@@ -1,0 +1,9 @@
+[project]
+name = "factoriax"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "jax[cuda13]>=0.9.1",
+]
