@@ -7,6 +7,7 @@ import pytest
 from jax import random
 
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
+from factoriax.constants import SOLID_BLOCKS
 from factoriax.game_logic import (
     get_block_at,
     is_game_over,
@@ -23,8 +24,29 @@ class TestConstants:
 
     def test_block_types_have_unique_values(self) -> None:
         """Block types should have distinct integer values."""
-        values = [BlockType.INVALID, BlockType.OUT_OF_BOUNDS, BlockType.DIRT, BlockType.WATER]
+        values = [
+            BlockType.INVALID,
+            BlockType.OUT_OF_BOUNDS,
+            BlockType.DIRT,
+            BlockType.WATER,
+            BlockType.IRON,
+            BlockType.COPPER,
+            BlockType.COAL,
+        ]
         assert len(values) == len(set(values))
+
+    def test_resource_block_types_exist(self) -> None:
+        """Resource block types should exist with expected values."""
+        assert BlockType.IRON == 4
+        assert BlockType.COPPER == 5
+        assert BlockType.COAL == 6
+
+    def test_resource_blocks_are_walkable(self) -> None:
+        """Resource blocks should not be in SOLID_BLOCKS."""
+        solid_set = set(int(b) for b in SOLID_BLOCKS)
+        assert int(BlockType.IRON) not in solid_set
+        assert int(BlockType.COPPER) not in solid_set
+        assert int(BlockType.COAL) not in solid_set
 
     def test_action_values(self) -> None:
         """Actions should be numbered 0-4."""
@@ -201,10 +223,13 @@ class TestRenderer:
     """Tests for rendering."""
 
     def test_create_default_textures_creates_all_textures(self) -> None:
-        """Default textures should include dirt and water."""
+        """Default textures should include all block types."""
         textures = create_default_textures()
         assert BlockType.DIRT in textures
         assert BlockType.WATER in textures
+        assert BlockType.IRON in textures
+        assert BlockType.COPPER in textures
+        assert BlockType.COAL in textures
 
     def test_textures_have_correct_shape(self) -> None:
         """Textures should be 16x16 RGBA."""
@@ -212,6 +237,25 @@ class TestRenderer:
         for texture in textures.values():
             assert texture.shape == (16, 16, 4)
             assert texture.dtype == np.uint8
+
+    def test_resource_textures_have_expected_colors(self) -> None:
+        """Resource textures should have distinct recognizable colors."""
+        textures = create_default_textures()
+
+        iron = textures[int(BlockType.IRON)]
+        assert iron[0, 0, 0] == 192  # Silver/gray RGB
+        assert iron[0, 0, 1] == 192
+        assert iron[0, 0, 2] == 192
+
+        copper = textures[int(BlockType.COPPER)]
+        assert copper[0, 0, 0] == 184  # Orange-brown RGB
+        assert copper[0, 0, 1] == 115
+        assert copper[0, 0, 2] == 51
+
+        coal = textures[int(BlockType.COAL)]
+        assert coal[0, 0, 0] == 54  # Dark gray RGB
+        assert coal[0, 0, 1] == 54
+        assert coal[0, 0, 2] == 54
 
     def test_render_pixels_returns_correct_shape(self) -> None:
         """Rendered image should have correct dimensions."""

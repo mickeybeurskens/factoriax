@@ -32,11 +32,17 @@ class EnvParams:
         map_width: Width of the map grid
         map_height: Height of the map grid
         water_probability: Probability of a tile being water during generation
+        iron_probability: Probability of a tile being iron ore during generation
+        copper_probability: Probability of a tile being copper ore during generation
+        coal_probability: Probability of a tile being coal during generation
     """
 
     max_timesteps: int = 1000
     map_width: int = 32
     map_height: int = 32
     water_probability: float = 0.1
+    iron_probability: float = 0.02
+    copper_probability: float = 0.02
+    coal_probability: float = 0.02
 
     NUM_ACTIONS: ClassVar[int] = 5

@@ -16,6 +16,9 @@ class BlockType(IntEnum):
     OUT_OF_BOUNDS = 1
     DIRT = 2
     WATER = 3
+    IRON = 4
+    COPPER = 5
+    COAL = 6
 
 
 class Action(IntEnum):
@@ -76,6 +79,9 @@ def load_all_textures() -> dict[int, np.ndarray]:
     texture_names = {
         BlockType.DIRT: "dirt",
         BlockType.WATER: "water",
+        BlockType.IRON: "iron",
+        BlockType.COPPER: "copper",
+        BlockType.COAL: "coal",
     }
     for block_type, name in texture_names.items():
         textures[int(block_type)] = load_texture(name)

@@ -29,6 +29,27 @@ def create_default_textures() -> dict[int, np.ndarray]:
     water[:, :, 3] = 255
     textures[int(BlockType.WATER)] = water
 
+    iron = np.zeros((size, size, 4), dtype=np.uint8)
+    iron[:, :, 0] = 192
+    iron[:, :, 1] = 192
+    iron[:, :, 2] = 192
+    iron[:, :, 3] = 255
+    textures[int(BlockType.IRON)] = iron
+
+    copper = np.zeros((size, size, 4), dtype=np.uint8)
+    copper[:, :, 0] = 184
+    copper[:, :, 1] = 115
+    copper[:, :, 2] = 51
+    copper[:, :, 3] = 255
+    textures[int(BlockType.COPPER)] = copper
+
+    coal = np.zeros((size, size, 4), dtype=np.uint8)
+    coal[:, :, 0] = 54
+    coal[:, :, 1] = 54
+    coal[:, :, 2] = 54
+    coal[:, :, 3] = 255
+    textures[int(BlockType.COAL)] = coal
+
     return textures
 
 
