@@ -13,6 +13,7 @@ from factoriax.constants import (
     Action,
     BlockType,
     ItemType,
+    MachineType,
 )
 from factoriax.crafting import cycle_recipe, cycle_slot, start_crafting, update_crafting
 from factoriax.machines import update_all_machines
@@ -60,7 +61,8 @@ def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
 def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
     """Check if a position can be walked on.
 
-    A position is walkable if it's in bounds and not a solid block (water, etc).
+    A position is walkable if it's in bounds, not a solid block (water, etc),
+    and does not have a machine on it.
 
     Args:
         state: Current environment state
@@ -71,7 +73,16 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
     """
     block = get_block_at(state, position)
     is_solid = jnp.any(block == SOLID_BLOCKS)
-    return ~is_solid
+
+    map_height, map_width = state.map.shape
+    in_bounds = is_position_in_bounds(position, map_width, map_height)
+    has_machine = lax.cond(
+        in_bounds,
+        lambda: state.machine_types[position[1], position[0]] != MachineType.NONE,
+        lambda: jnp.bool_(False),
+    )
+
+    return ~is_solid & ~has_machine
 
 
 def move_player(

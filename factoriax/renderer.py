@@ -8,6 +8,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     Action,
     BlockType,
+    MachineType,
     load_all_textures,
 )
 from factoriax.state import EnvState
@@ -215,6 +216,39 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     return bar
 
 
+def render_machine_overlays(
+    image: np.ndarray,
+    state: EnvState,
+    block_pixel_size: int,
+) -> None:
+    """Draw machine overlays on tiles that have machines.
+
+    Machines are rendered as smaller bright green squares centered on the tile,
+    allowing the underlying block to show around the edges.
+
+    Args:
+        image: RGBA image to draw on (modified in place)
+        state: Current environment state
+        block_pixel_size: Size of each block in pixels
+    """
+    machine_size = int(block_pixel_size * 0.6)
+    offset = (block_pixel_size - machine_size) // 2
+    machine_color = np.array([100, 150, 200, 255], dtype=np.uint8)
+
+    machine_types = np.array(state.machine_types)
+    map_height, map_width = machine_types.shape
+
+    for y in range(map_height):
+        for x in range(map_width):
+            if machine_types[y, x] != MachineType.NONE:
+                y_start = y * block_pixel_size + offset
+                x_start = x * block_pixel_size + offset
+                image[
+                    y_start : y_start + machine_size,
+                    x_start : x_start + machine_size,
+                ] = machine_color
+
+
 def render_pixels(
     state: EnvState, block_pixel_size: int = BLOCK_PIXEL_SIZE
 ) -> np.ndarray:
@@ -252,6 +286,8 @@ def render_pixels(
                 y_start : y_start + block_pixel_size,
                 x_start : x_start + block_pixel_size,
             ] = texture
+
+    render_machine_overlays(image, state, block_pixel_size)
 
     player_positions = np.array(state.player_positions)
     player_directions = np.array(state.player_directions)
