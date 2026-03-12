@@ -131,9 +131,8 @@ def _alpha_blend_inplace(
     """
     fg_alpha = foreground[:, :, 3:4].astype(np.float32) / 255.0
     bg_region = background[y_start : y_start + size, x_start : x_start + size]
-    blended = (
-        foreground[:, :, :3].astype(np.float32) * fg_alpha
-        + bg_region[:, :, :3].astype(np.float32) * (1 - fg_alpha)
-    )
+    blended = foreground[:, :, :3].astype(np.float32) * fg_alpha + bg_region[
+        :, :, :3
+    ].astype(np.float32) * (1 - fg_alpha)
     bg_region[:, :, :3] = blended.astype(np.uint8)
     bg_region[:, :, 3] = 255

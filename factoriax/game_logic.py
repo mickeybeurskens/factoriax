@@ -37,7 +37,7 @@ def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
     """
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
-    block = lax.cond(
+    block: jax.Array = lax.cond(
         in_bounds,
         lambda: state.map[position[1], position[0]],
         lambda: jnp.int32(BlockType.OUT_OF_BOUNDS),
@@ -85,7 +85,7 @@ def move_player(state: EnvState, action: int | jax.Array) -> EnvState:
         lambda: action,
     )
 
-    return state.replace(
+    return state.replace(  # type: ignore[attr-defined, no-any-return]
         player_position=final_position,
         player_direction=new_direction,
     )
@@ -106,7 +106,7 @@ def factoriax_step(
         Tuple of (new_state, reward)
     """
     state = move_player(state, action)
-    state = state.replace(timestep=state.timestep + 1)
+    state = state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined]
     reward = 0.0
     return state, reward
 
@@ -123,4 +123,5 @@ def is_game_over(state: EnvState, params: EnvParams) -> jax.Array:
     Returns:
         Boolean indicating whether the game is over
     """
-    return state.timestep >= params.max_timesteps
+    result: jax.Array = jnp.bool_(state.timestep >= params.max_timesteps)
+    return result
