@@ -8,6 +8,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     Action,
     BlockType,
+    ItemType,
     MachineType,
     load_all_textures,
 )
@@ -216,6 +217,11 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     return bar
 
 
+MACHINE_TO_ITEM = {
+    MachineType.MINER: ItemType.MINER,
+}
+
+
 def render_machine_overlays(
     image: np.ndarray,
     state: EnvState,
@@ -223,8 +229,9 @@ def render_machine_overlays(
 ) -> None:
     """Draw machine overlays on tiles that have machines.
 
-    Machines are rendered as smaller bright green squares centered on the tile,
-    allowing the underlying block to show around the edges.
+    Machines are rendered as smaller squares centered on the tile, using the
+    same color as the corresponding item in the inventory. This ensures visual
+    consistency between placed machines and inventory items.
 
     Args:
         image: RGBA image to draw on (modified in place)
@@ -233,20 +240,24 @@ def render_machine_overlays(
     """
     machine_size = int(block_pixel_size * 0.6)
     offset = (block_pixel_size - machine_size) // 2
-    machine_color = np.array([100, 150, 200, 255], dtype=np.uint8)
 
     machine_types = np.array(state.machine_types)
     map_height, map_width = machine_types.shape
 
     for y in range(map_height):
         for x in range(map_width):
-            if machine_types[y, x] != MachineType.NONE:
+            machine_type = int(machine_types[y, x])
+            if machine_type != MachineType.NONE:
+                item_type = MACHINE_TO_ITEM.get(machine_type, ItemType.EMPTY)
+                rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
+                color = np.array([*rgb, 255], dtype=np.uint8)
+
                 y_start = y * block_pixel_size + offset
                 x_start = x * block_pixel_size + offset
                 image[
                     y_start : y_start + machine_size,
                     x_start : x_start + machine_size,
-                ] = machine_color
+                ] = color
 
 
 def render_pixels(

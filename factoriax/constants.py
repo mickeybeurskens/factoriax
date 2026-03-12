@@ -53,7 +53,7 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.COAL: (54, 54, 54),
     ItemType.IRON: (192, 192, 192),
     ItemType.COPPER: (184, 115, 51),
-    ItemType.MINER: (100, 150, 200),
+    ItemType.MINER: (0, 200, 0),
 }
 
 RECIPES = [
