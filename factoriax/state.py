@@ -27,6 +27,7 @@ class EnvState:
         machine_fuel_count: Coal count in fuel slot with shape (height, width)
         machine_output_item: Item type in output slot with shape (height, width)
         machine_output_count: Stack count in output slot with shape (height, width)
+        achievements_unlocked: Boolean array tracking unlocked achievements (NUM_ACHIEVEMENTS,)
     """
 
     map: jnp.ndarray
@@ -45,6 +46,7 @@ class EnvState:
     machine_fuel_count: jnp.ndarray
     machine_output_item: jnp.ndarray
     machine_output_count: jnp.ndarray
+    achievements_unlocked: jnp.ndarray
 
 
 @struct.dataclass

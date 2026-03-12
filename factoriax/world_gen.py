@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MINEABLE_BLOCKS,
@@ -71,6 +72,7 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
         machine_fuel_count=jnp.zeros(map_shape, dtype=jnp.int16),
         machine_output_item=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_output_count=jnp.zeros(map_shape, dtype=jnp.int16),
+        achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 

@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax import Action, EnvState
+from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import NUM_INVENTORY_SLOTS, MachineType
 
 
@@ -46,6 +47,7 @@ def state_factory():
         machine_fuel_count: jnp.ndarray | None = None,
         machine_output_item: jnp.ndarray | None = None,
         machine_output_count: jnp.ndarray | None = None,
+        achievements_unlocked: jnp.ndarray | None = None,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
 
@@ -69,6 +71,7 @@ def state_factory():
             machine_fuel_count: Fuel per machine, defaults to zeros
             machine_output_item: Output item per machine, defaults to zeros
             machine_output_count: Output count per machine, defaults to zeros
+            achievements_unlocked: Boolean array of unlocked achievements, defaults to all False
 
         Returns:
             Configured EnvState for testing
@@ -137,6 +140,9 @@ def state_factory():
             machine_output_count=machine_output_count
             if machine_output_count is not None
             else jnp.zeros(shape, dtype=jnp.int16),
+            achievements_unlocked=achievements_unlocked
+            if achievements_unlocked is not None
+            else jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         )
 
     return _create
