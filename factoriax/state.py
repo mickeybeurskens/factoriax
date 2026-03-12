@@ -18,6 +18,9 @@ class EnvState:
         inventory_items: Item type IDs with shape (num_players, NUM_INVENTORY_SLOTS)
         inventory_counts: Stack counts with shape (num_players, NUM_INVENTORY_SLOTS)
         selected_player: Index of the currently selected player for UI/input
+        selected_slots: Currently selected inventory slot per player with shape (num_players,)
+        selected_recipes: Currently selected recipe index per player with shape (num_players,)
+        craft_progress: Ticks remaining in current craft per player with shape (num_players,)
         block_resources: Remaining resources for each tile with shape (height, width)
         machine_types: Machine type at each tile with shape (height, width)
         machine_power: Remaining power for each machine with shape (height, width)
@@ -33,6 +36,9 @@ class EnvState:
     inventory_items: jnp.ndarray
     inventory_counts: jnp.ndarray
     selected_player: int
+    selected_slots: jnp.ndarray
+    selected_recipes: jnp.ndarray
+    craft_progress: jnp.ndarray
     block_resources: jnp.ndarray
     machine_types: jnp.ndarray
     machine_power: jnp.ndarray
@@ -65,4 +71,4 @@ class EnvParams:
     copper_probability: float = 0.02
     coal_probability: float = 0.02
 
-    NUM_ACTIONS: ClassVar[int] = 5
+    NUM_ACTIONS: ClassVar[int] = 12

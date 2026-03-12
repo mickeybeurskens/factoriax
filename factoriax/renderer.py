@@ -159,6 +159,9 @@ def get_textures() -> dict[int, np.ndarray]:
 def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     """Render inventory bar showing the selected player's inventory.
 
+    The currently selected slot is highlighted with a white border.
+    If the player is crafting, a progress indicator is shown.
+
     Args:
         state: Current environment state containing inventory data
         width: Width of the bar in pixels (should match map render width)
@@ -172,16 +175,26 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     slot_width = width // NUM_INVENTORY_SLOTS
     slot_size = min(slot_width - 4, INVENTORY_BAR_HEIGHT - 4)
 
-    selected = int(state.selected_player)
-    inventory_items = np.array(state.inventory_items[selected])
-    inventory_counts = np.array(state.inventory_counts[selected])
+    selected_player = int(state.selected_player)
+    selected_slot = int(state.selected_slots[selected_player])
+    inventory_items = np.array(state.inventory_items[selected_player])
+    inventory_counts = np.array(state.inventory_counts[selected_player])
+    craft_progress = int(state.craft_progress[selected_player])
 
     for slot_idx in range(NUM_INVENTORY_SLOTS):
         x_center = slot_idx * slot_width + slot_width // 2
         x_start = x_center - slot_size // 2
         y_start = (INVENTORY_BAR_HEIGHT - slot_size) // 2
 
-        bar[y_start : y_start + slot_size, x_start : x_start + slot_size] = (60, 60, 60)
+        is_selected_slot = slot_idx == selected_slot
+        slot_bg = (100, 100, 100) if is_selected_slot else (60, 60, 60)
+        bar[y_start : y_start + slot_size, x_start : x_start + slot_size] = slot_bg
+
+        if is_selected_slot:
+            bar[y_start, x_start : x_start + slot_size] = (255, 255, 255)
+            bar[y_start + slot_size - 1, x_start : x_start + slot_size] = (255, 255, 255)
+            bar[y_start : y_start + slot_size, x_start] = (255, 255, 255)
+            bar[y_start : y_start + slot_size, x_start + slot_size - 1] = (255, 255, 255)
 
         item_type = int(inventory_items[slot_idx])
         count = int(inventory_counts[slot_idx])
@@ -193,6 +206,11 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
                 y_start + pad : y_start + slot_size - pad,
                 x_start + pad : x_start + slot_size - pad,
             ] = color
+
+    if craft_progress > 0:
+        indicator_width = 20
+        indicator_x = width - indicator_width - 4
+        bar[2:6, indicator_x : indicator_x + indicator_width] = (100, 200, 100)
 
     return bar
 

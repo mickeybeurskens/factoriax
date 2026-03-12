@@ -36,6 +36,9 @@ def state_factory():
         inventory_items: jnp.ndarray | None = None,
         inventory_counts: jnp.ndarray | None = None,
         selected_player: int = 0,
+        selected_slots: jnp.ndarray | None = None,
+        selected_recipes: jnp.ndarray | None = None,
+        craft_progress: jnp.ndarray | None = None,
         num_players: int = 1,
         block_resources: jnp.ndarray | None = None,
         machine_types: jnp.ndarray | None = None,
@@ -56,6 +59,9 @@ def state_factory():
             inventory_items: Inventory items, shape (num_players, NUM_INVENTORY_SLOTS)
             inventory_counts: Inventory counts, shape (num_players, NUM_INVENTORY_SLOTS)
             selected_player: Currently selected player index, defaults to 0
+            selected_slots: Selected inventory slot per player, defaults to zeros
+            selected_recipes: Selected recipe per player, defaults to zeros
+            craft_progress: Crafting progress per player, defaults to zeros
             num_players: Number of players (used for defaults), defaults to 1
             block_resources: Resources per tile, defaults to zeros
             machine_types: Machine type per tile, defaults to NONE
@@ -90,6 +96,7 @@ def state_factory():
             directions = jnp.full(num_players, Action.DOWN, dtype=jnp.int32)
 
         inv_shape = (num_players, NUM_INVENTORY_SLOTS)
+        player_shape = (num_players,)
 
         return EnvState(
             map=world_map,
@@ -103,6 +110,15 @@ def state_factory():
             if inventory_counts is not None
             else jnp.zeros(inv_shape, dtype=jnp.int32),
             selected_player=selected_player,
+            selected_slots=selected_slots
+            if selected_slots is not None
+            else jnp.zeros(player_shape, dtype=jnp.int32),
+            selected_recipes=selected_recipes
+            if selected_recipes is not None
+            else jnp.zeros(player_shape, dtype=jnp.int32),
+            craft_progress=craft_progress
+            if craft_progress is not None
+            else jnp.zeros(player_shape, dtype=jnp.int32),
             block_resources=block_resources
             if block_resources is not None
             else jnp.zeros(shape, dtype=jnp.int16),

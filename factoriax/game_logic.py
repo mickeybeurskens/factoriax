@@ -14,7 +14,9 @@ from factoriax.constants import (
     BlockType,
     ItemType,
 )
+from factoriax.crafting import cycle_recipe, cycle_slot, start_crafting, update_crafting
 from factoriax.machines import update_all_machines
+from factoriax.placement import place_machine
 from factoriax.state import EnvParams, EnvState
 
 
@@ -193,15 +195,75 @@ def mine_block(state: EnvState, player_idx: int | jax.Array) -> EnvState:
     )
 
 
+def _handle_player_action(
+    state: EnvState, action: int | jax.Array, player_idx: int | jax.Array
+) -> EnvState:
+    """Handle a single player action.
+
+    Dispatches to the appropriate handler based on action type.
+
+    Args:
+        state: Current environment state
+        action: Action to take
+        player_idx: Index of the player
+
+    Returns:
+        Updated environment state
+    """
+    is_mine = action == Action.MINE
+    is_craft = action == Action.CRAFT
+    is_place = action == Action.PLACE
+    is_next_slot = action == Action.NEXT_SLOT
+    is_prev_slot = action == Action.PREV_SLOT
+    is_next_recipe = action == Action.NEXT_RECIPE
+    is_prev_recipe = action == Action.PREV_RECIPE
+
+    state = lax.cond(is_mine, lambda s: mine_block(s, player_idx), lambda s: s, state)
+    state = lax.cond(
+        is_craft, lambda s: start_crafting(s, player_idx), lambda s: s, state
+    )
+    state = lax.cond(
+        is_place, lambda s: place_machine(s, player_idx), lambda s: s, state
+    )
+    state = lax.cond(
+        is_next_slot, lambda s: cycle_slot(s, player_idx, 1), lambda s: s, state
+    )
+    state = lax.cond(
+        is_prev_slot, lambda s: cycle_slot(s, player_idx, -1), lambda s: s, state
+    )
+    state = lax.cond(
+        is_next_recipe, lambda s: cycle_recipe(s, player_idx, 1), lambda s: s, state
+    )
+    state = lax.cond(
+        is_prev_recipe, lambda s: cycle_recipe(s, player_idx, -1), lambda s: s, state
+    )
+
+    is_movement = ~(
+        is_mine
+        | is_craft
+        | is_place
+        | is_next_slot
+        | is_prev_slot
+        | is_next_recipe
+        | is_prev_recipe
+    )
+    state = lax.cond(
+        is_movement, lambda s: move_player(s, action, player_idx), lambda s: s, state
+    )
+
+    return state
+
+
 def factoriax_step(
     rng: jax.Array, state: EnvState, action: int | jax.Array, params: EnvParams
 ) -> tuple[EnvState, float]:
     """Execute one step of the environment.
 
     Processes in order:
-    1. Selected player action (move or mine)
-    2. All machine updates
-    3. Timestep increment
+    1. Selected player action (move, mine, craft, place, or UI actions)
+    2. Crafting progress for all players
+    3. All machine updates
+    4. Timestep increment
 
     Non-selected players perform NOOP (no action).
 
@@ -215,11 +277,8 @@ def factoriax_step(
         Tuple of (new_state, reward)
     """
     player_idx = state.selected_player
-    state = lax.cond(
-        action == Action.MINE,
-        lambda: mine_block(state, player_idx),
-        lambda: move_player(state, action, player_idx),
-    )
+    state = _handle_player_action(state, action, player_idx)
+    state = update_crafting(state)
     state = update_all_machines(state)
     state = state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined]
     reward = 0.0

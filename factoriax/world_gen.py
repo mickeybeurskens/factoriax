@@ -52,6 +52,8 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
     map_shape = (params.map_height, params.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
 
+    player_shape = (params.num_players,)
+
     return EnvState(
         map=world_map,
         player_positions=player_positions,
@@ -60,6 +62,9 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
         inventory_items=jnp.zeros(inv_shape, dtype=jnp.int32),
         inventory_counts=jnp.zeros(inv_shape, dtype=jnp.int32),
         selected_player=0,
+        selected_slots=jnp.zeros(player_shape, dtype=jnp.int32),
+        selected_recipes=jnp.zeros(player_shape, dtype=jnp.int32),
+        craft_progress=jnp.zeros(player_shape, dtype=jnp.int32),
         block_resources=block_resources,
         machine_types=jnp.full(map_shape, MachineType.NONE, dtype=jnp.int32),
         machine_power=jnp.zeros(map_shape, dtype=jnp.int32),

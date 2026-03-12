@@ -16,6 +16,12 @@ def main() -> None:
     Controls:
         WASD: Move the selected player
         Space: Mine at current position
+        C: Start crafting selected recipe
+        E: Place machine from selected inventory slot
+        Tab: Next inventory slot
+        [: Previous inventory slot
+        T: Next recipe
+        G: Previous recipe
         1-9: Select player (if that many players exist)
         R: Reset the game
         Q/Escape: Quit
@@ -41,6 +47,12 @@ def main() -> None:
         pygame.K_w: Action.UP,
         pygame.K_s: Action.DOWN,
         pygame.K_SPACE: Action.MINE,
+        pygame.K_c: Action.CRAFT,
+        pygame.K_e: Action.PLACE,
+        pygame.K_TAB: Action.NEXT_SLOT,
+        pygame.K_LEFTBRACKET: Action.PREV_SLOT,
+        pygame.K_t: Action.NEXT_RECIPE,
+        pygame.K_g: Action.PREV_RECIPE,
     }
 
     key_to_player = {

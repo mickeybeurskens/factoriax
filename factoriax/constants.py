@@ -28,6 +28,7 @@ class ItemType(IntEnum):
     COAL = 1
     IRON = 2
     COPPER = 3
+    MINER = 4
 
 
 class MachineType(IntEnum):
@@ -48,11 +49,51 @@ BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
     BlockType.COPPER: ItemType.COPPER,
 }
 
-ITEM_COLORS: dict[ItemType, tuple[int, int, int]] = {
+ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.COAL: (54, 54, 54),
     ItemType.IRON: (192, 192, 192),
     ItemType.COPPER: (184, 115, 51),
+    ItemType.MINER: (100, 150, 200),
 }
+
+RECIPES = [
+    {
+        "output": ItemType.MINER,
+        "inputs": [(ItemType.COPPER, 5), (ItemType.IRON, 5)],
+        "ticks": 3,
+    },
+]
+
+NUM_RECIPES = len(RECIPES)
+MAX_RECIPE_INPUTS = 2
+
+RECIPE_OUTPUTS = jnp.array([ItemType.MINER], dtype=jnp.int32)
+RECIPE_TICKS = jnp.array([3], dtype=jnp.int32)
+RECIPE_INPUT_ITEMS = jnp.array(
+    [[ItemType.COPPER, ItemType.IRON]],
+    dtype=jnp.int32,
+)
+RECIPE_INPUT_COUNTS = jnp.array(
+    [[5, 5]],
+    dtype=jnp.int32,
+)
+
+PLACEABLE_ITEMS = jnp.array([ItemType.MINER], dtype=jnp.int32)
+
+ITEM_TO_MACHINE = {
+    ItemType.MINER: MachineType.MINER,
+}
+
+ITEM_TO_MACHINE_ARRAY = jnp.array(
+    [
+        MachineType.NONE,  # EMPTY
+        MachineType.NONE,  # COAL
+        MachineType.NONE,  # IRON
+        MachineType.NONE,  # COPPER
+        MachineType.MINER,  # MINER
+    ],
+    dtype=jnp.int32,
+)
 
 
 class Action(IntEnum):
@@ -64,6 +105,12 @@ class Action(IntEnum):
     UP = 3
     DOWN = 4
     MINE = 5
+    CRAFT = 6
+    PLACE = 7
+    NEXT_SLOT = 8
+    PREV_SLOT = 9
+    NEXT_RECIPE = 10
+    PREV_RECIPE = 11
 
 
 DIRECTIONS = jnp.array(
@@ -74,9 +121,22 @@ DIRECTIONS = jnp.array(
         [0, -1],  # UP
         [0, 1],  # DOWN
         [0, 0],  # MINE (no movement)
+        [0, 0],  # CRAFT (no movement)
+        [0, 0],  # PLACE (no movement)
+        [0, 0],  # NEXT_SLOT (no movement)
+        [0, 0],  # PREV_SLOT (no movement)
+        [0, 0],  # NEXT_RECIPE (no movement)
+        [0, 0],  # PREV_RECIPE (no movement)
     ],
     dtype=jnp.int32,
 )
+
+DIRECTION_OFFSETS = {
+    Action.UP: (0, -1),
+    Action.DOWN: (0, 1),
+    Action.LEFT: (-1, 0),
+    Action.RIGHT: (1, 0),
+}
 
 MINEABLE_BLOCKS = jnp.array([BlockType.COAL, BlockType.IRON, BlockType.COPPER])
 
