@@ -9,7 +9,6 @@ from factoriax.constants import (
     ITEM_TO_MACHINE_ARRAY,
     PLACEABLE_ITEMS,
     SOLID_BLOCKS,
-    Action,
     ItemType,
     MachineType,
 )

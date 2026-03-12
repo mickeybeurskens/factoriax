@@ -16,7 +16,6 @@ from factoriax.game_logic import (
     move_player,
 )
 from factoriax.renderer import (
-    INVENTORY_BAR_HEIGHT,
     create_default_textures,
     render_pixels,
 )
@@ -257,13 +256,13 @@ class TestRenderer:
         assert coal[0, 0, 2] == 54
 
     def test_render_pixels_returns_correct_shape(self) -> None:
-        """Rendered image should have correct dimensions including inventory bar."""
+        """Rendered image should have correct dimensions."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=8, map_height=8)
         state = generate_world(rng, params)
 
         pixels = render_pixels(state, block_pixel_size=16)
-        expected_height = 8 * 16 + INVENTORY_BAR_HEIGHT
+        expected_height = 8 * 16
         assert pixels.shape == (expected_height, 8 * 16, 3)
 
     def test_render_pixels_returns_rgb(self) -> None:

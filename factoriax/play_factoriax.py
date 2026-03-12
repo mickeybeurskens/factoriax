@@ -7,7 +7,26 @@ from jax import random
 
 from factoriax.constants import BLOCK_PIXEL_SIZE, Action
 from factoriax.envs.factoriax_env import make_factoriax_env
-from factoriax.renderer import INVENTORY_BAR_HEIGHT, render_pixels
+from factoriax.renderer import render_inventory_menu, render_pixels
+
+
+def composite_rgba_over_rgb(
+    background: np.ndarray, overlay: np.ndarray
+) -> np.ndarray:
+    """Composite an RGBA overlay onto an RGB background.
+
+    Args:
+        background: RGB image array of shape (H, W, 3)
+        overlay: RGBA image array of shape (H, W, 4)
+
+    Returns:
+        RGB image array with overlay composited
+    """
+    alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
+    fg = overlay[:, :, :3].astype(np.float32)
+    bg = background.astype(np.float32)
+    blended = fg * alpha + bg * (1 - alpha)
+    return blended.astype(np.uint8)
 
 
 def main() -> None:
@@ -16,12 +35,12 @@ def main() -> None:
     Controls:
         WASD: Move the selected player
         Space: Mine at current position
+        I: Toggle inventory/crafting menu
+        Left/Right arrows: Switch between inventory and crafting sections (when menu open)
+        Tab: Cycle slot/recipe forward (in focused section)
+        [: Cycle slot/recipe backward (in focused section)
         C: Start crafting selected recipe
         E: Place machine from selected inventory slot
-        Tab: Next inventory slot
-        [: Previous inventory slot
-        T: Next recipe
-        G: Previous recipe
         1-9: Select player (if that many players exist)
         R: Reset the game
         Q/Escape: Quit
@@ -30,7 +49,7 @@ def main() -> None:
 
     env, params = make_factoriax_env()
     window_width = params.map_width * BLOCK_PIXEL_SIZE
-    window_height = params.map_height * BLOCK_PIXEL_SIZE + INVENTORY_BAR_HEIGHT
+    window_height = params.map_height * BLOCK_PIXEL_SIZE
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
     clock = pygame.time.Clock()
@@ -49,10 +68,6 @@ def main() -> None:
         pygame.K_SPACE: Action.MINE,
         pygame.K_c: Action.CRAFT,
         pygame.K_e: Action.PLACE,
-        pygame.K_TAB: Action.NEXT_SLOT,
-        pygame.K_LEFTBRACKET: Action.PREV_SLOT,
-        pygame.K_t: Action.NEXT_RECIPE,
-        pygame.K_g: Action.PREV_RECIPE,
     }
 
     key_to_player = {
@@ -67,6 +82,9 @@ def main() -> None:
         pygame.K_9: 8,
     }
 
+    inventory_open = False
+    menu_focus = "inventory"
+
     running = True
     while running:
         action = Action.NOOP
@@ -77,9 +95,25 @@ def main() -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_i:
+                    inventory_open = not inventory_open
                 elif event.key == pygame.K_r:
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)
+                elif inventory_open and event.key == pygame.K_LEFT:
+                    menu_focus = "inventory"
+                elif inventory_open and event.key == pygame.K_RIGHT:
+                    menu_focus = "crafting"
+                elif event.key == pygame.K_TAB:
+                    if inventory_open and menu_focus == "crafting":
+                        action = Action.NEXT_RECIPE
+                    else:
+                        action = Action.NEXT_SLOT
+                elif event.key == pygame.K_LEFTBRACKET:
+                    if inventory_open and menu_focus == "crafting":
+                        action = Action.PREV_RECIPE
+                    else:
+                        action = Action.PREV_SLOT
                 elif event.key in key_to_player:
                     player_idx = key_to_player[event.key]
                     if player_idx < params.num_players:
@@ -96,6 +130,13 @@ def main() -> None:
                 obs, state = env.reset_env(reset_key, params)
 
         pixels = render_pixels(state)
+
+        if inventory_open:
+            menu_overlay = render_inventory_menu(
+                state, window_width, window_height, menu_focus
+            )
+            pixels = composite_rgba_over_rgb(pixels, menu_overlay)
+
         surface = pygame.surfarray.make_surface(np.transpose(pixels, (1, 0, 2)))
         screen.blit(surface, (0, 0))
         pygame.display.flip()

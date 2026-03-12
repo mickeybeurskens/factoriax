@@ -5,7 +5,7 @@ from jax import random
 
 from factoriax import ItemType, make_factoriax_env
 from factoriax.constants import MAX_STACK_SIZE, NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES
-from factoriax.renderer import INVENTORY_BAR_HEIGHT, render_pixels
+from factoriax.renderer import render_inventory_menu, render_pixels
 from factoriax.state import EnvParams
 from factoriax.world_gen import generate_world
 
@@ -122,19 +122,25 @@ class TestInventoryObservation:
 
 
 class TestInventoryRenderer:
-    """Tests for inventory bar rendering."""
+    """Tests for inventory menu rendering."""
 
-    def test_render_pixels_includes_inventory_bar(self) -> None:
-        """Rendered image should include inventory bar height."""
+    def test_render_pixels_excludes_inventory(self) -> None:
+        """Rendered image should not include inventory menu by default."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=8, map_height=8)
         state = generate_world(rng, params)
 
         pixels = render_pixels(state)
-        expected_height = 8 * 16 + INVENTORY_BAR_HEIGHT
+        expected_height = 8 * 16
         assert pixels.shape == (expected_height, 8 * 16, 3)
 
-    def test_inventory_bar_height_constant(self) -> None:
-        """INVENTORY_BAR_HEIGHT should be a reasonable value."""
-        assert INVENTORY_BAR_HEIGHT > 0
-        assert INVENTORY_BAR_HEIGHT == 24
+    def test_inventory_menu_returns_rgba(self) -> None:
+        """Inventory menu should return RGBA for compositing."""
+        rng = random.PRNGKey(0)
+        params = EnvParams(map_width=8, map_height=8)
+        state = generate_world(rng, params)
+
+        screen_width = 8 * 16
+        screen_height = 8 * 16
+        menu = render_inventory_menu(state, screen_width, screen_height)
+        assert menu.shape == (screen_height, screen_width, 4)

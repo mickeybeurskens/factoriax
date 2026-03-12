@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 
 from factoriax import Action, BlockType, ItemType
-from factoriax.constants import MachineType, NUM_INVENTORY_SLOTS
+from factoriax.constants import NUM_INVENTORY_SLOTS, MachineType
 from factoriax.placement import (
     get_tile_in_front,
     is_placeable_item,

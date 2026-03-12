@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from factoriax import BlockType, EnvState, ItemType
+from factoriax import BlockType, ItemType
 from factoriax.constants import NUM_INVENTORY_SLOTS
 from factoriax.crafting import (
     add_item_to_inventory,

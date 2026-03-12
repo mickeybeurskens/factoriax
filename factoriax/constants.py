@@ -67,6 +67,8 @@ RECIPES = [
 NUM_RECIPES = len(RECIPES)
 MAX_RECIPE_INPUTS = 2
 
+RECIPE_NAMES = ["Miner"]
+
 RECIPE_OUTPUTS = jnp.array([ItemType.MINER], dtype=jnp.int32)
 RECIPE_TICKS = jnp.array([3], dtype=jnp.int32)
 RECIPE_INPUT_ITEMS = jnp.array(
