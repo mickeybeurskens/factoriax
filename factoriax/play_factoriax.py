@@ -29,6 +29,41 @@ def composite_rgba_over_rgb(
     return blended.astype(np.uint8)
 
 
+def calculate_window_size(
+    base_width: int, base_height: int, scale_factor: float = 0.8
+) -> tuple[int, int]:
+    """Calculate window size to fit screen while maintaining aspect ratio.
+
+    Scales the window to use scale_factor (default 80%) of the limiting
+    dimension (width or height) while preserving aspect ratio.
+
+    Args:
+        base_width: Base render width in pixels
+        base_height: Base render height in pixels
+        scale_factor: Fraction of screen to use (0.0 to 1.0)
+
+    Returns:
+        Tuple of (window_width, window_height) in pixels
+    """
+    screen_info = pygame.display.Info()
+    max_width = screen_info.current_w
+    max_height = screen_info.current_h
+
+    aspect_ratio = base_width / base_height
+
+    target_width = int(max_width * scale_factor)
+    target_height = int(max_height * scale_factor)
+
+    if target_width / aspect_ratio <= target_height:
+        window_width = target_width
+        window_height = int(target_width / aspect_ratio)
+    else:
+        window_height = target_height
+        window_width = int(target_height * aspect_ratio)
+
+    return window_width, window_height
+
+
 def main() -> None:
     """Run the interactive FactoriaX game.
 
@@ -48,8 +83,10 @@ def main() -> None:
     pygame.init()
 
     env, params = make_factoriax_env()
-    window_width = params.map_width * BLOCK_PIXEL_SIZE
-    window_height = params.map_height * BLOCK_PIXEL_SIZE
+    base_width = params.map_width * BLOCK_PIXEL_SIZE
+    base_height = params.map_height * BLOCK_PIXEL_SIZE
+
+    window_width, window_height = calculate_window_size(base_width, base_height)
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
     clock = pygame.time.Clock()
@@ -133,12 +170,15 @@ def main() -> None:
 
         if inventory_open:
             menu_overlay = render_inventory_menu(
-                state, window_width, window_height, menu_focus
+                state, base_width, base_height, menu_focus
             )
             pixels = composite_rgba_over_rgb(pixels, menu_overlay)
 
-        surface = pygame.surfarray.make_surface(np.transpose(pixels, (1, 0, 2)))
-        screen.blit(surface, (0, 0))
+        base_surface = pygame.surfarray.make_surface(np.transpose(pixels, (1, 0, 2)))
+        scaled_surface = pygame.transform.scale(
+            base_surface, (window_width, window_height)
+        )
+        screen.blit(scaled_surface, (0, 0))
         pygame.display.flip()
         clock.tick(30)
 

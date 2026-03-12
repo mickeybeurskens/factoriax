@@ -345,9 +345,9 @@ def render_inventory_menu(
 
     for recipe_idx in range(NUM_RECIPES):
         recipe = RECIPES[recipe_idx]
-        recipe_name = RECIPE_NAMES[recipe_idx]
+        RECIPE_NAMES[recipe_idx]
         is_selected = (recipe_idx == selected_recipe) and (menu_focus == "crafting")
-        affordable = bool(can_afford_recipe(state, selected_player, recipe_idx))
+        bool(can_afford_recipe(state, selected_player, recipe_idx))
 
         recipe_y = craft_y + recipe_idx * recipe_height
 
