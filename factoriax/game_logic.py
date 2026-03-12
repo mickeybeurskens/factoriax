@@ -14,6 +14,7 @@ from factoriax.constants import (
     BlockType,
     ItemType,
 )
+from factoriax.machines import update_all_machines
 from factoriax.state import EnvParams, EnvState
 
 
@@ -183,6 +184,11 @@ def factoriax_step(
 ) -> tuple[EnvState, float]:
     """Execute one step of the environment.
 
+    Processes in order:
+    1. Player action (move or mine)
+    2. All machine updates
+    3. Timestep increment
+
     Args:
         rng: JAX random key (unused for now, but included for interface consistency)
         state: Current environment state
@@ -197,6 +203,7 @@ def factoriax_step(
         lambda: mine_block(state),
         lambda: move_player(state, action),
     )
+    state = update_all_machines(state)
     state = state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined]
     reward = 0.0
     return state, reward

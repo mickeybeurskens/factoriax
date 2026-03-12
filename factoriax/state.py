@@ -18,6 +18,11 @@ class EnvState:
         inventory_items: Array of item type IDs with shape (NUM_INVENTORY_SLOTS,)
         inventory_counts: Array of stack counts with shape (NUM_INVENTORY_SLOTS,)
         block_resources: Remaining resources for each tile with shape (height, width)
+        machine_types: Machine type at each tile with shape (height, width)
+        machine_power: Remaining power for each machine with shape (height, width)
+        machine_fuel_count: Coal count in fuel slot with shape (height, width)
+        machine_output_item: Item type in output slot with shape (height, width)
+        machine_output_count: Stack count in output slot with shape (height, width)
     """
 
     map: jnp.ndarray
@@ -27,6 +32,11 @@ class EnvState:
     inventory_items: jnp.ndarray
     inventory_counts: jnp.ndarray
     block_resources: jnp.ndarray
+    machine_types: jnp.ndarray
+    machine_power: jnp.ndarray
+    machine_fuel_count: jnp.ndarray
+    machine_output_item: jnp.ndarray
+    machine_output_count: jnp.ndarray
 
 
 @struct.dataclass

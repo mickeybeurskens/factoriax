@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax import Action, BlockType, EnvParams, EnvState, ItemType
-from factoriax.constants import BLOCK_MAX_RESOURCES, MINEABLE_BLOCKS, NUM_INVENTORY_SLOTS
+from factoriax import BlockType, EnvParams, EnvState, ItemType
+from factoriax.constants import BLOCK_MAX_RESOURCES, MINEABLE_BLOCKS
 from factoriax.game_logic import mine_block
 from factoriax.world_gen import generate_world
 
@@ -48,7 +48,7 @@ class TestMiningResources:
     """Tests for mining with the resource system."""
 
     @pytest.fixture
-    def coal_state(self) -> EnvState:
+    def coal_state(self, state_factory) -> EnvState:
         """Create a state with player on a coal block with 5 resources."""
         world_map = jnp.array(
             [
@@ -59,20 +59,12 @@ class TestMiningResources:
             dtype=jnp.int32,
         )
         block_resources = jnp.array(
-            [
-                [0, 0, 0],
-                [0, 5, 0],
-                [0, 0, 0],
-            ],
+            [[0, 0, 0], [0, 5, 0], [0, 0, 0]],
             dtype=jnp.int16,
         )
-        return EnvState(
-            map=world_map,
-            player_position=jnp.array([1, 1], dtype=jnp.int32),
-            player_direction=Action.DOWN,
-            timestep=0,
-            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+        return state_factory(
+            world_map=world_map,
+            player_position=(1, 1),
             block_resources=block_resources,
         )
 
@@ -93,18 +85,11 @@ class TestMiningResources:
         assert state.map[1, 1] == BlockType.COAL
         assert state.block_resources[1, 1] == 4
 
-    def test_block_becomes_dirt_when_depleted(self) -> None:
+    def test_block_becomes_dirt_when_depleted(self, state_factory) -> None:
         """Block should become dirt when resources reach zero."""
-        world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
-        block_resources = jnp.array([[1]], dtype=jnp.int16)
-        state = EnvState(
-            map=world_map,
-            player_position=jnp.array([0, 0], dtype=jnp.int32),
-            player_direction=Action.DOWN,
-            timestep=0,
-            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            block_resources=block_resources,
+        state = state_factory(
+            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
+            block_resources=jnp.array([[1]], dtype=jnp.int16),
         )
 
         new_state = mine_block(state)
@@ -113,18 +98,11 @@ class TestMiningResources:
         assert new_state.block_resources[0, 0] == 0
         assert new_state.inventory_counts[0] == 1
 
-    def test_cannot_mine_depleted_block(self) -> None:
+    def test_cannot_mine_depleted_block(self, state_factory) -> None:
         """Should not be able to mine a block with zero resources."""
-        world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
-        block_resources = jnp.array([[0]], dtype=jnp.int16)
-        state = EnvState(
-            map=world_map,
-            player_position=jnp.array([0, 0], dtype=jnp.int32),
-            player_direction=Action.DOWN,
-            timestep=0,
-            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            block_resources=block_resources,
+        state = state_factory(
+            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
+            block_resources=jnp.array([[0]], dtype=jnp.int16),
         )
 
         new_state = mine_block(state)
@@ -132,22 +110,15 @@ class TestMiningResources:
         assert new_state.inventory_counts[0] == 0
         assert new_state.block_resources[0, 0] == 0
 
-    def test_mining_iron_and_copper(self) -> None:
+    def test_mining_iron_and_copper(self, state_factory) -> None:
         """Iron and copper blocks should work the same as coal."""
         for block_type, item_type in [
             (BlockType.IRON, ItemType.IRON),
             (BlockType.COPPER, ItemType.COPPER),
         ]:
-            world_map = jnp.array([[block_type]], dtype=jnp.int32)
-            block_resources = jnp.array([[5]], dtype=jnp.int16)
-            state = EnvState(
-                map=world_map,
-                player_position=jnp.array([0, 0], dtype=jnp.int32),
-                player_direction=Action.DOWN,
-                timestep=0,
-                inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-                inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-                block_resources=block_resources,
+            state = state_factory(
+                world_map=jnp.array([[block_type]], dtype=jnp.int32),
+                block_resources=jnp.array([[5]], dtype=jnp.int16),
             )
 
             new_state = mine_block(state)
@@ -161,18 +132,10 @@ class TestMiningResources:
 class TestMiningEdgeCases:
     """Edge case tests for mining."""
 
-    def test_mining_non_mineable_block_does_nothing(self) -> None:
+    def test_mining_non_mineable_block_does_nothing(self, state_factory) -> None:
         """Mining dirt should have no effect."""
-        world_map = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-        block_resources = jnp.array([[0]], dtype=jnp.int16)
-        state = EnvState(
-            map=world_map,
-            player_position=jnp.array([0, 0], dtype=jnp.int32),
-            player_direction=Action.DOWN,
-            timestep=0,
-            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            block_resources=block_resources,
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
 
         new_state = mine_block(state)

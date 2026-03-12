@@ -30,8 +30,16 @@ class ItemType(IntEnum):
     COPPER = 3
 
 
+class MachineType(IntEnum):
+    """Machine types that can be placed on tiles."""
+
+    NONE = 0
+    MINER = 1
+
+
 NUM_INVENTORY_SLOTS = 10
 MAX_STACK_SIZE = 64
+MAX_MACHINE_STACK_SIZE = 64
 NUM_ITEM_TYPES = len(ItemType)
 
 BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
@@ -88,6 +96,18 @@ BLOCK_TO_ITEM_ARRAY = jnp.array(
 SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32)
 
 BLOCK_MAX_RESOURCES = 100
+
+POWER_PER_COAL = 10
+
+MACHINE_POWER_CONSUMPTION = jnp.array(
+    [0, 1],  # NONE=0, MINER=1 power/step
+    dtype=jnp.int32,
+)
+
+MACHINE_MINING_RATE = jnp.array(
+    [0, 3],  # NONE=0, MINER=3 resources/step
+    dtype=jnp.int32,
+)
 
 OBS_DIM = (64, 64, 3)
 BLOCK_PIXEL_SIZE = 16

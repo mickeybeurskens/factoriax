@@ -6,6 +6,7 @@ from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
     NUM_INVENTORY_SLOTS,
+    Action,
     BlockType,
     load_all_textures,
 )
@@ -61,8 +62,14 @@ def create_default_textures() -> dict[int, np.ndarray]:
     return textures
 
 
-def create_player_texture() -> np.ndarray:
-    """Create a simple player texture.
+def create_player_texture(direction: int = Action.DOWN) -> np.ndarray:
+    """Create a player texture with directional indicator.
+
+    The player is rendered as a circle with a small triangle indicating
+    the direction they are facing.
+
+    Args:
+        direction: The direction the player is facing (Action enum value)
 
     Returns:
         RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4)
@@ -71,11 +78,45 @@ def create_player_texture() -> np.ndarray:
     player = np.zeros((size, size, 4), dtype=np.uint8)
     center = size // 2
     radius = size // 3
+
     for y in range(size):
         for x in range(size):
             dist = ((x - center) ** 2 + (y - center) ** 2) ** 0.5
             if dist <= radius:
                 player[y, x] = [255, 100, 100, 255]
+
+    indicator_color = [200, 50, 50, 255]
+    indicator_size = max(2, size // 6)
+
+    if direction == Action.UP:
+        for i in range(indicator_size):
+            for j in range(-i, i + 1):
+                py = 1 + i
+                px = center + j
+                if 0 <= px < size and 0 <= py < size:
+                    player[py, px] = indicator_color
+    elif direction == Action.DOWN:
+        for i in range(indicator_size):
+            for j in range(-i, i + 1):
+                py = size - 2 - i
+                px = center + j
+                if 0 <= px < size and 0 <= py < size:
+                    player[py, px] = indicator_color
+    elif direction == Action.LEFT:
+        for i in range(indicator_size):
+            for j in range(-i, i + 1):
+                py = center + j
+                px = 1 + i
+                if 0 <= px < size and 0 <= py < size:
+                    player[py, px] = indicator_color
+    elif direction == Action.RIGHT:
+        for i in range(indicator_size):
+            for j in range(-i, i + 1):
+                py = center + j
+                px = size - 2 - i
+                if 0 <= px < size and 0 <= py < size:
+                    player[py, px] = indicator_color
+
     return player
 
 
@@ -144,7 +185,8 @@ def render_pixels(
         RGB numpy array of the rendered scene
     """
     textures = get_textures()
-    player_texture = create_player_texture()
+    player_direction = int(state.player_direction)
+    player_texture = create_player_texture(player_direction)
 
     map_array = np.array(state.map)
     map_height, map_width = map_array.shape

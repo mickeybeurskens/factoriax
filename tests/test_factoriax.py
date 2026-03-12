@@ -7,7 +7,7 @@ import pytest
 from jax import random
 
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
-from factoriax.constants import NUM_INVENTORY_SLOTS, SOLID_BLOCKS
+from factoriax.constants import SOLID_BLOCKS
 from factoriax.game_logic import (
     get_block_at,
     is_game_over,
@@ -15,7 +15,11 @@ from factoriax.game_logic import (
     is_position_walkable,
     move_player,
 )
-from factoriax.renderer import INVENTORY_BAR_HEIGHT, create_default_textures, render_pixels
+from factoriax.renderer import (
+    INVENTORY_BAR_HEIGHT,
+    create_default_textures,
+    render_pixels,
+)
 from factoriax.world_gen import generate_world
 
 
@@ -101,7 +105,7 @@ class TestGameLogic:
     """Tests for game logic."""
 
     @pytest.fixture
-    def simple_state(self) -> EnvState:
+    def simple_state(self, state_factory) -> EnvState:
         """Create a simple state for testing."""
         world_map = jnp.array(
             [
@@ -111,15 +115,7 @@ class TestGameLogic:
             ],
             dtype=jnp.int32,
         )
-        return EnvState(
-            map=world_map,
-            player_position=jnp.array([1, 1], dtype=jnp.int32),
-            player_direction=Action.DOWN,
-            timestep=0,
-            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            block_resources=jnp.zeros((3, 3), dtype=jnp.int16),
-        )
+        return state_factory(world_map=world_map, player_position=(1, 1))
 
     def test_is_position_in_bounds(self) -> None:
         """Position bounds checking should work correctly."""
@@ -179,7 +175,7 @@ class TestGameLogic:
         assert jnp.array_equal(new_state.player_position, jnp.array([1, 2]))
         assert new_state.player_direction == Action.DOWN
 
-    def test_move_player_blocked_by_water(self) -> None:
+    def test_move_player_blocked_by_water(self, state_factory) -> None:
         """Player should not move into water."""
         world_map = jnp.array(
             [
@@ -188,15 +184,7 @@ class TestGameLogic:
             ],
             dtype=jnp.int32,
         )
-        state = EnvState(
-            map=world_map,
-            player_position=jnp.array([0, 0], dtype=jnp.int32),
-            player_direction=Action.DOWN,
-            timestep=0,
-            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-            block_resources=jnp.zeros((2, 2), dtype=jnp.int16),
-        )
+        state = state_factory(world_map=world_map, player_position=(0, 0))
         new_state = move_player(state, Action.RIGHT)
         assert jnp.array_equal(new_state.player_position, jnp.array([0, 0]))
         assert new_state.player_direction == Action.RIGHT

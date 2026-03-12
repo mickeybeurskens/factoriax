@@ -10,6 +10,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     Action,
     BlockType,
+    MachineType,
 )
 from factoriax.state import EnvParams, EnvState
 
@@ -39,6 +40,8 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
     block_resources = jnp.where(is_mineable, BLOCK_MAX_RESOURCES, 0).astype(jnp.int16)
 
+    map_shape = (params.map_height, params.map_width)
+
     return EnvState(
         map=world_map,
         player_position=player_position,
@@ -47,6 +50,11 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
         inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
         inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
         block_resources=block_resources,
+        machine_types=jnp.full(map_shape, MachineType.NONE, dtype=jnp.int32),
+        machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_fuel_count=jnp.zeros(map_shape, dtype=jnp.int16),
+        machine_output_item=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_output_count=jnp.zeros(map_shape, dtype=jnp.int16),
     )
 
 
