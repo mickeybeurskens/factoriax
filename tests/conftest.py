@@ -15,6 +15,9 @@ def state_factory():
     required; all other fields have sensible defaults. This reduces boilerplate
     in tests that don't need to specify every field.
 
+    For single-player tests, pass player_position as a tuple. For multiplayer,
+    pass player_positions as an array of shape (num_players, 2).
+
     Example:
         def test_something(state_factory):
             state = state_factory(
@@ -25,11 +28,15 @@ def state_factory():
 
     def _create(
         world_map: jnp.ndarray,
-        player_position: tuple[int, int] | jnp.ndarray = (0, 0),
-        player_direction: int = Action.DOWN,
+        player_position: tuple[int, int] | None = None,
+        player_positions: jnp.ndarray | None = None,
+        player_direction: int | None = None,
+        player_directions: jnp.ndarray | None = None,
         timestep: int = 0,
         inventory_items: jnp.ndarray | None = None,
         inventory_counts: jnp.ndarray | None = None,
+        selected_player: int = 0,
+        num_players: int = 1,
         block_resources: jnp.ndarray | None = None,
         machine_types: jnp.ndarray | None = None,
         machine_power: jnp.ndarray | None = None,
@@ -41,11 +48,15 @@ def state_factory():
 
         Args:
             world_map: Block types array (required)
-            player_position: Player (x, y) position, defaults to (0, 0)
-            player_direction: Direction player faces, defaults to DOWN
+            player_position: Single player (x, y) position (convenience for 1 player)
+            player_positions: All player positions, shape (num_players, 2)
+            player_direction: Single player direction (convenience for 1 player)
+            player_directions: All player directions, shape (num_players,)
             timestep: Current timestep, defaults to 0
-            inventory_items: Player inventory items, defaults to zeros
-            inventory_counts: Player inventory counts, defaults to zeros
+            inventory_items: Inventory items, shape (num_players, NUM_INVENTORY_SLOTS)
+            inventory_counts: Inventory counts, shape (num_players, NUM_INVENTORY_SLOTS)
+            selected_player: Currently selected player index, defaults to 0
+            num_players: Number of players (used for defaults), defaults to 1
             block_resources: Resources per tile, defaults to zeros
             machine_types: Machine type per tile, defaults to NONE
             machine_power: Power per machine, defaults to zeros
@@ -58,20 +69,40 @@ def state_factory():
         """
         shape = world_map.shape
 
-        if isinstance(player_position, tuple):
-            player_position = jnp.array(player_position, dtype=jnp.int32)
+        if player_positions is not None:
+            positions = player_positions
+            num_players = positions.shape[0]
+        elif player_position is not None:
+            if isinstance(player_position, tuple):
+                positions = jnp.array([player_position], dtype=jnp.int32)
+            else:
+                positions = player_position.reshape(1, 2)
+            num_players = 1
+        else:
+            positions = jnp.array([[0, 0]], dtype=jnp.int32)
+            num_players = 1
+
+        if player_directions is not None:
+            directions = player_directions
+        elif player_direction is not None:
+            directions = jnp.array([player_direction], dtype=jnp.int32)
+        else:
+            directions = jnp.full(num_players, Action.DOWN, dtype=jnp.int32)
+
+        inv_shape = (num_players, NUM_INVENTORY_SLOTS)
 
         return EnvState(
             map=world_map,
-            player_position=player_position,
-            player_direction=player_direction,
+            player_positions=positions,
+            player_directions=directions,
             timestep=timestep,
             inventory_items=inventory_items
             if inventory_items is not None
-            else jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+            else jnp.zeros(inv_shape, dtype=jnp.int32),
             inventory_counts=inventory_counts
             if inventory_counts is not None
-            else jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+            else jnp.zeros(inv_shape, dtype=jnp.int32),
+            selected_player=selected_player,
             block_resources=block_resources
             if block_resources is not None
             else jnp.zeros(shape, dtype=jnp.int16),

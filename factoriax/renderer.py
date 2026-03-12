@@ -62,14 +62,34 @@ def create_default_textures() -> dict[int, np.ndarray]:
     return textures
 
 
-def create_player_texture(direction: int = Action.DOWN) -> np.ndarray:
+PLAYER_COLORS = [
+    ([255, 100, 100], [200, 50, 50]),    # Player 0: Red
+    ([100, 100, 255], [50, 50, 200]),    # Player 1: Blue
+    ([100, 255, 100], [50, 200, 50]),    # Player 2: Green
+    ([255, 255, 100], [200, 200, 50]),   # Player 3: Yellow
+    ([255, 100, 255], [200, 50, 200]),   # Player 4: Magenta
+    ([100, 255, 255], [50, 200, 200]),   # Player 5: Cyan
+    ([255, 180, 100], [200, 130, 50]),   # Player 6: Orange
+    ([180, 100, 255], [130, 50, 200]),   # Player 7: Purple
+    ([180, 255, 180], [130, 200, 130]),  # Player 8: Light green
+]
+
+
+def create_player_texture(
+    direction: int = Action.DOWN,
+    player_idx: int = 0,
+    is_selected: bool = True,
+) -> np.ndarray:
     """Create a player texture with directional indicator.
 
     The player is rendered as a circle with a small triangle indicating
-    the direction they are facing.
+    the direction they are facing. Different players have different colors,
+    and the selected player has a highlight ring.
 
     Args:
         direction: The direction the player is facing (Action enum value)
+        player_idx: Index of the player (determines color)
+        is_selected: Whether this player is currently selected
 
     Returns:
         RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4)
@@ -79,13 +99,17 @@ def create_player_texture(direction: int = Action.DOWN) -> np.ndarray:
     center = size // 2
     radius = size // 3
 
+    color_idx = player_idx % len(PLAYER_COLORS)
+    body_color, indicator_color = PLAYER_COLORS[color_idx]
+
     for y in range(size):
         for x in range(size):
             dist = ((x - center) ** 2 + (y - center) ** 2) ** 0.5
             if dist <= radius:
-                player[y, x] = [255, 100, 100, 255]
+                player[y, x] = [*body_color, 255]
+            elif is_selected and radius < dist <= radius + 2:
+                player[y, x] = [255, 255, 255, 255]
 
-    indicator_color = [200, 50, 50, 255]
     indicator_size = max(2, size // 6)
 
     if direction == Action.UP:
@@ -94,28 +118,28 @@ def create_player_texture(direction: int = Action.DOWN) -> np.ndarray:
                 py = 1 + i
                 px = center + j
                 if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = indicator_color
+                    player[py, px] = [*indicator_color, 255]
     elif direction == Action.DOWN:
         for i in range(indicator_size):
             for j in range(-i, i + 1):
                 py = size - 2 - i
                 px = center + j
                 if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = indicator_color
+                    player[py, px] = [*indicator_color, 255]
     elif direction == Action.LEFT:
         for i in range(indicator_size):
             for j in range(-i, i + 1):
                 py = center + j
                 px = 1 + i
                 if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = indicator_color
+                    player[py, px] = [*indicator_color, 255]
     elif direction == Action.RIGHT:
         for i in range(indicator_size):
             for j in range(-i, i + 1):
                 py = center + j
                 px = size - 2 - i
                 if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = indicator_color
+                    player[py, px] = [*indicator_color, 255]
 
     return player
 
@@ -133,7 +157,7 @@ def get_textures() -> dict[int, np.ndarray]:
 
 
 def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
-    """Render inventory bar showing all 10 slots.
+    """Render inventory bar showing the selected player's inventory.
 
     Args:
         state: Current environment state containing inventory data
@@ -148,8 +172,9 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     slot_width = width // NUM_INVENTORY_SLOTS
     slot_size = min(slot_width - 4, INVENTORY_BAR_HEIGHT - 4)
 
-    inventory_items = np.array(state.inventory_items)
-    inventory_counts = np.array(state.inventory_counts)
+    selected = int(state.selected_player)
+    inventory_items = np.array(state.inventory_items[selected])
+    inventory_counts = np.array(state.inventory_counts[selected])
 
     for slot_idx in range(NUM_INVENTORY_SLOTS):
         x_center = slot_idx * slot_width + slot_width // 2
@@ -177,6 +202,9 @@ def render_pixels(
 ) -> np.ndarray:
     """Render the environment state as an RGB pixel image.
 
+    Renders all players with different colors. The selected player has
+    a white highlight ring and their inventory is shown in the bar.
+
     Args:
         state: Current environment state
         block_pixel_size: Size of each block in pixels
@@ -185,8 +213,6 @@ def render_pixels(
         RGB numpy array of the rendered scene
     """
     textures = get_textures()
-    player_direction = int(state.player_direction)
-    player_texture = create_player_texture(player_direction)
 
     map_array = np.array(state.map)
     map_height, map_width = map_array.shape
@@ -209,17 +235,26 @@ def render_pixels(
                 x_start : x_start + block_pixel_size,
             ] = texture
 
-    player_pos = np.array(state.player_position)
-    px, py = int(player_pos[0]), int(player_pos[1])
-    py_start = py * block_pixel_size
-    px_start = px * block_pixel_size
-    _alpha_blend_inplace(
-        image,
-        player_texture,
-        py_start,
-        px_start,
-        block_pixel_size,
-    )
+    player_positions = np.array(state.player_positions)
+    player_directions = np.array(state.player_directions)
+    selected = int(state.selected_player)
+    num_players = player_positions.shape[0]
+
+    for player_idx in range(num_players):
+        direction = int(player_directions[player_idx])
+        is_selected = player_idx == selected
+        player_texture = create_player_texture(direction, player_idx, is_selected)
+
+        px, py = int(player_positions[player_idx, 0]), int(player_positions[player_idx, 1])
+        py_start = py * block_pixel_size
+        px_start = px * block_pixel_size
+        _alpha_blend_inplace(
+            image,
+            player_texture,
+            py_start,
+            px_start,
+            block_pixel_size,
+        )
 
     image_rgb = image[:, :, :3]
     inv_bar = render_inventory_bar(state, img_width)

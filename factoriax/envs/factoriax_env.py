@@ -84,9 +84,9 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Get observation from the current state.
 
-        The observation is a flattened representation of the map with player position
-        and inventory encoded. For now, we return a simple representation rather than
-        pixel rendering for efficiency in training.
+        The observation is a flattened representation of the map with selected player
+        position and inventory encoded. For now, we return a simple representation
+        rather than pixel rendering for efficiency in training.
 
         Args:
             state: Current environment state
@@ -95,15 +95,17 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Observation array containing map, player info, and inventory data
         """
-        player_x = state.player_position[0] / params.map_width
-        player_y = state.player_position[1] / params.map_height
-        player_dir = state.player_direction / NUM_ACTIONS
+        selected = state.selected_player
+        player_pos = state.player_positions[selected]
+        player_x = player_pos[0] / params.map_width
+        player_y = player_pos[1] / params.map_height
+        player_dir = state.player_directions[selected] / NUM_ACTIONS
         timestep_frac = state.timestep / params.max_timesteps
         flat_map = state.map.flatten().astype(jnp.float32) / float(BlockType.COAL)
         player_info = jnp.array([player_x, player_y, player_dir, timestep_frac])
 
-        inv_items = state.inventory_items.astype(jnp.float32) / NUM_ITEM_TYPES
-        inv_counts = state.inventory_counts.astype(jnp.float32) / MAX_STACK_SIZE
+        inv_items = state.inventory_items[selected].astype(jnp.float32) / NUM_ITEM_TYPES
+        inv_counts = state.inventory_counts[selected].astype(jnp.float32) / MAX_STACK_SIZE
 
         return jnp.concatenate([flat_map, player_info, inv_items, inv_counts])
 

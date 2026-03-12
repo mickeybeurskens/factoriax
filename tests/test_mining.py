@@ -70,18 +70,18 @@ class TestMiningResources:
 
     def test_mining_decrements_resources(self, coal_state: EnvState) -> None:
         """Mining should decrement the block's resources by 1."""
-        new_state = mine_block(coal_state)
+        new_state = mine_block(coal_state, 0)
         assert new_state.block_resources[1, 1] == 4
 
     def test_mining_yields_item(self, coal_state: EnvState) -> None:
         """Each mining action should yield one item."""
-        new_state = mine_block(coal_state)
-        assert new_state.inventory_counts[0] == 1
-        assert new_state.inventory_items[0] == ItemType.COAL
+        new_state = mine_block(coal_state, 0)
+        assert new_state.inventory_counts[0, 0] == 1
+        assert new_state.inventory_items[0, 0] == ItemType.COAL
 
     def test_block_stays_while_resources_remain(self, coal_state: EnvState) -> None:
         """Block should remain coal while resources are above zero."""
-        state = mine_block(coal_state)
+        state = mine_block(coal_state, 0)
         assert state.map[1, 1] == BlockType.COAL
         assert state.block_resources[1, 1] == 4
 
@@ -92,11 +92,11 @@ class TestMiningResources:
             block_resources=jnp.array([[1]], dtype=jnp.int16),
         )
 
-        new_state = mine_block(state)
+        new_state = mine_block(state, 0)
 
         assert new_state.map[0, 0] == BlockType.DIRT
         assert new_state.block_resources[0, 0] == 0
-        assert new_state.inventory_counts[0] == 1
+        assert new_state.inventory_counts[0, 0] == 1
 
     def test_cannot_mine_depleted_block(self, state_factory) -> None:
         """Should not be able to mine a block with zero resources."""
@@ -105,9 +105,9 @@ class TestMiningResources:
             block_resources=jnp.array([[0]], dtype=jnp.int16),
         )
 
-        new_state = mine_block(state)
+        new_state = mine_block(state, 0)
 
-        assert new_state.inventory_counts[0] == 0
+        assert new_state.inventory_counts[0, 0] == 0
         assert new_state.block_resources[0, 0] == 0
 
     def test_mining_iron_and_copper(self, state_factory) -> None:
@@ -121,11 +121,11 @@ class TestMiningResources:
                 block_resources=jnp.array([[5]], dtype=jnp.int16),
             )
 
-            new_state = mine_block(state)
+            new_state = mine_block(state, 0)
 
             assert new_state.block_resources[0, 0] == 4
-            assert new_state.inventory_items[0] == item_type
-            assert new_state.inventory_counts[0] == 1
+            assert new_state.inventory_items[0, 0] == item_type
+            assert new_state.inventory_counts[0, 0] == 1
             assert new_state.map[0, 0] == block_type
 
 
@@ -138,9 +138,9 @@ class TestMiningEdgeCases:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
 
-        new_state = mine_block(state)
+        new_state = mine_block(state, 0)
 
-        assert new_state.inventory_counts[0] == 0
+        assert new_state.inventory_counts[0, 0] == 0
         assert new_state.map[0, 0] == BlockType.DIRT
 
     def test_max_resources_constant_is_100(self) -> None:

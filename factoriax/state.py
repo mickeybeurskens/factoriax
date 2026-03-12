@@ -12,11 +12,12 @@ class EnvState:
 
     Attributes:
         map: 2D grid of block types with shape (height, width)
-        player_position: (x, y) coordinates of the player
-        player_direction: Direction the player is facing (Action value)
+        player_positions: (x, y) coordinates per player with shape (num_players, 2)
+        player_directions: Direction each player is facing with shape (num_players,)
         timestep: Current timestep in the episode
-        inventory_items: Array of item type IDs with shape (NUM_INVENTORY_SLOTS,)
-        inventory_counts: Array of stack counts with shape (NUM_INVENTORY_SLOTS,)
+        inventory_items: Item type IDs with shape (num_players, NUM_INVENTORY_SLOTS)
+        inventory_counts: Stack counts with shape (num_players, NUM_INVENTORY_SLOTS)
+        selected_player: Index of the currently selected player for UI/input
         block_resources: Remaining resources for each tile with shape (height, width)
         machine_types: Machine type at each tile with shape (height, width)
         machine_power: Remaining power for each machine with shape (height, width)
@@ -26,11 +27,12 @@ class EnvState:
     """
 
     map: jnp.ndarray
-    player_position: jnp.ndarray
-    player_direction: int
+    player_positions: jnp.ndarray
+    player_directions: jnp.ndarray
     timestep: int
     inventory_items: jnp.ndarray
     inventory_counts: jnp.ndarray
+    selected_player: int
     block_resources: jnp.ndarray
     machine_types: jnp.ndarray
     machine_power: jnp.ndarray
@@ -47,6 +49,7 @@ class EnvParams:
         max_timesteps: Maximum number of timesteps per episode
         map_width: Width of the map grid
         map_height: Height of the map grid
+        num_players: Number of players in the game
         water_probability: Probability of a tile being water during generation
         iron_probability: Probability of a tile being iron ore during generation
         copper_probability: Probability of a tile being copper ore during generation
@@ -56,6 +59,7 @@ class EnvParams:
     max_timesteps: int = 1000
     map_width: int = 32
     map_height: int = 32
+    num_players: int = 2
     water_probability: float = 0.1
     iron_probability: float = 0.02
     copper_probability: float = 0.02

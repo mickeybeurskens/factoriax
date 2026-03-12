@@ -19,36 +19,47 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
     """Generate a new world with random dirt and water tiles.
 
     Creates a grid filled primarily with dirt tiles and some scattered water tiles.
-    The player spawns at the center of the map, and we ensure the spawn location
-    is always dirt by overwriting it after random generation.
+    Players spawn near the center of the map in a horizontal line, and we ensure
+    spawn locations are always dirt by overwriting after random generation.
 
     Args:
         rng: JAX random key for reproducible generation
         params: Environment parameters including map dimensions and water probability
 
     Returns:
-        Initial environment state with generated map and player at center
+        Initial environment state with generated map and players near center
     """
     rng_map, rng_spawn = random.split(rng)
 
     world_map = _generate_terrain(rng_map, params)
-    player_x = params.map_width // 2
-    player_y = params.map_height // 2
-    world_map = world_map.at[player_y, player_x].set(BlockType.DIRT)
-    player_position = jnp.array([player_x, player_y], dtype=jnp.int32)
+
+    center_x = params.map_width // 2
+    center_y = params.map_height // 2
+    player_positions = []
+    for i in range(params.num_players):
+        offset = i - params.num_players // 2
+        px = jnp.clip(center_x + offset, 0, params.map_width - 1)
+        py = center_y
+        player_positions.append([px, py])
+        world_map = world_map.at[py, px].set(BlockType.DIRT)
+
+    player_positions = jnp.array(player_positions, dtype=jnp.int32)
+    player_directions = jnp.full(params.num_players, Action.DOWN, dtype=jnp.int32)
 
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
     block_resources = jnp.where(is_mineable, BLOCK_MAX_RESOURCES, 0).astype(jnp.int16)
 
     map_shape = (params.map_height, params.map_width)
+    inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
 
     return EnvState(
         map=world_map,
-        player_position=player_position,
-        player_direction=Action.DOWN,
+        player_positions=player_positions,
+        player_directions=player_directions,
         timestep=0,
-        inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
-        inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+        inventory_items=jnp.zeros(inv_shape, dtype=jnp.int32),
+        inventory_counts=jnp.zeros(inv_shape, dtype=jnp.int32),
+        selected_player=0,
         block_resources=block_resources,
         machine_types=jnp.full(map_shape, MachineType.NONE, dtype=jnp.int32),
         machine_power=jnp.zeros(map_shape, dtype=jnp.int32),

@@ -23,13 +23,13 @@ class TestInventoryState:
         assert jnp.all(state.inventory_counts == 0)
 
     def test_inventory_arrays_have_correct_shape(self) -> None:
-        """Inventory arrays should have shape (NUM_INVENTORY_SLOTS,)."""
+        """Inventory arrays should have shape (num_players, NUM_INVENTORY_SLOTS)."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_world(rng, params)
 
-        assert state.inventory_items.shape == (NUM_INVENTORY_SLOTS,)
-        assert state.inventory_counts.shape == (NUM_INVENTORY_SLOTS,)
+        assert state.inventory_items.shape == (params.num_players, NUM_INVENTORY_SLOTS)
+        assert state.inventory_counts.shape == (params.num_players, NUM_INVENTORY_SLOTS)
 
     def test_inventory_arrays_are_int32(self) -> None:
         """Inventory arrays should be int32 dtype."""
@@ -103,9 +103,10 @@ class TestInventoryObservation:
         rng = random.PRNGKey(0)
         _, state = env.reset_env(rng, params)
 
+        selected = state.selected_player
         state = state.replace(
-            inventory_items=state.inventory_items.at[0].set(ItemType.COAL),
-            inventory_counts=state.inventory_counts.at[0].set(MAX_STACK_SIZE),
+            inventory_items=state.inventory_items.at[selected, 0].set(ItemType.COAL),
+            inventory_counts=state.inventory_counts.at[selected, 0].set(MAX_STACK_SIZE),
         )
 
         obs = env.get_obs(state, params)

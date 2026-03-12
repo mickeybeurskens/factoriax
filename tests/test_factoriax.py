@@ -71,17 +71,18 @@ class TestWorldGen:
         state = generate_world(rng, params)
 
         assert state.map.shape == (params.map_height, params.map_width)
-        assert state.player_position.shape == (2,)
+        assert state.player_positions.shape == (params.num_players, 2)
         assert state.timestep == 0
 
     def test_player_spawns_on_dirt(self) -> None:
-        """Player should always spawn on a dirt tile."""
+        """Players should always spawn on dirt tiles."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_world(rng, params)
 
-        px, py = state.player_position
-        assert state.map[py, px] == BlockType.DIRT
+        for i in range(params.num_players):
+            px, py = state.player_positions[i]
+            assert state.map[py, px] == BlockType.DIRT
 
     def test_world_gen_is_deterministic(self) -> None:
         """Same seed should produce same world."""
@@ -90,7 +91,7 @@ class TestWorldGen:
         state2 = generate_world(random.PRNGKey(42), params)
 
         assert jnp.array_equal(state1.map, state2.map)
-        assert jnp.array_equal(state1.player_position, state2.player_position)
+        assert jnp.array_equal(state1.player_positions, state2.player_positions)
 
     def test_different_seeds_produce_different_worlds(self) -> None:
         """Different seeds should produce different worlds."""
@@ -153,27 +154,27 @@ class TestGameLogic:
 
     def test_move_player_left(self, simple_state: EnvState) -> None:
         """Player should move left on dirt."""
-        new_state = move_player(simple_state, Action.LEFT)
-        assert jnp.array_equal(new_state.player_position, jnp.array([0, 1]))
-        assert new_state.player_direction == Action.LEFT
+        new_state = move_player(simple_state, Action.LEFT, 0)
+        assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 1]))
+        assert new_state.player_directions[0] == Action.LEFT
 
     def test_move_player_right(self, simple_state: EnvState) -> None:
         """Player should move right on dirt."""
-        new_state = move_player(simple_state, Action.RIGHT)
-        assert jnp.array_equal(new_state.player_position, jnp.array([2, 1]))
-        assert new_state.player_direction == Action.RIGHT
+        new_state = move_player(simple_state, Action.RIGHT, 0)
+        assert jnp.array_equal(new_state.player_positions[0], jnp.array([2, 1]))
+        assert new_state.player_directions[0] == Action.RIGHT
 
     def test_move_player_up(self, simple_state: EnvState) -> None:
         """Player should move up on dirt."""
-        new_state = move_player(simple_state, Action.UP)
-        assert jnp.array_equal(new_state.player_position, jnp.array([1, 0]))
-        assert new_state.player_direction == Action.UP
+        new_state = move_player(simple_state, Action.UP, 0)
+        assert jnp.array_equal(new_state.player_positions[0], jnp.array([1, 0]))
+        assert new_state.player_directions[0] == Action.UP
 
     def test_move_player_down(self, simple_state: EnvState) -> None:
         """Player should move down on dirt."""
-        new_state = move_player(simple_state, Action.DOWN)
-        assert jnp.array_equal(new_state.player_position, jnp.array([1, 2]))
-        assert new_state.player_direction == Action.DOWN
+        new_state = move_player(simple_state, Action.DOWN, 0)
+        assert jnp.array_equal(new_state.player_positions[0], jnp.array([1, 2]))
+        assert new_state.player_directions[0] == Action.DOWN
 
     def test_move_player_blocked_by_water(self, state_factory) -> None:
         """Player should not move into water."""
@@ -185,21 +186,25 @@ class TestGameLogic:
             dtype=jnp.int32,
         )
         state = state_factory(world_map=world_map, player_position=(0, 0))
-        new_state = move_player(state, Action.RIGHT)
-        assert jnp.array_equal(new_state.player_position, jnp.array([0, 0]))
-        assert new_state.player_direction == Action.RIGHT
+        new_state = move_player(state, Action.RIGHT, 0)
+        assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 0]))
+        assert new_state.player_directions[0] == Action.RIGHT
 
     def test_move_player_blocked_by_bounds(self, simple_state: EnvState) -> None:
         """Player should not move out of bounds."""
-        state = simple_state.replace(player_position=jnp.array([0, 0], dtype=jnp.int32))
-        new_state = move_player(state, Action.LEFT)
-        assert jnp.array_equal(new_state.player_position, jnp.array([0, 0]))
+        state = simple_state.replace(
+            player_positions=jnp.array([[0, 0]], dtype=jnp.int32)
+        )
+        new_state = move_player(state, Action.LEFT, 0)
+        assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 0]))
 
     def test_noop_does_not_change_position(self, simple_state: EnvState) -> None:
         """NOOP should not change player position or direction."""
-        new_state = move_player(simple_state, Action.NOOP)
-        assert jnp.array_equal(new_state.player_position, simple_state.player_position)
-        assert new_state.player_direction == simple_state.player_direction
+        new_state = move_player(simple_state, Action.NOOP, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], simple_state.player_positions[0]
+        )
+        assert new_state.player_directions[0] == simple_state.player_directions[0]
 
     def test_is_game_over_before_max_timesteps(self, simple_state: EnvState) -> None:
         """Game should not be over before max timesteps."""

@@ -72,8 +72,10 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
     return ~is_solid
 
 
-def move_player(state: EnvState, action: int | jax.Array) -> EnvState:
-    """Attempt to move the player in the specified direction.
+def move_player(
+    state: EnvState, action: int | jax.Array, player_idx: int | jax.Array
+) -> EnvState:
+    """Attempt to move a player in the specified direction.
 
     The player will face the direction of movement regardless of whether
     the move succeeds. Movement only succeeds if the target tile is walkable.
@@ -81,28 +83,35 @@ def move_player(state: EnvState, action: int | jax.Array) -> EnvState:
     Args:
         state: Current environment state
         action: Action to take (from Action enum)
+        player_idx: Index of the player to move
 
     Returns:
         Updated environment state with new player position and direction
     """
+    current_position = state.player_positions[player_idx]
+    current_direction = state.player_directions[player_idx]
+
     direction = DIRECTIONS[action]
-    new_position = state.player_position + direction
+    new_position = current_position + direction
     can_move = is_position_walkable(state, new_position)
-    final_position = jnp.where(can_move, new_position, state.player_position)
+    final_position = jnp.where(can_move, new_position, current_position)
     new_direction = lax.cond(
         action == Action.NOOP,
-        lambda: state.player_direction,
-        lambda: action,
+        lambda: current_direction,
+        lambda: jnp.int32(action),
     )
+
+    new_positions = state.player_positions.at[player_idx].set(final_position)
+    new_directions = state.player_directions.at[player_idx].set(new_direction)
 
     return state.replace(  # type: ignore[attr-defined, no-any-return]
-        player_position=final_position,
-        player_direction=new_direction,
+        player_positions=new_positions,
+        player_directions=new_directions,
     )
 
 
-def mine_block(state: EnvState) -> EnvState:
-    """Attempt to mine the block at the player's current position.
+def mine_block(state: EnvState, player_idx: int | jax.Array) -> EnvState:
+    """Attempt to mine the block at a player's current position.
 
     Mining succeeds if:
     - The block is mineable (coal, iron, or copper)
@@ -114,24 +123,29 @@ def mine_block(state: EnvState) -> EnvState:
 
     Args:
         state: Current environment state
+        player_idx: Index of the player performing the mining
 
     Returns:
         Updated environment state with updated resources and inventory
     """
-    px, py = state.player_position[0], state.player_position[1]
+    player_pos = state.player_positions[player_idx]
+    px, py = player_pos[0], player_pos[1]
     block_type = state.map[py, px]
 
     is_mineable = jnp.any(block_type == MINEABLE_BLOCKS)
     has_resources = state.block_resources[py, px] > 0
     item_type = BLOCK_TO_ITEM_ARRAY[block_type]
 
-    matching_slot_mask = (state.inventory_items == item_type) & (
-        state.inventory_counts < MAX_STACK_SIZE
+    player_inv_items = state.inventory_items[player_idx]
+    player_inv_counts = state.inventory_counts[player_idx]
+
+    matching_slot_mask = (player_inv_items == item_type) & (
+        player_inv_counts < MAX_STACK_SIZE
     )
     has_matching_slot = jnp.any(matching_slot_mask)
     matching_slot_idx = jnp.argmax(matching_slot_mask)
 
-    empty_slot_mask = state.inventory_items == ItemType.EMPTY
+    empty_slot_mask = player_inv_items == ItemType.EMPTY
     has_empty_slot = jnp.any(empty_slot_mask)
     empty_slot_idx = jnp.argmax(empty_slot_mask)
 
@@ -144,14 +158,14 @@ def mine_block(state: EnvState) -> EnvState:
 
     new_inventory_items = lax.cond(
         can_mine,
-        lambda: state.inventory_items.at[slot_idx].set(item_type),
+        lambda: state.inventory_items.at[player_idx, slot_idx].set(item_type),
         lambda: state.inventory_items,
     )
 
     new_inventory_counts = lax.cond(
         can_mine,
-        lambda: state.inventory_counts.at[slot_idx].set(
-            state.inventory_counts[slot_idx] + 1
+        lambda: state.inventory_counts.at[player_idx, slot_idx].set(
+            player_inv_counts[slot_idx] + 1
         ),
         lambda: state.inventory_counts,
     )
@@ -185,23 +199,26 @@ def factoriax_step(
     """Execute one step of the environment.
 
     Processes in order:
-    1. Player action (move or mine)
+    1. Selected player action (move or mine)
     2. All machine updates
     3. Timestep increment
+
+    Non-selected players perform NOOP (no action).
 
     Args:
         rng: JAX random key (unused for now, but included for interface consistency)
         state: Current environment state
-        action: Action to take
+        action: Action to take for the selected player
         params: Environment parameters
 
     Returns:
         Tuple of (new_state, reward)
     """
+    player_idx = state.selected_player
     state = lax.cond(
         action == Action.MINE,
-        lambda: mine_block(state),
-        lambda: move_player(state, action),
+        lambda: mine_block(state, player_idx),
+        lambda: move_player(state, action, player_idx),
     )
     state = update_all_machines(state)
     state = state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined]
