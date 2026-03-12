@@ -105,20 +105,23 @@ def mine_block(state: EnvState) -> EnvState:
 
     Mining succeeds if:
     - The block is mineable (coal, iron, or copper)
+    - The block has remaining resources
     - There is inventory space (existing stack with room or empty slot)
 
-    On success, the block becomes dirt and the item is added to inventory.
+    On success, one resource is extracted and added to inventory. The block
+    becomes dirt only when all resources are depleted.
 
     Args:
         state: Current environment state
 
     Returns:
-        Updated environment state with mined block and updated inventory
+        Updated environment state with updated resources and inventory
     """
     px, py = state.player_position[0], state.player_position[1]
     block_type = state.map[py, px]
 
     is_mineable = jnp.any(block_type == MINEABLE_BLOCKS)
+    has_resources = state.block_resources[py, px] > 0
     item_type = BLOCK_TO_ITEM_ARRAY[block_type]
 
     matching_slot_mask = (state.inventory_items == item_type) & (
@@ -134,7 +137,7 @@ def mine_block(state: EnvState) -> EnvState:
     can_stack = has_matching_slot
     can_use_empty = ~has_matching_slot & has_empty_slot
     can_add_to_inventory = can_stack | can_use_empty
-    can_mine = is_mineable & can_add_to_inventory
+    can_mine = is_mineable & has_resources & can_add_to_inventory
 
     slot_idx = jnp.where(can_stack, matching_slot_idx, empty_slot_idx)
 
@@ -152,8 +155,17 @@ def mine_block(state: EnvState) -> EnvState:
         lambda: state.inventory_counts,
     )
 
-    new_map = lax.cond(
+    new_resources = state.block_resources[py, px] - 1
+    is_depleted = new_resources <= 0
+
+    new_block_resources = lax.cond(
         can_mine,
+        lambda: state.block_resources.at[py, px].set(new_resources),
+        lambda: state.block_resources,
+    )
+
+    new_map = lax.cond(
+        can_mine & is_depleted,
         lambda: state.map.at[py, px].set(jnp.int32(BlockType.DIRT)),
         lambda: state.map,
     )
@@ -162,6 +174,7 @@ def mine_block(state: EnvState) -> EnvState:
         map=new_map,
         inventory_items=new_inventory_items,
         inventory_counts=new_inventory_counts,
+        block_resources=new_block_resources,
     )
 
 

@@ -87,6 +87,8 @@ BLOCK_TO_ITEM_ARRAY = jnp.array(
 
 SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32)
 
+BLOCK_MAX_RESOURCES = 100
+
 OBS_DIM = (64, 64, 3)
 BLOCK_PIXEL_SIZE = 16
 NUM_ACTIONS = len(Action)

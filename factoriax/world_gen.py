@@ -4,7 +4,13 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
-from factoriax.constants import NUM_INVENTORY_SLOTS, Action, BlockType
+from factoriax.constants import (
+    BLOCK_MAX_RESOURCES,
+    MINEABLE_BLOCKS,
+    NUM_INVENTORY_SLOTS,
+    Action,
+    BlockType,
+)
 from factoriax.state import EnvParams, EnvState
 
 
@@ -30,6 +36,9 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
     world_map = world_map.at[player_y, player_x].set(BlockType.DIRT)
     player_position = jnp.array([player_x, player_y], dtype=jnp.int32)
 
+    is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
+    block_resources = jnp.where(is_mineable, BLOCK_MAX_RESOURCES, 0).astype(jnp.int16)
+
     return EnvState(
         map=world_map,
         player_position=player_position,
@@ -37,6 +46,7 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
         timestep=0,
         inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
         inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+        block_resources=block_resources,
     )
 
 

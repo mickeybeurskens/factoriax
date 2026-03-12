@@ -118,6 +118,7 @@ class TestGameLogic:
             timestep=0,
             inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
             inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+            block_resources=jnp.zeros((3, 3), dtype=jnp.int16),
         )
 
     def test_is_position_in_bounds(self) -> None:
@@ -194,6 +195,7 @@ class TestGameLogic:
             timestep=0,
             inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
             inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+            block_resources=jnp.zeros((2, 2), dtype=jnp.int16),
         )
         new_state = move_player(state, Action.RIGHT)
         assert jnp.array_equal(new_state.player_position, jnp.array([0, 0]))

@@ -17,6 +17,7 @@ class EnvState:
         timestep: Current timestep in the episode
         inventory_items: Array of item type IDs with shape (NUM_INVENTORY_SLOTS,)
         inventory_counts: Array of stack counts with shape (NUM_INVENTORY_SLOTS,)
+        block_resources: Remaining resources for each tile with shape (height, width)
     """
 
     map: jnp.ndarray
@@ -25,6 +26,7 @@ class EnvState:
     timestep: int
     inventory_items: jnp.ndarray
     inventory_counts: jnp.ndarray
+    block_resources: jnp.ndarray
 
 
 @struct.dataclass
