@@ -4,7 +4,16 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from factoriax.constants import DIRECTIONS, SOLID_BLOCKS, Action, BlockType
+from factoriax.constants import (
+    BLOCK_TO_ITEM_ARRAY,
+    DIRECTIONS,
+    MAX_STACK_SIZE,
+    MINEABLE_BLOCKS,
+    SOLID_BLOCKS,
+    Action,
+    BlockType,
+    ItemType,
+)
 from factoriax.state import EnvParams, EnvState
 
 
@@ -91,6 +100,71 @@ def move_player(state: EnvState, action: int | jax.Array) -> EnvState:
     )
 
 
+def mine_block(state: EnvState) -> EnvState:
+    """Attempt to mine the block at the player's current position.
+
+    Mining succeeds if:
+    - The block is mineable (coal, iron, or copper)
+    - There is inventory space (existing stack with room or empty slot)
+
+    On success, the block becomes dirt and the item is added to inventory.
+
+    Args:
+        state: Current environment state
+
+    Returns:
+        Updated environment state with mined block and updated inventory
+    """
+    px, py = state.player_position[0], state.player_position[1]
+    block_type = state.map[py, px]
+
+    is_mineable = jnp.any(block_type == MINEABLE_BLOCKS)
+    item_type = BLOCK_TO_ITEM_ARRAY[block_type]
+
+    matching_slot_mask = (state.inventory_items == item_type) & (
+        state.inventory_counts < MAX_STACK_SIZE
+    )
+    has_matching_slot = jnp.any(matching_slot_mask)
+    matching_slot_idx = jnp.argmax(matching_slot_mask)
+
+    empty_slot_mask = state.inventory_items == ItemType.EMPTY
+    has_empty_slot = jnp.any(empty_slot_mask)
+    empty_slot_idx = jnp.argmax(empty_slot_mask)
+
+    can_stack = has_matching_slot
+    can_use_empty = ~has_matching_slot & has_empty_slot
+    can_add_to_inventory = can_stack | can_use_empty
+    can_mine = is_mineable & can_add_to_inventory
+
+    slot_idx = jnp.where(can_stack, matching_slot_idx, empty_slot_idx)
+
+    new_inventory_items = lax.cond(
+        can_mine,
+        lambda: state.inventory_items.at[slot_idx].set(item_type),
+        lambda: state.inventory_items,
+    )
+
+    new_inventory_counts = lax.cond(
+        can_mine,
+        lambda: state.inventory_counts.at[slot_idx].set(
+            state.inventory_counts[slot_idx] + 1
+        ),
+        lambda: state.inventory_counts,
+    )
+
+    new_map = lax.cond(
+        can_mine,
+        lambda: state.map.at[py, px].set(jnp.int32(BlockType.DIRT)),
+        lambda: state.map,
+    )
+
+    return state.replace(  # type: ignore[attr-defined, no-any-return]
+        map=new_map,
+        inventory_items=new_inventory_items,
+        inventory_counts=new_inventory_counts,
+    )
+
+
 def factoriax_step(
     rng: jax.Array, state: EnvState, action: int | jax.Array, params: EnvParams
 ) -> tuple[EnvState, float]:
@@ -105,7 +179,11 @@ def factoriax_step(
     Returns:
         Tuple of (new_state, reward)
     """
-    state = move_player(state, action)
+    state = lax.cond(
+        action == Action.MINE,
+        lambda: mine_block(state),
+        lambda: move_player(state, action),
+    )
     state = state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined]
     reward = 0.0
     return state, reward

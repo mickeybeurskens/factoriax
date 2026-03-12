@@ -32,6 +32,7 @@ def main() -> None:
         pygame.K_d: Action.RIGHT,
         pygame.K_w: Action.UP,
         pygame.K_s: Action.DOWN,
+        pygame.K_SPACE: Action.MINE,
     }
 
     running = True

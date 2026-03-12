@@ -55,6 +55,7 @@ class Action(IntEnum):
     RIGHT = 2
     UP = 3
     DOWN = 4
+    MINE = 5
 
 
 DIRECTIONS = jnp.array(
@@ -64,6 +65,22 @@ DIRECTIONS = jnp.array(
         [1, 0],  # RIGHT
         [0, -1],  # UP
         [0, 1],  # DOWN
+        [0, 0],  # MINE (no movement)
+    ],
+    dtype=jnp.int32,
+)
+
+MINEABLE_BLOCKS = jnp.array([BlockType.COAL, BlockType.IRON, BlockType.COPPER])
+
+BLOCK_TO_ITEM_ARRAY = jnp.array(
+    [
+        ItemType.EMPTY,  # INVALID -> EMPTY
+        ItemType.EMPTY,  # OUT_OF_BOUNDS -> EMPTY
+        ItemType.EMPTY,  # DIRT -> EMPTY
+        ItemType.EMPTY,  # WATER -> EMPTY
+        ItemType.IRON,  # IRON -> IRON
+        ItemType.COPPER,  # COPPER -> COPPER
+        ItemType.COAL,  # COAL -> COAL
     ],
     dtype=jnp.int32,
 )
