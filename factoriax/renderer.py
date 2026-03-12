@@ -2,8 +2,16 @@
 
 import numpy as np
 
-from factoriax.constants import BLOCK_PIXEL_SIZE, BlockType, load_all_textures
+from factoriax.constants import (
+    BLOCK_PIXEL_SIZE,
+    ITEM_COLORS,
+    NUM_INVENTORY_SLOTS,
+    BlockType,
+    load_all_textures,
+)
 from factoriax.state import EnvState
+
+INVENTORY_BAR_HEIGHT = 24
 
 
 def create_default_textures() -> dict[int, np.ndarray]:
@@ -83,6 +91,46 @@ def get_textures() -> dict[int, np.ndarray]:
         return create_default_textures()
 
 
+def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
+    """Render inventory bar showing all 10 slots.
+
+    Args:
+        state: Current environment state containing inventory data
+        width: Width of the bar in pixels (should match map render width)
+
+    Returns:
+        RGB numpy array of shape (INVENTORY_BAR_HEIGHT, width, 3)
+    """
+    bar = np.zeros((INVENTORY_BAR_HEIGHT, width, 3), dtype=np.uint8)
+    bar[:, :] = (40, 40, 40)
+
+    slot_width = width // NUM_INVENTORY_SLOTS
+    slot_size = min(slot_width - 4, INVENTORY_BAR_HEIGHT - 4)
+
+    inventory_items = np.array(state.inventory_items)
+    inventory_counts = np.array(state.inventory_counts)
+
+    for slot_idx in range(NUM_INVENTORY_SLOTS):
+        x_center = slot_idx * slot_width + slot_width // 2
+        x_start = x_center - slot_size // 2
+        y_start = (INVENTORY_BAR_HEIGHT - slot_size) // 2
+
+        bar[y_start : y_start + slot_size, x_start : x_start + slot_size] = (60, 60, 60)
+
+        item_type = int(inventory_items[slot_idx])
+        count = int(inventory_counts[slot_idx])
+
+        if item_type != 0 and count > 0:
+            pad = 2
+            color = ITEM_COLORS.get(item_type, (128, 128, 128))
+            bar[
+                y_start + pad : y_start + slot_size - pad,
+                x_start + pad : x_start + slot_size - pad,
+            ] = color
+
+    return bar
+
+
 def render_pixels(
     state: EnvState, block_pixel_size: int = BLOCK_PIXEL_SIZE
 ) -> np.ndarray:
@@ -131,7 +179,9 @@ def render_pixels(
         block_pixel_size,
     )
 
-    return image[:, :, :3]
+    image_rgb = image[:, :, :3]
+    inv_bar = render_inventory_bar(state, img_width)
+    return np.vstack([image_rgb, inv_bar])
 
 
 def _alpha_blend_inplace(

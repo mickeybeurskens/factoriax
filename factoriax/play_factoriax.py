@@ -7,7 +7,7 @@ from jax import random
 
 from factoriax.constants import BLOCK_PIXEL_SIZE, Action
 from factoriax.envs.factoriax_env import make_factoriax_env
-from factoriax.renderer import render_pixels
+from factoriax.renderer import INVENTORY_BAR_HEIGHT, render_pixels
 
 
 def main() -> None:
@@ -16,7 +16,7 @@ def main() -> None:
 
     env, params = make_factoriax_env()
     window_width = params.map_width * BLOCK_PIXEL_SIZE
-    window_height = params.map_height * BLOCK_PIXEL_SIZE
+    window_height = params.map_height * BLOCK_PIXEL_SIZE + INVENTORY_BAR_HEIGHT
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
     clock = pygame.time.Clock()

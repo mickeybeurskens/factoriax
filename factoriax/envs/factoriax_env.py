@@ -6,7 +6,13 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces
 
-from factoriax.constants import NUM_ACTIONS
+from factoriax.constants import (
+    MAX_STACK_SIZE,
+    NUM_ACTIONS,
+    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
+    BlockType,
+)
 from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
@@ -79,23 +85,27 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """Get observation from the current state.
 
         The observation is a flattened representation of the map with player position
-        encoded. For now, we return a simple representation rather than pixel rendering
-        for efficiency in training.
+        and inventory encoded. For now, we return a simple representation rather than
+        pixel rendering for efficiency in training.
 
         Args:
             state: Current environment state
             params: Environment parameters
 
         Returns:
-            Observation array
+            Observation array containing map, player info, and inventory data
         """
         player_x = state.player_position[0] / params.map_width
         player_y = state.player_position[1] / params.map_height
         player_dir = state.player_direction / NUM_ACTIONS
         timestep_frac = state.timestep / params.max_timesteps
-        flat_map = state.map.flatten().astype(jnp.float32) / 4.0
+        flat_map = state.map.flatten().astype(jnp.float32) / float(BlockType.COAL)
         player_info = jnp.array([player_x, player_y, player_dir, timestep_frac])
-        return jnp.concatenate([flat_map, player_info])
+
+        inv_items = state.inventory_items.astype(jnp.float32) / NUM_ITEM_TYPES
+        inv_counts = state.inventory_counts.astype(jnp.float32) / MAX_STACK_SIZE
+
+        return jnp.concatenate([flat_map, player_info, inv_items, inv_counts])
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.
@@ -129,7 +139,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Box observation space matching the flattened observation
         """
-        obs_size = params.map_width * params.map_height + 4
+        obs_size = params.map_width * params.map_height + 4 + NUM_INVENTORY_SLOTS * 2
         return spaces.Box(
             low=0.0,
             high=1.0,

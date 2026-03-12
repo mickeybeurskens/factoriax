@@ -21,6 +21,32 @@ class BlockType(IntEnum):
     COAL = 6
 
 
+class ItemType(IntEnum):
+    """Item types that can be stored in inventory."""
+
+    EMPTY = 0
+    COAL = 1
+    IRON = 2
+    COPPER = 3
+
+
+NUM_INVENTORY_SLOTS = 10
+MAX_STACK_SIZE = 64
+NUM_ITEM_TYPES = len(ItemType)
+
+BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
+    BlockType.COAL: ItemType.COAL,
+    BlockType.IRON: ItemType.IRON,
+    BlockType.COPPER: ItemType.COPPER,
+}
+
+ITEM_COLORS: dict[ItemType, tuple[int, int, int]] = {
+    ItemType.COAL: (54, 54, 54),
+    ItemType.IRON: (192, 192, 192),
+    ItemType.COPPER: (184, 115, 51),
+}
+
+
 class Action(IntEnum):
     """Player actions."""
 

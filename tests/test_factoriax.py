@@ -7,7 +7,7 @@ import pytest
 from jax import random
 
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
-from factoriax.constants import SOLID_BLOCKS
+from factoriax.constants import NUM_INVENTORY_SLOTS, SOLID_BLOCKS
 from factoriax.game_logic import (
     get_block_at,
     is_game_over,
@@ -15,7 +15,7 @@ from factoriax.game_logic import (
     is_position_walkable,
     move_player,
 )
-from factoriax.renderer import create_default_textures, render_pixels
+from factoriax.renderer import INVENTORY_BAR_HEIGHT, create_default_textures, render_pixels
 from factoriax.world_gen import generate_world
 
 
@@ -116,6 +116,8 @@ class TestGameLogic:
             player_position=jnp.array([1, 1], dtype=jnp.int32),
             player_direction=Action.DOWN,
             timestep=0,
+            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
         )
 
     def test_is_position_in_bounds(self) -> None:
@@ -190,6 +192,8 @@ class TestGameLogic:
             player_position=jnp.array([0, 0], dtype=jnp.int32),
             player_direction=Action.DOWN,
             timestep=0,
+            inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+            inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
         )
         new_state = move_player(state, Action.RIGHT)
         assert jnp.array_equal(new_state.player_position, jnp.array([0, 0]))
@@ -258,13 +262,14 @@ class TestRenderer:
         assert coal[0, 0, 2] == 54
 
     def test_render_pixels_returns_correct_shape(self) -> None:
-        """Rendered image should have correct dimensions."""
+        """Rendered image should have correct dimensions including inventory bar."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=8, map_height=8)
         state = generate_world(rng, params)
 
         pixels = render_pixels(state, block_pixel_size=16)
-        assert pixels.shape == (8 * 16, 8 * 16, 3)
+        expected_height = 8 * 16 + INVENTORY_BAR_HEIGHT
+        assert pixels.shape == (expected_height, 8 * 16, 3)
 
     def test_render_pixels_returns_rgb(self) -> None:
         """Rendered image should be RGB (not RGBA)."""
@@ -332,7 +337,7 @@ class TestEnvironment:
         """Observation space should match expected dimensions."""
         env, params = make_factoriax_env()
         obs_space = env.observation_space(params)
-        expected_size = params.map_width * params.map_height + 4
+        expected_size = params.map_width * params.map_height + 4 + 20
         assert obs_space.shape == (expected_size,)
 
     def test_jit_compilation(self) -> None:

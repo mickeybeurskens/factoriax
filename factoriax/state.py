@@ -15,12 +15,16 @@ class EnvState:
         player_position: (x, y) coordinates of the player
         player_direction: Direction the player is facing (Action value)
         timestep: Current timestep in the episode
+        inventory_items: Array of item type IDs with shape (NUM_INVENTORY_SLOTS,)
+        inventory_counts: Array of stack counts with shape (NUM_INVENTORY_SLOTS,)
     """
 
     map: jnp.ndarray
     player_position: jnp.ndarray
     player_direction: int
     timestep: int
+    inventory_items: jnp.ndarray
+    inventory_counts: jnp.ndarray
 
 
 @struct.dataclass

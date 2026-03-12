@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
-from factoriax.constants import Action, BlockType
+from factoriax.constants import NUM_INVENTORY_SLOTS, Action, BlockType
 from factoriax.state import EnvParams, EnvState
 
 
@@ -35,6 +35,8 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
         player_position=player_position,
         player_direction=Action.DOWN,
         timestep=0,
+        inventory_items=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
+        inventory_counts=jnp.zeros(NUM_INVENTORY_SLOTS, dtype=jnp.int32),
     )
 
 
