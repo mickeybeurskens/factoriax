@@ -7,7 +7,7 @@ import pytest
 from jax import random
 
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
-from factoriax.constants import SOLID_BLOCKS
+from factoriax.constants import BLOCK_PIXEL_SIZE, SOLID_BLOCKS
 from factoriax.game_logic import (
     get_block_at,
     is_game_over,
@@ -230,10 +230,10 @@ class TestRenderer:
         assert BlockType.COAL in textures
 
     def test_textures_have_correct_shape(self) -> None:
-        """Textures should be 16x16 RGBA."""
+        """Textures should be BLOCK_PIXEL_SIZE x BLOCK_PIXEL_SIZE RGBA."""
         textures = create_default_textures()
         for texture in textures.values():
-            assert texture.shape == (16, 16, 4)
+            assert texture.shape == (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4)
             assert texture.dtype == np.uint8
 
     def test_resource_textures_have_expected_colors(self) -> None:

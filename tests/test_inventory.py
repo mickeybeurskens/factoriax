@@ -4,7 +4,12 @@ import jax.numpy as jnp
 from jax import random
 
 from factoriax import ItemType, make_factoriax_env
-from factoriax.constants import MAX_STACK_SIZE, NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES
+from factoriax.constants import (
+    BLOCK_PIXEL_SIZE,
+    MAX_STACK_SIZE,
+    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
+)
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 from factoriax.world_gen import generate_world
@@ -131,4 +136,4 @@ class TestInventoryRenderer:
         state = generate_world(rng, params)
 
         pixels = render_pixels(state)
-        assert pixels.shape == (8 * 16, 8 * 16, 3)
+        assert pixels.shape == (8 * BLOCK_PIXEL_SIZE, 8 * BLOCK_PIXEL_SIZE, 3)

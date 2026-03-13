@@ -209,3 +209,4 @@ __marimo__/
 # Project specific
 CLAUDE.md
 craftax/
+tmp_baselines/

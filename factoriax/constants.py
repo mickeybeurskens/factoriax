@@ -172,7 +172,7 @@ MACHINE_MINING_RATE = jnp.array(
 )
 
 OBS_DIM = (64, 64, 3)
-BLOCK_PIXEL_SIZE = 16
+BLOCK_PIXEL_SIZE = 32
 NUM_ACTIONS = len(Action)
 
 

@@ -26,16 +26,17 @@ from factoriax.state import EnvState
 
 # ---------------------------------------------------------------------------
 # Style constants — edit here to restyle every menu at once.
+# All values are sized for the 32 px-per-block base resolution.
 # ---------------------------------------------------------------------------
 
 _PANEL_BG: tuple[int, int, int, int] = (22, 22, 22, 228)
 _BORDER: tuple[int, int, int, int] = (190, 165, 55, 255)
-_BORDER_PX: int = 2
+_BORDER_PX: int = 4
 _FOCUS_STRIP: tuple[int, int, int, int] = (55, 130, 55, 255)
-_HEADER_H: int = 22       # height reserved for each section label row
-_SEP_H: int = 2           # height of the gold separator beneath labels
-_FONT_HEADER: int = 13    # section label font size
-_FONT_BODY: int = 10      # item names, counts, recipe info font size
+_HEADER_H: int = 44       # height reserved for each section label row
+_SEP_H: int = 4           # height of the gold separator beneath labels
+_FONT_HEADER: int = 26    # section label font size
+_FONT_BODY: int = 20      # item names, counts, recipe info font size
 
 # Crafting ingredient affordability colours.
 _AFFORD_COLOR: tuple[int, int, int] = (110, 220, 110)
@@ -224,10 +225,10 @@ def _draw_section_header(
     _blit_rgba(overlay, label, label_y, label_x)
 
     sep_y = content_y + _HEADER_H
-    overlay[sep_y : sep_y + _SEP_H, x + _BORDER_PX + 2 : x + w - _BORDER_PX - 2] = (
+    overlay[sep_y : sep_y + _SEP_H, x + _BORDER_PX + 4 : x + w - _BORDER_PX - 4] = (
         _BORDER
     )
-    return sep_y + _SEP_H + 4
+    return sep_y + _SEP_H + 8
 
 
 # ---------------------------------------------------------------------------
@@ -263,23 +264,23 @@ def render_achievement_menu(
 
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
-    title_font = get_pixel_font(16)
+    title_font = get_pixel_font(32)
     body_font = get_pixel_font(_FONT_BODY)
 
     title_arr = _render_text_rgba("ACHIEVEMENTS", title_font, (215, 195, 65))
     title_x = menu_x + (menu_w - title_arr.shape[1]) // 2
-    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 8, title_x)
+    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 16, title_x)
 
-    sep_y = menu_y + _BORDER_PX + 8 + title_arr.shape[0] + 6
-    overlay[sep_y : sep_y + _SEP_H, menu_x + 10 : menu_x + menu_w - 10] = _BORDER
+    sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
+    overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
 
     unlocked = np.array(state.achievements_unlocked)
     n_unlocked = int(np.sum(unlocked))
 
-    footer_reserve = 28
-    available_h = menu_h - (sep_y - menu_y) - 8 - footer_reserve
-    row_h = min(38, available_h // max(NUM_ACHIEVEMENTS, 1))
-    list_y = sep_y + _SEP_H + 8
+    footer_reserve = 56
+    available_h = menu_h - (sep_y - menu_y) - 16 - footer_reserve
+    row_h = min(76, available_h // max(NUM_ACHIEVEMENTS, 1))
+    list_y = sep_y + _SEP_H + 16
 
     for i, info in enumerate(ACHIEVEMENT_INFO):
         is_unlocked = bool(unlocked[i])
@@ -287,12 +288,12 @@ def render_achievement_menu(
 
         if is_unlocked:
             overlay[
-                row_y : row_y + row_h - 2,
-                menu_x + 4 : menu_x + menu_w - 4,
+                row_y : row_y + row_h - 4,
+                menu_x + 8 : menu_x + menu_w - 8,
             ] = (42, 68, 42, 210)
 
-        icon_size = 10
-        icon_x = menu_x + 16
+        icon_size = 20
+        icon_x = menu_x + 32
         icon_y = row_y + (row_h - icon_size) // 2
         icon_color: tuple[int, int, int, int] = (
             (75, 215, 75, 255) if is_unlocked else (65, 65, 65, 255)
@@ -304,7 +305,7 @@ def render_achievement_menu(
         )
         name_arr = _render_text_rgba(info.name, body_font, text_color)
         name_y = row_y + (row_h - name_arr.shape[0]) // 2
-        _blit_rgba(overlay, name_arr, name_y, icon_x + icon_size + 10)
+        _blit_rgba(overlay, name_arr, name_y, icon_x + icon_size + 20)
 
     footer_arr = _render_text_rgba(
         f"{n_unlocked} / {NUM_ACHIEVEMENTS} unlocked",
@@ -312,9 +313,9 @@ def render_achievement_menu(
         (148, 140, 98),
     )
     fx = menu_x + (menu_w - footer_arr.shape[1]) // 2
-    fy = menu_y + menu_h - footer_arr.shape[0] - 10
+    fy = menu_y + menu_h - footer_arr.shape[0] - 20
     _blit_rgba(overlay, footer_arr, fy, fx)
-    overlay[fy - 4 : fy - 3, menu_x + 10 : menu_x + menu_w - 10] = (80, 75, 40, 255)
+    overlay[fy - 8 : fy - 6, menu_x + 20 : menu_x + menu_w - 20] = (80, 75, 40, 255)
 
     return overlay
 
@@ -381,18 +382,18 @@ def render_inventory_menu(
     # ------------------------------------------------------------------
     cols = 5
     rows = 2
-    padding = 10
+    padding = 20
     grid_x = menu_x + padding
     grid_w = inv_w - 2 * padding
 
     cell_w = grid_w // cols
-    icon_size = min(cell_w - 6, 28)
+    icon_size = min(cell_w - 12, 56)
     line_h = body_font.get_height()
-    # Each cell: icon + 2px gap + count text + 1px gap + name text + 4px margin
-    cell_h = icon_size + 2 + line_h + 1 + line_h + 4
+    # Each cell: icon + 4px gap + count text + 2px gap + name text + 8px margin
+    cell_h = icon_size + 4 + line_h + 2 + line_h + 8
 
     grid_available_h = menu_h - (inv_content_y - menu_y) - padding
-    row_gap = max(4, (grid_available_h - rows * cell_h) // (rows + 1))
+    row_gap = max(8, (grid_available_h - rows * cell_h) // (rows + 1))
     grid_y = inv_content_y + row_gap
 
     for slot_idx in range(NUM_INVENTORY_SLOTS):
@@ -421,14 +422,14 @@ def render_inventory_menu(
 
         if item_type != 0 and count > 0:
             rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            pad = 4
+            pad = 8
             overlay[
                 cell_y + pad : cell_y + icon_size - pad,
                 icon_x + pad : icon_x + icon_size - pad,
             ] = (*rgb, 255)
 
             count_arr = _render_text_rgba(f"x{count}", body_font, rgb)
-            count_y = cell_y + icon_size + 2
+            count_y = cell_y + icon_size + 4
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
             _blit_rgba(overlay, count_arr, count_y, count_x)
 
@@ -438,18 +439,18 @@ def render_inventory_menu(
                     (235, 228, 185) if is_selected else (160, 155, 130)
                 )
                 name_arr = _render_text_rgba(name, body_font, name_color)
-                name_y = cell_y + icon_size + 2 + line_h + 1
+                name_y = cell_y + icon_size + 4 + line_h + 2
                 name_x = cell_x + (cell_w - name_arr.shape[1]) // 2
                 _blit_rgba(overlay, name_arr, name_y, name_x)
 
     # ------------------------------------------------------------------
     # Crafting recipes list
     # ------------------------------------------------------------------
-    craft_pad = 10
+    craft_pad = 20
     craft_x = div_x + craft_pad
     craft_available_w = craft_w - 2 * craft_pad
     craft_available_h = menu_h - (craft_content_y - menu_y) - craft_pad
-    recipe_h = min(60, craft_available_h // max(NUM_RECIPES, 1))
+    recipe_h = min(120, craft_available_h // max(NUM_RECIPES, 1))
 
     for recipe_idx in range(NUM_RECIPES):
         recipe = RECIPES[recipe_idx]
@@ -462,34 +463,34 @@ def render_inventory_menu(
 
         if is_selected_recipe:
             overlay[
-                recipe_y : recipe_y + recipe_h - 2,
+                recipe_y : recipe_y + recipe_h - 4,
                 craft_x : craft_x + craft_available_w,
             ] = (65, 65, 65, 255)
             white = (255, 255, 255, 255)
             overlay[recipe_y, craft_x : craft_x + craft_available_w] = white
-            overlay[recipe_y + recipe_h - 3, craft_x : craft_x + craft_available_w] = white
-            overlay[recipe_y : recipe_y + recipe_h - 2, craft_x] = white
-            overlay[recipe_y : recipe_y + recipe_h - 2, craft_x + craft_available_w - 1] = white
+            overlay[recipe_y + recipe_h - 5, craft_x : craft_x + craft_available_w] = white
+            overlay[recipe_y : recipe_y + recipe_h - 4, craft_x] = white
+            overlay[recipe_y : recipe_y + recipe_h - 4, craft_x + craft_available_w - 1] = white
 
         # Output icon.
-        out_icon = 16
+        out_icon = 32
         out_item = recipe["output"]
         out_rgb = ITEM_COLORS.get(out_item, (128, 128, 128))
         overlay[
-            recipe_y + 4 : recipe_y + 4 + out_icon,
-            craft_x + 4 : craft_x + 4 + out_icon,
+            recipe_y + 8 : recipe_y + 8 + out_icon,
+            craft_x + 8 : craft_x + 8 + out_icon,
         ] = (*out_rgb, 255)
 
         # Recipe name to the right of the icon.
         name_color = (230, 225, 180) if can_afford else (150, 145, 120)
         name_arr = _render_text_rgba(RECIPE_NAMES[recipe_idx], body_font, name_color)
-        name_y = recipe_y + 4 + (out_icon - name_arr.shape[0]) // 2
-        _blit_rgba(overlay, name_arr, name_y, craft_x + 4 + out_icon + 6)
+        name_y = recipe_y + 8 + (out_icon - name_arr.shape[0]) // 2
+        _blit_rgba(overlay, name_arr, name_y, craft_x + 8 + out_icon + 12)
 
         # Ingredient row: [small icon] [have/need] for each input.
-        inp_y = recipe_y + 4 + out_icon + 4
-        inp_x = craft_x + 4
-        inp_icon = 10
+        inp_y = recipe_y + 8 + out_icon + 8
+        inp_x = craft_x + 8
+        inp_icon = 20
 
         for item_type, required in recipe["inputs"]:
             have = int(count_item_in_inventory(state, selected_player, item_type))
@@ -500,19 +501,19 @@ def render_inventory_menu(
                 _AFFORD_COLOR if have >= required else _CANNOT_AFFORD_COLOR
             )
             ratio_arr = _render_text_rgba(f"{have}/{required}", body_font, count_color)
-            _blit_rgba(overlay, ratio_arr, inp_y, inp_x + inp_icon + 3)
-            inp_x += inp_icon + 3 + ratio_arr.shape[1] + 6
+            _blit_rgba(overlay, ratio_arr, inp_y, inp_x + inp_icon + 6)
+            inp_x += inp_icon + 6 + ratio_arr.shape[1] + 12
 
         # Progress bar on the selected recipe.
         if craft_progress > 0 and is_selected_recipe:
-            bar_y = recipe_y + recipe_h - 10
-            bar_w = craft_available_w - 8
+            bar_y = recipe_y + recipe_h - 20
+            bar_w = craft_available_w - 16
             filled = int(bar_w * (1 - craft_progress / recipe["ticks"]))
-            overlay[bar_y : bar_y + 4, craft_x + 4 : craft_x + 4 + bar_w] = (
+            overlay[bar_y : bar_y + 8, craft_x + 8 : craft_x + 8 + bar_w] = (
                 35, 35, 35, 255
             )
             if filled > 0:
-                overlay[bar_y : bar_y + 4, craft_x + 4 : craft_x + 4 + filled] = (
+                overlay[bar_y : bar_y + 8, craft_x + 8 : craft_x + 8 + filled] = (
                     100, 200, 100, 255
                 )
 

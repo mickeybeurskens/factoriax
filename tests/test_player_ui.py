@@ -6,10 +6,9 @@ correctness is validated by running the game — pixel-level assertions are
 intentionally absent.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pygame
-import pytest
-import jax.numpy as jnp
 
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import ItemType

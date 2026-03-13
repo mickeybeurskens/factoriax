@@ -17,13 +17,32 @@ from factoriax.state import EnvState
 INVENTORY_BAR_HEIGHT = 24
 
 
-def create_default_textures() -> dict[int, np.ndarray]:
+def _resize_texture(texture: np.ndarray, size: int) -> np.ndarray:
+    """Resize a texture to *size* × *size* using nearest-neighbour sampling.
+
+    Args:
+        texture: RGBA array of shape (H, W, 4).
+        size: Target side length in pixels.
+
+    Returns:
+        RGBA array of shape (size, size, 4).
+    """
+    src_size = texture.shape[0]
+    if src_size == size:
+        return texture
+    idx = np.round(np.linspace(0, src_size - 1, size)).astype(int)
+    return texture[np.ix_(idx, idx)]
+
+
+def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
     """Create simple default textures if asset files don't exist.
+
+    Args:
+        size: Side length of each texture in pixels.
 
     Returns:
         Dictionary mapping BlockType values to RGBA texture arrays
     """
-    size = BLOCK_PIXEL_SIZE
     textures: dict[int, np.ndarray] = {}
 
     dirt = np.zeros((size, size, 4), dtype=np.uint8)
@@ -81,6 +100,7 @@ def create_player_texture(
     direction: int = Action.DOWN,
     player_idx: int = 0,
     is_selected: bool = True,
+    size: int = BLOCK_PIXEL_SIZE,
 ) -> np.ndarray:
     """Create a player texture with directional indicator.
 
@@ -92,11 +112,11 @@ def create_player_texture(
         direction: The direction the player is facing (Action enum value)
         player_idx: Index of the player (determines color)
         is_selected: Whether this player is currently selected
+        size: Side length of the texture in pixels
 
     Returns:
-        RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4)
+        RGBA numpy array of shape (size, size, 4)
     """
-    size = BLOCK_PIXEL_SIZE
     player = np.zeros((size, size, 4), dtype=np.uint8)
     center = size // 2
     radius = size // 3
@@ -146,16 +166,23 @@ def create_player_texture(
     return player
 
 
-def get_textures() -> dict[int, np.ndarray]:
+def get_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
     """Load textures from files, falling back to defaults if not found.
+
+    Resizes textures to *size* if they differ from the stored dimensions,
+    so render_pixels can produce any block pixel size cleanly.
+
+    Args:
+        size: Required texture side length in pixels.
 
     Returns:
         Dictionary mapping BlockType values to RGBA texture arrays
     """
     try:
-        return load_all_textures()
+        raw = load_all_textures()
+        return {k: _resize_texture(v, size) for k, v in raw.items()}
     except FileNotFoundError:
-        return create_default_textures()
+        return create_default_textures(size)
 
 
 def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
@@ -276,7 +303,7 @@ def render_pixels(
     Returns:
         RGB numpy array of the rendered scene
     """
-    textures = get_textures()
+    textures = get_textures(block_pixel_size)
 
     map_array = np.array(state.map)
     map_height, map_width = map_array.shape
@@ -309,7 +336,7 @@ def render_pixels(
     for player_idx in range(num_players):
         direction = int(player_directions[player_idx])
         is_selected = player_idx == selected
-        player_texture = create_player_texture(direction, player_idx, is_selected)
+        player_texture = create_player_texture(direction, player_idx, is_selected, block_pixel_size)
 
         px, py = int(player_positions[player_idx, 0]), int(player_positions[player_idx, 1])
         py_start = py * block_pixel_size
