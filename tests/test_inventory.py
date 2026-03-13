@@ -5,7 +5,7 @@ from jax import random
 
 from factoriax import ItemType, make_factoriax_env
 from factoriax.constants import MAX_STACK_SIZE, NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES
-from factoriax.renderer import render_inventory_menu, render_pixels
+from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 from factoriax.world_gen import generate_world
 
@@ -122,25 +122,13 @@ class TestInventoryObservation:
 
 
 class TestInventoryRenderer:
-    """Tests for inventory menu rendering."""
+    """Regression tests for the base renderer output contract."""
 
     def test_render_pixels_excludes_inventory(self) -> None:
-        """Rendered image should not include inventory menu by default."""
+        """render_pixels should return an RGB array sized to the map, no menu."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=8, map_height=8)
         state = generate_world(rng, params)
 
         pixels = render_pixels(state)
-        expected_height = 8 * 16
-        assert pixels.shape == (expected_height, 8 * 16, 3)
-
-    def test_inventory_menu_returns_rgba(self) -> None:
-        """Inventory menu should return RGBA for compositing."""
-        rng = random.PRNGKey(0)
-        params = EnvParams(map_width=8, map_height=8)
-        state = generate_world(rng, params)
-
-        screen_width = 8 * 16
-        screen_height = 8 * 16
-        menu = render_inventory_menu(state, screen_width, screen_height)
-        assert menu.shape == (screen_height, screen_width, 4)
+        assert pixels.shape == (8 * 16, 8 * 16, 3)

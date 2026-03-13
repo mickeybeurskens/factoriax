@@ -7,7 +7,8 @@ from jax import random
 
 from factoriax.constants import BLOCK_PIXEL_SIZE, Action
 from factoriax.envs.factoriax_env import make_factoriax_env
-from factoriax.renderer import render_inventory_menu, render_pixels
+from factoriax.player_ui import render_achievement_menu, render_inventory_menu
+from factoriax.renderer import render_pixels
 
 
 def composite_rgba_over_rgb(
@@ -76,6 +77,7 @@ def main() -> None:
         [: Cycle slot/recipe backward (in focused section)
         C: Start crafting selected recipe
         E: Place machine from selected inventory slot
+        P: Toggle achievement menu
         1-9: Select player (if that many players exist)
         R: Reset the game
         Q/Escape: Quit
@@ -120,6 +122,7 @@ def main() -> None:
     }
 
     inventory_open = False
+    achievement_open = False
     menu_focus = "inventory"
 
     running = True
@@ -134,6 +137,12 @@ def main() -> None:
                     running = False
                 elif event.key == pygame.K_i:
                     inventory_open = not inventory_open
+                    if inventory_open:
+                        achievement_open = False
+                elif event.key == pygame.K_p:
+                    achievement_open = not achievement_open
+                    if achievement_open:
+                        inventory_open = False
                 elif event.key == pygame.K_r:
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)
@@ -173,6 +182,10 @@ def main() -> None:
                 state, base_width, base_height, menu_focus
             )
             pixels = composite_rgba_over_rgb(pixels, menu_overlay)
+
+        if achievement_open:
+            ach_overlay = render_achievement_menu(state, base_width, base_height)
+            pixels = composite_rgba_over_rgb(pixels, ach_overlay)
 
         base_surface = pygame.surfarray.make_surface(np.transpose(pixels, (1, 0, 2)))
         scaled_surface = pygame.transform.scale(

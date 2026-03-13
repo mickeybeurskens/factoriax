@@ -6,16 +6,12 @@ from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
     NUM_INVENTORY_SLOTS,
-    NUM_RECIPES,
-    RECIPE_NAMES,
-    RECIPES,
     Action,
     BlockType,
     ItemType,
     MachineType,
     load_all_textures,
 )
-from factoriax.crafting import can_afford_recipe, count_item_in_inventory
 from factoriax.state import EnvState
 
 INVENTORY_BAR_HEIGHT = 24
@@ -220,180 +216,6 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
 
     return bar
 
-
-ITEM_NAMES: dict[int, str] = {
-    ItemType.EMPTY: "Empty",
-    ItemType.COAL: "Coal",
-    ItemType.IRON: "Iron",
-    ItemType.COPPER: "Copper",
-    ItemType.MINER: "Miner",
-}
-
-
-def render_inventory_menu(
-    state: EnvState,
-    screen_width: int,
-    screen_height: int,
-    menu_focus: str = "inventory",
-) -> np.ndarray:
-    """Render the inventory and crafting menu as an RGBA overlay.
-
-    Creates a semi-transparent menu with two sections:
-    - Left: Inventory grid (2x5)
-    - Right: Crafting recipes list
-
-    Args:
-        state: Current environment state
-        screen_width: Total screen width in pixels
-        screen_height: Total screen height in pixels
-        menu_focus: Which section is focused ("inventory" or "crafting")
-
-    Returns:
-        RGBA numpy array that can be alpha-composited over the game render
-    """
-    menu_width = int(screen_width * 0.75)
-    menu_height = int(screen_height * 0.5)
-    menu_x = (screen_width - menu_width) // 2
-    menu_y = (screen_height - menu_height) // 2
-
-    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
-
-    bg_alpha = 217
-    inv_section_width = int(menu_width * 0.6)
-    craft_section_width = menu_width - inv_section_width
-
-    overlay[menu_y : menu_y + menu_height, menu_x : menu_x + inv_section_width] = (
-        40, 40, 40, bg_alpha
-    )
-    overlay[
-        menu_y : menu_y + menu_height,
-        menu_x + inv_section_width : menu_x + menu_width
-    ] = (55, 55, 55, bg_alpha)
-
-    border_color = (100, 100, 100, 255)
-    overlay[menu_y, menu_x : menu_x + menu_width] = border_color
-    overlay[menu_y + menu_height - 1, menu_x : menu_x + menu_width] = border_color
-    overlay[menu_y : menu_y + menu_height, menu_x] = border_color
-    overlay[menu_y : menu_y + menu_height, menu_x + menu_width - 1] = border_color
-    overlay[menu_y : menu_y + menu_height, menu_x + inv_section_width] = border_color
-
-    if menu_focus == "inventory":
-        highlight = (80, 120, 80, 255)
-        overlay[menu_y + 1, menu_x + 1 : menu_x + inv_section_width] = highlight
-        overlay[menu_y + 2, menu_x + 1 : menu_x + inv_section_width] = highlight
-    else:
-        highlight = (80, 120, 80, 255)
-        overlay[menu_y + 1, menu_x + inv_section_width + 1 : menu_x + menu_width - 1] = highlight
-        overlay[menu_y + 2, menu_x + inv_section_width + 1 : menu_x + menu_width - 1] = highlight
-
-    selected_player = int(state.selected_player)
-    selected_slot = int(state.selected_slots[selected_player])
-    selected_recipe = int(state.selected_recipes[selected_player])
-    craft_progress = int(state.craft_progress[selected_player])
-    inventory_items = np.array(state.inventory_items[selected_player])
-    inventory_counts = np.array(state.inventory_counts[selected_player])
-
-    padding = 15
-    inv_grid_width = inv_section_width - 2 * padding
-    inv_grid_height = menu_height - 2 * padding - 25
-
-    cols = 5
-    rows = 2
-    slot_width = inv_grid_width // cols
-    slot_height = inv_grid_height // rows
-    slot_size = min(slot_width, slot_height) - 6
-
-    grid_start_x = menu_x + padding
-    grid_start_y = menu_y + padding + 10
-
-    for slot_idx in range(NUM_INVENTORY_SLOTS):
-        row = slot_idx // cols
-        col = slot_idx % cols
-
-        slot_center_x = grid_start_x + col * slot_width + slot_width // 2
-        slot_center_y = grid_start_y + row * slot_height + slot_height // 2
-
-        x_start = slot_center_x - slot_size // 2
-        y_start = slot_center_y - slot_size // 2
-
-        is_selected = (slot_idx == selected_slot) and (menu_focus == "inventory")
-        slot_bg = (100, 100, 100, 255) if is_selected else (60, 60, 60, 255)
-
-        overlay[y_start : y_start + slot_size, x_start : x_start + slot_size] = slot_bg
-
-        if is_selected:
-            white = (255, 255, 255, 255)
-            overlay[y_start, x_start : x_start + slot_size] = white
-            overlay[y_start + slot_size - 1, x_start : x_start + slot_size] = white
-            overlay[y_start : y_start + slot_size, x_start] = white
-            overlay[y_start : y_start + slot_size, x_start + slot_size - 1] = white
-
-        item_type = int(inventory_items[slot_idx])
-        count = int(inventory_counts[slot_idx])
-
-        if item_type != 0 and count > 0:
-            item_pad = 3
-            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            overlay[
-                y_start + item_pad : y_start + slot_size - item_pad,
-                x_start + item_pad : x_start + slot_size - item_pad,
-            ] = (*rgb, 255)
-
-    craft_x = menu_x + inv_section_width + padding
-    craft_y = menu_y + padding + 10
-    recipe_height = 35
-
-    for recipe_idx in range(NUM_RECIPES):
-        recipe = RECIPES[recipe_idx]
-        RECIPE_NAMES[recipe_idx]
-        is_selected = (recipe_idx == selected_recipe) and (menu_focus == "crafting")
-        bool(can_afford_recipe(state, selected_player, recipe_idx))
-
-        recipe_y = craft_y + recipe_idx * recipe_height
-
-        if is_selected:
-            overlay[
-                recipe_y : recipe_y + recipe_height - 2,
-                craft_x : craft_x + craft_section_width - 2 * padding,
-            ] = (80, 80, 80, 255)
-            white = (255, 255, 255, 255)
-            overlay[recipe_y, craft_x : craft_x + craft_section_width - 2 * padding] = white
-            overlay[recipe_y + recipe_height - 3, craft_x : craft_x + craft_section_width - 2 * padding] = white
-            overlay[recipe_y : recipe_y + recipe_height - 2, craft_x] = white
-            overlay[recipe_y : recipe_y + recipe_height - 2, craft_x + craft_section_width - 2 * padding - 1] = white
-
-        output_item = recipe["output"]
-        rgb = ITEM_COLORS.get(output_item, (128, 128, 128))
-        icon_size = 16
-        icon_y = recipe_y + 4
-        icon_x = craft_x + 4
-        overlay[icon_y : icon_y + icon_size, icon_x : icon_x + icon_size] = (*rgb, 255)
-
-        inputs = recipe["inputs"]
-        input_x = icon_x + icon_size + 8
-        for item_type, required in inputs:
-            input_rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            have = int(count_item_in_inventory(state, selected_player, item_type))
-
-            if have >= required:
-                input_rgb = tuple(min(255, c + 30) for c in input_rgb)
-            else:
-                input_rgb = tuple(c // 2 for c in input_rgb)
-
-            input_icon_size = 10
-            input_y = recipe_y + 8
-            overlay[input_y : input_y + input_icon_size, input_x : input_x + input_icon_size] = (*input_rgb, 255)
-            input_x += input_icon_size + 4
-
-        if craft_progress > 0 and recipe_idx == selected_recipe:
-            progress_y = recipe_y + recipe_height - 8
-            progress_width = craft_section_width - 2 * padding - 10
-            progress_filled = int(progress_width * (1 - craft_progress / recipe["ticks"]))
-            overlay[progress_y : progress_y + 4, craft_x + 4 : craft_x + 4 + progress_width] = (30, 30, 30, 255)
-            if progress_filled > 0:
-                overlay[progress_y : progress_y + 4, craft_x + 4 : craft_x + 4 + progress_filled] = (100, 200, 100, 255)
-
-    return overlay
 
 
 MACHINE_TO_ITEM = {
