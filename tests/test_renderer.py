@@ -5,19 +5,23 @@ reference so any regression introduced by the transpose/reshape path is
 caught immediately.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
-import jax.numpy as jnp
 
-from factoriax.constants import BlockType, Action, MachineType, NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES
-from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax import EnvState
+from factoriax.achievements import NUM_ACHIEVEMENTS
+from factoriax.constants import (
+    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
+    Action,
+    BlockType,
+    MachineType,
+)
 from factoriax.renderer import (
     _build_texture_lookup,
     render_pixels,
-    INVENTORY_BAR_HEIGHT,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

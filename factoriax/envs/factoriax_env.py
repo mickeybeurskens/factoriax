@@ -6,14 +6,9 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces
 
-from factoriax.constants import (
-    MAX_STACK_SIZE,
-    NUM_ACTIONS,
-    NUM_INVENTORY_SLOTS,
-    NUM_ITEM_TYPES,
-    BlockType,
-)
+from factoriax.constants import NUM_ACTIONS, NUM_INVENTORY_SLOTS
 from factoriax.game_logic import factoriax_step, is_game_over
+from factoriax.observations import global_array
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 from factoriax.world_gen import generate_world
@@ -82,32 +77,20 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return obs, state
 
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Get observation from the current state.
+        """Get observation from the current state for the selected player.
 
-        The observation is a flattened representation of the map with selected player
-        position and inventory encoded. For now, we return a simple representation
-        rather than pixel rendering for efficiency in training.
+        Delegates to :func:`factoriax.observations.global_array` using
+        ``state.selected_player`` as the player index.
 
         Args:
-            state: Current environment state
-            params: Environment parameters
+            state: Current environment state.
+            params: Environment parameters.
 
         Returns:
-            Observation array containing map, player info, and inventory data
+            Float32 array of shape
+            ``(map_h * map_w + 4 + 2 * NUM_INVENTORY_SLOTS,)``.
         """
-        selected = state.selected_player
-        player_pos = state.player_positions[selected]
-        player_x = player_pos[0] / params.map_width
-        player_y = player_pos[1] / params.map_height
-        player_dir = state.player_directions[selected] / NUM_ACTIONS
-        timestep_frac = state.timestep / params.max_timesteps
-        flat_map = state.map.flatten().astype(jnp.float32) / float(BlockType.COAL)
-        player_info = jnp.array([player_x, player_y, player_dir, timestep_frac])
-
-        inv_items = state.inventory_items[selected].astype(jnp.float32) / NUM_ITEM_TYPES
-        inv_counts = state.inventory_counts[selected].astype(jnp.float32) / MAX_STACK_SIZE
-
-        return jnp.concatenate([flat_map, player_info, inv_items, inv_counts])
+        return global_array(state, params, state.selected_player)
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.

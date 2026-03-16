@@ -26,7 +26,7 @@ import pickle
 import time
 from collections import deque
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Callable, NamedTuple
 
 import flax.linen as nn
 import jax
@@ -40,6 +40,7 @@ from factoriax.analysis import actions as ana_actions
 from factoriax.analysis.recorder import RolloutRecorder
 from factoriax.analysis.trajectory import Trajectory as AnalysisTrajectory
 from factoriax.constants import Action
+from factoriax.observations import global_array, local_array
 
 # Must be called before any pyplot import (all pyplot usage is inside functions).
 matplotlib.use("Agg")
@@ -80,6 +81,10 @@ class Config:
         max_grad_norm: Global gradient clipping norm.
         normalize_obs: Whether to apply online observation normalization.
         restrict_actions: Limit the agent to NOOP, movement, and MINE only.
+        obs_type: Observation type: "global" (full flattened map) or "local"
+            (windowed patch centered on the agent).
+        obs_radius: Half-width of the local observation window in tiles.
+            Only used when obs_type is "local".
         resource_density: Per-type resource spawn probability (coal/iron/copper).
         seed: Random seed.
         save_path: Directory for checkpoints (None = disabled).
@@ -105,6 +110,8 @@ class Config:
     max_grad_norm: float = 0.5
     normalize_obs: bool = True
     restrict_actions: bool = False
+    obs_type: str = "global"
+    obs_radius: int = 10
     resource_density: float = 0.02
     seed: int = 0
     save_path: str | None = None
@@ -318,6 +325,7 @@ def make_train_fns(
     network: ActorCritic,
     optimizer: optax.GradientTransformation,
     config: Config,
+    obs_fn: Callable[[EnvState, EnvParams], jax.Array],
 ) -> tuple[Any, Any]:
     """Build JIT-compiled collect and update functions for the training loop.
 
@@ -331,6 +339,10 @@ def make_train_fns(
         network: Actor-critic Flax module.
         optimizer: Optax gradient transformation.
         config: Training configuration.
+        obs_fn: Observation function ``(state, params) -> obs_array``.
+            Applied to each environment's state after every step and reset
+            to produce the agent's observation.  Must be JAX-native and
+            JIT-compatible.
 
     Returns:
         Tuple ``(collect_fn, update_fn)``.
@@ -346,6 +358,7 @@ def make_train_fns(
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
+    vmap_obs_fn = jax.vmap(obs_fn, in_axes=(0, None))
 
     def _auto_reset(
         dones: jax.Array,
@@ -410,16 +423,17 @@ def make_train_fns(
             )
 
             keys_step = jax.random.split(key_step, num_envs)
-            next_obs, next_states, rewards, dones, _ = vmap_step(
+            step_obs, next_states, rewards, dones, _ = vmap_step(
                 keys_step, states, actions, env_params
             )
 
             keys_reset = jax.random.split(key_reset, num_envs)
             reset_obs, reset_states = vmap_reset(keys_reset, env_params)
 
-            next_obs, next_states = _auto_reset(
-                dones, next_obs, reset_obs, next_states, reset_states
+            _, next_states = _auto_reset(
+                dones, step_obs, reset_obs, next_states, reset_states
             )
+            next_obs = vmap_obs_fn(next_states, env_params)
 
             transition = Transition(
                 obs=cur_obs,
@@ -925,7 +939,10 @@ def train(config: Config) -> None:
         try:
             import wandb  # type: ignore[import-untyped]
 
-            tags = ["restrict_actions" if config.restrict_actions else "full_actions"]
+            tags = [
+            "restrict_actions" if config.restrict_actions else "full_actions",
+            f"obs_{config.obs_type}",
+        ]
             wandb_run = wandb.init(
                 project=config.wandb_project,
                 name=config.wandb_run_name,
@@ -948,9 +965,19 @@ def train(config: Config) -> None:
         copper_probability=config.resource_density,
     )
 
+    # --- Build observation function ------------------------------------------
+    _obs_radius = config.obs_radius
+    _obs_type = config.obs_type
+
+    def _obs_fn(state: EnvState, params: EnvParams) -> jax.Array:
+        """Return observation for the selected player under the configured type."""
+        if _obs_type == "local":
+            return local_array(state, params, state.selected_player, _obs_radius)
+        return global_array(state, params, state.selected_player)
+
     rng, key_dummy = jax.random.split(rng)
-    dummy_obs, _ = env.reset_env(key_dummy, env_params)
-    obs_dim = int(dummy_obs.shape[0])
+    _, dummy_state = env.reset_env(key_dummy, env_params)
+    obs_dim = int(_obs_fn(dummy_state, env_params).shape[0])
     # NOOP=0, LEFT=1, RIGHT=2, UP=3, DOWN=4, MINE=5 are the first 6 actions.
     num_actions = 6 if config.restrict_actions else int(env.action_space(env_params).n)
 
@@ -979,7 +1006,7 @@ def train(config: Config) -> None:
 
     # --- Build JIT'd training functions --------------------------------------
     collect_fn, update_fn = make_train_fns(
-        env, env_params, network, optimizer, config
+        env, env_params, network, optimizer, config, _obs_fn
     )
 
     # --- Compute loop counts -------------------------------------------------
@@ -1001,9 +1028,15 @@ def train(config: Config) -> None:
         steps_per_iter,
         f"{total_iters * steps_per_iter:,}",
     )
+    obs_label = (
+        f"local(r={config.obs_radius})"
+        if config.obs_type == "local"
+        else "global"
+    )
     logger.info(
-        "  obs_dim=%d  num_actions=%d  num_envs=%d  rollout_steps=%d"
+        "  obs=%s  obs_dim=%d  num_actions=%d  num_envs=%d  rollout_steps=%d"
         "  resource_density=%.2f  max_timesteps=%d",
+        obs_label,
         obs_dim,
         num_actions,
         config.num_envs,
@@ -1024,7 +1057,8 @@ def train(config: Config) -> None:
     vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
     rng, key_envs = jax.random.split(rng)
     keys_envs = jax.random.split(key_envs, config.num_envs)
-    obs, env_states = vmap_reset(keys_envs, env_params)
+    _, env_states = vmap_reset(keys_envs, env_params)
+    obs = jax.vmap(_obs_fn, in_axes=(0, None))(env_states, env_params)
     logger.info("Environments ready.")
 
     t_start = time.time()
@@ -1228,6 +1262,19 @@ def _parse_args() -> Config:
     p.add_argument("--load-path", type=str, default=None)
     p.add_argument("--log-interval", type=int, default=10)
     p.add_argument("--restrict-actions", action="store_true")
+    p.add_argument(
+        "--obs-type",
+        type=str,
+        default="global",
+        choices=["global", "local"],
+        help="Observation type: 'global' (full flattened map) or 'local' (windowed patch).",
+    )
+    p.add_argument(
+        "--obs-radius",
+        type=int,
+        default=10,
+        help="Half-width of the local observation window in tiles (local obs only).",
+    )
     p.add_argument("--resource-density", type=float, default=0.02)
     p.add_argument("--use-wandb", action="store_true")
     p.add_argument("--wandb-project", type=str, default="factoriax-ppo")
@@ -1249,6 +1296,8 @@ def _parse_args() -> Config:
         max_grad_norm=args.max_grad_norm,
         normalize_obs=args.normalize_obs,
         restrict_actions=args.restrict_actions,
+        obs_type=args.obs_type,
+        obs_radius=args.obs_radius,
         resource_density=args.resource_density,
         seed=args.seed,
         save_path=args.save_path,

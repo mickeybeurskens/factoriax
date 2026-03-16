@@ -170,8 +170,8 @@ class TestAchievementRewards:
 
     def test_multiple_achievements_at_once(self, state_factory) -> None:
         """Should reward one achievement per resource type when each first mined."""
-        from factoriax.constants import NUM_ITEM_TYPES
         from factoriax.achievements import ACHIEVEMENT_INFO
+        from factoriax.constants import NUM_ITEM_TYPES
 
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         items_mined = items_mined.at[ItemType.COAL].set(1)
