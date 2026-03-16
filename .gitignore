@@ -208,9 +208,11 @@ __marimo__/
 
 # File types
 *.mp4
+*.png
 
 # Project specific
 CLAUDE.md
 craftax/
 tmp_baselines/
 experiments/
+wandb/
