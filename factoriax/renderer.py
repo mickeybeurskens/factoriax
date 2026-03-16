@@ -1,5 +1,7 @@
 """Pixel rendering for the FactoriaX environment."""
 
+import functools
+
 import numpy as np
 
 from factoriax.constants import (
@@ -43,43 +45,18 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
     Returns:
         Dictionary mapping BlockType values to RGBA texture arrays
     """
+    colors: dict[int, tuple[int, int, int]] = {
+        int(BlockType.DIRT): (139, 90, 43),
+        int(BlockType.WATER): (64, 164, 223),
+        int(BlockType.IRON): (192, 192, 192),
+        int(BlockType.COPPER): (184, 115, 51),
+        int(BlockType.COAL): (54, 54, 54),
+    }
     textures: dict[int, np.ndarray] = {}
-
-    dirt = np.zeros((size, size, 4), dtype=np.uint8)
-    dirt[:, :, 0] = 139
-    dirt[:, :, 1] = 90
-    dirt[:, :, 2] = 43
-    dirt[:, :, 3] = 255
-    textures[int(BlockType.DIRT)] = dirt
-
-    water = np.zeros((size, size, 4), dtype=np.uint8)
-    water[:, :, 0] = 64
-    water[:, :, 1] = 164
-    water[:, :, 2] = 223
-    water[:, :, 3] = 255
-    textures[int(BlockType.WATER)] = water
-
-    iron = np.zeros((size, size, 4), dtype=np.uint8)
-    iron[:, :, 0] = 192
-    iron[:, :, 1] = 192
-    iron[:, :, 2] = 192
-    iron[:, :, 3] = 255
-    textures[int(BlockType.IRON)] = iron
-
-    copper = np.zeros((size, size, 4), dtype=np.uint8)
-    copper[:, :, 0] = 184
-    copper[:, :, 1] = 115
-    copper[:, :, 2] = 51
-    copper[:, :, 3] = 255
-    textures[int(BlockType.COPPER)] = copper
-
-    coal = np.zeros((size, size, 4), dtype=np.uint8)
-    coal[:, :, 0] = 54
-    coal[:, :, 1] = 54
-    coal[:, :, 2] = 54
-    coal[:, :, 3] = 255
-    textures[int(BlockType.COAL)] = coal
-
+    for block_id, (r, g, b) in colors.items():
+        t = np.empty((size, size, 4), dtype=np.uint8)
+        t[:, :] = (r, g, b, 255)
+        textures[block_id] = t
     return textures
 
 
@@ -124,53 +101,50 @@ def create_player_texture(
     color_idx = player_idx % len(PLAYER_COLORS)
     body_color, indicator_color = PLAYER_COLORS[color_idx]
 
-    for y in range(size):
-        for x in range(size):
-            dist = ((x - center) ** 2 + (y - center) ** 2) ** 0.5
-            if dist <= radius:
-                player[y, x] = [*body_color, 255]
-            elif is_selected and radius < dist <= radius + 2:
-                player[y, x] = [255, 255, 255, 255]
+    ys, xs = np.ogrid[:size, :size]
+    dist = np.sqrt((xs - center) ** 2 + (ys - center) ** 2)
+
+    player[dist <= radius] = [*body_color, 255]
+    if is_selected:
+        player[(dist > radius) & (dist <= radius + 2)] = [255, 255, 255, 255]
 
     indicator_size = max(2, size // 6)
 
+    # Build indicator triangle via vectorised row/column masks.
+    rows = np.arange(indicator_size)
     if direction == Action.UP:
-        for i in range(indicator_size):
-            for j in range(-i, i + 1):
-                py = 1 + i
-                px = center + j
-                if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = [*indicator_color, 255]
+        pys = 1 + rows
+        centers_x = center
     elif direction == Action.DOWN:
-        for i in range(indicator_size):
-            for j in range(-i, i + 1):
-                py = size - 2 - i
-                px = center + j
-                if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = [*indicator_color, 255]
+        pys = size - 2 - rows
+        centers_x = center
     elif direction == Action.LEFT:
-        for i in range(indicator_size):
-            for j in range(-i, i + 1):
-                py = center + j
-                px = 1 + i
-                if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = [*indicator_color, 255]
-    elif direction == Action.RIGHT:
-        for i in range(indicator_size):
-            for j in range(-i, i + 1):
-                py = center + j
-                px = size - 2 - i
-                if 0 <= px < size and 0 <= py < size:
-                    player[py, px] = [*indicator_color, 255]
+        pys = center
+        centers_x = 1 + rows
+    else:  # RIGHT
+        pys = center
+        centers_x = size - 2 - rows
+
+    for i in range(indicator_size):
+        offsets = np.arange(-i, i + 1)
+        if direction in (Action.UP, Action.DOWN):
+            py = int(pys[i])
+            pxs = np.clip(centers_x + offsets, 0, size - 1)
+            player[py, pxs] = [*indicator_color, 255]
+        else:
+            px = int(centers_x[i])
+            pys_clipped = np.clip(pys + offsets, 0, size - 1)
+            player[pys_clipped, px] = [*indicator_color, 255]
 
     return player
 
 
+@functools.lru_cache(maxsize=8)
 def get_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
     """Load textures from files, falling back to defaults if not found.
 
-    Resizes textures to *size* if they differ from the stored dimensions,
-    so render_pixels can produce any block pixel size cleanly.
+    Results are cached per ``size`` so disk I/O and resizing happen at
+    most once per unique block pixel size across the entire process.
 
     Args:
         size: Required texture side length in pixels.
@@ -183,6 +157,52 @@ def get_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
         return {k: _resize_texture(v, size) for k, v in raw.items()}
     except FileNotFoundError:
         return create_default_textures(size)
+
+
+@functools.lru_cache(maxsize=256)
+def _get_player_texture(
+    direction: int,
+    player_idx: int,
+    is_selected: bool,
+    size: int,
+) -> np.ndarray:
+    """Cached wrapper around create_player_texture.
+
+    The full set of combinations is small (players × 4 dirs × 2 selected
+    states), so every texture is computed at most once per size.
+
+    Args:
+        direction: Facing direction (Action enum value).
+        player_idx: Player index.
+        is_selected: Whether this player is currently selected.
+        size: Block pixel size.
+
+    Returns:
+        RGBA numpy array of shape (size, size, 4).
+    """
+    return create_player_texture(direction, player_idx, is_selected, size)
+
+
+@functools.lru_cache(maxsize=8)
+def _build_texture_lookup(size: int) -> np.ndarray:
+    """Build a dense texture lookup array indexed by block type.
+
+    Allows tile rendering via a single numpy advanced-index operation
+    instead of a Python loop over every map cell.
+
+    Args:
+        size: Block pixel size.
+
+    Returns:
+        Array of shape (max_block_id + 1, size, size, 4).
+    """
+    textures = get_textures(size)
+    max_id = max(textures.keys())
+    lookup = np.zeros((max_id + 1, size, size, 4), dtype=np.uint8)
+    default = textures[int(BlockType.DIRT)]
+    for i in range(max_id + 1):
+        lookup[i] = textures.get(i, default)
+    return lookup
 
 
 def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
@@ -198,8 +218,7 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     Returns:
         RGB numpy array of shape (INVENTORY_BAR_HEIGHT, width, 3)
     """
-    bar = np.zeros((INVENTORY_BAR_HEIGHT, width, 3), dtype=np.uint8)
-    bar[:, :] = (40, 40, 40)
+    bar = np.full((INVENTORY_BAR_HEIGHT, width, 3), (40, 40, 40), dtype=np.uint8)
 
     slot_width = width // NUM_INVENTORY_SLOTS
     slot_size = min(slot_width - 4, INVENTORY_BAR_HEIGHT - 4)
@@ -244,7 +263,6 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     return bar
 
 
-
 MACHINE_TO_ITEM = {
     MachineType.MINER: ItemType.MINER,
 }
@@ -270,22 +288,22 @@ def render_machine_overlays(
     offset = (block_pixel_size - machine_size) // 2
 
     machine_types = np.array(state.machine_types)
-    map_height, map_width = machine_types.shape
+    ys, xs = np.nonzero(machine_types != MachineType.NONE)
+    if ys.size == 0:
+        return
 
-    for y in range(map_height):
-        for x in range(map_width):
-            machine_type = int(machine_types[y, x])
-            if machine_type != MachineType.NONE:
-                item_type = MACHINE_TO_ITEM.get(machine_type, ItemType.EMPTY)
-                rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-                color = np.array([*rgb, 255], dtype=np.uint8)
+    for y, x in zip(ys, xs):
+        machine_type = int(machine_types[y, x])
+        item_type = MACHINE_TO_ITEM.get(machine_type, ItemType.EMPTY)
+        rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
+        color = (*rgb, 255)
 
-                y_start = y * block_pixel_size + offset
-                x_start = x * block_pixel_size + offset
-                image[
-                    y_start : y_start + machine_size,
-                    x_start : x_start + machine_size,
-                ] = color
+        y_start = y * block_pixel_size + offset
+        x_start = x * block_pixel_size + offset
+        image[
+            y_start : y_start + machine_size,
+            x_start : x_start + machine_size,
+        ] = color
 
 
 def render_pixels(
@@ -303,28 +321,24 @@ def render_pixels(
     Returns:
         RGB numpy array of the rendered scene
     """
-    textures = get_textures(block_pixel_size)
+    texture_lookup = _build_texture_lookup(block_pixel_size)
 
     map_array = np.array(state.map)
     map_height, map_width = map_array.shape
-    img_height = map_height * block_pixel_size
-    img_width = map_width * block_pixel_size
-    image = np.zeros((img_height, img_width, 4), dtype=np.uint8)
 
-    for y in range(map_height):
-        for x in range(map_width):
-            block_type = int(map_array[y, x])
-            if block_type in textures:
-                texture = textures[block_type]
-            else:
-                texture = textures[int(BlockType.DIRT)]
+    # Clamp unknown block IDs to the DIRT fallback.
+    max_id = texture_lookup.shape[0] - 1
+    safe_map = np.clip(map_array, 0, max_id)
 
-            y_start = y * block_pixel_size
-            x_start = x * block_pixel_size
-            image[
-                y_start : y_start + block_pixel_size,
-                x_start : x_start + block_pixel_size,
-            ] = texture
+    # Single numpy index: (H, W, size, size, 4) -> (H*size, W*size, 4)
+    tile_textures = texture_lookup[safe_map]
+    image = (
+        tile_textures
+        .transpose(0, 2, 1, 3, 4)
+        .reshape(map_height * block_pixel_size, map_width * block_pixel_size, 4)
+    )
+    # Make writable — the reshape may return a view into the read-only cache.
+    image = np.array(image)
 
     render_machine_overlays(image, state, block_pixel_size)
 
@@ -336,7 +350,9 @@ def render_pixels(
     for player_idx in range(num_players):
         direction = int(player_directions[player_idx])
         is_selected = player_idx == selected
-        player_texture = create_player_texture(direction, player_idx, is_selected, block_pixel_size)
+        player_texture = _get_player_texture(
+            direction, player_idx, is_selected, block_pixel_size
+        )
 
         px, py = int(player_positions[player_idx, 0]), int(player_positions[player_idx, 1])
         py_start = py * block_pixel_size

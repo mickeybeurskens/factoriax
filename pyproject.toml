@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "factoriax"
 version = "0.1.0"
@@ -8,9 +12,10 @@ dependencies = [
     "jax[cuda13]>=0.9.1",
     "flax>=0.8.0",
     "numpy>=1.26.0",
+    "optax>=0.2.0",
     "pygame>=2.5.0",
     "gymnax>=0.0.8",
-    "imageio>=2.33.0",
+    "imageio[ffmpeg]>=2.33.0",
 ]
 
 [project.optional-dependencies]
