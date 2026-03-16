@@ -40,7 +40,11 @@ warn_unused_ignores = true
 
 [dependency-groups]
 dev = [
+    "kaleido>=1.2.0",
     "mypy>=1.19.1",
+    "plotly>=6.6.0",
     "pytest>=9.0.2",
     "ruff>=0.15.5",
+    "tqdm>=4.67.3",
+    "wandb>=0.25.1",
 ]

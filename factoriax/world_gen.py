@@ -9,6 +9,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MINEABLE_BLOCKS,
     NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     Action,
     BlockType,
     MachineType,
@@ -73,6 +74,7 @@ def generate_world(rng: jax.Array, params: EnvParams) -> EnvState:
         machine_output_item=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_output_count=jnp.zeros(map_shape, dtype=jnp.int16),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+        items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
 
 

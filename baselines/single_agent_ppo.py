@@ -24,6 +24,7 @@ import dataclasses
 import logging
 import pickle
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -71,6 +72,8 @@ class Config:
         num_minibatches: Minibatches per epoch.
         max_grad_norm: Global gradient clipping norm.
         normalize_obs: Whether to apply online observation normalization.
+        restrict_actions: Limit the agent to NOOP, movement, and MINE only.
+        resource_density: Per-type resource spawn probability (coal/iron/copper).
         seed: Random seed.
         save_path: Directory for checkpoints (None = disabled).
         load_path: Path to a checkpoint file to resume from.
@@ -94,6 +97,8 @@ class Config:
     num_minibatches: int = 8
     max_grad_norm: float = 0.5
     normalize_obs: bool = True
+    restrict_actions: bool = False
+    resource_density: float = 0.02
     seed: int = 0
     save_path: str | None = None
     load_path: str | None = None
@@ -688,7 +693,8 @@ def render_episode(
         normalize: Whether to normalize observations before the forward pass.
 
     Returns:
-        List of ``(H, W, 3)`` uint8 numpy arrays, one per step.
+        Tuple of (frames, actions) where frames is a list of ``(H, W, 3)``
+        uint8 numpy arrays and actions is the integer action taken each step.
     """
     jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
     jit_step = jax.jit(env.step_env, static_argnums=(3,))
@@ -709,12 +715,13 @@ def render_episode(
     logger.info("  Kernels ready; collecting up to %d frames...", env_params.max_timesteps)
 
     frames: list[np.ndarray] = []
+    actions: list[int] = []
     cum_return = 0.0
-    action = int(Action.NOOP)
     for _ in range(env_params.max_timesteps):
         norm = normalize_obs(obs_stats, obs) if normalize else obs
         logits, _ = jit_apply(params, norm)
         action = int(jnp.argmax(logits))
+        actions.append(action)
         frame = render_pixels(state)
         frames.append(_draw_hud(frame, Action(action).name, cum_return))
         rng, key_step = jax.random.split(rng)
@@ -726,7 +733,7 @@ def render_episode(
             break
 
     logger.info("  Episode finished: %d frames collected.", len(frames))
-    return frames
+    return frames, actions
 
 
 def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
@@ -754,6 +761,50 @@ def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
         pixelformat="yuv420p",
     )
     logger.info("Visualization saved -> %s", path)
+
+
+def save_action_rasterplot(actions: list[int], path: Path, num_actions: int) -> None:
+    """Save a raster plot of the action sequence from one episode.
+
+    Each row corresponds to one action; a vertical tick is drawn at every
+    timestep where that action was chosen.  Rows are coloured distinctly so
+    the plot is readable at a glance.
+
+    Args:
+        actions: Integer action chosen at each timestep.
+        path: Destination PNG path.
+        num_actions: Total number of actions in the action set (sets row count).
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import TABLEAU_COLORS
+
+    action_names = [a.name for a in Action][:num_actions]
+    colors = list(TABLEAU_COLORS.values())[:num_actions]
+
+    # Build per-action timestep lists for eventplot.
+    positions = [
+        [t for t, a in enumerate(actions) if a == i]
+        for i in range(num_actions)
+    ]
+
+    fig, ax = plt.subplots(figsize=(min(16, max(8, len(actions) / 10)), 3))
+    ax.eventplot(
+        positions,
+        orientation="horizontal",
+        lineoffsets=range(num_actions),
+        linelengths=0.7,
+        colors=colors,
+    )
+    ax.set_yticks(range(num_actions))
+    ax.set_yticklabels(action_names, fontsize=8)
+    ax.set_xlabel("Timestep")
+    ax.set_xlim(-1, len(actions))
+    ax.set_title("Action timeline")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    logger.info("Action rasterplot saved -> %s", path)
 
 
 # ---------------------------------------------------------------------------
@@ -792,12 +843,19 @@ def train(config: Config) -> None:
 
     # --- Environment and network setup ---------------------------------------
     env = FactoriaXEnv()
-    env_params = env.default_params.replace(num_players=1)
+    env_params = env.default_params.replace(
+        num_players=1,
+        max_timesteps=200,
+        coal_probability=config.resource_density,
+        iron_probability=config.resource_density,
+        copper_probability=config.resource_density,
+    )
 
     rng, key_dummy = jax.random.split(rng)
     dummy_obs, _ = env.reset_env(key_dummy, env_params)
     obs_dim = int(dummy_obs.shape[0])
-    num_actions = int(env.action_space(env_params).n)
+    # NOOP=0, LEFT=1, RIGHT=2, UP=3, DOWN=4, MINE=5 are the first 6 actions.
+    num_actions = 6 if config.restrict_actions else int(env.action_space(env_params).n)
 
     network = ActorCritic(
         hidden_dims=config.hidden_dims, num_actions=num_actions
@@ -840,11 +898,14 @@ def train(config: Config) -> None:
         f"{total_iters * steps_per_iter:,}",
     )
     logger.info(
-        "  obs_dim=%d  num_actions=%d  num_envs=%d  rollout_steps=%d",
+        "  obs_dim=%d  num_actions=%d  num_envs=%d  rollout_steps=%d"
+        "  resource_density=%.2f  max_timesteps=%d",
         obs_dim,
         num_actions,
         config.num_envs,
         config.rollout_steps,
+        config.resource_density,
+        env_params.max_timesteps,
     )
     if config.save_path is not None:
         logger.info(
@@ -863,7 +924,10 @@ def train(config: Config) -> None:
     logger.info("Environments ready.")
 
     t_start = time.time()
-    ep_return_buf: list[float] = []
+    running_ep_return = np.zeros(config.num_envs, dtype=np.float32)
+    running_ep_length = np.zeros(config.num_envs, dtype=np.int32)
+    completed_ep_returns: deque[float] = deque(maxlen=1000)
+    completed_ep_lengths: deque[int] = deque(maxlen=1000)
 
     for it in range(total_iters):
         rng, key_collect, key_update = jax.random.split(rng, 3)
@@ -907,33 +971,45 @@ def train(config: Config) -> None:
 
         current_step += steps_per_iter
 
-        # Accumulate episode returns for logging ----------------------------
-        # done mask: (T, N) -> sum of rewards per done episode (approximation)
-        ep_return_buf.extend(
-            float(r) for r in trajectories.reward.sum(axis=0).tolist()
-        )
+        # Track completed episodes via done signals -------------------------
+        rewards_np = np.array(trajectories.reward)  # (T, N)
+        dones_np = np.array(trajectories.done)       # (T, N)
+        for t in range(rewards_np.shape[0]):
+            running_ep_return += rewards_np[t]
+            running_ep_length += 1
+            done_envs = np.where(dones_np[t])[0]
+            for n in done_envs:
+                completed_ep_returns.append(float(running_ep_return[n]))
+                completed_ep_lengths.append(int(running_ep_length[n]))
+                running_ep_return[n] = 0.0
+                running_ep_length[n] = 0
 
         # Logging -----------------------------------------------------------
         if (it + 1) % config.log_interval == 0 or it == total_iters - 1:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
-            mean_ret = (
-                float(np.mean(ep_return_buf[-config.num_envs :]))
-                if ep_return_buf
-                else 0.0
-            )
+            if completed_ep_returns:
+                mean_ep_reward = float(np.mean(
+                    [r / l for r, l in zip(completed_ep_returns, completed_ep_lengths)]
+                ))
+                max_ep_return = float(np.max(completed_ep_returns))
+            else:
+                mean_ep_reward = 0.0
+                max_ep_return = 0.0
             log_data: dict[str, float] = {
                 "train/step": float(current_step),
                 "train/sps": sps,
-                "train/mean_ep_return": mean_ret,
+                "train/mean_ep_reward": mean_ep_reward,
+                "train/max_ep_return": max_ep_return,
                 **{k: float(v) for k, v in metrics.items()},
             }
             logger.info(
-                "step=%d  sps=%.0f  return=%.3f  "
+                "step=%d  sps=%.0f  mean_rew=%.4f  max_ret=%.3f  "
                 "loss=%.4f  entropy=%.4f  kl=%.5f",
                 current_step,
                 sps,
-                mean_ret,
+                mean_ep_reward,
+                max_ep_return,
                 float(metrics["loss/total"]),
                 float(metrics["loss/entropy"]),
                 float(metrics["misc/approx_kl"]),
@@ -960,7 +1036,7 @@ def train(config: Config) -> None:
     # --- Visualization of final policy ---------------------------------------
     logger.info("Rendering final-policy episode...")
     rng, key_vis = jax.random.split(rng)
-    frames = render_episode(
+    frames, actions = render_episode(
         params,
         network,
         obs_stats,
@@ -969,22 +1045,22 @@ def train(config: Config) -> None:
         key_vis,
         normalize=config.normalize_obs,
     )
-    mp4_path = (
-        Path(config.save_path) / "final_episode.mp4"
-        if config.save_path is not None
-        else Path("final_episode.mp4")
-    )
+    out_dir = Path(config.save_path) if config.save_path is not None else Path(".")
+    mp4_path = out_dir / "final_episode.mp4"
+    raster_path = out_dir / "final_episode_actions.png"
     save_mp4(frames, mp4_path)
+    save_action_rasterplot(actions, raster_path, num_actions)
 
     if wandb_run is not None:
         try:
             import wandb  # type: ignore[import-untyped]
 
-            wandb_run.log(
-                {"eval/final_episode": wandb.Video(str(mp4_path), fps=10)}
-            )
+            wandb_run.log({
+                "eval/final_episode": wandb.Video(str(mp4_path), fps=10),
+                "eval/action_timeline": wandb.Image(str(raster_path)),
+            })
         except Exception as exc:  # noqa: BLE001
-            logger.error("W&B video upload failed: %s", exc)
+            logger.error("W&B upload failed: %s", exc)
         wandb_run.finish()
 
 
@@ -1024,6 +1100,8 @@ def _parse_args() -> Config:
     p.add_argument("--save-path", type=str, default=None)
     p.add_argument("--load-path", type=str, default=None)
     p.add_argument("--log-interval", type=int, default=10)
+    p.add_argument("--restrict-actions", action="store_true")
+    p.add_argument("--resource-density", type=float, default=0.02)
     p.add_argument("--use-wandb", action="store_true")
     p.add_argument("--wandb-project", type=str, default="factoriax-ppo")
     p.add_argument("--wandb-run-name", type=str, default=None)
@@ -1043,6 +1121,8 @@ def _parse_args() -> Config:
         num_minibatches=args.num_minibatches,
         max_grad_norm=args.max_grad_norm,
         normalize_obs=args.normalize_obs,
+        restrict_actions=args.restrict_actions,
+        resource_density=args.resource_density,
         seed=args.seed,
         save_path=args.save_path,
         load_path=args.load_path,

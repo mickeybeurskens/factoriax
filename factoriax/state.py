@@ -28,6 +28,7 @@ class EnvState:
         machine_output_item: Item type in output slot with shape (height, width)
         machine_output_count: Stack count in output slot with shape (height, width)
         achievements_unlocked: Boolean array tracking unlocked achievements (NUM_ACHIEVEMENTS,)
+        items_mined: Lifetime mined count per item type with shape (NUM_ITEM_TYPES,)
     """
 
     map: jnp.ndarray
@@ -47,6 +48,7 @@ class EnvState:
     machine_output_item: jnp.ndarray
     machine_output_count: jnp.ndarray
     achievements_unlocked: jnp.ndarray
+    items_mined: jnp.ndarray
 
 
 @struct.dataclass

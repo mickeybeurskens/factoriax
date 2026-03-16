@@ -199,11 +199,18 @@ def mine_block(state: EnvState, player_idx: int | jax.Array) -> EnvState:
         lambda: state.map,
     )
 
+    new_items_mined = lax.cond(
+        can_mine,
+        lambda: state.items_mined.at[item_type].add(1),
+        lambda: state.items_mined,
+    )
+
     return state.replace(  # type: ignore[attr-defined, no-any-return]
         map=new_map,
         inventory_items=new_inventory_items,
         inventory_counts=new_inventory_counts,
         block_resources=new_block_resources,
+        items_mined=new_items_mined,
     )
 
 

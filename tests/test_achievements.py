@@ -109,16 +109,15 @@ class TestConditionComputation:
         assert not jnp.any(conditions)
 
     def test_coal_condition_met(self, state_factory) -> None:
-        """Coal collection condition should be met with 1 coal."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.COAL)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
+        """Coal collection condition should be met with 1 coal mined."""
+        from factoriax.constants import NUM_ITEM_TYPES
+
+        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+        items_mined = items_mined.at[ItemType.COAL].set(1)
 
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            items_mined=items_mined,
         )
         conditions = compute_all_conditions(state)
         assert conditions[0]  # collect_coal_1 is first achievement
@@ -137,16 +136,15 @@ class TestAchievementRewards:
         assert not jnp.any(new_state.achievements_unlocked)
 
     def test_reward_for_first_coal(self, state_factory) -> None:
-        """Should award reward when coal is first collected."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.COAL)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
+        """Should award reward when 1 coal has been mined."""
+        from factoriax.constants import NUM_ITEM_TYPES
+
+        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+        items_mined = items_mined.at[ItemType.COAL].set(1)
 
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            items_mined=items_mined,
         )
         new_state, reward = check_achievements(state)
         assert reward == 1.0
@@ -171,26 +169,28 @@ class TestAchievementRewards:
         assert reward == 0.0
 
     def test_multiple_achievements_at_once(self, state_factory) -> None:
-        """Should reward multiple achievements unlocked simultaneously."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.COAL)
-        inv_items = inv_items.at[0, 1].set(ItemType.IRON)
-        inv_items = inv_items.at[0, 2].set(ItemType.COPPER)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
-        inv_counts = inv_counts.at[0, 1].set(1)
-        inv_counts = inv_counts.at[0, 2].set(1)
+        """Should reward one achievement per resource type when each first mined."""
+        from factoriax.constants import NUM_ITEM_TYPES
+        from factoriax.achievements import ACHIEVEMENT_INFO
+
+        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+        items_mined = items_mined.at[ItemType.COAL].set(1)
+        items_mined = items_mined.at[ItemType.IRON].set(1)
+        items_mined = items_mined.at[ItemType.COPPER].set(1)
 
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            items_mined=items_mined,
         )
         new_state, reward = check_achievements(state)
         assert reward == 3.0
-        assert new_state.achievements_unlocked[0]
-        assert new_state.achievements_unlocked[1]
-        assert new_state.achievements_unlocked[2]
+
+        coal_1_idx = next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_coal_1")
+        iron_1_idx = next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_iron_1")
+        copper_1_idx = next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_copper_1")
+        assert new_state.achievements_unlocked[coal_1_idx]
+        assert new_state.achievements_unlocked[iron_1_idx]
+        assert new_state.achievements_unlocked[copper_1_idx]
 
 
 class TestJITCompatibility:
@@ -207,15 +207,14 @@ class TestJITCompatibility:
 
     def test_check_achievements_jit_with_rewards(self, state_factory) -> None:
         """JIT-compiled check_achievements should award rewards correctly."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.COAL)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
+        from factoriax.constants import NUM_ITEM_TYPES
+
+        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+        items_mined = items_mined.at[ItemType.COAL].set(1)
 
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            items_mined=items_mined,
         )
         jit_check = jax.jit(check_achievements)
         new_state, reward = jit_check(state)

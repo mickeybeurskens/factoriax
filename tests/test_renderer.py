@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import jax.numpy as jnp
 
-from factoriax.constants import BlockType, Action, MachineType, NUM_INVENTORY_SLOTS
+from factoriax.constants import BlockType, Action, MachineType, NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax import EnvState
 from factoriax.renderer import (
@@ -52,6 +52,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         machine_output_item=jnp.zeros(shape, dtype=jnp.int32),
         machine_output_count=jnp.zeros(shape, dtype=jnp.int16),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+        items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
 
 

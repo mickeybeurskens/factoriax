@@ -24,15 +24,24 @@ class AchievementInfo:
 
 ACHIEVEMENT_INFO = [
     AchievementInfo(id="collect_coal_1", name="Coal Miner"),
+    AchievementInfo(id="collect_coal_2", name="Coal Miner II"),
+    AchievementInfo(id="collect_coal_5", name="Coal Miner III"),
+    AchievementInfo(id="collect_coal_10", name="Coal Miner IV"),
     AchievementInfo(id="collect_iron_1", name="Iron Age"),
+    AchievementInfo(id="collect_iron_2", name="Iron Age II"),
+    AchievementInfo(id="collect_iron_5", name="Iron Age III"),
+    AchievementInfo(id="collect_iron_10", name="Iron Age IV"),
     AchievementInfo(id="collect_copper_1", name="Copper Collector"),
+    AchievementInfo(id="collect_copper_2", name="Copper Collector II"),
+    AchievementInfo(id="collect_copper_5", name="Copper Collector III"),
+    AchievementInfo(id="collect_copper_10", name="Copper Collector IV"),
     AchievementInfo(id="craft_machine_1", name="Engineer"),
     AchievementInfo(id="place_machine_1", name="Automation"),
 ]
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 
-ACHIEVEMENT_REWARDS = jnp.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=jnp.float32)
+ACHIEVEMENT_REWARDS = jnp.ones(NUM_ACHIEVEMENTS, dtype=jnp.float32)
 
 
 def count_total_items(state: EnvState, item_type: int) -> jax.Array:
@@ -79,11 +88,23 @@ def compute_all_conditions(state: EnvState) -> jax.Array:
         Boolean array of shape (NUM_ACHIEVEMENTS,) indicating which
         achievement conditions are currently satisfied
     """
+    coal = state.items_mined[ItemType.COAL]
+    iron = state.items_mined[ItemType.IRON]
+    copper = state.items_mined[ItemType.COPPER]
     conditions = jnp.array(
         [
-            count_total_items(state, ItemType.COAL) >= 1,
-            count_total_items(state, ItemType.IRON) >= 1,
-            count_total_items(state, ItemType.COPPER) >= 1,
+            coal >= 1,
+            coal >= 2,
+            coal >= 5,
+            coal >= 10,
+            iron >= 1,
+            iron >= 2,
+            iron >= 5,
+            iron >= 10,
+            copper >= 1,
+            copper >= 2,
+            copper >= 5,
+            copper >= 10,
             count_total_items(state, ItemType.MINER) >= 1,
             count_machines(state, MachineType.MINER) >= 1,
         ],

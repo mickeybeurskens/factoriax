@@ -5,7 +5,7 @@ import pytest
 
 from factoriax import Action, EnvState
 from factoriax.achievements import NUM_ACHIEVEMENTS
-from factoriax.constants import NUM_INVENTORY_SLOTS, MachineType
+from factoriax.constants import NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES, MachineType
 
 
 @pytest.fixture
@@ -48,6 +48,7 @@ def state_factory():
         machine_output_item: jnp.ndarray | None = None,
         machine_output_count: jnp.ndarray | None = None,
         achievements_unlocked: jnp.ndarray | None = None,
+        items_mined: jnp.ndarray | None = None,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
 
@@ -72,6 +73,7 @@ def state_factory():
             machine_output_item: Output item per machine, defaults to zeros
             machine_output_count: Output count per machine, defaults to zeros
             achievements_unlocked: Boolean array of unlocked achievements, defaults to all False
+            items_mined: Lifetime mined count per item type, defaults to zeros
 
         Returns:
             Configured EnvState for testing
@@ -143,6 +145,9 @@ def state_factory():
             achievements_unlocked=achievements_unlocked
             if achievements_unlocked is not None
             else jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+            items_mined=items_mined
+            if items_mined is not None
+            else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         )
 
     return _create
