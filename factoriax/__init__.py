@@ -19,6 +19,7 @@ from factoriax.levels import (
     save_level,
 )
 from factoriax.observations import global_array, local_array, rgb
+from factoriax.rewards import achievement_reward, mining_reward
 from factoriax.state import EnvParams, EnvState
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "LevelBuilder",
     "MAX_STACK_SIZE",
     "NUM_INVENTORY_SLOTS",
+    "achievement_reward",
     "build_state",
     "generate_state",
     "get_level",
@@ -40,6 +42,7 @@ __all__ = [
     "load_level",
     "local_array",
     "make_factoriax_env",
+    "mining_reward",
     "rgb",
     "save_level",
 ]

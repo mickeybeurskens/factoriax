@@ -42,6 +42,7 @@ from factoriax.analysis.trajectory import Trajectory as AnalysisTrajectory
 from factoriax.constants import Action
 from factoriax.levels import LEVELS, Level, build_state, get_level
 from factoriax.observations import global_array, local_array
+from factoriax.rewards import achievement_reward, mining_reward
 
 # Must be called before any pyplot import (all pyplot usage is inside functions).
 matplotlib.use("Agg")
@@ -89,6 +90,9 @@ class Config:
         level_name: Name of a built-in level (key in ``factoriax.levels.LEVELS``)
             to use for all resets instead of procedural generation.  ``None``
             uses random procedural generation (default).
+        reward_type: Reward function to use during training.  ``"mining"``
+            (default) gives a dense proximity-plus-bonus reward.
+            ``"achievement"`` gives sparse +1 per newly unlocked achievement.
         resource_density: Per-type resource spawn probability (coal/iron/copper).
             Only applies when ``level_name`` is ``None``.
         seed: Random seed.
@@ -118,6 +122,7 @@ class Config:
     obs_type: str = "global"
     obs_radius: int = 10
     level_name: str | None = None
+    reward_type: str = "mining"
     resource_density: float = 0.02
     seed: int = 0
     save_path: str | None = None
@@ -333,6 +338,7 @@ def make_train_fns(
     config: Config,
     obs_fn: Callable[[EnvState, EnvParams], jax.Array],
     reset_fn: Callable[[jax.Array, EnvParams], EnvState],
+    reward_fn: Callable[[EnvState, EnvState, EnvParams], jax.Array],
 ) -> tuple[Any, Any]:
     """Build JIT-compiled collect and update functions for the training loop.
 
@@ -350,6 +356,9 @@ def make_train_fns(
             Applied to each environment's state after every step and reset
             to produce the agent's observation.  Must be JAX-native and
             JIT-compatible.
+        reward_fn: Reward function ``(prev_state, new_state, params) -> scalar``.
+            Applied after each step to compute the training reward signal.
+            Must be JAX-native and JIT-compatible.
 
     Returns:
         Tuple ``(collect_fn, update_fn)``.
@@ -369,6 +378,7 @@ def make_train_fns(
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_obs_fn = jax.vmap(obs_fn, in_axes=(0, None))
+    vmap_reward_fn = jax.vmap(reward_fn, in_axes=(0, 0, None))
 
     def _select_states(
         dones: jax.Array,
@@ -427,9 +437,11 @@ def make_train_fns(
             )
 
             keys_step = jax.random.split(key_step, num_envs)
-            _, next_states, rewards, dones, _ = vmap_step(
+            prev_states = states
+            _, next_states, _, dones, _ = vmap_step(
                 keys_step, states, actions, env_params
             )
+            rewards = vmap_reward_fn(prev_states, next_states, env_params)
 
             keys_reset = jax.random.split(key_reset, num_envs)
             reset_states = reset_fn(keys_reset, env_params)
@@ -945,6 +957,7 @@ def train(config: Config) -> None:
                 "restrict_actions" if config.restrict_actions else "full_actions",
                 f"obs_{config.obs_type}",
                 f"level_{config.level_name}" if config.level_name else "procedural",
+                f"reward_{config.reward_type}",
             ]
             wandb_run = wandb.init(
                 project=config.wandb_project,
@@ -1007,6 +1020,9 @@ def train(config: Config) -> None:
             _, states = _vmap_reset(keys, params)
             return states
 
+    # --- Build reward function ------------------------------------------------
+    _reward_fn = mining_reward if config.reward_type == "mining" else achievement_reward
+
     obs_dim = int(_obs_fn(dummy_state, env_params).shape[0])
     # NOOP=0, LEFT=1, RIGHT=2, UP=3, DOWN=4, MINE=5 are the first 6 actions.
     num_actions = 6 if config.restrict_actions else int(env.action_space(env_params).n)
@@ -1036,7 +1052,7 @@ def train(config: Config) -> None:
 
     # --- Build JIT'd training functions --------------------------------------
     collect_fn, update_fn = make_train_fns(
-        env, env_params, network, optimizer, config, _obs_fn, _reset_fn
+        env, env_params, network, optimizer, config, _obs_fn, _reset_fn, _reward_fn
     )
 
     # --- Compute loop counts -------------------------------------------------
@@ -1065,11 +1081,12 @@ def train(config: Config) -> None:
     )
     level_label = config.level_name if config.level_name else "procedural"
     logger.info(
-        "  level=%s  obs=%s  obs_dim=%d  num_actions=%d"
+        "  level=%s  obs=%s  obs_dim=%d  reward=%s  num_actions=%d"
         "  num_envs=%d  rollout_steps=%d  max_timesteps=%d",
         level_label,
         obs_label,
         obs_dim,
+        config.reward_type,
         num_actions,
         config.num_envs,
         config.rollout_steps,
@@ -1313,6 +1330,16 @@ def _parse_args() -> Config:
         choices=list(LEVELS),
         help="Built-in level name for fixed resets. Omit for procedural generation.",
     )
+    p.add_argument(
+        "--reward-type",
+        type=str,
+        default="mining",
+        choices=["achievement", "mining"],
+        help=(
+            "Reward function: 'achievement' (sparse +1 per unlocked achievement) "
+            "or 'mining' (dense proximity + ore-extraction bonus)."
+        ),
+    )
     p.add_argument("--resource-density", type=float, default=0.02)
     p.add_argument("--use-wandb", action="store_true")
     p.add_argument("--wandb-project", type=str, default="factoriax-ppo")
@@ -1337,6 +1364,7 @@ def _parse_args() -> Config:
         obs_type=args.obs_type,
         obs_radius=args.obs_radius,
         level_name=args.level_name,
+        reward_type=args.reward_type,
         resource_density=args.resource_density,
         seed=args.seed,
         save_path=args.save_path,

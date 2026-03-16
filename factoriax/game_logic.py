@@ -275,34 +275,37 @@ def _handle_player_action(
 
 def factoriax_step(
     rng: jax.Array, state: EnvState, action: int | jax.Array, params: EnvParams
-) -> tuple[EnvState, float]:
+) -> EnvState:
     """Execute one step of the environment.
 
     Processes in order:
+
     1. Selected player action (move, mine, craft, place, or UI actions)
     2. Crafting progress for all players
     3. All machine updates
-    4. Timestep increment
+    4. Achievement tracking
+    5. Timestep increment
 
-    Non-selected players perform NOOP (no action).
+    Non-selected players perform NOOP.  Reward computation is intentionally
+    absent here; it is performed externally by a reward function from
+    :mod:`factoriax.rewards`, which receives both the pre-step and
+    post-step states.
 
     Args:
-        rng: JAX random key (unused for now, but included for interface consistency)
-        state: Current environment state
-        action: Action to take for the selected player
-        params: Environment parameters
+        rng: JAX random key (reserved for future stochastic mechanics).
+        state: Current environment state.
+        action: Action to take for the selected player.
+        params: Environment parameters.
 
     Returns:
-        Tuple of (new_state, reward)
+        Updated environment state.
     """
     player_idx = state.selected_player
     state = _handle_player_action(state, action, player_idx)
     state = update_crafting(state)
     state = update_all_machines(state)
-    state, achievement_reward = check_achievements(state)
-    state = state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined]
-    reward = achievement_reward
-    return state, reward
+    state = check_achievements(state)
+    return state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined, no-any-return]
 
 
 def is_game_over(state: EnvState, params: EnvParams) -> jax.Array:

@@ -123,20 +123,19 @@ class TestConditionComputation:
         assert conditions[0]  # collect_coal_1 is first achievement
 
 
-class TestAchievementRewards:
-    """Tests for achievement reward system."""
+class TestAchievementUnlocking:
+    """Tests for achievement state updates via check_achievements."""
 
-    def test_no_reward_for_empty_state(self, state_factory) -> None:
-        """No reward should be given for empty state."""
+    def test_no_achievements_unlocked_for_empty_state(self, state_factory) -> None:
+        """No achievements should be unlocked for a fresh state."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        new_state, reward = check_achievements(state)
-        assert reward == 0.0
+        new_state = check_achievements(state)
         assert not jnp.any(new_state.achievements_unlocked)
 
-    def test_reward_for_first_coal(self, state_factory) -> None:
-        """Should award reward when 1 coal has been mined."""
+    def test_coal_achievement_unlocked(self, state_factory) -> None:
+        """Coal achievement should be unlocked when 1 coal has been mined."""
         from factoriax.constants import NUM_ITEM_TYPES
 
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
@@ -146,30 +145,23 @@ class TestAchievementRewards:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        new_state, reward = check_achievements(state)
-        assert reward == 1.0
+        new_state = check_achievements(state)
         assert new_state.achievements_unlocked[0]
 
-    def test_no_duplicate_reward(self, state_factory) -> None:
-        """Should not reward already unlocked achievements."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.COAL)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
+    def test_already_unlocked_achievement_stays_unlocked(self, state_factory) -> None:
+        """Previously unlocked achievements must remain unlocked."""
         already_unlocked = jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_)
         already_unlocked = already_unlocked.at[0].set(True)
 
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
             achievements_unlocked=already_unlocked,
         )
-        new_state, reward = check_achievements(state)
-        assert reward == 0.0
+        new_state = check_achievements(state)
+        assert new_state.achievements_unlocked[0]
 
-    def test_multiple_achievements_at_once(self, state_factory) -> None:
-        """Should reward one achievement per resource type when each first mined."""
+    def test_multiple_achievements_unlocked_simultaneously(self, state_factory) -> None:
+        """All relevant achievements should unlock in a single call."""
         from factoriax.achievements import ACHIEVEMENT_INFO
         from factoriax.constants import NUM_ITEM_TYPES
 
@@ -182,12 +174,16 @@ class TestAchievementRewards:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        new_state, reward = check_achievements(state)
-        assert reward == 3.0
-
-        coal_1_idx = next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_coal_1")
-        iron_1_idx = next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_iron_1")
-        copper_1_idx = next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_copper_1")
+        new_state = check_achievements(state)
+        coal_1_idx = next(
+            i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_coal_1"
+        )
+        iron_1_idx = next(
+            i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_iron_1"
+        )
+        copper_1_idx = next(
+            i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "collect_copper_1"
+        )
         assert new_state.achievements_unlocked[coal_1_idx]
         assert new_state.achievements_unlocked[iron_1_idx]
         assert new_state.achievements_unlocked[copper_1_idx]
@@ -202,11 +198,11 @@ class TestJITCompatibility:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
         jit_check = jax.jit(check_achievements)
-        new_state, reward = jit_check(state)
-        assert reward == 0.0
+        new_state = jit_check(state)
+        assert not jnp.any(new_state.achievements_unlocked)
 
-    def test_check_achievements_jit_with_rewards(self, state_factory) -> None:
-        """JIT-compiled check_achievements should award rewards correctly."""
+    def test_check_achievements_jit_unlocks_correctly(self, state_factory) -> None:
+        """JIT-compiled check_achievements should unlock achievements correctly."""
         from factoriax.constants import NUM_ITEM_TYPES
 
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
@@ -217,6 +213,5 @@ class TestJITCompatibility:
             items_mined=items_mined,
         )
         jit_check = jax.jit(check_achievements)
-        new_state, reward = jit_check(state)
-        assert reward == 1.0
+        new_state = jit_check(state)
         assert new_state.achievements_unlocked[0]

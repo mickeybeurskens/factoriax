@@ -11,6 +11,7 @@ from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.levels import Level, build_state, generate_state
 from factoriax.observations import global_array
 from factoriax.renderer import render_pixels
+from factoriax.rewards import achievement_reward
 from factoriax.state import EnvParams, EnvState
 
 
@@ -54,7 +55,9 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             Tuple of (observation, new_state, reward, done, info)
         """
         action_arr = jnp.int32(action)
-        new_state, reward = factoriax_step(key, state, action_arr, params)
+        prev_state = state
+        new_state = factoriax_step(key, prev_state, action_arr, params)
+        reward = achievement_reward(prev_state, new_state, params)
         done = is_game_over(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}

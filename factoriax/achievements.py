@@ -41,6 +41,7 @@ ACHIEVEMENT_INFO = [
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 
+#: Per-achievement reward magnitudes used by :func:`factoriax.rewards.achievement_reward`.
 ACHIEVEMENT_REWARDS = jnp.ones(NUM_ACHIEVEMENTS, dtype=jnp.float32)
 
 
@@ -113,23 +114,21 @@ def compute_all_conditions(state: EnvState) -> jax.Array:
     return conditions
 
 
-def check_achievements(state: EnvState) -> tuple[EnvState, jax.Array]:
-    """Check all achievements and return updated state with total reward.
+def check_achievements(state: EnvState) -> EnvState:
+    """Update ``achievements_unlocked`` in state based on current conditions.
 
-    Uses vectorized JAX operations to check all achievements simultaneously,
-    avoiding the need to index Python lists with traced values.
+    Uses vectorized JAX operations to check all achievement conditions
+    simultaneously.  Reward computation has moved to
+    :func:`factoriax.rewards.achievement_reward`, which compares the
+    before/after states.
 
     Args:
-        state: Current environment state
+        state: Current environment state.
 
     Returns:
-        Tuple of (updated_state, total_reward) where total_reward is the sum
-        of all newly unlocked achievement rewards
+        Updated state with any newly satisfied achievements marked as
+        unlocked.
     """
     conditions_met = compute_all_conditions(state)
-    already_unlocked = state.achievements_unlocked
-    newly_unlocked = conditions_met & ~already_unlocked
-    new_unlocked = already_unlocked | newly_unlocked
-    total_reward = jnp.sum(jnp.where(newly_unlocked, ACHIEVEMENT_REWARDS, 0.0))
-    new_state = state.replace(achievements_unlocked=new_unlocked)
-    return new_state, total_reward
+    new_unlocked = state.achievements_unlocked | conditions_met
+    return state.replace(achievements_unlocked=new_unlocked)  # type: ignore[attr-defined, no-any-return]
