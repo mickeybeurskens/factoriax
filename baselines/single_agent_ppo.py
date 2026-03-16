@@ -31,11 +31,18 @@ from typing import Any, NamedTuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import matplotlib
 import numpy as np
 import optax
 from flax import struct
 
+from factoriax.analysis import actions as ana_actions
+from factoriax.analysis.recorder import RolloutRecorder
+from factoriax.analysis.trajectory import Trajectory as AnalysisTrajectory
 from factoriax.constants import Action
+
+# Must be called before any pyplot import (all pyplot usage is inside functions).
+matplotlib.use("Agg")
 from factoriax.envs import FactoriaXEnv
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
@@ -763,48 +770,136 @@ def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
     logger.info("Visualization saved -> %s", path)
 
 
-def save_action_rasterplot(actions: list[int], path: Path, num_actions: int) -> None:
-    """Save a raster plot of the action sequence from one episode.
+def _save_analysis_plots(
+    traj: AnalysisTrajectory | None,
+    single_ep_actions: list[int],
+    out_dir: Path,
+    num_actions: int,
+) -> None:
+    """Generate and save all available analysis plots to *out_dir*.
 
-    Each row corresponds to one action; a vertical tick is drawn at every
-    timestep where that action was chosen.  Rows are coloured distinctly so
-    the plot is readable at a glance.
+    Multi-episode plots draw from *traj*, which is built from the last 5% of
+    training iterations (up to 1 000 episodes) via
+    :class:`~factoriax.analysis.recorder.RolloutRecorder`.  If no episodes
+    were recorded (e.g. very short runs), multi-episode plots are skipped and
+    a warning is logged.  The single-episode action raster always runs and
+    comes from the greedy rendered episode.
 
     Args:
-        actions: Integer action chosen at each timestep.
-        path: Destination PNG path.
-        num_actions: Total number of actions in the action set (sets row count).
+        traj: Multi-episode trajectory from the recorder, or *None*.
+        single_ep_actions: Action sequence from the final rendered episode.
+        out_dir: Directory for PNG output.
+        num_actions: Number of discrete actions in the action space.
     """
     import matplotlib.pyplot as plt
-    from matplotlib.colors import TABLEAU_COLORS
 
-    action_names = [a.name for a in Action][:num_actions]
-    colors = list(TABLEAU_COLORS.values())[:num_actions]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    action_labels = ana_actions.DEFAULT_ACTION_LABELS[:num_actions]
 
-    # Build per-action timestep lists for eventplot.
-    positions = [
-        [t for t, a in enumerate(actions) if a == i]
-        for i in range(num_actions)
-    ]
+    # --- Multi-episode plots (last 5% of training, up to 1 000 episodes) -----
+    if traj is not None:
+        n_eps, ep_len = traj.num_episodes, traj.episode_length
+        logger.info(
+            "Generating multi-episode analysis plots (%d episodes, %d steps)...",
+            n_eps,
+            ep_len,
+        )
+        third = ep_len // 3
 
-    fig, ax = plt.subplots(figsize=(min(16, max(8, len(actions) / 10)), 3))
-    ax.eventplot(
-        positions,
-        orientation="horizontal",
-        lineoffsets=range(num_actions),
-        linelengths=0.7,
-        colors=colors,
+        def _save(fig: Any, name: str) -> None:
+            fig.savefig(out_dir / name, dpi=120, bbox_inches="tight")
+            plt.close(fig)
+            logger.info("  Saved %s", name)
+
+        # Action raster — one row per episode, color = action
+        fig, _ = ana_actions.action_raster(
+            traj,
+            num_actions=num_actions,
+            action_labels=action_labels,
+            title=f"Action raster — final {n_eps} episodes",
+        )
+        _save(fig, "analysis_action_raster.png")
+
+        # Transition matrix — action-to-action probabilities
+        fig, _ = ana_actions.plot_transition_matrix(
+            traj,
+            num_actions=num_actions,
+            action_labels=action_labels,
+            title=f"Transition matrix — final {n_eps} episodes",
+        )
+        _save(fig, "analysis_transition_matrix.png")
+
+        # Phase transitions — early / mid / late thirds side-by-side
+        phases = [(0, third), (third, 2 * third), (2 * third, ep_len)]
+        phase_labels = [
+            f"Early (0-{third})",
+            f"Mid ({third}-{2 * third})",
+            f"Late ({2 * third}-{ep_len})",
+        ]
+        fig, _ = ana_actions.plot_phase_transitions(
+            traj,
+            phases,
+            num_actions=num_actions,
+            action_labels=action_labels,
+            phase_labels=phase_labels,
+        )
+        _save(fig, "analysis_phase_transitions.png")
+
+        # Top bigrams
+        fig, _ = ana_actions.plot_ngrams(
+            traj,
+            n=2,
+            action_labels=action_labels,
+            title=f"Top bigrams — final {n_eps} episodes",
+        )
+        _save(fig, "analysis_bigrams.png")
+
+        # Action entropy over the episode
+        fig, _ = ana_actions.plot_entropy(
+            traj,
+            num_actions=num_actions,
+            title=f"Action entropy — final {n_eps} episodes",
+        )
+        _save(fig, "analysis_entropy.png")
+
+        # Run-length distributions per action
+        fig, _ = ana_actions.plot_run_lengths(
+            traj,
+            num_actions=num_actions,
+            action_labels=action_labels,
+            title=f"Run-length distributions — final {n_eps} episodes",
+        )
+        _save(fig, "analysis_run_lengths.png")
+
+        # Stacked area — how action proportions evolve across the episode
+        fig, _ = ana_actions.plot_action_distribution(
+            traj,
+            num_actions=num_actions,
+            action_labels=action_labels,
+            title=f"Action distribution — final {n_eps} episodes",
+        )
+        _save(fig, "analysis_action_distribution.png")
+    else:
+        logger.warning(
+            "No episodes were recorded; skipping multi-episode analysis plots. "
+            "Run for more iterations or reduce --log-interval to populate the recorder."
+        )
+
+    # --- Single-episode plots (rendered greedy episode) ----------------------
+    ep_traj = AnalysisTrajectory(actions=np.array(single_ep_actions)[np.newaxis, :])
+    fig, _ = ana_actions.action_raster(
+        ep_traj,
+        num_actions=num_actions,
+        action_labels=action_labels,
+        title="Action raster — final rendered episode",
     )
-    ax.set_yticks(range(num_actions))
-    ax.set_yticklabels(action_names, fontsize=8)
-    ax.set_xlabel("Timestep")
-    ax.set_xlim(-1, len(actions))
-    ax.set_title("Action timeline")
-    fig.tight_layout()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=120)
+    fig.savefig(
+        out_dir / "final_episode_actions.png", dpi=120, bbox_inches="tight"
+    )
     plt.close(fig)
-    logger.info("Action rasterplot saved -> %s", path)
+    logger.info("  Saved final_episode_actions.png")
+
+    logger.info("Analysis plots saved to %s", out_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -830,10 +925,12 @@ def train(config: Config) -> None:
         try:
             import wandb  # type: ignore[import-untyped]
 
+            tags = ["restrict_actions" if config.restrict_actions else "full_actions"]
             wandb_run = wandb.init(
                 project=config.wandb_project,
                 name=config.wandb_run_name,
                 config=dataclasses.asdict(config),
+                tags=tags,
             )
         except ImportError:
             logger.error(
@@ -891,6 +988,13 @@ def train(config: Config) -> None:
     total_iters = max(1, remaining // steps_per_iter)
     current_step = start_step
 
+    # --- Analysis recorder (last 5% of training, up to 1 000 episodes) -------
+    # Multi-episode analysis plots (transition matrices, entropy, etc.) are
+    # generated from this window so they reflect the converged policy rather
+    # than early exploration.
+    record_start_iter = total_iters - max(1, total_iters // 20)
+    recorder = RolloutRecorder(max_episodes=1000)
+
     logger.info(
         "Starting training: %d iters x %d steps/iter = %s total steps",
         total_iters,
@@ -936,6 +1040,10 @@ def train(config: Config) -> None:
         trajectories, env_states, obs, last_values, _ = collect_fn(
             params, obs_stats, env_states, obs, key_collect
         )
+
+        # Feed recorder during the last 5% of training iterations ----------
+        if it >= record_start_iter:
+            recorder.record(trajectories)
 
         # Update obs normalizer from raw collected observations -------------
         flat_obs = trajectories.obs.reshape(-1, obs_dim)
@@ -1047,18 +1155,37 @@ def train(config: Config) -> None:
     )
     out_dir = Path(config.save_path) if config.save_path is not None else Path(".")
     mp4_path = out_dir / "final_episode.mp4"
-    raster_path = out_dir / "final_episode_actions.png"
     save_mp4(frames, mp4_path)
-    save_action_rasterplot(actions, raster_path, num_actions)
+
+    analysis_traj: AnalysisTrajectory | None = None
+    if recorder.num_recorded_steps > 0:
+        analysis_traj = recorder.finish()
+        logger.info(
+            "Recorder captured %d complete episodes from the last 5%% of training.",
+            analysis_traj.num_episodes,
+        )
+    _save_analysis_plots(analysis_traj, actions, out_dir, num_actions)
 
     if wandb_run is not None:
         try:
             import wandb  # type: ignore[import-untyped]
 
-            wandb_run.log({
+            def _img(name: str) -> wandb.Image | None:
+                p = out_dir / name
+                return wandb.Image(str(p)) if p.exists() else None
+
+            upload: dict[str, Any] = {
                 "eval/final_episode": wandb.Video(str(mp4_path), fps=10),
-                "eval/action_timeline": wandb.Image(str(raster_path)),
-            })
+                "eval/action_timeline": _img("final_episode_actions.png"),
+                "eval/action_raster": _img("analysis_action_raster.png"),
+                "eval/transition_matrix": _img("analysis_transition_matrix.png"),
+                "eval/phase_transitions": _img("analysis_phase_transitions.png"),
+                "eval/bigrams": _img("analysis_bigrams.png"),
+                "eval/entropy": _img("analysis_entropy.png"),
+                "eval/run_lengths": _img("analysis_run_lengths.png"),
+                "eval/action_distribution": _img("analysis_action_distribution.png"),
+            }
+            wandb_run.log({k: v for k, v in upload.items() if v is not None})
         except Exception as exc:  # noqa: BLE001
             logger.error("W&B upload failed: %s", exc)
         wandb_run.finish()
