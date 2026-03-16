@@ -681,9 +681,10 @@ def plot_action_distribution(
         dist[t] = np.bincount(actions[:, t], minlength=num_actions)
     dist = dist / dist.sum(axis=1, keepdims=True)
 
-    # Smooth
-    if window > 1:
-        kernel = np.ones(window) / window
+    # Smooth (only when the episode is longer than the kernel)
+    effective_window = min(window, T)
+    if effective_window > 1:
+        kernel = np.ones(effective_window) / effective_window
         for a in range(num_actions):
             dist[:, a] = np.convolve(dist[:, a], kernel, mode="same")
         # Renormalize after smoothing

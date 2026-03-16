@@ -88,8 +88,9 @@ class Config:
         obs_radius: Half-width of the local observation window in tiles.
             Only used when obs_type is "local".
         level_name: Name of a built-in level (key in ``factoriax.levels.LEVELS``)
-            to use for all resets instead of procedural generation.  ``None``
-            uses random procedural generation (default).
+            to use for all resets instead of procedural generation.  Defaults
+            to ``"15x15_resources"``.  Pass ``None`` for random procedural
+            generation.
         reward_type: Reward function to use during training.  ``"mining"``
             (default) gives a dense proximity-plus-bonus reward.
             ``"achievement"`` gives sparse +1 per newly unlocked achievement.
@@ -121,7 +122,7 @@ class Config:
     restrict_actions: bool = False
     obs_type: str = "global"
     obs_radius: int = 10
-    level_name: str | None = None
+    level_name: str | None = "15x15_resources"
     reward_type: str = "mining"
     resource_density: float = 0.02
     seed: int = 0
@@ -713,8 +714,10 @@ def render_episode(
     obs_stats: RunningStats,
     env: FactoriaXEnv,
     env_params: EnvParams,
+    obs_fn: Callable[[EnvState, EnvParams], jax.Array],
     rng: jax.Array,
     normalize: bool = True,
+    initial_state: EnvState | None = None,
 ) -> list[np.ndarray]:
     """Run one greedy episode and collect rendered RGB frames.
 
@@ -724,20 +727,28 @@ def render_episode(
         obs_stats: Running observation statistics.
         env: Environment instance.
         env_params: Environment parameters.
+        obs_fn: Observation function ``(state, params) -> obs_array``.
         rng: PRNG key.
         normalize: Whether to normalize observations before the forward pass.
+        initial_state: Fixed initial state to use instead of a random reset.
+            Pass the level state here when training on a fixed level so the
+            rendered episode matches the training distribution.
 
     Returns:
         Tuple of (frames, actions) where frames is a list of ``(H, W, 3)``
         uint8 numpy arrays and actions is the integer action taken each step.
     """
-    jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
     jit_step = jax.jit(env.step_env, static_argnums=(3,))
     jit_apply = jax.jit(network.apply)
 
     logger.info("  Compiling step/apply kernels (first call)...")
-    rng, key_reset = jax.random.split(rng)
-    obs, state = jit_reset(key_reset, env_params)
+    if initial_state is not None:
+        state = initial_state
+        obs = obs_fn(state, env_params)
+    else:
+        jit_reset = jax.jit(env.reset_env, static_argnums=(1,))
+        rng, key_reset = jax.random.split(rng)
+        obs, state = jit_reset(key_reset, env_params)
     # Warm up jit_apply and jit_step so that compilation happens now rather
     # than silently blocking the first render-loop iteration.  The warmup
     # results are thrown away; obs/state are NOT advanced so the episode
@@ -751,24 +762,26 @@ def render_episode(
 
     frames: list[np.ndarray] = []
     actions: list[int] = []
+    rewards: list[float] = []
     cum_return = 0.0
     for _ in range(env_params.max_timesteps):
         norm = normalize_obs(obs_stats, obs) if normalize else obs
         logits, _ = jit_apply(params, norm)
         action = int(jnp.argmax(logits))
         actions.append(action)
+        rng, key_step = jax.random.split(rng)
+        obs, next_state, reward, done, _ = jit_step(key_step, state, action, env_params)
+        cum_return += float(reward)
+        rewards.append(float(reward))
         frame = render_pixels(state)
         frames.append(_draw_hud(frame, Action(action).name, cum_return))
-        rng, key_step = jax.random.split(rng)
-        obs, state, reward, done, _ = jit_step(key_step, state, action, env_params)
-        cum_return += float(reward)
+        state = next_state
         if bool(done):
-            frame = render_pixels(state)
-            frames.append(_draw_hud(frame, Action(action).name, cum_return))
+            frames.append(_draw_hud(render_pixels(state), Action(action).name, cum_return))
             break
 
     logger.info("  Episode finished: %d frames collected.", len(frames))
-    return frames, actions
+    return frames, actions, rewards
 
 
 def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
@@ -796,6 +809,32 @@ def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
         pixelformat="yuv420p",
     )
     logger.info("Visualization saved -> %s", path)
+
+
+def save_episode_return_plot(rewards: list[float], path: Path) -> None:
+    """Plot cumulative reward over the final rendered episode and save to disk.
+
+    Args:
+        rewards: Per-step rewards from the rendered episode.
+        path: Destination file path for the PNG.
+    """
+    import matplotlib.pyplot as plt
+
+    cumulative = np.cumsum(rewards)
+    steps = np.arange(1, len(cumulative) + 1)
+
+    fig, ax = plt.subplots(figsize=(8, 3))
+    ax.plot(steps, cumulative, color="steelblue", linewidth=1.5)
+    ax.fill_between(steps, cumulative, alpha=0.15, color="steelblue")
+    ax.set_xlabel("Step")
+    ax.set_ylabel("Cumulative reward")
+    ax.set_title("Final episode — cumulative return")
+    ax.set_xlim(1, max(len(cumulative), 1))
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    logger.info("Episode return plot saved -> %s", path)
 
 
 def _save_analysis_plots(
@@ -1006,10 +1045,11 @@ def train(config: Config) -> None:
 
         def _reset_fn(keys: jax.Array, params: EnvParams) -> EnvState:
             """Return the fixed level state broadcast across all environments."""
-            return jax.tree_util.tree_map(
-                lambda x: jnp.broadcast_to(x[None], (config.num_envs,) + x.shape),
-                _level_state,
-            )
+            def _broadcast(x: jax.Array) -> jax.Array:
+                a = jnp.asarray(x)
+                return jnp.broadcast_to(a[None], (config.num_envs,) + a.shape)
+
+            return jax.tree_util.tree_map(_broadcast, _level_state)
     else:
         rng, key_dummy = jax.random.split(rng)
         _, dummy_state = env.reset_env(key_dummy, env_params)
@@ -1225,18 +1265,21 @@ def train(config: Config) -> None:
     # --- Visualization of final policy ---------------------------------------
     logger.info("Rendering final-policy episode...")
     rng, key_vis = jax.random.split(rng)
-    frames, actions = render_episode(
+    frames, actions, rewards = render_episode(
         params,
         network,
         obs_stats,
         env,
         env_params,
+        _obs_fn,
         key_vis,
         normalize=config.normalize_obs,
+        initial_state=_level_state if _level is not None else None,
     )
     out_dir = Path(config.save_path) if config.save_path is not None else Path(".")
     mp4_path = out_dir / "final_episode.mp4"
     save_mp4(frames, mp4_path)
+    save_episode_return_plot(rewards, out_dir / "final_episode_return.png")
 
     analysis_traj: AnalysisTrajectory | None = None
     if recorder.num_recorded_steps > 0:
@@ -1257,6 +1300,7 @@ def train(config: Config) -> None:
 
             upload: dict[str, Any] = {
                 "eval/final_episode": wandb.Video(str(mp4_path), fps=10),
+                "eval/episode_return": _img("final_episode_return.png"),
                 "eval/action_timeline": _img("final_episode_actions.png"),
                 "eval/action_raster": _img("analysis_action_raster.png"),
                 "eval/transition_matrix": _img("analysis_transition_matrix.png"),
@@ -1325,7 +1369,7 @@ def _parse_args() -> Config:
     p.add_argument(
         "--level",
         type=str,
-        default=None,
+        default="15x15_resources",
         dest="level_name",
         choices=list(LEVELS),
         help="Built-in level name for fixed resets. Omit for procedural generation.",
