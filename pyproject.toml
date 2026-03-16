@@ -16,6 +16,7 @@ dependencies = [
     "pygame>=2.5.0",
     "gymnax>=0.0.8",
     "imageio[ffmpeg]>=2.33.0",
+    "orjson>=3.11.7",
 ]
 
 [project.optional-dependencies]

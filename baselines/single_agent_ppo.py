@@ -40,6 +40,7 @@ from factoriax.analysis import actions as ana_actions
 from factoriax.analysis.recorder import RolloutRecorder
 from factoriax.analysis.trajectory import Trajectory as AnalysisTrajectory
 from factoriax.constants import Action
+from factoriax.levels import LEVELS, Level, build_state, get_level
 from factoriax.observations import global_array, local_array
 
 # Must be called before any pyplot import (all pyplot usage is inside functions).
@@ -85,7 +86,11 @@ class Config:
             (windowed patch centered on the agent).
         obs_radius: Half-width of the local observation window in tiles.
             Only used when obs_type is "local".
+        level_name: Name of a built-in level (key in ``factoriax.levels.LEVELS``)
+            to use for all resets instead of procedural generation.  ``None``
+            uses random procedural generation (default).
         resource_density: Per-type resource spawn probability (coal/iron/copper).
+            Only applies when ``level_name`` is ``None``.
         seed: Random seed.
         save_path: Directory for checkpoints (None = disabled).
         load_path: Path to a checkpoint file to resume from.
@@ -112,6 +117,7 @@ class Config:
     restrict_actions: bool = False
     obs_type: str = "global"
     obs_radius: int = 10
+    level_name: str | None = None
     resource_density: float = 0.02
     seed: int = 0
     save_path: str | None = None
@@ -326,6 +332,7 @@ def make_train_fns(
     optimizer: optax.GradientTransformation,
     config: Config,
     obs_fn: Callable[[EnvState, EnvParams], jax.Array],
+    reset_fn: Callable[[jax.Array, EnvParams], EnvState],
 ) -> tuple[Any, Any]:
     """Build JIT-compiled collect and update functions for the training loop.
 
@@ -352,31 +359,28 @@ def make_train_fns(
         ``update_fn(params, opt_state, obs_stats, flat_traj, advantages,
         returns, rng)`` runs PPO epochs and returns
         ``(new_params, new_opt_state, metrics, rng)``.
+        ``reset_fn(keys, params)`` returns a batched :class:`EnvState`
+        of shape ``(N, ...)`` used to reinitialise terminated environments.
+        The key array has shape ``(N, 2)`` and may be ignored (e.g. for
+        deterministic level resets).
     """
     num_envs = config.num_envs
     rollout_steps = config.rollout_steps
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
-    vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
     vmap_obs_fn = jax.vmap(obs_fn, in_axes=(0, None))
 
-    def _auto_reset(
+    def _select_states(
         dones: jax.Array,
-        step_obs: jax.Array,
-        reset_obs: jax.Array,
         step_states: EnvState,
         reset_states: EnvState,
-    ) -> tuple[jax.Array, EnvState]:
-        """Replace terminated env observations and states with fresh resets."""
-        obs = jnp.where(dones[:, None], reset_obs, step_obs)
-
+    ) -> EnvState:
+        """Replace terminated environment states with fresh reset states."""
         def _where(r: jax.Array, s: jax.Array) -> jax.Array:
-            # Broadcast done over any number of trailing dims.
             pad = dones.reshape((-1,) + (1,) * (s.ndim - 1))
             return jnp.where(pad, r, s)
 
-        states = jax.tree_util.tree_map(_where, reset_states, step_states)
-        return obs, states
+        return jax.tree_util.tree_map(_where, reset_states, step_states)
 
     @jax.jit
     def collect(
@@ -423,16 +427,14 @@ def make_train_fns(
             )
 
             keys_step = jax.random.split(key_step, num_envs)
-            step_obs, next_states, rewards, dones, _ = vmap_step(
+            _, next_states, rewards, dones, _ = vmap_step(
                 keys_step, states, actions, env_params
             )
 
             keys_reset = jax.random.split(key_reset, num_envs)
-            reset_obs, reset_states = vmap_reset(keys_reset, env_params)
+            reset_states = reset_fn(keys_reset, env_params)
 
-            _, next_states = _auto_reset(
-                dones, step_obs, reset_obs, next_states, reset_states
-            )
+            next_states = _select_states(dones, next_states, reset_states)
             next_obs = vmap_obs_fn(next_states, env_params)
 
             transition = Transition(
@@ -940,9 +942,10 @@ def train(config: Config) -> None:
             import wandb  # type: ignore[import-untyped]
 
             tags = [
-            "restrict_actions" if config.restrict_actions else "full_actions",
-            f"obs_{config.obs_type}",
-        ]
+                "restrict_actions" if config.restrict_actions else "full_actions",
+                f"obs_{config.obs_type}",
+                f"level_{config.level_name}" if config.level_name else "procedural",
+            ]
             wandb_run = wandb.init(
                 project=config.wandb_project,
                 name=config.wandb_run_name,
@@ -965,6 +968,15 @@ def train(config: Config) -> None:
         copper_probability=config.resource_density,
     )
 
+    # --- Level or procedural reset -------------------------------------------
+    _level: Level | None = None
+    if config.level_name is not None:
+        _level = get_level(config.level_name)
+        env_params = env_params.replace(
+            map_width=_level.map_width,
+            map_height=_level.map_height,
+        )
+
     # --- Build observation function ------------------------------------------
     _obs_radius = config.obs_radius
     _obs_type = config.obs_type
@@ -975,8 +987,26 @@ def train(config: Config) -> None:
             return local_array(state, params, state.selected_player, _obs_radius)
         return global_array(state, params, state.selected_player)
 
-    rng, key_dummy = jax.random.split(rng)
-    _, dummy_state = env.reset_env(key_dummy, env_params)
+    if _level is not None:
+        _level_state = build_state(_level, env_params)
+        dummy_state = _level_state
+
+        def _reset_fn(keys: jax.Array, params: EnvParams) -> EnvState:
+            """Return the fixed level state broadcast across all environments."""
+            return jax.tree_util.tree_map(
+                lambda x: jnp.broadcast_to(x[None], (config.num_envs,) + x.shape),
+                _level_state,
+            )
+    else:
+        rng, key_dummy = jax.random.split(rng)
+        _, dummy_state = env.reset_env(key_dummy, env_params)
+        _vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
+
+        def _reset_fn(keys: jax.Array, params: EnvParams) -> EnvState:
+            """Return fresh procedurally generated states for all environments."""
+            _, states = _vmap_reset(keys, params)
+            return states
+
     obs_dim = int(_obs_fn(dummy_state, env_params).shape[0])
     # NOOP=0, LEFT=1, RIGHT=2, UP=3, DOWN=4, MINE=5 are the first 6 actions.
     num_actions = 6 if config.restrict_actions else int(env.action_space(env_params).n)
@@ -1006,7 +1036,7 @@ def train(config: Config) -> None:
 
     # --- Build JIT'd training functions --------------------------------------
     collect_fn, update_fn = make_train_fns(
-        env, env_params, network, optimizer, config, _obs_fn
+        env, env_params, network, optimizer, config, _obs_fn, _reset_fn
     )
 
     # --- Compute loop counts -------------------------------------------------
@@ -1033,15 +1063,16 @@ def train(config: Config) -> None:
         if config.obs_type == "local"
         else "global"
     )
+    level_label = config.level_name if config.level_name else "procedural"
     logger.info(
-        "  obs=%s  obs_dim=%d  num_actions=%d  num_envs=%d  rollout_steps=%d"
-        "  resource_density=%.2f  max_timesteps=%d",
+        "  level=%s  obs=%s  obs_dim=%d  num_actions=%d"
+        "  num_envs=%d  rollout_steps=%d  max_timesteps=%d",
+        level_label,
         obs_label,
         obs_dim,
         num_actions,
         config.num_envs,
         config.rollout_steps,
-        config.resource_density,
         env_params.max_timesteps,
     )
     if config.save_path is not None:
@@ -1054,10 +1085,9 @@ def train(config: Config) -> None:
         "Compiling and initializing %d environments (first JIT — may take a minute)...",
         config.num_envs,
     )
-    vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
     rng, key_envs = jax.random.split(rng)
     keys_envs = jax.random.split(key_envs, config.num_envs)
-    _, env_states = vmap_reset(keys_envs, env_params)
+    env_states = _reset_fn(keys_envs, env_params)
     obs = jax.vmap(_obs_fn, in_axes=(0, None))(env_states, env_params)
     logger.info("Environments ready.")
 
@@ -1275,6 +1305,14 @@ def _parse_args() -> Config:
         default=10,
         help="Half-width of the local observation window in tiles (local obs only).",
     )
+    p.add_argument(
+        "--level",
+        type=str,
+        default=None,
+        dest="level_name",
+        choices=list(LEVELS),
+        help="Built-in level name for fixed resets. Omit for procedural generation.",
+    )
     p.add_argument("--resource-density", type=float, default=0.02)
     p.add_argument("--use-wandb", action="store_true")
     p.add_argument("--wandb-project", type=str, default="factoriax-ppo")
@@ -1298,6 +1336,7 @@ def _parse_args() -> Config:
         restrict_actions=args.restrict_actions,
         obs_type=args.obs_type,
         obs_radius=args.obs_radius,
+        level_name=args.level_name,
         resource_density=args.resource_density,
         seed=args.seed,
         save_path=args.save_path,

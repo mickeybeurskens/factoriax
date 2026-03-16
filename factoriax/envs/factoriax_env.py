@@ -8,10 +8,10 @@ from gymnax.environments import environment, spaces
 
 from factoriax.constants import NUM_ACTIONS, NUM_INVENTORY_SLOTS
 from factoriax.game_logic import factoriax_step, is_game_over
+from factoriax.levels import Level, build_state, generate_state
 from factoriax.observations import global_array
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
-from factoriax.world_gen import generate_world
 
 
 class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
@@ -72,7 +72,28 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Tuple of (initial_observation, initial_state)
         """
-        state = generate_world(key, params)
+        state = generate_state(key, params)
+        obs = self.get_obs(state, params)
+        return obs, state
+
+    def reset_from_level(
+        self, level: Level, params: EnvParams
+    ) -> tuple[jax.Array, EnvState]:
+        """Reset the environment to a pre-built level.
+
+        Players are placed near the centre of the map according to
+        ``params.num_players``.  No random key is needed because pre-built
+        levels are deterministic.
+
+        Args:
+            level: Level definition.  Its dimensions must match those in
+                ``params``.
+            params: Environment parameters, including ``num_players``.
+
+        Returns:
+            Tuple of ``(initial_observation, initial_state)``.
+        """
+        state = build_state(level, params)
         obs = self.get_obs(state, params)
         return obs, state
 

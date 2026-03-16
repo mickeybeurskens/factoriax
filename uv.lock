@@ -335,6 +335,7 @@ dependencies = [
     { name = "jax", extra = ["cuda13"] },
     { name = "numpy" },
     { name = "optax" },
+    { name = "orjson" },
     { name = "pygame" },
 ]
 
@@ -365,6 +366,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "optax", specifier = ">=0.2.0" },
+    { name = "orjson", specifier = ">=3.11.7" },
     { name = "pygame", specifier = ">=2.5.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.2.0" },
