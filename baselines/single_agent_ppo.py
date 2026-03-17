@@ -25,8 +25,9 @@ import logging
 import pickle
 import time
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 import flax.linen as nn
 import jax

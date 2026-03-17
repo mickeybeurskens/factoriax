@@ -1,4 +1,4 @@
-"""Regression tests for player_ui rendering functions.
+"""Regression tests for play.ui rendering functions.
 
 These tests guard the output contract (shape, dtype) of the render functions
 and verify that they do not crash under common state configurations.  Visual
@@ -12,7 +12,12 @@ import pygame
 
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import ItemType
-from factoriax.player_ui import render_achievement_menu, render_inventory_menu
+from factoriax.play.ui import (
+    ClickRegion,
+    render_achievement_menu,
+    render_inventory_menu,
+    render_pause_menu,
+)
 
 
 def setup_module(module: object) -> None:
@@ -64,20 +69,22 @@ class TestRenderInventoryMenu:
     def test_returns_uint8_rgba(self, state_factory) -> None:
         """Must return a uint8 RGBA array matching the requested dimensions."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result = render_inventory_menu(state, _SW, _SH)
+        result, click_regions = render_inventory_menu(state, _SW, _SH)
         assert result.dtype == np.uint8
         assert result.shape == (_SH, _SW, 4)
+        assert isinstance(click_regions, list)
+        assert all(isinstance(r, ClickRegion) for r in click_regions)
 
     def test_inventory_focus(self, state_factory) -> None:
         """Should not crash with inventory focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result = render_inventory_menu(state, _SW, _SH, menu_focus="inventory")
+        result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="inventory")
         assert result.shape == (_SH, _SW, 4)
 
     def test_crafting_focus(self, state_factory) -> None:
         """Should not crash with crafting focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
+        result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
         assert result.shape == (_SH, _SW, 4)
 
     def test_populated_inventory(self, state_factory) -> None:
@@ -95,7 +102,7 @@ class TestRenderInventoryMenu:
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
-        result = render_inventory_menu(state, _SW, _SH)
+        result, _ = render_inventory_menu(state, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
     def test_craft_in_progress(self, state_factory) -> None:
@@ -104,5 +111,31 @@ class TestRenderInventoryMenu:
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
             craft_progress=jnp.array([2], dtype=jnp.int32),
         )
-        result = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
+        result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
         assert result.shape == (_SH, _SW, 4)
+
+
+class TestRenderPauseMenu:
+    """Output-contract tests for render_pause_menu."""
+
+    _PAUSE_W = 480
+    _PAUSE_H = 480
+
+    def test_returns_uint8_rgba(self) -> None:
+        """Must return a uint8 RGBA array matching the requested dimensions."""
+        result, click_regions = render_pause_menu(self._PAUSE_W, self._PAUSE_H)
+        assert result.dtype == np.uint8
+        assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)
+        assert isinstance(click_regions, list)
+        assert len(click_regions) == 2
+        assert all(isinstance(r, ClickRegion) for r in click_regions)
+
+    def test_selection_zero(self) -> None:
+        """Should render correctly with first option selected."""
+        result, _ = render_pause_menu(self._PAUSE_W, self._PAUSE_H, selected_option=0)
+        assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)
+
+    def test_selection_one(self) -> None:
+        """Should render correctly with second option selected."""
+        result, _ = render_pause_menu(self._PAUSE_W, self._PAUSE_H, selected_option=1)
+        assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)

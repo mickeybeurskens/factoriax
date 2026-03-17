@@ -6,7 +6,7 @@ import pytest
 
 from factoriax import BlockType, ItemType
 from factoriax.achievements import NUM_ACHIEVEMENTS
-from factoriax.constants import NUM_ITEM_TYPES, MachineType
+from factoriax.constants import NUM_ITEM_TYPES
 from factoriax.rewards import achievement_reward, mining_reward
 from factoriax.state import EnvParams
 

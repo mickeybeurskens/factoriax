@@ -14,8 +14,6 @@ import pytest
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    NUM_INVENTORY_SLOTS,
-    NUM_ITEM_TYPES,
     Action,
     BlockType,
     MachineType,
@@ -33,7 +31,6 @@ from factoriax.levels import (
     save_level,
 )
 from factoriax.state import EnvParams
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

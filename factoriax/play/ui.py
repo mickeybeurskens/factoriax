@@ -1,18 +1,45 @@
 """Player-only UI components using pygame for pixel-font text rendering.
 
 This module is intentionally separate from renderer.py so that the RL
-environment never pulls in a pygame dependency.  Only play_factoriax.py
+environment never pulls in a pygame dependency.  Only the play subpackage
 (and any other human-facing entry points) should import from here.
 """
 
 from __future__ import annotations
 
 import functools
+from dataclasses import dataclass
 
 import numpy as np
 import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
+
+
+@dataclass(frozen=True, slots=True)
+class ClickRegion:
+    """Represents a clickable rectangular area in the UI.
+
+    Coordinates are in base render resolution (before window scaling).
+
+    Attributes:
+        x: Left edge of the region in pixels.
+        y: Top edge of the region in pixels.
+        w: Width of the region in pixels.
+        h: Height of the region in pixels.
+        action: Type of action to perform ("select_slot", "select_recipe",
+            "focus_inventory", "focus_crafting", "pause_option").
+        param: Action-specific parameter (slot/recipe index, option index).
+    """
+
+    x: int
+    y: int
+    w: int
+    h: int
+    action: str
+    param: int
+
+
 from factoriax.constants import (
     ITEM_COLORS,
     NUM_INVENTORY_SLOTS,
@@ -30,6 +57,8 @@ from factoriax.state import EnvState
 # ---------------------------------------------------------------------------
 
 _PANEL_BG: tuple[int, int, int, int] = (22, 22, 22, 228)
+_PAUSE_OPTION_NORMAL: tuple[int, int, int, int] = (45, 45, 45, 255)
+_PAUSE_OPTION_SELECTED: tuple[int, int, int, int] = (75, 75, 75, 255)
 _BORDER: tuple[int, int, int, int] = (190, 165, 55, 255)
 _BORDER_PX: int = 4
 _FOCUS_STRIP: tuple[int, int, int, int] = (55, 130, 55, 255)
@@ -37,6 +66,9 @@ _HEADER_H: int = 44       # height reserved for each section label row
 _SEP_H: int = 4           # height of the gold separator beneath labels
 _FONT_HEADER: int = 26    # section label font size
 _FONT_BODY: int = 20      # item names, counts, recipe info font size
+_FONT_HINT: int = 14      # control hint font size
+_HINT_HEIGHT: int = 24    # height reserved for hint bar at bottom of menus
+_HINT_COLOR: tuple[int, int, int] = (120, 115, 90)
 
 # Crafting ingredient affordability colours.
 _AFFORD_COLOR: tuple[int, int, int] = (110, 220, 110)
@@ -231,6 +263,29 @@ def _draw_section_header(
     return sep_y + _SEP_H + 8
 
 
+def _render_control_hints(
+    overlay: np.ndarray,
+    hints: str,
+    x: int,
+    y: int,
+    w: int,
+) -> None:
+    """Render a control hint bar centered in the given region.
+
+    Args:
+        overlay: Destination RGBA array; modified in place.
+        hints: Hint text to render (e.g. "[TAB] Next | [E] Craft").
+        x: Left edge of the hint region.
+        y: Top edge of the hint region.
+        w: Width of the hint region.
+    """
+    font = get_pixel_font(_FONT_HINT)
+    hint_arr = _render_text_rgba(hints, font, _HINT_COLOR)
+    hint_x = x + (w - hint_arr.shape[1]) // 2
+    hint_y = y + (_HINT_HEIGHT - hint_arr.shape[0]) // 2
+    _blit_rgba(overlay, hint_arr, hint_y, hint_x)
+
+
 # ---------------------------------------------------------------------------
 # Public menu renderers
 # ---------------------------------------------------------------------------
@@ -313,11 +368,96 @@ def render_achievement_menu(
         (148, 140, 98),
     )
     fx = menu_x + (menu_w - footer_arr.shape[1]) // 2
-    fy = menu_y + menu_h - footer_arr.shape[0] - 20
+    fy = menu_y + menu_h - footer_arr.shape[0] - 20 - _HINT_HEIGHT
     _blit_rgba(overlay, footer_arr, fy, fx)
     overlay[fy - 8 : fy - 6, menu_x + 20 : menu_x + menu_w - 20] = (80, 75, 40, 255)
 
+    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    _render_control_hints(
+        overlay, "[ESC] Close", menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
+    )
+
     return overlay
+
+
+def render_pause_menu(
+    screen_width: int,
+    screen_height: int,
+    selected_option: int = 0,
+) -> tuple[np.ndarray, list[ClickRegion]]:
+    """Render the pause menu as an RGBA overlay.
+
+    Displays a centered panel with Resume and Quit Game options. The selected
+    option is highlighted with a brighter background.
+
+    Args:
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+        selected_option: Currently selected option index (0=Resume, 1=Quit).
+
+    Returns:
+        Tuple of (RGBA overlay array, list of click regions).
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    click_regions: list[ClickRegion] = []
+
+    menu_w = int(screen_width * 0.35)
+    menu_h = int(screen_height * 0.35)
+    menu_x = (screen_width - menu_w) // 2
+    menu_y = (screen_height - menu_h) // 2
+
+    draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
+
+    title_font = get_pixel_font(28)
+    body_font = get_pixel_font(_FONT_BODY)
+
+    title_arr = _render_text_rgba("PAUSED", title_font, (215, 195, 65))
+    title_x = menu_x + (menu_w - title_arr.shape[1]) // 2
+    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 16, title_x)
+
+    sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
+    overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
+
+    options = ["Resume", "Quit Game"]
+    option_h = 40
+    options_start_y = sep_y + _SEP_H + 24
+
+    for i, option_text in enumerate(options):
+        option_y = options_start_y + i * (option_h + 12)
+        option_bg = _PAUSE_OPTION_SELECTED if i == selected_option else _PAUSE_OPTION_NORMAL
+
+        option_x = menu_x + 24
+        option_w = menu_w - 48
+        overlay[
+            option_y : option_y + option_h,
+            option_x : option_x + option_w,
+        ] = option_bg
+
+        click_regions.append(ClickRegion(
+            x=option_x, y=option_y, w=option_w, h=option_h,
+            action="pause_option", param=i,
+        ))
+
+        if i == selected_option:
+            white = (255, 255, 255, 255)
+            overlay[option_y, option_x : option_x + option_w] = white
+            overlay[option_y + option_h - 1, option_x : option_x + option_w] = white
+            overlay[option_y : option_y + option_h, option_x] = white
+            overlay[option_y : option_y + option_h, option_x + option_w - 1] = white
+
+        text_color = (235, 228, 185) if i == selected_option else (160, 155, 130)
+        text_arr = _render_text_rgba(option_text, body_font, text_color)
+        text_x = option_x + (option_w - text_arr.shape[1]) // 2
+        text_y = option_y + (option_h - text_arr.shape[0]) // 2
+        _blit_rgba(overlay, text_arr, text_y, text_x)
+
+    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    _render_control_hints(
+        overlay, "[UP/DOWN] Select | [ENTER/E] Confirm | [ESC] Back",
+        menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX,
+    )
+
+    return overlay, click_regions
 
 
 def render_inventory_menu(
@@ -325,7 +465,7 @@ def render_inventory_menu(
     screen_width: int,
     screen_height: int,
     menu_focus: str = "inventory",
-) -> np.ndarray:
+) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the inventory and crafting menu as an RGBA overlay.
 
     Left section: 2x5 inventory grid with item icon, count, and name per
@@ -339,9 +479,10 @@ def render_inventory_menu(
         menu_focus: Focused section — "inventory" or "crafting".
 
     Returns:
-        RGBA numpy array of shape (screen_height, screen_width, 4).
+        Tuple of (RGBA overlay array, list of click regions).
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    click_regions: list[ClickRegion] = []
 
     menu_w = int(screen_width * 0.75)
     menu_h = int(screen_height * 0.5)
@@ -369,6 +510,15 @@ def render_inventory_menu(
         overlay, div_x, menu_y, craft_w,
         "CRAFTING", header_font, menu_focus == "crafting",
     )
+
+    click_regions.append(ClickRegion(
+        x=menu_x, y=menu_y, w=inv_w, h=inv_content_y - menu_y,
+        action="focus_inventory", param=0,
+    ))
+    click_regions.append(ClickRegion(
+        x=div_x, y=menu_y, w=craft_w, h=craft_content_y - menu_y,
+        action="focus_crafting", param=0,
+    ))
 
     selected_player = int(state.selected_player)
     selected_slot = int(state.selected_slots[selected_player])
@@ -417,6 +567,11 @@ def render_inventory_menu(
             overlay[cell_y : cell_y + icon_size, icon_x] = white
             overlay[cell_y : cell_y + icon_size, icon_x + icon_size - 1] = white
 
+        click_regions.append(ClickRegion(
+            x=icon_x, y=cell_y, w=icon_size, h=cell_h,
+            action="select_slot", param=slot_idx,
+        ))
+
         item_type = int(inventory_items[slot_idx])
         count = int(inventory_counts[slot_idx])
 
@@ -460,6 +615,11 @@ def render_inventory_menu(
         can_afford = bool(can_afford_recipe(state, selected_player, recipe_idx))
 
         recipe_y = craft_content_y + recipe_idx * recipe_h
+
+        click_regions.append(ClickRegion(
+            x=craft_x, y=recipe_y, w=craft_available_w, h=recipe_h,
+            action="select_recipe", param=recipe_idx,
+        ))
 
         if is_selected_recipe:
             overlay[
@@ -517,4 +677,13 @@ def render_inventory_menu(
                     100, 200, 100, 255
                 )
 
-    return overlay
+    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    if menu_focus == "crafting":
+        hints = "[UP/DOWN] Select | [TAB] Inventory | [E] Craft | [ESC] Close"
+    else:
+        hints = "[LEFT/RIGHT] Select | [TAB] Crafting | [E] Place | [ESC] Close"
+    _render_control_hints(
+        overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
+    )
+
+    return overlay, click_regions

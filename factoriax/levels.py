@@ -53,7 +53,6 @@ from factoriax.constants import (
 )
 from factoriax.state import EnvParams, EnvState
 
-
 # ---------------------------------------------------------------------------
 # Level dataclass
 # ---------------------------------------------------------------------------
