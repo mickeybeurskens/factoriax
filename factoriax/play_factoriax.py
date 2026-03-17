@@ -33,10 +33,11 @@ def composite_rgba_over_rgb(
 def calculate_window_size(
     base_width: int, base_height: int, scale_factor: float = 0.8
 ) -> tuple[int, int]:
-    """Calculate window size to fit screen while maintaining aspect ratio.
+    """Calculate window size using integer scaling for crisp pixel art.
 
-    Scales the window to use scale_factor (default 80%) of the limiting
-    dimension (width or height) while preserving aspect ratio.
+    Uses the largest integer scale factor that fits within scale_factor
+    (default 80%) of the screen. Integer scaling ensures every pixel is
+    rendered at exactly the same size, preventing blurry text and artifacts.
 
     Args:
         base_width: Base render width in pixels
@@ -47,22 +48,15 @@ def calculate_window_size(
         Tuple of (window_width, window_height) in pixels
     """
     screen_info = pygame.display.Info()
-    max_width = screen_info.current_w
-    max_height = screen_info.current_h
+    max_width = int(screen_info.current_w * scale_factor)
+    max_height = int(screen_info.current_h * scale_factor)
 
-    aspect_ratio = base_width / base_height
+    # Find the largest integer scale that fits the screen
+    max_scale_w = max_width // base_width
+    max_scale_h = max_height // base_height
+    scale = max(1, min(max_scale_w, max_scale_h))
 
-    target_width = int(max_width * scale_factor)
-    target_height = int(max_height * scale_factor)
-
-    if target_width / aspect_ratio <= target_height:
-        window_width = target_width
-        window_height = int(target_width / aspect_ratio)
-    else:
-        window_height = target_height
-        window_width = int(target_height * aspect_ratio)
-
-    return window_width, window_height
+    return base_width * scale, base_height * scale
 
 
 def main() -> None:
