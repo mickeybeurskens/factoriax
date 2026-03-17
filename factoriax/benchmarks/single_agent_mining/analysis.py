@@ -214,18 +214,25 @@ def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
     """
     if not frames:
         raise ValueError("frames list is empty; cannot write MP4.")
+    import warnings
     import imageio.v3 as iio
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    iio.imwrite(
-        str(path),
-        np.stack([f.astype(np.uint8) for f in frames]),
-        plugin="FFMPEG",
-        fps=fps,
-        codec="libx264",
-        pixelformat="yuv420p",
-    )
+    # imageio-ffmpeg spawns ffmpeg via os.fork()+exec. JAX registers an
+    # os.register_at_fork() callback that warns whenever fork is called after
+    # JAX's thread pool has started. The fork succeeds and no deadlock occurs
+    # in practice, so we suppress the false-positive here.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message="os.fork()")
+        iio.imwrite(
+            str(path),
+            np.stack([f.astype(np.uint8) for f in frames]),
+            plugin="FFMPEG",
+            fps=fps,
+            codec="libx264",
+            pixelformat="yuv420p",
+        )
 
 
 def log_to_wandb(
