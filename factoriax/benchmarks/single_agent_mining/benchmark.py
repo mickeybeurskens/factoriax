@@ -21,9 +21,12 @@ Typical usage::
 
 from __future__ import annotations
 
-from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
+from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.benchmarks.single_agent_mining.levels import MINING_LEVELS
-from factoriax.benchmarks.single_agent_mining.scoring import aggregate_scores, score_items
+from factoriax.benchmarks.single_agent_mining.scoring import (
+    aggregate_scores,
+    score_items,
+)
 
 
 class SingleAgentMiningBenchmark:

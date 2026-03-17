@@ -7,9 +7,9 @@ basic structure; visual correctness is verified manually.
 
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import matplotlib.pyplot as plt
 
 from factoriax.benchmarks.core import BenchmarkResult, LevelResult
 from factoriax.benchmarks.single_agent_mining.analysis import (
@@ -18,7 +18,6 @@ from factoriax.benchmarks.single_agent_mining.analysis import (
     plot_level_scores,
     plot_resource_breakdown,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

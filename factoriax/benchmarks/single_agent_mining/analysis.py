@@ -18,13 +18,12 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from factoriax.benchmarks.core import BenchmarkResult
+from factoriax.benchmarks.single_agent_mining.scoring import RESOURCE_WEIGHTS
 from factoriax.constants import Action
 
-from factoriax.benchmarks.core import BenchmarkResult, LevelResult
-from factoriax.benchmarks.single_agent_mining.scoring import RESOURCE_WEIGHTS
-
 if TYPE_CHECKING:
-    import wandb as wandb_module
+    pass
 
 # Consistent colours for each resource type across all plots.
 _RESOURCE_COLORS: dict[str, str] = {

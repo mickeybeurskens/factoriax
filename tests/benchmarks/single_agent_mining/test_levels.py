@@ -21,21 +21,19 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import BlockType
-from factoriax.envs import FactoriaXEnv
-from factoriax.levels import build_state
-from factoriax.observations import global_array
-
 from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.benchmarks.single_agent_mining.levels import (
-    MINING_LEVELS,
     _LEVEL_1,
     _LEVEL_2,
     _LEVEL_3,
     _LEVEL_4,
     _LEVEL_5,
+    MINING_LEVELS,
 )
-
+from factoriax.constants import BlockType
+from factoriax.envs import FactoriaXEnv
+from factoriax.levels import build_state
+from factoriax.observations import global_array
 
 # ---------------------------------------------------------------------------
 # Content tests — pure numpy, all five levels

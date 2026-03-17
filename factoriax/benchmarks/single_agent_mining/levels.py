@@ -22,11 +22,10 @@ Level overview:
 
 from __future__ import annotations
 
+from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
-
-from factoriax.benchmarks.core import BenchmarkLevel
 
 # All benchmark levels use these constraints.
 _MAX_TIMESTEPS: int = 200

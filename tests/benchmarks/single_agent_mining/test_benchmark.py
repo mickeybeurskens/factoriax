@@ -12,20 +12,20 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import BlockType
-from factoriax.levels import LevelBuilder
-from factoriax.state import EnvParams
-
 from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
 from factoriax.benchmarks.runner import BenchmarkRunner
-from factoriax.benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
+from factoriax.benchmarks.single_agent_mining.benchmark import (
+    SingleAgentMiningBenchmark,
+)
 from factoriax.benchmarks.single_agent_mining.levels import MINING_LEVELS
 from factoriax.benchmarks.single_agent_mining.scoring import (
     RESOURCE_WEIGHTS,
     aggregate_scores,
     score_items,
 )
-
+from factoriax.constants import BlockType
+from factoriax.levels import LevelBuilder
+from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Scoring unit tests — pure Python, no JAX

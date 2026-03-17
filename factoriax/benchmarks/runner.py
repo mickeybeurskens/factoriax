@@ -17,12 +17,17 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from factoriax.benchmarks.core import (
+    Benchmark,
+    BenchmarkLevel,
+    BenchmarkResult,
+    LevelResult,
+    Policy,
+)
 from factoriax.constants import ItemType
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import global_array
-
-from factoriax.benchmarks.core import Benchmark, BenchmarkLevel, BenchmarkResult, LevelResult, Policy
 
 logger = logging.getLogger(__name__)
 

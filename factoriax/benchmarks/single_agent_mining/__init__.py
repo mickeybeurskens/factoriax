@@ -6,6 +6,8 @@ different values: copper (3 pts) > iron (2 pts) > coal (1 pt). The
 benchmark score is the mean weighted score across all five levels.
 """
 
-from factoriax.benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
+from factoriax.benchmarks.single_agent_mining.benchmark import (
+    SingleAgentMiningBenchmark,
+)
 
 __all__ = ["SingleAgentMiningBenchmark"]

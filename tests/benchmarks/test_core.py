@@ -5,17 +5,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from factoriax.constants import BlockType
-from factoriax.levels import LevelBuilder
-from factoriax.state import EnvParams
-
 from factoriax.benchmarks.core import (
     Benchmark,
     BenchmarkLevel,
     BenchmarkResult,
     LevelResult,
 )
-
+from factoriax.constants import BlockType
+from factoriax.levels import LevelBuilder
+from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Fixtures

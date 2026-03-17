@@ -11,13 +11,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
+from factoriax.benchmarks.runner import BenchmarkRunner
 from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
-
-from factoriax.benchmarks.core import Benchmark, BenchmarkLevel, LevelResult
-from factoriax.benchmarks.runner import BenchmarkRunner
-
 
 # ---------------------------------------------------------------------------
 # Shared stub infrastructure
