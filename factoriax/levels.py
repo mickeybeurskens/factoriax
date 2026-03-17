@@ -158,8 +158,9 @@ class LevelBuilder:
         w: int,
         h: int,
         block: BlockType,
+        resources: int | None = None,
     ) -> LevelBuilder:
-        """Fill a rectangular region with *block*.
+        """Fill a rectangular region with *block*, optionally overriding resources.
 
         The rectangle is clipped to the map boundary so callers do not
         need to guard against out-of-bounds coordinates.
@@ -170,6 +171,9 @@ class LevelBuilder:
             w: Width of the rectangle in tiles.
             h: Height of the rectangle in tiles.
             block: Block type to place.
+            resources: If given, set every tile in the region to this resource
+                count instead of the default (``BLOCK_MAX_RESOURCES`` for ore,
+                0 for non-ore).
 
         Returns:
             ``self`` for chaining.
@@ -179,6 +183,10 @@ class LevelBuilder:
         x1 = min(self._width, x + w)
         y1 = min(self._height, y + h)
         self._block_map[y0:y1, x0:x1] = int(block)
+        if resources is not None:
+            if self._block_resources is None:
+                self._block_resources = _default_resources(self._block_map)
+            self._block_resources[y0:y1, x0:x1] = resources
         return self
 
     def set_resources(self, x: int, y: int, amount: int) -> LevelBuilder:
@@ -529,9 +537,9 @@ def load_level(path: Path) -> Level:
 #: Coal: top-left. Copper: top-right. Iron: bottom-left.
 _15X15_RESOURCES: Level = (
     LevelBuilder(15, 15)
-    .fill_rect(0, 0, 4, 4, BlockType.COAL)
-    .fill_rect(11, 0, 4, 4, BlockType.COPPER)
-    .fill_rect(0, 11, 4, 4, BlockType.IRON)
+    .fill_rect(0, 0, 4, 4, BlockType.COAL, resources=3)
+    .fill_rect(11, 0, 4, 4, BlockType.COPPER, resources=3)
+    .fill_rect(0, 11, 4, 4, BlockType.IRON, resources=3)
     .build("15x15_resources")
 )
 
