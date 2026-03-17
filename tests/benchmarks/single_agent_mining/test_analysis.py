@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 import matplotlib.pyplot as plt
 
-from benchmarks.core import BenchmarkResult, LevelResult
-from benchmarks.single_agent_mining.analysis import (
+from factoriax.benchmarks.core import BenchmarkResult, LevelResult
+from factoriax.benchmarks.single_agent_mining.analysis import (
     log_to_wandb,
     plot_action_distribution,
     plot_level_scores,

@@ -22,7 +22,7 @@ from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import global_array
 
-from benchmarks.core import Benchmark, BenchmarkLevel, BenchmarkResult, LevelResult, Policy
+from factoriax.benchmarks.core import Benchmark, BenchmarkLevel, BenchmarkResult, LevelResult, Policy
 
 logger = logging.getLogger(__name__)
 

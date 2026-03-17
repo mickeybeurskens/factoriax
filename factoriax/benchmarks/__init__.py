@@ -9,8 +9,8 @@ All benchmarks follow the same entry point: construct a ``Benchmark``,
 construct a ``BenchmarkRunner``, call ``runner.run(benchmark, policies)``.
 """
 
-from benchmarks.core import Benchmark, BenchmarkLevel, BenchmarkResult, LevelResult, Policy
-from benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.core import Benchmark, BenchmarkLevel, BenchmarkResult, LevelResult, Policy
+from factoriax.benchmarks.runner import BenchmarkRunner
 
 __all__ = [
     "Benchmark",

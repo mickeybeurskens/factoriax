@@ -9,7 +9,7 @@ from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
 
-from benchmarks.core import (
+from factoriax.benchmarks.core import (
     Benchmark,
     BenchmarkLevel,
     BenchmarkResult,

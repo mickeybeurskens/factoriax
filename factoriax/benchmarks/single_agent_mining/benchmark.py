@@ -7,8 +7,8 @@ score across all five levels.
 
 Typical usage::
 
-    from benchmarks.single_agent_mining import SingleAgentMiningBenchmark
-    from benchmarks.runner import BenchmarkRunner
+    from factoriax.benchmarks.single_agent_mining import SingleAgentMiningBenchmark
+    from factoriax.benchmarks.runner import BenchmarkRunner
 
     def my_policy(obs):
         ...  # returns a JAX integer action scalar
@@ -21,9 +21,9 @@ Typical usage::
 
 from __future__ import annotations
 
-from benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
-from benchmarks.single_agent_mining.levels import MINING_LEVELS
-from benchmarks.single_agent_mining.scoring import aggregate_scores, score_items
+from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
+from factoriax.benchmarks.single_agent_mining.levels import MINING_LEVELS
+from factoriax.benchmarks.single_agent_mining.scoring import aggregate_scores, score_items
 
 
 class SingleAgentMiningBenchmark:

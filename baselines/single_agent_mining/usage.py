@@ -2,7 +2,7 @@
 
 Demonstrates the full evaluation loop with a random policy. Run directly::
 
-    python -m benchmarks.single_agent_mining.usage
+    python -m baselines.single_agent_mining.usage
 
 The only thing you need to change to evaluate your own agent is the policy
 function. It receives a JAX float32 observation array and must return a JAX
@@ -14,9 +14,9 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from benchmarks.runner import BenchmarkRunner
-from benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
-from benchmarks.single_agent_mining.analysis import (
+from factoriax.benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
+from factoriax.benchmarks.single_agent_mining.analysis import (
     plot_action_distribution,
     plot_level_scores,
     plot_resource_breakdown,
