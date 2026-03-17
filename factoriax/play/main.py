@@ -246,11 +246,10 @@ def main() -> None:
                         action = Action.PREV_RECIPE
                     elif event.key == pygame.K_DOWN:
                         action = Action.NEXT_RECIPE
-                elif event.key == pygame.K_e:
-                    if inventory_open and menu_focus == "crafting":
+                    elif event.key == pygame.K_e:
                         action = Action.CRAFT
-                    else:
-                        action = Action.PLACE
+                elif event.key == pygame.K_e:
+                    action = Action.PLACE
                 elif ctrl_held and event.key in key_to_player:
                     player_idx = key_to_player[event.key]
                     if player_idx < params.num_players:
