@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 
 import jax
 
@@ -24,6 +25,8 @@ from factoriax.benchmarks.single_agent_mining.analysis import (
     plot_action_distribution,
     plot_level_scores,
     plot_resource_breakdown,
+    render_level_video,
+    save_mp4,
 )
 from factoriax.benchmarks.single_agent_mining.benchmark import (
     SingleAgentMiningBenchmark,
@@ -31,6 +34,18 @@ from factoriax.benchmarks.single_agent_mining.benchmark import (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
+
+
+def _make_random_policy() -> ...:
+    """Factory that returns a fresh random policy with its own PRNG state."""
+    key = jax.random.PRNGKey(0)
+
+    def policy(obs: jax.Array) -> jax.Array:
+        nonlocal key
+        key, subkey = jax.random.split(key)
+        return jax.random.randint(subkey, shape=(), minval=0, maxval=12)
+
+    return policy
 
 
 def main() -> None:
@@ -42,19 +57,9 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
 
-    key = jax.random.PRNGKey(0)
-
-    # Replace this function with your own policy.
-    # obs: float32 JAX array of shape (obs_dim,)
-    # return: integer JAX scalar in [0, 11]
-    def random_policy(obs: jax.Array) -> jax.Array:
-        nonlocal key
-        key, subkey = jax.random.split(key)
-        return jax.random.randint(subkey, shape=(), minval=0, maxval=12)
-
     benchmark = SingleAgentMiningBenchmark()
     runner = BenchmarkRunner(seed=args.seed)
-    result = runner.run(benchmark, policies=[random_policy])
+    result = runner.run(benchmark, policies=[_make_random_policy()])
 
     print(f"Benchmark : {result.benchmark_name}")
     print(f"Aggregate : {result.aggregate_score:.2f}")
@@ -78,6 +83,16 @@ def main() -> None:
     fig_actions.savefig("benchmark_actions.png", dpi=120, bbox_inches="tight")
     logger.info("Plots saved: benchmark_scores.png, benchmark_breakdown.png, benchmark_actions.png")
 
+    # Render one video per level. Each level gets a fresh policy so the
+    # videos are independent of the scoring run above.
+    videos: dict[str, Path] = {}
+    for bl in benchmark.levels():
+        frames = render_level_video(bl, _make_random_policy(), seed=args.seed)
+        path = Path(f"{bl.name}.mp4")
+        save_mp4(frames, path)
+        videos[bl.name] = path
+        logger.info("Video saved: %s  (%d frames)", path, len(frames))
+
     wandb_run = None
     if args.use_wandb:
         try:
@@ -90,7 +105,7 @@ def main() -> None:
         except ImportError:
             logger.error("wandb not found. Install with: uv add wandb")
 
-    log_to_wandb(result, wandb_run)
+    log_to_wandb(result, wandb_run, videos=videos)
 
     if wandb_run is not None:
         wandb_run.finish()

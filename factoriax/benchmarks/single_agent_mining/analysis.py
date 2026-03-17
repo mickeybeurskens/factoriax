@@ -1,29 +1,34 @@
 """Analysis and visualisation for single-agent mining benchmark results.
 
-Each function takes a ``BenchmarkResult`` and returns a Matplotlib figure.
+Each plot function takes a ``BenchmarkResult`` and returns a Matplotlib figure.
 Figures are returned rather than shown or saved so callers control I/O.
-W&B logging is opt-in: pass a live ``wandb.Run`` object or ``None``.
 
-All functions gracefully degrade when the result has zero items mined
-(e.g. from a random policy) — they still produce valid plots.
+``render_level_video`` re-runs a policy through one level and captures an RGB
+frame at each step. ``save_mp4`` writes those frames to disk. Neither is
+JIT-compatible — they are for offline visualisation only.
+
+W&B logging is opt-in via ``log_to_wandb``. Pass video paths produced by
+``save_mp4`` to have them uploaded alongside the scalar metrics and figures.
+
+All functions degrade gracefully when the result has zero items mined.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
+import jax
+import jax.numpy as jnp
 import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from factoriax.benchmarks.core import BenchmarkResult
+from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, Policy
 from factoriax.benchmarks.single_agent_mining.scoring import RESOURCE_WEIGHTS
 from factoriax.constants import Action
-
-if TYPE_CHECKING:
-    pass
 
 # Consistent colours for each resource type across all plots.
 _RESOURCE_COLORS: dict[str, str] = {
@@ -149,22 +154,95 @@ def plot_action_distribution(result: BenchmarkResult) -> plt.Figure:
     return fig
 
 
+def render_level_video(
+    bench_level: BenchmarkLevel,
+    policy: Policy,
+    seed: int = 0,
+) -> list[np.ndarray]:
+    """Run a policy through one level and return rendered RGB frames.
+
+    Captures one frame per step from the pre-step state so the video shows
+    what the agent sees before each action. A final frame is appended after
+    the last step. Not JIT-compatible; intended for offline visualisation only.
+
+    Args:
+        bench_level: Level to render.
+        policy: Policy to evaluate. Receives a float32 JAX observation array
+            and returns a JAX integer action scalar.
+        seed: Random seed for ``step_env``. Does not affect the policy's own
+            PRNG if it manages its own key.
+
+    Returns:
+        List of ``(H, W, 3)`` uint8 numpy arrays, one per step plus one
+        final frame.
+    """
+    from factoriax.envs import FactoriaXEnv
+    from factoriax.levels import build_state
+    from factoriax.observations import global_array
+    from factoriax.renderer import render_pixels
+
+    env = FactoriaXEnv()
+    jit_step = jax.jit(env.step_env)
+    rng = jax.random.PRNGKey(seed)
+    params = bench_level.env_params
+    state = build_state(bench_level.level, params)
+
+    frames: list[np.ndarray] = []
+    for _ in range(params.max_timesteps):
+        frames.append(render_pixels(state))
+        obs = global_array(state, params, 0)
+        action = policy(obs)
+        rng, subkey = jax.random.split(rng)
+        _, state, _, done, _ = jit_step(subkey, state, action, params)
+        if bool(done):
+            break
+
+    frames.append(render_pixels(state))
+    return frames
+
+
+def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
+    """Write a list of RGB frames to an MP4 file.
+
+    Args:
+        frames: List of ``(H, W, 3)`` uint8 numpy arrays.
+        path: Destination file path. Parent directories are created if absent.
+        fps: Frames per second.
+
+    Raises:
+        ValueError: If ``frames`` is empty.
+    """
+    if not frames:
+        raise ValueError("frames list is empty; cannot write MP4.")
+    import imageio.v3 as iio
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    iio.imwrite(
+        str(path),
+        np.stack([f.astype(np.uint8) for f in frames]),
+        plugin="FFMPEG",
+        fps=fps,
+        codec="libx264",
+        pixelformat="yuv420p",
+    )
+
+
 def log_to_wandb(
     result: BenchmarkResult,
     wandb_run: Any | None,
     step: int | None = None,
+    videos: dict[str, Path] | None = None,
 ) -> None:
-    """Log benchmark results and analysis figures to Weights and Biases.
-
-    Logs per-level scores, the aggregate score, a resource breakdown table,
-    and all three analysis figures as ``wandb.Image`` objects.
+    """Log benchmark results, figures, and optional videos to Weights and Biases.
 
     Args:
         result: Benchmark result to log.
-        wandb_run: A live ``wandb.Run`` instance (from ``wandb.init()``) or
-            ``None``. When ``None`` this function is a no-op.
-        step: Optional global training step to associate with the log entry.
-            Pass ``None`` to log without a step.
+        wandb_run: A live ``wandb.Run`` instance or ``None`` (no-op).
+        step: Optional global training step for the log entry.
+        videos: Optional mapping of level name to MP4 file path. Each path
+            is uploaded as a ``wandb.Video`` under
+            ``{benchmark_name}/videos/{level_name}``.
     """
     if wandb_run is None:
         return
@@ -197,6 +275,12 @@ def log_to_wandb(
     plt.close(fig_scores)
     plt.close(fig_breakdown)
     plt.close(fig_actions)
+
+    if videos:
+        for level_name, mp4_path in videos.items():
+            log_data[f"{prefix}videos/{level_name}"] = wandb.Video(
+                str(mp4_path), fps=10, format="mp4"
+            )
 
     if step is not None:
         wandb_run.log(log_data, step=step)
