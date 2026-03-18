@@ -29,6 +29,9 @@ class ItemType(IntEnum):
     IRON = 2
     COPPER = 3
     MINER = 4
+    CHEST = 5
+    CONVEYOR_BELT = 6
+    ARM = 7
 
 
 class MachineType(IntEnum):
@@ -38,6 +41,8 @@ class MachineType(IntEnum):
     MINER = 1
     CHEST = 2
     ASSEMBLER = 3
+    CONVEYOR_BELT = 4
+    ARM = 5
 
 
 class SlotRole(IntEnum):
@@ -75,12 +80,16 @@ MACHINE_SLOT_ROLES: np.ndarray = np.array(
         # ASSEMBLER — slots 0-2: ingredient inputs, slot 3: product output
         [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
         + [SlotRole.NONE] * 4,
+        # CONVEYOR_BELT — slot 0: single storage buffer
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
+        # ARM — slot 0: single storage buffer (pick/deposit working buffer)
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
     ],
     dtype=np.int32,
 )
 
 # Number of active (non-NONE) slots per machine type.
-MACHINE_NUM_SLOTS: np.ndarray = np.array([0, 2, 8, 4], dtype=np.int32)
+MACHINE_NUM_SLOTS: np.ndarray = np.array([0, 2, 8, 4, 1, 1], dtype=np.int32)
 
 BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
     BlockType.COAL: ItemType.COAL,
@@ -93,6 +102,9 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.IRON: (192, 192, 192),
     ItemType.COPPER: (184, 115, 51),
     ItemType.MINER: (0, 200, 0),
+    ItemType.CHEST: (150, 100, 50),
+    ItemType.CONVEYOR_BELT: (220, 180, 50),
+    ItemType.ARM: (80, 120, 200),
 }
 
 # Human-readable display names for each MachineType, used by the UI.
@@ -101,6 +113,8 @@ MACHINE_TYPE_NAMES: dict[int, str] = {
     int(MachineType.MINER): "Miner",
     int(MachineType.CHEST): "Chest",
     int(MachineType.ASSEMBLER): "Assembler",
+    int(MachineType.CONVEYOR_BELT): "Conveyor Belt",
+    int(MachineType.ARM): "Arm",
 }
 
 # Short badge labels for each SlotRole, rendered inside the slot cell header.
@@ -125,37 +139,74 @@ RECIPES = [
         "inputs": [(ItemType.COPPER, 5), (ItemType.IRON, 5)],
         "ticks": 3,
     },
+    {
+        "output": ItemType.CHEST,
+        "inputs": [(ItemType.IRON, 5)],
+        "ticks": 2,
+    },
+    {
+        "output": ItemType.CONVEYOR_BELT,
+        "inputs": [(ItemType.IRON, 1)],
+        "ticks": 1,
+    },
+    {
+        "output": ItemType.ARM,
+        "inputs": [(ItemType.IRON, 5), (ItemType.COPPER, 1)],
+        "ticks": 5,
+    },
 ]
 
 NUM_RECIPES = len(RECIPES)
 MAX_RECIPE_INPUTS = 2
 
-RECIPE_NAMES = ["Miner"]
+RECIPE_NAMES = ["Miner", "Chest", "Conveyor Belt", "Arm"]
 
-RECIPE_OUTPUTS = jnp.array([ItemType.MINER], dtype=jnp.int32)
-RECIPE_TICKS = jnp.array([3], dtype=jnp.int32)
+RECIPE_OUTPUTS = jnp.array(
+    [ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT, ItemType.ARM],
+    dtype=jnp.int32,
+)
+RECIPE_TICKS = jnp.array([3, 2, 1, 5], dtype=jnp.int32)
 RECIPE_INPUT_ITEMS = jnp.array(
-    [[ItemType.COPPER, ItemType.IRON]],
+    [
+        [ItemType.COPPER, ItemType.IRON],    # Miner
+        [ItemType.IRON, ItemType.EMPTY],     # Chest
+        [ItemType.IRON, ItemType.EMPTY],     # Conveyor Belt
+        [ItemType.IRON, ItemType.COPPER],    # Arm
+    ],
     dtype=jnp.int32,
 )
 RECIPE_INPUT_COUNTS = jnp.array(
-    [[5, 5]],
+    [
+        [5, 5],  # Miner
+        [5, 0],  # Chest
+        [1, 0],  # Conveyor Belt
+        [5, 1],  # Arm
+    ],
     dtype=jnp.int32,
 )
 
-PLACEABLE_ITEMS = jnp.array([ItemType.MINER], dtype=jnp.int32)
+PLACEABLE_ITEMS = jnp.array(
+    [ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT, ItemType.ARM],
+    dtype=jnp.int32,
+)
 
 ITEM_TO_MACHINE = {
     ItemType.MINER: MachineType.MINER,
+    ItemType.CHEST: MachineType.CHEST,
+    ItemType.CONVEYOR_BELT: MachineType.CONVEYOR_BELT,
+    ItemType.ARM: MachineType.ARM,
 }
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
     [
-        MachineType.NONE,  # EMPTY
-        MachineType.NONE,  # COAL
-        MachineType.NONE,  # IRON
-        MachineType.NONE,  # COPPER
-        MachineType.MINER,  # MINER
+        MachineType.NONE,          # EMPTY
+        MachineType.NONE,          # COAL
+        MachineType.NONE,          # IRON
+        MachineType.NONE,          # COPPER
+        MachineType.MINER,         # MINER
+        MachineType.CHEST,         # CHEST
+        MachineType.CONVEYOR_BELT, # CONVEYOR_BELT
+        MachineType.ARM,           # ARM
     ],
     dtype=jnp.int32,
 )
@@ -225,12 +276,12 @@ BLOCK_MAX_RESOURCES = 100
 POWER_PER_COAL = 10
 
 MACHINE_POWER_CONSUMPTION = jnp.array(
-    [0, 1, 0, 2],  # NONE=0, MINER=1, CHEST=0, ASSEMBLER=2 power/step
+    [0, 1, 0, 2, 0, 0],  # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM
     dtype=jnp.int32,
 )
 
 MACHINE_MINING_RATE = jnp.array(
-    [0, 3, 0, 0],  # NONE=0, MINER=3, CHEST=0, ASSEMBLER=0 resources/step
+    [0, 3, 0, 0, 0, 0],  # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM
     dtype=jnp.int32,
 )
 

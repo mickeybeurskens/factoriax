@@ -360,6 +360,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         machine_inventory_counts=jnp.zeros(machine_inv_shape, dtype=jnp.int16),
         machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_direction=jnp.zeros(map_shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
@@ -433,6 +434,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         machine_inventory_counts=jnp.zeros(machine_inv_shape, dtype=jnp.int16),
         machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_direction=jnp.zeros(map_shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )

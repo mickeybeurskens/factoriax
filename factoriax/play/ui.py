@@ -89,6 +89,9 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.IRON: "Iron",
     ItemType.COPPER: "Copper",
     ItemType.MINER: "Miner",
+    ItemType.CHEST: "Chest",
+    ItemType.CONVEYOR_BELT: "Belt",
+    ItemType.ARM: "Arm",
 }
 
 # Comma-separated preference list for pygame.font.SysFont.  Terminus is a

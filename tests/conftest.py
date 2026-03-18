@@ -53,6 +53,7 @@ def state_factory():
         machine_inventory_counts: jnp.ndarray | None = None,
         machine_selected_recipe: jnp.ndarray | None = None,
         machine_selected_slot: jnp.ndarray | None = None,
+        machine_direction: jnp.ndarray | None = None,
         achievements_unlocked: jnp.ndarray | None = None,
         items_mined: jnp.ndarray | None = None,
     ) -> EnvState:
@@ -81,6 +82,8 @@ def state_factory():
                 (H, W, MAX_MACHINE_INVENTORY_SLOTS), defaults to zeros
             machine_selected_recipe: Active recipe index per tile, defaults to zeros
             machine_selected_slot: UI-focused slot index per tile, defaults to zeros
+            machine_direction: Facing direction per tile (Action enum),
+                defaults to zeros
             achievements_unlocked: Boolean array of unlocked achievements,
                 defaults to all False
             items_mined: Lifetime mined count per item type, defaults to zeros
@@ -154,6 +157,9 @@ def state_factory():
             else jnp.zeros(shape, dtype=jnp.int32),
             machine_selected_slot=machine_selected_slot
             if machine_selected_slot is not None
+            else jnp.zeros(shape, dtype=jnp.int32),
+            machine_direction=machine_direction
+            if machine_direction is not None
             else jnp.zeros(shape, dtype=jnp.int32),
             achievements_unlocked=achievements_unlocked
             if achievements_unlocked is not None

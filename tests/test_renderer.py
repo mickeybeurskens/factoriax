@@ -64,6 +64,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         machine_selected_slot=jnp.zeros(shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
+        machine_direction=jnp.zeros(shape, dtype=jnp.int32),
     )
 
 

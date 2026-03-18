@@ -33,6 +33,9 @@ class EnvState:
             (height, width, MAX_MACHINE_INVENTORY_SLOTS)
         machine_selected_recipe: Active recipe index per tile with shape (height, width)
         machine_selected_slot: UI-focused slot index per tile with shape (height, width)
+        machine_direction: Facing direction of each machine (Action enum value) with
+            shape (height, width). Used by conveyor belts and arms to determine
+            the push/pick direction.
         achievements_unlocked: Boolean array tracking unlocked achievements
             with shape (NUM_ACHIEVEMENTS,)
         items_mined: Lifetime mined count per item type with shape (NUM_ITEM_TYPES,)
@@ -55,6 +58,7 @@ class EnvState:
     machine_inventory_counts: jnp.ndarray
     machine_selected_recipe: jnp.ndarray
     machine_selected_slot: jnp.ndarray
+    machine_direction: jnp.ndarray
     achievements_unlocked: jnp.ndarray
     items_mined: jnp.ndarray
 

@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 
 from factoriax import BlockType, ItemType
-from factoriax.constants import NUM_INVENTORY_SLOTS
+from factoriax.constants import NUM_INVENTORY_SLOTS, NUM_RECIPES
 from factoriax.crafting import (
     add_item_to_inventory,
     can_afford_recipe,
@@ -273,17 +273,17 @@ class TestSlotAndRecipeCycling:
         assert new_state.selected_slots[0] == NUM_INVENTORY_SLOTS - 1
 
     def test_cycle_recipe_forward(self, state_factory) -> None:
-        """Should cycle recipe forward."""
+        """Should cycle recipe forward and wrap around."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
         new_state = cycle_recipe(state, 0, 1)
-        assert new_state.selected_recipes[0] == 0
+        assert new_state.selected_recipes[0] == 1
 
     def test_cycle_recipe_backward(self, state_factory) -> None:
-        """Should cycle recipe backward."""
+        """Should cycle recipe backward and wrap around."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
         new_state = cycle_recipe(state, 0, -1)
-        assert new_state.selected_recipes[0] == 0
+        assert new_state.selected_recipes[0] == NUM_RECIPES - 1

@@ -124,6 +124,7 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
     def do_place(s: EnvState) -> EnvState:
         new_count = item_count - 1
         new_item = jnp.where(new_count == 0, ItemType.EMPTY, item_type)
+        direction = s.player_directions[player_idx]
 
         s = s.replace(
             inventory_items=s.inventory_items.at[player_idx, selected_slot].set(
@@ -133,6 +134,9 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
                 new_count
             ),
             machine_types=s.machine_types.at[target_y, target_x].set(machine_type),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(
+                direction
+            ),
         )
         return s
 
