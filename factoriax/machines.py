@@ -430,30 +430,35 @@ def _arm_pick_phase(
     new_counts = state.machine_inventory_counts.at[
         bwd_row, bwd_col, pick_idx
     ].add(-pick_count)
-    new_items = state.machine_inventory_items
 
-    # Zero out item type where the slot count has reached 0.
+    # Zero out item type where the picked slot was fully depleted.
+    # Use a min-scatter: depleted slots scatter 0, others scatter their
+    # existing value (a no-op under min since item types are >= 0).
     remaining_at_slot = jnp.sum(
         new_counts[bwd_row, bwd_col] * slot_one_hot, axis=-1
     ).astype(jnp.int16)
     slot_depleted = (remaining_at_slot <= 0) & can_pick
-    clear_mask = slot_one_hot * slot_depleted[:, :, None]  # (H, W, 8)
-    new_items = jnp.where(
-        clear_mask.astype(jnp.int32)[bwd_row, bwd_col] > 0,
+    depleted_item = jnp.where(
+        slot_depleted,
         0,
-        new_items,
+        state.machine_inventory_items[bwd_row, bwd_col, pick_idx],
     )
+    new_items = state.machine_inventory_items.at[
+        bwd_row, bwd_col, pick_idx
+    ].min(depleted_item)
 
-    # Fill the arm buffer.
+    # Fill the arm buffer.  Use new_counts/new_items (not the original
+    # state) so the scatter changes above are preserved for non-arm tiles
+    # whose slot 0 was modified (e.g. the chest that was just picked from).
     new_counts = new_counts.at[..., _ARM_SLOT].set(
         jnp.where(
             can_pick,
             pick_count,
-            state.machine_inventory_counts[..., _ARM_SLOT],
+            new_counts[..., _ARM_SLOT],
         )
     )
     new_items = new_items.at[..., _ARM_SLOT].set(
-        jnp.where(can_pick, pick_item, state.machine_inventory_items[..., _ARM_SLOT])
+        jnp.where(can_pick, pick_item, new_items[..., _ARM_SLOT])
     )
 
     return state.replace(

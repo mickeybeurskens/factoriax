@@ -344,6 +344,58 @@ class TestArm:
         result = run_arms(state)
         assert int(result.machine_inventory_counts[0, 1, 0]) == 0
 
+    def test_chest_to_belt_no_item_corruption(self, state_factory) -> None:
+        """Arm depositing to belt then picking from chest must not corrupt belt items.
+
+        Reproduces a bug where the pick phase's item-type clearing used a
+        gather+where instead of a scatter, causing the belt's item type to
+        be zeroed when the arm depleted the chest slot in the same tick.
+        """
+        # Layout: [CHEST, ARM, BELT]
+        # ARM faces RIGHT: forward=BELT, backward=CHEST.
+        # ARM buffer holds COAL (will deposit to belt), chest has more
+        # COAL (will be picked after deposit clears the buffer).
+        shape = (1, 3)
+        types = jnp.array([[
+            MachineType.CHEST,
+            MachineType.ARM,
+            MachineType.CONVEYOR_BELT,
+        ]])
+        dirs = jnp.array([[0, int(Action.RIGHT), int(Action.RIGHT)]])
+        inv_items, inv_counts = _inv(
+            shape,
+            # Chest slot 0: 10 COAL.  ARM buffer: 5 COAL.  Belt: empty.
+            items_slot0=jnp.array([
+                [int(ItemType.COAL), int(ItemType.COAL), 0],
+            ]),
+            counts_slot0=jnp.array([[10, 5, 0]]),
+        )
+        state = _arm_state(
+            state_factory,
+            machine_types=types,
+            machine_direction=dirs,
+            inv_items=inv_items,
+            inv_counts=inv_counts,
+        )
+        result = run_arms(state)
+
+        # Deposit phase: ARM deposits 5 COAL to belt slot 0.
+        # Pick phase: ARM (now empty) picks 10 COAL from chest slot 0.
+        # Belt must retain COAL item type — not be zeroed.
+        assert int(result.machine_inventory_items[0, 2, 0]) == int(
+            ItemType.COAL
+        ), "belt item type corrupted to EMPTY"
+        assert int(result.machine_inventory_counts[0, 2, 0]) == 5
+
+        # Chest should be empty (count decremented to 0).
+        assert int(result.machine_inventory_counts[0, 0, 0]) == 0
+
+        # ARM buffer should hold the picked COAL from chest.
+        assert int(result.machine_inventory_items[0, 1, 0]) == int(
+            ItemType.COAL
+        )
+        assert int(result.machine_inventory_counts[0, 1, 0]) == 10
+
     def test_does_not_pick_from_input_only_slot(self, state_factory) -> None:
         """Arm cannot pick from INPUT-role slots (miner fuel slot 0)."""
         # MINER slot 0 = INPUT (fuel); arm should not pick from it.
