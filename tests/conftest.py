@@ -5,7 +5,12 @@ import pytest
 
 from factoriax import Action, EnvState
 from factoriax.achievements import NUM_ACHIEVEMENTS
-from factoriax.constants import NUM_INVENTORY_SLOTS, NUM_ITEM_TYPES, MachineType
+from factoriax.constants import (
+    MAX_MACHINE_INVENTORY_SLOTS,
+    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
+    MachineType,
+)
 
 
 @pytest.fixture
@@ -44,9 +49,10 @@ def state_factory():
         block_resources: jnp.ndarray | None = None,
         machine_types: jnp.ndarray | None = None,
         machine_power: jnp.ndarray | None = None,
-        machine_fuel_count: jnp.ndarray | None = None,
-        machine_output_item: jnp.ndarray | None = None,
-        machine_output_count: jnp.ndarray | None = None,
+        machine_inventory_items: jnp.ndarray | None = None,
+        machine_inventory_counts: jnp.ndarray | None = None,
+        machine_selected_recipe: jnp.ndarray | None = None,
+        machine_selected_slot: jnp.ndarray | None = None,
         achievements_unlocked: jnp.ndarray | None = None,
         items_mined: jnp.ndarray | None = None,
     ) -> EnvState:
@@ -69,9 +75,12 @@ def state_factory():
             block_resources: Resources per tile, defaults to zeros
             machine_types: Machine type per tile, defaults to NONE
             machine_power: Power per machine, defaults to zeros
-            machine_fuel_count: Fuel per machine, defaults to zeros
-            machine_output_item: Output item per machine, defaults to zeros
-            machine_output_count: Output count per machine, defaults to zeros
+            machine_inventory_items: Item type per slot per tile, shape
+                (H, W, MAX_MACHINE_INVENTORY_SLOTS), defaults to zeros
+            machine_inventory_counts: Stack count per slot per tile, shape
+                (H, W, MAX_MACHINE_INVENTORY_SLOTS), defaults to zeros
+            machine_selected_recipe: Active recipe index per tile, defaults to zeros
+            machine_selected_slot: UI-focused slot index per tile, defaults to zeros
             achievements_unlocked: Boolean array of unlocked achievements, defaults to all False
             items_mined: Lifetime mined count per item type, defaults to zeros
 
@@ -133,15 +142,18 @@ def state_factory():
             machine_power=machine_power
             if machine_power is not None
             else jnp.zeros(shape, dtype=jnp.int32),
-            machine_fuel_count=machine_fuel_count
-            if machine_fuel_count is not None
-            else jnp.zeros(shape, dtype=jnp.int16),
-            machine_output_item=machine_output_item
-            if machine_output_item is not None
+            machine_inventory_items=machine_inventory_items
+            if machine_inventory_items is not None
+            else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32),
+            machine_inventory_counts=machine_inventory_counts
+            if machine_inventory_counts is not None
+            else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16),
+            machine_selected_recipe=machine_selected_recipe
+            if machine_selected_recipe is not None
             else jnp.zeros(shape, dtype=jnp.int32),
-            machine_output_count=machine_output_count
-            if machine_output_count is not None
-            else jnp.zeros(shape, dtype=jnp.int16),
+            machine_selected_slot=machine_selected_slot
+            if machine_selected_slot is not None
+            else jnp.zeros(shape, dtype=jnp.int32),
             achievements_unlocked=achievements_unlocked
             if achievements_unlocked is not None
             else jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),

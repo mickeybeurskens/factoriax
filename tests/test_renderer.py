@@ -12,6 +12,7 @@ import pytest
 from factoriax import EnvState
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
+    MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     Action,
@@ -52,9 +53,10 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         block_resources=jnp.zeros(shape, dtype=jnp.int16),
         machine_types=jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32),
         machine_power=jnp.zeros(shape, dtype=jnp.int32),
-        machine_fuel_count=jnp.zeros(shape, dtype=jnp.int16),
-        machine_output_item=jnp.zeros(shape, dtype=jnp.int32),
-        machine_output_count=jnp.zeros(shape, dtype=jnp.int16),
+        machine_inventory_items=jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32),
+        machine_inventory_counts=jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16),
+        machine_selected_recipe=jnp.zeros(shape, dtype=jnp.int32),
+        machine_selected_slot=jnp.zeros(shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )

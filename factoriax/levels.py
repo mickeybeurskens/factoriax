@@ -44,6 +44,7 @@ from jax import random
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
+    MAX_MACHINE_INVENTORY_SLOTS,
     MINEABLE_BLOCKS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
@@ -341,6 +342,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     map_shape = (level.map_height, level.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
     player_shape = (params.num_players,)
+    machine_inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
 
     return EnvState(
         map=jnp.array(block_map, dtype=jnp.int32),
@@ -356,9 +358,10 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         block_resources=jnp.array(resources_np, dtype=jnp.int16),
         machine_types=jnp.array(machine_types_np, dtype=jnp.int32),
         machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_fuel_count=jnp.zeros(map_shape, dtype=jnp.int16),
-        machine_output_item=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_output_count=jnp.zeros(map_shape, dtype=jnp.int16),
+        machine_inventory_items=jnp.zeros(machine_inv_shape, dtype=jnp.int32),
+        machine_inventory_counts=jnp.zeros(machine_inv_shape, dtype=jnp.int16),
+        machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
@@ -406,6 +409,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     map_shape = (params.map_height, params.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
     player_shape = (params.num_players,)
+    machine_inv_shape = (params.map_height, params.map_width, MAX_MACHINE_INVENTORY_SLOTS)
 
     return EnvState(
         map=world_map,
@@ -421,9 +425,10 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         block_resources=block_resources,
         machine_types=jnp.full(map_shape, int(MachineType.NONE), dtype=jnp.int32),
         machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_fuel_count=jnp.zeros(map_shape, dtype=jnp.int16),
-        machine_output_item=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_output_count=jnp.zeros(map_shape, dtype=jnp.int16),
+        machine_inventory_items=jnp.zeros(machine_inv_shape, dtype=jnp.int32),
+        machine_inventory_counts=jnp.zeros(machine_inv_shape, dtype=jnp.int16),
+        machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )

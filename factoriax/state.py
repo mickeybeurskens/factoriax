@@ -24,9 +24,12 @@ class EnvState:
         block_resources: Remaining resources for each tile with shape (height, width)
         machine_types: Machine type at each tile with shape (height, width)
         machine_power: Remaining power for each machine with shape (height, width)
-        machine_fuel_count: Coal count in fuel slot with shape (height, width)
-        machine_output_item: Item type in output slot with shape (height, width)
-        machine_output_count: Stack count in output slot with shape (height, width)
+        machine_inventory_items: Item type in each slot per tile with shape
+            (height, width, MAX_MACHINE_INVENTORY_SLOTS)
+        machine_inventory_counts: Stack count in each slot per tile with shape
+            (height, width, MAX_MACHINE_INVENTORY_SLOTS)
+        machine_selected_recipe: Active recipe index per tile with shape (height, width)
+        machine_selected_slot: UI-focused slot index per tile with shape (height, width)
         achievements_unlocked: Boolean array tracking unlocked achievements (NUM_ACHIEVEMENTS,)
         items_mined: Lifetime mined count per item type with shape (NUM_ITEM_TYPES,)
     """
@@ -44,9 +47,10 @@ class EnvState:
     block_resources: jnp.ndarray
     machine_types: jnp.ndarray
     machine_power: jnp.ndarray
-    machine_fuel_count: jnp.ndarray
-    machine_output_item: jnp.ndarray
-    machine_output_count: jnp.ndarray
+    machine_inventory_items: jnp.ndarray
+    machine_inventory_counts: jnp.ndarray
+    machine_selected_recipe: jnp.ndarray
+    machine_selected_slot: jnp.ndarray
     achievements_unlocked: jnp.ndarray
     items_mined: jnp.ndarray
 

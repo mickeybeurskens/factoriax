@@ -36,12 +36,50 @@ class MachineType(IntEnum):
 
     NONE = 0
     MINER = 1
+    CHEST = 2
+    ASSEMBLER = 3
+
+
+class SlotRole(IntEnum):
+    """Role of a machine inventory slot, describing automated item flow direction.
+
+    Roles determine which agents (machine logic vs player) may read or write
+    a slot.  The player may withdraw from *any* role; the player may only
+    *deposit* into INPUT or STORAGE — never into OUTPUT.  Machine logic may
+    only write to OUTPUT and read from INPUT.
+    """
+
+    NONE = 0      # Unused / padding slot — no automated flow, no player access.
+    INPUT = 1     # Machine consumes from here; player may deposit and withdraw.
+    OUTPUT = 2    # Machine produces here; player may only withdraw.
+    STORAGE = 3   # No automated flow; player may deposit and withdraw freely.
 
 
 NUM_INVENTORY_SLOTS = 10
 MAX_STACK_SIZE = 64
 MAX_MACHINE_STACK_SIZE = 64
+MAX_MACHINE_INVENTORY_SLOTS = 8
 NUM_ITEM_TYPES = len(ItemType)
+
+# Per-slot roles for each MachineType, shape (NUM_MACHINE_TYPES, MAX_MACHINE_INVENTORY_SLOTS).
+# Indexed as MACHINE_SLOT_ROLES[machine_type, slot_index].
+MACHINE_SLOT_ROLES: np.ndarray = np.array(
+    [
+        # NONE — no slots active
+        [SlotRole.NONE] * 8,
+        # MINER — slot 0: fuel input, slot 1: ore output
+        [SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
+        # CHEST — all 8 slots are general storage
+        [SlotRole.STORAGE] * 8,
+        # ASSEMBLER — slots 0-2: ingredient inputs, slot 3: product output
+        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
+        + [SlotRole.NONE] * 4,
+    ],
+    dtype=np.int32,
+)
+
+# Number of active (non-NONE) slots per machine type.
+MACHINE_NUM_SLOTS: np.ndarray = np.array([0, 2, 8, 4], dtype=np.int32)
 
 BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
     BlockType.COAL: ItemType.COAL,
@@ -162,12 +200,12 @@ BLOCK_MAX_RESOURCES = 100
 POWER_PER_COAL = 10
 
 MACHINE_POWER_CONSUMPTION = jnp.array(
-    [0, 1],  # NONE=0, MINER=1 power/step
+    [0, 1, 0, 2],  # NONE=0, MINER=1, CHEST=0, ASSEMBLER=2 power/step
     dtype=jnp.int32,
 )
 
 MACHINE_MINING_RATE = jnp.array(
-    [0, 3],  # NONE=0, MINER=3 resources/step
+    [0, 3, 0, 0],  # NONE=0, MINER=3, CHEST=0, ASSEMBLER=0 resources/step
     dtype=jnp.int32,
 )
 
