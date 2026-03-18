@@ -72,6 +72,9 @@ class EnvParams:
         iron_probability: Probability of a tile being iron ore during generation
         copper_probability: Probability of a tile being copper ore during generation
         coal_probability: Probability of a tile being coal during generation
+        base_resources: Starting resource count per ore tile in procedurally
+            generated worlds. Does not affect levels built with
+            :class:`~factoriax.levels.LevelBuilder`.
     """
 
     max_timesteps: int = 1000
@@ -82,5 +85,6 @@ class EnvParams:
     iron_probability: float = 0.02
     copper_probability: float = 0.02
     coal_probability: float = 0.02
+    base_resources: int = 3
 
     NUM_ACTIONS: ClassVar[int] = 12

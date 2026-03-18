@@ -429,6 +429,39 @@ class TestGenerateState:
         s1 = generate_state(jax.random.PRNGKey(7), params)
         np.testing.assert_array_equal(np.array(s0.map), np.array(s1.map))
 
+    def test_ore_tiles_get_base_resources(self) -> None:
+        """All ore tiles should have exactly base_resources resources."""
+        import numpy as np
+
+        from factoriax.constants import MINEABLE_BLOCKS
+
+        params = EnvParams(
+            map_width=32, map_height=32, num_players=1, base_resources=3
+        )
+        state = generate_state(jax.random.PRNGKey(5), params)
+        world_map = np.array(state.map)
+        resources = np.array(state.block_resources)
+        is_ore = np.isin(world_map, [int(b) for b in MINEABLE_BLOCKS])
+        assert np.all(resources[is_ore] == 3)
+        assert np.all(resources[~is_ore] == 0)
+
+    def test_custom_base_resources(self) -> None:
+        """base_resources param controls starting resources on ore tiles."""
+        import numpy as np
+
+        from factoriax.constants import MINEABLE_BLOCKS
+
+        for count in (1, 5, 10):
+            params = EnvParams(
+                map_width=16, map_height=16, num_players=1, base_resources=count
+            )
+            state = generate_state(jax.random.PRNGKey(0), params)
+            world_map = np.array(state.map)
+            resources = np.array(state.block_resources)
+            is_ore = np.isin(world_map, [int(b) for b in MINEABLE_BLOCKS])
+            if is_ore.any():
+                assert np.all(resources[is_ore] == count)
+
     def test_backward_compat_shim(self) -> None:
         """world_gen.generate_world must still work via the shim."""
         from factoriax.world_gen import generate_world

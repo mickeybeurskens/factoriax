@@ -85,3 +85,31 @@ def mining_reward(
     mining_bonus: jax.Array = 5.0 * mined_delta.astype(jnp.float32)
 
     return proximity + mining_bonus
+
+
+def sparse_mining_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward of 1.0 for each ore item mined during this step.
+
+    Counts the total delta across coal, iron, and copper in ``items_mined``
+    between the two states.  This signal is zero on every step where nothing
+    is extracted, which makes it harder to shape behaviour but trivial to
+    interpret: one unit of reward per one unit of ore.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface uniformity).
+
+    Returns:
+        Scalar float32 reward.
+    """
+    ore_items = jnp.array(
+        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+    )
+    delta = jnp.sum(
+        new_state.items_mined[ore_items] - prev_state.items_mined[ore_items]
+    )
+    reward: jax.Array = delta.astype(jnp.float32)
+    return reward

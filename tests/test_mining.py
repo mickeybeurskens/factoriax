@@ -13,8 +13,8 @@ from factoriax.world_gen import generate_world
 class TestBlockResources:
     """Tests for block resource initialization."""
 
-    def test_mineable_blocks_have_max_resources(self) -> None:
-        """Mineable blocks should be initialized with BLOCK_MAX_RESOURCES."""
+    def test_mineable_blocks_have_base_resources(self) -> None:
+        """Mineable blocks should be initialized with params.base_resources."""
         rng = random.PRNGKey(42)
         params = EnvParams()
         state = generate_world(rng, params)
@@ -23,7 +23,7 @@ class TestBlockResources:
             mask = state.map == block_type
             if jnp.any(mask):
                 resources_at_block = state.block_resources[mask]
-                assert jnp.all(resources_at_block == BLOCK_MAX_RESOURCES)
+                assert jnp.all(resources_at_block == params.base_resources)
 
     def test_non_mineable_blocks_have_zero_resources(self) -> None:
         """Non-mineable blocks should have zero resources."""

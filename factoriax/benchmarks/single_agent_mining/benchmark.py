@@ -21,12 +21,18 @@ Typical usage::
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+import jax
+
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.benchmarks.single_agent_mining.levels import MINING_LEVELS
 from factoriax.benchmarks.single_agent_mining.scoring import (
     aggregate_scores,
     score_items,
 )
+from factoriax.rewards import sparse_mining_reward
+from factoriax.state import EnvParams, EnvState
 
 
 class SingleAgentMiningBenchmark:
@@ -38,7 +44,7 @@ class SingleAgentMiningBenchmark:
     all five levels, preventing strong early-level performance from hiding
     weak late-level performance.
 
-    Resource weights: coal=1, iron=2, copper=3.
+    Every ore type scores 1 point, matching the sparse reward signal.
     """
 
     @property
@@ -49,6 +55,22 @@ class SingleAgentMiningBenchmark:
             ``"single_agent_mining"``.
         """
         return "single_agent_mining"
+
+    @property
+    def reward_fn(
+        self,
+    ) -> Callable[[EnvState, EnvState, EnvParams], jax.Array]:
+        """Reward function for training agents on this benchmark.
+
+        Returns one reward unit per ore item extracted during a step —
+        coal, iron, or copper each count equally.  The sparse signal
+        encourages direct mining without the proximity shaping of
+        :func:`~factoriax.rewards.mining_reward`.
+
+        Returns:
+            :func:`~factoriax.rewards.sparse_mining_reward`.
+        """
+        return sparse_mining_reward
 
     @property
     def num_players(self) -> int:
@@ -81,7 +103,7 @@ class SingleAgentMiningBenchmark:
             items_mined: Resources collected, keyed by item name.
 
         Returns:
-            Weighted sum: ``coal * 1 + iron * 2 + copper * 3``.
+            Total ore count: ``coal + iron + copper``.
         """
         return score_items(items_mined)
 

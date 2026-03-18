@@ -12,6 +12,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import jax
+import jax.numpy as jnp
+
 from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
 from factoriax.benchmarks.runner import BenchmarkRunner
 from factoriax.benchmarks.single_agent_mining.benchmark import (
@@ -23,8 +26,9 @@ from factoriax.benchmarks.single_agent_mining.scoring import (
     aggregate_scores,
     score_items,
 )
-from factoriax.constants import BlockType
-from factoriax.levels import LevelBuilder
+from factoriax.constants import BlockType, NUM_ITEM_TYPES, ItemType
+from factoriax.levels import LevelBuilder, generate_state
+from factoriax.rewards import sparse_mining_reward
 from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
@@ -40,24 +44,20 @@ class TestScoreItems:
         assert score_items({"coal": 10}) == pytest.approx(10.0)
 
     def test_iron_only(self) -> None:
-        assert score_items({"iron": 5}) == pytest.approx(10.0)
+        assert score_items({"iron": 5}) == pytest.approx(5.0)
 
     def test_copper_only(self) -> None:
-        assert score_items({"copper": 3}) == pytest.approx(9.0)
+        assert score_items({"copper": 3}) == pytest.approx(3.0)
 
     def test_mixed(self) -> None:
-        # 4*1 + 3*2 + 2*3 = 16
-        assert score_items({"coal": 4, "iron": 3, "copper": 2}) == pytest.approx(16.0)
+        # 4 + 3 + 2 = 9
+        assert score_items({"coal": 4, "iron": 3, "copper": 2}) == pytest.approx(9.0)
 
     def test_unknown_key_ignored(self) -> None:
         assert score_items({"miner": 100, "coal": 1}) == pytest.approx(1.0)
 
-    def test_weight_ordering(self) -> None:
-        assert (
-            RESOURCE_WEIGHTS["copper"]
-            > RESOURCE_WEIGHTS["iron"]
-            > RESOURCE_WEIGHTS["coal"]
-        )
+    def test_equal_weights(self) -> None:
+        assert RESOURCE_WEIGHTS["coal"] == RESOURCE_WEIGHTS["iron"] == RESOURCE_WEIGHTS["copper"]
 
 
 class TestAggregateScores:
@@ -97,6 +97,27 @@ class TestBenchmarkProperties:
         assert bench.score_level(MINING_LEVELS[0], items) == pytest.approx(
             score_items(items)
         )
+
+    def test_reward_fn_is_sparse_mining_reward(self) -> None:
+        """reward_fn property must return sparse_mining_reward."""
+        assert SingleAgentMiningBenchmark().reward_fn is sparse_mining_reward
+
+    def test_reward_fn_returns_zero_with_no_mining(self, state_factory) -> None:
+        """reward_fn returns 0.0 when no ore was extracted."""
+        state = state_factory(world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32))
+        params = EnvParams()
+        reward = SingleAgentMiningBenchmark().reward_fn(state, state, params)
+        assert float(reward) == 0.0
+
+    def test_reward_fn_counts_ore_mined(self, state_factory) -> None:
+        """reward_fn returns 1.0 per ore item extracted."""
+        world_map = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
+        prev = state_factory(world_map=world_map)
+        items = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(2)
+        new = state_factory(world_map=world_map, items_mined=items)
+        params = EnvParams()
+        reward = SingleAgentMiningBenchmark().reward_fn(prev, new, params)
+        assert float(reward) == pytest.approx(2.0)
 
     def test_score_is_mean(self) -> None:
         level_results = [

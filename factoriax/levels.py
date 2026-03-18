@@ -402,7 +402,9 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     player_directions = jnp.full(params.num_players, int(Action.DOWN), dtype=jnp.int32)
 
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
-    block_resources = jnp.where(is_mineable, BLOCK_MAX_RESOURCES, 0).astype(jnp.int16)
+    block_resources = jnp.where(
+        is_mineable, params.base_resources, 0
+    ).astype(jnp.int16)
 
     map_shape = (params.map_height, params.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)

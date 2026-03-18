@@ -1,23 +1,21 @@
 """Scoring functions for the single-agent mining benchmark.
 
-Resources are valued by how difficult they are to find and process in a
-more complex game: coal is abundant and easy; copper requires more effort
-and is used in more advanced recipes. The weight vector reflects this.
+Every ore type is worth exactly one point, matching the sparse reward signal
+(1.0 per item mined).  This makes the benchmark score directly interpretable
+as total ore extracted — no conversion factor needed when comparing reward
+curves to evaluation scores.
 
-The per-level score is the dot product of items collected and the weight
-vector. The aggregate benchmark score is the unweighted mean across all
-five levels, so strong performance on easy levels cannot mask poor
-performance on hard ones.
+The aggregate benchmark score is the unweighted mean across all five levels,
+so strong performance on easy levels cannot mask poor performance on hard ones.
 """
 
 from __future__ import annotations
 
-# Resource value weights. These are intentionally simple integers so that
-# scores are human-readable (e.g. 30 copper = 90 points).
+# All ore types worth 1 point, matching the sparse per-item reward signal.
 RESOURCE_WEIGHTS: dict[str, int] = {
     "coal": 1,
-    "iron": 2,
-    "copper": 3,
+    "iron": 1,
+    "copper": 1,
 }
 
 

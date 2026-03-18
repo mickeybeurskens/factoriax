@@ -7,7 +7,7 @@ import pytest
 from factoriax import BlockType, ItemType
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import NUM_ITEM_TYPES
-from factoriax.rewards import achievement_reward, mining_reward
+from factoriax.rewards import achievement_reward, mining_reward, sparse_mining_reward
 from factoriax.state import EnvParams
 
 
@@ -204,3 +204,43 @@ class TestMiningReward:
         # mining_bonus = 5 * (1 + 2) = 15; total = 15.0 + 1/3
         reward = float(mining_reward(prev_state, new_state, params))
         assert reward == pytest.approx(15.0 + 1.0 / 3.0, abs=0.01)
+
+
+class TestSparseMiningReward:
+    """Tests for sparse_mining_reward."""
+
+    def test_zero_when_nothing_mined(self, state_factory, params) -> None:
+        """No reward on steps where items_mined is unchanged."""
+        state = state_factory(world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32))
+        assert float(sparse_mining_reward(state, state, params)) == 0.0
+
+    def test_one_per_ore_item(self, state_factory, params) -> None:
+        """Returns 1.0 for each ore item extracted."""
+        world_map = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
+        prev = state_factory(world_map=world_map)
+        items = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(3)
+        new = state_factory(world_map=world_map, items_mined=items)
+        assert float(sparse_mining_reward(prev, new, params)) == pytest.approx(3.0)
+
+    def test_accumulates_across_ore_types(self, state_factory, params) -> None:
+        """Delta summed across coal, iron, and copper."""
+        world_map = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
+        prev = state_factory(world_map=world_map)
+        items = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+        items = items.at[ItemType.COAL].set(1)
+        items = items.at[ItemType.IRON].set(2)
+        items = items.at[ItemType.COPPER].set(3)
+        new = state_factory(world_map=world_map, items_mined=items)
+        assert float(sparse_mining_reward(prev, new, params)) == pytest.approx(6.0)
+
+    def test_no_proximity_component(self, state_factory, params) -> None:
+        """Sparse reward is zero when no ore mined, even when player is on ore."""
+        world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
+        state = state_factory(world_map=world_map, player_position=(0, 0))
+        assert float(sparse_mining_reward(state, state, params)) == 0.0
+
+    def test_jit_compatible(self, state_factory, params) -> None:
+        """sparse_mining_reward should be JIT-compilable."""
+        state = state_factory(world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32))
+        jit_fn = jax.jit(sparse_mining_reward)
+        assert float(jit_fn(state, state, params)) == 0.0
