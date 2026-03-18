@@ -582,18 +582,19 @@ def render_machine_menu(
     screen_height: int,
     tx: int,
     ty: int,
+    machine_panel_active: bool = True,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the machine inventory inspection menu as an RGBA overlay.
 
     Displays all active slots for the machine at tile ``(tx, ty)`` in a grid
     of up to four columns.  Each slot shows a colour-coded role badge (IN /
     OUT / STORE), a filled colour swatch when the slot is occupied, a stack
-    count, and the item name.  Empty slots show a dim placeholder.  The
-    currently focused slot (``state.machine_selected_slot[ty, tx]``) is
-    highlighted with a white border.
+    count, and the item name.  Empty slots show a dim placeholder.
 
-    A compact player-inventory strip below lets the player see what they are
-    carrying without opening a second menu.
+    The focused slot in the *active* panel is highlighted with a bright white
+    border; the focused slot in the *inactive* panel uses a dim gray border
+    so the player can see both positions at a glance.  Press Tab to toggle
+    which panel is active; press E to transfer between the two focused slots.
 
     Args:
         state: Current environment state.
@@ -601,6 +602,8 @@ def render_machine_menu(
         screen_height: Total render height in pixels.
         tx: X tile coordinate of the machine to inspect.
         ty: Y tile coordinate of the machine to inspect.
+        machine_panel_active: Whether the machine slot grid has active focus
+            (``True``) or the player inventory strip does (``False``).
 
     Returns:
         Tuple of (RGBA overlay array of shape ``(screen_height, screen_width,
@@ -620,6 +623,7 @@ def render_machine_menu(
     focused_slot = int(state.machine_selected_slot[ty, tx])
 
     selected_player = int(state.selected_player)
+    focused_player_slot = int(state.selected_slots[selected_player])
     player_items = np.array(state.inventory_items[selected_player])
     player_counts = np.array(state.inventory_counts[selected_player])
 
@@ -707,7 +711,9 @@ def render_machine_menu(
         )
         overlay[cell_y : cell_y + cell_h, cell_x : cell_x + cell_w] = cell_bg
         if is_focused:
-            sel = (255, 255, 255, 255)
+            sel: tuple[int, int, int, int] = (
+                (255, 255, 255, 255) if machine_panel_active else (100, 100, 100, 200)
+            )
             overlay[cell_y, cell_x : cell_x + cell_w] = sel
             overlay[cell_y + cell_h - 1, cell_x : cell_x + cell_w] = sel
             overlay[cell_y : cell_y + cell_h, cell_x] = sel
@@ -791,6 +797,7 @@ def render_machine_menu(
     for slot_idx in range(NUM_INVENTORY_SLOTS):
         icon_x = strip_x + slot_idx * strip_cell_w
         icon_w = strip_cell_w - 4
+        is_focused_player = slot_idx == focused_player_slot
         overlay[strip_y : strip_y + player_icon, icon_x : icon_x + icon_w] = (
             55,
             55,
@@ -807,6 +814,17 @@ def render_machine_menu(
                 param=slot_idx,
             )
         )
+
+        if is_focused_player:
+            psel: tuple[int, int, int, int] = (
+                (255, 255, 255, 255)
+                if not machine_panel_active
+                else (100, 100, 100, 200)
+            )
+            overlay[strip_y, icon_x : icon_x + icon_w] = psel
+            overlay[strip_y + player_icon - 1, icon_x : icon_x + icon_w] = psel
+            overlay[strip_y : strip_y + player_icon, icon_x] = psel
+            overlay[strip_y : strip_y + player_icon, icon_x + icon_w - 1] = psel
 
         p_item = int(player_items[slot_idx])
         p_count = int(player_counts[slot_idx])
@@ -825,7 +843,7 @@ def render_machine_menu(
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
         overlay,
-        "[◄/►] Select slot  [F/ESC] Close",
+        "[E] Transfer  [TAB] Switch panel  [◄/►] Select  [ESC] Close",
         menu_x + _BORDER_PX,
         hint_y,
         menu_w - 2 * _BORDER_PX,

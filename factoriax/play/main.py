@@ -5,8 +5,15 @@ import numpy as np
 import pygame
 from jax import random
 
-from factoriax.constants import BLOCK_PIXEL_SIZE, MACHINE_NUM_SLOTS, Action, MachineType
+from factoriax.constants import (
+    BLOCK_PIXEL_SIZE,
+    MACHINE_NUM_SLOTS,
+    NUM_INVENTORY_SLOTS,
+    Action,
+    MachineType,
+)
 from factoriax.envs.factoriax_env import make_factoriax_env
+from factoriax.play.transfer import deposit_to_machine, withdraw_from_machine
 from factoriax.play.ui import (
     ClickRegion,
     render_achievement_menu,
@@ -181,6 +188,7 @@ def main() -> None:
     machine_open = False
     machine_tx = 0
     machine_ty = 0
+    machine_panel_active = True  # True = machine slots focused, False = player strip
 
     scale = window_width // base_width
     click_regions: list[ClickRegion] = []
@@ -202,12 +210,15 @@ def main() -> None:
                 hit = hit_test_regions(click_regions, base_x, base_y)
                 if hit is not None:
                     if hit.action == "select_slot":
-                        menu_focus = "inventory"
                         selected_player = int(state.selected_player)
                         new_slots = state.selected_slots.at[selected_player].set(
                             hit.param
                         )
                         state = state.replace(selected_slots=new_slots)
+                        if machine_open:
+                            machine_panel_active = False
+                        else:
+                            menu_focus = "inventory"
                     elif hit.action == "select_recipe":
                         menu_focus = "crafting"
                         selected_player = int(state.selected_player)
@@ -223,6 +234,7 @@ def main() -> None:
                                 machine_ty, machine_tx
                             ].set(hit.param)
                             state = state.replace(machine_selected_slot=new_sel)
+                        machine_panel_active = True
                     elif hit.action == "focus_inventory":
                         menu_focus = "inventory"
                     elif hit.action == "focus_crafting":
@@ -279,23 +291,53 @@ def main() -> None:
                         ):
                             machine_tx, machine_ty = tx, ty
                             machine_open = True
+                            machine_panel_active = True
                             inventory_open = False
                             achievement_open = False
                             pause_open = False
                 elif machine_open:
-                    if event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    if event.key == pygame.K_TAB:
+                        machine_panel_active = not machine_panel_active
+                    elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                         delta = -1 if event.key == pygame.K_LEFT else 1
-                        machine_type = int(state.machine_types[machine_ty, machine_tx])
-                        num_slots = int(MACHINE_NUM_SLOTS[machine_type])
-                        if num_slots > 0:
-                            current = int(
-                                state.machine_selected_slot[machine_ty, machine_tx]
+                        selected_player = int(state.selected_player)
+                        if machine_panel_active:
+                            machine_type = int(
+                                state.machine_types[machine_ty, machine_tx]
                             )
-                            new_slot = (current + delta) % num_slots
-                            new_sel = state.machine_selected_slot.at[
-                                machine_ty, machine_tx
-                            ].set(new_slot)
-                            state = state.replace(machine_selected_slot=new_sel)
+                            num_slots = int(MACHINE_NUM_SLOTS[machine_type])
+                            if num_slots > 0:
+                                current = int(
+                                    state.machine_selected_slot[machine_ty, machine_tx]
+                                )
+                                new_slot = (current + delta) % num_slots
+                                new_sel = state.machine_selected_slot.at[
+                                    machine_ty, machine_tx
+                                ].set(new_slot)
+                                state = state.replace(machine_selected_slot=new_sel)
+                        else:
+                            current = int(state.selected_slots[selected_player])
+                            new_slot = (current + delta) % NUM_INVENTORY_SLOTS
+                            new_slots = state.selected_slots.at[selected_player].set(
+                                new_slot
+                            )
+                            state = state.replace(selected_slots=new_slots)
+                    elif event.key == pygame.K_e:
+                        selected_player = int(state.selected_player)
+                        machine_slot = int(
+                            state.machine_selected_slot[machine_ty, machine_tx]
+                        )
+                        player_slot = int(state.selected_slots[selected_player])
+                        if machine_panel_active:
+                            state = withdraw_from_machine(
+                                state, selected_player,
+                                machine_tx, machine_ty, machine_slot,
+                            )
+                        else:
+                            state = deposit_to_machine(
+                                state, selected_player,
+                                machine_tx, machine_ty, machine_slot, player_slot,
+                            )
                 elif event.key == pygame.K_i:
                     inventory_open = not inventory_open
                     if inventory_open:
@@ -354,7 +396,8 @@ def main() -> None:
 
         if machine_open:
             machine_overlay, machine_regions = render_machine_menu(
-                state, base_width, base_height, machine_tx, machine_ty
+                state, base_width, base_height, machine_tx, machine_ty,
+                machine_panel_active,
             )
             pixels = composite_rgba_over_rgb(pixels, machine_overlay)
             click_regions.extend(machine_regions)
