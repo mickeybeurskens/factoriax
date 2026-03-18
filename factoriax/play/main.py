@@ -1,6 +1,7 @@
 """Interactive play script for FactoriaX using pygame."""
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pygame
 from jax import random
@@ -149,6 +150,11 @@ def main() -> None:
     obs, state = env.reset_env(reset_key, params)
 
     step_fn = jax.jit(env.step_env)
+
+    # Trigger JIT compilation before the display loop so the first real
+    # keypress is not delayed by tracing.
+    rng, warmup_key = random.split(rng)
+    step_fn(warmup_key, state, jnp.int32(Action.NOOP), params)[0].block_until_ready()
 
     key_to_action = {
         pygame.K_a: Action.LEFT,
