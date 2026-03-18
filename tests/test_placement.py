@@ -19,9 +19,11 @@ class TestDirectionOffsets:
         """Should return tile above player when facing up."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
+                [
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                ],
                 dtype=jnp.int32,
             ),
             player_position=(1, 1),
@@ -35,9 +37,11 @@ class TestDirectionOffsets:
         """Should return tile below player when facing down."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
+                [
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                ],
                 dtype=jnp.int32,
             ),
             player_position=(1, 1),
@@ -51,9 +55,11 @@ class TestDirectionOffsets:
         """Should return tile left of player when facing left."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
+                [
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                ],
                 dtype=jnp.int32,
             ),
             player_position=(1, 1),
@@ -67,9 +73,11 @@ class TestDirectionOffsets:
         """Should return tile right of player when facing right."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
+                [
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
+                ],
                 dtype=jnp.int32,
             ),
             player_position=(1, 1),
@@ -147,8 +155,7 @@ class TestMachinePlacement:
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
@@ -171,8 +178,7 @@ class TestMachinePlacement:
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
@@ -194,8 +200,7 @@ class TestMachinePlacement:
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.WATER],
-                 [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.WATER], [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
@@ -212,8 +217,7 @@ class TestMachinePlacement:
         """Should not place machine without item in inventory."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
@@ -232,8 +236,7 @@ class TestMachinePlacement:
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
@@ -256,8 +259,7 @@ class TestMachinePlacement:
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT],
-                 [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),

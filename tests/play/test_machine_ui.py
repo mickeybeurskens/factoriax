@@ -10,20 +10,15 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 import pytest
+
 from factoriax.constants import (
+    MACHINE_NUM_SLOTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
-    MACHINE_NUM_SLOTS,
-    MACHINE_SLOT_ROLES,
-    SLOT_ROLE_COLORS,
-    SLOT_ROLE_LABELS,
     ItemType,
     MachineType,
-    SlotRole,
 )
 from factoriax.play.ui import ClickRegion, render_machine_menu
-
-
 
 _SW = 320
 _SH = 320
@@ -86,9 +81,7 @@ class TestMachineMenuClickRegions:
         """Slot region params must be 0, 1, ..., N-1 in order."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
-            machine_types=jnp.full(
-                (4, 4), int(MachineType.ASSEMBLER), dtype=jnp.int32
-            ),
+            machine_types=jnp.full((4, 4), int(MachineType.ASSEMBLER), dtype=jnp.int32),
         )
         _, regions = render_machine_menu(state, _SW, _SH, 0, 0)
         slot_regions = [r for r in regions if r.action == "select_machine_slot"]
@@ -160,9 +153,7 @@ class TestMachineMenuContents:
         inv_counts = inv_counts.at[0, 0, 2].set(10)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
-            machine_types=jnp.full(
-                (4, 4), int(MachineType.ASSEMBLER), dtype=jnp.int32
-            ),
+            machine_types=jnp.full((4, 4), int(MachineType.ASSEMBLER), dtype=jnp.int32),
             machine_inventory_items=inv_items,
             machine_inventory_counts=inv_counts,
         )
@@ -172,8 +163,14 @@ class TestMachineMenuContents:
     def test_full_chest_inventory(self, state_factory) -> None:
         """Chest with all 8 slots filled (mixed items) renders cleanly."""
         items = [
-            ItemType.COAL, ItemType.IRON, ItemType.COPPER, ItemType.MINER,
-            ItemType.COAL, ItemType.IRON, ItemType.COPPER, ItemType.MINER,
+            ItemType.COAL,
+            ItemType.IRON,
+            ItemType.COPPER,
+            ItemType.MINER,
+            ItemType.COAL,
+            ItemType.IRON,
+            ItemType.COPPER,
+            ItemType.MINER,
         ]
         inv_items = jnp.zeros((4, 4, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32)
         inv_counts = jnp.zeros((4, 4, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
@@ -230,7 +227,9 @@ class TestMachineMenuFocusedSlot:
         result, _ = render_machine_menu(state, _SW, _SH, 0, 0)
         assert result.shape == (_SH, _SW, 4)
 
-    @pytest.mark.parametrize("focused", range(int(MACHINE_NUM_SLOTS[MachineType.CHEST])))
+    @pytest.mark.parametrize(
+        "focused", range(int(MACHINE_NUM_SLOTS[MachineType.CHEST]))
+    )
     def test_chest_all_focused_slots(self, state_factory, focused: int) -> None:
         """Each of the 8 chest slots can be focused without crash."""
         sel = jnp.zeros((4, 4), dtype=jnp.int32)

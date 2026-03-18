@@ -18,9 +18,12 @@ class EnvState:
         inventory_items: Item type IDs with shape (num_players, NUM_INVENTORY_SLOTS)
         inventory_counts: Stack counts with shape (num_players, NUM_INVENTORY_SLOTS)
         selected_player: Index of the currently selected player for UI/input
-        selected_slots: Currently selected inventory slot per player with shape (num_players,)
-        selected_recipes: Currently selected recipe index per player with shape (num_players,)
-        craft_progress: Ticks remaining in current craft per player with shape (num_players,)
+        selected_slots: Currently selected inventory slot per player
+            with shape (num_players,)
+        selected_recipes: Currently selected recipe index per player
+            with shape (num_players,)
+        craft_progress: Ticks remaining in current craft per player
+            with shape (num_players,)
         block_resources: Remaining resources for each tile with shape (height, width)
         machine_types: Machine type at each tile with shape (height, width)
         machine_power: Remaining power for each machine with shape (height, width)
@@ -30,7 +33,8 @@ class EnvState:
             (height, width, MAX_MACHINE_INVENTORY_SLOTS)
         machine_selected_recipe: Active recipe index per tile with shape (height, width)
         machine_selected_slot: UI-focused slot index per tile with shape (height, width)
-        achievements_unlocked: Boolean array tracking unlocked achievements (NUM_ACHIEVEMENTS,)
+        achievements_unlocked: Boolean array tracking unlocked achievements
+            with shape (NUM_ACHIEVEMENTS,)
         items_mined: Lifetime mined count per item type with shape (NUM_ITEM_TYPES,)
     """
 

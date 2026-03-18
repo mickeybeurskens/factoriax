@@ -28,6 +28,7 @@ from factoriax.renderer import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_state(world_map: np.ndarray) -> EnvState:
     """Build a minimal EnvState from a 2-D block-type array.
 
@@ -53,8 +54,12 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         block_resources=jnp.zeros(shape, dtype=jnp.int16),
         machine_types=jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32),
         machine_power=jnp.zeros(shape, dtype=jnp.int32),
-        machine_inventory_items=jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32),
-        machine_inventory_counts=jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16),
+        machine_inventory_items=jnp.zeros(
+            (*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32
+        ),
+        machine_inventory_counts=jnp.zeros(
+            (*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16
+        ),
         machine_selected_recipe=jnp.zeros(shape, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(shape, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
@@ -129,18 +134,14 @@ def test_tile_rendering_matches_reference(block_pixel_size: int) -> None:
     tile_textures = texture_lookup[safe_map]
     h, w = map_array.shape
     s = block_pixel_size
-    actual = (
-        tile_textures
-        .transpose(0, 2, 1, 3, 4)
-        .reshape(h * s, w * s, 4)
-    )
+    actual = tile_textures.transpose(0, 2, 1, 3, 4).reshape(h * s, w * s, 4)
 
     np.testing.assert_array_equal(
         actual,
         expected,
         err_msg=(
             f"Tile rendering mismatch at block_pixel_size={block_pixel_size}. "
-            "The transpose/reshape path produces different pixels than the loop reference."
+            "The transpose/reshape path produces different pixels than the reference."
         ),
     )
 
@@ -176,7 +177,7 @@ def test_render_pixels_distinct_blocks_produce_distinct_colours() -> None:
 
     # The mean RGB across the tile should differ
     assert not np.array_equal(left, right), (
-        "DIRT and WATER tiles rendered as identical pixels — texture lookup may be broken."
+        "DIRT and WATER tiles rendered identically — texture lookup may be broken."
     )
 
 

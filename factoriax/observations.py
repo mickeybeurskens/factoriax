@@ -70,12 +70,8 @@ def _player_scalars(
         ],
         dtype=jnp.float32,
     )
-    inv_items = (
-        state.inventory_items[player_idx].astype(jnp.float32) / _INV_ITEM_NORM
-    )
-    inv_counts = (
-        state.inventory_counts[player_idx].astype(jnp.float32) / MAX_STACK_SIZE
-    )
+    inv_items = state.inventory_items[player_idx].astype(jnp.float32) / _INV_ITEM_NORM
+    inv_counts = state.inventory_counts[player_idx].astype(jnp.float32) / MAX_STACK_SIZE
     return jnp.concatenate([scalars, inv_items, inv_counts])
 
 
@@ -157,15 +153,12 @@ def local_array(
         ).astype(jnp.float32)
         / _MACHINE_NORM
     )
-    padded_resources = (
-        jnp.pad(
-            state.block_resources,
-            pw,
-            mode="constant",
-            constant_values=0,
-        ).astype(jnp.float32)
-        / float(BLOCK_MAX_RESOURCES)
-    )
+    padded_resources = jnp.pad(
+        state.block_resources,
+        pw,
+        mode="constant",
+        constant_values=0,
+    ).astype(jnp.float32) / float(BLOCK_MAX_RESOURCES)
 
     # Original player (row, col) = (pos[1], pos[0]) is the start index in
     # padded space for a centered window of size (2*radius+1).

@@ -23,7 +23,9 @@ from factoriax.state import EnvParams
 def _make_bench_level(name: str = "test") -> BenchmarkLevel:
     level = LevelBuilder(8, 8).fill_rect(0, 0, 3, 3, BlockType.COAL).build(name)
     params = EnvParams(map_width=8, map_height=8, num_players=1, max_timesteps=10)
-    return BenchmarkLevel(name=name, description="A test level.", level=level, env_params=params)
+    return BenchmarkLevel(
+        name=name, description="A test level.", level=level, env_params=params
+    )
 
 
 def _make_level_result(name: str = "test", score: float = 5.0) -> LevelResult:
@@ -132,7 +134,9 @@ class TestBenchmarkProtocol:
             def levels(self) -> list[BenchmarkLevel]:
                 return []
 
-            def score_level(self, bench_level: BenchmarkLevel, items_mined: dict) -> float:
+            def score_level(
+                self, bench_level: BenchmarkLevel, items_mined: dict
+            ) -> float:
                 return 0.0
 
             def score(self, level_results: list[LevelResult]) -> float:

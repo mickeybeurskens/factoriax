@@ -60,8 +60,16 @@ class TestMachineInitialization:
 
         assert state.machine_types.shape == state.map.shape
         assert state.machine_power.shape == state.map.shape
-        assert state.machine_inventory_items.shape == (24, 16, MAX_MACHINE_INVENTORY_SLOTS)
-        assert state.machine_inventory_counts.shape == (24, 16, MAX_MACHINE_INVENTORY_SLOTS)
+        assert state.machine_inventory_items.shape == (
+            24,
+            16,
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
+        assert state.machine_inventory_counts.shape == (
+            24,
+            16,
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
 
 
 class TestMachineRefueling:
@@ -74,7 +82,9 @@ class TestMachineRefueling:
             block_resources=jnp.array([[10]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[0]], dtype=jnp.int32),
-            machine_inventory_counts=_fuel_counts(jnp.array([[5]], dtype=jnp.int16), 1, 1),
+            machine_inventory_counts=_fuel_counts(
+                jnp.array([[5]], dtype=jnp.int16), 1, 1
+            ),
         )
 
         new_state = refuel_machines(state)
@@ -89,7 +99,9 @@ class TestMachineRefueling:
             block_resources=jnp.array([[10]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[5]], dtype=jnp.int32),
-            machine_inventory_counts=_fuel_counts(jnp.array([[5]], dtype=jnp.int16), 1, 1),
+            machine_inventory_counts=_fuel_counts(
+                jnp.array([[5]], dtype=jnp.int16), 1, 1
+            ),
         )
 
         new_state = refuel_machines(state)
@@ -337,7 +349,9 @@ class TestUpdateAllMachines:
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[0]], dtype=jnp.int32),
-            machine_inventory_counts=_fuel_counts(jnp.array([[5]], dtype=jnp.int16), 1, 1),
+            machine_inventory_counts=_fuel_counts(
+                jnp.array([[5]], dtype=jnp.int16), 1, 1
+            ),
         )
 
         new_state = update_all_machines(state)

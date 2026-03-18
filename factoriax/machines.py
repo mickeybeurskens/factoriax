@@ -14,7 +14,7 @@ from factoriax.constants import (
 from factoriax.state import EnvState
 
 # Miner slot indices (within machine_inventory_items / machine_inventory_counts).
-_MINER_FUEL_SLOT: int = 0   # INPUT — coal fuel consumed by the miner.
+_MINER_FUEL_SLOT: int = 0  # INPUT — coal fuel consumed by the miner.
 _MINER_OUTPUT_SLOT: int = 1  # OUTPUT — mined ore deposited here.
 
 
@@ -58,7 +58,9 @@ def refuel_machines(state: EnvState) -> EnvState:
     new_fuel = fuel_count - should_refuel.astype(jnp.int16)
     new_power = state.machine_power + (should_refuel.astype(jnp.int32) * POWER_PER_COAL)
 
-    new_inv_counts = state.machine_inventory_counts.at[..., _MINER_FUEL_SLOT].set(new_fuel)
+    new_inv_counts = state.machine_inventory_counts.at[..., _MINER_FUEL_SLOT].set(
+        new_fuel
+    )
     return state.replace(
         machine_inventory_counts=new_inv_counts,
         machine_power=new_power,
@@ -89,7 +91,9 @@ def run_miners(state: EnvState) -> EnvState:
 
     output_empty = output_count == 0
     output_matches = output_item == block_item
-    has_space = (output_empty | output_matches) & (output_count < MAX_MACHINE_STACK_SIZE)
+    has_space = (output_empty | output_matches) & (
+        output_count < MAX_MACHINE_STACK_SIZE
+    )
 
     can_mine = is_miner & has_power & has_resources & has_space
 

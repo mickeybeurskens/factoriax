@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 import matplotlib
 import numpy as np
 
@@ -56,8 +55,13 @@ def plot_level_scores(result: BenchmarkResult) -> plt.Figure:
 
     fig, ax = plt.subplots(figsize=(8, 4))
     bars = ax.bar(names, scores, color="steelblue", edgecolor="white", linewidth=0.5)
-    ax.axhline(result.aggregate_score, color="crimson", linestyle="--", linewidth=1.2,
-               label=f"aggregate mean = {result.aggregate_score:.1f}")
+    ax.axhline(
+        result.aggregate_score,
+        color="crimson",
+        linestyle="--",
+        linewidth=1.2,
+        label=f"aggregate mean = {result.aggregate_score:.1f}",
+    )
     ax.bar_label(bars, fmt="%.1f", padding=3, fontsize=9)
     ax.set_ylabel("Weighted score")
     ax.set_title(f"{result.benchmark_name} — per-level scores")
@@ -224,6 +228,7 @@ def save_mp4(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
     if not frames:
         raise ValueError("frames list is empty; cannot write MP4.")
     import warnings
+
     import imageio.v3 as iio
 
     path = Path(path)

@@ -26,7 +26,6 @@ from factoriax.constants import (
 from factoriax.levels import build_state, generate_state
 from factoriax.machines import refuel_machines, run_miners, update_all_machines
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -58,7 +57,10 @@ class TestSlotRoleConstants:
 
     def test_shape(self) -> None:
         """MACHINE_SLOT_ROLES must have one row per MachineType and 8 columns."""
-        assert MACHINE_SLOT_ROLES.shape == (len(MachineType), MAX_MACHINE_INVENTORY_SLOTS)
+        assert MACHINE_SLOT_ROLES.shape == (
+            len(MachineType),
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
 
     def test_none_machine_all_none_slots(self) -> None:
         """MachineType.NONE should have all NONE-role slots."""
@@ -151,10 +153,18 @@ class TestMachineInventoryStateFields:
         return build_state(level, params)
 
     def test_machine_inventory_items_shape(self, state) -> None:
-        assert state.machine_inventory_items.shape == (6, 8, MAX_MACHINE_INVENTORY_SLOTS)
+        assert state.machine_inventory_items.shape == (
+            6,
+            8,
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
 
     def test_machine_inventory_counts_shape(self, state) -> None:
-        assert state.machine_inventory_counts.shape == (6, 8, MAX_MACHINE_INVENTORY_SLOTS)
+        assert state.machine_inventory_counts.shape == (
+            6,
+            8,
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
 
     def test_machine_selected_recipe_shape(self, state) -> None:
         assert state.machine_selected_recipe.shape == (6, 8)
@@ -192,13 +202,22 @@ class TestGenerateStateInventoryFields:
     @pytest.fixture(scope="class")
     def state(self):
         import jax
+
         rng = jax.random.PRNGKey(0)
         params = EnvParams(map_width=10, map_height=10, num_players=1)
         return generate_state(rng, params)
 
     def test_shape(self, state) -> None:
-        assert state.machine_inventory_items.shape == (10, 10, MAX_MACHINE_INVENTORY_SLOTS)
-        assert state.machine_inventory_counts.shape == (10, 10, MAX_MACHINE_INVENTORY_SLOTS)
+        assert state.machine_inventory_items.shape == (
+            10,
+            10,
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
+        assert state.machine_inventory_counts.shape == (
+            10,
+            10,
+            MAX_MACHINE_INVENTORY_SLOTS,
+        )
         assert state.machine_selected_recipe.shape == (10, 10)
         assert state.machine_selected_slot.shape == (10, 10)
 
@@ -333,7 +352,9 @@ class TestChestInventory:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array([[MachineType.CHEST]], dtype=jnp.int32),
-            machine_inventory_items=_inv_items({0: int(ItemType.IRON), 3: int(ItemType.COAL)}, 1, 1),
+            machine_inventory_items=_inv_items(
+                {0: int(ItemType.IRON), 3: int(ItemType.COAL)}, 1, 1
+            ),
             machine_inventory_counts=_inv_counts({0: 10, 3: 5}, 1, 1),
         )
 

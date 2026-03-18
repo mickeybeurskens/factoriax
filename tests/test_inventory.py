@@ -77,7 +77,9 @@ class TestInventoryObservation:
         rng = random.PRNGKey(0)
         obs, state = env.reset_env(rng, params)
 
-        expected_size = params.map_width * params.map_height + 4 + NUM_INVENTORY_SLOTS * 2
+        expected_size = (
+            params.map_width * params.map_height + 4 + NUM_INVENTORY_SLOTS * 2
+        )
         assert obs.shape == (expected_size,)
 
     def test_observation_space_matches_observation(self) -> None:

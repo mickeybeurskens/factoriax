@@ -8,6 +8,7 @@ intentionally absent.
 
 import jax.numpy as jnp
 import numpy as np
+
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import ItemType
 from factoriax.play.ui import (
@@ -17,8 +18,6 @@ from factoriax.play.ui import (
     render_pause_menu,
     render_welcome_screen,
 )
-
-
 
 _SW = 128
 _SH = 128

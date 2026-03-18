@@ -81,7 +81,8 @@ def state_factory():
                 (H, W, MAX_MACHINE_INVENTORY_SLOTS), defaults to zeros
             machine_selected_recipe: Active recipe index per tile, defaults to zeros
             machine_selected_slot: UI-focused slot index per tile, defaults to zeros
-            achievements_unlocked: Boolean array of unlocked achievements, defaults to all False
+            achievements_unlocked: Boolean array of unlocked achievements,
+                defaults to all False
             items_mined: Lifetime mined count per item type, defaults to zeros
 
         Returns:

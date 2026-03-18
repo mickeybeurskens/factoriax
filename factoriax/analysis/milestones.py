@@ -90,8 +90,11 @@ def plot_achievement_timing(
 
     if data:
         bp = ax.boxplot(
-            data, orientation="horizontal", tick_labels=labels_used,
-            patch_artist=True, showfliers=True,
+            data,
+            orientation="horizontal",
+            tick_labels=labels_used,
+            patch_artist=True,
+            showfliers=True,
             flierprops=dict(markersize=3, alpha=0.5),
         )
         for patch in bp["boxes"]:
@@ -230,6 +233,7 @@ def plot_first_action_timing(
     """
     if action_labels is None:
         from .actions import DEFAULT_ACTION_LABELS
+
         action_labels = [DEFAULT_ACTION_LABELS[a] for a in action_ids]
 
     if ax is None:
@@ -249,8 +253,11 @@ def plot_first_action_timing(
 
     if data:
         bp = ax.boxplot(
-            data, orientation="horizontal", tick_labels=labels_used,
-            patch_artist=True, showfliers=True,
+            data,
+            orientation="horizontal",
+            tick_labels=labels_used,
+            patch_artist=True,
+            showfliers=True,
             flierprops=dict(markersize=3, alpha=0.5),
         )
         for patch in bp["boxes"]:

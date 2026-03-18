@@ -69,7 +69,8 @@ def plot_comparative_raster(
     P = traj.num_players
 
     fig, axes = plt.subplots(
-        P, 1,
+        P,
+        1,
         figsize=(figsize_per_player[0], figsize_per_player[1] * P),
         sharex=True,
     )
@@ -79,9 +80,13 @@ def plot_comparative_raster(
     for p, ax in enumerate(axes):
         label = player_labels[p] if player_labels else f"Player {p}"
         action_raster(
-            traj, player=p, num_actions=num_actions,
-            action_labels=action_labels, colors=colors,
-            ax=ax, title=label,
+            traj,
+            player=p,
+            num_actions=num_actions,
+            action_labels=action_labels,
+            colors=colors,
+            ax=ax,
+            title=label,
         )
 
     fig.tight_layout()
@@ -181,7 +186,7 @@ def plot_role_divergence(
         ax.set_title("Role divergence (action distribution)")
         for i in range(P):
             for j in range(P):
-                ax.text(j, i, f"{jsd[i,j]:.3f}", ha="center", va="center", fontsize=9)
+                ax.text(j, i, f"{jsd[i, j]:.3f}", ha="center", va="center", fontsize=9)
         fig.tight_layout()
         return fig, ax
     else:
@@ -200,8 +205,12 @@ def plot_role_divergence(
             for i in range(P):
                 for j in range(P):
                     ax.text(
-                        j, i, f"{jsd[i,j]:.3f}",
-                        ha="center", va="center", fontsize=9,
+                        j,
+                        i,
+                        f"{jsd[i, j]:.3f}",
+                        ha="center",
+                        va="center",
+                        fontsize=9,
                     )
         fig.colorbar(im, ax=axes[-1], label="JSD")
         fig.tight_layout()

@@ -41,7 +41,8 @@ ACHIEVEMENT_INFO = [
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 
-#: Per-achievement reward magnitudes used by :func:`factoriax.rewards.achievement_reward`.
+#: Per-achievement reward magnitudes used by
+#: :func:`factoriax.rewards.achievement_reward`.
 ACHIEVEMENT_REWARDS = jnp.ones(NUM_ACHIEVEMENTS, dtype=jnp.float32)
 
 

@@ -61,14 +61,14 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
 
 
 PLAYER_COLORS = [
-    ([255, 100, 100], [200, 50, 50]),    # Player 0: Red
-    ([100, 100, 255], [50, 50, 200]),    # Player 1: Blue
-    ([100, 255, 100], [50, 200, 50]),    # Player 2: Green
-    ([255, 255, 100], [200, 200, 50]),   # Player 3: Yellow
-    ([255, 100, 255], [200, 50, 200]),   # Player 4: Magenta
-    ([100, 255, 255], [50, 200, 200]),   # Player 5: Cyan
-    ([255, 180, 100], [200, 130, 50]),   # Player 6: Orange
-    ([180, 100, 255], [130, 50, 200]),   # Player 7: Purple
+    ([255, 100, 100], [200, 50, 50]),  # Player 0: Red
+    ([100, 100, 255], [50, 50, 200]),  # Player 1: Blue
+    ([100, 255, 100], [50, 200, 50]),  # Player 2: Green
+    ([255, 255, 100], [200, 200, 50]),  # Player 3: Yellow
+    ([255, 100, 255], [200, 50, 200]),  # Player 4: Magenta
+    ([100, 255, 255], [50, 200, 200]),  # Player 5: Cyan
+    ([255, 180, 100], [200, 130, 50]),  # Player 6: Orange
+    ([180, 100, 255], [130, 50, 200]),  # Player 7: Purple
     ([180, 255, 180], [130, 200, 130]),  # Player 8: Light green
 ]
 
@@ -240,9 +240,17 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
 
         if is_selected_slot:
             bar[y_start, x_start : x_start + slot_size] = (255, 255, 255)
-            bar[y_start + slot_size - 1, x_start : x_start + slot_size] = (255, 255, 255)
+            bar[y_start + slot_size - 1, x_start : x_start + slot_size] = (
+                255,
+                255,
+                255,
+            )
             bar[y_start : y_start + slot_size, x_start] = (255, 255, 255)
-            bar[y_start : y_start + slot_size, x_start + slot_size - 1] = (255, 255, 255)
+            bar[y_start : y_start + slot_size, x_start + slot_size - 1] = (
+                255,
+                255,
+                255,
+            )
 
         item_type = int(inventory_items[slot_idx])
         count = int(inventory_counts[slot_idx])
@@ -332,10 +340,8 @@ def render_pixels(
 
     # Single numpy index: (H, W, size, size, 4) -> (H*size, W*size, 4)
     tile_textures = texture_lookup[safe_map]
-    image = (
-        tile_textures
-        .transpose(0, 2, 1, 3, 4)
-        .reshape(map_height * block_pixel_size, map_width * block_pixel_size, 4)
+    image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
+        map_height * block_pixel_size, map_width * block_pixel_size, 4
     )
     # Make writable — the reshape may return a view into the read-only cache.
     image = np.array(image)
@@ -354,7 +360,10 @@ def render_pixels(
             direction, player_idx, is_selected, block_pixel_size
         )
 
-        px, py = int(player_positions[player_idx, 0]), int(player_positions[player_idx, 1])
+        px, py = (
+            int(player_positions[player_idx, 0]),
+            int(player_positions[player_idx, 1]),
+        )
         py_start = py * block_pixel_size
         px_start = px * block_pixel_size
         _alpha_blend_inplace(

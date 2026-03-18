@@ -64,9 +64,7 @@ def mining_reward(
     px, py = player_pos[0], player_pos[1]
     map_h, map_w = new_state.map.shape
 
-    grid_y, grid_x = jnp.meshgrid(
-        jnp.arange(map_h), jnp.arange(map_w), indexing="ij"
-    )
+    grid_y, grid_x = jnp.meshgrid(jnp.arange(map_h), jnp.arange(map_w), indexing="ij")
     dist = jnp.abs(grid_x - px) + jnp.abs(grid_y - py)
 
     # Identify ore tiles: broadcast (H, W, 1) == (3,) -> (H, W, 3) -> (H, W)

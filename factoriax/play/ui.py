@@ -14,6 +14,21 @@ import numpy as np
 import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
+from factoriax.constants import (
+    ITEM_COLORS,
+    MACHINE_NUM_SLOTS,
+    MACHINE_SLOT_ROLES,
+    MACHINE_TYPE_NAMES,
+    NUM_INVENTORY_SLOTS,
+    NUM_RECIPES,
+    RECIPE_NAMES,
+    RECIPES,
+    SLOT_ROLE_COLORS,
+    SLOT_ROLE_LABELS,
+    ItemType,
+)
+from factoriax.crafting import can_afford_recipe, count_item_in_inventory
+from factoriax.state import EnvState
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,23 +54,6 @@ class ClickRegion:
     action: str
     param: int
 
-
-from factoriax.constants import (
-    ITEM_COLORS,
-    MACHINE_NUM_SLOTS,
-    MACHINE_SLOT_ROLES,
-    MACHINE_TYPE_NAMES,
-    NUM_INVENTORY_SLOTS,
-    NUM_RECIPES,
-    RECIPE_NAMES,
-    RECIPES,
-    SLOT_ROLE_COLORS,
-    SLOT_ROLE_LABELS,
-    ItemType,
-)
-from factoriax.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.state import EnvState
-
 # ---------------------------------------------------------------------------
 # Style constants — edit here to restyle every menu at once.
 # All values are sized for the 32 px-per-block base resolution.
@@ -67,12 +65,12 @@ _PAUSE_OPTION_SELECTED: tuple[int, int, int, int] = (75, 75, 75, 255)
 _BORDER: tuple[int, int, int, int] = (190, 165, 55, 255)
 _BORDER_PX: int = 4
 _FOCUS_STRIP: tuple[int, int, int, int] = (55, 130, 55, 255)
-_HEADER_H: int = 44       # height reserved for each section label row
-_SEP_H: int = 4           # height of the gold separator beneath labels
-_FONT_HEADER: int = 26    # section label font size
-_FONT_BODY: int = 20      # item names, counts, recipe info font size
-_FONT_HINT: int = 14      # control hint font size
-_HINT_HEIGHT: int = 24    # height reserved for hint bar at bottom of menus
+_HEADER_H: int = 44  # height reserved for each section label row
+_SEP_H: int = 4  # height of the gold separator beneath labels
+_FONT_HEADER: int = 26  # section label font size
+_FONT_BODY: int = 20  # item names, counts, recipe info font size
+_FONT_HINT: int = 14  # control hint font size
+_HINT_HEIGHT: int = 24  # height reserved for hint bar at bottom of menus
 _HINT_COLOR: tuple[int, int, int] = (120, 115, 90)
 
 # Crafting ingredient affordability colours.
@@ -89,9 +87,7 @@ _ITEM_NAMES: dict[int, str] = {
 
 # Comma-separated preference list for pygame.font.SysFont.  Terminus is a
 # 1:1 pixel bitmap font common on Linux; the rest are fallbacks.
-_PIXEL_FONT_PREFERENCE = (
-    "terminus,fixedsys excelsior,courier new,monospace,courier"
-)
+_PIXEL_FONT_PREFERENCE = "terminus,fixedsys excelsior,courier new,monospace,courier"
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +425,9 @@ def render_pause_menu(
 
     for i, option_text in enumerate(options):
         option_y = options_start_y + i * (option_h + 12)
-        option_bg = _PAUSE_OPTION_SELECTED if i == selected_option else _PAUSE_OPTION_NORMAL
+        option_bg = (
+            _PAUSE_OPTION_SELECTED if i == selected_option else _PAUSE_OPTION_NORMAL
+        )
 
         option_x = menu_x + 24
         option_w = menu_w - 48
@@ -438,10 +436,16 @@ def render_pause_menu(
             option_x : option_x + option_w,
         ] = option_bg
 
-        click_regions.append(ClickRegion(
-            x=option_x, y=option_y, w=option_w, h=option_h,
-            action="pause_option", param=i,
-        ))
+        click_regions.append(
+            ClickRegion(
+                x=option_x,
+                y=option_y,
+                w=option_w,
+                h=option_h,
+                action="pause_option",
+                param=i,
+            )
+        )
 
         if i == selected_option:
             white = (255, 255, 255, 255)
@@ -458,8 +462,11 @@ def render_pause_menu(
 
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
-        overlay, "[UP/DOWN] Select | [ENTER/E] Confirm | [ESC] Back",
-        menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX,
+        overlay,
+        "[UP/DOWN] Select | [ENTER/E] Confirm | [ESC] Back",
+        menu_x + _BORDER_PX,
+        hint_y,
+        menu_w - 2 * _BORDER_PX,
     )
 
     return overlay, click_regions
@@ -496,14 +503,14 @@ def render_welcome_screen(
     hint_h = hint_font.get_height()
 
     story = "You crashed on an unknown planet."
-    goal  = "Mine ore, build machines, launch a spaceship."
+    goal = "Mine ore, build machines, launch a spaceship."
 
     controls = [
-        ("WASD",       "Move"),
-        ("SPACE",      "Mine ore"),
-        ("E",          "Place machine"),
-        ("I",          "Inventory & crafting"),
-        ("F",          "Inspect machine"),
+        ("WASD", "Move"),
+        ("SPACE", "Mine ore"),
+        ("E", "Place machine"),
+        ("I", "Inventory & crafting"),
+        ("F", "Inspect machine"),
     ]
 
     key_col_w = 64
@@ -511,13 +518,17 @@ def render_welcome_screen(
     controls_h = len(controls) * control_row_h
 
     inner_h = (
-        48              # title
-        + _SEP_H + 8    # separator
-        + line_h + 6    # story line
-        + line_h + 16   # goal line
-        + _SEP_H + 8    # separator
-        + controls_h    # control rows
-        + 16            # gap before hint
+        48  # title
+        + _SEP_H
+        + 8  # separator
+        + line_h
+        + 6  # story line
+        + line_h
+        + 16  # goal line
+        + _SEP_H
+        + 8  # separator
+        + controls_h  # control rows
+        + 16  # gap before hint
         + _HINT_HEIGHT
     )
     menu_h = inner_h + 2 * (_BORDER_PX + 16)
@@ -559,9 +570,7 @@ def render_welcome_screen(
 
     # Dismiss hint
     cy += 16
-    hint_arr = _render_text_rgba(
-        "[SPACE / ENTER]  Start", hint_font, _HINT_COLOR
-    )
+    hint_arr = _render_text_rgba("[SPACE / ENTER]  Start", hint_font, _HINT_COLOR)
     _blit_rgba(overlay, hint_arr, cy, menu_x + (menu_w - hint_arr.shape[1]) // 2)
 
     return overlay
@@ -659,9 +668,7 @@ def render_machine_menu(
             icon_size = max(16, cell_h - badge_h - 4 - line_h * 2 - 14)
 
     slot_area_h = (
-        slot_rows * cell_h + max(0, slot_rows - 1) * cell_gap
-        if slot_rows > 0
-        else 0
+        slot_rows * cell_h + max(0, slot_rows - 1) * cell_gap if slot_rows > 0 else 0
     )
 
     menu_w = int(screen_width * 0.72)
@@ -679,9 +686,7 @@ def render_machine_menu(
     # --- Slot grid ---
     grid_w = menu_w - 2 * padding
     cell_w = (
-        (grid_w - (slot_cols - 1) * cell_gap) // slot_cols
-        if slot_cols > 0
-        else grid_w
+        (grid_w - (slot_cols - 1) * cell_gap) // slot_cols if slot_cols > 0 else grid_w
     )
     grid_x = menu_x + padding
 
@@ -708,14 +713,21 @@ def render_machine_menu(
             overlay[cell_y : cell_y + cell_h, cell_x] = sel
             overlay[cell_y : cell_y + cell_h, cell_x + cell_w - 1] = sel
 
-        click_regions.append(ClickRegion(
-            x=cell_x, y=cell_y, w=cell_w, h=cell_h,
-            action="select_machine_slot", param=slot_idx,
-        ))
+        click_regions.append(
+            ClickRegion(
+                x=cell_x,
+                y=cell_y,
+                w=cell_w,
+                h=cell_h,
+                action="select_machine_slot",
+                param=slot_idx,
+            )
+        )
 
         # Role badge strip across the top of the cell
         overlay[cell_y : cell_y + badge_h, cell_x : cell_x + cell_w] = (
-            *role_color, 220
+            *role_color,
+            220,
         )
         if role_label:
             badge_arr = _render_text_rgba(role_label, hint_font, (230, 230, 230))
@@ -780,12 +792,21 @@ def render_machine_menu(
         icon_x = strip_x + slot_idx * strip_cell_w
         icon_w = strip_cell_w - 4
         overlay[strip_y : strip_y + player_icon, icon_x : icon_x + icon_w] = (
-            55, 55, 55, 255
+            55,
+            55,
+            55,
+            255,
         )
-        click_regions.append(ClickRegion(
-            x=icon_x, y=strip_y, w=icon_w, h=player_icon,
-            action="select_slot", param=slot_idx,
-        ))
+        click_regions.append(
+            ClickRegion(
+                x=icon_x,
+                y=strip_y,
+                w=icon_w,
+                h=player_icon,
+                action="select_slot",
+                param=slot_idx,
+            )
+        )
 
         p_item = int(player_items[slot_idx])
         p_count = int(player_counts[slot_idx])
@@ -856,22 +877,44 @@ def render_inventory_menu(
     body_font = get_pixel_font(_FONT_BODY)
 
     inv_content_y = _draw_section_header(
-        overlay, menu_x, menu_y, inv_w,
-        "INVENTORY", header_font, menu_focus == "inventory",
+        overlay,
+        menu_x,
+        menu_y,
+        inv_w,
+        "INVENTORY",
+        header_font,
+        menu_focus == "inventory",
     )
     craft_content_y = _draw_section_header(
-        overlay, div_x, menu_y, craft_w,
-        "CRAFTING", header_font, menu_focus == "crafting",
+        overlay,
+        div_x,
+        menu_y,
+        craft_w,
+        "CRAFTING",
+        header_font,
+        menu_focus == "crafting",
     )
 
-    click_regions.append(ClickRegion(
-        x=menu_x, y=menu_y, w=inv_w, h=inv_content_y - menu_y,
-        action="focus_inventory", param=0,
-    ))
-    click_regions.append(ClickRegion(
-        x=div_x, y=menu_y, w=craft_w, h=craft_content_y - menu_y,
-        action="focus_crafting", param=0,
-    ))
+    click_regions.append(
+        ClickRegion(
+            x=menu_x,
+            y=menu_y,
+            w=inv_w,
+            h=inv_content_y - menu_y,
+            action="focus_inventory",
+            param=0,
+        )
+    )
+    click_regions.append(
+        ClickRegion(
+            x=div_x,
+            y=menu_y,
+            w=craft_w,
+            h=craft_content_y - menu_y,
+            action="focus_crafting",
+            param=0,
+        )
+    )
 
     selected_player = int(state.selected_player)
     selected_slot = int(state.selected_slots[selected_player])
@@ -920,10 +963,16 @@ def render_inventory_menu(
             overlay[cell_y : cell_y + icon_size, icon_x] = white
             overlay[cell_y : cell_y + icon_size, icon_x + icon_size - 1] = white
 
-        click_regions.append(ClickRegion(
-            x=icon_x, y=cell_y, w=icon_size, h=cell_h,
-            action="select_slot", param=slot_idx,
-        ))
+        click_regions.append(
+            ClickRegion(
+                x=icon_x,
+                y=cell_y,
+                w=icon_size,
+                h=cell_h,
+                action="select_slot",
+                param=slot_idx,
+            )
+        )
 
         item_type = int(inventory_items[slot_idx])
         count = int(inventory_counts[slot_idx])
@@ -969,10 +1018,16 @@ def render_inventory_menu(
 
         recipe_y = craft_content_y + recipe_idx * recipe_h
 
-        click_regions.append(ClickRegion(
-            x=craft_x, y=recipe_y, w=craft_available_w, h=recipe_h,
-            action="select_recipe", param=recipe_idx,
-        ))
+        click_regions.append(
+            ClickRegion(
+                x=craft_x,
+                y=recipe_y,
+                w=craft_available_w,
+                h=recipe_h,
+                action="select_recipe",
+                param=recipe_idx,
+            )
+        )
 
         if is_selected_recipe:
             overlay[
@@ -981,9 +1036,13 @@ def render_inventory_menu(
             ] = (65, 65, 65, 255)
             white = (255, 255, 255, 255)
             overlay[recipe_y, craft_x : craft_x + craft_available_w] = white
-            overlay[recipe_y + recipe_h - 5, craft_x : craft_x + craft_available_w] = white
+            overlay[recipe_y + recipe_h - 5, craft_x : craft_x + craft_available_w] = (
+                white
+            )
             overlay[recipe_y : recipe_y + recipe_h - 4, craft_x] = white
-            overlay[recipe_y : recipe_y + recipe_h - 4, craft_x + craft_available_w - 1] = white
+            overlay[
+                recipe_y : recipe_y + recipe_h - 4, craft_x + craft_available_w - 1
+            ] = white
 
         # Output icon.
         out_icon = 32
@@ -1008,7 +1067,10 @@ def render_inventory_menu(
         for item_type, required in recipe["inputs"]:
             have = int(count_item_in_inventory(state, selected_player, item_type))
             inp_rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            overlay[inp_y : inp_y + inp_icon, inp_x : inp_x + inp_icon] = (*inp_rgb, 255)
+            overlay[inp_y : inp_y + inp_icon, inp_x : inp_x + inp_icon] = (
+                *inp_rgb,
+                255,
+            )
 
             count_color: tuple[int, int, int] = (
                 _AFFORD_COLOR if have >= required else _CANNOT_AFFORD_COLOR
@@ -1023,11 +1085,17 @@ def render_inventory_menu(
             bar_w = craft_available_w - 16
             filled = int(bar_w * (1 - craft_progress / recipe["ticks"]))
             overlay[bar_y : bar_y + 8, craft_x + 8 : craft_x + 8 + bar_w] = (
-                35, 35, 35, 255
+                35,
+                35,
+                35,
+                255,
             )
             if filled > 0:
                 overlay[bar_y : bar_y + 8, craft_x + 8 : craft_x + 8 + filled] = (
-                    100, 200, 100, 255
+                    100,
+                    200,
+                    100,
+                    255,
                 )
 
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX

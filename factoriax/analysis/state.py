@@ -48,14 +48,16 @@ def inventory_over_time(
         inventory count per item type.
     """
     if traj.inventory_items is None or traj.inventory_counts is None:
-        raise ValueError("inventory_over_time requires inventory_items and inventory_counts")
+        raise ValueError(
+            "inventory_over_time requires inventory_items and inventory_counts"
+        )
 
     # Get single-player view
     if traj.is_multi_player:
-        items = traj.inventory_items[:, :, player, :]    # (B, T, slots)
+        items = traj.inventory_items[:, :, player, :]  # (B, T, slots)
         counts = traj.inventory_counts[:, :, player, :]  # (B, T, slots)
     else:
-        items = traj.inventory_items    # (B, T, slots)
+        items = traj.inventory_items  # (B, T, slots)
         counts = traj.inventory_counts  # (B, T, slots)
 
     B, T, S = items.shape
@@ -264,8 +266,18 @@ def plot_trajectory_trace(
     ax.plot(pos[:, 0], pos[:, 1], color="gray", alpha=0.2, linewidth=0.5, zorder=1)
 
     # Mark start and end
-    ax.scatter(*pos[0], marker="o", s=80, c="green", edgecolors="black", zorder=3, label="Start")
-    ax.scatter(*pos[-1], marker="s", s=80, c="red", edgecolors="black", zorder=3, label="End")
+    ax.scatter(
+        *pos[0],
+        marker="o",
+        s=80,
+        c="green",
+        edgecolors="black",
+        zorder=3,
+        label="Start",
+    )
+    ax.scatter(
+        *pos[-1], marker="s", s=80, c="red", edgecolors="black", zorder=3, label="End"
+    )
 
     ax.set_xlim(-0.5, map_width - 0.5)
     ax.set_ylim(map_height - 0.5, -0.5)  # Invert y to match grid convention

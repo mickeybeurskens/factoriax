@@ -96,9 +96,7 @@ class Level:
         """
         expected = (self.map_height, self.map_width)
         if self.block_map.shape != expected:
-            raise ValueError(
-                f"block_map shape {self.block_map.shape} != {expected}"
-            )
+            raise ValueError(f"block_map shape {self.block_map.shape} != {expected}")
         if self.block_resources is not None and self.block_resources.shape != expected:
             raise ValueError(
                 f"block_resources shape {self.block_resources.shape} != {expected}"
@@ -145,9 +143,7 @@ class LevelBuilder:
         """
         self._width = width
         self._height = height
-        self._block_map = np.full(
-            (height, width), int(default_block), dtype=np.int32
-        )
+        self._block_map = np.full((height, width), int(default_block), dtype=np.int32)
         self._block_resources: np.ndarray | None = None
         self._machine_types: np.ndarray | None = None
 
@@ -208,7 +204,9 @@ class LevelBuilder:
             IndexError: If ``(x, y)`` is outside the map.
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
-            raise IndexError(f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map.")
+            raise IndexError(
+                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
+            )
         if self._block_resources is None:
             self._block_resources = _default_resources(self._block_map)
         self._block_resources[y, x] = amount
@@ -234,9 +232,7 @@ class LevelBuilder:
                 else None
             ),
             machine_types=(
-                self._machine_types.copy()
-                if self._machine_types is not None
-                else None
+                self._machine_types.copy() if self._machine_types is not None else None
             ),
         )
 
@@ -258,7 +254,9 @@ def _default_resources(block_map: np.ndarray) -> np.ndarray:
     Returns:
         int32 resource array of the same shape.
     """
-    mineable = np.isin(block_map, [int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)])
+    mineable = np.isin(
+        block_map, [int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)]
+    )
     return np.where(mineable, BLOCK_MAX_RESOURCES, 0).astype(np.int32)
 
 
@@ -324,9 +322,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             f"match params ({params.map_width}x{params.map_height})."
         )
 
-    block_map, player_positions_np = _place_players(
-        level.block_map, params.num_players
-    )
+    block_map, player_positions_np = _place_players(level.block_map, params.num_players)
 
     resources_np = (
         level.block_resources
@@ -336,7 +332,9 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     machine_types_np = (
         level.machine_types
         if level.machine_types is not None
-        else np.full((level.map_height, level.map_width), int(MachineType.NONE), dtype=np.int32)
+        else np.full(
+            (level.map_height, level.map_width), int(MachineType.NONE), dtype=np.int32
+        )
     )
 
     map_shape = (level.map_height, level.map_width)
@@ -409,7 +407,11 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     map_shape = (params.map_height, params.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
     player_shape = (params.num_players,)
-    machine_inv_shape = (params.map_height, params.map_width, MAX_MACHINE_INVENTORY_SLOTS)
+    machine_inv_shape = (
+        params.map_height,
+        params.map_width,
+        MAX_MACHINE_INVENTORY_SLOTS,
+    )
 
     return EnvState(
         map=world_map,
@@ -458,7 +460,9 @@ def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
         (params.map_height, params.map_width), int(BlockType.DIRT), dtype=jnp.int32
     )
     terrain = jnp.where(random_values < coal_threshold, int(BlockType.COAL), terrain)
-    terrain = jnp.where(random_values < copper_threshold, int(BlockType.COPPER), terrain)
+    terrain = jnp.where(
+        random_values < copper_threshold, int(BlockType.COPPER), terrain
+    )
     terrain = jnp.where(random_values < iron_threshold, int(BlockType.IRON), terrain)
     terrain = jnp.where(random_values < water_threshold, int(BlockType.WATER), terrain)
 
@@ -494,9 +498,7 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "machine_types": (
-            level.machine_types.tolist()
-            if level.machine_types is not None
-            else None
+            level.machine_types.tolist() if level.machine_types is not None else None
         ),
     }
     path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))

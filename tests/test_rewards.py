@@ -35,7 +35,9 @@ class TestAchievementReward:
         prev_state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
+        items_mined = (
+            jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
+        )
         new_state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
@@ -47,7 +49,9 @@ class TestAchievementReward:
         reward = achievement_reward(prev_state, new_state, params)
         assert float(reward) == 1.0
 
-    def test_no_duplicate_reward_for_already_unlocked(self, state_factory, params) -> None:
+    def test_no_duplicate_reward_for_already_unlocked(
+        self, state_factory, params
+    ) -> None:
         """No reward when the achievement was already unlocked in prev_state."""
         already = jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_).at[0].set(True)
         prev_state = state_factory(
@@ -95,7 +99,9 @@ class TestAchievementReward:
         """achievement_reward should be vmappable over batched states."""
         from factoriax.achievements import check_achievements
 
-        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
+        items_mined = (
+            jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
+        )
         prev = state_factory(world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32))
         new = check_achievements(
             state_factory(
@@ -142,7 +148,9 @@ class TestMiningReward:
         """Bonus of 5.0 per ore item extracted during the step."""
         world_map = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
         prev_state = state_factory(world_map=world_map)
-        items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
+        items_mined = (
+            jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
+        )
         new_state = state_factory(world_map=world_map, items_mined=items_mined)
         # 1x1 DIRT map: sentinel = map_h + map_w = 2, proximity = 1/(1+2) = 1/3
         # mining_bonus = 5.0 * 1 = 5.0; total = 5.0 + 1/3

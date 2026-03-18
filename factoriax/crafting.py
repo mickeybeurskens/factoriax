@@ -62,7 +62,9 @@ def can_afford_recipe(
         can_afford = can_afford & (jnp.where(is_valid_input, have >= required, True))
         return can_afford, None
 
-    can_afford, _ = lax.scan(check_input, jnp.bool_(True), jnp.arange(MAX_RECIPE_INPUTS))
+    can_afford, _ = lax.scan(
+        check_input, jnp.bool_(True), jnp.arange(MAX_RECIPE_INPUTS)
+    )
     return can_afford
 
 

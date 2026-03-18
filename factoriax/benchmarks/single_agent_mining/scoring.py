@@ -34,7 +34,9 @@ def score_items(items_mined: dict[str, int]) -> float:
         Weighted sum of resources collected.
     """
     return float(
-        sum(RESOURCE_WEIGHTS.get(name, 0) * count for name, count in items_mined.items())
+        sum(
+            RESOURCE_WEIGHTS.get(name, 0) * count for name, count in items_mined.items()
+        )
     )
 
 

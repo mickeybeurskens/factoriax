@@ -24,8 +24,12 @@ from factoriax.state import EnvParams
 
 def _stub_level(name: str = "stub", max_timesteps: int = 5) -> BenchmarkLevel:
     level = LevelBuilder(10, 10).fill_rect(2, 2, 3, 3, BlockType.COAL).build(name)
-    params = EnvParams(map_width=10, map_height=10, num_players=1, max_timesteps=max_timesteps)
-    return BenchmarkLevel(name=name, description="Stub.", level=level, env_params=params)
+    params = EnvParams(
+        map_width=10, map_height=10, num_players=1, max_timesteps=max_timesteps
+    )
+    return BenchmarkLevel(
+        name=name, description="Stub.", level=level, env_params=params
+    )
 
 
 class _StubBenchmark:
@@ -108,7 +112,11 @@ class TestRunnerExecution:
         assert lr.actions.shape == (lr.timesteps_used,)
 
     def test_items_mined_keys(self, noop_result) -> None:
-        assert set(noop_result.level_results[0].items_mined.keys()) == {"coal", "iron", "copper"}
+        assert set(noop_result.level_results[0].items_mined.keys()) == {
+            "coal",
+            "iron",
+            "copper",
+        }
 
     def test_items_mined_non_negative(self, noop_result) -> None:
         assert all(v >= 0 for v in noop_result.level_results[0].items_mined.values())
@@ -122,7 +130,10 @@ class TestRunnerExecution:
         bench = _StubBenchmark(_stub_level(max_timesteps=20))
         noop = runner.run(bench, policies=[lambda obs: jnp.array(0)])
         mine = runner.run(bench, policies=[lambda obs: jnp.array(5)])
-        assert mine.level_results[0].items_mined["coal"] >= noop.level_results[0].items_mined["coal"]
+        assert (
+            mine.level_results[0].items_mined["coal"]
+            >= noop.level_results[0].items_mined["coal"]
+        )
 
     def test_reproducible_with_same_seed(self) -> None:
         bench = _StubBenchmark(_stub_level(max_timesteps=10))
@@ -138,4 +149,6 @@ class TestRunnerExecution:
         key = jax.random.PRNGKey(7)
         r2 = BenchmarkRunner(seed=0).run(bench, policies=[_policy])
         assert r1.level_results[0].items_mined == r2.level_results[0].items_mined
-        np.testing.assert_array_equal(r1.level_results[0].actions, r2.level_results[0].actions)
+        np.testing.assert_array_equal(
+            r1.level_results[0].actions, r2.level_results[0].actions
+        )

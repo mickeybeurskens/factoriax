@@ -1,13 +1,12 @@
-
 """Rollout recording utilities for building Trajectory objects.
- 
+
 :class:`RolloutRecorder` — **zero-change integration.**  Call
 :meth:`record` after each ``collect_fn`` call, passing the trajectory
 struct and env states that are *already returned* by your collection
 function.  Accumulates across iterations and produces a
 :class:`~factoriax.analysis.trajectory.Trajectory` via :meth:`finish`.
 
- 
+
 Typical usage
 -------------------------------------------------------
 >>> from factoriax.analysis.recorder import RolloutRecorder
@@ -37,15 +36,15 @@ from .trajectory import Trajectory
 @dataclass
 class RolloutRecorder:
     """Accumulates rollout data across training iterations.
- 
+
     This recorder is designed to slot into an existing training loop
     with **zero changes** to your ``collect_fn`` or JIT'd code.  It
     works by extracting numpy arrays from the trajectory struct and
     env states that your collection function already returns.
- 
+
     The recorder segments the continuous stream of ``(T, N)`` rollout
     chunks into complete episodes using the ``done`` flags.
- 
+
     Parameters
     ----------
     max_episodes : int, optional
@@ -59,11 +58,11 @@ class RolloutRecorder:
         Which ``EnvState`` fields to record when ``record_states=True``.
         Defaults to ``["player_positions", "inventory_items",
         "inventory_counts"]``.
- 
+
     Examples
     --------
     Minimal integration (actions + rewards only):
- 
+
     >>> recorder = RolloutRecorder(max_episodes=64)
     >>> for it in range(total_iters):
     ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
@@ -71,9 +70,9 @@ class RolloutRecorder:
     ...     if recorder.is_full:
     ...         break
     >>> traj = recorder.finish()
- 
+
     With state recording:
- 
+
     >>> recorder = RolloutRecorder(max_episodes=32, record_states=True)
     >>> for it in range(total_iters):
     ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
@@ -95,9 +94,7 @@ class RolloutRecorder:
     _action_chunks: list[np.ndarray] = field(default_factory=list, repr=False)
     _reward_chunks: list[np.ndarray] = field(default_factory=list, repr=False)
     _done_chunks: list[np.ndarray] = field(default_factory=list, repr=False)
-    _state_chunks: dict[str, list[np.ndarray]] = field(
-        default_factory=dict, repr=False
-    )
+    _state_chunks: dict[str, list[np.ndarray]] = field(default_factory=dict, repr=False)
     _num_complete_episodes: int = field(default=0, repr=False)
 
     def record(
@@ -106,7 +103,7 @@ class RolloutRecorder:
         env_states: Any = None,
     ) -> None:
         """Record one chunk of rollout data.
- 
+
         Parameters
         ----------
         trajectories
@@ -117,7 +114,7 @@ class RolloutRecorder:
             The ``EnvState`` pytree returned by ``collect_fn``.  Only
             needed if ``record_states=True``.  The recorder extracts
             fields listed in ``self.state_fields``.
- 
+
             **Important:** ``env_states`` as returned by ``collect_fn``
             is typically the *final* state after the rollout, not the
             per-step states.  If your ``collect_fn`` returns per-step
@@ -128,9 +125,9 @@ class RolloutRecorder:
             return
 
         # Extract arrays — handles both JAX and numpy transparently
-        actions = np.asarray(trajectories.action)   # (T, N) or (T, N, P)
-        rewards = np.asarray(trajectories.reward)    # (T, N)
-        dones = np.asarray(trajectories.done)        # (T, N)
+        actions = np.asarray(trajectories.action)  # (T, N) or (T, N, P)
+        rewards = np.asarray(trajectories.reward)  # (T, N)
+        dones = np.asarray(trajectories.done)  # (T, N)
 
         self._action_chunks.append(actions)
         self._reward_chunks.append(rewards)
@@ -167,17 +164,17 @@ class RolloutRecorder:
 
     def finish(self, pad_incomplete: bool = True) -> Trajectory:
         """Segment recorded chunks into complete episodes and build a Trajectory.
- 
+
         This method concatenates all recorded chunks along the time axis,
         then splits them into individual episodes using the ``done`` flags.
- 
+
         Parameters
         ----------
         pad_incomplete : bool
             If *True*, include the last (possibly incomplete) episode in
             each environment, zero-padded to match the longest episode.
             If *False*, only include fully completed episodes.
- 
+
         Returns
         -------
         Trajectory
@@ -200,9 +197,9 @@ class RolloutRecorder:
         episodes_rewards: list[np.ndarray] = []
 
         for env_idx in range(N):
-            env_actions = all_actions[:, env_idx]   # (T_total, ...)
-            env_rewards = all_rewards[:, env_idx]    # (T_total,)
-            env_dones = all_dones[:, env_idx]        # (T_total,)
+            env_actions = all_actions[:, env_idx]  # (T_total, ...)
+            env_rewards = all_rewards[:, env_idx]  # (T_total,)
+            env_dones = all_dones[:, env_idx]  # (T_total,)
 
             # Find episode boundaries
             done_indices = np.where(env_dones)[0]
@@ -214,7 +211,9 @@ class RolloutRecorder:
                 episodes_rewards.append(env_rewards[s:e])
 
             # Handle trailing incomplete episode
-            if pad_incomplete and (len(done_indices) == 0 or done_indices[-1] < T_total - 1):
+            if pad_incomplete and (
+                len(done_indices) == 0 or done_indices[-1] < T_total - 1
+            ):
                 last_start = 0 if len(done_indices) == 0 else done_indices[-1] + 1
                 episodes_actions.append(env_actions[last_start:])
                 episodes_rewards.append(env_rewards[last_start:])
@@ -235,7 +234,9 @@ class RolloutRecorder:
         B = len(episodes_actions)
 
         action_shape = episodes_actions[0].shape[1:]  # () or (P,)
-        padded_actions = np.zeros((B, max_len, *action_shape), dtype=episodes_actions[0].dtype)
+        padded_actions = np.zeros(
+            (B, max_len, *action_shape), dtype=episodes_actions[0].dtype
+        )
         padded_rewards = np.zeros((B, max_len), dtype=np.float32)
 
         for i, (a, r) in enumerate(zip(episodes_actions, episodes_rewards)):
@@ -261,4 +262,3 @@ class RolloutRecorder:
         self._done_chunks.clear()
         self._state_chunks.clear()
         self._num_complete_episodes = 0
-

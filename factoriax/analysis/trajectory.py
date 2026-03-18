@@ -8,7 +8,7 @@ Typical usage
 -------------
 >>> import numpy as np
 >>> from factoriax.analysis.trajectory import Trajectory
->>> actions = np.random.randint(0, 12, size=(16, 200, 2))  # 16 eps, 200 steps, 2 players
+>>> actions = np.random.randint(0, 12, size=(16, 200, 2))  # (B, T, P)
 >>> traj = Trajectory(actions=actions)
 
 With full state information:

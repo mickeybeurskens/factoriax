@@ -143,7 +143,7 @@ def action_raster(
     else:
         fig = ax.figure
 
-    im = ax.imshow(
+    ax.imshow(
         actions,
         aspect="auto",
         cmap=cmap,
@@ -281,8 +281,13 @@ def plot_transition_matrix(
             if val > 0.005 or (not normalize and val > 0):
                 color = "white" if val > (mat.max() * 0.6) else "black"
                 ax.text(
-                    j, i, f"{val:{fmt}}", ha="center", va="center",
-                    fontsize=6, color=color,
+                    j,
+                    i,
+                    f"{val:{fmt}}",
+                    ha="center",
+                    va="center",
+                    fontsize=6,
+                    color=color,
                 )
 
     if title:
@@ -334,8 +339,14 @@ def plot_phase_transitions(
     for i, (phase, ax) in enumerate(zip(phases, axes)):
         label = phase_labels[i] if phase_labels else f"Steps {phase[0]}–{phase[1]}"
         plot_transition_matrix(
-            traj, player, num_actions, action_labels,
-            time_range=phase, ax=ax, cmap=cmap, title=label,
+            traj,
+            player,
+            num_actions,
+            action_labels,
+            time_range=phase,
+            ax=ax,
+            cmap=cmap,
+            title=label,
         )
 
     fig.tight_layout()
@@ -696,8 +707,11 @@ def plot_action_distribution(
         fig = ax.figure
 
     ax.stackplot(
-        range(T), *[dist[:, a] for a in range(num_actions)],
-        labels=action_labels, colors=colors, alpha=0.8,
+        range(T),
+        *[dist[:, a] for a in range(num_actions)],
+        labels=action_labels,
+        colors=colors,
+        alpha=0.8,
     )
     ax.set_xlabel("Timestep")
     ax.set_ylabel("Action proportion")

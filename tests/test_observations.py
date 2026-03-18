@@ -35,9 +35,7 @@ _DEFAULT_PARAMS = EnvParams(
 )
 
 _GLOBAL_OBS_SIZE = (
-    _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
-    + 4
-    + 2 * NUM_INVENTORY_SLOTS
+    _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height + 4 + 2 * NUM_INVENTORY_SLOTS
 )
 
 
@@ -123,9 +121,7 @@ class TestGlobalArray:
     def test_values_in_range(self, state_factory) -> None:
         """All values must lie in [0, 1]."""
         state = state_factory(
-            world_map=jnp.array(
-                [[int(BlockType.DIRT)] * 8] * 8, dtype=jnp.int32
-            ),
+            world_map=jnp.array([[int(BlockType.DIRT)] * 8] * 8, dtype=jnp.int32),
             player_position=(2, 2),
         )
         out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
@@ -134,9 +130,7 @@ class TestGlobalArray:
 
     def test_map_segment_correct(self, state_factory) -> None:
         """The first map_h * map_w elements must match the normalized map."""
-        world_map = jnp.array(
-            [[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32
-        )
+        world_map = jnp.array([[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32)
         state = state_factory(world_map=world_map)
         out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
         map_size = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
@@ -390,9 +384,7 @@ class TestRgb:
         assert not np.array_equal(img_dirt, img_water)
 
     @pytest.mark.parametrize("bps", [4, 8, 16])
-    def test_block_pixel_size_scales_output(
-        self, state_factory, bps: int
-    ) -> None:
+    def test_block_pixel_size_scales_output(self, state_factory, bps: int) -> None:
         """Output dimensions must scale linearly with block_pixel_size.
 
         Args:

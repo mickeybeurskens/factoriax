@@ -102,25 +102,27 @@ def make_multi_player_traj(
         rewards, and timesteps.
     """
     rng = np.random.default_rng(seed)
-    actions = rng.integers(
-        0, num_actions, size=(num_eps, num_steps, num_p)
-    ).astype(np.int32)
+    actions = rng.integers(0, num_actions, size=(num_eps, num_steps, num_p)).astype(
+        np.int32
+    )
     positions = rng.integers(0, 32, size=(num_eps, num_steps, num_p, 2)).astype(
         np.int32
     )
-    inventory_items = rng.integers(
-        0, 3, size=(num_eps, num_steps, num_p, 3)
-    ).astype(np.int32)
-    inventory_counts = rng.integers(
-        0, 20, size=(num_eps, num_steps, num_p, 3)
-    ).astype(np.int32)
+    inventory_items = rng.integers(0, 3, size=(num_eps, num_steps, num_p, 3)).astype(
+        np.int32
+    )
+    inventory_counts = rng.integers(0, 20, size=(num_eps, num_steps, num_p, 3)).astype(
+        np.int32
+    )
     achievements = np.zeros((num_eps, num_steps, 2), dtype=bool)
     achievements[:, num_steps // 2 :, 0] = True
     achievements[:, num_steps // 4 :, 1] = True
     rewards = rng.standard_normal(size=(num_eps, num_steps)).astype(np.float32)
-    timesteps = np.broadcast_to(
-        np.arange(num_steps), (num_eps, num_steps)
-    ).copy().astype(np.int32)
+    timesteps = (
+        np.broadcast_to(np.arange(num_steps), (num_eps, num_steps))
+        .copy()
+        .astype(np.int32)
+    )
     return Trajectory(
         actions=actions,
         positions=positions,
@@ -359,8 +361,8 @@ class TestActions:
         base = np.tile(np.arange(num_actions), num_eps // num_actions).reshape(
             num_eps, 1
         )
-        base_actions = np.broadcast_to(base, (num_eps, num_steps)).copy().astype(
-            np.int32
+        base_actions = (
+            np.broadcast_to(base, (num_eps, num_steps)).copy().astype(np.int32)
         )
         if num_players == 1:
             actions = base_actions
@@ -701,7 +703,7 @@ class TestMilestones:
         """first_action_timestep works for a specific player in multi-player traj."""
         num_eps, num_steps, num_p = 4, 20, 2
         actions = np.zeros((num_eps, num_steps, num_p), dtype=np.int32)
-        actions[:, 5, 0] = 2   # player 0 takes action 2 at t=5
+        actions[:, 5, 0] = 2  # player 0 takes action 2 at t=5
         actions[:, 10, 1] = 2  # player 1 takes action 2 at t=10
         traj = Trajectory(actions=actions)
         result_p0 = first_action_timestep(traj, action_id=2, player=0)
@@ -786,9 +788,11 @@ class TestMultiagent:
     def test_role_divergence_identical_players_near_zero(self) -> None:
         """Players with identical action distributions have near-zero JSD."""
         num_eps, num_steps = 8, 40
-        base_actions = np.random.default_rng(0).integers(
-            0, 6, size=(num_eps, num_steps)
-        ).astype(np.int32)
+        base_actions = (
+            np.random.default_rng(0)
+            .integers(0, 6, size=(num_eps, num_steps))
+            .astype(np.int32)
+        )
         actions = np.stack([base_actions, base_actions], axis=-1)
         traj = Trajectory(actions=actions)
         jsd = role_divergence(traj, num_actions=6)
@@ -948,9 +952,7 @@ class TestRolloutRecorder:
             FakeRollout with sequential action values for easy verification.
         """
         actions = (
-            np.arange(num_steps * num_envs, dtype=np.int32).reshape(
-                num_steps, num_envs
-            )
+            np.arange(num_steps * num_envs, dtype=np.int32).reshape(num_steps, num_envs)
             % 10
         )
         rewards = np.zeros((num_steps, num_envs), dtype=np.float32)

@@ -53,7 +53,11 @@ class TestScoreItems:
         assert score_items({"miner": 100, "coal": 1}) == pytest.approx(1.0)
 
     def test_weight_ordering(self) -> None:
-        assert RESOURCE_WEIGHTS["copper"] > RESOURCE_WEIGHTS["iron"] > RESOURCE_WEIGHTS["coal"]
+        assert (
+            RESOURCE_WEIGHTS["copper"]
+            > RESOURCE_WEIGHTS["iron"]
+            > RESOURCE_WEIGHTS["coal"]
+        )
 
 
 class TestAggregateScores:
@@ -90,7 +94,9 @@ class TestBenchmarkProperties:
     def test_score_level_matches_score_items(self) -> None:
         items = {"coal": 5, "iron": 3, "copper": 1}
         bench = SingleAgentMiningBenchmark()
-        assert bench.score_level(MINING_LEVELS[0], items) == pytest.approx(score_items(items))
+        assert bench.score_level(MINING_LEVELS[0], items) == pytest.approx(
+            score_items(items)
+        )
 
     def test_score_is_mean(self) -> None:
         level_results = [
@@ -113,7 +119,12 @@ def _make_fast_level() -> BenchmarkLevel:
     """A 10×10 coal level with 5-step episodes for minimal JAX overhead."""
     level = LevelBuilder(10, 10).fill_rect(2, 2, 3, 3, BlockType.COAL).build("fast")
     params = EnvParams(map_width=10, map_height=10, num_players=1, max_timesteps=5)
-    return BenchmarkLevel(name="fast_level", description="Fast test level.", level=level, env_params=params)
+    return BenchmarkLevel(
+        name="fast_level",
+        description="Fast test level.",
+        level=level,
+        env_params=params,
+    )
 
 
 class _FastBenchmark(SingleAgentMiningBenchmark):
@@ -122,8 +133,12 @@ class _FastBenchmark(SingleAgentMiningBenchmark):
     def levels(self) -> list[BenchmarkLevel]:
         bl = _make_fast_level()
         return [
-            BenchmarkLevel(name=f"fast_{i}", description=bl.description,
-                           level=bl.level, env_params=bl.env_params)
+            BenchmarkLevel(
+                name=f"fast_{i}",
+                description=bl.description,
+                level=bl.level,
+                env_params=bl.env_params,
+            )
             for i in range(5)
         ]
 
@@ -131,7 +146,9 @@ class _FastBenchmark(SingleAgentMiningBenchmark):
 @pytest.fixture(scope="session")
 def fast_result() -> BenchmarkResult:
     """Run the fast benchmark once for the entire session."""
-    return BenchmarkRunner(seed=0).run(_FastBenchmark(), policies=[lambda obs: jnp.array(0)])
+    return BenchmarkRunner(seed=0).run(
+        _FastBenchmark(), policies=[lambda obs: jnp.array(0)]
+    )
 
 
 class TestEndToEnd:
@@ -143,7 +160,9 @@ class TestEndToEnd:
     def test_benchmark_name(self, fast_result: BenchmarkResult) -> None:
         assert fast_result.benchmark_name == "single_agent_mining"
 
-    def test_aggregate_is_mean_of_level_scores(self, fast_result: BenchmarkResult) -> None:
+    def test_aggregate_is_mean_of_level_scores(
+        self, fast_result: BenchmarkResult
+    ) -> None:
         expected = sum(lr.weighted_score for lr in fast_result.level_results) / 5
         assert fast_result.aggregate_score == pytest.approx(expected)
 
@@ -159,7 +178,9 @@ class TestEndToEnd:
         for lr in fast_result.level_results:
             assert lr.timesteps_used <= 5
 
-    def test_actions_length_matches_timesteps(self, fast_result: BenchmarkResult) -> None:
+    def test_actions_length_matches_timesteps(
+        self, fast_result: BenchmarkResult
+    ) -> None:
         for lr in fast_result.level_results:
             assert lr.actions.shape == (lr.timesteps_used,)
 
@@ -170,5 +191,8 @@ def test_mine_policy_outscores_noop() -> None:
     runner = BenchmarkRunner(seed=0)
     noop = runner.run(bench, policies=[lambda obs: jnp.array(0)])
     mine = runner.run(bench, policies=[lambda obs: jnp.array(5)])
-    total = lambda r: sum(sum(lr.items_mined.values()) for lr in r.level_results)
+
+    def total(r):
+        return sum(sum(lr.items_mined.values()) for lr in r.level_results)
+
     assert total(mine) >= total(noop)

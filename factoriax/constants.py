@@ -49,10 +49,10 @@ class SlotRole(IntEnum):
     only write to OUTPUT and read from INPUT.
     """
 
-    NONE = 0      # Unused / padding slot — no automated flow, no player access.
-    INPUT = 1     # Machine consumes from here; player may deposit and withdraw.
-    OUTPUT = 2    # Machine produces here; player may only withdraw.
-    STORAGE = 3   # No automated flow; player may deposit and withdraw freely.
+    NONE = 0  # Unused / padding slot — no automated flow, no player access.
+    INPUT = 1  # Machine consumes from here; player may deposit and withdraw.
+    OUTPUT = 2  # Machine produces here; player may only withdraw.
+    STORAGE = 3  # No automated flow; player may deposit and withdraw freely.
 
 
 NUM_INVENTORY_SLOTS = 10
@@ -61,7 +61,8 @@ MAX_MACHINE_STACK_SIZE = 64
 MAX_MACHINE_INVENTORY_SLOTS = 8
 NUM_ITEM_TYPES = len(ItemType)
 
-# Per-slot roles for each MachineType, shape (NUM_MACHINE_TYPES, MAX_MACHINE_INVENTORY_SLOTS).
+# Per-slot roles for each MachineType,
+# shape (NUM_MACHINE_TYPES, MAX_MACHINE_INVENTORY_SLOTS).
 # Indexed as MACHINE_SLOT_ROLES[machine_type, slot_index].
 MACHINE_SLOT_ROLES: np.ndarray = np.array(
     [

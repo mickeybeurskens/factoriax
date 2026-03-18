@@ -18,9 +18,7 @@ from factoriax.play.ui import (
 from factoriax.renderer import render_pixels
 
 
-def composite_rgba_over_rgb(
-    background: np.ndarray, overlay: np.ndarray
-) -> np.ndarray:
+def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> np.ndarray:
     """Composite an RGBA overlay onto an RGB background.
 
     Args:
@@ -37,9 +35,7 @@ def composite_rgba_over_rgb(
     return blended.astype(np.uint8)
 
 
-def hit_test_regions(
-    regions: list[ClickRegion], x: int, y: int
-) -> ClickRegion | None:
+def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion | None:
     """Find the first click region containing the given point.
 
     Args:
@@ -51,10 +47,7 @@ def hit_test_regions(
         The first matching ClickRegion, or None if no hit.
     """
     for region in regions:
-        if (
-            region.x <= x < region.x + region.w
-            and region.y <= y < region.y + region.h
-        ):
+        if region.x <= x < region.x + region.w and region.y <= y < region.y + region.h:
             return region
     return None
 
@@ -199,7 +192,11 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and not welcome_open:
+            elif (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+                and not welcome_open
+            ):
                 base_x = event.pos[0] // scale
                 base_y = event.pos[1] // scale
                 hit = hit_test_regions(click_regions, base_x, base_y)
@@ -277,7 +274,8 @@ def main() -> None:
                         if (
                             0 <= tx < map_w
                             and 0 <= ty < map_h
-                            and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
+                            and int(state.machine_types[ty, tx])
+                            != int(MachineType.NONE)
                         ):
                             machine_tx, machine_ty = tx, ty
                             machine_open = True
@@ -287,9 +285,7 @@ def main() -> None:
                 elif machine_open:
                     if event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                         delta = -1 if event.key == pygame.K_LEFT else 1
-                        machine_type = int(
-                            state.machine_types[machine_ty, machine_tx]
-                        )
+                        machine_type = int(state.machine_types[machine_ty, machine_tx])
                         num_slots = int(MACHINE_NUM_SLOTS[machine_type])
                         if num_slots > 0:
                             current = int(
