@@ -42,10 +42,15 @@ class ClickRegion:
 
 from factoriax.constants import (
     ITEM_COLORS,
+    MACHINE_NUM_SLOTS,
+    MACHINE_SLOT_ROLES,
+    MACHINE_TYPE_NAMES,
     NUM_INVENTORY_SLOTS,
     NUM_RECIPES,
     RECIPE_NAMES,
     RECIPES,
+    SLOT_ROLE_COLORS,
+    SLOT_ROLE_LABELS,
     ItemType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
@@ -455,6 +460,354 @@ def render_pause_menu(
     _render_control_hints(
         overlay, "[UP/DOWN] Select | [ENTER/E] Confirm | [ESC] Back",
         menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX,
+    )
+
+    return overlay, click_regions
+
+
+def render_welcome_screen(
+    screen_width: int,
+    screen_height: int,
+) -> np.ndarray:
+    """Render the one-time welcome screen shown at game start.
+
+    Displays a brief narrative hook, a compact control reference, and a
+    prompt to dismiss.  Returned as a fully-opaque RGBA overlay so it
+    completely covers the world behind it.
+
+    Args:
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+
+    Returns:
+        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    overlay[:, :, :3] = 10
+    overlay[:, :, 3] = 255
+
+    menu_w = int(screen_width * 0.68)
+    menu_x = (screen_width - menu_w) // 2
+
+    title_font = get_pixel_font(28)
+    body_font = get_pixel_font(_FONT_BODY)
+    hint_font = get_pixel_font(_FONT_HINT)
+    line_h = body_font.get_height()
+    hint_h = hint_font.get_height()
+
+    story = "You crashed on an unknown planet."
+    goal  = "Mine ore, build machines, launch a spaceship."
+
+    controls = [
+        ("WASD",       "Move"),
+        ("SPACE",      "Mine ore"),
+        ("E",          "Place machine"),
+        ("I",          "Inventory & crafting"),
+        ("F",          "Inspect machine"),
+    ]
+
+    key_col_w = 64
+    control_row_h = hint_h + 6
+    controls_h = len(controls) * control_row_h
+
+    inner_h = (
+        48              # title
+        + _SEP_H + 8    # separator
+        + line_h + 6    # story line
+        + line_h + 16   # goal line
+        + _SEP_H + 8    # separator
+        + controls_h    # control rows
+        + 16            # gap before hint
+        + _HINT_HEIGHT
+    )
+    menu_h = inner_h + 2 * (_BORDER_PX + 16)
+    menu_y = (screen_height - menu_h) // 2
+
+    draw_panel(overlay, menu_x, menu_y, menu_w, menu_h, bg=(22, 22, 22, 255))
+
+    cy = menu_y + _BORDER_PX + 16
+
+    # Title
+    title_arr = _render_text_rgba("CRASH LANDED", title_font, (215, 195, 65))
+    _blit_rgba(overlay, title_arr, cy, menu_x + (menu_w - title_arr.shape[1]) // 2)
+    cy += title_arr.shape[0] + 8
+
+    # Separator
+    overlay[cy : cy + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
+    cy += _SEP_H + 8
+
+    # Story lines
+    for text in (story, goal):
+        arr = _render_text_rgba(text, body_font, (200, 195, 160))
+        _blit_rgba(overlay, arr, cy, menu_x + (menu_w - arr.shape[1]) // 2)
+        cy += line_h + 6
+    cy += 10
+
+    # Separator
+    overlay[cy : cy + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
+    cy += _SEP_H + 8
+
+    # Controls
+    controls_x = menu_x + (menu_w - key_col_w - 16 - 120) // 2
+    for key, desc in controls:
+        key_arr = _render_text_rgba(key, hint_font, (215, 195, 65))
+        desc_arr = _render_text_rgba(desc, hint_font, (160, 155, 130))
+        row_y = cy + (control_row_h - hint_h) // 2
+        _blit_rgba(overlay, key_arr, row_y, controls_x + key_col_w - key_arr.shape[1])
+        _blit_rgba(overlay, desc_arr, row_y, controls_x + key_col_w + 16)
+        cy += control_row_h
+
+    # Dismiss hint
+    cy += 16
+    hint_arr = _render_text_rgba(
+        "[SPACE / ENTER]  Start", hint_font, _HINT_COLOR
+    )
+    _blit_rgba(overlay, hint_arr, cy, menu_x + (menu_w - hint_arr.shape[1]) // 2)
+
+    return overlay
+
+
+def render_machine_menu(
+    state: EnvState,
+    screen_width: int,
+    screen_height: int,
+    tx: int,
+    ty: int,
+) -> tuple[np.ndarray, list[ClickRegion]]:
+    """Render the machine inventory inspection menu as an RGBA overlay.
+
+    Displays all active slots for the machine at tile ``(tx, ty)`` in a grid
+    of up to four columns.  Each slot shows a colour-coded role badge (IN /
+    OUT / STORE), a filled colour swatch when the slot is occupied, a stack
+    count, and the item name.  Empty slots show a dim placeholder.  The
+    currently focused slot (``state.machine_selected_slot[ty, tx]``) is
+    highlighted with a white border.
+
+    A compact player-inventory strip below lets the player see what they are
+    carrying without opening a second menu.
+
+    Args:
+        state: Current environment state.
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+        tx: X tile coordinate of the machine to inspect.
+        ty: Y tile coordinate of the machine to inspect.
+
+    Returns:
+        Tuple of (RGBA overlay array of shape ``(screen_height, screen_width,
+        4)``, list of click regions).  Machine slot regions carry
+        ``action="select_machine_slot"`` with ``param=slot_index``.  Player
+        inventory regions carry ``action="select_slot"`` with
+        ``param=slot_index``.
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    click_regions: list[ClickRegion] = []
+
+    machine_type = int(state.machine_types[ty, tx])
+    num_slots = int(MACHINE_NUM_SLOTS[machine_type])
+    slot_roles = MACHINE_SLOT_ROLES[machine_type]
+    inv_items = np.array(state.machine_inventory_items[ty, tx])
+    inv_counts = np.array(state.machine_inventory_counts[ty, tx])
+    focused_slot = int(state.machine_selected_slot[ty, tx])
+
+    selected_player = int(state.selected_player)
+    player_items = np.array(state.inventory_items[selected_player])
+    player_counts = np.array(state.inventory_counts[selected_player])
+
+    header_font = get_pixel_font(_FONT_HEADER)
+    body_font = get_pixel_font(_FONT_BODY)
+    hint_font = get_pixel_font(_FONT_HINT)
+    line_h = body_font.get_height()
+
+    # --- Layout constants ---
+    padding = 20
+    slot_cols = min(4, num_slots) if num_slots > 0 else 1
+    slot_rows = (num_slots + slot_cols - 1) // slot_cols if num_slots > 0 else 0
+    cell_gap = 8
+    badge_h = 20
+    icon_size = 40
+    player_icon = 26
+
+    # separator + gap + strip label + gap + icon row
+    player_strip_h = _SEP_H + 8 + line_h + 6 + player_icon
+
+    # _BORDER_PX + _HEADER_H + _SEP_H + 8 — matches _draw_section_header offset
+    header_offset = _BORDER_PX + _HEADER_H + _SEP_H + 8
+
+    # Fixed overhead: everything except the slot grid itself.
+    overhead_h = (
+        header_offset
+        + padding
+        + (padding if slot_rows > 0 else 0)
+        + player_strip_h
+        + padding // 2
+        + _HINT_HEIGHT
+        + _BORDER_PX
+    )
+
+    # Ideal cell height; shrink to fit if the screen is small.
+    # badge + gap + icon + gap + count text + gap + name text + bottom margin
+    cell_h = badge_h + 4 + icon_size + 4 + line_h + 2 + line_h + 10
+    if slot_rows > 0:
+        max_slot_h = max(0, int(screen_height * 0.92) - overhead_h)
+        ideal_slot_h = slot_rows * cell_h + max(0, slot_rows - 1) * cell_gap
+        if ideal_slot_h > max_slot_h:
+            cell_h = max(
+                badge_h + 20,
+                (max_slot_h - max(0, slot_rows - 1) * cell_gap) // slot_rows,
+            )
+            icon_size = max(16, cell_h - badge_h - 4 - line_h * 2 - 14)
+
+    slot_area_h = (
+        slot_rows * cell_h + max(0, slot_rows - 1) * cell_gap
+        if slot_rows > 0
+        else 0
+    )
+
+    menu_w = int(screen_width * 0.72)
+    menu_h = overhead_h + slot_area_h
+    menu_x = (screen_width - menu_w) // 2
+    menu_y = (screen_height - menu_h) // 2
+
+    draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
+
+    machine_name = MACHINE_TYPE_NAMES.get(machine_type, "Machine")
+    content_y = _draw_section_header(
+        overlay, menu_x, menu_y, menu_w, machine_name, header_font, False
+    )
+
+    # --- Slot grid ---
+    grid_w = menu_w - 2 * padding
+    cell_w = (
+        (grid_w - (slot_cols - 1) * cell_gap) // slot_cols
+        if slot_cols > 0
+        else grid_w
+    )
+    grid_x = menu_x + padding
+
+    for slot_idx in range(num_slots):
+        row = slot_idx // slot_cols
+        col = slot_idx % slot_cols
+        cell_x = grid_x + col * (cell_w + cell_gap)
+        cell_y = content_y + padding // 2 + row * (cell_h + cell_gap)
+
+        role = int(slot_roles[slot_idx])
+        role_label = SLOT_ROLE_LABELS.get(role, "")
+        role_color = SLOT_ROLE_COLORS.get(role, (60, 60, 60))
+        is_focused = slot_idx == focused_slot
+
+        # Cell background + selection border
+        cell_bg: tuple[int, int, int, int] = (
+            (90, 90, 90, 255) if is_focused else (55, 55, 55, 255)
+        )
+        overlay[cell_y : cell_y + cell_h, cell_x : cell_x + cell_w] = cell_bg
+        if is_focused:
+            sel = (255, 255, 255, 255)
+            overlay[cell_y, cell_x : cell_x + cell_w] = sel
+            overlay[cell_y + cell_h - 1, cell_x : cell_x + cell_w] = sel
+            overlay[cell_y : cell_y + cell_h, cell_x] = sel
+            overlay[cell_y : cell_y + cell_h, cell_x + cell_w - 1] = sel
+
+        click_regions.append(ClickRegion(
+            x=cell_x, y=cell_y, w=cell_w, h=cell_h,
+            action="select_machine_slot", param=slot_idx,
+        ))
+
+        # Role badge strip across the top of the cell
+        overlay[cell_y : cell_y + badge_h, cell_x : cell_x + cell_w] = (
+            *role_color, 220
+        )
+        if role_label:
+            badge_arr = _render_text_rgba(role_label, hint_font, (230, 230, 230))
+            badge_x = cell_x + (cell_w - badge_arr.shape[1]) // 2
+            badge_y = cell_y + (badge_h - badge_arr.shape[0]) // 2
+            _blit_rgba(overlay, badge_arr, badge_y, badge_x)
+
+        # Item swatch, count, and name
+        item_type = int(inv_items[slot_idx])
+        count = int(inv_counts[slot_idx])
+        icon_x = cell_x + (cell_w - icon_size) // 2
+        icon_y = cell_y + badge_h + 4
+
+        if item_type != 0 and count > 0:
+            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
+            pad = 6
+            overlay[
+                icon_y + pad : icon_y + icon_size - pad,
+                icon_x + pad : icon_x + icon_size - pad,
+            ] = (*rgb, 255)
+
+            count_arr = _render_text_rgba(f"x{count}", body_font, rgb)
+            count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
+            count_y = icon_y + icon_size + 4
+            _blit_rgba(overlay, count_arr, count_y, count_x)
+
+            name = _ITEM_NAMES.get(item_type, "")
+            if name:
+                name_color: tuple[int, int, int] = (
+                    (235, 228, 185) if is_focused else (160, 155, 130)
+                )
+                name_arr = _render_text_rgba(name, body_font, name_color)
+                name_x = cell_x + (cell_w - name_arr.shape[1]) // 2
+                _blit_rgba(overlay, name_arr, count_y + line_h + 2, name_x)
+        else:
+            pad = 6
+            overlay[
+                icon_y + pad : icon_y + icon_size - pad,
+                icon_x + pad : icon_x + icon_size - pad,
+            ] = (45, 45, 45, 255)
+            empty_arr = _render_text_rgba("empty", body_font, (70, 70, 70))
+            empty_x = cell_x + (cell_w - empty_arr.shape[1]) // 2
+            _blit_rgba(overlay, empty_arr, icon_y + icon_size + 4, empty_x)
+
+    # --- Player inventory strip ---
+    slot_area_bottom = content_y + padding // 2 + slot_area_h
+    sep_y = slot_area_bottom + (padding if slot_area_h > 0 else 0)
+    overlay[
+        sep_y : sep_y + _SEP_H,
+        menu_x + _BORDER_PX + 4 : menu_x + menu_w - _BORDER_PX - 4,
+    ] = _BORDER
+
+    label_y = sep_y + _SEP_H + 8
+    label_arr = _render_text_rgba("Player Inventory", body_font, (148, 140, 98))
+    _blit_rgba(overlay, label_arr, label_y, menu_x + padding)
+
+    strip_y = label_y + line_h + 6
+    strip_x = menu_x + padding
+    strip_cell_w = (menu_w - 2 * padding) // NUM_INVENTORY_SLOTS
+
+    for slot_idx in range(NUM_INVENTORY_SLOTS):
+        icon_x = strip_x + slot_idx * strip_cell_w
+        icon_w = strip_cell_w - 4
+        overlay[strip_y : strip_y + player_icon, icon_x : icon_x + icon_w] = (
+            55, 55, 55, 255
+        )
+        click_regions.append(ClickRegion(
+            x=icon_x, y=strip_y, w=icon_w, h=player_icon,
+            action="select_slot", param=slot_idx,
+        ))
+
+        p_item = int(player_items[slot_idx])
+        p_count = int(player_counts[slot_idx])
+        if p_item != 0 and p_count > 0:
+            rgb = ITEM_COLORS.get(p_item, (128, 128, 128))
+            pad = 3
+            overlay[
+                strip_y + pad : strip_y + player_icon - pad,
+                icon_x + pad : icon_x + icon_w - pad,
+            ] = (*rgb, 255)
+            cnt_arr = _render_text_rgba(str(p_count), hint_font, (220, 220, 220))
+            cnt_y = strip_y + player_icon - hint_font.get_height()
+            _blit_rgba(overlay, cnt_arr, cnt_y, icon_x)
+
+    # --- Hint bar ---
+    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    _render_control_hints(
+        overlay,
+        "[◄/►] Select slot  [F/ESC] Close",
+        menu_x + _BORDER_PX,
+        hint_y,
+        menu_w - 2 * _BORDER_PX,
     )
 
     return overlay, click_regions

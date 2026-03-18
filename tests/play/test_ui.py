@@ -8,8 +8,6 @@ intentionally absent.
 
 import jax.numpy as jnp
 import numpy as np
-import pygame
-
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import ItemType
 from factoriax.play.ui import (
@@ -17,17 +15,9 @@ from factoriax.play.ui import (
     render_achievement_menu,
     render_inventory_menu,
     render_pause_menu,
+    render_welcome_screen,
 )
 
-
-def setup_module(module: object) -> None:
-    """Initialise the pygame font subsystem (no display required)."""
-    pygame.font.init()
-
-
-def teardown_module(module: object) -> None:
-    """Shut down the font subsystem after all tests in this module."""
-    pygame.font.quit()
 
 
 _SW = 128
@@ -113,6 +103,35 @@ class TestRenderInventoryMenu:
         )
         result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
         assert result.shape == (_SH, _SW, 4)
+
+
+class TestRenderWelcomeScreen:
+    """Output-contract tests for render_welcome_screen."""
+
+    _W = 480
+    _H = 480
+
+    def test_returns_uint8_rgba(self) -> None:
+        """Must return a uint8 RGBA array matching the requested dimensions."""
+        result = render_welcome_screen(self._W, self._H)
+        assert result.dtype == np.uint8
+        assert result.shape == (self._H, self._W, 4)
+
+    def test_fully_opaque(self) -> None:
+        """Welcome screen must be fully opaque (alpha=255 everywhere)."""
+        result = render_welcome_screen(self._W, self._H)
+        assert np.all(result[:, :, 3] == 255)
+
+    def test_not_all_black(self) -> None:
+        """At least some pixels must be non-black (panel and text are visible)."""
+        result = render_welcome_screen(self._W, self._H)
+        assert np.any(result[:, :, :3] > 20)
+
+    def test_various_sizes(self) -> None:
+        """Should render cleanly at different screen sizes without crashing."""
+        for w, h in [(320, 320), (640, 480), (1024, 768)]:
+            result = render_welcome_screen(w, h)
+            assert result.shape == (h, w, 4)
 
 
 class TestRenderPauseMenu:

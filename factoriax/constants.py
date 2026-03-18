@@ -94,6 +94,30 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.MINER: (0, 200, 0),
 }
 
+# Human-readable display names for each MachineType, used by the UI.
+MACHINE_TYPE_NAMES: dict[int, str] = {
+    int(MachineType.NONE): "None",
+    int(MachineType.MINER): "Miner",
+    int(MachineType.CHEST): "Chest",
+    int(MachineType.ASSEMBLER): "Assembler",
+}
+
+# Short badge labels for each SlotRole, rendered inside the slot cell header.
+SLOT_ROLE_LABELS: dict[int, str] = {
+    int(SlotRole.NONE): "",
+    int(SlotRole.INPUT): "IN",
+    int(SlotRole.OUTPUT): "OUT",
+    int(SlotRole.STORAGE): "STORE",
+}
+
+# Badge background colours per SlotRole: amber=INPUT, teal=OUTPUT, steel=STORAGE.
+SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {
+    int(SlotRole.NONE): (40, 40, 40),
+    int(SlotRole.INPUT): (190, 120, 40),
+    int(SlotRole.OUTPUT): (40, 170, 140),
+    int(SlotRole.STORAGE): (80, 115, 175),
+}
+
 RECIPES = [
     {
         "output": ItemType.MINER,
