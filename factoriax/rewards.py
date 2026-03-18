@@ -1,7 +1,7 @@
 """Reward functions for the FactoriaX environment.
 
 Reward functions share a common signature ``(prev_state, new_state, params) ->
-jax.Array`` so they are interchangeable and composable.  Both functions are
+jax.Array`` so they are interchangeable and composable.  Functions are
 pure JAX and fully JIT-compatible; bind static arguments (e.g. the radius
 used by :func:`mining_reward`) with :func:`functools.partial` before passing
 to :func:`jax.jit`.
