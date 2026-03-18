@@ -12,6 +12,7 @@ without any knowledge of JAX internals, JIT compilation, or PRNG splits.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -28,6 +29,7 @@ from factoriax.constants import ItemType
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import global_array
+from factoriax.state import EnvParams, EnvState
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,7 @@ class BenchmarkRunner:
         self,
         benchmark: Benchmark,
         policies: list[Policy],
+        obs_fn: Callable[[EnvState, EnvParams, int], jax.Array] | None = None,
     ) -> BenchmarkResult:
         """Run policies through all benchmark levels and return aggregated results.
 
@@ -74,6 +77,11 @@ class BenchmarkRunner:
             policies: One policy per player, indexed by player index. Each
                 policy must accept a JAX float32 observation array and return
                 a JAX integer action scalar.
+            obs_fn: Observation extraction function with signature
+                ``(state, env_params, player_idx) -> obs_array``. Defaults to
+                ``global_array``. Pass a custom function to match the
+                observation space used during training (e.g. ``local_array``
+                with a fixed radius for policies trained with local obs).
 
         Returns:
             ``BenchmarkResult`` containing per-level results and the
@@ -83,6 +91,7 @@ class BenchmarkRunner:
             ValueError: If ``len(policies)`` does not equal
                 ``benchmark.num_players``.
         """
+        _obs_fn = obs_fn if obs_fn is not None else global_array
         if len(policies) != benchmark.num_players:
             noun = "policy" if benchmark.num_players == 1 else "policies"
             raise ValueError(
@@ -95,7 +104,7 @@ class BenchmarkRunner:
 
         for bench_level in benchmark.levels():
             rng, subkey = jax.random.split(rng)
-            result = self._run_level(benchmark, bench_level, policies, subkey)
+            result = self._run_level(benchmark, bench_level, policies, subkey, _obs_fn)
             level_results.append(result)
             logger.info(
                 "Level '%s': score=%.1f  mined=%s  steps=%d",
@@ -123,6 +132,7 @@ class BenchmarkRunner:
         bench_level: BenchmarkLevel,
         policies: list[Policy],
         rng: jax.Array,
+        obs_fn: Callable[[EnvState, EnvParams, int], jax.Array],
     ) -> LevelResult:
         """Execute one level and return the result.
 
@@ -135,6 +145,7 @@ class BenchmarkRunner:
             bench_level: Level to run.
             policies: Policies indexed by player index.
             rng: PRNG key for this level's episode steps.
+            obs_fn: Observation extraction function.
 
         Returns:
             ``LevelResult`` for this level.
@@ -152,7 +163,7 @@ class BenchmarkRunner:
         for _ in range(params.max_timesteps):
             for p in range(num_players):
                 state_p = state.replace(selected_player=p)
-                obs = global_array(state_p, params, p)
+                obs = obs_fn(state_p, params, p)
                 action = policies[p](obs)
 
                 rng, subkey = jax.random.split(rng)

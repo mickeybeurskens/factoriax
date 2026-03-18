@@ -4,8 +4,8 @@ Five levels of increasing difficulty, each a 200-tick mining challenge.
 Difficulty scales along three axes: map size (exploration cost), resource
 density, and the spatial relationship between spawn and high-value deposits.
 
-All levels use one player and cap at 200 timesteps. Resources default to
-``BLOCK_MAX_RESOURCES`` (100) per ore tile unless stated otherwise.
+All levels use one player and cap at 200 timesteps. Every ore tile holds
+exactly 1 resource, so each mine action yields one item.
 
 Spawn placement is handled by ``build_state`` — players always appear at
 the horizontal centre of the map, vertically centred. The exact spawn tile
@@ -66,7 +66,7 @@ _LEVEL_1 = BenchmarkLevel(
     ),
     level=(
         LevelBuilder(10, 10)
-        .fill_rect(2, 2, 4, 4, BlockType.COAL)
+        .fill_rect(2, 2, 4, 4, BlockType.COAL, resources=1)
         .build("mining_l1_adjacent_coal")
     ),
     env_params=_params(10, 10),
@@ -88,8 +88,8 @@ _LEVEL_2 = BenchmarkLevel(
     ),
     level=(
         LevelBuilder(12, 12)
-        .fill_rect(3, 3, 3, 3, BlockType.COAL)
-        .fill_rect(7, 3, 3, 3, BlockType.IRON)
+        .fill_rect(3, 3, 3, 3, BlockType.COAL, resources=1)
+        .fill_rect(7, 3, 3, 3, BlockType.IRON, resources=1)
         .build("mining_l2_coal_and_iron")
     ),
     env_params=_params(12, 12),
@@ -113,9 +113,9 @@ _LEVEL_3 = BenchmarkLevel(
     ),
     level=(
         LevelBuilder(15, 15)
-        .fill_rect(0, 0, 4, 4, BlockType.COAL)
-        .fill_rect(11, 0, 4, 4, BlockType.IRON)
-        .fill_rect(5, 11, 4, 4, BlockType.COPPER)
+        .fill_rect(0, 0, 4, 4, BlockType.COAL, resources=1)
+        .fill_rect(11, 0, 4, 4, BlockType.IRON, resources=1)
+        .fill_rect(5, 11, 4, 4, BlockType.COPPER, resources=1)
         .build("mining_l3_three_patches")
     ),
     env_params=_params(15, 15),
@@ -139,8 +139,8 @@ _LEVEL_4 = BenchmarkLevel(
     ),
     level=(
         LevelBuilder(18, 18)
-        .fill_rect(6, 6, 4, 4, BlockType.IRON)
-        .fill_rect(14, 1, 3, 3, BlockType.COPPER)
+        .fill_rect(6, 6, 4, 4, BlockType.IRON, resources=1)
+        .fill_rect(14, 1, 3, 3, BlockType.COPPER, resources=1)
         .build("mining_l4_iron_near_copper_far")
     ),
     env_params=_params(18, 18),
@@ -163,8 +163,8 @@ _LEVEL_5 = BenchmarkLevel(
     ),
     level=(
         LevelBuilder(22, 22)
-        .fill_rect(1, 17, 4, 4, BlockType.IRON)
-        .fill_rect(17, 1, 4, 4, BlockType.COPPER)
+        .fill_rect(1, 17, 4, 4, BlockType.IRON, resources=1)
+        .fill_rect(17, 1, 4, 4, BlockType.COPPER, resources=1)
         .build("mining_l5_two_corners")
     ),
     env_params=_params(22, 22),

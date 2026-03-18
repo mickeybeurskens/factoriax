@@ -15,6 +15,7 @@ All functions degrade gracefully when the result has zero items mined.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ import matplotlib.pyplot as plt
 from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, Policy
 from factoriax.benchmarks.single_agent_mining.scoring import RESOURCE_WEIGHTS
 from factoriax.constants import Action
+from factoriax.state import EnvParams, EnvState
 
 # Consistent colours for each resource type across all plots.
 _RESOURCE_COLORS: dict[str, str] = {
@@ -158,6 +160,7 @@ def render_level_video(
     bench_level: BenchmarkLevel,
     policy: Policy,
     seed: int = 0,
+    obs_fn: Callable[[EnvState, EnvParams, int], jax.Array] | None = None,
 ) -> list[np.ndarray]:
     """Run a policy through one level and return rendered RGB frames.
 
@@ -171,6 +174,11 @@ def render_level_video(
             and returns a JAX integer action scalar.
         seed: Random seed for ``step_env``. Does not affect the policy's own
             PRNG if it manages its own key.
+        obs_fn: Observation extraction function with signature
+            ``(state, env_params, player_idx) -> obs_array``. Defaults to
+            ``global_array``. Pass a custom function to match the observation
+            space used during training (e.g. ``local_array`` with a fixed
+            radius for policies trained with local observations).
 
     Returns:
         List of ``(H, W, 3)`` uint8 numpy arrays, one per step plus one
@@ -181,6 +189,7 @@ def render_level_video(
     from factoriax.observations import global_array
     from factoriax.renderer import render_pixels
 
+    _obs_fn = obs_fn if obs_fn is not None else global_array
     env = FactoriaXEnv()
     jit_step = jax.jit(env.step_env)
     rng = jax.random.PRNGKey(seed)
@@ -190,7 +199,7 @@ def render_level_video(
     frames: list[np.ndarray] = []
     for _ in range(params.max_timesteps):
         frames.append(render_pixels(state))
-        obs = global_array(state, params, 0)
+        obs = _obs_fn(state, params, 0)
         action = policy(obs)
         rng, subkey = jax.random.split(rng)
         _, state, _, done, _ = jit_step(subkey, state, action, params)
