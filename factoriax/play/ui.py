@@ -28,6 +28,7 @@ from factoriax.constants import (
     ItemType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
+from factoriax.renderer import render_item_icon
 from factoriax.state import EnvState
 
 
@@ -873,13 +874,16 @@ def render_machine_menu(
         icon_y = cell_y + badge_h + 4
 
         if item_type != 0 and count > 0:
-            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
             pad = 6
-            overlay[
-                icon_y + pad : icon_y + icon_size - pad,
-                icon_x + pad : icon_x + icon_size - pad,
-            ] = (*rgb, 255)
+            icon_s = icon_size - 2 * pad
+            if icon_s > 0:
+                icon = render_item_icon(item_type, icon_s)
+                overlay[
+                    icon_y + pad : icon_y + pad + icon_s,
+                    icon_x + pad : icon_x + pad + icon_s,
+                ] = icon
 
+            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
             count_arr = _render_text_rgba(f"x{count}", body_font, rgb)
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
             count_y = icon_y + icon_size + 4
@@ -954,12 +958,14 @@ def render_machine_menu(
         p_item = int(player_items[slot_idx])
         p_count = int(player_counts[slot_idx])
         if p_item != 0 and p_count > 0:
-            rgb = ITEM_COLORS.get(p_item, (128, 128, 128))
             pad = 3
-            overlay[
-                strip_y + pad : strip_y + player_icon - pad,
-                icon_x + pad : icon_x + icon_w - pad,
-            ] = (*rgb, 255)
+            icon_h = player_icon - 2 * pad
+            icon_w_inner = icon_w - 2 * pad
+            icon_s = min(icon_h, icon_w_inner)
+            icon = render_item_icon(p_item, icon_s)
+            iy = strip_y + pad + (icon_h - icon_s) // 2
+            ix = icon_x + pad + (icon_w_inner - icon_s) // 2
+            overlay[iy : iy + icon_s, ix : ix + icon_s] = icon
             cnt_arr = _render_text_rgba(str(p_count), hint_font, (220, 220, 220))
             cnt_y = strip_y + player_icon - hint_font.get_height()
             _blit_rgba(overlay, cnt_arr, cnt_y, icon_x)
@@ -1121,13 +1127,16 @@ def render_inventory_menu(
         count = int(inventory_counts[slot_idx])
 
         if item_type != 0 and count > 0:
-            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
             pad = 8
-            overlay[
-                cell_y + pad : cell_y + icon_size - pad,
-                icon_x + pad : icon_x + icon_size - pad,
-            ] = (*rgb, 255)
+            icon_s = icon_size - 2 * pad
+            if icon_s > 0:
+                icon = render_item_icon(item_type, icon_s)
+                overlay[
+                    cell_y + pad : cell_y + pad + icon_s,
+                    icon_x + pad : icon_x + pad + icon_s,
+                ] = icon
 
+            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
             count_arr = _render_text_rgba(f"x{count}", body_font, rgb)
             count_y = cell_y + icon_size + 4
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
@@ -1196,11 +1205,13 @@ def render_inventory_menu(
             recipe_content[ry : ry + recipe_h - 4, vp_w_craft - 1] = white
 
         out_item = recipe["output"]
-        out_rgb = ITEM_COLORS.get(out_item, (128, 128, 128))
-        recipe_content[
-            ry + craft_pad : ry + craft_pad + out_icon,
-            craft_pad : craft_pad + out_icon,
-        ] = (*out_rgb, 255)
+        out_s = min(out_icon, vp_w_craft - craft_pad)
+        if out_s > 0:
+            out_icon_arr = render_item_icon(out_item, out_s)
+            recipe_content[
+                ry + craft_pad : ry + craft_pad + out_s,
+                craft_pad : craft_pad + out_s,
+            ] = out_icon_arr
 
         name_color = (230, 225, 180) if can_afford else (150, 145, 120)
         name_arr = _render_text_rgba(RECIPE_NAMES[recipe_idx], body_font, name_color)
@@ -1212,11 +1223,12 @@ def render_inventory_menu(
 
         for item_type, required in recipe["inputs"]:
             have = int(count_item_in_inventory(state, selected_player, item_type))
-            inp_rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            recipe_content[inp_y : inp_y + inp_icon, inp_x : inp_x + inp_icon] = (
-                *inp_rgb,
-                255,
-            )
+            inp_s = min(inp_icon, vp_w_craft - inp_x)
+            if inp_s > 0:
+                inp_icon_arr = render_item_icon(item_type, inp_s)
+                recipe_content[
+                    inp_y : inp_y + inp_s, inp_x : inp_x + inp_s
+                ] = inp_icon_arr
             count_color: tuple[int, int, int] = (
                 _AFFORD_COLOR if have >= required else _CANNOT_AFFORD_COLOR
             )

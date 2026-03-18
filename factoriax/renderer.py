@@ -271,9 +271,112 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     return bar
 
 
-MACHINE_TO_ITEM = {
-    MachineType.MINER: ItemType.MINER,
+MACHINE_TO_ITEM: dict[int, int] = {
+    int(MachineType.MINER): int(ItemType.MINER),
+    int(MachineType.CHEST): int(ItemType.CHEST),
+    int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
+    int(MachineType.ARM): int(ItemType.ARM),
 }
+
+# Dark arrow colour drawn on top of the gold conveyor belt square.
+_BELT_ARROW_COLOR: tuple[int, int, int, int] = (60, 50, 10, 255)
+
+
+def _draw_chevron(
+    image: np.ndarray,
+    cy: int,
+    cx: int,
+    size: int,
+    direction: int,
+) -> None:
+    """Draw a single filled chevron arrow into *image*.
+
+    The chevron points in *direction* (Action enum value) and is centred
+    on pixel ``(cy, cx)``.  *size* controls the half-width of the arrow.
+
+    Args:
+        image: RGBA image array (modified in place).
+        cy: Centre row of the chevron.
+        cx: Centre column of the chevron.
+        size: Half-extent of the arrow in pixels.
+        direction: Action.LEFT / RIGHT / UP / DOWN.
+    """
+    h, w = image.shape[:2]
+    for d in range(-size, size + 1):
+        depth = size - abs(d)
+        for t in range(depth + 1):
+            if direction == Action.RIGHT:
+                py, px = cy + d, cx + t
+            elif direction == Action.LEFT:
+                py, px = cy + d, cx - t
+            elif direction == Action.DOWN:
+                py, px = cy + t, cx + d
+            elif direction == Action.UP:
+                py, px = cy - t, cx + d
+            else:
+                return
+            if 0 <= py < h and 0 <= px < w:
+                image[py, px] = _BELT_ARROW_COLOR
+
+
+def _draw_belt_arrows(
+    icon: np.ndarray,
+    direction: int,
+) -> None:
+    """Draw three evenly spaced chevron arrows onto an icon array.
+
+    Args:
+        icon: RGBA array of shape ``(size, size, 4)``, modified in place.
+        direction: Action enum value for belt facing direction.
+    """
+    size = icon.shape[0]
+    arrow_size = max(1, size // 8)
+    mid = size // 2
+
+    if direction in (Action.LEFT, Action.RIGHT):
+        cy = mid
+        for i in range(3):
+            cx = size * (1 + 2 * i) // 6
+            _draw_chevron(icon, cy, cx, arrow_size, direction)
+    elif direction in (Action.UP, Action.DOWN):
+        cx = mid
+        for i in range(3):
+            cy = size * (1 + 2 * i) // 6
+            _draw_chevron(icon, cy, cx, arrow_size, direction)
+
+
+def render_item_icon(
+    item_type: int,
+    size: int,
+    direction: int | None = None,
+) -> np.ndarray:
+    """Render a square RGBA icon for an item type.
+
+    This is the single source of truth for how an item looks visually.
+    Both the map renderer and the menu UI call this function so that
+    placed machines and inventory icons are always identical.
+
+    Conveyor belts get three chevron arrows overlaid on the base colour.
+    When *direction* is ``None`` (e.g. in a menu with no placement
+    context), arrows default to pointing right.
+
+    Args:
+        item_type: ``ItemType`` integer value.
+        size: Side length of the returned square in pixels.
+        direction: Optional ``Action`` direction for belt arrows.
+            Ignored for non-belt items.
+
+    Returns:
+        RGBA uint8 array of shape ``(size, size, 4)``.
+    """
+    rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
+    icon = np.full((size, size, 4), (*rgb, 255), dtype=np.uint8)
+
+    if item_type == ItemType.CONVEYOR_BELT and size >= 6:
+        belt_dir = direction if direction is not None else int(Action.RIGHT)
+        _draw_belt_arrows(icon, belt_dir)
+
+    return icon
 
 
 def render_machine_overlays(
@@ -283,9 +386,8 @@ def render_machine_overlays(
 ) -> None:
     """Draw machine overlays on tiles that have machines.
 
-    Machines are rendered as smaller squares centered on the tile, using the
-    same color as the corresponding item in the inventory. This ensures visual
-    consistency between placed machines and inventory items.
+    Uses :func:`render_item_icon` for each machine so that placed
+    machines look identical to their inventory icons.
 
     Args:
         image: RGBA image to draw on (modified in place)
@@ -300,18 +402,22 @@ def render_machine_overlays(
     if ys.size == 0:
         return
 
+    directions = np.array(state.machine_direction)
+
     for y, x in zip(ys, xs):
         machine_type = int(machine_types[y, x])
-        item_type = MACHINE_TO_ITEM.get(machine_type, ItemType.EMPTY)
-        rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-        color = (*rgb, 255)
+        item_type = MACHINE_TO_ITEM.get(machine_type, int(ItemType.EMPTY))
+        direction = int(directions[y, x])
+
+        icon = render_item_icon(item_type, machine_size, direction)
 
         y_start = y * block_pixel_size + offset
         x_start = x * block_pixel_size + offset
         image[
             y_start : y_start + machine_size,
             x_start : x_start + machine_size,
-        ] = color
+        ] = icon
+
 
 
 def render_pixels(
