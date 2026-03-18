@@ -16,6 +16,7 @@ from factoriax.constants import (
 from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.play.transfer import deposit_to_machine, withdraw_from_machine
 from factoriax.play.ui import (
+    SCROLL_STEP,
     ClickRegion,
     render_achievement_menu,
     render_inventory_menu,
@@ -188,6 +189,7 @@ def main() -> None:
     welcome_open = True
     inventory_open = False
     achievement_open = False
+    achievement_scroll = 0
     pause_open = False
     pause_selection = 0
     menu_focus = "inventory"
@@ -353,6 +355,12 @@ def main() -> None:
                     achievement_open = not achievement_open
                     if achievement_open:
                         inventory_open = False
+                        achievement_scroll = 0
+                elif achievement_open:
+                    if event.key == pygame.K_UP:
+                        achievement_scroll = max(0, achievement_scroll - SCROLL_STEP)
+                    elif event.key == pygame.K_DOWN:
+                        achievement_scroll += SCROLL_STEP
                 elif event.key == pygame.K_r:
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)
@@ -416,7 +424,9 @@ def main() -> None:
             click_regions.extend(inv_regions)
 
         if achievement_open:
-            ach_overlay = render_achievement_menu(state, base_width, base_height)
+            ach_overlay = render_achievement_menu(
+                state, base_width, base_height, achievement_scroll
+            )
             pixels = composite_rgba_over_rgb(pixels, ach_overlay)
 
         if pause_open:

@@ -73,6 +73,12 @@ _FONT_HINT: int = 14  # control hint font size
 _HINT_HEIGHT: int = 24  # height reserved for hint bar at bottom of menus
 _HINT_COLOR: tuple[int, int, int] = (120, 115, 90)
 
+# Scroll system constants — shared by every scrollable menu.
+SCROLL_STEP: int = 24
+_SCROLLBAR_W: int = 8
+_SCROLLBAR_BG: tuple[int, int, int, int] = (40, 40, 40, 200)
+_SCROLLBAR_THUMB: tuple[int, int, int, int] = (140, 130, 80, 255)
+
 # Crafting ingredient affordability colours.
 _AFFORD_COLOR: tuple[int, int, int] = (110, 220, 110)
 _CANNOT_AFFORD_COLOR: tuple[int, int, int] = (200, 80, 80)
@@ -288,6 +294,108 @@ def _render_control_hints(
 
 
 # ---------------------------------------------------------------------------
+# Scroll system
+# ---------------------------------------------------------------------------
+
+
+def clip_scroll_offset(offset: int, content_h: int, viewport_h: int) -> int:
+    """Clamp a scroll offset to the valid range for the given content and viewport.
+
+    Args:
+        offset: Proposed scroll offset in pixels.
+        content_h: Total height of the scrollable content in pixels.
+        viewport_h: Height of the visible viewport in pixels.
+
+    Returns:
+        Clamped offset in ``[0, max(0, content_h - viewport_h)]``.
+    """
+    return max(0, min(offset, max(0, content_h - viewport_h)))
+
+
+def blit_scroll_view(
+    overlay: np.ndarray,
+    content: np.ndarray,
+    vp_x: int,
+    vp_y: int,
+    vp_w: int,
+    vp_h: int,
+    scroll_offset: int,
+) -> None:
+    """Composite a scrollable content canvas into a viewport on *overlay*.
+
+    When the content is taller than the viewport a scrollbar is drawn along
+    the right edge of the viewport.  The scrollbar appearance is fully
+    controlled by this function so every menu looks identical — callers only
+    choose the viewport geometry.
+
+    Args:
+        overlay: Destination RGBA array; modified in place.
+        content: Full content RGBA canvas of shape ``(content_h, vp_w, 4)``.
+        vp_x: Left edge of the viewport in overlay coordinates.
+        vp_y: Top edge of the viewport in overlay coordinates.
+        vp_w: Viewport width in pixels (includes scrollbar when shown).
+        vp_h: Viewport height in pixels.
+        scroll_offset: Number of content pixels scrolled off the top.
+    """
+    content_h = content.shape[0]
+    needs_bar = content_h > vp_h
+    render_w = vp_w - (_SCROLLBAR_W if needs_bar else 0)
+
+    visible = content[scroll_offset : scroll_offset + vp_h, :render_w]
+    _blit_rgba(overlay, visible, vp_y, vp_x)
+
+    if needs_bar:
+        bar_x = vp_x + vp_w - _SCROLLBAR_W
+        overlay[vp_y : vp_y + vp_h, bar_x : bar_x + _SCROLLBAR_W] = _SCROLLBAR_BG
+        thumb_h = max(12, vp_h * vp_h // content_h)
+        max_scroll = content_h - vp_h
+        thumb_y = vp_y + int((vp_h - thumb_h) * scroll_offset / max(1, max_scroll))
+        overlay[
+            thumb_y : thumb_y + thumb_h, bar_x : bar_x + _SCROLLBAR_W
+        ] = _SCROLLBAR_THUMB
+
+
+def scroll_adjust_regions(
+    regions: list[ClickRegion],
+    vp_x: int,
+    vp_y: int,
+    vp_h: int,
+    scroll_offset: int,
+) -> list[ClickRegion]:
+    """Translate content-space click regions to screen-space, clipping to viewport.
+
+    Content-space coordinates have ``x=0`` at the viewport's left edge and
+    ``y=0`` at the top of the full (unscrolled) content canvas.
+
+    Args:
+        regions: Click regions in content-space coordinates.
+        vp_x: Left edge of the viewport in screen coordinates.
+        vp_y: Top edge of the viewport in screen coordinates.
+        vp_h: Viewport height in pixels (used to discard off-screen regions).
+        scroll_offset: Pixels of content scrolled off the top.
+
+    Returns:
+        Filtered list of :class:`ClickRegion` objects in screen coordinates.
+    """
+    result: list[ClickRegion] = []
+    for r in regions:
+        screen_y = r.y - scroll_offset + vp_y
+        if screen_y + r.h <= vp_y or screen_y >= vp_y + vp_h:
+            continue
+        result.append(
+            ClickRegion(
+                x=r.x + vp_x,
+                y=screen_y,
+                w=r.w,
+                h=r.h,
+                action=r.action,
+                param=r.param,
+            )
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Public menu renderers
 # ---------------------------------------------------------------------------
 
@@ -296,20 +404,23 @@ def render_achievement_menu(
     state: EnvState,
     screen_width: int,
     screen_height: int,
+    scroll_offset: int = 0,
 ) -> np.ndarray:
-    """Render the achievement menu as an RGBA overlay.
+    """Render the achievement menu as a scrollable RGBA overlay.
 
-    Displays every achievement with a colour-coded status icon (bright green
-    = unlocked, dark grey = locked) and its name in a pixely monospace font.
-    A footer shows the overall completion count.
+    Achievements are laid out in a fixed-height scroll view so the list
+    remains comfortable even as more achievements are added.  A scrollbar
+    appears automatically when the content overflows the viewport.  A footer
+    shows the overall completion count.
 
     Args:
         state: Current environment state.
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
+        scroll_offset: Pixels of content scrolled off the top.
 
     Returns:
-        RGBA numpy array of shape (screen_height, screen_width, 4).
+        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
 
@@ -333,35 +444,42 @@ def render_achievement_menu(
     unlocked = np.array(state.achievements_unlocked)
     n_unlocked = int(np.sum(unlocked))
 
-    footer_reserve = 56
-    available_h = menu_h - (sep_y - menu_y) - 16 - footer_reserve
-    row_h = min(76, available_h // max(NUM_ACHIEVEMENTS, 1))
-    list_y = sep_y + _SEP_H + 16
+    # Fixed-height rows make the scroll math simple and the list readable.
+    row_h = 36
+    footer_reserve = _HINT_HEIGHT + _BORDER_PX + 40
 
+    vp_x = menu_x + _BORDER_PX
+    vp_y = sep_y + _SEP_H + 8
+    vp_w = menu_w - 2 * _BORDER_PX
+    vp_h = menu_y + menu_h - footer_reserve - vp_y
+
+    content_h = NUM_ACHIEVEMENTS * row_h
+    scroll_offset = clip_scroll_offset(scroll_offset, content_h, vp_h)
+
+    icon_size = 20
+    content = np.zeros((content_h, vp_w, 4), dtype=np.uint8)
     for i, info in enumerate(ACHIEVEMENT_INFO):
         is_unlocked = bool(unlocked[i])
-        row_y = list_y + i * row_h
+        row_y = i * row_h
 
         if is_unlocked:
-            overlay[
-                row_y : row_y + row_h - 4,
-                menu_x + 8 : menu_x + menu_w - 8,
-            ] = (42, 68, 42, 210)
+            content[row_y : row_y + row_h - 4, 8 : vp_w - 8] = (42, 68, 42, 210)
 
-        icon_size = 20
-        icon_x = menu_x + 32
+        icon_x = 24
         icon_y = row_y + (row_h - icon_size) // 2
         icon_color: tuple[int, int, int, int] = (
             (75, 215, 75, 255) if is_unlocked else (65, 65, 65, 255)
         )
-        overlay[icon_y : icon_y + icon_size, icon_x : icon_x + icon_size] = icon_color
+        content[icon_y : icon_y + icon_size, icon_x : icon_x + icon_size] = icon_color
 
         text_color: tuple[int, int, int] = (
             (235, 228, 185) if is_unlocked else (105, 105, 88)
         )
         name_arr = _render_text_rgba(info.name, body_font, text_color)
         name_y = row_y + (row_h - name_arr.shape[0]) // 2
-        _blit_rgba(overlay, name_arr, name_y, icon_x + icon_size + 20)
+        _blit_rgba(content, name_arr, name_y, icon_x + icon_size + 12)
+
+    blit_scroll_view(overlay, content, vp_x, vp_y, vp_w, vp_h, scroll_offset)
 
     footer_arr = _render_text_rgba(
         f"{n_unlocked} / {NUM_ACHIEVEMENTS} unlocked",
@@ -375,7 +493,11 @@ def render_achievement_menu(
 
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
-        overlay, "[ESC] Close", menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
+        overlay,
+        "[UP/DOWN] Scroll  [ESC] Close",
+        menu_x + _BORDER_PX,
+        hint_y,
+        menu_w - 2 * _BORDER_PX,
     )
 
     return overlay
@@ -1019,13 +1141,29 @@ def render_inventory_menu(
                 _blit_rgba(overlay, name_arr, name_y, name_x)
 
     # ------------------------------------------------------------------
-    # Crafting recipes list
+    # Crafting recipes list — rendered into a scroll view
     # ------------------------------------------------------------------
-    craft_pad = 20
-    craft_x = div_x + craft_pad
-    craft_available_w = craft_w - 2 * craft_pad
-    craft_available_h = menu_h - (craft_content_y - menu_y) - craft_pad
-    recipe_h = min(120, craft_available_h // max(NUM_RECIPES, 1))
+    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+
+    vp_x_craft = div_x + _BORDER_PX
+    vp_y_craft = craft_content_y
+    vp_w_craft = craft_w - _BORDER_PX
+    vp_h_craft = hint_y - craft_content_y
+
+    recipe_h = 80
+    craft_pad = 8
+    out_icon = 32
+    inp_icon = 20
+
+    content_h_craft = NUM_RECIPES * recipe_h
+    craft_scroll = clip_scroll_offset(
+        selected_recipe * recipe_h - (vp_h_craft - recipe_h) // 2,
+        content_h_craft,
+        vp_h_craft,
+    )
+
+    recipe_content = np.zeros((max(content_h_craft, 1), vp_w_craft, 4), dtype=np.uint8)
+    recipe_regions: list[ClickRegion] = []
 
     for recipe_idx in range(NUM_RECIPES):
         recipe = RECIPES[recipe_idx]
@@ -1033,14 +1171,13 @@ def render_inventory_menu(
             menu_focus == "crafting"
         )
         can_afford = bool(can_afford_recipe(state, selected_player, recipe_idx))
+        ry = recipe_idx * recipe_h
 
-        recipe_y = craft_content_y + recipe_idx * recipe_h
-
-        click_regions.append(
+        recipe_regions.append(
             ClickRegion(
-                x=craft_x,
-                y=recipe_y,
-                w=craft_available_w,
+                x=0,
+                y=ry,
+                w=vp_w_craft,
                 h=recipe_h,
                 action="select_recipe",
                 param=recipe_idx,
@@ -1048,75 +1185,64 @@ def render_inventory_menu(
         )
 
         if is_selected_recipe:
-            overlay[
-                recipe_y : recipe_y + recipe_h - 4,
-                craft_x : craft_x + craft_available_w,
-            ] = (65, 65, 65, 255)
+            recipe_content[ry : ry + recipe_h - 4, 0:vp_w_craft] = (65, 65, 65, 255)
             white = (255, 255, 255, 255)
-            overlay[recipe_y, craft_x : craft_x + craft_available_w] = white
-            overlay[recipe_y + recipe_h - 5, craft_x : craft_x + craft_available_w] = (
-                white
-            )
-            overlay[recipe_y : recipe_y + recipe_h - 4, craft_x] = white
-            overlay[
-                recipe_y : recipe_y + recipe_h - 4, craft_x + craft_available_w - 1
-            ] = white
+            recipe_content[ry, 0:vp_w_craft] = white
+            recipe_content[ry + recipe_h - 5, 0:vp_w_craft] = white
+            recipe_content[ry : ry + recipe_h - 4, 0] = white
+            recipe_content[ry : ry + recipe_h - 4, vp_w_craft - 1] = white
 
-        # Output icon.
-        out_icon = 32
         out_item = recipe["output"]
         out_rgb = ITEM_COLORS.get(out_item, (128, 128, 128))
-        overlay[
-            recipe_y + 8 : recipe_y + 8 + out_icon,
-            craft_x + 8 : craft_x + 8 + out_icon,
+        recipe_content[
+            ry + craft_pad : ry + craft_pad + out_icon,
+            craft_pad : craft_pad + out_icon,
         ] = (*out_rgb, 255)
 
-        # Recipe name to the right of the icon.
         name_color = (230, 225, 180) if can_afford else (150, 145, 120)
         name_arr = _render_text_rgba(RECIPE_NAMES[recipe_idx], body_font, name_color)
-        name_y = recipe_y + 8 + (out_icon - name_arr.shape[0]) // 2
-        _blit_rgba(overlay, name_arr, name_y, craft_x + 8 + out_icon + 12)
+        name_y = ry + craft_pad + (out_icon - name_arr.shape[0]) // 2
+        _blit_rgba(recipe_content, name_arr, name_y, craft_pad + out_icon + 12)
 
-        # Ingredient row: [small icon] [have/need] for each input.
-        inp_y = recipe_y + 8 + out_icon + 8
-        inp_x = craft_x + 8
-        inp_icon = 20
+        inp_y = ry + craft_pad + out_icon + craft_pad
+        inp_x = craft_pad
 
         for item_type, required in recipe["inputs"]:
             have = int(count_item_in_inventory(state, selected_player, item_type))
             inp_rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            overlay[inp_y : inp_y + inp_icon, inp_x : inp_x + inp_icon] = (
+            recipe_content[inp_y : inp_y + inp_icon, inp_x : inp_x + inp_icon] = (
                 *inp_rgb,
                 255,
             )
-
             count_color: tuple[int, int, int] = (
                 _AFFORD_COLOR if have >= required else _CANNOT_AFFORD_COLOR
             )
             ratio_arr = _render_text_rgba(f"{have}/{required}", body_font, count_color)
-            _blit_rgba(overlay, ratio_arr, inp_y, inp_x + inp_icon + 6)
+            _blit_rgba(recipe_content, ratio_arr, inp_y, inp_x + inp_icon + 6)
             inp_x += inp_icon + 6 + ratio_arr.shape[1] + 12
 
-        # Progress bar on the selected recipe.
         if craft_progress > 0 and is_selected_recipe:
-            bar_y = recipe_y + recipe_h - 20
-            bar_w = craft_available_w - 16
+            bar_y = ry + recipe_h - 20
+            bar_w = vp_w_craft - 16
             filled = int(bar_w * (1 - craft_progress / recipe["ticks"]))
-            overlay[bar_y : bar_y + 8, craft_x + 8 : craft_x + 8 + bar_w] = (
-                35,
-                35,
-                35,
-                255,
+            recipe_content[bar_y : bar_y + 8, craft_pad : craft_pad + bar_w] = (
+                35, 35, 35, 255,
             )
             if filled > 0:
-                overlay[bar_y : bar_y + 8, craft_x + 8 : craft_x + 8 + filled] = (
-                    100,
-                    200,
-                    100,
-                    255,
-                )
+                recipe_content[
+                    bar_y : bar_y + 8, craft_pad : craft_pad + filled
+                ] = (100, 200, 100, 255)
 
-    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    blit_scroll_view(
+        overlay, recipe_content, vp_x_craft, vp_y_craft, vp_w_craft, vp_h_craft,
+        craft_scroll,
+    )
+    click_regions.extend(
+        scroll_adjust_regions(
+            recipe_regions, vp_x_craft, vp_y_craft, vp_h_craft, craft_scroll
+        )
+    )
+
     if menu_focus == "crafting":
         hints = "[UP/DOWN] Select | [TAB] Inventory | [E] Craft | [ESC] Close"
     else:
