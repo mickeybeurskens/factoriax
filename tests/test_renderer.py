@@ -20,7 +20,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.renderer import (
-    _build_texture_lookup,
+    build_texture_lookup,
     render_pixels,
 )
 
@@ -124,7 +124,7 @@ def test_tile_rendering_matches_reference(block_pixel_size: int) -> None:
     flat = [block_types[i % len(block_types)] for i in range(16)]
     map_array = np.array(flat, dtype=np.int32).reshape(4, 4)
 
-    texture_lookup = _build_texture_lookup(block_pixel_size)
+    texture_lookup = build_texture_lookup(block_pixel_size)
 
     # Reference: Python loop
     expected = _render_tiles_reference(map_array, texture_lookup, block_pixel_size)
@@ -191,7 +191,7 @@ def test_tile_rendering_uniform_map(block_pixel_size: int) -> None:
     """
     h, w = 3, 3
     map_array = np.full((h, w), int(BlockType.IRON), dtype=np.int32)
-    texture_lookup = _build_texture_lookup(block_pixel_size)
+    texture_lookup = build_texture_lookup(block_pixel_size)
     s = block_pixel_size
 
     expected_tile = texture_lookup[int(BlockType.IRON)]

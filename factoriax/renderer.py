@@ -184,7 +184,7 @@ def _get_player_texture(
 
 
 @functools.lru_cache(maxsize=8)
-def _build_texture_lookup(size: int) -> np.ndarray:
+def build_texture_lookup(size: int) -> np.ndarray:
     """Build a dense texture lookup array indexed by block type.
 
     Allows tile rendering via a single numpy advanced-index operation
@@ -435,7 +435,7 @@ def render_pixels(
     Returns:
         RGB numpy array of the rendered scene
     """
-    texture_lookup = _build_texture_lookup(block_pixel_size)
+    texture_lookup = build_texture_lookup(block_pixel_size)
 
     map_array = np.array(state.map)
     map_height, map_width = map_array.shape

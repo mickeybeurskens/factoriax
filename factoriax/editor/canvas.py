@@ -1,0 +1,300 @@
+"""Viewport and tile rendering for the level editor canvas.
+
+Renders only the visible slice of the map using the same texture lookup
+that the game renderer uses, so editor tiles look pixel-identical to
+in-game tiles.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+
+import numpy as np
+
+from factoriax.constants import ItemType, MachineType
+from factoriax.renderer import (
+    MACHINE_TO_ITEM,
+    build_texture_lookup,
+    render_item_icon,
+)
+
+TILE_SIZES = (16, 24, 32, 48)
+_GRID_COLOR = (80, 80, 80, 100)
+_CURSOR_COLOR = (255, 255, 255, 120)
+_SELECT_COLOR = (100, 200, 255, 100)
+
+
+@dataclasses.dataclass
+class Viewport:
+    """Camera state for the scrollable/zoomable canvas.
+
+    Attributes:
+        camera_x: Leftmost visible tile column (fractional for smooth pan).
+        camera_y: Topmost visible tile row.
+        tile_size: Current zoom level in pixels per tile.
+        canvas_w: Width of the canvas area in pixels.
+        canvas_h: Height of the canvas area in pixels.
+    """
+
+    camera_x: float = 0.0
+    camera_y: float = 0.0
+    tile_size: int = 32
+    canvas_w: int = 400
+    canvas_h: int = 400
+
+
+def screen_to_tile(vp: Viewport, sx: int, sy: int) -> tuple[int, int]:
+    """Convert canvas-relative pixel coordinates to tile coordinates.
+
+    Args:
+        vp: Current viewport state.
+        sx: X pixel offset from the canvas left edge.
+        sy: Y pixel offset from the canvas top edge.
+
+    Returns:
+        ``(tile_x, tile_y)`` integer tile coordinates.
+    """
+    tx = int(vp.camera_x + sx / vp.tile_size)
+    ty = int(vp.camera_y + sy / vp.tile_size)
+    return tx, ty
+
+
+def tile_to_screen(vp: Viewport, tx: int, ty: int) -> tuple[int, int]:
+    """Convert tile coordinates to canvas-relative pixel coordinates.
+
+    Args:
+        vp: Current viewport state.
+        tx: Tile column.
+        ty: Tile row.
+
+    Returns:
+        ``(px, py)`` pixel offset from the canvas top-left.
+    """
+    px = int((tx - vp.camera_x) * vp.tile_size)
+    py = int((ty - vp.camera_y) * vp.tile_size)
+    return px, py
+
+
+def clamp_camera(vp: Viewport, map_w: int, map_h: int) -> None:
+    """Clamp camera so visible area stays within map bounds.
+
+    Args:
+        vp: Viewport (mutated in place).
+        map_w: Map width in tiles.
+        map_h: Map height in tiles.
+    """
+    max_x = max(0.0, map_w - vp.canvas_w / vp.tile_size)
+    max_y = max(0.0, map_h - vp.canvas_h / vp.tile_size)
+    vp.camera_x = max(0.0, min(vp.camera_x, max_x))
+    vp.camera_y = max(0.0, min(vp.camera_y, max_y))
+
+
+def pan(vp: Viewport, dx: float, dy: float, map_w: int, map_h: int) -> None:
+    """Pan the camera by a tile-space offset, clamped to map bounds.
+
+    Args:
+        vp: Viewport (mutated in place).
+        dx: Horizontal offset in tiles (positive = right).
+        dy: Vertical offset in tiles (positive = down).
+        map_w: Map width in tiles.
+        map_h: Map height in tiles.
+    """
+    vp.camera_x += dx
+    vp.camera_y += dy
+    clamp_camera(vp, map_w, map_h)
+
+
+def zoom(
+    vp: Viewport,
+    direction: int,
+    mouse_sx: int,
+    mouse_sy: int,
+    map_w: int,
+    map_h: int,
+) -> None:
+    """Zoom in or out, keeping the tile under the mouse fixed.
+
+    Cycles through :data:`TILE_SIZES` in the given direction.
+
+    Args:
+        vp: Viewport (mutated in place).
+        direction: ``+1`` to zoom in, ``-1`` to zoom out.
+        mouse_sx: Mouse x relative to canvas left edge.
+        mouse_sy: Mouse y relative to canvas top edge.
+        map_w: Map width in tiles.
+        map_h: Map height in tiles.
+    """
+    idx = TILE_SIZES.index(vp.tile_size) if vp.tile_size in TILE_SIZES else 2
+    new_idx = max(0, min(len(TILE_SIZES) - 1, idx + direction))
+    new_size = TILE_SIZES[new_idx]
+    if new_size == vp.tile_size:
+        return
+
+    tile_x = vp.camera_x + mouse_sx / vp.tile_size
+    tile_y = vp.camera_y + mouse_sy / vp.tile_size
+
+    vp.tile_size = new_size
+    vp.camera_x = tile_x - mouse_sx / new_size
+    vp.camera_y = tile_y - mouse_sy / new_size
+    clamp_camera(vp, map_w, map_h)
+
+
+def render_canvas(
+    state: object,
+    vp: Viewport,
+    cursor_tile: tuple[int, int] | None,
+    selection_rect: tuple[int, int, int, int] | None = None,
+) -> np.ndarray:
+    """Render the visible canvas area as an RGBA image.
+
+    Draws terrain tiles via the vectorized texture lookup, overlays
+    machines, grid lines, and cursor / selection highlights.
+
+    Args:
+        state: :class:`~factoriax.editor.state.EditorState` instance.
+        vp: Current viewport.
+        cursor_tile: ``(tx, ty)`` of the tile under the mouse, or ``None``.
+        selection_rect: ``(x0, y0, x1, y1)`` tile coordinates of the
+            fill-rect selection, or ``None``.
+
+    Returns:
+        RGBA uint8 array of shape ``(canvas_h, canvas_w, 4)``.
+    """
+    from factoriax.editor.state import EditorState
+
+    es: EditorState = state  # type: ignore[assignment]
+    canvas = np.zeros((vp.canvas_h, vp.canvas_w, 4), dtype=np.uint8)
+
+    col0 = max(0, int(vp.camera_x))
+    row0 = max(0, int(vp.camera_y))
+    col1 = min(es.map_width, int(vp.camera_x + vp.canvas_w / vp.tile_size) + 1)
+    row1 = min(es.map_height, int(vp.camera_y + vp.canvas_h / vp.tile_size) + 1)
+
+    if col1 <= col0 or row1 <= row0:
+        return canvas
+
+    lookup = build_texture_lookup(vp.tile_size)
+    block_slice = es.block_map[row0:row1, col0:col1]
+    max_id = lookup.shape[0] - 1
+    safe = np.clip(block_slice, 0, max_id)
+    tile_textures = lookup[safe]
+
+    rows = row1 - row0
+    cols = col1 - col0
+    ts = vp.tile_size
+    tiles_image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
+        rows * ts, cols * ts, 4
+    )
+
+    px0 = int((col0 - vp.camera_x) * ts)
+    py0 = int((row0 - vp.camera_y) * ts)
+
+    _blit_clipped(canvas, tiles_image, py0, px0)
+
+    machine_slice = es.machine_types[row0:row1, col0:col1]
+    direction_slice = es.machine_directions[row0:row1, col0:col1]
+    mys, mxs = np.nonzero(machine_slice != int(MachineType.NONE))
+
+    machine_size = int(ts * 0.6)
+    offset = (ts - machine_size) // 2
+
+    for my, mx in zip(mys, mxs):
+        mt = int(machine_slice[my, mx])
+        item_type = MACHINE_TO_ITEM.get(mt, int(ItemType.EMPTY))
+        direction = int(direction_slice[my, mx])
+        icon = render_item_icon(item_type, machine_size, direction)
+        iy = int(py0 + my * ts + offset)
+        ix = int(px0 + mx * ts + offset)
+        _blit_clipped(canvas, icon, iy, ix)
+
+    for r in range(rows + 1):
+        gy = py0 + r * ts
+        if 0 <= gy < vp.canvas_h:
+            gx0 = max(0, px0)
+            gx1 = min(vp.canvas_w, px0 + cols * ts)
+            if gx1 > gx0:
+                canvas[gy, gx0:gx1] = _GRID_COLOR
+
+    for c in range(cols + 1):
+        gx = px0 + c * ts
+        if 0 <= gx < vp.canvas_w:
+            gy0 = max(0, py0)
+            gy1 = min(vp.canvas_h, py0 + rows * ts)
+            if gy1 > gy0:
+                canvas[gy0:gy1, gx] = _GRID_COLOR
+
+    if cursor_tile is not None:
+        cx, cy = cursor_tile
+        if 0 <= cx < es.map_width and 0 <= cy < es.map_height:
+            _highlight_tile(canvas, vp, cx, cy, _CURSOR_COLOR)
+
+    if selection_rect is not None:
+        sx0, sy0, sx1, sy1 = selection_rect
+        lx, rx = min(sx0, sx1), max(sx0, sx1)
+        ly, ry = min(sy0, sy1), max(sy0, sy1)
+        for ty in range(max(0, ly), min(es.map_height, ry + 1)):
+            for tx in range(max(0, lx), min(es.map_width, rx + 1)):
+                _highlight_tile(canvas, vp, tx, ty, _SELECT_COLOR)
+
+    return canvas
+
+
+def _highlight_tile(
+    canvas: np.ndarray,
+    vp: Viewport,
+    tx: int,
+    ty: int,
+    color: tuple[int, int, int, int],
+) -> None:
+    """Draw a translucent highlight over a single tile.
+
+    Args:
+        canvas: RGBA canvas array (mutated in place).
+        vp: Current viewport.
+        tx: Tile column.
+        ty: Tile row.
+        color: RGBA highlight colour.
+    """
+    px, py = tile_to_screen(vp, tx, ty)
+    ts = vp.tile_size
+    y0 = max(0, py)
+    y1 = min(canvas.shape[0], py + ts)
+    x0 = max(0, px)
+    x1 = min(canvas.shape[1], px + ts)
+    if y1 <= y0 or x1 <= x0:
+        return
+    alpha = color[3] / 255.0
+    region = canvas[y0:y1, x0:x1]
+    fg = np.array(color[:3], dtype=np.float32)
+    blended = (fg * alpha + region[:, :, :3].astype(np.float32) * (1 - alpha)).astype(
+        np.uint8
+    )
+    region[:, :, :3] = blended
+    region[:, :, 3] = np.maximum(region[:, :, 3], color[3])
+
+
+def _blit_clipped(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
+    """Copy *src* onto *dst* at ``(y, x)`` with boundary clipping.
+
+    Args:
+        dst: Destination RGBA array (mutated in place).
+        src: Source RGBA array.
+        y: Top row in destination.
+        x: Left column in destination.
+    """
+    dh, dw = dst.shape[:2]
+    sh, sw = src.shape[:2]
+
+    sy0 = max(0, -y)
+    sx0 = max(0, -x)
+    dy0 = max(0, y)
+    dx0 = max(0, x)
+    dy1 = min(dh, y + sh)
+    dx1 = min(dw, x + sw)
+
+    if dy1 <= dy0 or dx1 <= dx0:
+        return
+
+    ch = dy1 - dy0
+    cw = dx1 - dx0
+    dst[dy0:dy1, dx0:dx1] = src[sy0 : sy0 + ch, sx0 : sx0 + cw]

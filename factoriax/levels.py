@@ -181,7 +181,7 @@ class LevelBuilder:
         self._block_map[y0:y1, x0:x1] = int(block)
         if resources is not None:
             if self._block_resources is None:
-                self._block_resources = _default_resources(self._block_map)
+                self._block_resources = default_resources(self._block_map)
             self._block_resources[y0:y1, x0:x1] = resources
         return self
 
@@ -208,7 +208,7 @@ class LevelBuilder:
                 f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
             )
         if self._block_resources is None:
-            self._block_resources = _default_resources(self._block_map)
+            self._block_resources = default_resources(self._block_map)
         self._block_resources[y, x] = amount
         return self
 
@@ -242,7 +242,7 @@ class LevelBuilder:
 # ---------------------------------------------------------------------------
 
 
-def _default_resources(block_map: np.ndarray) -> np.ndarray:
+def default_resources(block_map: np.ndarray) -> np.ndarray:
     """Build a resource array from a block map using natural defaults.
 
     Ore tiles (COAL, IRON, COPPER) receive ``BLOCK_MAX_RESOURCES``; all
@@ -327,7 +327,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     resources_np = (
         level.block_resources
         if level.block_resources is not None
-        else _default_resources(block_map)
+        else default_resources(block_map)
     )
     machine_types_np = (
         level.machine_types

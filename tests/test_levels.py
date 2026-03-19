@@ -22,9 +22,9 @@ from factoriax.levels import (
     LEVELS,
     Level,
     LevelBuilder,
-    _default_resources,
     _place_players,
     build_state,
+    default_resources,
     generate_state,
     get_level,
     load_level,
@@ -156,19 +156,19 @@ class TestLevelBuilder:
 
 
 # ---------------------------------------------------------------------------
-# _default_resources helper
+# default_resources helper
 # ---------------------------------------------------------------------------
 
 
 class TestDefaultResources:
-    """_default_resources fills ore tiles correctly."""
+    """default_resources fills ore tiles correctly."""
 
     def test_ore_tiles_get_max_resources(self) -> None:
         block_map = np.array(
             [[int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)]],
             dtype=np.int32,
         )
-        res = _default_resources(block_map)
+        res = default_resources(block_map)
         assert (res == BLOCK_MAX_RESOURCES).all()
 
     def test_non_ore_tiles_get_zero(self) -> None:
@@ -176,7 +176,7 @@ class TestDefaultResources:
             [[int(BlockType.DIRT), int(BlockType.WATER)]],
             dtype=np.int32,
         )
-        res = _default_resources(block_map)
+        res = default_resources(block_map)
         assert (res == 0).all()
 
 
