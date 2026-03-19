@@ -338,13 +338,20 @@ def main() -> None:
                         player_slot = int(state.selected_slots[selected_player])
                         if machine_panel_active:
                             state = withdraw_from_machine(
-                                state, selected_player,
-                                machine_tx, machine_ty, machine_slot,
+                                state,
+                                selected_player,
+                                machine_tx,
+                                machine_ty,
+                                machine_slot,
                             )
                         else:
                             state = deposit_to_machine(
-                                state, selected_player,
-                                machine_tx, machine_ty, machine_slot, player_slot,
+                                state,
+                                selected_player,
+                                machine_tx,
+                                machine_ty,
+                                machine_slot,
+                                player_slot,
                             )
                 elif event.key == pygame.K_i:
                     inventory_open = not inventory_open
@@ -382,7 +389,15 @@ def main() -> None:
                     elif event.key == pygame.K_e:
                         action = Action.CRAFT
                 elif event.key == pygame.K_e:
-                    action = Action.PLACE
+                    selected_player = int(state.selected_player)
+                    tx, ty = _tile_in_front(state, selected_player)
+                    map_h, map_w = state.map.shape
+                    has_machine = (
+                        0 <= tx < map_w
+                        and 0 <= ty < map_h
+                        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
+                    )
+                    action = Action.PICKUP if has_machine else Action.PLACE
                 elif ctrl_held and event.key in key_to_player:
                     player_idx = key_to_player[event.key]
                     if player_idx < params.num_players:
@@ -410,7 +425,11 @@ def main() -> None:
 
         if machine_open:
             machine_overlay, machine_regions = render_machine_menu(
-                state, base_width, base_height, machine_tx, machine_ty,
+                state,
+                base_width,
+                base_height,
+                machine_tx,
+                machine_ty,
                 machine_panel_active,
             )
             pixels = composite_rgba_over_rgb(pixels, machine_overlay)

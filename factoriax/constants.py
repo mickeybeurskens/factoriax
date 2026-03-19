@@ -168,10 +168,10 @@ RECIPE_OUTPUTS = jnp.array(
 RECIPE_TICKS = jnp.array([3, 2, 1, 5], dtype=jnp.int32)
 RECIPE_INPUT_ITEMS = jnp.array(
     [
-        [ItemType.COPPER, ItemType.IRON],    # Miner
-        [ItemType.IRON, ItemType.EMPTY],     # Chest
-        [ItemType.IRON, ItemType.EMPTY],     # Conveyor Belt
-        [ItemType.IRON, ItemType.COPPER],    # Arm
+        [ItemType.COPPER, ItemType.IRON],  # Miner
+        [ItemType.IRON, ItemType.EMPTY],  # Chest
+        [ItemType.IRON, ItemType.EMPTY],  # Conveyor Belt
+        [ItemType.IRON, ItemType.COPPER],  # Arm
     ],
     dtype=jnp.int32,
 )
@@ -199,14 +199,26 @@ ITEM_TO_MACHINE = {
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
     [
-        MachineType.NONE,          # EMPTY
-        MachineType.NONE,          # COAL
-        MachineType.NONE,          # IRON
-        MachineType.NONE,          # COPPER
-        MachineType.MINER,         # MINER
-        MachineType.CHEST,         # CHEST
-        MachineType.CONVEYOR_BELT, # CONVEYOR_BELT
-        MachineType.ARM,           # ARM
+        MachineType.NONE,  # EMPTY
+        MachineType.NONE,  # COAL
+        MachineType.NONE,  # IRON
+        MachineType.NONE,  # COPPER
+        MachineType.MINER,  # MINER
+        MachineType.CHEST,  # CHEST
+        MachineType.CONVEYOR_BELT,  # CONVEYOR_BELT
+        MachineType.ARM,  # ARM
+    ],
+    dtype=jnp.int32,
+)
+
+MACHINE_TO_ITEM_ARRAY = jnp.array(
+    [
+        ItemType.EMPTY,  # NONE
+        ItemType.MINER,  # MINER
+        ItemType.CHEST,  # CHEST
+        ItemType.EMPTY,  # ASSEMBLER (not player-craftable)
+        ItemType.CONVEYOR_BELT,  # CONVEYOR_BELT
+        ItemType.ARM,  # ARM
     ],
     dtype=jnp.int32,
 )
@@ -227,6 +239,7 @@ class Action(IntEnum):
     PREV_SLOT = 9
     NEXT_RECIPE = 10
     PREV_RECIPE = 11
+    PICKUP = 12
 
 
 DIRECTIONS = jnp.array(
@@ -243,6 +256,7 @@ DIRECTIONS = jnp.array(
         [0, 0],  # PREV_SLOT (no movement)
         [0, 0],  # NEXT_RECIPE (no movement)
         [0, 0],  # PREV_RECIPE (no movement)
+        [0, 0],  # PICKUP (no movement)
     ],
     dtype=jnp.int32,
 )

@@ -91,4 +91,4 @@ class EnvParams:
     coal_probability: float = 0.02
     base_resources: int = 3
 
-    NUM_ACTIONS: ClassVar[int] = 12
+    NUM_ACTIONS: ClassVar[int] = 13

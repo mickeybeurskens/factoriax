@@ -322,10 +322,10 @@ class TestEnvironment:
         assert new_state.timestep == state.timestep + 1
 
     def test_action_space(self) -> None:
-        """Action space should be Discrete(12) for movement, mining, crafting."""
+        """Action space should match the number of defined actions."""
         env, params = make_factoriax_env()
         action_space = env.action_space(params)
-        assert action_space.n == 12
+        assert action_space.n == 13
 
     def test_observation_space(self) -> None:
         """Observation space should match expected dimensions."""

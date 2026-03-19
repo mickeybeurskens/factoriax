@@ -7,6 +7,10 @@ from jax import lax
 from factoriax.constants import (
     DIRECTION_OFFSETS,
     ITEM_TO_MACHINE_ARRAY,
+    MACHINE_TO_ITEM_ARRAY,
+    MAX_MACHINE_INVENTORY_SLOTS,
+    MAX_STACK_SIZE,
+    NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     SOLID_BLOCKS,
     ItemType,
@@ -134,10 +138,191 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
                 new_count
             ),
             machine_types=s.machine_types.at[target_y, target_x].set(machine_type),
-            machine_direction=s.machine_direction.at[target_y, target_x].set(
-                direction
-            ),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(direction),
         )
         return s
 
     return lax.cond(should_place, do_place, lambda s: s, state)
+
+
+def can_fit_in_inventory(
+    player_items: jax.Array,
+    player_counts: jax.Array,
+    items_to_add: jax.Array,
+    counts_to_add: jax.Array,
+) -> jax.Array:
+    """Check if all item stacks can fit into a player's inventory.
+
+    Simulates adding each item stack sequentially using the same stacking
+    logic as add_item_to_inventory. Returns True only if every item fits
+    with zero remainder.
+
+    Args:
+        player_items: Current inventory item types, shape (NUM_INVENTORY_SLOTS,)
+        player_counts: Current inventory counts, shape (NUM_INVENTORY_SLOTS,)
+        items_to_add: Item types to add, shape (N,)
+        counts_to_add: Counts to add per item, shape (N,)
+
+    Returns:
+        Boolean indicating all items fit
+    """
+
+    def simulate_add_one(
+        carry: tuple[jax.Array, jax.Array, jax.Array],
+        idx: jax.Array,
+    ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], None]:
+        inv_items, inv_counts, all_fit = carry
+        item_type = items_to_add[idx]
+        amount = counts_to_add[idx]
+        is_nonempty = (item_type != ItemType.EMPTY) & (amount > 0)
+
+        def add_to_inv(
+            state: tuple[jax.Array, jax.Array, jax.Array],
+        ) -> tuple[jax.Array, jax.Array, jax.Array]:
+            inv_i, inv_c, remaining = state
+
+            def add_to_slot(
+                carry: tuple[jax.Array, jax.Array, jax.Array],
+                slot_idx: jax.Array,
+            ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], None]:
+                i_arr, c_arr, rem = carry
+                slot_item = i_arr[slot_idx]
+                slot_count = c_arr[slot_idx]
+
+                can_stack = (slot_item == item_type) & (slot_count < MAX_STACK_SIZE)
+                is_empty = slot_item == ItemType.EMPTY
+
+                space = jnp.where(can_stack, MAX_STACK_SIZE - slot_count, 0)
+                space = jnp.where(is_empty, MAX_STACK_SIZE, space)
+                to_add = jnp.minimum(rem, space)
+
+                new_count = slot_count + to_add
+                new_rem = rem - to_add
+
+                i_arr = jnp.where(
+                    is_empty & (to_add > 0),
+                    i_arr.at[slot_idx].set(item_type),
+                    i_arr,
+                )
+                c_arr = c_arr.at[slot_idx].set(new_count)
+
+                return (i_arr, c_arr, new_rem), None
+
+            (inv_i, inv_c, remaining), _ = lax.scan(
+                add_to_slot,
+                (inv_i, inv_c, remaining),
+                jnp.arange(NUM_INVENTORY_SLOTS),
+            )
+            return inv_i, inv_c, remaining
+
+        inv_items, inv_counts, leftover = lax.cond(
+            is_nonempty,
+            add_to_inv,
+            lambda s: (s[0], s[1], jnp.int32(0)),
+            (inv_items, inv_counts, amount),
+        )
+        all_fit = all_fit & (leftover == 0)
+        return (inv_items, inv_counts, all_fit), None
+
+    num_items = items_to_add.shape[0]
+    (_, _, all_fit), _ = lax.scan(
+        simulate_add_one,
+        (player_items, player_counts, jnp.bool_(True)),
+        jnp.arange(num_items),
+    )
+    return all_fit
+
+
+def pickup_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
+    """Pick up a machine from the tile in front of the player.
+
+    Removes the machine from the tile, transfers all its inventory contents
+    into the player's inventory, and returns the machine item itself to the
+    player. The pickup is a no-op if:
+    - The tile in front has no machine
+    - The tile is out of bounds
+    - The player lacks inventory space for all contents plus the machine item
+
+    Args:
+        state: Current environment state
+        player_idx: Index of the player
+
+    Returns:
+        Updated state with machine removed (or unchanged if invalid)
+    """
+    from factoriax.crafting import add_item_to_inventory
+
+    target_x, target_y = get_tile_in_front(state, player_idx)
+    map_height, map_width = state.map.shape
+
+    in_bounds = (
+        (target_x >= 0)
+        & (target_x < map_width)
+        & (target_y >= 0)
+        & (target_y < map_height)
+    )
+
+    machine_type = jnp.where(
+        in_bounds, state.machine_types[target_y, target_x], MachineType.NONE
+    )
+    has_machine = machine_type != MachineType.NONE
+
+    machine_item = MACHINE_TO_ITEM_ARRAY[machine_type]
+
+    machine_inv_items = jnp.where(
+        in_bounds,
+        state.machine_inventory_items[target_y, target_x],
+        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int32),
+    )
+    machine_inv_counts = jnp.where(
+        in_bounds,
+        state.machine_inventory_counts[target_y, target_x],
+        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int16),
+    )
+
+    all_items = jnp.concatenate(
+        [machine_inv_items, jnp.array([machine_item], dtype=jnp.int32)]
+    )
+    all_counts = jnp.concatenate([machine_inv_counts, jnp.array([1], dtype=jnp.int32)])
+
+    player_items = state.inventory_items[player_idx]
+    player_counts = state.inventory_counts[player_idx]
+    fits = can_fit_in_inventory(player_items, player_counts, all_items, all_counts)
+
+    should_pickup = in_bounds & has_machine & fits
+
+    def do_pickup(s: EnvState) -> EnvState:
+        def transfer_slot(s: EnvState, slot_idx: jax.Array) -> tuple[EnvState, None]:
+            item = machine_inv_items[slot_idx]
+            count = machine_inv_counts[slot_idx].astype(jnp.int32)
+            has_item = (item != ItemType.EMPTY) & (count > 0)
+            s = lax.cond(
+                has_item,
+                lambda st: add_item_to_inventory(st, player_idx, item, count),
+                lambda st: st,
+                s,
+            )
+            return s, None
+
+        s, _ = lax.scan(transfer_slot, s, jnp.arange(MAX_MACHINE_INVENTORY_SLOTS))
+
+        s = add_item_to_inventory(s, player_idx, machine_item, 1)
+
+        s = s.replace(
+            machine_types=s.machine_types.at[target_y, target_x].set(MachineType.NONE),
+            machine_power=s.machine_power.at[target_y, target_x].set(0),
+            machine_inventory_items=s.machine_inventory_items.at[
+                target_y, target_x
+            ].set(jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int32)),
+            machine_inventory_counts=s.machine_inventory_counts.at[
+                target_y, target_x
+            ].set(jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int16)),
+            machine_selected_recipe=s.machine_selected_recipe.at[
+                target_y, target_x
+            ].set(0),
+            machine_selected_slot=s.machine_selected_slot.at[target_y, target_x].set(0),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(0),
+        )
+        return s
+
+    return lax.cond(should_pickup, do_pickup, lambda s: s, state)

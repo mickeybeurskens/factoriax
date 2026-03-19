@@ -18,7 +18,7 @@ from factoriax.constants import (
 )
 from factoriax.crafting import cycle_recipe, cycle_slot, start_crafting, update_crafting
 from factoriax.machines import update_all_machines
-from factoriax.placement import place_machine
+from factoriax.placement import pickup_machine, place_machine
 from factoriax.state import EnvParams, EnvState
 
 
@@ -236,6 +236,7 @@ def _handle_player_action(
     is_prev_slot = action == Action.PREV_SLOT
     is_next_recipe = action == Action.NEXT_RECIPE
     is_prev_recipe = action == Action.PREV_RECIPE
+    is_pickup = action == Action.PICKUP
 
     state = lax.cond(is_mine, lambda s: mine_block(s, player_idx), lambda s: s, state)
     state = lax.cond(
@@ -243,6 +244,9 @@ def _handle_player_action(
     )
     state = lax.cond(
         is_place, lambda s: place_machine(s, player_idx), lambda s: s, state
+    )
+    state = lax.cond(
+        is_pickup, lambda s: pickup_machine(s, player_idx), lambda s: s, state
     )
     state = lax.cond(
         is_next_slot, lambda s: cycle_slot(s, player_idx, 1), lambda s: s, state
@@ -261,6 +265,7 @@ def _handle_player_action(
         is_mine
         | is_craft
         | is_place
+        | is_pickup
         | is_next_slot
         | is_prev_slot
         | is_next_recipe
