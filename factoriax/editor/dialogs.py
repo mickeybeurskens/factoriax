@@ -319,6 +319,81 @@ def ask_load_path() -> Path | None:
     return Path(path) if path else None
 
 
+_HELP_LINES = [
+    "-- Drawing --",
+    "Left click/drag  Paint tile or machine",
+    "Right click/drag  Erase (layer-aware)",
+    "X  Eraser tool (clears both layers)",
+    "B  Paint tool    F  Fill rect tool",
+    "1-5  Terrain: Dirt Water Iron Copper Coal",
+    "6-9  Machine: Miner Chest Belt Arm",
+    "R  Rotate machine (or rotate under cursor)",
+    "",
+    "-- Resources --",
+    "T  Toggle exact / range mode",
+    "V  Toggle resource overlay",
+    "[ ]  Adjust resource value",
+    "Click value in toolbar to type amount",
+    "",
+    "-- View --",
+    "Scroll wheel  Zoom",
+    "Middle drag / Arrows  Pan",
+    "",
+    "-- Map --",
+    "Ctrl+Arrows  Add/remove row or column",
+    "Ctrl+N  New    Ctrl+O  Load    Ctrl+S  Save",
+    "F5  Play-test    Esc  Quit",
+    "",
+    "Press any key to close",
+]
+
+
+def render_help_overlay(base_w: int, base_h: int) -> np.ndarray:
+    """Render a controls reference overlay.
+
+    Args:
+        base_w: Base window width.
+        base_h: Base window height.
+
+    Returns:
+        RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+    """
+    overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
+    overlay[:, :] = (0, 0, 0, 180)
+
+    font = get_pixel_font(12)
+    line_h = 16
+    total_h = len(_HELP_LINES) * line_h + 24
+    panel_w = min(360, base_w - 20)
+    dx = (base_w - panel_w) // 2
+    dy = max(4, (base_h - total_h) // 2)
+    panel_h = min(total_h, base_h - 8)
+
+    overlay[dy : dy + panel_h, dx : dx + panel_w] = _BG
+    for i in range(2):
+        overlay[dy + i, dx : dx + panel_w] = _BORDER
+        overlay[dy + panel_h - 1 - i, dx : dx + panel_w] = _BORDER
+        overlay[dy : dy + panel_h, dx + i] = _BORDER
+        overlay[dy : dy + panel_h, dx + panel_w - 1 - i] = _BORDER
+
+    title = _render_text_rgba("Editor Controls", get_pixel_font(14), _TEXT_COLOR)
+    _blit_rgba(overlay, title, dy + 6, dx + (panel_w - title.shape[1]) // 2)
+
+    y = dy + 24
+    for line in _HELP_LINES:
+        if not line:
+            y += line_h // 2
+            continue
+        if line.startswith("--"):
+            txt = _render_text_rgba(line, font, (190, 165, 55))
+        else:
+            txt = _render_text_rgba(line, font, _LABEL_COLOR)
+        _blit_rgba(overlay, txt, y, dx + 12)
+        y += line_h
+
+    return overlay
+
+
 def _render_text_rgba(
     text: str,
     font: pygame.font.Font,

@@ -316,3 +316,105 @@ def erase_tile(state: EditorState, x: int, y: int) -> None:
     """
     erase_block(state, x, y)
     erase_machine(state, x, y)
+
+
+def add_column(state: EditorState) -> None:
+    """Append one dirt column to the right edge of the map.
+
+    All four arrays are extended in place and ``map_width`` is
+    incremented.
+
+    Args:
+        state: Editor state (mutated in place).
+    """
+    h = state.map_height
+    state.block_map = np.concatenate(
+        [state.block_map, np.full((h, 1), int(BlockType.DIRT), dtype=np.int32)],
+        axis=1,
+    )
+    state.block_resources = np.concatenate(
+        [state.block_resources, np.zeros((h, 1), dtype=np.int32)],
+        axis=1,
+    )
+    state.machine_types = np.concatenate(
+        [
+            state.machine_types,
+            np.full((h, 1), int(MachineType.NONE), dtype=np.int32),
+        ],
+        axis=1,
+    )
+    state.machine_directions = np.concatenate(
+        [state.machine_directions, np.zeros((h, 1), dtype=np.int32)],
+        axis=1,
+    )
+    state.map_width += 1
+    state.dirty = True
+
+
+def remove_column(state: EditorState) -> None:
+    """Remove the rightmost column from the map.
+
+    No-op if the map is 1 tile wide.
+
+    Args:
+        state: Editor state (mutated in place).
+    """
+    if state.map_width <= 1:
+        return
+    state.block_map = state.block_map[:, :-1]
+    state.block_resources = state.block_resources[:, :-1]
+    state.machine_types = state.machine_types[:, :-1]
+    state.machine_directions = state.machine_directions[:, :-1]
+    state.map_width -= 1
+    state.dirty = True
+
+
+def add_row(state: EditorState) -> None:
+    """Append one dirt row to the bottom edge of the map.
+
+    All four arrays are extended in place and ``map_height`` is
+    incremented.
+
+    Args:
+        state: Editor state (mutated in place).
+    """
+    w = state.map_width
+    state.block_map = np.concatenate(
+        [state.block_map, np.full((1, w), int(BlockType.DIRT), dtype=np.int32)],
+        axis=0,
+    )
+    state.block_resources = np.concatenate(
+        [state.block_resources, np.zeros((1, w), dtype=np.int32)],
+        axis=0,
+    )
+    state.machine_types = np.concatenate(
+        [
+            state.machine_types,
+            np.full((1, w), int(MachineType.NONE), dtype=np.int32),
+        ],
+        axis=0,
+    )
+    state.machine_directions = np.concatenate(
+        [state.machine_directions, np.zeros((1, w), dtype=np.int32)],
+        axis=0,
+    )
+    state.map_height += 1
+    state.dirty = True
+
+
+def remove_row(state: EditorState) -> None:
+    """Remove the bottom row from the map.
+
+    No-op if the map is 1 tile tall.
+
+    Args:
+        state: Editor state (mutated in place).
+    """
+    if state.map_height <= 1:
+        return
+    state.block_map = state.block_map[:-1, :]
+    state.block_resources = state.block_resources[:-1, :]
+    state.machine_types = state.machine_types[:-1, :]
+    state.machine_directions = state.machine_directions[:-1, :]
+    state.map_height -= 1
+    state.dirty = True

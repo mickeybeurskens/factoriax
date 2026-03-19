@@ -30,10 +30,13 @@ from factoriax.editor.dialogs import (
     NumberInputDialog,
     ask_load_path,
     ask_save_path,
+    render_help_overlay,
 )
 from factoriax.editor.state import (
     EditorState,
     ResourceBrush,
+    add_column,
+    add_row,
     editor_state_from_level,
     editor_state_to_level,
     erase_block,
@@ -41,6 +44,8 @@ from factoriax.editor.state import (
     erase_tile,
     fill_rect_tiles,
     new_editor_state,
+    remove_column,
+    remove_row,
     set_machine,
     set_tile,
 )
@@ -245,6 +250,7 @@ def main() -> None:
     number_dialog: NumberInputDialog | None = None
     number_dialog_target: str = ""
     show_resources = False
+    show_help = False
 
     running = True
     while running:
@@ -258,7 +264,7 @@ def main() -> None:
                 if result == "ok":
                     w, h, name = dialog.get_values()
                     editor = new_editor_state(w, h, name)
-                    _update_layout(editor, vp)
+                    _update_layout(editor, vp, reset_camera=True)
                     base_width = TOOLBAR_WIDTH + vp.canvas_w
                     base_height = MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
                     scale = max(
@@ -292,6 +298,11 @@ def main() -> None:
                     number_dialog = None
                 elif result == "cancel":
                     number_dialog = None
+                continue
+
+            if show_help:
+                if event.type == pygame.KEYDOWN:
+                    show_help = False
                 continue
 
             if event.type == pygame.VIDEORESIZE:
@@ -401,7 +412,11 @@ def main() -> None:
                                 if path is not None:
                                     level = load_level(path)
                                     editor = editor_state_from_level(level)
-                                    _update_layout(editor, vp)
+                                    _update_layout(
+                                        editor,
+                                        vp,
+                                        reset_camera=True,
+                                    )
                                     base_width = TOOLBAR_WIDTH + vp.canvas_w
                                     base_height = (
                                         MENU_BAR_HEIGHT
@@ -615,7 +630,7 @@ def main() -> None:
                     if path is not None:
                         level = load_level(path)
                         editor = editor_state_from_level(level)
-                        _update_layout(editor, vp)
+                        _update_layout(editor, vp, reset_camera=True)
                         base_width = TOOLBAR_WIDTH + vp.canvas_w
                         base_height = MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
                         scale = max(
@@ -688,6 +703,10 @@ def main() -> None:
                     )
                 elif event.key == pygame.K_v:
                     show_resources = not show_resources
+                elif event.key == pygame.K_QUESTION or (
+                    event.key == pygame.K_SLASH and shift
+                ):
+                    show_help = True
 
                 elif event.key == pygame.K_RIGHTBRACKET:
                     if resource_brush.mode == "exact":
@@ -717,6 +736,62 @@ def main() -> None:
                             resource_brush.range_max - _RES_STEP,
                         )
 
+                elif ctrl and event.key == pygame.K_RIGHT:
+                    add_column(editor)
+                    _update_layout(editor, vp)
+                    base_width = TOOLBAR_WIDTH + vp.canvas_w
+                    base_height = (
+                        MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
+                    )
+                    scale = max(
+                        1,
+                        min(
+                            window_width // base_width,
+                            window_height // base_height,
+                        ),
+                    )
+                elif ctrl and event.key == pygame.K_LEFT:
+                    remove_column(editor)
+                    _update_layout(editor, vp)
+                    base_width = TOOLBAR_WIDTH + vp.canvas_w
+                    base_height = (
+                        MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
+                    )
+                    scale = max(
+                        1,
+                        min(
+                            window_width // base_width,
+                            window_height // base_height,
+                        ),
+                    )
+                elif ctrl and event.key == pygame.K_DOWN:
+                    add_row(editor)
+                    _update_layout(editor, vp)
+                    base_width = TOOLBAR_WIDTH + vp.canvas_w
+                    base_height = (
+                        MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
+                    )
+                    scale = max(
+                        1,
+                        min(
+                            window_width // base_width,
+                            window_height // base_height,
+                        ),
+                    )
+                elif ctrl and event.key == pygame.K_UP:
+                    remove_row(editor)
+                    _update_layout(editor, vp)
+                    base_width = TOOLBAR_WIDTH + vp.canvas_w
+                    base_height = (
+                        MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
+                    )
+                    scale = max(
+                        1,
+                        min(
+                            window_width // base_width,
+                            window_height // base_height,
+                        ),
+                    )
                 elif event.key == pygame.K_LEFT:
                     pan(
                         vp,
@@ -810,6 +885,10 @@ def main() -> None:
             num_overlay = number_dialog.render(base_width, base_height)
             frame = composite_rgba_over_rgb(frame, num_overlay)
 
+        if show_help:
+            help_overlay = render_help_overlay(base_width, base_height)
+            frame = composite_rgba_over_rgb(frame, help_overlay)
+
         base_surface = pygame.surfarray.make_surface(
             np.transpose(frame, (1, 0, 2)),
         )
@@ -825,15 +904,22 @@ def main() -> None:
     pygame.quit()
 
 
-def _update_layout(editor: EditorState, vp: Viewport) -> None:
+def _update_layout(
+    editor: EditorState,
+    vp: Viewport,
+    reset_camera: bool = False,
+) -> None:
     """Recalculate viewport dimensions after the map size changes.
 
     Args:
         editor: Current editor state (read-only).
         vp: Viewport to update in place.
+        reset_camera: If ``True`` the camera is moved to (0, 0).
+            Otherwise the current position is preserved and clamped.
     """
     vp.canvas_w = editor.map_width * vp.tile_size
     vp.canvas_h = editor.map_height * vp.tile_size
-    vp.camera_x = 0.0
-    vp.camera_y = 0.0
+    if reset_camera:
+        vp.camera_x = 0.0
+        vp.camera_y = 0.0
     clamp_camera(vp, editor.map_width, editor.map_height)

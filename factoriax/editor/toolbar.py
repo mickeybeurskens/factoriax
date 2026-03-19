@@ -356,6 +356,14 @@ def render_status_bar(
     _blit_rgb(bar, tag_txt, (STATUS_BAR_HEIGHT - tag_txt.shape[0]) // 2, x)
     x += tag_txt.shape[1]
     _blit_rgb(bar, rest_txt, (STATUS_BAR_HEIGHT - rest_txt.shape[0]) // 2, x)
+
+    help_txt = _render_text("? Help", font, (100, 100, 100))
+    _blit_rgb(
+        bar,
+        help_txt,
+        (STATUS_BAR_HEIGHT - help_txt.shape[0]) // 2,
+        width - help_txt.shape[1] - 8,
+    )
     return bar
 
 
