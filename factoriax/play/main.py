@@ -9,7 +9,6 @@ import pygame
 from jax import random
 
 from factoriax.constants import (
-    BLOCK_PIXEL_SIZE,
     MACHINE_NUM_SLOTS,
     NUM_INVENTORY_SLOTS,
     Action,
@@ -147,17 +146,15 @@ def play_level(
         num_players=num_players,
     )
 
-    base_width = params.map_width * BLOCK_PIXEL_SIZE
-    base_height = params.map_height * BLOCK_PIXEL_SIZE
-
+    prev_size = screen.get_size() if screen is not None else None
+    game_win_w, game_win_h = calculate_window_size(_UI_SIZE, _UI_SIZE)
     if screen is None:
-        window_width, window_height = calculate_window_size(
-            base_width,
-            base_height,
-        )
-        screen = pygame.display.set_mode((window_width, window_height))
+        screen = pygame.display.set_mode((game_win_w, game_win_h))
     else:
-        window_width, window_height = screen.get_size()
+        screen = pygame.display.set_mode(
+            (game_win_w, game_win_h),
+            pygame.RESIZABLE,
+        )
 
     pygame.display.set_caption(f"FactoriaX - {level.name}")
 
@@ -173,10 +170,31 @@ def play_level(
         params,
     )[0].block_until_ready()
 
-    _play_loop(env, state, params, level, screen, rng, base_width, base_height)
+    _play_loop(env, state, params, level, screen, rng)
 
     if owns_pygame:
         pygame.quit()
+    elif prev_size is not None:
+        pygame.display.set_mode(prev_size, pygame.RESIZABLE)
+
+
+_UI_SIZE = 1024
+
+
+def _tile_pixel_size(map_w: int, map_h: int) -> int:
+    """Choose a tile pixel size so the map fits within the UI canvas.
+
+    Picks the largest size that keeps the full map visible, with a
+    minimum of 8 pixels per tile so blocks remain distinguishable.
+
+    Args:
+        map_w: Map width in tiles.
+        map_h: Map height in tiles.
+
+    Returns:
+        Tile side length in pixels.
+    """
+    return max(8, min(_UI_SIZE // map_w, _UI_SIZE // map_h))
 
 
 def _play_loop(
@@ -186,14 +204,13 @@ def _play_loop(
     level: Level | None,
     screen: pygame.Surface,
     rng: jax.Array,
-    base_width: int,
-    base_height: int,
 ) -> None:
     """Run the full interactive game loop with all menus and controls.
 
-    This is the shared implementation used by both :func:`main` (standalone
-    play) and :func:`play_level` (editor play-test).  Separated so that
-    callers can set up the environment and window however they like.
+    The game world is rendered at a tile size chosen so the full map
+    fits within the fixed ``_UI_SIZE x _UI_SIZE`` canvas.  Menus
+    always render at the same canvas resolution, so their proportions
+    are independent of map dimensions.
 
     Args:
         env: FactoriaX environment instance.
@@ -202,12 +219,18 @@ def _play_loop(
         level: Source level for reset, or ``None`` for procedural reset.
         screen: Pygame display surface.
         rng: JAX random key.
-        base_width: Base render width in pixels.
-        base_height: Base render height in pixels.
     """
     window_width, window_height = screen.get_size()
     step_fn = jax.jit(env.step_env)  # type: ignore[union-attr]
     clock = pygame.time.Clock()
+
+    ui_w = _UI_SIZE
+    ui_h = _UI_SIZE
+    tile_px = _tile_pixel_size(params.map_width, params.map_height)
+    world_pw = params.map_width * tile_px
+    world_ph = params.map_height * tile_px
+    world_ox = (ui_w - world_pw) // 2
+    world_oy = (ui_h - world_ph) // 2
 
     key_to_action = {
         pygame.K_a: Action.LEFT,
@@ -249,7 +272,9 @@ def _play_loop(
     machine_ty = 0
     machine_panel_active = True
 
-    scale = max(1, window_width // base_width)
+    win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
+    win_ox = (window_width - ui_w * win_scale) // 2
+    win_oy = (window_height - ui_h * win_scale) // 2
     click_regions: list[ClickRegion] = []
 
     running = True
@@ -260,8 +285,8 @@ def _play_loop(
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                base_x = event.pos[0] // scale
-                base_y = event.pos[1] // scale
+                base_x = (event.pos[0] - win_ox) // win_scale
+                base_y = (event.pos[1] - win_oy) // win_scale
                 hit = hit_test_regions(click_regions, base_x, base_y)
                 if hit is not None:
                     if hit.action == "select_slot":
@@ -478,57 +503,65 @@ def _play_loop(
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
 
-        pixels = render_pixels(state)
+        pixels = render_pixels(state, block_pixel_size=tile_px)
         click_regions = []
+
+        # Build the UI frame.  The world is rendered at a tile size
+        # chosen to fit the fixed canvas.  Menus overlay at the same
+        # canvas resolution so their proportions never change.
+        ui_frame = np.zeros((ui_h, ui_w, 3), dtype=np.uint8)
+        ph, pw = pixels.shape[:2]
+        ui_frame[world_oy : world_oy + ph, world_ox : world_ox + pw] = pixels
 
         if machine_open:
             machine_overlay, machine_regions = render_machine_menu(
                 state,
-                base_width,
-                base_height,
+                ui_w,
+                ui_h,
                 machine_tx,
                 machine_ty,
                 machine_panel_active,
             )
-            pixels = composite_rgba_over_rgb(pixels, machine_overlay)
+            ui_frame = composite_rgba_over_rgb(ui_frame, machine_overlay)
             click_regions.extend(machine_regions)
 
         if inventory_open:
             menu_overlay, inv_regions = render_inventory_menu(
                 state,
-                base_width,
-                base_height,
+                ui_w,
+                ui_h,
                 menu_focus,
             )
-            pixels = composite_rgba_over_rgb(pixels, menu_overlay)
+            ui_frame = composite_rgba_over_rgb(ui_frame, menu_overlay)
             click_regions.extend(inv_regions)
 
         if achievement_open:
             ach_overlay = render_achievement_menu(
                 state,
-                base_width,
-                base_height,
+                ui_w,
+                ui_h,
                 achievement_scroll,
             )
-            pixels = composite_rgba_over_rgb(pixels, ach_overlay)
+            ui_frame = composite_rgba_over_rgb(ui_frame, ach_overlay)
 
         if pause_open:
             pause_overlay, pause_regions = render_pause_menu(
-                base_width,
-                base_height,
+                ui_w,
+                ui_h,
                 pause_selection,
             )
-            pixels = composite_rgba_over_rgb(pixels, pause_overlay)
+            ui_frame = composite_rgba_over_rgb(ui_frame, pause_overlay)
             click_regions.extend(pause_regions)
 
-        base_surface = pygame.surfarray.make_surface(
-            np.transpose(pixels, (1, 0, 2)),
+        final_surface = pygame.surfarray.make_surface(
+            np.transpose(ui_frame, (1, 0, 2)),
         )
         scaled_surface = pygame.transform.scale(
-            base_surface,
-            (window_width, window_height),
+            final_surface,
+            (ui_w * win_scale, ui_h * win_scale),
         )
-        screen.blit(scaled_surface, (0, 0))
+        screen.fill((0, 0, 0))
+        screen.blit(scaled_surface, (win_ox, win_oy))
         pygame.display.flip()
         clock.tick(30)
 
@@ -556,10 +589,11 @@ def main() -> None:
     pygame.init()
 
     env, params = make_factoriax_env()
-    base_width = params.map_width * BLOCK_PIXEL_SIZE
-    base_height = params.map_height * BLOCK_PIXEL_SIZE
 
-    window_width, window_height = calculate_window_size(base_width, base_height)
+    window_width, window_height = calculate_window_size(
+        _UI_SIZE,
+        _UI_SIZE,
+    )
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
 
@@ -569,9 +603,14 @@ def main() -> None:
 
     step_fn = jax.jit(env.step_env)
     rng, warmup_key = random.split(rng)
-    step_fn(warmup_key, state, jnp.int32(Action.NOOP), params)[0].block_until_ready()
+    step_fn(
+        warmup_key,
+        state,
+        jnp.int32(Action.NOOP),
+        params,
+    )[0].block_until_ready()
 
-    _play_loop(env, state, params, None, screen, rng, base_width, base_height)
+    _play_loop(env, state, params, None, screen, rng)
 
     pygame.quit()
 
