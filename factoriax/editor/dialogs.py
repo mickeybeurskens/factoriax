@@ -169,6 +169,111 @@ class NewLevelDialog:
         return w, h, name
 
 
+@dataclasses.dataclass
+class NumberInputDialog:
+    """Small overlay for typing a single integer value.
+
+    Renders as a compact RGBA overlay centred on the screen.  Accepts
+    digits, backspace, Enter to confirm, and Escape to cancel.
+
+    Attributes:
+        label: Prompt shown above the input field.
+        text: Current input text.
+        min_value: Minimum allowed value (clamped on confirm).
+        max_value: Maximum allowed value (clamped on confirm).
+        default: Fallback value when the input is empty or invalid.
+    """
+
+    label: str = "Value:"
+    text: str = ""
+    min_value: int = 0
+    max_value: int = 100
+    default: int = 0
+
+    def handle_event(self, event: pygame.event.Event) -> str | None:
+        """Process a pygame event.
+
+        Args:
+            event: A ``pygame.KEYDOWN`` event.
+
+        Returns:
+            ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
+        """
+        if event.type != pygame.KEYDOWN:
+            return None
+        if event.key == pygame.K_ESCAPE:
+            return "cancel"
+        if event.key == pygame.K_RETURN:
+            return "ok"
+        if event.key == pygame.K_BACKSPACE:
+            self.text = self.text[:-1]
+            return None
+        if event.unicode and event.unicode.isdigit():
+            self.text += event.unicode
+        return None
+
+    def get_value(self) -> int:
+        """Parse the text field into a clamped integer.
+
+        Returns:
+            Integer between ``min_value`` and ``max_value``.
+        """
+        try:
+            val = int(self.text)
+        except ValueError:
+            val = self.default
+        return max(self.min_value, min(self.max_value, val))
+
+    def render(self, base_w: int, base_h: int) -> np.ndarray:
+        """Render the dialog as an RGBA overlay.
+
+        Args:
+            base_w: Base window width.
+            base_h: Base window height.
+
+        Returns:
+            RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+        """
+        w, h = 180, 80
+        overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
+        overlay[:, :] = (0, 0, 0, 140)
+
+        dx = (base_w - w) // 2
+        dy = (base_h - h) // 2
+        overlay[dy : dy + h, dx : dx + w] = _BG
+        for i in range(2):
+            overlay[dy + i, dx : dx + w] = _BORDER
+            overlay[dy + h - 1 - i, dx : dx + w] = _BORDER
+            overlay[dy : dy + h, dx + i] = _BORDER
+            overlay[dy : dy + h, dx + w - 1 - i] = _BORDER
+
+        font = get_pixel_font(14)
+        lbl = _render_text_rgba(self.label, font, _LABEL_COLOR)
+        _blit_rgba(overlay, lbl, dy + 10, dx + 12)
+
+        fy = dy + 34
+        overlay[fy : fy + 22, dx + 12 : dx + w - 12] = _FIELD_ACTIVE
+        val = _render_text_rgba(
+            self.text + "_",
+            font,
+            _TEXT_COLOR,
+        )
+        _blit_rgba(overlay, val, fy + 3, dx + 16)
+
+        hint = _render_text_rgba(
+            "Enter: OK  Esc: cancel",
+            get_pixel_font(10),
+            _LABEL_COLOR,
+        )
+        _blit_rgba(
+            overlay,
+            hint,
+            dy + h - 16,
+            dx + (w - hint.shape[1]) // 2,
+        )
+        return overlay
+
+
 def ask_save_path(initial_name: str) -> Path | None:
     """Open a native file-save dialog and return the chosen path.
 

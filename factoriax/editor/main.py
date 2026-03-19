@@ -15,6 +15,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     Action,
     BlockType,
+    MachineType,
 )
 from factoriax.editor.canvas import (
     Viewport,
@@ -26,6 +27,7 @@ from factoriax.editor.canvas import (
 )
 from factoriax.editor.dialogs import (
     NewLevelDialog,
+    NumberInputDialog,
     ask_load_path,
     ask_save_path,
 )
@@ -34,6 +36,8 @@ from factoriax.editor.state import (
     ResourceBrush,
     editor_state_from_level,
     editor_state_to_level,
+    erase_block,
+    erase_machine,
     erase_tile,
     fill_rect_tiles,
     new_editor_state,
@@ -58,12 +62,54 @@ from factoriax.play.main import (
     calculate_window_size,
     composite_rgba_over_rgb,
     hit_test_regions,
+    play_level,
 )
 from factoriax.play.ui import ClickRegion
 
 _PAN_SPEED = 1.0
 _RES_STEP = 10
 _MIN_RES = 0
+
+_DIR_CYCLE = [
+    int(Action.DOWN),
+    int(Action.RIGHT),
+    int(Action.UP),
+    int(Action.LEFT),
+]
+
+_CONVEYOR = int(MachineType.CONVEYOR_BELT)
+
+
+def _next_direction(current: int) -> int:
+    """Cycle to the next direction in clockwise order.
+
+    Args:
+        current: Current direction as an ``Action`` integer.
+
+    Returns:
+        Next direction value.
+    """
+    idx = _DIR_CYCLE.index(current) if current in _DIR_CYCLE else 0
+    return _DIR_CYCLE[(idx + 1) % 4]
+
+
+def _direction_from_delta(dx: int, dy: int) -> int | None:
+    """Infer a cardinal direction from a tile-space delta.
+
+    Returns ``None`` when the delta is zero (no movement).
+
+    Args:
+        dx: Horizontal tile offset (positive = right).
+        dy: Vertical tile offset (positive = down).
+
+    Returns:
+        ``Action`` direction integer, or ``None``.
+    """
+    if dx == 0 and dy == 0:
+        return None
+    if abs(dx) >= abs(dy):
+        return int(Action.RIGHT) if dx > 0 else int(Action.LEFT)
+    return int(Action.DOWN) if dy > 0 else int(Action.UP)
 
 
 def _brush_name(
@@ -110,92 +156,22 @@ def _resource_info(brush: ResourceBrush) -> str:
 def run_play_session(
     state: EditorState,
     screen: pygame.Surface,
-    window_width: int,
-    window_height: int,
 ) -> None:
-    """Launch a play-test session from the editor.
+    """Launch a full play-test session from the editor.
 
-    Converts the editor state to a Level, resets the environment, and
-    runs a simplified play loop.  Returns to the editor when the user
-    presses Escape.
+    Converts the editor state to a Level and delegates to
+    :func:`~factoriax.play.main.play_level`, which provides the
+    complete game UI (inventory, crafting, machine inspection,
+    achievements, pause).  Returns to the editor when the user
+    quits from the pause menu.
 
     Args:
         state: Current editor state.
-        screen: Pygame display surface.
-        window_width: Window width in pixels.
-        window_height: Window height in pixels.
+        screen: Pygame display surface (reused by the play session).
     """
-    import jax
-    import jax.numpy as jnp
-    from jax import random
-
-    from factoriax.envs.factoriax_env import make_factoriax_env
-    from factoriax.renderer import render_pixels
-    from factoriax.state import EnvParams
-
     level = editor_state_to_level(state)
-    env, _ = make_factoriax_env()
-    params = EnvParams(
-        map_width=level.map_width,
-        map_height=level.map_height,
-        num_players=1,
-    )
-
-    obs, env_state = env.reset_from_level(level, params)
-    step_fn = jax.jit(env.step_env)
-
-    rng = random.PRNGKey(0)
-    rng, warmup_key = random.split(rng)
-    step_fn(warmup_key, env_state, jnp.int32(Action.NOOP), params)[
-        0
-    ].block_until_ready()
-
-    key_to_action = {
-        pygame.K_a: Action.LEFT,
-        pygame.K_d: Action.RIGHT,
-        pygame.K_w: Action.UP,
-        pygame.K_s: Action.DOWN,
-        pygame.K_SPACE: Action.MINE,
-        pygame.K_e: Action.PLACE,
-    }
-
-    clock = pygame.time.Clock()
-    base_w = params.map_width * 32
-    base_h = params.map_height * 32
-    scale = max(1, min(window_width // base_w, window_height // base_h))
-
-    running = True
-    while running:
-        action = Action.NOOP
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key in key_to_action:
-                    action = key_to_action[event.key]
-
-        if not running:
-            break
-
-        if action != Action.NOOP:
-            rng, step_key = random.split(rng)
-            obs, env_state, reward, done, info = step_fn(
-                step_key, env_state, jnp.int32(action), params
-            )
-            if done:
-                obs, env_state = env.reset_from_level(level, params)
-
-        pixels = render_pixels(env_state)
-        base_surface = pygame.surfarray.make_surface(np.transpose(pixels, (1, 0, 2)))
-        scaled = pygame.transform.scale(base_surface, (base_w * scale, base_h * scale))
-        screen.fill((0, 0, 0))
-        sx = (window_width - base_w * scale) // 2
-        sy = (window_height - base_h * scale) // 2
-        screen.blit(scaled, (sx, sy))
-        pygame.display.flip()
-        clock.tick(30)
+    play_level(level, num_players=1, screen=screen)
+    pygame.display.set_caption("FactoriaX Editor")
 
 
 def main() -> None:
@@ -208,13 +184,15 @@ def main() -> None:
         Middle drag / arrow keys: pan
         1-5: select block brush (Dirt, Water, Iron, Copper, Coal)
         6-9: select machine brush (Miner, Chest, Belt, Arm)
-        R: rotate machine direction
+        R: rotate machine direction (or rotate existing machine under cursor)
         B: paint tool, F: fill rect tool, X: eraser tool
         T: toggle resource mode (exact / range)
         [ / ]: decrease / increase resource value
         Shift+[ / Shift+]: adjust range_min
         Ctrl+N: new level, Ctrl+O: load, Ctrl+S: save, F5: play
         Escape: cancel operation / close dialog
+
+    Conveyor belts infer direction from drag direction when painting.
     """
     pygame.init()
 
@@ -223,12 +201,21 @@ def main() -> None:
 
     base_width = TOOLBAR_WIDTH + editor.map_width * 32
     base_height = MENU_BAR_HEIGHT + editor.map_height * 32 + STATUS_BAR_HEIGHT
-    window_width, window_height = calculate_window_size(base_width, base_height)
-    screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
+    window_width, window_height = calculate_window_size(
+        base_width,
+        base_height,
+    )
+    screen = pygame.display.set_mode(
+        (window_width, window_height),
+        pygame.RESIZABLE,
+    )
     pygame.display.set_caption("FactoriaX Editor")
     clock = pygame.time.Clock()
 
-    scale = max(1, min(window_width // base_width, window_height // base_height))
+    scale = max(
+        1,
+        min(window_width // base_width, window_height // base_height),
+    )
 
     vp = Viewport(
         tile_size=32,
@@ -245,12 +232,19 @@ def main() -> None:
 
     cursor_tile: tuple[int, int] | None = None
     painting = False
+    last_paint_tile: tuple[int, int] | None = None
+    right_erasing = False
+    tool_before_erase: str = TOOL_PAINT
+    machine_before_erase: int = 0
     fill_start: tuple[int, int] | None = None
     fill_rect: tuple[int, int, int, int] | None = None
     middle_dragging = False
     middle_last: tuple[int, int] = (0, 0)
 
     dialog: NewLevelDialog | None = None
+    number_dialog: NumberInputDialog | None = None
+    number_dialog_target: str = ""
+    show_resources = False
 
     running = True
     while running:
@@ -268,21 +262,51 @@ def main() -> None:
                     base_width = TOOLBAR_WIDTH + vp.canvas_w
                     base_height = MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
                     scale = max(
-                        1, min(window_width // base_width, window_height // base_height)
+                        1,
+                        min(
+                            window_width // base_width,
+                            window_height // base_height,
+                        ),
                     )
                     dialog = None
                 elif result == "cancel":
                     dialog = None
                 continue
 
+            if number_dialog is not None:
+                result = number_dialog.handle_event(event)
+                if result == "ok":
+                    val = number_dialog.get_value()
+                    if number_dialog_target == "exact":
+                        resource_brush.exact_value = val
+                    elif number_dialog_target == "min":
+                        resource_brush.range_min = min(
+                            val,
+                            resource_brush.range_max,
+                        )
+                    elif number_dialog_target == "max":
+                        resource_brush.range_max = max(
+                            val,
+                            resource_brush.range_min,
+                        )
+                    number_dialog = None
+                elif result == "cancel":
+                    number_dialog = None
+                continue
+
             if event.type == pygame.VIDEORESIZE:
                 window_width, window_height = event.w, event.h
                 scale = max(
-                    1, min(window_width // base_width, window_height // base_height)
+                    1,
+                    min(
+                        window_width // base_width,
+                        window_height // base_height,
+                    ),
                 )
 
             elif event.type == pygame.MOUSEMOTION:
-                mx, my = event.pos[0] // scale, event.pos[1] // scale
+                mx = event.pos[0] // scale
+                my = event.pos[1] // scale
                 cx = mx - TOOLBAR_WIDTH
                 cy = my - MENU_BAR_HEIGHT
                 if cx >= 0 and cy >= 0 and cy < vp.canvas_h:
@@ -292,12 +316,45 @@ def main() -> None:
 
                 if painting and cursor_tile is not None:
                     tx, ty = cursor_tile
-                    if selected_tool == TOOL_ERASE:
-                        erase_tile(editor, tx, ty)
-                    elif selected_machine != 0:
-                        set_machine(editor, tx, ty, selected_machine, machine_direction)
-                    else:
-                        set_tile(editor, tx, ty, selected_block, resource_brush, rng)
+                    on_new_tile = (tx, ty) != last_paint_tile
+                    if on_new_tile:
+                        if selected_tool == TOOL_ERASE:
+                            if right_erasing:
+                                if machine_before_erase != 0:
+                                    erase_machine(editor, tx, ty)
+                                else:
+                                    erase_block(editor, tx, ty)
+                            else:
+                                erase_tile(editor, tx, ty)
+                        elif selected_machine != 0:
+                            direction = machine_direction
+                            if (
+                                selected_machine == _CONVEYOR
+                                and last_paint_tile is not None
+                            ):
+                                drag_dir = _direction_from_delta(
+                                    tx - last_paint_tile[0],
+                                    ty - last_paint_tile[1],
+                                )
+                                if drag_dir is not None:
+                                    direction = drag_dir
+                            set_machine(
+                                editor,
+                                tx,
+                                ty,
+                                selected_machine,
+                                direction,
+                            )
+                            last_paint_tile = (tx, ty)
+                        else:
+                            set_tile(
+                                editor,
+                                tx,
+                                ty,
+                                selected_block,
+                                resource_brush,
+                                rng,
+                            )
 
                 if fill_start is not None and cursor_tile is not None:
                     fill_rect = (*fill_start, *cursor_tile)
@@ -309,7 +366,8 @@ def main() -> None:
                     middle_last = event.pos
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos[0] // scale, event.pos[1] // scale
+                mx = event.pos[0] // scale
+                my = event.pos[1] // scale
 
                 if event.button == 2:
                     middle_dragging = True
@@ -321,22 +379,21 @@ def main() -> None:
                     cy = my - MENU_BAR_HEIGHT
                     if cx >= 0 and cy >= 0:
                         direction = 1 if event.button == 4 else -1
-                        zoom(vp, direction, cx, cy, editor.map_width, editor.map_height)
+                        zoom(
+                            vp,
+                            direction,
+                            cx,
+                            cy,
+                            editor.map_width,
+                            editor.map_height,
+                        )
                     continue
 
                 if event.button == 1:
                     if my < MENU_BAR_HEIGHT:
-                        menu_bar, menu_regions = render_menu_bar(base_width)
+                        _, menu_regions = render_menu_bar(base_width)
                         hit = hit_test_regions(menu_regions, mx, my)
                         if hit is not None:
-                            _handle_menu_action(
-                                hit.action,
-                                editor,
-                                vp,
-                                screen,
-                                window_width,
-                                window_height,
-                            )
                             if hit.action == "new":
                                 dialog = NewLevelDialog()
                             elif hit.action == "load":
@@ -361,12 +418,13 @@ def main() -> None:
                             elif hit.action == "save":
                                 path = ask_save_path(editor.name)
                                 if path is not None:
-                                    save_level(editor_state_to_level(editor), path)
+                                    save_level(
+                                        editor_state_to_level(editor),
+                                        path,
+                                    )
                                     editor.dirty = False
                             elif hit.action == "play":
-                                run_play_session(
-                                    editor, screen, window_width, window_height
-                                )
+                                run_play_session(editor, screen)
                         continue
 
                     if mx < TOOLBAR_WIDTH:
@@ -377,19 +435,27 @@ def main() -> None:
                             machine_direction,
                             resource_brush,
                             vp.canvas_h,
+                            show_resources,
                         )
                         adjusted = [
                             ClickRegion(
-                                r.x, r.y + MENU_BAR_HEIGHT, r.w, r.h, r.action, r.param
+                                r.x,
+                                r.y + MENU_BAR_HEIGHT,
+                                r.w,
+                                r.h,
+                                r.action,
+                                r.param,
                             )
                             for r in tb_regions
                         ]
                         hit = hit_test_regions(adjusted, mx, my)
                         if hit is not None:
                             if hit.action == "tool":
-                                selected_tool = [TOOL_PAINT, TOOL_FILL, TOOL_ERASE][
-                                    hit.param
-                                ]
+                                selected_tool = [
+                                    TOOL_PAINT,
+                                    TOOL_FILL,
+                                    TOOL_ERASE,
+                                ][hit.param]
                             elif hit.action == "block":
                                 selected_block = BLOCK_ITEMS[hit.param][0]
                                 selected_machine = 0
@@ -401,6 +467,32 @@ def main() -> None:
                                     if resource_brush.mode == "exact"
                                     else "exact"
                                 )
+                            elif hit.action == "edit_res_exact":
+                                number_dialog = NumberInputDialog(
+                                    label=f"Amount (0-{BLOCK_MAX_RESOURCES}):",
+                                    text="",
+                                    max_value=BLOCK_MAX_RESOURCES,
+                                    default=resource_brush.exact_value,
+                                )
+                                number_dialog_target = "exact"
+                            elif hit.action == "edit_res_min":
+                                number_dialog = NumberInputDialog(
+                                    label=f"Min (0-{BLOCK_MAX_RESOURCES}):",
+                                    text="",
+                                    max_value=BLOCK_MAX_RESOURCES,
+                                    default=resource_brush.range_min,
+                                )
+                                number_dialog_target = "min"
+                            elif hit.action == "edit_res_max":
+                                number_dialog = NumberInputDialog(
+                                    label=f"Max (0-{BLOCK_MAX_RESOURCES}):",
+                                    text="",
+                                    max_value=BLOCK_MAX_RESOURCES,
+                                    default=resource_brush.range_max,
+                                )
+                                number_dialog_target = "max"
+                            elif hit.action == "toggle_show_res":
+                                show_resources = not show_resources
                         continue
 
                     cx = mx - TOOLBAR_WIDTH
@@ -412,15 +504,25 @@ def main() -> None:
                             fill_rect = (tx, ty, tx, ty)
                         else:
                             painting = True
+                            last_paint_tile = (tx, ty)
                             if selected_tool == TOOL_ERASE:
                                 erase_tile(editor, tx, ty)
                             elif selected_machine != 0:
                                 set_machine(
-                                    editor, tx, ty, selected_machine, machine_direction
+                                    editor,
+                                    tx,
+                                    ty,
+                                    selected_machine,
+                                    machine_direction,
                                 )
                             else:
                                 set_tile(
-                                    editor, tx, ty, selected_block, resource_brush, rng
+                                    editor,
+                                    tx,
+                                    ty,
+                                    selected_block,
+                                    resource_brush,
+                                    rng,
                                 )
 
                 elif event.button == 3:
@@ -428,31 +530,55 @@ def main() -> None:
                     cy = my - MENU_BAR_HEIGHT
                     if cx >= 0 and cy >= 0 and cy < vp.canvas_h:
                         tx, ty = screen_to_tile(vp, cx, cy)
-                        erase_tile(editor, tx, ty)
-                        painting = True
+                        right_erasing = True
+                        tool_before_erase = selected_tool
+                        machine_before_erase = selected_machine
                         selected_tool = TOOL_ERASE
+                        if selected_machine != 0:
+                            erase_machine(editor, tx, ty)
+                        else:
+                            erase_block(editor, tx, ty)
+                        painting = True
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 2:
                     middle_dragging = False
+                elif event.button == 3:
+                    if right_erasing:
+                        selected_tool = tool_before_erase
+                        right_erasing = False
+                        painting = False
+                        last_paint_tile = None
                 elif event.button == 1:
                     if fill_start is not None and cursor_tile is not None:
                         tx, ty = cursor_tile
                         if selected_machine != 0:
+                            fill_dir = _direction_from_delta(
+                                tx - fill_start[0],
+                                ty - fill_start[1],
+                            )
+                            if selected_machine == _CONVEYOR and fill_dir is not None:
+                                direction = fill_dir
+                            else:
+                                direction = machine_direction
                             lx = min(fill_start[0], tx)
                             ly = min(fill_start[1], ty)
                             rx = max(fill_start[0], tx)
                             ry = max(fill_start[1], ty)
-                            for fy in range(max(0, ly), min(editor.map_height, ry + 1)):
+                            for fy in range(
+                                max(0, ly),
+                                min(editor.map_height, ry + 1),
+                            ):
                                 for fx in range(
-                                    max(0, lx), min(editor.map_width, rx + 1)
+                                    max(0, lx),
+                                    min(editor.map_width, rx + 1),
                                 ):
                                     set_machine(
                                         editor,
                                         fx,
                                         fy,
                                         selected_machine,
-                                        machine_direction,
+                                        direction,
                                     )
                         else:
                             fill_rect_tiles(
@@ -468,6 +594,7 @@ def main() -> None:
                         fill_start = None
                         fill_rect = None
                     painting = False
+                    last_paint_tile = None
 
             elif event.type == pygame.KEYDOWN:
                 mods = pygame.key.get_mods()
@@ -494,7 +621,8 @@ def main() -> None:
                         scale = max(
                             1,
                             min(
-                                window_width // base_width, window_height // base_height
+                                window_width // base_width,
+                                window_height // base_height,
                             ),
                         )
                 elif ctrl and event.key == pygame.K_s:
@@ -503,7 +631,7 @@ def main() -> None:
                         save_level(editor_state_to_level(editor), path)
                         editor.dirty = False
                 elif event.key == pygame.K_F5:
-                    run_play_session(editor, screen, window_width, window_height)
+                    run_play_session(editor, screen)
 
                 elif event.key == pygame.K_b:
                     selected_tool = TOOL_PAINT
@@ -537,23 +665,29 @@ def main() -> None:
                     selected_machine = MACHINE_ITEMS[3][0]
 
                 elif event.key == pygame.K_r:
-                    dirs = [
-                        int(Action.DOWN),
-                        int(Action.RIGHT),
-                        int(Action.UP),
-                        int(Action.LEFT),
-                    ]
-                    idx = (
-                        dirs.index(machine_direction)
-                        if machine_direction in dirs
-                        else 0
-                    )
-                    machine_direction = dirs[(idx + 1) % 4]
+                    if (
+                        cursor_tile is not None
+                        and 0 <= cursor_tile[0] < editor.map_width
+                        and 0 <= cursor_tile[1] < editor.map_height
+                        and editor.machine_types[cursor_tile[1], cursor_tile[0]]
+                        != int(MachineType.NONE)
+                    ):
+                        cy, cx = cursor_tile[1], cursor_tile[0]
+                        editor.machine_directions[cy, cx] = _next_direction(
+                            int(editor.machine_directions[cy, cx]),
+                        )
+                        editor.dirty = True
+                    else:
+                        machine_direction = _next_direction(
+                            machine_direction,
+                        )
 
                 elif event.key == pygame.K_t:
                     resource_brush.mode = (
                         "range" if resource_brush.mode == "exact" else "exact"
                     )
+                elif event.key == pygame.K_v:
+                    show_resources = not show_resources
 
                 elif event.key == pygame.K_RIGHTBRACKET:
                     if resource_brush.mode == "exact":
@@ -569,11 +703,13 @@ def main() -> None:
                 elif event.key == pygame.K_LEFTBRACKET:
                     if shift:
                         resource_brush.range_min = max(
-                            _MIN_RES, resource_brush.range_min - _RES_STEP
+                            _MIN_RES,
+                            resource_brush.range_min - _RES_STEP,
                         )
                     elif resource_brush.mode == "exact":
                         resource_brush.exact_value = max(
-                            _MIN_RES, resource_brush.exact_value - _RES_STEP
+                            _MIN_RES,
+                            resource_brush.exact_value - _RES_STEP,
                         )
                     else:
                         resource_brush.range_max = max(
@@ -582,13 +718,31 @@ def main() -> None:
                         )
 
                 elif event.key == pygame.K_LEFT:
-                    pan(vp, -_PAN_SPEED, 0, editor.map_width, editor.map_height)
+                    pan(
+                        vp,
+                        -_PAN_SPEED,
+                        0,
+                        editor.map_width,
+                        editor.map_height,
+                    )
                 elif event.key == pygame.K_RIGHT:
-                    pan(vp, _PAN_SPEED, 0, editor.map_width, editor.map_height)
+                    pan(
+                        vp,
+                        _PAN_SPEED,
+                        0,
+                        editor.map_width,
+                        editor.map_height,
+                    )
                 elif event.key == pygame.K_UP:
                     pan(vp, 0, -_PAN_SPEED, 0, editor.map_height)
                 elif event.key == pygame.K_DOWN:
-                    pan(vp, 0, _PAN_SPEED, editor.map_width, editor.map_height)
+                    pan(
+                        vp,
+                        0,
+                        _PAN_SPEED,
+                        editor.map_width,
+                        editor.map_height,
+                    )
 
         menu_bar, _ = render_menu_bar(base_width)
         toolbar, _ = render_toolbar(
@@ -598,12 +752,20 @@ def main() -> None:
             machine_direction,
             resource_brush,
             vp.canvas_h,
+            show_resources,
         )
 
-        canvas_img = render_canvas(editor, vp, cursor_tile, fill_rect)
+        canvas_img = render_canvas(
+            editor,
+            vp,
+            cursor_tile,
+            fill_rect,
+            show_resources,
+        )
 
         bn = _brush_name(selected_block, selected_machine, selected_tool)
         ri = _resource_info(resource_brush)
+        active_layer = "machine" if selected_machine != 0 else "terrain"
         status_bar = render_status_bar(
             selected_tool,
             bn,
@@ -612,9 +774,14 @@ def main() -> None:
             editor.dirty,
             ri,
             base_width,
+            layer=active_layer,
         )
 
-        frame = np.full((base_height, base_width, 3), (30, 30, 30), dtype=np.uint8)
+        frame = np.full(
+            (base_height, base_width, 3),
+            (30, 30, 30),
+            dtype=np.uint8,
+        )
         frame[:MENU_BAR_HEIGHT, :] = menu_bar
         tb_h = min(toolbar.shape[0], vp.canvas_h)
         frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_h, :TOOLBAR_WIDTH] = toolbar[:tb_h]
@@ -639,9 +806,16 @@ def main() -> None:
             dialog_overlay = dialog.render(base_width, base_height)
             frame = composite_rgba_over_rgb(frame, dialog_overlay)
 
-        base_surface = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
+        if number_dialog is not None:
+            num_overlay = number_dialog.render(base_width, base_height)
+            frame = composite_rgba_over_rgb(frame, num_overlay)
+
+        base_surface = pygame.surfarray.make_surface(
+            np.transpose(frame, (1, 0, 2)),
+        )
         scaled = pygame.transform.scale(
-            base_surface, (base_width * scale, base_height * scale)
+            base_surface,
+            (base_width * scale, base_height * scale),
         )
         screen.fill((0, 0, 0))
         screen.blit(scaled, (0, 0))
@@ -663,23 +837,3 @@ def _update_layout(editor: EditorState, vp: Viewport) -> None:
     vp.camera_x = 0.0
     vp.camera_y = 0.0
     clamp_camera(vp, editor.map_width, editor.map_height)
-
-
-def _handle_menu_action(
-    action: str,
-    editor: EditorState,
-    vp: Viewport,
-    screen: pygame.Surface,
-    window_width: int,
-    window_height: int,
-) -> None:
-    """Placeholder for menu actions handled inline in the event loop.
-
-    Args:
-        action: Menu action name.
-        editor: Current editor state.
-        vp: Current viewport.
-        screen: Pygame display surface.
-        window_width: Window width.
-        window_height: Window height.
-    """

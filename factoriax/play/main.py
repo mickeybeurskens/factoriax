@@ -1,5 +1,7 @@
 """Interactive play script for FactoriaX using pygame."""
 
+from __future__ import annotations
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -14,6 +16,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.envs.factoriax_env import make_factoriax_env
+from factoriax.levels import Level
 from factoriax.play.transfer import deposit_to_machine, withdraw_from_machine
 from factoriax.play.ui import (
     SCROLL_STEP,
@@ -22,9 +25,9 @@ from factoriax.play.ui import (
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
-    render_welcome_screen,
 )
 from factoriax.renderer import render_pixels
+from factoriax.state import EnvParams
 
 
 def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> np.ndarray:
@@ -115,47 +118,96 @@ def _tile_in_front(state: object, player_idx: int) -> tuple[int, int]:
     return int(pos[0]) + dx, int(pos[1]) + dy
 
 
-def main() -> None:
-    """Run the interactive FactoriaX game.
+def play_level(
+    level: Level,
+    num_players: int = 1,
+    screen: pygame.Surface | None = None,
+) -> None:
+    """Play a level with the full game UI.
 
-    Controls:
-        WASD: Move the selected player
-        Space: Mine at current position
-        F: Inspect machine in front of the selected player
-        I: Toggle inventory/crafting menu
-        Tab: Switch between inventory and crafting sections (when menu open)
-        Left/Right arrows: Navigate inventory slots / machine slots
-        Up/Down arrows: Navigate recipes (in crafting section)
-        C: Start crafting selected recipe
-        E: Place (in world/inventory) or Craft (in crafting section)
-        P: Toggle achievement menu
-        1-5: Quick-select inventory slot 1-5
-        Shift+1-5: Quick-select inventory slot 6-10
-        Ctrl+1-9: Select player (if that many players exist)
-        R: Reset the game
-        Escape: Close menus / Open pause menu
+    Provides the complete play experience including inventory, crafting,
+    machine inspection, achievements, and pause menus.  When called from
+    the editor the existing *screen* surface is reused and the function
+    returns on quit instead of terminating pygame.
+
+    Args:
+        level: Level to play.
+        num_players: Number of players to spawn.
+        screen: Existing pygame display surface.  If ``None`` a new
+            window is created and destroyed on exit.
     """
-    pygame.init()
+    owns_pygame = screen is None
+    if owns_pygame:
+        pygame.init()
 
-    env, params = make_factoriax_env()
+    env, _ = make_factoriax_env()
+    params = EnvParams(
+        map_width=level.map_width,
+        map_height=level.map_height,
+        num_players=num_players,
+    )
+
     base_width = params.map_width * BLOCK_PIXEL_SIZE
     base_height = params.map_height * BLOCK_PIXEL_SIZE
 
-    window_width, window_height = calculate_window_size(base_width, base_height)
-    screen = pygame.display.set_mode((window_width, window_height))
-    pygame.display.set_caption("FactoriaX")
-    clock = pygame.time.Clock()
+    if screen is None:
+        window_width, window_height = calculate_window_size(
+            base_width,
+            base_height,
+        )
+        screen = pygame.display.set_mode((window_width, window_height))
+    else:
+        window_width, window_height = screen.get_size()
 
+    pygame.display.set_caption(f"FactoriaX - {level.name}")
+
+    obs, state = env.reset_from_level(level, params)
     rng = random.PRNGKey(42)
-    rng, reset_key = random.split(rng)
-    obs, state = env.reset_env(reset_key, params)
 
     step_fn = jax.jit(env.step_env)
-
-    # Trigger JIT compilation before the display loop so the first real
-    # keypress is not delayed by tracing.
     rng, warmup_key = random.split(rng)
-    step_fn(warmup_key, state, jnp.int32(Action.NOOP), params)[0].block_until_ready()
+    step_fn(
+        warmup_key,
+        state,
+        jnp.int32(Action.NOOP),
+        params,
+    )[0].block_until_ready()
+
+    _play_loop(env, state, params, level, screen, rng, base_width, base_height)
+
+    if owns_pygame:
+        pygame.quit()
+
+
+def _play_loop(
+    env: object,
+    state: object,
+    params: EnvParams,
+    level: Level | None,
+    screen: pygame.Surface,
+    rng: jax.Array,
+    base_width: int,
+    base_height: int,
+) -> None:
+    """Run the full interactive game loop with all menus and controls.
+
+    This is the shared implementation used by both :func:`main` (standalone
+    play) and :func:`play_level` (editor play-test).  Separated so that
+    callers can set up the environment and window however they like.
+
+    Args:
+        env: FactoriaX environment instance.
+        state: Initial environment state.
+        params: Environment parameters.
+        level: Source level for reset, or ``None`` for procedural reset.
+        screen: Pygame display surface.
+        rng: JAX random key.
+        base_width: Base render width in pixels.
+        base_height: Base render height in pixels.
+    """
+    window_width, window_height = screen.get_size()
+    step_fn = jax.jit(env.step_env)  # type: ignore[union-attr]
+    clock = pygame.time.Clock()
 
     key_to_action = {
         pygame.K_a: Action.LEFT,
@@ -186,7 +238,6 @@ def main() -> None:
         pygame.K_9: 8,
     }
 
-    welcome_open = True
     inventory_open = False
     achievement_open = False
     achievement_scroll = 0
@@ -196,9 +247,9 @@ def main() -> None:
     machine_open = False
     machine_tx = 0
     machine_ty = 0
-    machine_panel_active = True  # True = machine slots focused, False = player strip
+    machine_panel_active = True
 
-    scale = window_width // base_width
+    scale = max(1, window_width // base_width)
     click_regions: list[ClickRegion] = []
 
     running = True
@@ -208,40 +259,36 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif (
-                event.type == pygame.MOUSEBUTTONDOWN
-                and event.button == 1
-                and not welcome_open
-            ):
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 base_x = event.pos[0] // scale
                 base_y = event.pos[1] // scale
                 hit = hit_test_regions(click_regions, base_x, base_y)
                 if hit is not None:
                     if hit.action == "select_slot":
-                        selected_player = int(state.selected_player)
-                        new_slots = state.selected_slots.at[selected_player].set(
+                        selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                        new_slots = state.selected_slots.at[selected_player].set(  # type: ignore[union-attr]
                             hit.param
                         )
-                        state = state.replace(selected_slots=new_slots)
+                        state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
                         if machine_open:
                             machine_panel_active = False
                         else:
                             menu_focus = "inventory"
                     elif hit.action == "select_recipe":
                         menu_focus = "crafting"
-                        selected_player = int(state.selected_player)
-                        new_recipes = state.selected_recipes.at[selected_player].set(
+                        selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                        new_recipes = state.selected_recipes.at[selected_player].set(  # type: ignore[union-attr]
                             hit.param
                         )
-                        state = state.replace(selected_recipes=new_recipes)
+                        state = state.replace(selected_recipes=new_recipes)  # type: ignore[union-attr]
                     elif hit.action == "select_machine_slot":
-                        machine_type = int(state.machine_types[machine_ty, machine_tx])
+                        machine_type = int(state.machine_types[machine_ty, machine_tx])  # type: ignore[union-attr]
                         num_slots = int(MACHINE_NUM_SLOTS[machine_type])
                         if 0 <= hit.param < num_slots:
-                            new_sel = state.machine_selected_slot.at[
+                            new_sel = state.machine_selected_slot.at[  # type: ignore[union-attr]
                                 machine_ty, machine_tx
                             ].set(hit.param)
-                            state = state.replace(machine_selected_slot=new_sel)
+                            state = state.replace(machine_selected_slot=new_sel)  # type: ignore[union-attr]
                         machine_panel_active = True
                     elif hit.action == "focus_inventory":
                         menu_focus = "inventory"
@@ -256,11 +303,6 @@ def main() -> None:
                 mods = pygame.key.get_mods()
                 shift_held = mods & pygame.KMOD_SHIFT
                 ctrl_held = mods & pygame.KMOD_CTRL
-
-                if welcome_open:
-                    if event.key in (pygame.K_SPACE, pygame.K_RETURN):
-                        welcome_open = False
-                    continue
 
                 if event.key == pygame.K_ESCAPE:
                     if pause_open:
@@ -288,13 +330,13 @@ def main() -> None:
                     if machine_open:
                         machine_open = False
                     else:
-                        selected_player = int(state.selected_player)
+                        selected_player = int(state.selected_player)  # type: ignore[union-attr]
                         tx, ty = _tile_in_front(state, selected_player)
-                        map_h, map_w = state.map.shape
+                        map_h, map_w = state.map.shape  # type: ignore[union-attr]
                         if (
                             0 <= tx < map_w
                             and 0 <= ty < map_h
-                            and int(state.machine_types[ty, tx])
+                            and int(state.machine_types[ty, tx])  # type: ignore[union-attr]
                             != int(MachineType.NONE)
                         ):
                             machine_tx, machine_ty = tx, ty
@@ -308,34 +350,34 @@ def main() -> None:
                         machine_panel_active = not machine_panel_active
                     elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                         delta = -1 if event.key == pygame.K_LEFT else 1
-                        selected_player = int(state.selected_player)
+                        selected_player = int(state.selected_player)  # type: ignore[union-attr]
                         if machine_panel_active:
                             machine_type = int(
-                                state.machine_types[machine_ty, machine_tx]
+                                state.machine_types[machine_ty, machine_tx]  # type: ignore[union-attr]
                             )
                             num_slots = int(MACHINE_NUM_SLOTS[machine_type])
                             if num_slots > 0:
                                 current = int(
-                                    state.machine_selected_slot[machine_ty, machine_tx]
+                                    state.machine_selected_slot[machine_ty, machine_tx]  # type: ignore[union-attr]
                                 )
                                 new_slot = (current + delta) % num_slots
-                                new_sel = state.machine_selected_slot.at[
+                                new_sel = state.machine_selected_slot.at[  # type: ignore[union-attr]
                                     machine_ty, machine_tx
                                 ].set(new_slot)
-                                state = state.replace(machine_selected_slot=new_sel)
+                                state = state.replace(machine_selected_slot=new_sel)  # type: ignore[union-attr]
                         else:
-                            current = int(state.selected_slots[selected_player])
+                            current = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
                             new_slot = (current + delta) % NUM_INVENTORY_SLOTS
-                            new_slots = state.selected_slots.at[selected_player].set(
+                            new_slots = state.selected_slots.at[selected_player].set(  # type: ignore[union-attr]
                                 new_slot
                             )
-                            state = state.replace(selected_slots=new_slots)
+                            state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
                     elif event.key == pygame.K_e:
-                        selected_player = int(state.selected_player)
+                        selected_player = int(state.selected_player)  # type: ignore[union-attr]
                         machine_slot = int(
-                            state.machine_selected_slot[machine_ty, machine_tx]
+                            state.machine_selected_slot[machine_ty, machine_tx]  # type: ignore[union-attr]
                         )
-                        player_slot = int(state.selected_slots[selected_player])
+                        player_slot = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
                         if machine_panel_active:
                             state = withdraw_from_machine(
                                 state,
@@ -365,12 +407,18 @@ def main() -> None:
                         achievement_scroll = 0
                 elif achievement_open:
                     if event.key == pygame.K_UP:
-                        achievement_scroll = max(0, achievement_scroll - SCROLL_STEP)
+                        achievement_scroll = max(
+                            0,
+                            achievement_scroll - SCROLL_STEP,
+                        )
                     elif event.key == pygame.K_DOWN:
                         achievement_scroll += SCROLL_STEP
                 elif event.key == pygame.K_r:
-                    rng, reset_key = random.split(rng)
-                    obs, state = env.reset_env(reset_key, params)
+                    if level is not None:
+                        obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                    else:
+                        rng, reset_key = random.split(rng)
+                        obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
                 elif inventory_open and event.key == pygame.K_TAB:
                     if menu_focus == "inventory":
                         menu_focus = "crafting"
@@ -389,36 +437,46 @@ def main() -> None:
                     elif event.key == pygame.K_e:
                         action = Action.CRAFT
                 elif event.key == pygame.K_e:
-                    selected_player = int(state.selected_player)
+                    selected_player = int(state.selected_player)  # type: ignore[union-attr]
                     tx, ty = _tile_in_front(state, selected_player)
-                    map_h, map_w = state.map.shape
+                    map_h, map_w = state.map.shape  # type: ignore[union-attr]
                     has_machine = (
                         0 <= tx < map_w
                         and 0 <= ty < map_h
-                        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
+                        and int(state.machine_types[ty, tx])  # type: ignore[union-attr]
+                        != int(MachineType.NONE)
                     )
                     action = Action.PICKUP if has_machine else Action.PLACE
                 elif ctrl_held and event.key in key_to_player:
                     player_idx = key_to_player[event.key]
                     if player_idx < params.num_players:
-                        state = state.replace(selected_player=player_idx)
+                        state = state.replace(selected_player=player_idx)  # type: ignore[union-attr]
                 elif event.key in key_to_slot:
                     slot_idx = key_to_slot[event.key]
                     if shift_held:
                         slot_idx += 5
-                    selected_player = int(state.selected_player)
-                    new_slots = state.selected_slots.at[selected_player].set(slot_idx)
-                    state = state.replace(selected_slots=new_slots)
+                    selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                    new_slots = state.selected_slots.at[selected_player].set(  # type: ignore[union-attr]
+                        slot_idx,
+                    )
+                    state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
                 elif event.key in key_to_action:
                     action = key_to_action[event.key]
 
         if action != Action.NOOP:
             rng, step_key = random.split(rng)
-            obs, state, reward, done, info = step_fn(step_key, state, action, params)
-
+            obs, state, reward, done, info = step_fn(
+                step_key,
+                state,
+                action,
+                params,
+            )
             if done:
-                rng, reset_key = random.split(rng)
-                obs, state = env.reset_env(reset_key, params)
+                if level is not None:
+                    obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                else:
+                    rng, reset_key = random.split(rng)
+                    obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
 
         pixels = render_pixels(state)
         click_regions = []
@@ -437,35 +495,83 @@ def main() -> None:
 
         if inventory_open:
             menu_overlay, inv_regions = render_inventory_menu(
-                state, base_width, base_height, menu_focus
+                state,
+                base_width,
+                base_height,
+                menu_focus,
             )
             pixels = composite_rgba_over_rgb(pixels, menu_overlay)
             click_regions.extend(inv_regions)
 
         if achievement_open:
             ach_overlay = render_achievement_menu(
-                state, base_width, base_height, achievement_scroll
+                state,
+                base_width,
+                base_height,
+                achievement_scroll,
             )
             pixels = composite_rgba_over_rgb(pixels, ach_overlay)
 
         if pause_open:
             pause_overlay, pause_regions = render_pause_menu(
-                base_width, base_height, pause_selection
+                base_width,
+                base_height,
+                pause_selection,
             )
             pixels = composite_rgba_over_rgb(pixels, pause_overlay)
             click_regions.extend(pause_regions)
 
-        if welcome_open:
-            welcome_overlay = render_welcome_screen(base_width, base_height)
-            pixels = composite_rgba_over_rgb(pixels, welcome_overlay)
-
-        base_surface = pygame.surfarray.make_surface(np.transpose(pixels, (1, 0, 2)))
+        base_surface = pygame.surfarray.make_surface(
+            np.transpose(pixels, (1, 0, 2)),
+        )
         scaled_surface = pygame.transform.scale(
-            base_surface, (window_width, window_height)
+            base_surface,
+            (window_width, window_height),
         )
         screen.blit(scaled_surface, (0, 0))
         pygame.display.flip()
         clock.tick(30)
+
+
+def main() -> None:
+    """Run the interactive FactoriaX game.
+
+    Controls:
+        WASD: Move the selected player
+        Space: Mine at current position
+        F: Inspect machine in front of the selected player
+        I: Toggle inventory/crafting menu
+        Tab: Switch between inventory and crafting sections (when menu open)
+        Left/Right arrows: Navigate inventory slots / machine slots
+        Up/Down arrows: Navigate recipes (in crafting section)
+        C: Start crafting selected recipe
+        E: Place (in world/inventory) or Craft (in crafting section)
+        P: Toggle achievement menu
+        1-5: Quick-select inventory slot 1-5
+        Shift+1-5: Quick-select inventory slot 6-10
+        Ctrl+1-9: Select player (if that many players exist)
+        R: Reset the game
+        Escape: Close menus / Open pause menu
+    """
+    pygame.init()
+
+    env, params = make_factoriax_env()
+    base_width = params.map_width * BLOCK_PIXEL_SIZE
+    base_height = params.map_height * BLOCK_PIXEL_SIZE
+
+    window_width, window_height = calculate_window_size(base_width, base_height)
+    screen = pygame.display.set_mode((window_width, window_height))
+    pygame.display.set_caption("FactoriaX")
+
+    rng = random.PRNGKey(42)
+    rng, reset_key = random.split(rng)
+    obs, state = env.reset_env(reset_key, params)
+
+    step_fn = jax.jit(env.step_env)
+    rng, warmup_key = random.split(rng)
+    step_fn(warmup_key, state, jnp.int32(Action.NOOP), params)[0].block_until_ready()
+
+    _play_loop(env, state, params, None, screen, rng, base_width, base_height)
 
     pygame.quit()
 

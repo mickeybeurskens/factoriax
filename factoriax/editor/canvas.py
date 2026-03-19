@@ -8,8 +8,10 @@ in-game tiles.
 from __future__ import annotations
 
 import dataclasses
+import functools
 
 import numpy as np
+import pygame
 
 from factoriax.constants import ItemType, MachineType
 from factoriax.renderer import (
@@ -144,11 +146,14 @@ def render_canvas(
     vp: Viewport,
     cursor_tile: tuple[int, int] | None,
     selection_rect: tuple[int, int, int, int] | None = None,
+    show_resources: bool = False,
 ) -> np.ndarray:
     """Render the visible canvas area as an RGBA image.
 
     Draws terrain tiles via the vectorized texture lookup, overlays
-    machines, grid lines, and cursor / selection highlights.
+    machines, grid lines, and cursor / selection highlights.  When
+    *show_resources* is ``True``, the resource count is drawn on each
+    tile that has resources.
 
     Args:
         state: :class:`~factoriax.editor.state.EditorState` instance.
@@ -156,6 +161,7 @@ def render_canvas(
         cursor_tile: ``(tx, ty)`` of the tile under the mouse, or ``None``.
         selection_rect: ``(x0, y0, x1, y1)`` tile coordinates of the
             fill-rect selection, or ``None``.
+        show_resources: Whether to draw resource amounts on tiles.
 
     Returns:
         RGBA uint8 array of shape ``(canvas_h, canvas_w, 4)``.
@@ -207,6 +213,18 @@ def render_canvas(
         ix = int(px0 + mx * ts + offset)
         _blit_clipped(canvas, icon, iy, ix)
 
+    if show_resources and ts >= 16:
+        resource_slice = es.block_resources[row0:row1, col0:col1]
+        rys, rxs = np.nonzero(resource_slice > 0)
+        font = _get_resource_font(ts)
+        for ry, rx in zip(rys, rxs):
+            amount = int(resource_slice[ry, rx])
+            label = _render_resource_label(font, amount)
+            lh, lw = label.shape[:2]
+            ly = py0 + ry * ts + (ts - lh) // 2
+            lx = px0 + rx * ts + (ts - lw) // 2
+            _blit_alpha(canvas, label, ly, lx)
+
     for r in range(rows + 1):
         gy = py0 + r * ts
         if 0 <= gy < vp.canvas_h:
@@ -230,10 +248,12 @@ def render_canvas(
 
     if selection_rect is not None:
         sx0, sy0, sx1, sy1 = selection_rect
-        lx, rx = min(sx0, sx1), max(sx0, sx1)
-        ly, ry = min(sy0, sy1), max(sy0, sy1)
-        for ty in range(max(0, ly), min(es.map_height, ry + 1)):
-            for tx in range(max(0, lx), min(es.map_width, rx + 1)):
+        sel_lx = int(min(sx0, sx1))
+        sel_rx = int(max(sx0, sx1))
+        sel_ly = int(min(sy0, sy1))
+        sel_ry = int(max(sy0, sy1))
+        for ty in range(max(0, sel_ly), min(es.map_height, sel_ry + 1)):
+            for tx in range(max(0, sel_lx), min(es.map_width, sel_rx + 1)):
                 _highlight_tile(canvas, vp, tx, ty, _SELECT_COLOR)
 
     return canvas
@@ -298,3 +318,76 @@ def _blit_clipped(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     ch = dy1 - dy0
     cw = dx1 - dx0
     dst[dy0:dy1, dx0:dx1] = src[sy0 : sy0 + ch, sx0 : sx0 + cw]
+
+
+def _get_resource_font(tile_size: int) -> pygame.font.Font:
+    """Return a font sized for resource labels at the given tile size.
+
+    Args:
+        tile_size: Current tile pixel size.
+
+    Returns:
+        A pygame font instance.
+    """
+    from factoriax.play.ui import get_pixel_font
+
+    font_size = max(8, tile_size * 2 // 5)
+    return get_pixel_font(font_size)
+
+
+@functools.lru_cache(maxsize=256)
+def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
+    """Render a resource amount as a small RGBA text label.
+
+    Results are cached per ``(font, amount)`` pair so repeated
+    amounts on the same zoom level don't re-render.
+
+    Args:
+        font: Pygame font for rendering.
+        amount: Resource count to display.
+
+    Returns:
+        RGBA uint8 array of shape ``(H, W, 4)``.
+    """
+    color = (255, 255, 255)
+    surface = font.render(str(amount), False, color)
+    w, h = surface.get_size()
+    rgb = pygame.surfarray.array3d(surface).transpose(1, 0, 2)
+    result = np.zeros((h, w, 4), dtype=np.uint8)
+    result[:, :, :3] = rgb
+    result[:, :, 3] = np.where(np.any(rgb != 0, axis=2), 220, 0)
+    return result
+
+
+def _blit_alpha(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
+    """Alpha-composite *src* onto *dst* with boundary clipping.
+
+    Args:
+        dst: Destination RGBA array (mutated in place).
+        src: Source RGBA array.
+        y: Top row in destination.
+        x: Left column in destination.
+    """
+    dh, dw = dst.shape[:2]
+    sh, sw = src.shape[:2]
+
+    sy0 = max(0, -y)
+    sx0 = max(0, -x)
+    dy0 = max(0, y)
+    dx0 = max(0, x)
+    dy1 = min(dh, y + sh)
+    dx1 = min(dw, x + sw)
+
+    if dy1 <= dy0 or dx1 <= dx0:
+        return
+
+    ch = dy1 - dy0
+    cw = dx1 - dx0
+    crop = src[sy0 : sy0 + ch, sx0 : sx0 + cw]
+    region = dst[dy0:dy1, dx0:dx1]
+    alpha = crop[:, :, 3:4].astype(np.float32) / 255.0
+    region[:, :, :3] = (
+        crop[:, :, :3].astype(np.float32) * alpha
+        + region[:, :, :3].astype(np.float32) * (1.0 - alpha)
+    ).astype(np.uint8)
+    region[:, :, 3] = np.maximum(region[:, :, 3], crop[:, :, 3])

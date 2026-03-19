@@ -129,6 +129,7 @@ def render_toolbar(
     direction: int,
     resource_brush: object,
     height: int,
+    show_resources: bool = False,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the sidebar toolbar with all palette sections.
 
@@ -139,6 +140,7 @@ def render_toolbar(
         direction: Current machine placement direction.
         resource_brush: :class:`~factoriax.editor.state.ResourceBrush`.
         height: Available height for the toolbar in pixels.
+        show_resources: Whether the resource overlay is active.
 
     Returns:
         ``(image, regions)`` where *image* is RGB shape
@@ -208,18 +210,79 @@ def render_toolbar(
     _blit_rgb(bar, mode_txt, y, 8)
     regions.append(
         ClickRegion(
-            x=4, y=y, w=TOOLBAR_WIDTH - 8, h=16, action="toggle_res_mode", param=0
+            x=4,
+            y=y,
+            w=TOOLBAR_WIDTH - 8,
+            h=16,
+            action="toggle_res_mode",
+            param=0,
         )
     )
     y += 18
 
+    field_h = 16
     if brush.mode == "exact":
-        val_str = str(brush.exact_value)
+        val_txt = _render_text(str(brush.exact_value), font, _TEXT_COLOR)
+        bar[y : y + field_h, 8 : TOOLBAR_WIDTH - 8] = (45, 45, 45)
+        _blit_rgb(bar, val_txt, y + 2, 12)
+        regions.append(
+            ClickRegion(
+                x=8,
+                y=y,
+                w=TOOLBAR_WIDTH - 16,
+                h=field_h,
+                action="edit_res_exact",
+                param=0,
+            )
+        )
+        y += field_h + 4
     else:
-        val_str = f"{brush.range_min}-{brush.range_max}"
-    val_txt = _render_text(val_str, font, _TEXT_COLOR)
-    _blit_rgb(bar, val_txt, y, 8)
-    y += 18
+        min_txt = _render_text(f"Min: {brush.range_min}", font, _TEXT_COLOR)
+        bar[y : y + field_h, 8 : TOOLBAR_WIDTH - 8] = (45, 45, 45)
+        _blit_rgb(bar, min_txt, y + 2, 12)
+        regions.append(
+            ClickRegion(
+                x=8,
+                y=y,
+                w=TOOLBAR_WIDTH - 16,
+                h=field_h,
+                action="edit_res_min",
+                param=0,
+            )
+        )
+        y += field_h + 2
+
+        max_txt = _render_text(f"Max: {brush.range_max}", font, _TEXT_COLOR)
+        bar[y : y + field_h, 8 : TOOLBAR_WIDTH - 8] = (45, 45, 45)
+        _blit_rgb(bar, max_txt, y + 2, 12)
+        regions.append(
+            ClickRegion(
+                x=8,
+                y=y,
+                w=TOOLBAR_WIDTH - 16,
+                h=field_h,
+                action="edit_res_max",
+                param=0,
+            )
+        )
+        y += field_h + 4
+
+    show_lbl = "Show" if show_resources else "Show"
+    show_bg = _ACTIVE_TOOL_BG if show_resources else (50, 50, 50)
+    bar[y : y + field_h, 4 : TOOLBAR_WIDTH - 4] = show_bg
+    show_txt = _render_text(show_lbl, font, _TEXT_COLOR)
+    _blit_rgb(bar, show_txt, y + 2, 8)
+    regions.append(
+        ClickRegion(
+            x=4,
+            y=y,
+            w=TOOLBAR_WIDTH - 8,
+            h=field_h,
+            action="toggle_show_res",
+            param=0,
+        )
+    )
+    y += field_h + 4
 
     y += 8
     label_txt = _render_text("Machines", font, _ACCENT_COLOR)
@@ -254,6 +317,7 @@ def render_status_bar(
     dirty: bool,
     resource_info: str,
     width: int,
+    layer: str = "terrain",
 ) -> np.ndarray:
     """Render the bottom status bar.
 
@@ -265,6 +329,7 @@ def render_status_bar(
         dirty: Whether unsaved changes exist.
         resource_info: Resource brush summary (e.g. ``"Res:100"``).
         width: Full window width in pixels.
+        layer: Active editing layer (``"terrain"`` or ``"machine"``).
 
     Returns:
         RGB uint8 array of shape ``(STATUS_BAR_HEIGHT, width, 3)``.
@@ -272,16 +337,25 @@ def render_status_bar(
     bar = np.full((STATUS_BAR_HEIGHT, width, 3), _STATUS_BG, dtype=np.uint8)
     font = get_pixel_font(12)
 
-    parts = [f"{tool.capitalize()}: {brush_name}"]
+    layer_tag = "[Terrain]" if layer == "terrain" else "[Machine]"
+    parts = [layer_tag, f"{tool.capitalize()}: {brush_name}"]
     parts.append(resource_info)
     if cursor_tile is not None:
         parts.append(f"({cursor_tile[0]}, {cursor_tile[1]})")
     name_display = level_name + (" *" if dirty else "")
     parts.append(name_display)
 
-    text = "  ".join(parts)
-    txt = _render_text(text, font, _DIM_TEXT)
-    _blit_rgb(bar, txt, (STATUS_BAR_HEIGHT - txt.shape[0]) // 2, 8)
+    layer_color = (100, 180, 100) if layer == "terrain" else (100, 140, 200)
+    tag_txt = _render_text(layer_tag, font, layer_color)
+    rest_txt = _render_text(
+        "  " + "  ".join(parts[1:]),
+        font,
+        _DIM_TEXT,
+    )
+    x = 8
+    _blit_rgb(bar, tag_txt, (STATUS_BAR_HEIGHT - tag_txt.shape[0]) // 2, x)
+    x += tag_txt.shape[1]
+    _blit_rgb(bar, rest_txt, (STATUS_BAR_HEIGHT - rest_txt.shape[0]) // 2, x)
     return bar
 
 

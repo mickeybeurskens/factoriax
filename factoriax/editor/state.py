@@ -274,8 +274,8 @@ def fill_rect_tiles(
     state.dirty = True
 
 
-def erase_tile(state: EditorState, x: int, y: int) -> None:
-    """Reset a tile to dirt and remove any machine.
+def erase_block(state: EditorState, x: int, y: int) -> None:
+    """Reset a tile's terrain to dirt, leaving any machine untouched.
 
     Args:
         state: Editor state (mutated in place).
@@ -286,6 +286,33 @@ def erase_tile(state: EditorState, x: int, y: int) -> None:
         return
     state.block_map[y, x] = int(BlockType.DIRT)
     state.block_resources[y, x] = 0
+    state.dirty = True
+
+
+def erase_machine(state: EditorState, x: int, y: int) -> None:
+    """Remove a machine from a tile, leaving the terrain untouched.
+
+    Args:
+        state: Editor state (mutated in place).
+        x: Tile column.
+        y: Tile row.
+    """
+    if not (0 <= x < state.map_width and 0 <= y < state.map_height):
+        return
     state.machine_types[y, x] = int(MachineType.NONE)
     state.machine_directions[y, x] = 0
     state.dirty = True
+
+
+def erase_tile(state: EditorState, x: int, y: int) -> None:
+    """Reset a tile to dirt and remove any machine.
+
+    Convenience function that clears both layers.
+
+    Args:
+        state: Editor state (mutated in place).
+        x: Tile column.
+        y: Tile row.
+    """
+    erase_block(state, x, y)
+    erase_machine(state, x, y)

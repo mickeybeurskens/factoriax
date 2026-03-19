@@ -7,6 +7,8 @@ from factoriax.editor.state import (
     ResourceBrush,
     editor_state_from_level,
     editor_state_to_level,
+    erase_block,
+    erase_machine,
     erase_tile,
     fill_rect_tiles,
     new_editor_state,
@@ -126,7 +128,7 @@ class TestFillRectTiles:
 
 
 class TestEraseTile:
-    """Tests for erase_tile."""
+    """Tests for erase_tile, erase_block, and erase_machine."""
 
     def test_erase_resets_to_dirt(self) -> None:
         state = new_editor_state(5, 5)
@@ -138,6 +140,40 @@ class TestEraseTile:
         assert state.block_map[1, 1] == int(BlockType.DIRT)
         assert state.block_resources[1, 1] == 0
         assert state.machine_types[1, 1] == int(MachineType.NONE)
+
+    def test_erase_block_preserves_machine(self) -> None:
+        state = new_editor_state(5, 5)
+        rng = np.random.default_rng(0)
+        brush = ResourceBrush(mode="exact", exact_value=50)
+        set_tile(state, 2, 2, int(BlockType.COAL), brush, rng)
+        set_machine(state, 2, 2, int(MachineType.MINER), int(Action.DOWN))
+        erase_block(state, 2, 2)
+        assert state.block_map[2, 2] == int(BlockType.DIRT)
+        assert state.block_resources[2, 2] == 0
+        assert state.machine_types[2, 2] == int(MachineType.MINER)
+        assert state.machine_directions[2, 2] == int(Action.DOWN)
+
+    def test_erase_machine_preserves_terrain(self) -> None:
+        state = new_editor_state(5, 5)
+        rng = np.random.default_rng(0)
+        brush = ResourceBrush(mode="exact", exact_value=50)
+        set_tile(state, 2, 2, int(BlockType.COAL), brush, rng)
+        set_machine(state, 2, 2, int(MachineType.MINER), int(Action.DOWN))
+        erase_machine(state, 2, 2)
+        assert state.block_map[2, 2] == int(BlockType.COAL)
+        assert state.block_resources[2, 2] == 50
+        assert state.machine_types[2, 2] == int(MachineType.NONE)
+        assert state.machine_directions[2, 2] == 0
+
+    def test_erase_block_out_of_bounds(self) -> None:
+        state = new_editor_state(5, 5)
+        erase_block(state, -1, 0)
+        assert state.dirty is False
+
+    def test_erase_machine_out_of_bounds(self) -> None:
+        state = new_editor_state(5, 5)
+        erase_machine(state, 10, 10)
+        assert state.dirty is False
 
 
 class TestLevelConversion:
