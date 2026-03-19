@@ -345,25 +345,23 @@ def render_status_bar(
     name_display = level_name + (" *" if dirty else "")
     parts.append(name_display)
 
+    help_txt = _render_text("? Help", font, (100, 100, 100))
+    y_center = (STATUS_BAR_HEIGHT - help_txt.shape[0]) // 2
+    x = 4
+    _blit_rgb(bar, help_txt, y_center, x)
+    x += help_txt.shape[1] + 8
+
     layer_color = (100, 180, 100) if layer == "terrain" else (100, 140, 200)
     tag_txt = _render_text(layer_tag, font, layer_color)
+    _blit_rgb(bar, tag_txt, y_center, x)
+    x += tag_txt.shape[1]
+
     rest_txt = _render_text(
         "  " + "  ".join(parts[1:]),
         font,
         _DIM_TEXT,
     )
-    x = 8
-    _blit_rgb(bar, tag_txt, (STATUS_BAR_HEIGHT - tag_txt.shape[0]) // 2, x)
-    x += tag_txt.shape[1]
-    _blit_rgb(bar, rest_txt, (STATUS_BAR_HEIGHT - rest_txt.shape[0]) // 2, x)
-
-    help_txt = _render_text("? Help", font, (100, 100, 100))
-    _blit_rgb(
-        bar,
-        help_txt,
-        (STATUS_BAR_HEIGHT - help_txt.shape[0]) // 2,
-        width - help_txt.shape[1] - 8,
-    )
+    _blit_rgb(bar, rest_txt, y_center, x)
     return bar
 
 
