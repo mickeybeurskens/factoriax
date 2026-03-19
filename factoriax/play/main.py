@@ -63,6 +63,27 @@ def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion 
     return None
 
 
+_monitor_size: tuple[int, int] | None = None
+
+
+def _get_monitor_size() -> tuple[int, int]:
+    """Return the monitor resolution, cached on first call.
+
+    ``pygame.display.Info()`` reports the monitor size before any
+    display mode is set, but returns the *window* size afterwards.
+    This function captures the true monitor dimensions once and
+    reuses them for all subsequent calls.
+
+    Returns:
+        ``(width, height)`` of the primary monitor in pixels.
+    """
+    global _monitor_size  # noqa: PLW0603
+    if _monitor_size is None:
+        info = pygame.display.Info()
+        _monitor_size = (info.current_w, info.current_h)
+    return _monitor_size
+
+
 def calculate_window_size(
     base_width: int, base_height: int, scale_factor: float = 0.8
 ) -> tuple[int, int]:
@@ -80,9 +101,9 @@ def calculate_window_size(
     Returns:
         Tuple of (window_width, window_height) in pixels
     """
-    screen_info = pygame.display.Info()
-    max_width = int(screen_info.current_w * scale_factor)
-    max_height = int(screen_info.current_h * scale_factor)
+    monitor_w, monitor_h = _get_monitor_size()
+    max_width = int(monitor_w * scale_factor)
+    max_height = int(monitor_h * scale_factor)
 
     # Find the largest integer scale that fits the screen
     max_scale_w = max_width // base_width
