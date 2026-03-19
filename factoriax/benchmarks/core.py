@@ -68,6 +68,12 @@ class LevelResult:
             at most ``env_params.max_timesteps``.
         actions: Integer action sequence of shape ``(T,)`` for player 0.
             For single-agent benchmarks this covers the full episode.
+        constraint_costs: Per-step constraint cost vectors of shape
+            ``(T, K)`` where *K* is the number of constraint
+            dimensions, or ``None`` when no constraint function was
+            supplied.  Each row holds the cost vector returned by the
+            constraint function after that tick.  Researchers can
+            aggregate these however they like (sum, max, threshold).
     """
 
     level_name: str
@@ -75,6 +81,7 @@ class LevelResult:
     weighted_score: float
     timesteps_used: int
     actions: np.ndarray
+    constraint_costs: np.ndarray | None = None
 
 
 @dataclasses.dataclass

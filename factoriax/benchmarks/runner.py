@@ -69,6 +69,8 @@ class BenchmarkRunner:
         benchmark: Benchmark,
         policies: list[Policy],
         obs_fn: Callable[[EnvState, EnvParams, int], jax.Array] | None = None,
+        constraint_fn: Callable[[EnvState, EnvState, EnvParams], jax.Array]
+        | None = None,
     ) -> BenchmarkResult:
         """Run policies through all benchmark levels and return aggregated results.
 
@@ -82,6 +84,10 @@ class BenchmarkRunner:
                 ``global_array``. Pass a custom function to match the
                 observation space used during training (e.g. ``local_array``
                 with a fixed radius for policies trained with local obs).
+            constraint_fn: Optional constraint cost function with signature
+                ``(prev_state, new_state, params) -> jax.Array`` returning
+                a cost vector of shape ``(K,)``.  When provided, the per-step
+                costs are recorded in ``LevelResult.constraint_costs``.
 
         Returns:
             ``BenchmarkResult`` containing per-level results and the
@@ -104,7 +110,14 @@ class BenchmarkRunner:
 
         for bench_level in benchmark.levels():
             rng, subkey = jax.random.split(rng)
-            result = self._run_level(benchmark, bench_level, policies, subkey, _obs_fn)
+            result = self._run_level(
+                benchmark,
+                bench_level,
+                policies,
+                subkey,
+                _obs_fn,
+                constraint_fn,
+            )
             level_results.append(result)
             logger.info(
                 "Level '%s': score=%.1f  mined=%s  steps=%d",
@@ -133,6 +146,8 @@ class BenchmarkRunner:
         policies: list[Policy],
         rng: jax.Array,
         obs_fn: Callable[[EnvState, EnvParams, int], jax.Array],
+        constraint_fn: Callable[[EnvState, EnvState, EnvParams], jax.Array]
+        | None = None,
     ) -> LevelResult:
         """Execute one level and return the result.
 
@@ -140,12 +155,17 @@ class BenchmarkRunner:
         and ``bench_level.env_params`` via ``build_state`` — no random key
         is needed for the reset. The PRNG key is used only for step_env.
 
+        When *constraint_fn* is provided, it is evaluated once per tick
+        (after all players have acted) and the per-step cost vectors are
+        stored in ``LevelResult.constraint_costs``.
+
         Args:
             benchmark: Benchmark owning this level (provides per-level scoring).
             bench_level: Level to run.
             policies: Policies indexed by player index.
             rng: PRNG key for this level's episode steps.
             obs_fn: Observation extraction function.
+            constraint_fn: Optional constraint cost function.
 
         Returns:
             ``LevelResult`` for this level.
@@ -154,23 +174,31 @@ class BenchmarkRunner:
         state = build_state(bench_level.level, params)
         num_players = params.num_players
 
-        # Player-0 actions are logged for analysis. For multi-agent benchmarks
-        # all players act sequentially each tick; analysis modules for those
-        # benchmarks should interpret actions accordingly.
         actions_log: list[int] = []
+        costs_log: list[np.ndarray] = []
         done = jnp.array(False)
 
         for _ in range(params.max_timesteps):
+            prev_state = state
             for p in range(num_players):
-                state_p = state.replace(selected_player=p)
+                state_p = state.replace(selected_player=p)  # type: ignore[attr-defined]
                 obs = obs_fn(state_p, params, p)
                 action = policies[p](obs)
 
                 rng, subkey = jax.random.split(rng)
-                _, state, _, done, _ = self._jit_step(subkey, state_p, action, params)
+                _, state, _, done, _ = self._jit_step(
+                    subkey,
+                    state_p,
+                    action,
+                    params,
+                )
 
                 if p == 0:
                     actions_log.append(int(action))
+
+            if constraint_fn is not None:
+                cost = constraint_fn(prev_state, state, params)
+                costs_log.append(np.asarray(cost))
 
             if bool(done):
                 break
@@ -181,6 +209,7 @@ class BenchmarkRunner:
             "copper": int(state.items_mined[ItemType.COPPER]),
         }
         weighted_score = benchmark.score_level(bench_level, items_mined)
+        constraint_costs = np.stack(costs_log) if costs_log else None
 
         return LevelResult(
             level_name=bench_level.name,
@@ -188,4 +217,5 @@ class BenchmarkRunner:
             weighted_score=weighted_score,
             timesteps_used=len(actions_log),
             actions=np.array(actions_log, dtype=np.int32),
+            constraint_costs=constraint_costs,
         )
