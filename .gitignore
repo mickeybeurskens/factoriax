@@ -216,3 +216,5 @@ craftax/
 tmp_baselines/
 experiments/
 wandb/
+levels/
+checkpoints/

@@ -1,8 +1,8 @@
 """Dialogs for the level editor: new-level picker and file open/save.
 
 The new-level dialog is rendered as an RGBA overlay (similar to the
-game's pause menu).  Save/load use :mod:`tkinter.filedialog` for
-native OS file pickers, avoiding the need for a custom file browser.
+game's pause menu).  Save/load write to a ``levels/`` directory,
+avoiding any dependency on tkinter or native OS file pickers.
 """
 
 from __future__ import annotations
@@ -274,49 +274,42 @@ class NumberInputDialog:
         return overlay
 
 
-def ask_save_path(initial_name: str) -> Path | None:
-    """Open a native file-save dialog and return the chosen path.
+_LEVELS_DIR = Path("levels")
 
-    Uses :mod:`tkinter.filedialog` so no custom file browser is needed.
+
+def ask_save_path(initial_name: str) -> Path | None:
+    """Return the save path for a level.
+
+    Levels are stored in a ``levels/`` directory next to the working
+    directory. The directory is created automatically if it does not
+    exist.
 
     Args:
-        initial_name: Suggested filename (without extension).
+        initial_name: Level name used as the filename stem.
 
     Returns:
-        Chosen :class:`Path`, or ``None`` if the user cancelled.
+        :class:`Path` to the JSON file.
     """
-    import tkinter as tk
-    from tkinter import filedialog
-
-    root = tk.Tk()
-    root.withdraw()
-    path = filedialog.asksaveasfilename(
-        title="Save Level",
-        initialfile=f"{initial_name}.json",
-        defaultextension=".json",
-        filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-    )
-    root.destroy()
-    return Path(path) if path else None
+    _LEVELS_DIR.mkdir(parents=True, exist_ok=True)
+    return _LEVELS_DIR / f"{initial_name}.json"
 
 
 def ask_load_path() -> Path | None:
-    """Open a native file-open dialog and return the chosen path.
+    """Return the path of the most recent level file in ``levels/``.
+
+    Scans the ``levels/`` directory for ``.json`` files and returns
+    the one with the newest modification time. Returns ``None`` if no
+    files exist.
 
     Returns:
-        Chosen :class:`Path`, or ``None`` if the user cancelled.
+        :class:`Path` to the newest JSON file, or ``None``.
     """
-    import tkinter as tk
-    from tkinter import filedialog
-
-    root = tk.Tk()
-    root.withdraw()
-    path = filedialog.askopenfilename(
-        title="Load Level",
-        filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+    if not _LEVELS_DIR.is_dir():
+        return None
+    files = sorted(
+        _LEVELS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime,
     )
-    root.destroy()
-    return Path(path) if path else None
+    return files[-1] if files else None
 
 
 _HELP_LINES = [
