@@ -7,7 +7,7 @@ import pytest
 from jax import random
 
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
-from factoriax.constants import BLOCK_PIXEL_SIZE, SOLID_BLOCKS
+from factoriax.constants import BLOCK_PIXEL_SIZE, SOLID_BLOCKS, MachineType
 from factoriax.game_logic import (
     get_block_at,
     is_game_over,
@@ -150,6 +150,26 @@ class TestGameLogic:
         """Out of bounds should not be walkable."""
         assert not is_position_walkable(simple_state, jnp.array([-1, 0]))
         assert not is_position_walkable(simple_state, jnp.array([5, 5]))
+
+    def test_is_position_walkable_conveyor_belt(self, state_factory) -> None:
+        """Conveyor belts should be walkable despite being machines."""
+        world_map = jnp.array(
+            [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
+            dtype=jnp.int32,
+        )
+        machine_types = jnp.array(
+            [[MachineType.NONE, MachineType.CONVEYOR_BELT, MachineType.MINER]],
+            dtype=jnp.int32,
+        )
+        state = state_factory(
+            world_map=world_map,
+            player_position=(0, 0),
+            machine_types=machine_types,
+        )
+        # Belt tile is walkable
+        assert is_position_walkable(state, jnp.array([1, 0]))
+        # Miner tile is not walkable
+        assert not is_position_walkable(state, jnp.array([2, 0]))
 
     def test_move_player_left(self, simple_state: EnvState) -> None:
         """Player should move left on dirt."""

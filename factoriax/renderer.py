@@ -345,6 +345,109 @@ def _draw_belt_arrows(
             _draw_chevron(icon, cy, cx, arrow_size, direction)
 
 
+# Colours for the arm (inserter) direction overlay.
+_ARM_LINE_COLOR: tuple[int, int, int, int] = (30, 55, 110, 255)
+_ARM_HEAD_COLOR: tuple[int, int, int, int] = (200, 220, 255, 255)
+_ARM_TAIL_COLOR: tuple[int, int, int, int] = (40, 70, 140, 255)
+
+
+def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
+    """Draw a pick-to-deposit flow indicator on an arm icon.
+
+    Draws a centre line along the arm's facing axis with a small
+    circle on the pick (back) end and a chevron arrowhead on the
+    deposit (front) end so the player can tell input from output
+    at a glance.
+
+    Args:
+        icon: RGBA array of shape ``(size, size, 4)``, modified
+            in place.
+        direction: ``Action`` direction the arm faces (deposit side).
+    """
+    size = icon.shape[0]
+    mid = size // 2
+    thickness = max(1, size // 10)
+    half_t = thickness // 2
+
+    # Shaft line along the facing axis, inset from edges.
+    margin = max(2, size // 6)
+    if direction in (Action.LEFT, Action.RIGHT):
+        icon[mid - half_t : mid + half_t + 1, margin : size - margin] = (
+            _ARM_LINE_COLOR
+        )
+    else:
+        icon[margin : size - margin, mid - half_t : mid + half_t + 1] = (
+            _ARM_LINE_COLOR
+        )
+
+    # Arrowhead on the deposit (forward) end.
+    arrow_size = max(1, size // 8)
+    if direction == Action.RIGHT:
+        _draw_arm_chevron(icon, mid, size - margin - 1, arrow_size, direction)
+    elif direction == Action.LEFT:
+        _draw_arm_chevron(icon, mid, margin, arrow_size, direction)
+    elif direction == Action.DOWN:
+        _draw_arm_chevron(icon, size - margin - 1, mid, arrow_size, direction)
+    elif direction == Action.UP:
+        _draw_arm_chevron(icon, margin, mid, arrow_size, direction)
+
+    # Small circle on the pick (back) end.
+    radius = max(1, size // 8)
+    if direction == Action.RIGHT:
+        cy, cx = mid, margin
+    elif direction == Action.LEFT:
+        cy, cx = mid, size - margin - 1
+    elif direction == Action.DOWN:
+        cy, cx = mid, margin
+    else:  # UP
+        cy, cx = mid, size - margin - 1
+    # Swap for vertical directions — circle is at the opposite end.
+    if direction == Action.DOWN:
+        cy, cx = margin, mid
+    elif direction == Action.UP:
+        cy, cx = size - margin - 1, mid
+
+    ys, xs = np.ogrid[:size, :size]
+    dist = (xs - cx) ** 2 + (ys - cy) ** 2
+    icon[dist <= radius**2] = _ARM_TAIL_COLOR
+
+
+def _draw_arm_chevron(
+    image: np.ndarray,
+    cy: int,
+    cx: int,
+    size: int,
+    direction: int,
+) -> None:
+    """Draw a filled chevron arrowhead for the arm deposit end.
+
+    Same geometry as ``_draw_chevron`` but uses the arm head colour.
+
+    Args:
+        image: RGBA image array (modified in place).
+        cy: Centre row of the chevron.
+        cx: Centre column of the chevron.
+        size: Half-extent of the arrow in pixels.
+        direction: Action.LEFT / RIGHT / UP / DOWN.
+    """
+    h, w = image.shape[:2]
+    for d in range(-size, size + 1):
+        depth = size - abs(d)
+        for t in range(depth + 1):
+            if direction == Action.RIGHT:
+                py, px = cy + d, cx + t
+            elif direction == Action.LEFT:
+                py, px = cy + d, cx - t
+            elif direction == Action.DOWN:
+                py, px = cy + t, cx + d
+            elif direction == Action.UP:
+                py, px = cy - t, cx + d
+            else:
+                return
+            if 0 <= py < h and 0 <= px < w:
+                image[py, px] = _ARM_HEAD_COLOR
+
+
 @functools.lru_cache(maxsize=128)
 def render_item_icon(
     item_type: int,
@@ -358,14 +461,15 @@ def render_item_icon(
     placed machines and inventory icons are always identical.
 
     Conveyor belts get three chevron arrows overlaid on the base colour.
-    When *direction* is ``None`` (e.g. in a menu with no placement
-    context), arrows default to pointing right.
+    Arms get a flow indicator showing pick (circle, back) and deposit
+    (arrowhead, front) sides.  When *direction* is ``None`` (e.g. in a
+    menu with no placement context), arrows default to pointing right.
 
     Args:
         item_type: ``ItemType`` integer value.
         size: Side length of the returned square in pixels.
-        direction: Optional ``Action`` direction for belt arrows.
-            Ignored for non-belt items.
+        direction: Optional ``Action`` direction for directional items.
+            Ignored for non-directional items.
 
     Returns:
         RGBA uint8 array of shape ``(size, size, 4)``.
@@ -376,6 +480,9 @@ def render_item_icon(
     if item_type == ItemType.CONVEYOR_BELT and size >= 6:
         belt_dir = direction if direction is not None else int(Action.RIGHT)
         _draw_belt_arrows(icon, belt_dir)
+    elif item_type == ItemType.ARM and size >= 6:
+        arm_dir = direction if direction is not None else int(Action.RIGHT)
+        _draw_arm_indicator(icon, arm_dir)
 
     return icon
 

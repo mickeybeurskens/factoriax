@@ -63,7 +63,8 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
     """Check if a position can be walked on.
 
     A position is walkable if it's in bounds, not a solid block (water, etc),
-    and does not have a machine on it.
+    and does not have a blocking machine on it. Conveyor belts are not
+    blocking because players can walk over them.
 
     Args:
         state: Current environment state
@@ -77,13 +78,19 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
 
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
-    has_machine = lax.cond(
+    has_blocking_machine = lax.cond(
         in_bounds,
-        lambda: state.machine_types[position[1], position[0]] != MachineType.NONE,
+        lambda: (
+            (state.machine_types[position[1], position[0]] != MachineType.NONE)
+            & (
+                state.machine_types[position[1], position[0]]
+                != MachineType.CONVEYOR_BELT
+            )
+        ),
         lambda: jnp.bool_(False),
     )
 
-    return ~is_solid & ~has_machine
+    return ~is_solid & ~has_blocking_machine
 
 
 def move_player(
