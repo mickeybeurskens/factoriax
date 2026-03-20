@@ -441,10 +441,12 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
 
 
 def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
-    """Generate a random terrain map.
+    """Generate a random terrain map using patch-based noise.
 
-    Uses cumulative probability thresholds to assign block types.  Water
-    takes priority, then iron, copper, coal, with dirt as the fallback.
+    Delegates to :func:`_generate_terrain_patched`, the default
+    algorithm that produces natural-looking resource clusters and
+    water bodies.  See also :func:`_generate_terrain_uniform` for
+    the original per-tile random approach.
 
     Args:
         rng: JAX random key.
@@ -453,7 +455,38 @@ def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
     Returns:
         2D int32 array of shape ``(map_height, map_width)``.
     """
-    random_values = random.uniform(rng, (params.map_height, params.map_width))
+    return _generate_terrain_patched(rng, params)
+
+
+# ---------------------------------------------------------------------------
+# Terrain generation algorithms
+#
+# Each algorithm takes the same (rng, params) signature and returns
+# an int32 terrain grid.  _generate_terrain delegates to one of these.
+# ---------------------------------------------------------------------------
+
+
+def _generate_terrain_uniform(
+    rng: jax.Array, params: EnvParams,
+) -> jax.Array:
+    """Generate terrain with independent per-tile random rolls.
+
+    Every tile gets a uniform random value and is assigned a block
+    type via cumulative probability thresholds.  Produces a scattered
+    salt-and-pepper distribution with no spatial coherence.
+
+    Priority (highest to lowest): water, iron, copper, coal.
+
+    Args:
+        rng: JAX random key.
+        params: Environment parameters with terrain probabilities.
+
+    Returns:
+        2D int32 array of shape ``(map_height, map_width)``.
+    """
+    random_values = random.uniform(
+        rng, (params.map_height, params.map_width),
+    )
 
     water_threshold = params.water_probability
     iron_threshold = water_threshold + params.iron_probability
@@ -461,14 +494,113 @@ def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
     coal_threshold = copper_threshold + params.coal_probability
 
     terrain = jnp.full(
-        (params.map_height, params.map_width), int(BlockType.DIRT), dtype=jnp.int32
+        (params.map_height, params.map_width),
+        int(BlockType.DIRT),
+        dtype=jnp.int32,
     )
-    terrain = jnp.where(random_values < coal_threshold, int(BlockType.COAL), terrain)
     terrain = jnp.where(
-        random_values < copper_threshold, int(BlockType.COPPER), terrain
+        random_values < coal_threshold,
+        int(BlockType.COAL),
+        terrain,
     )
-    terrain = jnp.where(random_values < iron_threshold, int(BlockType.IRON), terrain)
-    terrain = jnp.where(random_values < water_threshold, int(BlockType.WATER), terrain)
+    terrain = jnp.where(
+        random_values < copper_threshold,
+        int(BlockType.COPPER),
+        terrain,
+    )
+    terrain = jnp.where(
+        random_values < iron_threshold,
+        int(BlockType.IRON),
+        terrain,
+    )
+    terrain = jnp.where(
+        random_values < water_threshold,
+        int(BlockType.WATER),
+        terrain,
+    )
+
+    return terrain
+
+
+def _smooth_noise(
+    rng: jax.Array,
+    height: int,
+    width: int,
+    scale: int = 4,
+) -> jax.Array:
+    """Generate a smooth 2D noise field via low-res sampling and upscale.
+
+    A small random grid is bilinearly upscaled to the full map size,
+    producing natural-looking blobs suitable for patch-based terrain.
+
+    Args:
+        rng: JAX random key.
+        height: Output height in tiles.
+        width: Output width in tiles.
+        scale: Downscale factor.  Larger values produce bigger, smoother
+            patches.  The low-res grid is ``ceil(dim / scale) + 1``.
+
+    Returns:
+        Float32 array of shape ``(height, width)`` in ``[0, 1)``.
+    """
+    lo_h = height // scale + 2
+    lo_w = width // scale + 2
+    lo = random.uniform(rng, (lo_h, lo_w))
+    hi = jax.image.resize(lo, (height, width), method="bilinear")
+    # Rescale to [0, 1) so probability thresholds work as expected.
+    lo_val = jnp.min(hi)
+    hi_val = jnp.max(hi)
+    span = jnp.maximum(hi_val - lo_val, 1e-6)
+    return (hi - lo_val) / span
+
+
+def _generate_terrain_patched(
+    rng: jax.Array, params: EnvParams,
+) -> jax.Array:
+    """Generate terrain with smooth resource patches and water bodies.
+
+    Each terrain type gets its own smooth noise field so deposits form
+    organic-looking clusters instead of single scattered tiles.  Water
+    uses a coarser noise scale to produce larger lakes.
+
+    Priority (highest to lowest): water, iron, copper, coal.
+
+    Args:
+        rng: JAX random key.
+        params: Environment parameters with terrain probabilities.
+
+    Returns:
+        2D int32 array of shape ``(map_height, map_width)``.
+    """
+    h, w = params.map_height, params.map_width
+    k_water, k_iron, k_copper, k_coal = random.split(rng, 4)
+
+    noise_water = _smooth_noise(k_water, h, w, scale=6)
+    noise_iron = _smooth_noise(k_iron, h, w, scale=4)
+    noise_copper = _smooth_noise(k_copper, h, w, scale=4)
+    noise_coal = _smooth_noise(k_coal, h, w, scale=4)
+
+    terrain = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+    terrain = jnp.where(
+        noise_coal < params.coal_probability,
+        int(BlockType.COAL),
+        terrain,
+    )
+    terrain = jnp.where(
+        noise_copper < params.copper_probability,
+        int(BlockType.COPPER),
+        terrain,
+    )
+    terrain = jnp.where(
+        noise_iron < params.iron_probability,
+        int(BlockType.IRON),
+        terrain,
+    )
+    terrain = jnp.where(
+        noise_water < params.water_probability,
+        int(BlockType.WATER),
+        terrain,
+    )
 
     return terrain
 

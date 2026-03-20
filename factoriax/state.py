@@ -86,9 +86,9 @@ class EnvParams:
     map_height: int = 32
     num_players: int = 2
     water_probability: float = 0.1
-    iron_probability: float = 0.02
-    copper_probability: float = 0.02
-    coal_probability: float = 0.02
+    iron_probability: float = 0.12
+    copper_probability: float = 0.12
+    coal_probability: float = 0.12
     base_resources: int = 1000
 
     NUM_ACTIONS: ClassVar[int] = 13
