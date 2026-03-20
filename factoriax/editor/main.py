@@ -28,10 +28,9 @@ from factoriax.editor.canvas import (
     zoom,
 )
 from factoriax.editor.dialogs import (
+    FileDialog,
     NewLevelDialog,
     NumberInputDialog,
-    ask_load_path,
-    ask_save_path,
     render_help_overlay,
 )
 from factoriax.editor.state import (
@@ -515,11 +514,13 @@ def _handle_keydown(
     screen: pygame.Surface,
     window_w: int,
     window_h: int,
-) -> tuple[EditorState, int, int, int, bool, NewLevelDialog | None]:
+) -> tuple[
+    EditorState, int, int, int, bool, NewLevelDialog | FileDialog | None,
+]:
     """Process a KEYDOWN event.
 
     Returns the potentially-replaced editor, updated layout values,
-    the running flag, and an optional new-level dialog.
+    the running flag, and an optional dialog (new-level or file).
 
     Args:
         event: Pygame KEYDOWN event.
@@ -540,7 +541,7 @@ def _handle_keydown(
 
     base_w, base_h, scale = _recalc_layout(vp, window_w, window_h)
     running = True
-    dialog: NewLevelDialog | None = None
+    dialog: NewLevelDialog | FileDialog | None = None
 
     if key == pygame.K_ESCAPE:
         if ts.fill_start is not None:
@@ -551,17 +552,9 @@ def _handle_keydown(
     elif ctrl and key == pygame.K_n:
         dialog = NewLevelDialog()
     elif ctrl and key == pygame.K_o:
-        path = ask_load_path()
-        if path is not None:
-            level = load_level(path)
-            editor = editor_state_from_level(level)
-            _update_viewport(editor, vp, reset_camera=True)
-            base_w, base_h, scale = _recalc_layout(vp, window_w, window_h)
+        dialog = FileDialog(mode="load")
     elif ctrl and key == pygame.K_s:
-        path = ask_save_path(editor.name)
-        if path is not None:
-            save_level(editor_state_to_level(editor), path)
-            editor.dirty = False
+        dialog = FileDialog(mode="save", filename_text=editor.name)
     elif key == pygame.K_F5:
         run_play_session(editor, screen)
 
@@ -691,6 +684,7 @@ def _render_frame(
     ts: ToolState,
     base_w: int,
     base_h: int,
+    file_dialog: FileDialog | None,
     dialog: NewLevelDialog | None,
     number_dialog: NumberInputDialog | None,
 ) -> np.ndarray:
@@ -702,6 +696,7 @@ def _render_frame(
         ts: Tool state.
         base_w: Base frame width in pixels.
         base_h: Base frame height in pixels.
+        file_dialog: Active file save/load dialog, or ``None``.
         dialog: Active new-level dialog, or ``None``.
         number_dialog: Active number-input dialog, or ``None``.
 
@@ -756,6 +751,8 @@ def _render_frame(
 
     frame[base_h - STATUS_BAR_HEIGHT :, :] = status_bar
 
+    if file_dialog is not None:
+        composite_rgba_over_rgb(frame, file_dialog.render(base_w, base_h))
     if dialog is not None:
         composite_rgba_over_rgb(frame, dialog.render(base_w, base_h))
     if number_dialog is not None:
@@ -806,6 +803,7 @@ def main() -> None:
     base_w, base_h, scale = _recalc_layout(vp, window_w, window_h)
 
     dialog: NewLevelDialog | None = None
+    file_dialog: FileDialog | None = None
     number_dialog: NumberInputDialog | None = None
     number_dialog_target: str = ""
 
@@ -817,6 +815,31 @@ def main() -> None:
                 continue
 
             # ---- Modal dialog layers (consume all events) ----
+
+            if file_dialog is not None:
+                result = file_dialog.handle_event(event)
+                if result == "ok":
+                    path = file_dialog.get_path()
+                    if path is not None:
+                        if file_dialog.mode == "save":
+                            save_level(
+                                editor_state_to_level(editor), path,
+                            )
+                            editor.dirty = False
+                        else:
+                            if path.exists():
+                                level = load_level(path)
+                                editor = editor_state_from_level(level)
+                                _update_viewport(
+                                    editor, vp, reset_camera=True,
+                                )
+                                base_w, base_h, scale = _recalc_layout(
+                                    vp, window_w, window_h,
+                                )
+                    file_dialog = None
+                elif result == "cancel":
+                    file_dialog = None
+                continue
 
             if dialog is not None:
                 result = dialog.handle_event(event)
@@ -898,28 +921,12 @@ def main() -> None:
                             if hit.action == "new":
                                 dialog = NewLevelDialog()
                             elif hit.action == "load":
-                                path = ask_load_path()
-                                if path is not None:
-                                    level = load_level(path)
-                                    editor = editor_state_from_level(level)
-                                    _update_viewport(
-                                        editor,
-                                        vp,
-                                        reset_camera=True,
-                                    )
-                                    base_w, base_h, scale = _recalc_layout(
-                                        vp,
-                                        window_w,
-                                        window_h,
-                                    )
+                                file_dialog = FileDialog(mode="load")
                             elif hit.action == "save":
-                                path = ask_save_path(editor.name)
-                                if path is not None:
-                                    save_level(
-                                        editor_state_to_level(editor),
-                                        path,
-                                    )
-                                    editor.dirty = False
+                                file_dialog = FileDialog(
+                                    mode="save",
+                                    filename_text=editor.name,
+                                )
                             elif hit.action == "play":
                                 run_play_session(editor, screen)
                         continue
@@ -999,7 +1006,10 @@ def main() -> None:
                     window_h,
                 )
                 if new_dialog is not None:
-                    dialog = new_dialog
+                    if isinstance(new_dialog, FileDialog):
+                        file_dialog = new_dialog
+                    else:
+                        dialog = new_dialog
 
         # ---- Render ----
 
@@ -1009,6 +1019,7 @@ def main() -> None:
             ts,
             base_w,
             base_h,
+            file_dialog,
             dialog,
             number_dialog,
         )

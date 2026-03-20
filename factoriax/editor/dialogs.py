@@ -274,42 +274,186 @@ class NumberInputDialog:
         return overlay
 
 
-_LEVELS_DIR = Path("levels")
+LEVELS_DIR = Path("levels")
+
+_FILE_DLG_W = 280
+_FILE_DLG_H = 260
+_FILE_LIST_ROWS = 6
+_FILE_SELECTED_BG: tuple[int, int, int, int] = (60, 80, 60, 255)
+_FILE_ROW_BG: tuple[int, int, int, int] = (35, 35, 35, 255)
 
 
-def ask_save_path(initial_name: str) -> Path | None:
-    """Return the save path for a level.
+@dataclasses.dataclass
+class FileDialog:
+    """In-editor dialog for choosing or typing a filename.
 
-    Levels are stored in a ``levels/`` directory next to the working
-    directory. The directory is created automatically if it does not
-    exist.
+    Works for both save and load. Shows a text field for the filename
+    and a scrollable list of existing ``.json`` files in ``levels/``.
+    Press W/S to navigate the list, Enter to confirm, Escape to cancel.
 
-    Args:
-        initial_name: Level name used as the filename stem.
-
-    Returns:
-        :class:`Path` to the JSON file.
+    Attributes:
+        mode: ``"save"`` or ``"load"``.
+        filename_text: Editable filename (without extension).
+        files: List of existing level filenames (stems only).
+        selected_index: Currently highlighted file in the list.
+        scroll_offset: First visible row in the file list.
     """
-    _LEVELS_DIR.mkdir(parents=True, exist_ok=True)
-    return _LEVELS_DIR / f"{initial_name}.json"
 
+    mode: str = "save"
+    filename_text: str = ""
+    files: list[str] = dataclasses.field(default_factory=list)
+    selected_index: int = -1
+    scroll_offset: int = 0
 
-def ask_load_path() -> Path | None:
-    """Return the path of the most recent level file in ``levels/``.
+    def __post_init__(self) -> None:
+        """Scan the levels directory for existing files."""
+        self.files = _list_level_files()
+        if self.mode == "load" and self.files:
+            self.selected_index = 0
+            self.filename_text = self.files[0]
 
-    Scans the ``levels/`` directory for ``.json`` files and returns
-    the one with the newest modification time. Returns ``None`` if no
-    files exist.
+    def handle_event(self, event: pygame.event.Event) -> str | None:
+        """Process a pygame event.
 
-    Returns:
-        :class:`Path` to the newest JSON file, or ``None``.
-    """
-    if not _LEVELS_DIR.is_dir():
+        Args:
+            event: A ``pygame.KEYDOWN`` event.
+
+        Returns:
+            ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
+        """
+        if event.type != pygame.KEYDOWN:
+            return None
+        if event.key == pygame.K_ESCAPE:
+            return "cancel"
+        if event.key == pygame.K_RETURN:
+            return "ok"
+        if event.key == pygame.K_UP:
+            self._move_selection(-1)
+            return None
+        if event.key == pygame.K_DOWN:
+            self._move_selection(1)
+            return None
+        if event.key == pygame.K_BACKSPACE:
+            self.filename_text = self.filename_text[:-1]
+            self.selected_index = -1
+            return None
+        if event.unicode and event.unicode.isprintable():
+            self.filename_text += event.unicode
+            self.selected_index = -1
         return None
-    files = sorted(
-        _LEVELS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime,
-    )
-    return files[-1] if files else None
+
+    def _move_selection(self, delta: int) -> None:
+        """Move the file list selection by *delta* rows."""
+        if not self.files:
+            return
+        new_idx = self.selected_index + delta
+        new_idx = max(0, min(len(self.files) - 1, new_idx))
+        self.selected_index = new_idx
+        self.filename_text = self.files[new_idx]
+        if new_idx < self.scroll_offset:
+            self.scroll_offset = new_idx
+        elif new_idx >= self.scroll_offset + _FILE_LIST_ROWS:
+            self.scroll_offset = new_idx - _FILE_LIST_ROWS + 1
+
+    def get_path(self) -> Path | None:
+        """Return the chosen path, or ``None`` for empty input.
+
+        Returns:
+            :class:`Path` in the levels directory, or ``None``.
+        """
+        name = self.filename_text.strip()
+        if not name:
+            return None
+        LEVELS_DIR.mkdir(parents=True, exist_ok=True)
+        if not name.endswith(".json"):
+            name += ".json"
+        return LEVELS_DIR / name
+
+    def render(self, base_w: int, base_h: int) -> np.ndarray:
+        """Render the dialog as an RGBA overlay.
+
+        Args:
+            base_w: Base window width.
+            base_h: Base window height.
+
+        Returns:
+            RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+        """
+        overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
+        overlay[:, :] = (0, 0, 0, 140)
+
+        w, h = _FILE_DLG_W, _FILE_DLG_H
+        dx = (base_w - w) // 2
+        dy = (base_h - h) // 2
+        overlay[dy : dy + h, dx : dx + w] = _BG
+        for i in range(2):
+            overlay[dy + i, dx : dx + w] = _BORDER
+            overlay[dy + h - 1 - i, dx : dx + w] = _BORDER
+            overlay[dy : dy + h, dx + i] = _BORDER
+            overlay[dy : dy + h, dx + w - 1 - i] = _BORDER
+
+        font = get_pixel_font(14)
+        small = get_pixel_font(10)
+
+        title_text = "Save Level" if self.mode == "save" else "Load Level"
+        title = _render_text_rgba(title_text, font, _TEXT_COLOR)
+        _blit_rgba(overlay, title, dy + 8, dx + (w - title.shape[1]) // 2)
+
+        # Filename field
+        lbl = _render_text_rgba("Filename:", font, _LABEL_COLOR)
+        _blit_rgba(overlay, lbl, dy + 32, dx + 12)
+        fy = dy + 50
+        overlay[fy : fy + 22, dx + 12 : dx + w - 12] = _FIELD_ACTIVE
+        val = _render_text_rgba(
+            self.filename_text + "_", font, _TEXT_COLOR,
+        )
+        _blit_rgba(overlay, val, fy + 3, dx + 16)
+
+        # File list
+        list_y = fy + 30
+        list_label = _render_text_rgba("Existing files:", small, _LABEL_COLOR)
+        _blit_rgba(overlay, list_label, list_y, dx + 12)
+        list_y += 16
+        row_h = 18
+        visible = self.files[
+            self.scroll_offset : self.scroll_offset + _FILE_LIST_ROWS
+        ]
+        for i, fname in enumerate(visible):
+            abs_idx = self.scroll_offset + i
+            ry = list_y + i * row_h
+            bg = (
+                _FILE_SELECTED_BG
+                if abs_idx == self.selected_index
+                else _FILE_ROW_BG
+            )
+            overlay[ry : ry + row_h - 1, dx + 12 : dx + w - 12] = bg
+            ftxt = _render_text_rgba(fname, small, _TEXT_COLOR)
+            _blit_rgba(overlay, ftxt, ry + 2, dx + 16)
+
+        if not self.files:
+            empty = _render_text_rgba("(no files)", small, _LABEL_COLOR)
+            _blit_rgba(overlay, empty, list_y + 2, dx + 16)
+
+        hint = _render_text_rgba(
+            "Up/Down: select  Enter: OK  Esc: cancel",
+            small,
+            _LABEL_COLOR,
+        )
+        _blit_rgba(
+            overlay, hint, dy + h - 16, dx + (w - hint.shape[1]) // 2,
+        )
+        return overlay
+
+
+def _list_level_files() -> list[str]:
+    """Return sorted list of level filenames (stems) in the levels dir.
+
+    Returns:
+        List of filename stems, sorted alphabetically.
+    """
+    if not LEVELS_DIR.is_dir():
+        return []
+    return sorted(p.stem for p in LEVELS_DIR.glob("*.json"))
 
 
 _HELP_LINES = [

@@ -1,4 +1,4 @@
-"""Tests for editor save/load without tkinter dependency."""
+"""Tests for editor save/load via FileDialog without tkinter dependency."""
 
 import tempfile
 from pathlib import Path
@@ -7,7 +7,7 @@ from unittest.mock import patch
 import numpy as np
 
 from factoriax.constants import Action, MachineType
-from factoriax.editor.dialogs import ask_load_path, ask_save_path
+from factoriax.editor.dialogs import FileDialog, _list_level_files
 from factoriax.editor.state import (
     editor_state_from_level,
     editor_state_to_level,
@@ -17,58 +17,116 @@ from factoriax.editor.state import (
 from factoriax.levels import load_level, save_level
 
 
-class TestAskSavePath:
-    """ask_save_path returns a path in the levels directory."""
+class TestFileDialogSave:
+    """FileDialog in save mode returns the correct path."""
 
-    def test_returns_json_path(self) -> None:
-        """Path should be levels/{name}.json."""
+    def test_get_path_appends_json(self) -> None:
+        """Path should end with .json even without the extension."""
         with tempfile.TemporaryDirectory() as d:
             levels_dir = Path(d) / "levels"
-            with patch(
-                "factoriax.editor.dialogs._LEVELS_DIR", levels_dir
+            with patch.object(
+                FileDialog, "__post_init__", lambda self: None
             ):
-                result = ask_save_path("my_level")
+                dlg = FileDialog(mode="save", filename_text="my_level")
+            with patch(
+                "factoriax.editor.dialogs.LEVELS_DIR", levels_dir
+            ):
+                result = dlg.get_path()
         assert result is not None
         assert result.name == "my_level.json"
-        assert result.parent.name == "levels"
 
     def test_creates_directory(self) -> None:
-        """The levels directory should be created if missing."""
+        """get_path should create the levels directory."""
         with tempfile.TemporaryDirectory() as d:
             levels_dir = Path(d) / "levels"
             assert not levels_dir.exists()
-            with patch(
-                "factoriax.editor.dialogs._LEVELS_DIR", levels_dir
+            with patch.object(
+                FileDialog, "__post_init__", lambda self: None
             ):
-                ask_save_path("test")
+                dlg = FileDialog(mode="save", filename_text="test")
+            with patch(
+                "factoriax.editor.dialogs.LEVELS_DIR", levels_dir
+            ):
+                dlg.get_path()
             assert levels_dir.is_dir()
 
+    def test_empty_returns_none(self) -> None:
+        """Empty filename should return None."""
+        with patch.object(
+            FileDialog, "__post_init__", lambda self: None
+        ):
+            dlg = FileDialog(mode="save", filename_text="")
+        assert dlg.get_path() is None
 
-class TestAskLoadPath:
-    """ask_load_path returns the newest json file."""
 
-    def test_returns_none_when_empty(self) -> None:
-        """No levels directory should return None."""
-        with tempfile.TemporaryDirectory() as d:
-            levels_dir = Path(d) / "levels"
-            with patch(
-                "factoriax.editor.dialogs._LEVELS_DIR", levels_dir
-            ):
-                assert ask_load_path() is None
+class TestFileDialogLoad:
+    """FileDialog in load mode lists existing files."""
 
-    def test_returns_newest_file(self) -> None:
-        """Should return the most recently modified json file."""
+    def test_lists_existing_files(self) -> None:
+        """Should scan the levels directory for json files."""
         with tempfile.TemporaryDirectory() as d:
             levels_dir = Path(d) / "levels"
             levels_dir.mkdir()
-            (levels_dir / "old.json").write_text("{}")
-            (levels_dir / "new.json").write_text("{}")
+            (levels_dir / "alpha.json").write_text("{}")
+            (levels_dir / "beta.json").write_text("{}")
             with patch(
-                "factoriax.editor.dialogs._LEVELS_DIR", levels_dir
+                "factoriax.editor.dialogs.LEVELS_DIR", levels_dir
             ):
-                result = ask_load_path()
-            assert result is not None
-            assert result.name == "new.json"
+                files = _list_level_files()
+        assert files == ["alpha", "beta"]
+
+    def test_load_mode_selects_first(self) -> None:
+        """Load mode should pre-select the first file."""
+        with tempfile.TemporaryDirectory() as d:
+            levels_dir = Path(d) / "levels"
+            levels_dir.mkdir()
+            (levels_dir / "alpha.json").write_text("{}")
+            with patch(
+                "factoriax.editor.dialogs.LEVELS_DIR", levels_dir
+            ):
+                dlg = FileDialog(mode="load")
+            assert dlg.selected_index == 0
+            assert dlg.filename_text == "alpha"
+
+    def test_empty_dir_returns_none(self) -> None:
+        """No files should mean get_path returns None for empty input."""
+        with tempfile.TemporaryDirectory() as d:
+            levels_dir = Path(d) / "levels"
+            levels_dir.mkdir()
+            with patch(
+                "factoriax.editor.dialogs.LEVELS_DIR", levels_dir
+            ):
+                dlg = FileDialog(mode="load")
+        assert dlg.get_path() is None
+
+
+class TestFileDialogNavigation:
+    """Arrow keys navigate the file list."""
+
+    def test_down_moves_selection(self) -> None:
+        """Down arrow should advance selection."""
+        with patch.object(
+            FileDialog, "__post_init__", lambda self: None
+        ):
+            dlg = FileDialog(mode="load")
+        dlg.files = ["a", "b", "c"]
+        dlg.selected_index = 0
+        dlg.filename_text = "a"
+        dlg._move_selection(1)
+        assert dlg.selected_index == 1
+        assert dlg.filename_text == "b"
+
+    def test_up_clamps_at_zero(self) -> None:
+        """Up arrow at index 0 should stay at 0."""
+        with patch.object(
+            FileDialog, "__post_init__", lambda self: None
+        ):
+            dlg = FileDialog(mode="load")
+        dlg.files = ["a", "b"]
+        dlg.selected_index = 0
+        dlg.filename_text = "a"
+        dlg._move_selection(-1)
+        assert dlg.selected_index == 0
 
 
 class TestEditorSaveLoadRoundTrip:
@@ -93,19 +151,18 @@ class TestEditorSaveLoadRoundTrip:
         )
 
     def test_no_tkinter_import(self) -> None:
-        """Save/load must not import tkinter."""
+        """FileDialog must not import tkinter."""
         import sys
 
         had_tkinter = "tkinter" in sys.modules
         with tempfile.TemporaryDirectory() as d:
             levels_dir = Path(d) / "levels"
+            levels_dir.mkdir()
+            (levels_dir / "test.json").write_text("{}")
             with patch(
-                "factoriax.editor.dialogs._LEVELS_DIR", levels_dir
+                "factoriax.editor.dialogs.LEVELS_DIR", levels_dir
             ):
-                ask_save_path("test")
-                # Create a file so load has something to find
-                levels_dir.mkdir(exist_ok=True)
-                (levels_dir / "test.json").write_text("{}")
-                ask_load_path()
+                FileDialog(mode="save", filename_text="test")
+                FileDialog(mode="load")
         if not had_tkinter:
             assert "tkinter" not in sys.modules
