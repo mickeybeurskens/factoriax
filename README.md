@@ -15,7 +15,7 @@ The interesting part is the progression. Early on, you're manually walking to or
 The whole thing runs on GPU through JAX. Every piece of game state is an immutable JAX array, the step function is fully JIT-compiled, and you can `vmap` across dozens of parallel environments. That means you can run training at the speed of your GPU rather than waiting on Python loops.
 
 <p align="center">
-  <img src="docs/media/gameplay.gif" width="320" alt="A trained agent navigating and mining" />
+  <img src="docs/media/mining.gif" width="320" alt="A trained agent mining through an iron patch" />
 </p>
 
 ## Quick start
