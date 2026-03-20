@@ -32,6 +32,7 @@ from factoriax.play.ui import (
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
+    render_welcome_screen,
 )
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
@@ -322,6 +323,7 @@ def _play_loop(
     machine_panel_active = True
     hotbar_page = 0
     held_slot: int | None = None
+    welcome_open = True
 
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
     win_ox = (window_width - ui_w * win_scale) // 2
@@ -335,6 +337,14 @@ def _play_loop(
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif welcome_open:
+                if event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_SPACE,
+                    pygame.K_RETURN,
+                    pygame.K_ESCAPE,
+                ):
+                    welcome_open = False
+                continue
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 base_x = (event.pos[0] - win_ox) // win_scale
                 base_y = (event.pos[1] - win_oy) // win_scale
@@ -658,6 +668,11 @@ def _play_loop(
         if help_open:
             composite_rgba_over_rgb(
                 ui_frame, render_help_overlay(ui_w, ui_h)
+            )
+
+        if welcome_open:
+            composite_rgba_over_rgb(
+                ui_frame, render_welcome_screen(ui_w, ui_h)
             )
 
         final_surface = pygame.surfarray.make_surface(
