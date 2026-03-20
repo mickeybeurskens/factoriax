@@ -11,7 +11,11 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
-from factoriax.play.transfer import deposit_to_machine, withdraw_from_machine
+from factoriax.play.transfer import (
+    deposit_to_machine,
+    swap_inventory_slots,
+    withdraw_from_machine,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -266,3 +270,60 @@ class TestDeposit:
         result = deposit_to_machine(state, 0, 0, 0, 0, 0)
         assert int(result.machine_inventory_counts[0, 0, 0]) == MAX_MACHINE_STACK_SIZE
         assert int(result.inventory_counts[0, 0]) == 7
+
+
+# ---------------------------------------------------------------------------
+# swap_inventory_slots
+# ---------------------------------------------------------------------------
+
+
+class TestSwapInventorySlots:
+    """Tests for the swap_inventory_slots helper."""
+
+    def test_swap_two_occupied_slots(self, state_factory) -> None:
+        """Swapping two slots exchanges their items and counts."""
+        state = _state_with_machine(
+            state_factory,
+            MachineType.CHEST,
+            p_items=[int(ItemType.COAL), int(ItemType.IRON)],
+            p_counts=[5, 10],
+        )
+        result = swap_inventory_slots(state, 0, 0, 1)
+        assert int(result.inventory_items[0, 0]) == int(ItemType.IRON)
+        assert int(result.inventory_counts[0, 0]) == 10
+        assert int(result.inventory_items[0, 1]) == int(ItemType.COAL)
+        assert int(result.inventory_counts[0, 1]) == 5
+
+    def test_swap_occupied_with_empty(self, state_factory) -> None:
+        """Swapping an occupied slot with an empty one moves the item."""
+        state = _state_with_machine(
+            state_factory,
+            MachineType.CHEST,
+            p_items=[int(ItemType.COPPER)],
+            p_counts=[3],
+        )
+        result = swap_inventory_slots(state, 0, 0, 4)
+        assert int(result.inventory_items[0, 0]) == 0
+        assert int(result.inventory_counts[0, 0]) == 0
+        assert int(result.inventory_items[0, 4]) == int(ItemType.COPPER)
+        assert int(result.inventory_counts[0, 4]) == 3
+
+    def test_same_slot_is_noop(self, state_factory) -> None:
+        """Swapping a slot with itself returns the same state object."""
+        state = _state_with_machine(
+            state_factory,
+            MachineType.CHEST,
+            p_items=[int(ItemType.COAL)],
+            p_counts=[5],
+        )
+        result = swap_inventory_slots(state, 0, 0, 0)
+        assert result is state
+
+    def test_swap_two_empty_slots(self, state_factory) -> None:
+        """Swapping two empty slots leaves both empty."""
+        state = _state_with_machine(
+            state_factory, MachineType.CHEST,
+        )
+        result = swap_inventory_slots(state, 0, 2, 7)
+        assert int(result.inventory_items[0, 2]) == 0
+        assert int(result.inventory_items[0, 7]) == 0

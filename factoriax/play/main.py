@@ -16,11 +16,18 @@ from factoriax.constants import (
 )
 from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.levels import Level
-from factoriax.play.transfer import deposit_to_machine, withdraw_from_machine
+from factoriax.play.transfer import (
+    deposit_to_machine,
+    swap_inventory_slots,
+    withdraw_from_machine,
+)
 from factoriax.play.ui import (
+    _HOTBAR_H,
     SCROLL_STEP,
     ClickRegion,
     render_achievement_menu,
+    render_help_overlay,
+    render_hotbar,
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
@@ -221,8 +228,9 @@ _UI_SIZE = 1024
 def _tile_pixel_size(map_w: int, map_h: int) -> int:
     """Choose a tile pixel size so the map fits within the UI canvas.
 
-    Picks the largest size that keeps the full map visible, with a
-    minimum of 8 pixels per tile so blocks remain distinguishable.
+    Picks the largest size that keeps the full map visible above the
+    hotbar, with a minimum of 8 pixels per tile so blocks remain
+    distinguishable.
 
     Args:
         map_w: Map width in tiles.
@@ -231,7 +239,8 @@ def _tile_pixel_size(map_w: int, map_h: int) -> int:
     Returns:
         Tile side length in pixels.
     """
-    return max(8, min(_UI_SIZE // map_w, _UI_SIZE // map_h))
+    world_h = _UI_SIZE - _HOTBAR_H
+    return max(8, min(_UI_SIZE // map_w, world_h // map_h))
 
 
 def _play_loop(
@@ -263,11 +272,12 @@ def _play_loop(
 
     ui_w = _UI_SIZE
     ui_h = _UI_SIZE
+    world_area_h = ui_h - _HOTBAR_H
     tile_px = _tile_pixel_size(params.map_width, params.map_height)
     world_pw = params.map_width * tile_px
     world_ph = params.map_height * tile_px
     world_ox = (ui_w - world_pw) // 2
-    world_oy = (ui_h - world_ph) // 2
+    world_oy = (world_area_h - world_ph) // 2
 
     key_to_action = {
         pygame.K_a: Action.LEFT,
@@ -303,11 +313,14 @@ def _play_loop(
     achievement_scroll = 0
     pause_open = False
     pause_selection = 0
+    help_open = False
     menu_focus = "inventory"
     machine_open = False
     machine_tx = 0
     machine_ty = 0
     machine_panel_active = True
+    hotbar_page = 0
+    held_slot: int | None = None
 
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
     win_ox = (window_width - ui_w * win_scale) // 2
@@ -352,6 +365,27 @@ def _play_loop(
                             ].set(hit.param)
                             state = state.replace(machine_selected_slot=new_sel)  # type: ignore[union-attr]
                         machine_panel_active = True
+                    elif hit.action == "toggle_held":
+                        if held_slot is None:
+                            held_slot = hit.param
+                            selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                            new_slots = state.selected_slots.at[selected_player].set(  # type: ignore[union-attr]
+                                hit.param
+                            )
+                            state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
+                        elif held_slot == hit.param:
+                            held_slot = None
+                        else:
+                            selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                            state = swap_inventory_slots(
+                                state,
+                                selected_player,
+                                held_slot,
+                                hit.param,
+                            )
+                            held_slot = None
+                    elif hit.action == "hotbar_page":
+                        hotbar_page = 1 - hotbar_page
                     elif hit.action == "focus_inventory":
                         menu_focus = "inventory"
                     elif hit.action == "focus_crafting":
@@ -362,6 +396,10 @@ def _play_loop(
                         else:
                             running = False
             elif event.type == pygame.KEYDOWN:
+                if help_open:
+                    help_open = False
+                    continue
+
                 mods = pygame.key.get_mods()
                 shift_held = mods & pygame.KMOD_SHIFT
                 ctrl_held = mods & pygame.KMOD_CTRL
@@ -371,6 +409,7 @@ def _play_loop(
                         pause_open = False
                     elif inventory_open:
                         inventory_open = False
+                        held_slot = None
                     elif achievement_open:
                         achievement_open = False
                     elif machine_open:
@@ -457,11 +496,15 @@ def _play_loop(
                                 machine_slot,
                                 player_slot,
                             )
+                elif event.key == pygame.K_q:
+                    hotbar_page = 1 - hotbar_page
                 elif event.key == pygame.K_i:
                     inventory_open = not inventory_open
                     if inventory_open:
                         achievement_open = False
                         machine_open = False
+                    else:
+                        held_slot = None
                 elif event.key == pygame.K_p:
                     achievement_open = not achievement_open
                     if achievement_open:
@@ -475,6 +518,10 @@ def _play_loop(
                         )
                     elif event.key == pygame.K_DOWN:
                         achievement_scroll += SCROLL_STEP
+                elif event.key == pygame.K_QUESTION or (
+                    event.key == pygame.K_SLASH and shift_held
+                ):
+                    help_open = True
                 elif event.key == pygame.K_r:
                     if level is not None:
                         obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
@@ -550,6 +597,13 @@ def _play_loop(
         ph, pw = pixels.shape[:2]
         ui_frame[world_oy : world_oy + ph, world_ox : world_ox + pw] = pixels
 
+        # Persistent hotbar at the bottom of every frame.
+        hotbar_overlay, hotbar_regions = render_hotbar(
+            state, ui_w, ui_h, hotbar_page
+        )
+        composite_rgba_over_rgb(ui_frame, hotbar_overlay)
+        click_regions.extend(hotbar_regions)
+
         if machine_open:
             machine_overlay, machine_regions = render_machine_menu(
                 state,
@@ -568,6 +622,7 @@ def _play_loop(
                 ui_w,
                 ui_h,
                 menu_focus,
+                held_slot,
             )
             composite_rgba_over_rgb(ui_frame, menu_overlay)
             click_regions.extend(inv_regions)
@@ -589,6 +644,11 @@ def _play_loop(
             )
             composite_rgba_over_rgb(ui_frame, pause_overlay)
             click_regions.extend(pause_regions)
+
+        if help_open:
+            composite_rgba_over_rgb(
+                ui_frame, render_help_overlay(ui_w, ui_h)
+            )
 
         final_surface = pygame.surfarray.make_surface(
             np.transpose(ui_frame, (1, 0, 2)),

@@ -89,6 +89,6 @@ class EnvParams:
     iron_probability: float = 0.02
     copper_probability: float = 0.02
     coal_probability: float = 0.02
-    base_resources: int = 3
+    base_resources: int = 1000
 
     NUM_ACTIONS: ClassVar[int] = 13

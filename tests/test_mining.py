@@ -143,6 +143,6 @@ class TestMiningEdgeCases:
         assert new_state.inventory_counts[0, 0] == 0
         assert new_state.map[0, 0] == BlockType.DIRT
 
-    def test_max_resources_constant_is_100(self) -> None:
-        """BLOCK_MAX_RESOURCES should be 100."""
-        assert BLOCK_MAX_RESOURCES == 100
+    def test_max_resources_constant_is_1000(self) -> None:
+        """BLOCK_MAX_RESOURCES should be 1000."""
+        assert BLOCK_MAX_RESOURCES == 1000

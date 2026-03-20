@@ -285,7 +285,7 @@ BLOCK_TO_ITEM_ARRAY = jnp.array(
 
 SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32)
 
-BLOCK_MAX_RESOURCES = 100
+BLOCK_MAX_RESOURCES = 1000
 
 POWER_PER_COAL = 10
 

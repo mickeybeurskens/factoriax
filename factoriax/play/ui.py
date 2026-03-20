@@ -25,10 +25,11 @@ from factoriax.constants import (
     RECIPES,
     SLOT_ROLE_COLORS,
     SLOT_ROLE_LABELS,
+    Action,
     ItemType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.renderer import render_item_icon
+from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvState
 
 
@@ -1001,11 +1002,192 @@ def render_machine_menu(
     return overlay, click_regions
 
 
+_HOTBAR_H: int = 48
+"""Height of the persistent hotbar in pixels."""
+
+_HOTBAR_SLOTS: int = 8
+"""Number of inventory slots visible in the hotbar at once."""
+
+_DIRECTION_LETTERS: dict[int, str] = {
+    int(Action.LEFT): "W",
+    int(Action.RIGHT): "E",
+    int(Action.UP): "N",
+    int(Action.DOWN): "S",
+}
+
+# Gold border for the held-slot highlight in inventory swap mode.
+_HELD_BORDER: tuple[int, int, int, int] = (210, 180, 50, 255)
+
+
+def render_hotbar(
+    state: EnvState,
+    screen_width: int,
+    screen_height: int,
+    hotbar_page: int = 0,
+) -> tuple[np.ndarray, list[ClickRegion]]:
+    """Render a persistent hotbar at the bottom of the game canvas.
+
+    The bar shows a player badge on the left, a sliding window of 8
+    inventory slots in the centre, and a page-toggle button on the right.
+    Page 0 shows slots 0-7, page 1 shows slots 2-9.
+
+    Args:
+        state: Current environment state.
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+        hotbar_page: Which page of slots to display (0 or 1).
+
+    Returns:
+        Tuple of (RGBA overlay, list of click regions).
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    regions: list[ClickRegion] = []
+
+    bar_y = screen_height - _HOTBAR_H
+    overlay[bar_y:, :screen_width] = (22, 22, 22, 228)
+    # Top border line
+    overlay[bar_y : bar_y + 2, :screen_width] = _BORDER
+
+    selected_player = int(state.selected_player)
+    selected_slot = int(state.selected_slots[selected_player])
+    direction = int(state.player_directions[selected_player])
+    inventory_items = np.array(state.inventory_items[selected_player])
+    inventory_counts = np.array(state.inventory_counts[selected_player])
+
+    hint_font = get_pixel_font(_FONT_HINT)
+
+    # --- Player badge (~60px) ---
+    badge_x = 8
+    badge_cy = bar_y + _HOTBAR_H // 2
+    circle_r = 14
+    colors = PLAYER_COLORS[selected_player % len(PLAYER_COLORS)]
+    # Draw a filled circle approximation as a square with clipped corners
+    for dy in range(-circle_r, circle_r + 1):
+        half_w = int((circle_r * circle_r - dy * dy) ** 0.5)
+        row = badge_cy + dy
+        if 0 <= row < screen_height:
+            c0 = max(0, badge_x + circle_r - half_w)
+            c1 = min(screen_width, badge_x + circle_r + half_w + 1)
+            overlay[row, c0:c1, :3] = colors[0]
+            overlay[row, c0:c1, 3] = 255
+
+    label = _render_text_rgba(
+        f"P{selected_player + 1}", hint_font, (255, 255, 255)
+    )
+    _blit_rgba(
+        overlay,
+        label,
+        badge_cy - label.shape[0] // 2 - 1,
+        badge_x + circle_r - label.shape[1] // 2,
+    )
+    dir_letter = _DIRECTION_LETTERS.get(direction, "?")
+    dir_arr = _render_text_rgba(dir_letter, hint_font, (200, 195, 160))
+    _blit_rgba(
+        overlay,
+        dir_arr,
+        badge_cy - dir_arr.shape[0] // 2 - 1,
+        badge_x + circle_r * 2 + 6,
+    )
+
+    # --- 8 item slots ---
+    slot_start = 0 if hotbar_page == 0 else 2
+    slot_area_x = 64
+    slot_area_w = screen_width - 64 - 104  # leave room for page btn + padding
+    slot_w = slot_area_w // _HOTBAR_SLOTS
+    icon_size = min(32, slot_w - 8)
+    slot_y = bar_y + 4
+
+    for i in range(_HOTBAR_SLOTS):
+        slot_idx = slot_start + i
+        if slot_idx >= NUM_INVENTORY_SLOTS:
+            break
+
+        sx = slot_area_x + i * slot_w
+        icon_x = sx + (slot_w - icon_size) // 2
+        icon_y = slot_y + 2
+
+        is_selected = slot_idx == selected_slot
+        bg: tuple[int, int, int, int] = (
+            (90, 90, 90, 255) if is_selected else (45, 45, 45, 255)
+        )
+        overlay[icon_y : icon_y + icon_size, icon_x : icon_x + icon_size] = bg
+
+        if is_selected:
+            white = (255, 255, 255, 255)
+            overlay[icon_y, icon_x : icon_x + icon_size] = white
+            overlay[
+                icon_y + icon_size - 1, icon_x : icon_x + icon_size
+            ] = white
+            overlay[icon_y : icon_y + icon_size, icon_x] = white
+            overlay[
+                icon_y : icon_y + icon_size, icon_x + icon_size - 1
+            ] = white
+
+        item_type = int(inventory_items[slot_idx])
+        count = int(inventory_counts[slot_idx])
+        if item_type != 0 and count > 0:
+            pad = 4
+            icon_s = icon_size - 2 * pad
+            if icon_s > 0:
+                icon_arr = render_item_icon(item_type, icon_s)
+                overlay[
+                    icon_y + pad : icon_y + pad + icon_s,
+                    icon_x + pad : icon_x + pad + icon_s,
+                ] = icon_arr
+            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
+            count_arr = _render_text_rgba(f"{count}", hint_font, rgb)
+            count_x = icon_x + icon_size - count_arr.shape[1] - 1
+            count_y = icon_y + icon_size - count_arr.shape[0]
+            _blit_rgba(overlay, count_arr, count_y, count_x)
+
+        regions.append(
+            ClickRegion(
+                x=icon_x,
+                y=icon_y,
+                w=icon_size,
+                h=icon_size,
+                action="select_slot",
+                param=slot_idx,
+            )
+        )
+
+    # --- Page button ---
+    btn_x = screen_width - 96
+    btn_y = bar_y + 8
+    btn_w = 36
+    btn_h = _HOTBAR_H - 16
+    overlay[btn_y : btn_y + btn_h, btn_x : btn_x + btn_w] = (
+        55, 55, 55, 255
+    )
+    page_label = _render_text_rgba(
+        f"{hotbar_page + 1}/2", hint_font, (180, 175, 150)
+    )
+    _blit_rgba(
+        overlay,
+        page_label,
+        btn_y + (btn_h - page_label.shape[0]) // 2,
+        btn_x + (btn_w - page_label.shape[1]) // 2,
+    )
+    regions.append(
+        ClickRegion(
+            x=btn_x,
+            y=btn_y,
+            w=btn_w,
+            h=btn_h,
+            action="hotbar_page",
+            param=0,
+        )
+    )
+
+    return overlay, regions
+
+
 def render_inventory_menu(
     state: EnvState,
     screen_width: int,
     screen_height: int,
     menu_focus: str = "inventory",
+    held_slot: int | None = None,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the inventory and crafting menu as an RGBA overlay.
 
@@ -1013,11 +1195,15 @@ def render_inventory_menu(
     slot.  Right section: recipe list showing output, name, and per-
     ingredient have/need counts coloured by affordability.
 
+    When *held_slot* is not ``None`` the corresponding inventory cell is
+    drawn with a gold border to indicate a pending swap operation.
+
     Args:
         state: Current environment state.
         screen_width: Total screen width in pixels.
         screen_height: Total screen height in pixels.
         menu_focus: Focused section — "inventory" or "crafting".
+        held_slot: Inventory slot currently "held" for swapping, or None.
 
     Returns:
         Tuple of (RGBA overlay array, list of click regions).
@@ -1118,12 +1304,25 @@ def render_inventory_menu(
         icon_x = cell_x + (cell_w - icon_size) // 2
 
         is_selected = (slot_idx == selected_slot) and (menu_focus == "inventory")
+        is_held = slot_idx == held_slot
         slot_bg: tuple[int, int, int, int] = (
             (90, 90, 90, 255) if is_selected else (55, 55, 55, 255)
         )
         overlay[cell_y : cell_y + icon_size, icon_x : icon_x + icon_size] = slot_bg
 
-        if is_selected:
+        if is_held:
+            for bw in range(2):
+                overlay[cell_y + bw, icon_x : icon_x + icon_size] = _HELD_BORDER
+                overlay[
+                    cell_y + icon_size - 1 - bw,
+                    icon_x : icon_x + icon_size,
+                ] = _HELD_BORDER
+                overlay[cell_y : cell_y + icon_size, icon_x + bw] = _HELD_BORDER
+                overlay[
+                    cell_y : cell_y + icon_size,
+                    icon_x + icon_size - 1 - bw,
+                ] = _HELD_BORDER
+        elif is_selected:
             white = (255, 255, 255, 255)
             overlay[cell_y, icon_x : icon_x + icon_size] = white
             overlay[cell_y + icon_size - 1, icon_x : icon_x + icon_size] = white
@@ -1136,7 +1335,7 @@ def render_inventory_menu(
                 y=cell_y,
                 w=icon_size,
                 h=cell_h,
-                action="select_slot",
+                action="toggle_held",
                 param=slot_idx,
             )
         )
@@ -1285,3 +1484,106 @@ def render_inventory_menu(
     )
 
     return overlay, click_regions
+
+
+# ---------------------------------------------------------------------------
+# Help overlay
+# ---------------------------------------------------------------------------
+
+_HELP_LINES: list[str] = [
+    "-- Movement --",
+    "WASD          Move player",
+    "Ctrl+1-9      Switch active player",
+    "",
+    "-- Actions --",
+    "SPACE         Mine ore at current tile",
+    "E             Place / pick up machine",
+    "F             Inspect machine in front",
+    "",
+    "-- Inventory & Crafting --",
+    "I             Toggle inventory menu",
+    "TAB           Switch inventory / crafting",
+    "LEFT/RIGHT    Select inventory slot",
+    "UP/DOWN       Select recipe",
+    "1-5 / Sh+1-5  Quick-select slot 1-10",
+    "Q             Toggle hotbar page",
+    "C / E         Craft selected recipe",
+    "Click slot    Pick up / swap item",
+    "",
+    "-- Machine Transfer --",
+    "F             Open machine panel",
+    "TAB           Switch machine / player panel",
+    "LEFT/RIGHT    Select slot",
+    "E             Transfer items",
+    "",
+    "-- Other --",
+    "P             Achievements",
+    "R             Restart level",
+    "?             This help screen",
+    "ESC           Close menu / pause",
+]
+
+
+def render_help_overlay(
+    screen_width: int,
+    screen_height: int,
+) -> np.ndarray:
+    """Render a controls reference overlay for play mode.
+
+    Displays all keybindings grouped by category. Press any key
+    to dismiss.
+
+    Args:
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+
+    Returns:
+        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    overlay[:, :] = (0, 0, 0, 180)
+
+    font = get_pixel_font(_FONT_HINT)
+    title_font = get_pixel_font(_FONT_HEADER)
+    line_h = font.get_height() + 4
+
+    total_h = len(_HELP_LINES) * line_h + 48
+    panel_w = min(420, screen_width - 40)
+    panel_h = min(total_h, screen_height - 40)
+    px = (screen_width - panel_w) // 2
+    py = (screen_height - panel_h) // 2
+
+    draw_panel(overlay, px, py, panel_w, panel_h)
+
+    title = _render_text_rgba("Controls", title_font, (215, 195, 65))
+    _blit_rgba(
+        overlay, title, py + _BORDER_PX + 6,
+        px + (panel_w - title.shape[1]) // 2,
+    )
+
+    cy = py + _BORDER_PX + 6 + title.shape[0] + 8
+    overlay[cy : cy + _SEP_H, px + 16 : px + panel_w - 16] = _BORDER
+    cy += _SEP_H + 6
+
+    for line in _HELP_LINES:
+        if not line:
+            cy += line_h // 2
+            continue
+        if line.startswith("--"):
+            arr = _render_text_rgba(line, font, (215, 195, 65))
+        else:
+            arr = _render_text_rgba(line, font, (180, 175, 150))
+        _blit_rgba(overlay, arr, cy, px + 16)
+        cy += line_h
+
+    dismiss = _render_text_rgba(
+        "Press any key to close", font, _HINT_COLOR
+    )
+    _blit_rgba(
+        overlay,
+        dismiss,
+        py + panel_h - _BORDER_PX - dismiss.shape[0] - 4,
+        px + (panel_w - dismiss.shape[1]) // 2,
+    )
+
+    return overlay

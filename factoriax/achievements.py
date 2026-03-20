@@ -1,4 +1,21 @@
-"""Achievement system for tracking player progress and awarding rewards."""
+"""Achievement system for tracking player progress and awarding rewards.
+
+Achievements are ordered as a tutorial progression that guides the player
+from hand-mining raw ore all the way to a multi-machine extraction
+pipeline.  Each achievement teaches one new concept or mechanic:
+
+ 1. First Ore          — mine any ore (teaches mining)
+ 2. Stockpile          — mine 10 total (build up resources for crafting)
+ 3. Apprentice Engineer — craft a machine (teaches crafting UI)
+ 4. Breaking Ground    — place a machine (teaches placement)
+ 5. Fueled Up          — deliver coal to a miner (teaches machine inspection)
+ 6. Automated Mining   — miner produces ore (confirms fuel→extraction loop)
+ 7. Moving Parts       — place an arm and a chest (pipeline building blocks)
+ 8. First Pipeline     — a chest holds items (full miner→arm→chest flow)
+ 9. Belt Network       — place 5 belts (transport layer)
+10. Scaling Up         — 3 miners on the map (replicate the pattern)
+11. Industrialist      — 10 machines total (capstone)
+"""
 
 from dataclasses import dataclass
 
@@ -23,20 +40,17 @@ class AchievementInfo:
 
 
 ACHIEVEMENT_INFO = [
-    AchievementInfo(id="collect_coal_1", name="Coal Miner"),
-    AchievementInfo(id="collect_coal_2", name="Coal Miner II"),
-    AchievementInfo(id="collect_coal_5", name="Coal Miner III"),
-    AchievementInfo(id="collect_coal_10", name="Coal Miner IV"),
-    AchievementInfo(id="collect_iron_1", name="Iron Age"),
-    AchievementInfo(id="collect_iron_2", name="Iron Age II"),
-    AchievementInfo(id="collect_iron_5", name="Iron Age III"),
-    AchievementInfo(id="collect_iron_10", name="Iron Age IV"),
-    AchievementInfo(id="collect_copper_1", name="Copper Collector"),
-    AchievementInfo(id="collect_copper_2", name="Copper Collector II"),
-    AchievementInfo(id="collect_copper_5", name="Copper Collector III"),
-    AchievementInfo(id="collect_copper_10", name="Copper Collector IV"),
-    AchievementInfo(id="craft_machine_1", name="Engineer"),
-    AchievementInfo(id="place_machine_1", name="Automation"),
+    AchievementInfo(id="first_ore", name="First Ore"),
+    AchievementInfo(id="stockpile", name="Stockpile"),
+    AchievementInfo(id="apprentice_engineer", name="Apprentice Engineer"),
+    AchievementInfo(id="breaking_ground", name="Breaking Ground"),
+    AchievementInfo(id="fueled_up", name="Fueled Up"),
+    AchievementInfo(id="automated_mining", name="Automated Mining"),
+    AchievementInfo(id="moving_parts", name="Moving Parts"),
+    AchievementInfo(id="first_pipeline", name="First Pipeline"),
+    AchievementInfo(id="belt_network", name="Belt Network"),
+    AchievementInfo(id="scaling_up", name="Scaling Up"),
+    AchievementInfo(id="industrialist", name="Industrialist"),
 ]
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
@@ -44,6 +58,10 @@ NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 #: Per-achievement reward magnitudes used by
 #: :func:`factoriax.rewards.achievement_reward`.
 ACHIEVEMENT_REWARDS = jnp.ones(NUM_ACHIEVEMENTS, dtype=jnp.float32)
+
+# Miner machine inventory layout (mirrors machines.py constants).
+_MINER_FUEL_SLOT: int = 0
+_MINER_OUTPUT_SLOT: int = 1
 
 
 def count_total_items(state: EnvState, item_type: int) -> jax.Array:
@@ -76,6 +94,51 @@ def count_machines(state: EnvState, machine_type: int) -> jax.Array:
     return count
 
 
+def _any_miner_has_fuel(state: EnvState) -> jax.Array:
+    """Check whether any placed miner has coal in its fuel slot.
+
+    Args:
+        state: Current environment state
+
+    Returns:
+        Scalar boolean — True if at least one miner is fueled.
+    """
+    is_miner = state.machine_types == MachineType.MINER
+    has_coal = (
+        (state.machine_inventory_items[..., _MINER_FUEL_SLOT] == ItemType.COAL)
+        & (state.machine_inventory_counts[..., _MINER_FUEL_SLOT] > 0)
+    )
+    return jnp.any(is_miner & has_coal)
+
+
+def _any_miner_has_output(state: EnvState) -> jax.Array:
+    """Check whether any placed miner has produced ore in its output slot.
+
+    Args:
+        state: Current environment state
+
+    Returns:
+        Scalar boolean — True if at least one miner output is non-empty.
+    """
+    is_miner = state.machine_types == MachineType.MINER
+    has_output = state.machine_inventory_counts[..., _MINER_OUTPUT_SLOT] > 0
+    return jnp.any(is_miner & has_output)
+
+
+def _any_chest_has_items(state: EnvState) -> jax.Array:
+    """Check whether any placed chest contains items.
+
+    Args:
+        state: Current environment state
+
+    Returns:
+        Scalar boolean — True if at least one chest slot is non-empty.
+    """
+    is_chest = state.machine_types == MachineType.CHEST
+    has_items = jnp.any(state.machine_inventory_counts > 0, axis=-1)
+    return jnp.any(is_chest & has_items)
+
+
 def compute_all_conditions(state: EnvState) -> jax.Array:
     """Compute whether each achievement condition is met.
 
@@ -90,25 +153,47 @@ def compute_all_conditions(state: EnvState) -> jax.Array:
         Boolean array of shape (NUM_ACHIEVEMENTS,) indicating which
         achievement conditions are currently satisfied
     """
-    coal = state.items_mined[ItemType.COAL]
-    iron = state.items_mined[ItemType.IRON]
-    copper = state.items_mined[ItemType.COPPER]
+    total_mined = (
+        state.items_mined[ItemType.COAL]
+        + state.items_mined[ItemType.IRON]
+        + state.items_mined[ItemType.COPPER]
+    )
+
+    total_machines = jnp.sum(state.machine_types != MachineType.NONE)
+
+    # Count machine items across all player inventories.
+    machine_items_held = (
+        count_total_items(state, ItemType.MINER)
+        + count_total_items(state, ItemType.CHEST)
+        + count_total_items(state, ItemType.CONVEYOR_BELT)
+        + count_total_items(state, ItemType.ARM)
+    )
+
     conditions = jnp.array(
         [
-            coal >= 1,
-            coal >= 2,
-            coal >= 5,
-            coal >= 10,
-            iron >= 1,
-            iron >= 2,
-            iron >= 5,
-            iron >= 10,
-            copper >= 1,
-            copper >= 2,
-            copper >= 5,
-            copper >= 10,
-            count_total_items(state, ItemType.MINER) >= 1,
-            count_machines(state, MachineType.MINER) >= 1,
+            # 0  First Ore — mine any ore
+            total_mined >= 1,
+            # 1  Stockpile — mine 10 total
+            total_mined >= 10,
+            # 2  Apprentice Engineer — craft any machine
+            machine_items_held >= 1,
+            # 3  Breaking Ground — place any machine
+            total_machines >= 1,
+            # 4  Fueled Up — deliver coal to a miner
+            _any_miner_has_fuel(state),
+            # 5  Automated Mining — miner output slot non-empty
+            _any_miner_has_output(state),
+            # 6  Moving Parts — place an arm and a chest
+            (count_machines(state, MachineType.ARM) >= 1)
+            & (count_machines(state, MachineType.CHEST) >= 1),
+            # 7  First Pipeline — any chest holds items
+            _any_chest_has_items(state),
+            # 8  Belt Network — place 5 belts
+            count_machines(state, MachineType.CONVEYOR_BELT) >= 5,
+            # 9  Scaling Up — 3 miners on the map
+            count_machines(state, MachineType.MINER) >= 3,
+            # 10 Industrialist — 10 machines total
+            total_machines >= 10,
         ],
         dtype=jnp.bool_,
     )

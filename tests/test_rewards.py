@@ -69,10 +69,9 @@ class TestAchievementReward:
         """Reward equals the number of newly unlocked achievements."""
         from factoriax.achievements import check_achievements
 
+        # Mining 10 total ores unlocks both First Ore and Stockpile.
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-        items_mined = items_mined.at[ItemType.COAL].set(1)
-        items_mined = items_mined.at[ItemType.IRON].set(1)
-        items_mined = items_mined.at[ItemType.COPPER].set(1)
+        items_mined = items_mined.at[ItemType.IRON].set(10)
 
         prev_state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
@@ -84,7 +83,7 @@ class TestAchievementReward:
             )
         )
         reward = achievement_reward(prev_state, new_state, params)
-        assert float(reward) == 3.0
+        assert float(reward) == 2.0
 
     def test_jit_compatible(self, state_factory, params) -> None:
         """achievement_reward should be JIT-compilable."""

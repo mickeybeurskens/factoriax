@@ -40,6 +40,52 @@ _DEPOSIT_ROLES: frozenset[int] = frozenset(
 )
 
 
+def swap_inventory_slots(
+    state: EnvState,
+    player_idx: int,
+    slot_a: int,
+    slot_b: int,
+) -> EnvState:
+    """Swap the contents of two inventory slots for a player.
+
+    If both slots are identical this is a no-op.  Works correctly when
+    one or both slots are empty.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the acting player.
+        slot_a: First inventory slot index.
+        slot_b: Second inventory slot index.
+
+    Returns:
+        Updated state with the two slots' items and counts exchanged.
+    """
+    if slot_a == slot_b:
+        return state
+
+    item_a = int(state.inventory_items[player_idx, slot_a])
+    count_a = int(state.inventory_counts[player_idx, slot_a])
+    item_b = int(state.inventory_items[player_idx, slot_b])
+    count_b = int(state.inventory_counts[player_idx, slot_b])
+
+    new_items = (
+        state.inventory_items.at[player_idx, slot_a]
+        .set(item_b)
+        .at[player_idx, slot_b]
+        .set(item_a)
+    )
+    new_counts = (
+        state.inventory_counts.at[player_idx, slot_a]
+        .set(count_b)
+        .at[player_idx, slot_b]
+        .set(count_a)
+    )
+    return state.replace(
+        inventory_items=new_items,
+        inventory_counts=new_counts,
+    )
+
+
 def withdraw_from_machine(
     state: EnvState,
     player_idx: int,

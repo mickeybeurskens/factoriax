@@ -13,6 +13,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     SOLID_BLOCKS,
+    Action,
     ItemType,
     MachineType,
 )
@@ -130,6 +131,19 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
         new_item = jnp.where(new_count == 0, ItemType.EMPTY, item_type)
         direction = s.player_directions[player_idx]
 
+        # Arms deposit forward and pick from behind.  Flipping the
+        # direction so the output faces the player makes placement
+        # intuitive: face a source machine, place the arm, and it
+        # grabs from what you are looking at.
+        opposite = jnp.int32(Action.NOOP)
+        opposite = jnp.where(direction == Action.LEFT, Action.RIGHT, opposite)
+        opposite = jnp.where(direction == Action.RIGHT, Action.LEFT, opposite)
+        opposite = jnp.where(direction == Action.UP, Action.DOWN, opposite)
+        opposite = jnp.where(direction == Action.DOWN, Action.UP, opposite)
+        placed_dir = jnp.where(
+            machine_type == MachineType.ARM, opposite, direction
+        )
+
         s = s.replace(
             inventory_items=s.inventory_items.at[player_idx, selected_slot].set(
                 new_item
@@ -138,7 +152,9 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
                 new_count
             ),
             machine_types=s.machine_types.at[target_y, target_x].set(machine_type),
-            machine_direction=s.machine_direction.at[target_y, target_x].set(direction),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(
+                placed_dir
+            ),
         )
         return s
 
