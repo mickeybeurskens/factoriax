@@ -281,11 +281,14 @@ def _play_loop(
     world_ox = (ui_w - world_pw) // 2
     world_oy = (world_area_h - world_ph) // 2
 
+    nav_keys = {
+        pygame.K_w: "up",
+        pygame.K_s: "down",
+        pygame.K_a: "left",
+        pygame.K_d: "right",
+    }
+
     key_to_action = {
-        pygame.K_a: Action.LEFT,
-        pygame.K_d: Action.RIGHT,
-        pygame.K_w: Action.UP,
-        pygame.K_s: Action.DOWN,
         pygame.K_SPACE: Action.MINE,
         pygame.K_c: Action.CRAFT,
     }
@@ -429,9 +432,9 @@ def _play_loop(
                         pause_open = True
                         pause_selection = 0
                 elif pause_open:
-                    if event.key == pygame.K_UP:
+                    if event.key == pygame.K_w:
                         pause_selection = max(0, pause_selection - 1)
-                    elif event.key == pygame.K_DOWN:
+                    elif event.key == pygame.K_s:
                         pause_selection = min(1, pause_selection + 1)
                     elif event.key in (pygame.K_RETURN, pygame.K_e):
                         if pause_selection == 0:
@@ -458,10 +461,10 @@ def _play_loop(
                             achievement_open = False
                             pause_open = False
                 elif machine_open:
-                    if event.key == pygame.K_TAB:
+                    if event.key in (pygame.K_w, pygame.K_s):
                         machine_panel_active = not machine_panel_active
-                    elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
-                        delta = -1 if event.key == pygame.K_LEFT else 1
+                    elif event.key in (pygame.K_a, pygame.K_d):
+                        delta = -1 if event.key == pygame.K_a else 1
                         selected_player = int(state.selected_player)  # type: ignore[union-attr]
                         if machine_panel_active:
                             machine_type = int(
@@ -522,12 +525,12 @@ def _play_loop(
                         inventory_open = False
                         achievement_scroll = 0
                 elif achievement_open:
-                    if event.key == pygame.K_UP:
+                    if event.key == pygame.K_w:
                         achievement_scroll = max(
                             0,
                             achievement_scroll - SCROLL_STEP,
                         )
-                    elif event.key == pygame.K_DOWN:
+                    elif event.key == pygame.K_s:
                         achievement_scroll += SCROLL_STEP
                 elif event.key == pygame.K_QUESTION or (
                     event.key == pygame.K_SLASH and shift_held
@@ -539,21 +542,39 @@ def _play_loop(
                     else:
                         rng, reset_key = random.split(rng)
                         obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
-                elif inventory_open and event.key == pygame.K_TAB:
-                    if menu_focus == "inventory":
-                        menu_focus = "crafting"
-                    else:
-                        menu_focus = "inventory"
                 elif inventory_open and menu_focus == "inventory":
-                    if event.key == pygame.K_LEFT:
-                        action = Action.PREV_SLOT
-                    elif event.key == pygame.K_RIGHT:
-                        action = Action.NEXT_SLOT
+                    selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                    current = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
+                    col = current % 5
+                    if event.key == pygame.K_a:
+                        if col == 0:
+                            pass  # leftmost column, nowhere to go
+                        else:
+                            action = Action.PREV_SLOT
+                    elif event.key == pygame.K_d:
+                        if col == 4:
+                            menu_focus = "crafting"
+                        else:
+                            action = Action.NEXT_SLOT
+                    elif event.key == pygame.K_w:
+                        if current >= 5:
+                            new_sel = state.selected_slots.at[  # type: ignore[union-attr]
+                                selected_player
+                            ].set(current - 5)
+                            state = state.replace(selected_slots=new_sel)  # type: ignore[union-attr]
+                    elif event.key == pygame.K_s:
+                        if current < 5:
+                            new_sel = state.selected_slots.at[  # type: ignore[union-attr]
+                                selected_player
+                            ].set(current + 5)
+                            state = state.replace(selected_slots=new_sel)  # type: ignore[union-attr]
                 elif inventory_open and menu_focus == "crafting":
-                    if event.key == pygame.K_UP:
+                    if event.key == pygame.K_w:
                         action = Action.PREV_RECIPE
-                    elif event.key == pygame.K_DOWN:
+                    elif event.key == pygame.K_s:
                         action = Action.NEXT_RECIPE
+                    elif event.key == pygame.K_a:
+                        menu_focus = "inventory"
                     elif event.key == pygame.K_e:
                         action = Action.CRAFT
                 elif event.key == pygame.K_e:
@@ -591,6 +612,15 @@ def _play_loop(
                     state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
                 elif event.key in key_to_action:
                     action = key_to_action[event.key]
+                elif event.key in nav_keys:
+                    nav_dir = nav_keys[event.key]
+                    nav_to_action = {
+                        "up": Action.UP,
+                        "down": Action.DOWN,
+                        "left": Action.LEFT,
+                        "right": Action.RIGHT,
+                    }
+                    action = nav_to_action[nav_dir]
 
         if action != Action.NOOP:
             rng, step_key = random.split(rng)
@@ -692,15 +722,14 @@ def main() -> None:
     """Run the interactive FactoriaX game.
 
     Controls:
-        WASD: Move the selected player
-        Space: Mine at current position
-        F: Inspect machine in front of the selected player
+        WASD: Move player (world), navigate menus (context-dependent)
+        Space: Mine ore at current tile
+        F: Inspect machine in front of player
         I: Toggle inventory/crafting menu
-        Tab: Switch between inventory and crafting sections (when menu open)
-        Left/Right arrows: Navigate inventory slots / machine slots
-        Up/Down arrows: Navigate recipes (in crafting section)
+        A/D: Select inventory slot, edge-wrap to crafting panel
+        W/S: Navigate rows (inventory), recipes (crafting), panels (machine)
         C: Start crafting selected recipe
-        E: Place (in world/inventory) or Craft (in crafting section)
+        E: Place/pick up (world), transfer (machine), craft (crafting)
         P: Toggle achievement menu
         1-5: Quick-select inventory slot 1-5
         Shift+1-5: Quick-select inventory slot 6-10

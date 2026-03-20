@@ -517,7 +517,7 @@ def render_achievement_menu(
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
         overlay,
-        "[UP/DOWN] Scroll  [ESC] Close",
+        "[W/S] Scroll  [ESC] Close",
         menu_x + _BORDER_PX,
         hint_y,
         menu_w - 2 * _BORDER_PX,
@@ -608,7 +608,7 @@ def render_pause_menu(
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
         overlay,
-        "[UP/DOWN] Select | [ENTER/E] Confirm | [ESC] Back",
+        "[W/S] Select | [ENTER/E] Confirm | [ESC] Back",
         menu_x + _BORDER_PX,
         hint_y,
         menu_w - 2 * _BORDER_PX,
@@ -994,7 +994,7 @@ def render_machine_menu(
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
         overlay,
-        "[E] Transfer  [TAB] Switch panel  [◄/►] Select  [ESC] Close",
+        "[E] Transfer  [W/S] Switch panel  [A/D] Select  [ESC] Close",
         menu_x + _BORDER_PX,
         hint_y,
         menu_w - 2 * _BORDER_PX,
@@ -1477,9 +1477,9 @@ def render_inventory_menu(
     )
 
     if menu_focus == "crafting":
-        hints = "[UP/DOWN] Select | [TAB] Inventory | [E] Craft | [ESC] Close"
+        hints = "[W/S] Select | [A] Inventory | [E] Craft | [ESC] Close"
     else:
-        hints = "[LEFT/RIGHT] Select | [TAB] Crafting | [E] Place | [ESC] Close"
+        hints = "[A/D] Select | [W/S] Row | [E] Place | [ESC] Close"
     _render_control_hints(
         overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
     )
@@ -1504,9 +1504,10 @@ _HELP_LINES: list[str] = [
     "",
     "-- Inventory & Crafting --",
     "I             Toggle inventory menu",
-    "TAB           Switch inventory / crafting",
-    "LEFT/RIGHT    Select inventory slot",
-    "UP/DOWN       Select recipe",
+    "A/D           Select inventory slot",
+    "W/S           Navigate rows / recipes",
+    "D (rightmost) Switch to crafting",
+    "A (crafting)  Switch to inventory",
     "1-5 / Sh+1-5  Quick-select slot 1-10",
     "Q             Toggle hotbar page",
     "C / E         Craft selected recipe",
@@ -1514,8 +1515,8 @@ _HELP_LINES: list[str] = [
     "",
     "-- Machine Transfer --",
     "F             Open machine panel",
-    "TAB           Switch machine / player panel",
-    "LEFT/RIGHT    Select slot",
+    "W/S           Switch machine / player panel",
+    "A/D           Select slot",
     "E             Transfer items",
     "",
     "-- Other --",
