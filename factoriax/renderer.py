@@ -817,7 +817,7 @@ def draw_belt_cargo(
     inv_counts = np.array(state.machine_inventory_counts)
 
     dot_size = max(4, block_pixel_size // 4)
-    border = max(1, dot_size // 4)
+    border = max(2, dot_size // 3)
     outer = dot_size + 2 * border
     half_outer = outer // 2
     mid = block_pixel_size // 2
