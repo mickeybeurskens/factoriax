@@ -245,6 +245,104 @@ class TestConditionComputation:
         conditions = compute_all_conditions(state)
         assert conditions[_achievement_index("industrialist")]
 
+    def test_assembler_crafted_condition(self, state_factory) -> None:
+        """Holding an assembler satisfies Assembler Crafted."""
+        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_items = inv_items.at[0, 0].set(ItemType.ASSEMBLER)
+        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_counts = inv_counts.at[0, 0].set(1)
+
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            inventory_items=inv_items,
+            inventory_counts=inv_counts,
+        )
+        conditions = compute_all_conditions(state)
+        assert conditions[_achievement_index("assembler_crafted")]
+
+    def test_assembly_line_condition(self, state_factory) -> None:
+        """Placing an assembler satisfies Assembly Line."""
+        machine_types = jnp.array(
+            [[MachineType.ASSEMBLER]], dtype=jnp.int32
+        )
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            machine_types=machine_types,
+        )
+        conditions = compute_all_conditions(state)
+        assert conditions[_achievement_index("assembly_line")]
+
+    def test_first_assembly_condition(self, state_factory) -> None:
+        """Assembler with output satisfies First Assembly."""
+        shape = (1, 1)
+        machine_types = jnp.array(
+            [[MachineType.ASSEMBLER]], dtype=jnp.int32
+        )
+        machine_inv_items = jnp.zeros(
+            (*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32
+        )
+        machine_inv_items = machine_inv_items.at[0, 0, 3].set(
+            ItemType.HULL
+        )
+        machine_inv_counts = jnp.zeros(
+            (*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16
+        )
+        machine_inv_counts = machine_inv_counts.at[0, 0, 3].set(1)
+
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            machine_types=machine_types,
+            machine_inventory_items=machine_inv_items,
+            machine_inventory_counts=machine_inv_counts,
+        )
+        conditions = compute_all_conditions(state)
+        assert conditions[_achievement_index("first_assembly")]
+
+    def test_hull_production_condition(self, state_factory) -> None:
+        """Holding 10 hulls satisfies Hull Production."""
+        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_items = inv_items.at[0, 0].set(ItemType.HULL)
+        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_counts = inv_counts.at[0, 0].set(10)
+
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            inventory_items=inv_items,
+            inventory_counts=inv_counts,
+        )
+        conditions = compute_all_conditions(state)
+        assert conditions[_achievement_index("hull_production")]
+
+    def test_fuel_production_condition(self, state_factory) -> None:
+        """Holding 10 fuel packs satisfies Fuel Production."""
+        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_items = inv_items.at[0, 0].set(ItemType.FUEL_PACK)
+        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_counts = inv_counts.at[0, 0].set(10)
+
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            inventory_items=inv_items,
+            inventory_counts=inv_counts,
+        )
+        conditions = compute_all_conditions(state)
+        assert conditions[_achievement_index("fuel_production")]
+
+    def test_rocket_complete_condition(self, state_factory) -> None:
+        """Holding a rocket satisfies Rocket Complete."""
+        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_items = inv_items.at[0, 0].set(ItemType.ROCKET)
+        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
+        inv_counts = inv_counts.at[0, 0].set(1)
+
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            inventory_items=inv_items,
+            inventory_counts=inv_counts,
+        )
+        conditions = compute_all_conditions(state)
+        assert conditions[_achievement_index("rocket_complete")]
+
 
 class TestAchievementUnlocking:
     """Tests for achievement state updates via check_achievements."""

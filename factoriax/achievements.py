@@ -1,20 +1,26 @@
 """Achievement system for tracking player progress and awarding rewards.
 
 Achievements are ordered as a tutorial progression that guides the player
-from hand-mining raw ore all the way to a multi-machine extraction
-pipeline.  Each achievement teaches one new concept or mechanic:
+from hand-mining raw ore all the way to launching a rocket.  Each
+achievement teaches one new concept or mechanic:
 
  1. First Ore          — mine any ore (teaches mining)
  2. Stockpile          — mine 10 total (build up resources for crafting)
  3. Apprentice Engineer — craft a machine (teaches crafting UI)
  4. Breaking Ground    — place a machine (teaches placement)
  5. Fueled Up          — deliver coal to a miner (teaches machine inspection)
- 6. Automated Mining   — miner produces ore (confirms fuel→extraction loop)
+ 6. Automated Mining   — miner produces ore (confirms fuel-to-extraction loop)
  7. Moving Parts       — place an arm and a chest (pipeline building blocks)
- 8. First Pipeline     — a chest holds items (full miner→arm→chest flow)
+ 8. First Pipeline     — a chest holds items (full miner-to-arm-to-chest flow)
  9. Belt Network       — place 5 belts (transport layer)
 10. Scaling Up         — 3 miners on the map (replicate the pattern)
-11. Industrialist      — 10 machines total (capstone)
+11. Industrialist      — 10 machines total (capstone of tier 1)
+12. Assembler Crafted  — craft an assembler (tier 2 entry)
+13. Assembly Line      — place an assembler (teaches assembler placement)
+14. First Assembly     — assembler produces output (confirms assembler works)
+15. Hull Production    — hold 10 hulls (building toward rocket)
+16. Fuel Production    — hold 10 fuel packs (second rocket ingredient)
+17. Rocket Complete    — hold a rocket (game won)
 """
 
 from dataclasses import dataclass
@@ -96,6 +102,36 @@ ACHIEVEMENT_INFO = [
         id="industrialist",
         name="Industrialist",
         hint="Place 10 machines of any type on the map.",
+    ),
+    AchievementInfo(
+        id="assembler_crafted",
+        name="Assembler Crafted",
+        hint="Open inventory (I), select the Assembler recipe, and craft it.",
+    ),
+    AchievementInfo(
+        id="assembly_line",
+        name="Assembly Line",
+        hint="Place an assembler on the map.",
+    ),
+    AchievementInfo(
+        id="first_assembly",
+        name="First Assembly",
+        hint="Set a recipe on your assembler (Q) and feed it inputs.",
+    ),
+    AchievementInfo(
+        id="hull_production",
+        name="Hull Production",
+        hint="Produce and collect at least 10 hulls.",
+    ),
+    AchievementInfo(
+        id="fuel_production",
+        name="Fuel Production",
+        hint="Produce and collect at least 10 fuel packs.",
+    ),
+    AchievementInfo(
+        id="rocket_complete",
+        name="Rocket Complete",
+        hint="Set an assembler to the Rocket recipe and craft one.",
     ),
 ]
 
@@ -185,6 +221,25 @@ def _any_chest_has_items(state: EnvState) -> jax.Array:
     return jnp.any(is_chest & has_items)
 
 
+_ASSEMBLER_OUTPUT_SLOT: int = 3
+
+
+def _any_assembler_has_output(state: EnvState) -> jax.Array:
+    """Check whether any placed assembler has items in its output slot.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Scalar boolean — True if at least one assembler output is non-empty.
+    """
+    is_asm = state.machine_types == MachineType.ASSEMBLER
+    has_output = (
+        state.machine_inventory_counts[..., _ASSEMBLER_OUTPUT_SLOT] > 0
+    )
+    return jnp.any(is_asm & has_output)
+
+
 def compute_all_conditions(state: EnvState) -> jax.Array:
     """Compute whether each achievement condition is met.
 
@@ -240,6 +295,18 @@ def compute_all_conditions(state: EnvState) -> jax.Array:
             count_machines(state, MachineType.MINER) >= 3,
             # 10 Industrialist — 10 machines total
             total_machines >= 10,
+            # 11 Assembler Crafted — hold an assembler
+            count_total_items(state, ItemType.ASSEMBLER) >= 1,
+            # 12 Assembly Line — place an assembler
+            count_machines(state, MachineType.ASSEMBLER) >= 1,
+            # 13 First Assembly — assembler output non-empty
+            _any_assembler_has_output(state),
+            # 14 Hull Production — hold 10 hulls
+            count_total_items(state, ItemType.HULL) >= 10,
+            # 15 Fuel Production — hold 10 fuel packs
+            count_total_items(state, ItemType.FUEL_PACK) >= 10,
+            # 16 Rocket Complete — hold a rocket
+            count_total_items(state, ItemType.ROCKET) >= 1,
         ],
         dtype=jnp.bool_,
     )
