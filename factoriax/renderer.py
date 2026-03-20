@@ -277,6 +277,7 @@ MACHINE_TO_ITEM: dict[int, int] = {
     int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
     int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
     int(MachineType.ARM): int(ItemType.ARM),
+    int(MachineType.ROCKET): int(ItemType.ROCKET),
 }
 
 # Dark arrow colour drawn on top of the gold conveyor belt square.

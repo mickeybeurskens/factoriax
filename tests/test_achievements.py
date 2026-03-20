@@ -329,16 +329,13 @@ class TestConditionComputation:
         assert conditions[_achievement_index("fuel_production")]
 
     def test_rocket_complete_condition(self, state_factory) -> None:
-        """Holding a rocket satisfies Rocket Complete."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.ROCKET)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
-
+        """Placing a rocket machine satisfies Rocket Complete."""
+        machine_types = jnp.array(
+            [[MachineType.ROCKET]], dtype=jnp.int32
+        )
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            machine_types=machine_types,
         )
         conditions = compute_all_conditions(state)
         assert conditions[_achievement_index("rocket_complete")]

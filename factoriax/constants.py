@@ -47,6 +47,7 @@ class MachineType(IntEnum):
     ASSEMBLER = 3
     CONVEYOR_BELT = 4
     ARM = 5
+    ROCKET = 6
 
 
 class SlotRole(IntEnum):
@@ -88,12 +89,14 @@ MACHINE_SLOT_ROLES: np.ndarray = np.array(
         [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
         # ARM — slot 0: single storage buffer (pick/deposit working buffer)
         [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
+        # ROCKET — no slots
+        [SlotRole.NONE] * 8,
     ],
     dtype=np.int32,
 )
 
 # Number of active (non-NONE) slots per machine type.
-MACHINE_NUM_SLOTS: np.ndarray = np.array([0, 2, 8, 4, 1, 1], dtype=np.int32)
+MACHINE_NUM_SLOTS: np.ndarray = np.array([0, 2, 8, 4, 1, 1, 0], dtype=np.int32)
 
 BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
     BlockType.COAL: ItemType.COAL,
@@ -123,6 +126,7 @@ MACHINE_TYPE_NAMES: dict[int, str] = {
     int(MachineType.ASSEMBLER): "Assembler",
     int(MachineType.CONVEYOR_BELT): "Conveyor Belt",
     int(MachineType.ARM): "Arm",
+    int(MachineType.ROCKET): "Rocket",
 }
 
 # Short badge labels for each SlotRole, rendered inside the slot cell header.
@@ -260,6 +264,7 @@ PLACEABLE_ITEMS = jnp.array(
         ItemType.CONVEYOR_BELT,
         ItemType.ARM,
         ItemType.ASSEMBLER,
+        ItemType.ROCKET,
     ],
     dtype=jnp.int32,
 )
@@ -270,6 +275,7 @@ ITEM_TO_MACHINE = {
     ItemType.CONVEYOR_BELT: MachineType.CONVEYOR_BELT,
     ItemType.ARM: MachineType.ARM,
     ItemType.ASSEMBLER: MachineType.ASSEMBLER,
+    ItemType.ROCKET: MachineType.ROCKET,
 }
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
@@ -285,7 +291,7 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.ASSEMBLER,  # ASSEMBLER
         MachineType.NONE,  # HULL
         MachineType.NONE,  # FUEL_PACK
-        MachineType.NONE,  # ROCKET
+        MachineType.ROCKET,  # ROCKET
     ],
     dtype=jnp.int32,
 )
@@ -298,6 +304,7 @@ MACHINE_TO_ITEM_ARRAY = jnp.array(
         ItemType.ASSEMBLER,  # ASSEMBLER
         ItemType.CONVEYOR_BELT,  # CONVEYOR_BELT
         ItemType.ARM,  # ARM
+        ItemType.ROCKET,  # ROCKET
     ],
     dtype=jnp.int32,
 )
@@ -369,12 +376,14 @@ BLOCK_MAX_RESOURCES = 1000
 POWER_PER_COAL = 10
 
 MACHINE_POWER_CONSUMPTION = jnp.array(
-    [0, 1, 0, 0, 0, 0],  # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM
+    [0, 1, 0, 0, 0, 0, 0],
+    # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM, ROCKET
     dtype=jnp.int32,
 )
 
 MACHINE_MINING_RATE = jnp.array(
-    [0, 3, 0, 0, 0, 0],  # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM
+    [0, 3, 0, 0, 0, 0, 0],
+    # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM, ROCKET
     dtype=jnp.int32,
 )
 

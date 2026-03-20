@@ -131,7 +131,7 @@ ACHIEVEMENT_INFO = [
     AchievementInfo(
         id="rocket_complete",
         name="Rocket Complete",
-        hint="Set an assembler to the Rocket recipe and craft one.",
+        hint="Craft a rocket in an assembler and place it on the map.",
     ),
 ]
 
@@ -305,8 +305,8 @@ def compute_all_conditions(state: EnvState) -> jax.Array:
             count_total_items(state, ItemType.HULL) >= 10,
             # 15 Fuel Production — hold 10 fuel packs
             count_total_items(state, ItemType.FUEL_PACK) >= 10,
-            # 16 Rocket Complete — hold a rocket
-            count_total_items(state, ItemType.ROCKET) >= 1,
+            # 16 Rocket Complete — place a rocket on the map
+            count_machines(state, MachineType.ROCKET) >= 1,
         ],
         dtype=jnp.bool_,
     )
