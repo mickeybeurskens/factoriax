@@ -159,6 +159,15 @@ def draw_panel(
         overlay[y : y + h, x + w - 1 - i] = border
 
 
+# Cache for rendered text arrays, keyed by (font identity, text, color).
+# Font objects come from get_pixel_font (lru_cached), so their id() is
+# stable for the lifetime of the process.  The cache avoids repeated
+# pygame font rasterisation for text that hasn't changed between frames.
+_text_rgba_cache: dict[
+    tuple[int, str, tuple[int, int, int]], np.ndarray
+] = {}
+
+
 def _render_text_rgba(
     text: str,
     font: pygame.font.Font,
@@ -166,6 +175,8 @@ def _render_text_rgba(
 ) -> np.ndarray:
     """Render text to an RGBA array with a fully transparent background.
 
+    Results are cached by ``(id(font), text, color)`` so that identical
+    text drawn on consecutive frames is rasterised at most once.
     antialias=False keeps every pixel either the exact glyph colour or
     transparent, which is what gives the pixelated look.
 
@@ -177,6 +188,11 @@ def _render_text_rgba(
     Returns:
         RGBA numpy array of shape (H, W, 4).
     """
+    key = (id(font), text, color)
+    cached = _text_rgba_cache.get(key)
+    if cached is not None:
+        return cached
+
     surface = font.render(text, False, color)
     w, h = surface.get_size()
     # surfarray returns (W, H, 3); transpose to (H, W, 3).
@@ -184,6 +200,8 @@ def _render_text_rgba(
     result = np.zeros((h, w, 4), dtype=np.uint8)
     result[:, :, :3] = rgb
     result[:, :, 3] = np.where(np.any(rgb != 0, axis=2), 255, 0)
+
+    _text_rgba_cache[key] = result
     return result
 
 

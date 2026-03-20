@@ -756,11 +756,11 @@ def _render_frame(
     frame[base_h - STATUS_BAR_HEIGHT :, :] = status_bar
 
     if dialog is not None:
-        frame = composite_rgba_over_rgb(frame, dialog.render(base_w, base_h))
+        composite_rgba_over_rgb(frame, dialog.render(base_w, base_h))
     if number_dialog is not None:
-        frame = composite_rgba_over_rgb(frame, number_dialog.render(base_w, base_h))
+        composite_rgba_over_rgb(frame, number_dialog.render(base_w, base_h))
     if ts.show_help:
-        frame = composite_rgba_over_rgb(frame, render_help_overlay(base_w, base_h))
+        composite_rgba_over_rgb(frame, render_help_overlay(base_w, base_h))
 
     return frame
 

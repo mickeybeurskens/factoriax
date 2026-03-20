@@ -345,6 +345,7 @@ def _draw_belt_arrows(
             _draw_chevron(icon, cy, cx, arrow_size, direction)
 
 
+@functools.lru_cache(maxsize=128)
 def render_item_icon(
     item_type: int,
     size: int,

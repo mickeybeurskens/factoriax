@@ -29,21 +29,37 @@ from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 
 
-def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> np.ndarray:
-    """Composite an RGBA overlay onto an RGB background.
+def composite_rgba_over_rgb(
+    background: np.ndarray, overlay: np.ndarray
+) -> None:
+    """Composite an RGBA overlay onto an RGB background in-place.
+
+    Only blends pixels within the bounding box of non-transparent
+    overlay content, skipping the float arithmetic for the large
+    fully-transparent regions that surround a centered menu panel.
 
     Args:
-        background: RGB image array of shape (H, W, 3)
-        overlay: RGBA image array of shape (H, W, 4)
-
-    Returns:
-        RGB image array with overlay composited
+        background: RGB image array of shape (H, W, 3), modified
+            in place.
+        overlay: RGBA image array of shape (H, W, 4).
     """
-    alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
-    fg = overlay[:, :, :3].astype(np.float32)
-    bg = background.astype(np.float32)
-    blended = fg * alpha + bg * (1 - alpha)
-    return blended.astype(np.uint8)
+    alpha_chan = overlay[:, :, 3]
+    row_has_alpha = np.any(alpha_chan > 0, axis=1)
+    if not np.any(row_has_alpha):
+        return
+    col_has_alpha = np.any(alpha_chan > 0, axis=0)
+
+    r0 = int(np.argmax(row_has_alpha))
+    r1 = len(row_has_alpha) - int(np.argmax(row_has_alpha[::-1]))
+    c0 = int(np.argmax(col_has_alpha))
+    c1 = len(col_has_alpha) - int(np.argmax(col_has_alpha[::-1]))
+
+    a = overlay[r0:r1, c0:c1, 3:4].astype(np.float32) / 255.0
+    fg = overlay[r0:r1, c0:c1, :3].astype(np.float32)
+    bg = background[r0:r1, c0:c1].astype(np.float32)
+    background[r0:r1, c0:c1] = (fg * a + bg * (1 - a)).astype(
+        np.uint8
+    )
 
 
 def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion | None:
@@ -543,7 +559,7 @@ def _play_loop(
                 machine_ty,
                 machine_panel_active,
             )
-            ui_frame = composite_rgba_over_rgb(ui_frame, machine_overlay)
+            composite_rgba_over_rgb(ui_frame, machine_overlay)
             click_regions.extend(machine_regions)
 
         if inventory_open:
@@ -553,7 +569,7 @@ def _play_loop(
                 ui_h,
                 menu_focus,
             )
-            ui_frame = composite_rgba_over_rgb(ui_frame, menu_overlay)
+            composite_rgba_over_rgb(ui_frame, menu_overlay)
             click_regions.extend(inv_regions)
 
         if achievement_open:
@@ -563,7 +579,7 @@ def _play_loop(
                 ui_h,
                 achievement_scroll,
             )
-            ui_frame = composite_rgba_over_rgb(ui_frame, ach_overlay)
+            composite_rgba_over_rgb(ui_frame, ach_overlay)
 
         if pause_open:
             pause_overlay, pause_regions = render_pause_menu(
@@ -571,7 +587,7 @@ def _play_loop(
                 ui_h,
                 pause_selection,
             )
-            ui_frame = composite_rgba_over_rgb(ui_frame, pause_overlay)
+            composite_rgba_over_rgb(ui_frame, pause_overlay)
             click_regions.extend(pause_regions)
 
         final_surface = pygame.surfarray.make_surface(
