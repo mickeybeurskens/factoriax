@@ -15,7 +15,6 @@ import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
-    ITEM_COLORS,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
@@ -74,6 +73,7 @@ _FONT_BODY: int = 20  # item names, counts, recipe info font size
 _FONT_HINT: int = 14  # control hint font size
 _HINT_HEIGHT: int = 24  # height reserved for hint bar at bottom of menus
 _HINT_COLOR: tuple[int, int, int] = (180, 175, 140)
+_SLOT_COUNT_COLOR: tuple[int, int, int] = (220, 215, 180)
 
 # Scroll system constants — shared by every scrollable menu.
 SCROLL_STEP: int = 24
@@ -673,8 +673,8 @@ def render_welcome_screen(
 
     controls = [
         ("WASD", "Move"),
-        ("E", "Mine ore"),
-        ("SPACE", "Place / pick up"),
+        ("SPACE", "Mine ore"),
+        ("E", "Place / pick up / craft"),
         ("I", "Inventory & crafting"),
         ("F", "Inspect machine"),
         ("?", "Full controls list"),
@@ -924,8 +924,9 @@ def render_machine_menu(
                     icon_x + pad : icon_x + pad + icon_s,
                 ] = icon
 
-            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            count_arr = _render_text_rgba(f"x{count}", body_font, rgb)
+            count_arr = _render_text_rgba(
+                f"x{count}", body_font, _SLOT_COUNT_COLOR,
+            )
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
             count_y = icon_y + icon_size + 4
             _blit_rgba(overlay, count_arr, count_y, count_x)
@@ -1156,8 +1157,9 @@ def render_hotbar(
                     icon_y + pad : icon_y + pad + icon_s,
                     icon_x + pad : icon_x + pad + icon_s,
                 ] = icon_arr
-            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            count_arr = _render_text_rgba(f"{count}", hint_font, rgb)
+            count_arr = _render_text_rgba(
+                f"{count}", hint_font, _SLOT_COUNT_COLOR,
+            )
             count_x = icon_x + icon_size - count_arr.shape[1] - 1
             count_y = icon_y + icon_size - count_arr.shape[0]
             _blit_rgba(overlay, count_arr, count_y, count_x)
@@ -1375,8 +1377,9 @@ def render_inventory_menu(
                     icon_x + pad : icon_x + pad + icon_s,
                 ] = icon
 
-            rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-            count_arr = _render_text_rgba(f"x{count}", body_font, rgb)
+            count_arr = _render_text_rgba(
+                f"x{count}", body_font, _SLOT_COUNT_COLOR,
+            )
             count_y = cell_y + icon_size + 4
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
             _blit_rgba(overlay, count_arr, count_y, count_x)
@@ -1500,7 +1503,7 @@ def render_inventory_menu(
     if menu_focus == "crafting":
         hints = "[W/S] Select | [A] Inventory | [E] Craft | [ESC] Close"
     else:
-        hints = "[A/D] Select | [W/S] Row | [SPACE] Place | [ESC] Close"
+        hints = "[A/D] Select | [W/S] Row | [E] Place | [ESC] Close"
     _render_control_hints(
         overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
     )
@@ -1518,8 +1521,8 @@ _HELP_LINES: list[str] = [
     "Ctrl+1-9      Switch active player",
     "",
     "-- Actions --",
-    "E             Mine ore at current tile",
-    "SPACE         Place / pick up machine",
+    "SPACE         Mine ore at current tile",
+    "E             Place / pick up machine",
     "T             Rotate machine in front",
     "F             Inspect machine in front",
     "",

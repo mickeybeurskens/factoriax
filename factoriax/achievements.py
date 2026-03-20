@@ -45,7 +45,7 @@ ACHIEVEMENT_INFO = [
     AchievementInfo(
         id="first_ore",
         name="First Ore",
-        hint="Walk onto an ore tile and press E to mine.",
+        hint="Walk onto an ore tile and press SPACE to mine.",
     ),
     AchievementInfo(
         id="stockpile",
@@ -60,7 +60,7 @@ ACHIEVEMENT_INFO = [
     AchievementInfo(
         id="breaking_ground",
         name="Breaking Ground",
-        hint="Select a machine in your hotbar and press SPACE to place it.",
+        hint="Select a machine in your hotbar and press E to place it.",
     ),
     AchievementInfo(
         id="fueled_up",

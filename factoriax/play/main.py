@@ -292,7 +292,7 @@ def _play_loop(
     }
 
     key_to_action = {
-        pygame.K_e: Action.MINE,
+        pygame.K_SPACE: Action.MINE,
     }
 
     key_to_slot = {
@@ -339,6 +339,7 @@ def _play_loop(
     win_oy = (window_height - ui_h * win_scale) // 2
     click_regions: list[ClickRegion] = []
 
+    frame_tick = 0
     running = True
     while running:
         action = Action.NOOP
@@ -606,7 +607,7 @@ def _play_loop(
                         menu_focus = "inventory"
                     elif event.key == pygame.K_e:
                         action = Action.CRAFT
-                elif event.key == pygame.K_SPACE:
+                elif event.key == pygame.K_e:
                     selected_player = int(state.selected_player)  # type: ignore[union-attr]
                     tx, ty = _tile_in_front(state, selected_player)
                     map_h, map_w = state.map.shape  # type: ignore[union-attr]
@@ -667,7 +668,9 @@ def _play_loop(
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
 
-        pixels = render_pixels(state, block_pixel_size=tile_px)
+        pixels = render_pixels(
+            state, block_pixel_size=tile_px, frame_tick=frame_tick
+        )
         click_regions = []
 
         # Build the UI frame.  The world is rendered at a tile size
@@ -746,6 +749,7 @@ def _play_loop(
         screen.fill((0, 0, 0))
         screen.blit(scaled_surface, (win_ox, win_oy))
         pygame.display.flip()
+        frame_tick += 1
         clock.tick(30)
 
 
@@ -754,13 +758,12 @@ def main() -> None:
 
     Controls:
         WASD: Move player (world), navigate menus (context-dependent)
-        E: Mine ore at current tile
-        Space: Place/pick up machine (world)
+        Space: Mine ore at current tile
+        E: Place/pick up (world), transfer (machine), craft (crafting)
         F: Inspect machine in front of player
         I: Toggle inventory/crafting menu
         A/D: Select inventory slot, edge-wrap to crafting panel
         W/S: Navigate rows (inventory), recipes (crafting), panels (machine)
-        E: Transfer (machine menu), craft (crafting menu)
         P: Toggle achievement menu
         1-8: Quick-select inventory slot 1-8
         Shift+1-2: Quick-select inventory slot 9-10

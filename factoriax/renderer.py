@@ -530,16 +530,20 @@ def render_machine_overlays(
     image: np.ndarray,
     state: EnvState,
     block_pixel_size: int,
+    frame_tick: int = 0,
 ) -> None:
     """Draw machine overlays on tiles that have machines.
 
     Uses :func:`render_item_icon` for each machine so that placed
-    machines look identical to their inventory icons.
+    machines look identical to their inventory icons.  When
+    *frame_tick* is non-zero, active machines pulse and idle machines
+    dim.
 
     Args:
         image: RGBA image to draw on (modified in place)
         state: Current environment state
         block_pixel_size: Size of each block in pixels
+        frame_tick: Monotonic frame counter (0 = static)
     """
     machine_size = int(block_pixel_size * 0.6)
     offset = (block_pixel_size - machine_size) // 2
@@ -558,6 +562,15 @@ def render_machine_overlays(
 
         icon = render_item_icon(item_type, machine_size, direction)
 
+        if frame_tick > 0:
+            if machine_type == int(MachineType.MINER):
+                active = is_miner_active(state, y, x)
+            elif machine_type == int(MachineType.ARM):
+                active = is_arm_active(state, y, x)
+            else:
+                active = True
+            icon = apply_activity_tint(icon, active, frame_tick)
+
         y_start = y * block_pixel_size + offset
         x_start = x * block_pixel_size + offset
         image[
@@ -565,19 +578,29 @@ def render_machine_overlays(
             x_start : x_start + machine_size,
         ] = icon
 
+    draw_belt_cargo(image, state, block_pixel_size)
+
 
 
 def render_pixels(
-    state: EnvState, block_pixel_size: int = BLOCK_PIXEL_SIZE
+    state: EnvState,
+    block_pixel_size: int = BLOCK_PIXEL_SIZE,
+    frame_tick: int = 0,
 ) -> np.ndarray:
     """Render the environment state as an RGB pixel image.
 
     Renders the map, machines, and all players. The selected player has
     a white highlight ring. Does not include the inventory menu.
 
+    When *frame_tick* is non-zero, world animations are applied: water
+    shimmers, active machines pulse, and belt cargo dots slide along
+    belts.  The default of 0 produces the same static output as before
+    so existing callers are unaffected.
+
     Args:
         state: Current environment state
         block_pixel_size: Size of each block in pixels
+        frame_tick: Monotonic frame counter (0 = static rendering)
 
     Returns:
         RGB numpy array of the rendered scene
@@ -599,7 +622,10 @@ def render_pixels(
     # Make writable — the reshape may return a view into the read-only cache.
     image = np.array(image)
 
-    render_machine_overlays(image, state, block_pixel_size)
+    if frame_tick > 0:
+        animate_water(image, map_array, block_pixel_size, frame_tick)
+
+    render_machine_overlays(image, state, block_pixel_size, frame_tick)
 
     player_positions = np.array(state.player_positions)
     player_directions = np.array(state.player_directions)
@@ -653,3 +679,216 @@ def _alpha_blend_inplace(
     ].astype(np.float32) * (1 - fg_alpha)
     bg_region[:, :, :3] = blended.astype(np.uint8)
     bg_region[:, :, 3] = 255
+
+
+# ---------------------------------------------------------------------------
+# Animation helpers
+#
+# All world-animation logic lives in this section. It is deliberately
+# self-contained so it can be extracted into its own module later.
+# Every function here takes a `frame_tick` counter and operates on
+# plain NumPy arrays.  Nothing in this section touches JAX.
+# ---------------------------------------------------------------------------
+
+_TWO_PI: float = 2.0 * np.pi
+
+# Machine activity pulse parameters.
+_PULSE_PERIOD: int = 30  # frames for one full sine cycle (~1 s at 30 FPS)
+_PULSE_MIN: int = 10
+_PULSE_MAX: int = 30
+_IDLE_DIM: float = 0.65  # RGB multiplier for idle machines
+
+# Water wave stripe parameters.
+_WAVE_STRIPE_COLOR: tuple[int, int, int] = (90, 190, 245)
+_WAVE_STRIPE_WIDTH: int = 2  # px thickness of each stripe
+_WAVE_PERIOD: int = 60  # frames for stripes to scroll one full cycle
+_WAVE_SPACING: int = 5  # px between stripe centers
+
+# Miner output slot index (mirrors machines.py).
+_ANIM_MINER_OUTPUT_SLOT: int = 1
+
+
+def animate_water(
+    image: np.ndarray,
+    map_array: np.ndarray,
+    block_pixel_size: int,
+    frame_tick: int,
+) -> None:
+    """Draw synchronized wave stripes across all water tiles.
+
+    Diagonal stripes in a lighter blue scroll steadily across every
+    water tile in lockstep, giving the impression of flowing water.
+    The stripes tile seamlessly across adjacent water tiles because
+    the pattern is computed in global pixel coordinates.
+
+    Args:
+        image: RGBA pixel image, modified in place.
+        map_array: Integer block-type grid of shape ``(H, W)``.
+        block_pixel_size: Tile side length in pixels.
+        frame_tick: Monotonic frame counter from the game loop.
+    """
+    water_ys, water_xs = np.nonzero(map_array == BlockType.WATER)
+    if water_ys.size == 0:
+        return
+
+    scroll = (frame_tick * _WAVE_SPACING) // _WAVE_PERIOD
+
+    # Local pixel offsets within one tile.
+    local_r = np.arange(block_pixel_size)
+    local_c = np.arange(block_pixel_size)
+    lr, lc = np.meshgrid(local_r, local_c, indexing="ij")
+
+    for idx in range(water_ys.size):
+        y, x = int(water_ys[idx]), int(water_xs[idx])
+        r0 = y * block_pixel_size
+        c0 = x * block_pixel_size
+
+        diag = (r0 + lr) + (c0 + lc) + scroll
+        stripe_mask = (diag % _WAVE_SPACING) < _WAVE_STRIPE_WIDTH
+
+        region = image[
+            r0 : r0 + block_pixel_size,
+            c0 : c0 + block_pixel_size,
+        ]
+        region[:, :, :3][stripe_mask] = _WAVE_STRIPE_COLOR
+
+
+def apply_activity_tint(
+    icon: np.ndarray,
+    active: bool,
+    frame_tick: int,
+) -> np.ndarray:
+    """Return a tinted copy of *icon* based on machine activity.
+
+    Active machines get a pulsing brightness boost.  Idle machines
+    are dimmed.  When ``frame_tick`` is 0 the icon is returned
+    unchanged so the static renderer path has zero overhead.
+
+    Args:
+        icon: Base RGBA icon from :func:`render_item_icon`.
+        active: Whether the machine is currently doing work.
+        frame_tick: Monotonic frame counter from the game loop.
+
+    Returns:
+        A new RGBA array (never mutates the cached *icon*).
+    """
+    if frame_tick == 0:
+        return icon
+
+    result = icon.copy()
+    if active:
+        phase = _TWO_PI * frame_tick / _PULSE_PERIOD
+        boost = int(_PULSE_MIN + (_PULSE_MAX - _PULSE_MIN) * (
+            0.5 + 0.5 * np.sin(phase)
+        ))
+        rgb = result[:, :, :3].astype(np.int16) + boost
+        np.clip(rgb, 0, 255, out=rgb)
+        result[:, :, :3] = rgb.astype(np.uint8)
+    else:
+        result[:, :, :3] = (
+            result[:, :, :3].astype(np.float32) * _IDLE_DIM
+        ).astype(np.uint8)
+    return result
+
+
+def draw_belt_cargo(
+    image: np.ndarray,
+    state: EnvState,
+    block_pixel_size: int,
+) -> None:
+    """Draw a static item dot on conveyor belts that hold items.
+
+    Each belt carrying items shows a small coloured square at its
+    centre.  The game simulation handles the actual item movement
+    between tiles, so the dot just indicates presence.
+
+    Args:
+        image: RGBA pixel image, modified in place.
+        state: Current environment state.
+        block_pixel_size: Tile side length in pixels.
+    """
+    machine_types = np.array(state.machine_types)
+    belt_mask = machine_types == MachineType.CONVEYOR_BELT
+    belt_ys, belt_xs = np.nonzero(belt_mask)
+    if belt_ys.size == 0:
+        return
+
+    inv_items = np.array(state.machine_inventory_items)
+    inv_counts = np.array(state.machine_inventory_counts)
+
+    dot_size = max(4, block_pixel_size // 4)
+    border = max(1, dot_size // 4)
+    outer = dot_size + 2 * border
+    half_outer = outer // 2
+    mid = block_pixel_size // 2
+
+    for idx in range(belt_ys.size):
+        y, x = int(belt_ys[idx]), int(belt_xs[idx])
+        if int(inv_counts[y, x, 0]) <= 0:
+            continue
+
+        item_type = int(inv_items[y, x, 0])
+        color = ITEM_COLORS.get(item_type, (128, 128, 128))
+
+        py0 = y * block_pixel_size + mid - half_outer
+        px0 = x * block_pixel_size + mid - half_outer
+
+        h, w = image.shape[:2]
+        # Dark outline
+        oy0 = max(0, py0)
+        ox0 = max(0, px0)
+        oy1 = min(h, py0 + outer)
+        ox1 = min(w, px0 + outer)
+        if oy0 < oy1 and ox0 < ox1:
+            image[oy0:oy1, ox0:ox1, :3] = (20, 20, 20)
+            image[oy0:oy1, ox0:ox1, 3] = 255
+
+        # Inner fill
+        iy0 = max(0, py0 + border)
+        ix0 = max(0, px0 + border)
+        iy1 = min(h, py0 + border + dot_size)
+        ix1 = min(w, px0 + border + dot_size)
+        if iy0 < iy1 and ix0 < ix1:
+            image[iy0:iy1, ix0:ix1, :3] = color
+            image[iy0:iy1, ix0:ix1, 3] = 255
+
+
+def is_miner_active(state: EnvState, y: int, x: int) -> bool:
+    """Check whether the miner at ``(y, x)`` is actively mining.
+
+    A miner is active when it has power, the tile below still holds
+    resources, and the output slot is not completely full.
+
+    Args:
+        state: Current environment state.
+        y: Row of the miner tile.
+        x: Column of the miner tile.
+
+    Returns:
+        True if the miner is doing work this tick.
+    """
+    has_power = int(state.machine_power[y, x]) > 0
+    has_resources = int(state.block_resources[y, x]) > 0
+    output_count = int(
+        state.machine_inventory_counts[y, x, _ANIM_MINER_OUTPUT_SLOT]
+    )
+    from factoriax.constants import MAX_MACHINE_STACK_SIZE
+    has_space = output_count < MAX_MACHINE_STACK_SIZE
+    return has_power and has_resources and has_space
+
+
+def is_arm_active(state: EnvState, y: int, x: int) -> bool:
+    """Check whether the arm at ``(y, x)`` is doing work.
+
+    An arm is considered active if its buffer slot holds items
+    (mid-transfer).
+
+    Args:
+        state: Current environment state.
+        y: Row of the arm tile.
+        x: Column of the arm tile.
+
+    Returns:
+        True if the arm buffer is non-empty.
+    """
+    return int(state.machine_inventory_counts[y, x, 0]) > 0
