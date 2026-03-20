@@ -8,9 +8,11 @@ import numpy as np
 import pygame
 from jax import random
 
+from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
     NUM_INVENTORY_SLOTS,
+    PLACEABLE_ITEMS,
     Action,
     MachineType,
 )
@@ -24,7 +26,6 @@ from factoriax.play.transfer import (
 )
 from factoriax.play.ui import (
     _HOTBAR_H,
-    SCROLL_STEP,
     ClickRegion,
     render_achievement_menu,
     render_help_overlay,
@@ -226,6 +227,8 @@ def play_level(
 
 _UI_SIZE = 1024
 
+_PLACEABLE_ITEM_SET: frozenset[int] = frozenset(int(x) for x in PLACEABLE_ITEMS)
+
 
 def _tile_pixel_size(map_w: int, map_h: int) -> int:
     """Choose a tile pixel size so the map fits within the UI canvas.
@@ -289,8 +292,7 @@ def _play_loop(
     }
 
     key_to_action = {
-        pygame.K_SPACE: Action.MINE,
-        pygame.K_c: Action.CRAFT,
+        pygame.K_e: Action.MINE,
     }
 
     key_to_slot = {
@@ -299,6 +301,9 @@ def _play_loop(
         pygame.K_3: 2,
         pygame.K_4: 3,
         pygame.K_5: 4,
+        pygame.K_6: 5,
+        pygame.K_7: 6,
+        pygame.K_8: 7,
     }
 
     key_to_player = {
@@ -316,6 +321,7 @@ def _play_loop(
     inventory_open = False
     achievement_open = False
     achievement_scroll = 0
+    achievement_selection = 0
     pause_open = False
     pause_selection = 0
     help_open = False
@@ -409,6 +415,19 @@ def _play_loop(
                             pause_open = False
                         else:
                             running = False
+                elif not (
+                    inventory_open
+                    or achievement_open
+                    or machine_open
+                    or pause_open
+                    or welcome_open
+                    or help_open
+                ):
+                    selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                    slot_idx = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
+                    item_type = int(state.inventory_items[selected_player, slot_idx])  # type: ignore[union-attr]
+                    if item_type in _PLACEABLE_ITEM_SET:
+                        action = Action.PLACE
             elif event.type == pygame.KEYDOWN:
                 if help_open:
                     help_open = False
@@ -524,14 +543,24 @@ def _play_loop(
                     if achievement_open:
                         inventory_open = False
                         achievement_scroll = 0
+                        achievement_selection = 0
                 elif achievement_open:
+                    row_h = 36
                     if event.key == pygame.K_w:
-                        achievement_scroll = max(
-                            0,
-                            achievement_scroll - SCROLL_STEP,
+                        achievement_selection = max(
+                            0, achievement_selection - 1
                         )
                     elif event.key == pygame.K_s:
-                        achievement_scroll += SCROLL_STEP
+                        achievement_selection = min(
+                            NUM_ACHIEVEMENTS - 1,
+                            achievement_selection + 1,
+                        )
+                    sel_top = achievement_selection * row_h
+                    sel_bot = sel_top + row_h
+                    if sel_top < achievement_scroll:
+                        achievement_scroll = sel_top
+                    elif sel_bot > achievement_scroll + 8 * row_h:
+                        achievement_scroll = sel_bot - 8 * row_h
                 elif event.key == pygame.K_QUESTION or (
                     event.key == pygame.K_SLASH and shift_held
                 ):
@@ -577,7 +606,7 @@ def _play_loop(
                         menu_focus = "inventory"
                     elif event.key == pygame.K_e:
                         action = Action.CRAFT
-                elif event.key == pygame.K_e:
+                elif event.key == pygame.K_SPACE:
                     selected_player = int(state.selected_player)  # type: ignore[union-attr]
                     tx, ty = _tile_in_front(state, selected_player)
                     map_h, map_w = state.map.shape  # type: ignore[union-attr]
@@ -604,12 +633,13 @@ def _play_loop(
                 elif event.key in key_to_slot:
                     slot_idx = key_to_slot[event.key]
                     if shift_held:
-                        slot_idx += 5
-                    selected_player = int(state.selected_player)  # type: ignore[union-attr]
-                    new_slots = state.selected_slots.at[selected_player].set(  # type: ignore[union-attr]
-                        slot_idx,
-                    )
-                    state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
+                        slot_idx += 8
+                    if slot_idx < NUM_INVENTORY_SLOTS:
+                        selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                        new_slots = state.selected_slots.at[selected_player].set(  # type: ignore[union-attr]
+                            slot_idx,
+                        )
+                        state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
                 elif event.key in key_to_action:
                     action = key_to_action[event.key]
                 elif event.key in nav_keys:
@@ -683,6 +713,7 @@ def _play_loop(
                 ui_w,
                 ui_h,
                 achievement_scroll,
+                achievement_selection,
             )
             composite_rgba_over_rgb(ui_frame, ach_overlay)
 
@@ -723,16 +754,16 @@ def main() -> None:
 
     Controls:
         WASD: Move player (world), navigate menus (context-dependent)
-        Space: Mine ore at current tile
+        E: Mine ore at current tile
+        Space: Place/pick up machine (world)
         F: Inspect machine in front of player
         I: Toggle inventory/crafting menu
         A/D: Select inventory slot, edge-wrap to crafting panel
         W/S: Navigate rows (inventory), recipes (crafting), panels (machine)
-        C: Start crafting selected recipe
-        E: Place/pick up (world), transfer (machine), craft (crafting)
+        E: Transfer (machine menu), craft (crafting menu)
         P: Toggle achievement menu
-        1-5: Quick-select inventory slot 1-5
-        Shift+1-5: Quick-select inventory slot 6-10
+        1-8: Quick-select inventory slot 1-8
+        Shift+1-2: Quick-select inventory slot 9-10
         Ctrl+1-9: Select player (if that many players exist)
         R: Reset the game
         Escape: Close menus / Open pause menu

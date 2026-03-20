@@ -42,8 +42,9 @@ def update_all_machines(state: EnvState) -> EnvState:
     Processes machine updates in order:
     1. Refuel machines that need power
     2. Run miners to extract resources
-    3. Run conveyor belts to push items
-    4. Run arms to pick and deposit items
+    3. Push miner output into the facing machine
+    4. Run conveyor belts to push items
+    5. Run arms to pick and deposit items
 
     Args:
         state: Current environment state
@@ -53,6 +54,7 @@ def update_all_machines(state: EnvState) -> EnvState:
     """
     state = refuel_machines(state)
     state = run_miners(state)
+    state = push_miner_output(state)
     state = run_conveyor_belts(state)
     state = run_arms(state)
     return state
@@ -149,6 +151,107 @@ def run_miners(state: EnvState) -> EnvState:
         machine_inventory_counts=new_inv_counts,
         machine_power=new_power,
         map=new_map,
+    )
+
+
+def push_miner_output(state: EnvState) -> EnvState:
+    """Push miner output into the machine the miner is facing.
+
+    For each miner with items in its output slot, finds the first
+    INPUT or STORAGE slot in the forward neighbour that can accept
+    those items and transfers the stack there.
+
+    Args:
+        state: Current environment state (post-mining).
+
+    Returns:
+        Updated state with miner outputs pushed forward.
+    """
+    h, w = state.machine_types.shape
+    is_miner = state.machine_types == MachineType.MINER
+
+    rows = jnp.broadcast_to(jnp.arange(h)[:, None], (h, w))
+    cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
+
+    direction = state.machine_direction
+    dx = (
+        jnp.where(direction == Action.LEFT, -1, 0)
+        + jnp.where(direction == Action.RIGHT, 1, 0)
+    )
+    dy = (
+        jnp.where(direction == Action.UP, -1, 0)
+        + jnp.where(direction == Action.DOWN, 1, 0)
+    )
+
+    fwd_row = jnp.clip(rows + dy, 0, h - 1)
+    fwd_col = jnp.clip(cols + dx, 0, w - 1)
+
+    miner_items = state.machine_inventory_items[
+        ..., _MINER_OUTPUT_SLOT
+    ]
+    miner_counts = state.machine_inventory_counts[
+        ..., _MINER_OUTPUT_SLOT
+    ]
+
+    fwd_mtype = state.machine_types[fwd_row, fwd_col]
+    fwd_not_none = fwd_mtype != MachineType.NONE
+    fwd_not_self = (fwd_row != rows) | (fwd_col != cols)
+
+    fwd_slot_roles = _SLOT_ROLES_JAX[fwd_mtype]
+    fwd_slot_items = state.machine_inventory_items[fwd_row, fwd_col]
+    fwd_slot_counts = state.machine_inventory_counts[fwd_row, fwd_col]
+
+    is_deposit_role = (
+        fwd_slot_roles == _DEPOSIT_ROLE_INPUT
+    ) | (fwd_slot_roles == _DEPOSIT_ROLE_STORAGE)
+    slot_empty = fwd_slot_counts == 0
+    slot_matches = fwd_slot_items == miner_items[:, :, None]
+    slot_has_space = (slot_empty | slot_matches) & (
+        fwd_slot_counts < MAX_MACHINE_STACK_SIZE
+    )
+    slot_usable = is_deposit_role & slot_has_space
+
+    deposit_idx = jnp.argmax(
+        slot_usable.astype(jnp.int32), axis=-1
+    )
+    has_deposit = jnp.any(slot_usable, axis=-1)
+
+    can_push = (
+        is_miner
+        & (miner_counts > 0)
+        & fwd_not_none
+        & fwd_not_self
+        & has_deposit
+    )
+
+    transfer_count = jnp.where(
+        can_push, miner_counts, jnp.int16(0)
+    )
+    transfer_item = jnp.where(can_push, miner_items, 0)
+
+    new_counts = state.machine_inventory_counts.at[
+        fwd_row, fwd_col, deposit_idx
+    ].add(transfer_count)
+    new_items = state.machine_inventory_items.at[
+        fwd_row, fwd_col, deposit_idx
+    ].max(transfer_item)
+
+    new_counts = new_counts.at[..., _MINER_OUTPUT_SLOT].set(
+        jnp.where(
+            can_push,
+            jnp.int16(0),
+            new_counts[..., _MINER_OUTPUT_SLOT],
+        )
+    )
+    new_items = new_items.at[..., _MINER_OUTPUT_SLOT].set(
+        jnp.where(
+            can_push, 0, new_items[..., _MINER_OUTPUT_SLOT]
+        )
+    )
+
+    return state.replace(
+        machine_inventory_items=new_items,
+        machine_inventory_counts=new_counts,
     )
 
 

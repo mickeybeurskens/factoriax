@@ -33,24 +33,70 @@ class AchievementInfo:
     Attributes:
         id: Unique identifier for the achievement
         name: Human-readable name
+        hint: Short guidance string shown when selected in the menu
     """
 
     id: str
     name: str
+    hint: str
 
 
 ACHIEVEMENT_INFO = [
-    AchievementInfo(id="first_ore", name="First Ore"),
-    AchievementInfo(id="stockpile", name="Stockpile"),
-    AchievementInfo(id="apprentice_engineer", name="Apprentice Engineer"),
-    AchievementInfo(id="breaking_ground", name="Breaking Ground"),
-    AchievementInfo(id="fueled_up", name="Fueled Up"),
-    AchievementInfo(id="automated_mining", name="Automated Mining"),
-    AchievementInfo(id="moving_parts", name="Moving Parts"),
-    AchievementInfo(id="first_pipeline", name="First Pipeline"),
-    AchievementInfo(id="belt_network", name="Belt Network"),
-    AchievementInfo(id="scaling_up", name="Scaling Up"),
-    AchievementInfo(id="industrialist", name="Industrialist"),
+    AchievementInfo(
+        id="first_ore",
+        name="First Ore",
+        hint="Walk onto an ore tile and press E to mine.",
+    ),
+    AchievementInfo(
+        id="stockpile",
+        name="Stockpile",
+        hint="Keep mining until you have 10 ore total.",
+    ),
+    AchievementInfo(
+        id="apprentice_engineer",
+        name="Apprentice Engineer",
+        hint="Open inventory (I), select a recipe, and craft it (E).",
+    ),
+    AchievementInfo(
+        id="breaking_ground",
+        name="Breaking Ground",
+        hint="Select a machine in your hotbar and press SPACE to place it.",
+    ),
+    AchievementInfo(
+        id="fueled_up",
+        name="Fueled Up",
+        hint="Inspect a miner (F) and transfer coal into its fuel slot (E).",
+    ),
+    AchievementInfo(
+        id="automated_mining",
+        name="Automated Mining",
+        hint="Place a fueled miner on an ore tile and wait for it to produce.",
+    ),
+    AchievementInfo(
+        id="moving_parts",
+        name="Moving Parts",
+        hint="Craft and place both an arm and a chest.",
+    ),
+    AchievementInfo(
+        id="first_pipeline",
+        name="First Pipeline",
+        hint="Use an arm to move miner output into a chest.",
+    ),
+    AchievementInfo(
+        id="belt_network",
+        name="Belt Network",
+        hint="Craft and place at least 5 conveyor belts.",
+    ),
+    AchievementInfo(
+        id="scaling_up",
+        name="Scaling Up",
+        hint="Have 3 miners placed on the map at the same time.",
+    ),
+    AchievementInfo(
+        id="industrialist",
+        name="Industrialist",
+        hint="Place 10 machines of any type on the map.",
+    ),
 ]
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)

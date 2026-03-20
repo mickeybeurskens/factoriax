@@ -448,6 +448,42 @@ def _draw_arm_chevron(
                 image[py, px] = _ARM_HEAD_COLOR
 
 
+_MINER_ARROW_COLOR: tuple[int, int, int, int] = (0, 90, 0, 255)
+
+
+def _draw_miner_indicator(icon: np.ndarray, direction: int) -> None:
+    """Draw a directional output arrow on a miner icon.
+
+    Renders a triangular pointer on the facing edge of the miner so
+    players can see which way the miner pushes its output.  The arrow
+    is drawn in a darker green that stands out against the bright
+    green base.
+
+    Args:
+        icon: RGBA array of shape ``(size, size, 4)``, modified
+            in place.
+        direction: ``Action`` direction the miner faces (output side).
+    """
+    size = icon.shape[0]
+    mid = size // 2
+    arrow_len = max(2, size // 4)
+    half_w = max(2, size // 4)
+
+    for t in range(arrow_len):
+        spread = half_w * (arrow_len - t) // arrow_len
+        for s in range(-spread, spread + 1):
+            if direction == Action.RIGHT:
+                py, px = mid + s, size - 1 - t
+            elif direction == Action.LEFT:
+                py, px = mid + s, t
+            elif direction == Action.DOWN:
+                py, px = size - 1 - t, mid + s
+            else:  # UP
+                py, px = t, mid + s
+            if 0 <= py < size and 0 <= px < size:
+                icon[py, px] = _MINER_ARROW_COLOR
+
+
 @functools.lru_cache(maxsize=128)
 def render_item_icon(
     item_type: int,
@@ -483,6 +519,9 @@ def render_item_icon(
     elif item_type == ItemType.ARM and size >= 6:
         arm_dir = direction if direction is not None else int(Action.RIGHT)
         _draw_arm_indicator(icon, arm_dir)
+    elif item_type == ItemType.MINER and size >= 6:
+        miner_dir = direction if direction is not None else int(Action.RIGHT)
+        _draw_miner_indicator(icon, miner_dir)
 
     return icon
 

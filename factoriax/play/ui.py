@@ -73,7 +73,7 @@ _FONT_HEADER: int = 26  # section label font size
 _FONT_BODY: int = 20  # item names, counts, recipe info font size
 _FONT_HINT: int = 14  # control hint font size
 _HINT_HEIGHT: int = 24  # height reserved for hint bar at bottom of menus
-_HINT_COLOR: tuple[int, int, int] = (120, 115, 90)
+_HINT_COLOR: tuple[int, int, int] = (180, 175, 140)
 
 # Scroll system constants — shared by every scrollable menu.
 SCROLL_STEP: int = 24
@@ -428,19 +428,22 @@ def render_achievement_menu(
     screen_width: int,
     screen_height: int,
     scroll_offset: int = 0,
+    selected_index: int = 0,
 ) -> np.ndarray:
     """Render the achievement menu as a scrollable RGBA overlay.
 
     Achievements are laid out in a fixed-height scroll view so the list
     remains comfortable even as more achievements are added.  A scrollbar
-    appears automatically when the content overflows the viewport.  A footer
-    shows the overall completion count.
+    appears automatically when the content overflows the viewport.  The
+    selected row is highlighted with a border, and a hint string for the
+    selected achievement is shown above the footer.
 
     Args:
         state: Current environment state.
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
         scroll_offset: Pixels of content scrolled off the top.
+        selected_index: Currently selected achievement row index.
 
     Returns:
         RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
@@ -467,9 +470,12 @@ def render_achievement_menu(
     unlocked = np.array(state.achievements_unlocked)
     n_unlocked = int(np.sum(unlocked))
 
+    hint_font = get_pixel_font(_FONT_HINT)
+
     # Fixed-height rows make the scroll math simple and the list readable.
     row_h = 36
-    footer_reserve = _HINT_HEIGHT + _BORDER_PX + 40
+    hint_text_h = hint_font.get_height() + 12
+    footer_reserve = _HINT_HEIGHT + _BORDER_PX + 40 + hint_text_h
 
     vp_x = menu_x + _BORDER_PX
     vp_y = sep_y + _SEP_H + 8
@@ -488,6 +494,14 @@ def render_achievement_menu(
         if is_unlocked:
             content[row_y : row_y + row_h - 4, 8 : vp_w - 8] = (42, 68, 42, 210)
 
+        if i == selected_index:
+            sel_t = 2
+            content[row_y : row_y + sel_t, 8 : vp_w - 8] = _BORDER
+            bot = row_y + row_h - 4
+            content[bot - sel_t : bot, 8 : vp_w - 8] = _BORDER
+            content[row_y : row_y + row_h - 4, 8 : 8 + sel_t] = _BORDER
+            content[row_y : row_y + row_h - 4, vp_w - 8 - sel_t : vp_w - 8] = _BORDER
+
         icon_x = 24
         icon_y = row_y + (row_h - icon_size) // 2
         icon_color: tuple[int, int, int, int] = (
@@ -496,7 +510,7 @@ def render_achievement_menu(
         content[icon_y : icon_y + icon_size, icon_x : icon_x + icon_size] = icon_color
 
         text_color: tuple[int, int, int] = (
-            (235, 228, 185) if is_unlocked else (105, 105, 88)
+            (235, 228, 185) if is_unlocked else (150, 148, 125)
         )
         name_arr = _render_text_rgba(info.name, body_font, text_color)
         name_y = row_y + (row_h - name_arr.shape[0]) // 2
@@ -504,20 +518,27 @@ def render_achievement_menu(
 
     blit_scroll_view(overlay, content, vp_x, vp_y, vp_w, vp_h, scroll_offset)
 
+    # Achievement hint for the selected row.
+    sel_hint = ACHIEVEMENT_INFO[selected_index].hint
+    hint_arr = _render_text_rgba(sel_hint, hint_font, _HINT_COLOR)
+    hx = menu_x + (menu_w - hint_arr.shape[1]) // 2
+    hy = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX - 40 - hint_text_h + 4
+    _blit_rgba(overlay, hint_arr, hy, hx)
+
     footer_arr = _render_text_rgba(
         f"{n_unlocked} / {NUM_ACHIEVEMENTS} unlocked",
         body_font,
-        (148, 140, 98),
+        (180, 172, 130),
     )
     fx = menu_x + (menu_w - footer_arr.shape[1]) // 2
-    fy = menu_y + menu_h - footer_arr.shape[0] - 20 - _HINT_HEIGHT
+    fy = hy + hint_arr.shape[0] + 8
     _blit_rgba(overlay, footer_arr, fy, fx)
-    overlay[fy - 8 : fy - 6, menu_x + 20 : menu_x + menu_w - 20] = (80, 75, 40, 255)
+    overlay[fy - 4 : fy - 2, menu_x + 20 : menu_x + menu_w - 20] = (80, 75, 40, 255)
 
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
     _render_control_hints(
         overlay,
-        "[W/S] Scroll  [ESC] Close",
+        "[W/S] Select  [ESC] Close",
         menu_x + _BORDER_PX,
         hint_y,
         menu_w - 2 * _BORDER_PX,
@@ -652,8 +673,8 @@ def render_welcome_screen(
 
     controls = [
         ("WASD", "Move"),
-        ("SPACE", "Mine ore"),
-        ("E", "Place machine"),
+        ("E", "Mine ore"),
+        ("SPACE", "Place / pick up"),
         ("I", "Inventory & crafting"),
         ("F", "Inspect machine"),
         ("?", "Full controls list"),
@@ -708,7 +729,7 @@ def render_welcome_screen(
     controls_x = menu_x + (menu_w - key_col_w - 16 - 120) // 2
     for key, desc in controls:
         key_arr = _render_text_rgba(key, hint_font, (215, 195, 65))
-        desc_arr = _render_text_rgba(desc, hint_font, (160, 155, 130))
+        desc_arr = _render_text_rgba(desc, hint_font, (190, 185, 155))
         row_y = cy + (control_row_h - hint_h) // 2
         _blit_rgba(overlay, key_arr, row_y, controls_x + key_col_w - key_arr.shape[1])
         _blit_rgba(overlay, desc_arr, row_y, controls_x + key_col_w + 16)
@@ -1479,7 +1500,7 @@ def render_inventory_menu(
     if menu_focus == "crafting":
         hints = "[W/S] Select | [A] Inventory | [E] Craft | [ESC] Close"
     else:
-        hints = "[A/D] Select | [W/S] Row | [E] Place | [ESC] Close"
+        hints = "[A/D] Select | [W/S] Row | [SPACE] Place | [ESC] Close"
     _render_control_hints(
         overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
     )
@@ -1497,8 +1518,8 @@ _HELP_LINES: list[str] = [
     "Ctrl+1-9      Switch active player",
     "",
     "-- Actions --",
-    "SPACE         Mine ore at current tile",
-    "E             Place / pick up machine",
+    "E             Mine ore at current tile",
+    "SPACE         Place / pick up machine",
     "T             Rotate machine in front",
     "F             Inspect machine in front",
     "",
@@ -1508,9 +1529,9 @@ _HELP_LINES: list[str] = [
     "W/S           Navigate rows / recipes",
     "D (rightmost) Switch to crafting",
     "A (crafting)  Switch to inventory",
-    "1-5 / Sh+1-5  Quick-select slot 1-10",
+    "1-8 / Sh+1-2  Quick-select slot 1-10",
     "Q             Toggle hotbar page",
-    "C / E         Craft selected recipe",
+    "E             Craft selected recipe",
     "Click slot    Pick up / swap item",
     "",
     "-- Machine Transfer --",

@@ -102,7 +102,7 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.IRON: (192, 192, 192),
     ItemType.COPPER: (184, 115, 51),
     ItemType.MINER: (0, 200, 0),
-    ItemType.CHEST: (150, 100, 50),
+    ItemType.CHEST: (210, 190, 50),
     ItemType.CONVEYOR_BELT: (220, 180, 50),
     ItemType.ARM: (80, 120, 200),
 }
