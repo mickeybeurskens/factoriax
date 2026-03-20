@@ -88,6 +88,9 @@ class Level:
     block_resources: np.ndarray | None = None
     machine_types: np.ndarray | None = None
     machine_directions: np.ndarray | None = None
+    machine_inventory_items: np.ndarray | None = None
+    machine_inventory_counts: np.ndarray | None = None
+    machine_selected_recipe: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         """Validate array shapes match declared dimensions.
@@ -96,6 +99,7 @@ class Level:
             ValueError: If any array has an unexpected shape.
         """
         expected = (self.map_height, self.map_width)
+        inv_expected = (self.map_height, self.map_width, MAX_MACHINE_INVENTORY_SLOTS)
         if self.block_map.shape != expected:
             raise ValueError(f"block_map shape {self.block_map.shape} != {expected}")
         if self.block_resources is not None and self.block_resources.shape != expected:
@@ -113,6 +117,30 @@ class Level:
             raise ValueError(
                 f"machine_directions shape "
                 f"{self.machine_directions.shape} != {expected}"
+            )
+        if (
+            self.machine_inventory_items is not None
+            and self.machine_inventory_items.shape != inv_expected
+        ):
+            raise ValueError(
+                f"machine_inventory_items shape "
+                f"{self.machine_inventory_items.shape} != {inv_expected}"
+            )
+        if (
+            self.machine_inventory_counts is not None
+            and self.machine_inventory_counts.shape != inv_expected
+        ):
+            raise ValueError(
+                f"machine_inventory_counts shape "
+                f"{self.machine_inventory_counts.shape} != {inv_expected}"
+            )
+        if (
+            self.machine_selected_recipe is not None
+            and self.machine_selected_recipe.shape != expected
+        ):
+            raise ValueError(
+                f"machine_selected_recipe shape "
+                f"{self.machine_selected_recipe.shape} != {expected}"
             )
 
 
@@ -155,6 +183,9 @@ class LevelBuilder:
         self._block_map = np.full((height, width), int(default_block), dtype=np.int32)
         self._block_resources: np.ndarray | None = None
         self._machine_types: np.ndarray | None = None
+        self._machine_inv_items: np.ndarray | None = None
+        self._machine_inv_counts: np.ndarray | None = None
+        self._machine_selected_recipe: np.ndarray | None = None
 
     def fill_rect(
         self,
@@ -221,6 +252,75 @@ class LevelBuilder:
         self._block_resources[y, x] = amount
         return self
 
+    def set_machine_inventory(
+        self,
+        x: int,
+        y: int,
+        slot: int,
+        item_type: int,
+        count: int,
+    ) -> LevelBuilder:
+        """Set the contents of a machine inventory slot.
+
+        Args:
+            x: Column (0-indexed).
+            y: Row (0-indexed).
+            slot: Slot index (0 to ``MAX_MACHINE_INVENTORY_SLOTS - 1``).
+            item_type: ``ItemType`` integer value.
+            count: Stack count.
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            IndexError: If ``(x, y)`` is outside the map or slot is invalid.
+        """
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise IndexError(
+                f"Tile ({x}, {y}) is outside the "
+                f"{self._width}x{self._height} map."
+            )
+        if not (0 <= slot < MAX_MACHINE_INVENTORY_SLOTS):
+            raise IndexError(
+                f"Slot {slot} is outside range "
+                f"[0, {MAX_MACHINE_INVENTORY_SLOTS})."
+            )
+        if self._machine_inv_items is None:
+            shape = (self._height, self._width, MAX_MACHINE_INVENTORY_SLOTS)
+            self._machine_inv_items = np.zeros(shape, dtype=np.int32)
+            self._machine_inv_counts = np.zeros(shape, dtype=np.int32)
+        self._machine_inv_items[y, x, slot] = item_type
+        self._machine_inv_counts[y, x, slot] = count  # type: ignore[index]
+        return self
+
+    def set_machine_recipe(
+        self, x: int, y: int, recipe_idx: int
+    ) -> LevelBuilder:
+        """Set the selected assembler recipe for a machine tile.
+
+        Args:
+            x: Column (0-indexed).
+            y: Row (0-indexed).
+            recipe_idx: Assembler recipe index.
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            IndexError: If ``(x, y)`` is outside the map.
+        """
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise IndexError(
+                f"Tile ({x}, {y}) is outside the "
+                f"{self._width}x{self._height} map."
+            )
+        if self._machine_selected_recipe is None:
+            self._machine_selected_recipe = np.zeros(
+                (self._height, self._width), dtype=np.int32
+            )
+        self._machine_selected_recipe[y, x] = recipe_idx
+        return self
+
     def build(self, name: str) -> Level:
         """Finalise and return the :class:`Level`.
 
@@ -241,7 +341,24 @@ class LevelBuilder:
                 else None
             ),
             machine_types=(
-                self._machine_types.copy() if self._machine_types is not None else None
+                self._machine_types.copy()
+                if self._machine_types is not None
+                else None
+            ),
+            machine_inventory_items=(
+                self._machine_inv_items.copy()
+                if self._machine_inv_items is not None
+                else None
+            ),
+            machine_inventory_counts=(
+                self._machine_inv_counts.copy()
+                if self._machine_inv_counts is not None
+                else None
+            ),
+            machine_selected_recipe=(
+                self._machine_selected_recipe.copy()
+                if self._machine_selected_recipe is not None
+                else None
             ),
         )
 
@@ -356,6 +473,22 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     player_shape = (params.num_players,)
     machine_inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
 
+    machine_inv_items_np = (
+        level.machine_inventory_items
+        if level.machine_inventory_items is not None
+        else np.zeros(machine_inv_shape, dtype=np.int32)
+    )
+    machine_inv_counts_np = (
+        level.machine_inventory_counts
+        if level.machine_inventory_counts is not None
+        else np.zeros(machine_inv_shape, dtype=np.int32)
+    )
+    machine_recipe_np = (
+        level.machine_selected_recipe
+        if level.machine_selected_recipe is not None
+        else np.zeros(map_shape, dtype=np.int32)
+    )
+
     return EnvState(
         map=jnp.array(block_map, dtype=jnp.int32),
         player_positions=jnp.array(player_positions_np, dtype=jnp.int32),
@@ -370,9 +503,11 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         block_resources=jnp.array(resources_np, dtype=jnp.int16),
         machine_types=jnp.array(machine_types_np, dtype=jnp.int32),
         machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_inventory_items=jnp.zeros(machine_inv_shape, dtype=jnp.int32),
-        machine_inventory_counts=jnp.zeros(machine_inv_shape, dtype=jnp.int16),
-        machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_inventory_items=jnp.array(machine_inv_items_np, dtype=jnp.int32),
+        machine_inventory_counts=jnp.array(
+            machine_inv_counts_np, dtype=jnp.int16
+        ),
+        machine_selected_recipe=jnp.array(machine_recipe_np, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_direction=jnp.array(machine_dirs_np, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
@@ -648,11 +783,28 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "machine_types": (
-            level.machine_types.tolist() if level.machine_types is not None else None
+            level.machine_types.tolist()
+            if level.machine_types is not None
+            else None
         ),
         "machine_directions": (
             level.machine_directions.tolist()
             if level.machine_directions is not None
+            else None
+        ),
+        "machine_inventory_items": (
+            level.machine_inventory_items.tolist()
+            if level.machine_inventory_items is not None
+            else None
+        ),
+        "machine_inventory_counts": (
+            level.machine_inventory_counts.tolist()
+            if level.machine_inventory_counts is not None
+            else None
+        ),
+        "machine_selected_recipe": (
+            level.machine_selected_recipe.tolist()
+            if level.machine_selected_recipe is not None
             else None
         ),
     }
@@ -673,6 +825,9 @@ def load_level(path: Path) -> Level:
     """
     payload = orjson.loads(Path(path).read_bytes())
     raw_dirs = payload.get("machine_directions")
+    raw_inv_items = payload.get("machine_inventory_items")
+    raw_inv_counts = payload.get("machine_inventory_counts")
+    raw_recipe = payload.get("machine_selected_recipe")
     return Level(
         name=payload["name"],
         map_width=payload["map_width"],
@@ -691,6 +846,21 @@ def load_level(path: Path) -> Level:
         machine_directions=(
             np.array(raw_dirs, dtype=np.int32)
             if raw_dirs is not None
+            else None
+        ),
+        machine_inventory_items=(
+            np.array(raw_inv_items, dtype=np.int32)
+            if raw_inv_items is not None
+            else None
+        ),
+        machine_inventory_counts=(
+            np.array(raw_inv_counts, dtype=np.int32)
+            if raw_inv_counts is not None
+            else None
+        ),
+        machine_selected_recipe=(
+            np.array(raw_recipe, dtype=np.int32)
+            if raw_recipe is not None
             else None
         ),
     )

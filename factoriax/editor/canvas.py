@@ -213,6 +213,20 @@ def render_canvas(
         ix = int(px0 + mx * ts + offset)
         _blit_clipped(canvas, icon, iy, ix)
 
+    inv_items = es.machine_inventory_items[row0:row1, col0:col1]
+    has_inv = np.any(inv_items != 0, axis=2)
+    iys, ixs = np.nonzero(has_inv)
+    for iy, ix in zip(iys, ixs):
+        dot_y = py0 + iy * ts + 2
+        dot_x = px0 + ix * ts + ts - 6
+        dot_sz = max(2, ts // 8)
+        dy0c = max(0, dot_y)
+        dy1c = min(canvas.shape[0], dot_y + dot_sz)
+        dx0c = max(0, dot_x)
+        dx1c = min(canvas.shape[1], dot_x + dot_sz)
+        if dy1c > dy0c and dx1c > dx0c:
+            canvas[dy0c:dy1c, dx0c:dx1c] = (255, 200, 60, 255)
+
     if show_resources and ts >= 16:
         resource_slice = es.block_resources[row0:row1, col0:col1]
         rys, rxs = np.nonzero(resource_slice > 0)

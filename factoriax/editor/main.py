@@ -29,6 +29,7 @@ from factoriax.editor.canvas import (
 )
 from factoriax.editor.dialogs import (
     FileDialog,
+    MachineInspectorDialog,
     NewLevelDialog,
     NumberInputDialog,
     render_help_overlay,
@@ -515,12 +516,18 @@ def _handle_keydown(
     window_w: int,
     window_h: int,
 ) -> tuple[
-    EditorState, int, int, int, bool, NewLevelDialog | FileDialog | None,
+    EditorState,
+    int,
+    int,
+    int,
+    bool,
+    NewLevelDialog | FileDialog | MachineInspectorDialog | None,
 ]:
     """Process a KEYDOWN event.
 
     Returns the potentially-replaced editor, updated layout values,
-    the running flag, and an optional dialog (new-level or file).
+    the running flag, and an optional dialog (new-level, file, or
+    machine inspector).
 
     Args:
         event: Pygame KEYDOWN event.
@@ -574,6 +581,11 @@ def _handle_keydown(
     elif key == pygame.K_r:
         _handle_rotate(ts, editor)
 
+    elif key == pygame.K_i:
+        insp = _open_inspector(ts, editor)
+        if insp is not None:
+            return editor, base_w, base_h, scale, running, insp
+
     elif key == pygame.K_t:
         ts.brush.mode = "range" if ts.brush.mode == "exact" else "exact"
     elif key == pygame.K_v:
@@ -623,6 +635,39 @@ def _handle_rotate(ts: ToolState, editor: EditorState) -> None:
         editor.dirty = True
     else:
         ts.direction = _next_direction(ts.direction)
+
+
+def _open_inspector(
+    ts: ToolState, editor: EditorState
+) -> MachineInspectorDialog | None:
+    """Try to open a machine inspector at the cursor tile.
+
+    Args:
+        ts: Tool state (read for cursor position).
+        editor: Editor state (read for machine type).
+
+    Returns:
+        A :class:`MachineInspectorDialog` if a machine is under the
+        cursor, else ``None``.
+    """
+    ct = ts.cursor_tile
+    if ct is None:
+        return None
+    x, y = ct
+    if not (0 <= x < editor.map_width and 0 <= y < editor.map_height):
+        return None
+    if editor.machine_types[y, x] == int(MachineType.NONE):
+        return None
+    return MachineInspectorDialog(
+        tile_x=x,
+        tile_y=y,
+        machine_type=int(editor.machine_types[y, x]),
+        inv_items=editor.machine_inventory_items[y, x],
+        inv_counts=editor.machine_inventory_counts[y, x],
+        selected_recipe=editor.machine_selected_recipe,
+        recipe_row=y,
+        recipe_col=x,
+    )
 
 
 def _adjust_resource(brush: ResourceBrush, delta: int, shift: bool) -> None:
@@ -687,6 +732,7 @@ def _render_frame(
     file_dialog: FileDialog | None,
     dialog: NewLevelDialog | None,
     number_dialog: NumberInputDialog | None,
+    inspector_dialog: MachineInspectorDialog | None = None,
 ) -> np.ndarray:
     """Compose the full editor frame from all UI layers.
 
@@ -699,6 +745,7 @@ def _render_frame(
         file_dialog: Active file save/load dialog, or ``None``.
         dialog: Active new-level dialog, or ``None``.
         number_dialog: Active number-input dialog, or ``None``.
+        inspector_dialog: Active machine inspector dialog, or ``None``.
 
     Returns:
         RGB uint8 array of shape ``(base_h, base_w, 3)``.
@@ -751,6 +798,10 @@ def _render_frame(
 
     frame[base_h - STATUS_BAR_HEIGHT :, :] = status_bar
 
+    if inspector_dialog is not None:
+        composite_rgba_over_rgb(
+            frame, inspector_dialog.render(base_w, base_h)
+        )
     if file_dialog is not None:
         composite_rgba_over_rgb(frame, file_dialog.render(base_w, base_h))
     if dialog is not None:
@@ -806,6 +857,7 @@ def main() -> None:
     file_dialog: FileDialog | None = None
     number_dialog: NumberInputDialog | None = None
     number_dialog_target: str = ""
+    inspector_dialog: MachineInspectorDialog | None = None
 
     running = True
     while running:
@@ -815,6 +867,13 @@ def main() -> None:
                 continue
 
             # ---- Modal dialog layers (consume all events) ----
+
+            if inspector_dialog is not None:
+                result = inspector_dialog.handle_event(event)
+                if result == "close":
+                    editor.dirty = True
+                    inspector_dialog = None
+                continue
 
             if file_dialog is not None:
                 result = file_dialog.handle_event(event)
@@ -1008,6 +1067,8 @@ def main() -> None:
                 if new_dialog is not None:
                     if isinstance(new_dialog, FileDialog):
                         file_dialog = new_dialog
+                    elif isinstance(new_dialog, MachineInspectorDialog):
+                        inspector_dialog = new_dialog
                     else:
                         dialog = new_dialog
 
@@ -1022,6 +1083,7 @@ def main() -> None:
             file_dialog,
             dialog,
             number_dialog,
+            inspector_dialog,
         )
         base_surface = pygame.surfarray.make_surface(
             np.transpose(frame, (1, 0, 2)),

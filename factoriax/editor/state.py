@@ -13,6 +13,7 @@ import numpy as np
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
+    MAX_MACHINE_INVENTORY_SLOTS,
     BlockType,
     MachineType,
 )
@@ -72,6 +73,12 @@ class EditorState:
         block_resources: Per-tile resource amounts, shape ``(H, W)`` int32.
         machine_types: Machine type per tile, shape ``(H, W)`` int32.
         machine_directions: Machine facing direction per tile, shape ``(H, W)`` int32.
+        machine_inventory_items: Item types per machine slot,
+            shape ``(H, W, MAX_MACHINE_INVENTORY_SLOTS)`` int32.
+        machine_inventory_counts: Stack counts per machine slot,
+            shape ``(H, W, MAX_MACHINE_INVENTORY_SLOTS)`` int32.
+        machine_selected_recipe: Selected assembler recipe per tile,
+            shape ``(H, W)`` int32.
         dirty: ``True`` when unsaved changes exist.
     """
 
@@ -82,6 +89,9 @@ class EditorState:
     block_resources: np.ndarray
     machine_types: np.ndarray
     machine_directions: np.ndarray
+    machine_inventory_items: np.ndarray
+    machine_inventory_counts: np.ndarray
+    machine_selected_recipe: np.ndarray
     dirty: bool = False
 
 
@@ -97,14 +107,20 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
         Fresh :class:`EditorState` with all-dirt terrain and no machines.
     """
     block_map = np.full((height, width), int(BlockType.DIRT), dtype=np.int32)
+    inv_shape = (height, width, MAX_MACHINE_INVENTORY_SLOTS)
     return EditorState(
         name=name,
         map_width=width,
         map_height=height,
         block_map=block_map,
         block_resources=np.zeros((height, width), dtype=np.int32),
-        machine_types=np.full((height, width), int(MachineType.NONE), dtype=np.int32),
+        machine_types=np.full(
+            (height, width), int(MachineType.NONE), dtype=np.int32
+        ),
         machine_directions=np.zeros((height, width), dtype=np.int32),
+        machine_inventory_items=np.zeros(inv_shape, dtype=np.int32),
+        machine_inventory_counts=np.zeros(inv_shape, dtype=np.int32),
+        machine_selected_recipe=np.zeros((height, width), dtype=np.int32),
     )
 
 
@@ -140,6 +156,24 @@ def editor_state_from_level(level: Level) -> EditorState:
             (level.map_height, level.map_width), dtype=np.int32
         )
     )
+    inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
+    inv_items = (
+        level.machine_inventory_items.copy()
+        if level.machine_inventory_items is not None
+        else np.zeros(inv_shape, dtype=np.int32)
+    )
+    inv_counts = (
+        level.machine_inventory_counts.copy()
+        if level.machine_inventory_counts is not None
+        else np.zeros(inv_shape, dtype=np.int32)
+    )
+    recipe = (
+        level.machine_selected_recipe.copy()
+        if level.machine_selected_recipe is not None
+        else np.zeros(
+            (level.map_height, level.map_width), dtype=np.int32
+        )
+    )
     return EditorState(
         name=level.name,
         map_width=level.map_width,
@@ -148,6 +182,9 @@ def editor_state_from_level(level: Level) -> EditorState:
         block_resources=resources.astype(np.int32),
         machine_types=machines.astype(np.int32),
         machine_directions=directions.astype(np.int32),
+        machine_inventory_items=inv_items.astype(np.int32),
+        machine_inventory_counts=inv_counts.astype(np.int32),
+        machine_selected_recipe=recipe.astype(np.int32),
     )
 
 
@@ -175,6 +212,18 @@ def editor_state_to_level(state: EditorState) -> Level:
     if np.all(directions == 0):
         directions = None
 
+    inv_items: np.ndarray | None = state.machine_inventory_items.copy()
+    if np.all(inv_items == 0):
+        inv_items = None
+
+    inv_counts: np.ndarray | None = state.machine_inventory_counts.copy()
+    if np.all(inv_counts == 0):
+        inv_counts = None
+
+    recipe: np.ndarray | None = state.machine_selected_recipe.copy()
+    if np.all(recipe == 0):
+        recipe = None
+
     return Level(
         name=state.name,
         map_width=state.map_width,
@@ -183,6 +232,9 @@ def editor_state_to_level(state: EditorState) -> Level:
         block_resources=resources,
         machine_types=machines,
         machine_directions=directions,
+        machine_inventory_items=inv_items,
+        machine_inventory_counts=inv_counts,
+        machine_selected_recipe=recipe,
     )
 
 
@@ -233,6 +285,9 @@ def set_machine(
         return
     state.machine_types[y, x] = machine
     state.machine_directions[y, x] = direction
+    state.machine_inventory_items[y, x] = 0
+    state.machine_inventory_counts[y, x] = 0
+    state.machine_selected_recipe[y, x] = 0
     state.dirty = True
 
 
@@ -311,6 +366,9 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
         return
     state.machine_types[y, x] = int(MachineType.NONE)
     state.machine_directions[y, x] = 0
+    state.machine_inventory_items[y, x] = 0
+    state.machine_inventory_counts[y, x] = 0
+    state.machine_selected_recipe[y, x] = 0
     state.dirty = True
 
 
@@ -338,6 +396,7 @@ def add_column(state: EditorState) -> None:
         state: Editor state (mutated in place).
     """
     h = state.map_height
+    s = MAX_MACHINE_INVENTORY_SLOTS
     state.block_map = np.concatenate(
         [state.block_map, np.full((h, 1), int(BlockType.DIRT), dtype=np.int32)],
         axis=1,
@@ -355,6 +414,18 @@ def add_column(state: EditorState) -> None:
     )
     state.machine_directions = np.concatenate(
         [state.machine_directions, np.zeros((h, 1), dtype=np.int32)],
+        axis=1,
+    )
+    state.machine_inventory_items = np.concatenate(
+        [state.machine_inventory_items, np.zeros((h, 1, s), dtype=np.int32)],
+        axis=1,
+    )
+    state.machine_inventory_counts = np.concatenate(
+        [state.machine_inventory_counts, np.zeros((h, 1, s), dtype=np.int32)],
+        axis=1,
+    )
+    state.machine_selected_recipe = np.concatenate(
+        [state.machine_selected_recipe, np.zeros((h, 1), dtype=np.int32)],
         axis=1,
     )
     state.map_width += 1
@@ -375,6 +446,9 @@ def remove_column(state: EditorState) -> None:
     state.block_resources = state.block_resources[:, :-1]
     state.machine_types = state.machine_types[:, :-1]
     state.machine_directions = state.machine_directions[:, :-1]
+    state.machine_inventory_items = state.machine_inventory_items[:, :-1, :]
+    state.machine_inventory_counts = state.machine_inventory_counts[:, :-1, :]
+    state.machine_selected_recipe = state.machine_selected_recipe[:, :-1]
     state.map_width -= 1
     state.dirty = True
 
@@ -389,6 +463,7 @@ def add_row(state: EditorState) -> None:
         state: Editor state (mutated in place).
     """
     w = state.map_width
+    s = MAX_MACHINE_INVENTORY_SLOTS
     state.block_map = np.concatenate(
         [state.block_map, np.full((1, w), int(BlockType.DIRT), dtype=np.int32)],
         axis=0,
@@ -406,6 +481,18 @@ def add_row(state: EditorState) -> None:
     )
     state.machine_directions = np.concatenate(
         [state.machine_directions, np.zeros((1, w), dtype=np.int32)],
+        axis=0,
+    )
+    state.machine_inventory_items = np.concatenate(
+        [state.machine_inventory_items, np.zeros((1, w, s), dtype=np.int32)],
+        axis=0,
+    )
+    state.machine_inventory_counts = np.concatenate(
+        [state.machine_inventory_counts, np.zeros((1, w, s), dtype=np.int32)],
+        axis=0,
+    )
+    state.machine_selected_recipe = np.concatenate(
+        [state.machine_selected_recipe, np.zeros((1, w), dtype=np.int32)],
         axis=0,
     )
     state.map_height += 1
@@ -426,5 +513,8 @@ def remove_row(state: EditorState) -> None:
     state.block_resources = state.block_resources[:-1, :]
     state.machine_types = state.machine_types[:-1, :]
     state.machine_directions = state.machine_directions[:-1, :]
+    state.machine_inventory_items = state.machine_inventory_items[:-1, :, :]
+    state.machine_inventory_counts = state.machine_inventory_counts[:-1, :, :]
+    state.machine_selected_recipe = state.machine_selected_recipe[:-1, :]
     state.map_height -= 1
     state.dirty = True

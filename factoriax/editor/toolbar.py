@@ -344,7 +344,7 @@ def render_status_bar(
     name_display = level_name + (" *" if dirty else "")
     parts.append(name_display)
 
-    help_txt = _render_text("? Help", font, (100, 100, 100))
+    help_txt = _render_text("? Help  I: Inspect", font, (100, 100, 100))
     y_center = (STATUS_BAR_HEIGHT - help_txt.shape[0]) // 2
     x = 4
     _blit_rgb(bar, help_txt, y_center, x)

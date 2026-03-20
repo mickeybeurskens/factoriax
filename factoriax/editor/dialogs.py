@@ -1,8 +1,10 @@
-"""Dialogs for the level editor: new-level picker and file open/save.
+"""Dialogs for the level editor: new-level, file open/save, machine inspector.
 
 The new-level dialog is rendered as an RGBA overlay (similar to the
 game's pause menu).  Save/load write to a ``levels/`` directory,
 avoiding any dependency on tkinter or native OS file pickers.
+The machine inspector dialog lets users edit pre-filled machine
+inventories and assembler recipes.
 """
 
 from __future__ import annotations
@@ -13,7 +15,21 @@ from pathlib import Path
 import numpy as np
 import pygame
 
+from factoriax.constants import (
+    ASSEMBLER_RECIPE_NAMES,
+    MACHINE_NUM_SLOTS,
+    MACHINE_SLOT_ROLES,
+    MACHINE_TYPE_NAMES,
+    MAX_MACHINE_STACK_SIZE,
+    NUM_ASSEMBLER_RECIPES,
+    SLOT_ROLE_COLORS,
+    SLOT_ROLE_LABELS,
+    ItemType,
+    MachineType,
+    SlotRole,
+)
 from factoriax.play.ui import get_pixel_font
+from factoriax.renderer import render_item_icon
 
 _BG = (22, 22, 22, 228)
 _BORDER = (190, 165, 55, 255)
@@ -456,6 +472,441 @@ def _list_level_files() -> list[str]:
     return sorted(p.stem for p in LEVELS_DIR.glob("*.json"))
 
 
+# ---------------------------------------------------------------------------
+# Item names and valid items per slot role
+# ---------------------------------------------------------------------------
+
+_ITEM_NAMES: dict[int, str] = {
+    int(ItemType.EMPTY): "(empty)",
+    int(ItemType.COAL): "Coal",
+    int(ItemType.IRON): "Iron",
+    int(ItemType.COPPER): "Copper",
+    int(ItemType.MINER): "Miner",
+    int(ItemType.CHEST): "Chest",
+    int(ItemType.CONVEYOR_BELT): "Belt",
+    int(ItemType.ARM): "Arm",
+    int(ItemType.ASSEMBLER): "Assembler",
+    int(ItemType.HULL): "Hull",
+    int(ItemType.FUEL_PACK): "Fuel Pack",
+    int(ItemType.ROCKET): "Rocket",
+}
+
+# Items valid for each slot role. INPUT and STORAGE accept raw materials
+# and intermediates; OUTPUT is set by machine logic so we allow the same
+# items for editor pre-fill.
+_ALL_ITEMS: list[int] = [int(it) for it in ItemType if it != ItemType.EMPTY]
+
+
+def _valid_items_for_role(role: int) -> list[int]:
+    """Return the list of item types valid for a given slot role.
+
+    Args:
+        role: ``SlotRole`` integer value.
+
+    Returns:
+        List of ``ItemType`` integer values (always includes EMPTY
+        as the first entry for clearing).
+    """
+    if role == int(SlotRole.NONE):
+        return []
+    return [int(ItemType.EMPTY)] + _ALL_ITEMS
+
+
+# ---------------------------------------------------------------------------
+# Machine inspector dialog
+# ---------------------------------------------------------------------------
+
+_INSP_W = 320
+_INSP_SLOT_H = 24
+_INSP_PICKER_ITEM_H = 18
+
+
+@dataclasses.dataclass
+class MachineInspectorDialog:
+    """Editor dialog for inspecting and editing machine inventory contents.
+
+    Shows each slot with its role badge, current item, and count. Users
+    navigate with A/D to select slots, click or press Enter to open an
+    item picker, type a count, and press Q to cycle assembler recipes.
+
+    Attributes:
+        tile_x: X coordinate of the inspected machine tile.
+        tile_y: Y coordinate of the inspected machine tile.
+        machine_type: ``MachineType`` integer value.
+        inv_items: Reference to editor state inventory items at this tile.
+        inv_counts: Reference to editor state inventory counts at this tile.
+        selected_recipe: Current assembler recipe index (mutable ref via
+            the editor state array).
+        focused_slot: Currently focused slot index.
+        editing_slot: Slot index being edited, or -1.
+        editing_count: Whether we are in count-editing mode.
+        count_text: Text buffer for count entry.
+        picker_scroll: Scroll offset in the item picker list.
+    """
+
+    tile_x: int
+    tile_y: int
+    machine_type: int
+    inv_items: np.ndarray
+    inv_counts: np.ndarray
+    selected_recipe: np.ndarray
+    recipe_row: int
+    recipe_col: int
+    focused_slot: int = 0
+    editing_slot: int = -1
+    editing_count: bool = False
+    count_text: str = ""
+    picker_scroll: int = 0
+
+    @property
+    def num_slots(self) -> int:
+        """Number of active slots for this machine type."""
+        return int(MACHINE_NUM_SLOTS[self.machine_type])
+
+    def handle_event(self, event: pygame.event.Event) -> str | None:
+        """Process a pygame event.
+
+        Args:
+            event: A pygame event (KEYDOWN or MOUSEBUTTONDOWN).
+
+        Returns:
+            ``"close"`` to dismiss, or ``None`` to stay open.
+        """
+        if event.type == pygame.KEYDOWN:
+            return self._handle_key(event)
+        return None
+
+    def _handle_key(self, event: pygame.event.Event) -> str | None:
+        """Handle keyboard input for the inspector dialog.
+
+        Args:
+            event: A pygame KEYDOWN event.
+
+        Returns:
+            ``"close"`` to dismiss, or ``None`` to stay open.
+        """
+        key = event.key
+
+        if self.editing_count:
+            return self._handle_count_key(key, event)
+
+        if self.editing_slot >= 0:
+            return self._handle_picker_key(key)
+
+        if key == pygame.K_ESCAPE:
+            return "close"
+
+        if key == pygame.K_a or key == pygame.K_LEFT:
+            self.focused_slot = max(0, self.focused_slot - 1)
+        elif key == pygame.K_d or key == pygame.K_RIGHT:
+            self.focused_slot = min(
+                self.num_slots - 1, self.focused_slot + 1
+            )
+        elif key == pygame.K_RETURN or key == pygame.K_e:
+            if self.num_slots > 0:
+                role = int(
+                    MACHINE_SLOT_ROLES[self.machine_type, self.focused_slot]
+                )
+                if role != int(SlotRole.NONE):
+                    self.editing_slot = self.focused_slot
+                    self.picker_scroll = 0
+        elif key == pygame.K_c:
+            if self.num_slots > 0:
+                self.editing_count = True
+                self.editing_slot = self.focused_slot
+                current = int(self.inv_counts[self.focused_slot])
+                self.count_text = str(current) if current > 0 else ""
+        elif key == pygame.K_q:
+            if self.machine_type == int(MachineType.ASSEMBLER):
+                cur = int(self.selected_recipe[self.recipe_row, self.recipe_col])
+                self.selected_recipe[self.recipe_row, self.recipe_col] = (
+                    (cur + 1) % NUM_ASSEMBLER_RECIPES
+                )
+        return None
+
+    def _handle_picker_key(self, key: int) -> str | None:
+        """Handle keys while the item picker is open.
+
+        Args:
+            key: Pygame key constant.
+
+        Returns:
+            ``None`` (picker stays within the dialog).
+        """
+        role = int(
+            MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot]
+        )
+        valid = _valid_items_for_role(role)
+        if not valid:
+            self.editing_slot = -1
+            return None
+
+        if key == pygame.K_ESCAPE:
+            self.editing_slot = -1
+        elif key == pygame.K_UP or key == pygame.K_w:
+            self.picker_scroll = max(0, self.picker_scroll - 1)
+        elif key == pygame.K_DOWN or key == pygame.K_s:
+            self.picker_scroll = min(
+                len(valid) - 1, self.picker_scroll + 1
+            )
+        elif key == pygame.K_RETURN:
+            chosen = valid[self.picker_scroll]
+            if chosen == int(ItemType.EMPTY):
+                self.inv_items[self.editing_slot] = 0
+                self.inv_counts[self.editing_slot] = 0
+            else:
+                self.inv_items[self.editing_slot] = chosen
+                if int(self.inv_counts[self.editing_slot]) == 0:
+                    self.inv_counts[self.editing_slot] = 1
+            self.editing_slot = -1
+        return None
+
+    def _handle_count_key(
+        self, key: int, event: pygame.event.Event
+    ) -> str | None:
+        """Handle keys while editing a slot count.
+
+        Args:
+            key: Pygame key constant.
+            event: Full pygame event for unicode access.
+
+        Returns:
+            ``None``.
+        """
+        if key == pygame.K_ESCAPE:
+            self.editing_count = False
+            self.editing_slot = -1
+        elif key == pygame.K_RETURN:
+            try:
+                val = int(self.count_text)
+            except ValueError:
+                val = 0
+            val = max(0, min(MAX_MACHINE_STACK_SIZE, val))
+            self.inv_counts[self.editing_slot] = val
+            if val == 0:
+                self.inv_items[self.editing_slot] = 0
+            self.editing_count = False
+            self.editing_slot = -1
+        elif key == pygame.K_BACKSPACE:
+            self.count_text = self.count_text[:-1]
+        elif event.unicode and event.unicode.isdigit():
+            self.count_text += event.unicode
+        return None
+
+    def render(self, base_w: int, base_h: int) -> np.ndarray:
+        """Render the inspector dialog as an RGBA overlay.
+
+        Args:
+            base_w: Base window width.
+            base_h: Base window height.
+
+        Returns:
+            RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+        """
+        overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
+        overlay[:, :] = (0, 0, 0, 140)
+
+        ns = self.num_slots
+        is_assembler = self.machine_type == int(MachineType.ASSEMBLER)
+        recipe_h = 20 if is_assembler else 0
+        dlg_h = 50 + ns * _INSP_SLOT_H + recipe_h + 24
+        dlg_w = min(_INSP_W, base_w - 20)
+        dx = (base_w - dlg_w) // 2
+        dy = (base_h - dlg_h) // 2
+
+        overlay[dy : dy + dlg_h, dx : dx + dlg_w] = _BG
+        for i in range(2):
+            overlay[dy + i, dx : dx + dlg_w] = _BORDER
+            overlay[dy + dlg_h - 1 - i, dx : dx + dlg_w] = _BORDER
+            overlay[dy : dy + dlg_h, dx + i] = _BORDER
+            overlay[dy : dy + dlg_h, dx + dlg_w - 1 - i] = _BORDER
+
+        font = get_pixel_font(14)
+        small = get_pixel_font(10)
+
+        machine_name = MACHINE_TYPE_NAMES.get(self.machine_type, "Machine")
+        title = _render_text_rgba(machine_name, font, _TEXT_COLOR)
+        _blit_rgba(
+            overlay, title, dy + 8, dx + (dlg_w - title.shape[1]) // 2
+        )
+
+        y = dy + 30
+
+        if is_assembler:
+            r_idx = int(
+                self.selected_recipe[self.recipe_row, self.recipe_col]
+            )
+            r_name = ASSEMBLER_RECIPE_NAMES[r_idx]
+            rtxt = _render_text_rgba(
+                f"Recipe: {r_name}  [Q] cycle", small, (190, 165, 55)
+            )
+            _blit_rgba(overlay, rtxt, y, dx + 12)
+            y += 20
+
+        slot_roles = MACHINE_SLOT_ROLES[self.machine_type]
+        for slot_idx in range(ns):
+            sy = y + slot_idx * _INSP_SLOT_H
+            role = int(slot_roles[slot_idx])
+            is_focused = slot_idx == self.focused_slot
+
+            row_bg = (70, 70, 70, 255) if is_focused else (45, 45, 45, 255)
+            overlay[sy : sy + _INSP_SLOT_H - 1, dx + 8 : dx + dlg_w - 8] = (
+                row_bg
+            )
+
+            role_color = SLOT_ROLE_COLORS.get(role, (60, 60, 60))
+            role_label = SLOT_ROLE_LABELS.get(role, "")
+            overlay[sy : sy + _INSP_SLOT_H - 1, dx + 8 : dx + 42] = (
+                *role_color,
+                220,
+            )
+            if role_label:
+                rl = _render_text_rgba(role_label, small, (230, 230, 230))
+                _blit_rgba(overlay, rl, sy + 3, dx + 10)
+
+            item_type = int(self.inv_items[slot_idx])
+            count = int(self.inv_counts[slot_idx])
+
+            if item_type != 0 and count > 0:
+                icon_s = _INSP_SLOT_H - 6
+                icon = render_item_icon(item_type, max(4, icon_s))
+                _blit_rgba(overlay, icon, sy + 3, dx + 46)
+
+                name = _ITEM_NAMES.get(item_type, "?")
+                ntxt = _render_text_rgba(
+                    f"{name} x{count}", font, _TEXT_COLOR
+                )
+                _blit_rgba(overlay, ntxt, sy + 4, dx + 46 + icon_s + 4)
+            else:
+                etxt = _render_text_rgba("(empty)", small, _LABEL_COLOR)
+                _blit_rgba(overlay, etxt, sy + 5, dx + 46)
+
+        hint_y = dy + dlg_h - 20
+        hint_parts = ["A/D: slot", "Enter: item", "C: count", "Esc: close"]
+        if is_assembler:
+            hint_parts.insert(0, "Q: recipe")
+        hint_str = "  ".join(hint_parts)
+        hint = _render_text_rgba(hint_str, small, _LABEL_COLOR)
+        _blit_rgba(
+            overlay, hint, hint_y, dx + (dlg_w - hint.shape[1]) // 2
+        )
+
+        if self.editing_slot >= 0 and not self.editing_count:
+            self._render_item_picker(overlay, base_w, base_h)
+        elif self.editing_count:
+            self._render_count_editor(overlay, base_w, base_h)
+
+        return overlay
+
+    def _render_item_picker(
+        self, overlay: np.ndarray, base_w: int, base_h: int
+    ) -> None:
+        """Render the item type picker sub-dialog.
+
+        Args:
+            overlay: RGBA overlay (mutated in place).
+            base_w: Base window width.
+            base_h: Base window height.
+        """
+        role = int(
+            MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot]
+        )
+        valid = _valid_items_for_role(role)
+        if not valid:
+            return
+
+        font = get_pixel_font(12)
+        small = get_pixel_font(10)
+        max_visible = 8
+        pw = 160
+        ph = 24 + min(len(valid), max_visible) * _INSP_PICKER_ITEM_H + 20
+        px = (base_w - pw) // 2
+        py = (base_h - ph) // 2
+
+        overlay[py : py + ph, px : px + pw] = (30, 30, 30, 240)
+        for i in range(2):
+            overlay[py + i, px : px + pw] = _BORDER
+            overlay[py + ph - 1 - i, px : px + pw] = _BORDER
+            overlay[py : py + ph, px + i] = _BORDER
+            overlay[py : py + ph, px + pw - 1 - i] = _BORDER
+
+        title = _render_text_rgba("Select Item", font, _TEXT_COLOR)
+        _blit_rgba(overlay, title, py + 4, px + (pw - title.shape[1]) // 2)
+
+        iy = py + 22
+        vis_start = max(
+            0, min(self.picker_scroll - max_visible // 2, len(valid) - max_visible)
+        )
+        vis_start = max(0, vis_start)
+        vis_end = min(len(valid), vis_start + max_visible)
+
+        for i in range(vis_start, vis_end):
+            item_id = valid[i]
+            row_y = iy + (i - vis_start) * _INSP_PICKER_ITEM_H
+            is_sel = i == self.picker_scroll
+            bg = (60, 80, 60, 255) if is_sel else (40, 40, 40, 255)
+            overlay[
+                row_y : row_y + _INSP_PICKER_ITEM_H - 1,
+                px + 4 : px + pw - 4,
+            ] = bg
+
+            if item_id != 0:
+                icon_s = _INSP_PICKER_ITEM_H - 4
+                icon = render_item_icon(item_id, max(4, icon_s))
+                _blit_rgba(overlay, icon, row_y + 2, px + 8)
+
+            name = _ITEM_NAMES.get(item_id, "?")
+            ntxt = _render_text_rgba(name, small, _TEXT_COLOR)
+            _blit_rgba(overlay, ntxt, row_y + 3, px + 8 + _INSP_PICKER_ITEM_H)
+
+        hint = _render_text_rgba(
+            "Up/Down  Enter: select  Esc: cancel", small, _LABEL_COLOR
+        )
+        _blit_rgba(
+            overlay, hint, py + ph - 16, px + (pw - hint.shape[1]) // 2
+        )
+
+    def _render_count_editor(
+        self, overlay: np.ndarray, base_w: int, base_h: int
+    ) -> None:
+        """Render the count entry sub-dialog.
+
+        Args:
+            overlay: RGBA overlay (mutated in place).
+            base_w: Base window width.
+            base_h: Base window height.
+        """
+        font = get_pixel_font(14)
+        small = get_pixel_font(10)
+        cw, ch = 160, 60
+        cx = (base_w - cw) // 2
+        cy = (base_h - ch) // 2
+
+        overlay[cy : cy + ch, cx : cx + cw] = (30, 30, 30, 240)
+        for i in range(2):
+            overlay[cy + i, cx : cx + cw] = _BORDER
+            overlay[cy + ch - 1 - i, cx : cx + cw] = _BORDER
+            overlay[cy : cy + ch, cx + i] = _BORDER
+            overlay[cy : cy + ch, cx + cw - 1 - i] = _BORDER
+
+        lbl = _render_text_rgba(
+            f"Count (0-{MAX_MACHINE_STACK_SIZE}):", small, _LABEL_COLOR
+        )
+        _blit_rgba(overlay, lbl, cy + 6, cx + 8)
+
+        fy = cy + 22
+        overlay[fy : fy + 20, cx + 8 : cx + cw - 8] = _FIELD_ACTIVE
+        val = _render_text_rgba(self.count_text + "_", font, _TEXT_COLOR)
+        _blit_rgba(overlay, val, fy + 2, cx + 12)
+
+        hint = _render_text_rgba(
+            "Enter: OK  Esc: cancel", small, _LABEL_COLOR
+        )
+        _blit_rgba(
+            overlay, hint, cy + ch - 14, cx + (cw - hint.shape[1]) // 2
+        )
+
+
 _HELP_LINES = [
     "-- Drawing --",
     "Left click/drag  Paint tile or machine",
@@ -465,6 +916,7 @@ _HELP_LINES = [
     "1-5  Terrain: Dirt Water Iron Copper Coal",
     "6-0  Select machine from palette",
     "R  Rotate machine (or rotate under cursor)",
+    "I  Inspect machine inventory",
     "",
     "-- Resources --",
     "T  Toggle exact / range mode",
