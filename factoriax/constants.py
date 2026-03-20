@@ -32,6 +32,10 @@ class ItemType(IntEnum):
     CHEST = 5
     CONVEYOR_BELT = 6
     ARM = 7
+    ASSEMBLER = 8
+    HULL = 9
+    FUEL_PACK = 10
+    ROCKET = 11
 
 
 class MachineType(IntEnum):
@@ -105,6 +109,10 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.CHEST: (210, 190, 50),
     ItemType.CONVEYOR_BELT: (220, 180, 50),
     ItemType.ARM: (80, 120, 200),
+    ItemType.ASSEMBLER: (160, 80, 200),
+    ItemType.HULL: (170, 170, 190),
+    ItemType.FUEL_PACK: (220, 140, 40),
+    ItemType.ROCKET: (240, 240, 240),
 }
 
 # Human-readable display names for each MachineType, used by the UI.
@@ -154,24 +162,36 @@ RECIPES = [
         "inputs": [(ItemType.IRON, 5), (ItemType.COPPER, 1)],
         "ticks": 5,
     },
+    {
+        "output": ItemType.ASSEMBLER,
+        "inputs": [(ItemType.IRON, 10), (ItemType.COPPER, 5)],
+        "ticks": 5,
+    },
 ]
 
 NUM_RECIPES = len(RECIPES)
 MAX_RECIPE_INPUTS = 2
 
-RECIPE_NAMES = ["Miner", "Chest", "Conveyor Belt", "Arm"]
+RECIPE_NAMES = ["Miner", "Chest", "Conveyor Belt", "Arm", "Assembler"]
 
 RECIPE_OUTPUTS = jnp.array(
-    [ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT, ItemType.ARM],
+    [
+        ItemType.MINER,
+        ItemType.CHEST,
+        ItemType.CONVEYOR_BELT,
+        ItemType.ARM,
+        ItemType.ASSEMBLER,
+    ],
     dtype=jnp.int32,
 )
-RECIPE_TICKS = jnp.array([3, 2, 1, 5], dtype=jnp.int32)
+RECIPE_TICKS = jnp.array([3, 2, 1, 5, 5], dtype=jnp.int32)
 RECIPE_INPUT_ITEMS = jnp.array(
     [
         [ItemType.COPPER, ItemType.IRON],  # Miner
         [ItemType.IRON, ItemType.EMPTY],  # Chest
         [ItemType.IRON, ItemType.EMPTY],  # Conveyor Belt
         [ItemType.IRON, ItemType.COPPER],  # Arm
+        [ItemType.IRON, ItemType.COPPER],  # Assembler
     ],
     dtype=jnp.int32,
 )
@@ -181,12 +201,66 @@ RECIPE_INPUT_COUNTS = jnp.array(
         [5, 0],  # Chest
         [1, 0],  # Conveyor Belt
         [5, 1],  # Arm
+        [10, 5],  # Assembler
+    ],
+    dtype=jnp.int32,
+)
+
+MAX_ASSEMBLER_STACK_SIZE = 1000
+
+ASSEMBLER_RECIPES = [
+    {
+        "output": ItemType.HULL,
+        "inputs": [(ItemType.IRON, 5)],
+        "ticks": 4,
+    },
+    {
+        "output": ItemType.FUEL_PACK,
+        "inputs": [(ItemType.COPPER, 3), (ItemType.COAL, 2)],
+        "ticks": 6,
+    },
+    {
+        "output": ItemType.ROCKET,
+        "inputs": [(ItemType.HULL, 500), (ItemType.FUEL_PACK, 200)],
+        "ticks": 100,
+    },
+]
+
+NUM_ASSEMBLER_RECIPES = len(ASSEMBLER_RECIPES)
+MAX_ASSEMBLER_RECIPE_INPUTS = 2
+
+ASSEMBLER_RECIPE_NAMES = ["Hull", "Fuel Pack", "Rocket"]
+
+ASSEMBLER_RECIPE_OUTPUTS = jnp.array(
+    [ItemType.HULL, ItemType.FUEL_PACK, ItemType.ROCKET],
+    dtype=jnp.int32,
+)
+ASSEMBLER_RECIPE_TICKS = jnp.array([4, 6, 100], dtype=jnp.int32)
+ASSEMBLER_RECIPE_INPUT_ITEMS = jnp.array(
+    [
+        [ItemType.IRON, ItemType.EMPTY],  # Hull
+        [ItemType.COPPER, ItemType.COAL],  # Fuel Pack
+        [ItemType.HULL, ItemType.FUEL_PACK],  # Rocket
+    ],
+    dtype=jnp.int32,
+)
+ASSEMBLER_RECIPE_INPUT_COUNTS = jnp.array(
+    [
+        [5, 0],  # Hull
+        [3, 2],  # Fuel Pack
+        [500, 200],  # Rocket
     ],
     dtype=jnp.int32,
 )
 
 PLACEABLE_ITEMS = jnp.array(
-    [ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT, ItemType.ARM],
+    [
+        ItemType.MINER,
+        ItemType.CHEST,
+        ItemType.CONVEYOR_BELT,
+        ItemType.ARM,
+        ItemType.ASSEMBLER,
+    ],
     dtype=jnp.int32,
 )
 
@@ -195,6 +269,7 @@ ITEM_TO_MACHINE = {
     ItemType.CHEST: MachineType.CHEST,
     ItemType.CONVEYOR_BELT: MachineType.CONVEYOR_BELT,
     ItemType.ARM: MachineType.ARM,
+    ItemType.ASSEMBLER: MachineType.ASSEMBLER,
 }
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
@@ -207,6 +282,10 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.CHEST,  # CHEST
         MachineType.CONVEYOR_BELT,  # CONVEYOR_BELT
         MachineType.ARM,  # ARM
+        MachineType.ASSEMBLER,  # ASSEMBLER
+        MachineType.NONE,  # HULL
+        MachineType.NONE,  # FUEL_PACK
+        MachineType.NONE,  # ROCKET
     ],
     dtype=jnp.int32,
 )
@@ -216,7 +295,7 @@ MACHINE_TO_ITEM_ARRAY = jnp.array(
         ItemType.EMPTY,  # NONE
         ItemType.MINER,  # MINER
         ItemType.CHEST,  # CHEST
-        ItemType.EMPTY,  # ASSEMBLER (not player-craftable)
+        ItemType.ASSEMBLER,  # ASSEMBLER
         ItemType.CONVEYOR_BELT,  # CONVEYOR_BELT
         ItemType.ARM,  # ARM
     ],
@@ -290,7 +369,7 @@ BLOCK_MAX_RESOURCES = 1000
 POWER_PER_COAL = 10
 
 MACHINE_POWER_CONSUMPTION = jnp.array(
-    [0, 1, 0, 2, 0, 0],  # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM
+    [0, 1, 0, 0, 0, 0],  # NONE, MINER, CHEST, ASSEMBLER, CONVEYOR_BELT, ARM
     dtype=jnp.int32,
 )
 

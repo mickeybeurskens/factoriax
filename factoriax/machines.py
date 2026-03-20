@@ -4,14 +4,20 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.constants import (
+    ASSEMBLER_RECIPE_INPUT_COUNTS,
+    ASSEMBLER_RECIPE_INPUT_ITEMS,
+    ASSEMBLER_RECIPE_OUTPUTS,
+    ASSEMBLER_RECIPE_TICKS,
     BLOCK_TO_ITEM_ARRAY,
     MACHINE_MINING_RATE,
     MACHINE_POWER_CONSUMPTION,
     MACHINE_SLOT_ROLES,
+    MAX_ASSEMBLER_STACK_SIZE,
     MAX_MACHINE_STACK_SIZE,
     POWER_PER_COAL,
     Action,
     BlockType,
+    ItemType,
     MachineType,
     SlotRole,
 )
@@ -41,10 +47,11 @@ def update_all_machines(state: EnvState) -> EnvState:
 
     Processes machine updates in order:
     1. Refuel machines that need power
-    2. Run miners to extract resources
-    3. Push miner output into the facing machine
-    4. Run conveyor belts to push items
-    5. Run arms to pick and deposit items
+    2. Run assemblers to craft items from inputs
+    3. Run miners to extract resources
+    4. Push miner output into the facing machine
+    5. Run conveyor belts to push items
+    6. Run arms to pick and deposit items
 
     Args:
         state: Current environment state
@@ -53,6 +60,7 @@ def update_all_machines(state: EnvState) -> EnvState:
         Updated environment state with all machines processed
     """
     state = refuel_machines(state)
+    state = run_assemblers(state)
     state = run_miners(state)
     state = push_miner_output(state)
     state = run_conveyor_belts(state)
@@ -88,6 +96,129 @@ def refuel_machines(state: EnvState) -> EnvState:
     return state.replace(
         machine_inventory_counts=new_inv_counts,
         machine_power=new_power,
+    )
+
+
+def run_assemblers(state: EnvState) -> EnvState:
+    """Execute assembler crafting logic for all assemblers in parallel.
+
+    Uses ``machine_power`` as a craft progress countdown. Three phases
+    run in sequence each tick:
+
+    1. Complete crafts where power == 1 and the output slot has space.
+    2. Decrement power for in-progress crafts (power > 1).
+    3. Start new crafts when power == 0 and inputs are sufficient.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Updated state with assembler operations applied.
+    """
+    is_asm = state.machine_types == MachineType.ASSEMBLER
+
+    recipe = state.machine_selected_recipe
+    recipe_out = ASSEMBLER_RECIPE_OUTPUTS[recipe]
+    recipe_ticks = ASSEMBLER_RECIPE_TICKS[recipe]
+    recipe_in_items = ASSEMBLER_RECIPE_INPUT_ITEMS[recipe]  # (H, W, 2)
+    recipe_in_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[recipe]  # (H, W, 2)
+
+    power = state.machine_power
+    inv_items = state.machine_inventory_items
+    inv_counts = state.machine_inventory_counts
+
+    out_slot = 3
+    out_item = inv_items[..., out_slot]
+    out_count = inv_counts[..., out_slot]
+
+    # --- Phase 1: Complete crafts (power == 1) ---
+    completing = is_asm & (power == 1)
+    out_empty = out_count == 0
+    out_matches = out_item == recipe_out
+    out_has_space = (out_empty | out_matches) & (
+        out_count < MAX_ASSEMBLER_STACK_SIZE
+    )
+    can_complete = completing & out_has_space
+
+    inv_items = inv_items.at[..., out_slot].set(
+        jnp.where(can_complete, recipe_out, inv_items[..., out_slot])
+    )
+    inv_counts = inv_counts.at[..., out_slot].set(
+        jnp.where(
+            can_complete,
+            inv_counts[..., out_slot] + jnp.int16(1),
+            inv_counts[..., out_slot],
+        )
+    )
+    power = jnp.where(can_complete, 0, power)
+
+    # --- Phase 2: Progress (power > 1) ---
+    progressing = is_asm & (power > 1)
+    power = jnp.where(progressing, power - 1, power)
+
+    # --- Phase 3: Start new craft (power == 0) ---
+    idle = is_asm & (power == 0)
+
+    slot0_item = inv_items[..., 0]
+    slot0_count = inv_counts[..., 0]
+    slot1_item = inv_items[..., 1]
+    slot1_count = inv_counts[..., 1]
+
+    need0 = recipe_in_counts[..., 0]
+    need1 = recipe_in_counts[..., 1]
+
+    has_input0 = (slot0_item == recipe_in_items[..., 0]) & (
+        slot0_count >= need0
+    )
+    # Second input: satisfied if recipe needs 0 of it, or item matches
+    # and count is sufficient.
+    has_input1 = (need1 == 0) | (
+        (slot1_item == recipe_in_items[..., 1]) & (slot1_count >= need1)
+    )
+
+    # Re-read output after phase 1 updates
+    out_item_now = inv_items[..., out_slot]
+    out_count_now = inv_counts[..., out_slot]
+    out_ok = (out_count_now == 0) | (out_item_now == recipe_out)
+    out_ok = out_ok & (out_count_now < MAX_ASSEMBLER_STACK_SIZE)
+
+    can_start = idle & has_input0 & has_input1 & out_ok
+
+    inv_counts = inv_counts.at[..., 0].set(
+        jnp.where(
+            can_start,
+            inv_counts[..., 0] - need0.astype(jnp.int16),
+            inv_counts[..., 0],
+        )
+    )
+    inv_counts = inv_counts.at[..., 1].set(
+        jnp.where(
+            can_start,
+            inv_counts[..., 1] - need1.astype(jnp.int16),
+            inv_counts[..., 1],
+        )
+    )
+    # Clear item type when count hits zero
+    inv_items = inv_items.at[..., 0].set(
+        jnp.where(
+            can_start & (inv_counts[..., 0] == 0),
+            ItemType.EMPTY,
+            inv_items[..., 0],
+        )
+    )
+    inv_items = inv_items.at[..., 1].set(
+        jnp.where(
+            can_start & (inv_counts[..., 1] == 0),
+            ItemType.EMPTY,
+            inv_items[..., 1],
+        )
+    )
+    power = jnp.where(can_start, recipe_ticks, power)
+
+    return state.replace(
+        machine_power=power,
+        machine_inventory_items=inv_items,
+        machine_inventory_counts=inv_counts,
     )
 
 
@@ -206,10 +337,32 @@ def push_miner_output(state: EnvState) -> EnvState:
     ) | (fwd_slot_roles == _DEPOSIT_ROLE_STORAGE)
     slot_empty = fwd_slot_counts == 0
     slot_matches = fwd_slot_items == miner_items[:, :, None]
+    miner_cap = jnp.where(
+        fwd_mtype == MachineType.ASSEMBLER,
+        MAX_ASSEMBLER_STACK_SIZE,
+        MAX_MACHINE_STACK_SIZE,
+    )
     slot_has_space = (slot_empty | slot_matches) & (
-        fwd_slot_counts < MAX_MACHINE_STACK_SIZE
+        fwd_slot_counts < miner_cap[:, :, None]
     )
     slot_usable = is_deposit_role & slot_has_space
+
+    # Assembler recipe filter: input slots only accept expected items.
+    m_fwd_is_asm = (fwd_mtype == MachineType.ASSEMBLER)[:, :, None]
+    m_fwd_recipe = state.machine_selected_recipe[fwd_row, fwd_col]
+    m_exp_items = ASSEMBLER_RECIPE_INPUT_ITEMS[m_fwd_recipe]
+    m_exp_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[m_fwd_recipe]
+    m_pad6 = jnp.zeros((*m_exp_items.shape[:2], 6), dtype=jnp.int32)
+    m_exp_full = jnp.concatenate([m_exp_items, m_pad6], axis=-1)
+    m_pad6_c = jnp.zeros((*m_exp_counts.shape[:2], 6), dtype=jnp.int32)
+    m_exp_counts_full = jnp.concatenate([m_exp_counts, m_pad6_c], axis=-1)
+    m_is_input = fwd_slot_roles == _DEPOSIT_ROLE_INPUT
+    m_recipe_ok = (
+        (miner_items[:, :, None] == m_exp_full)
+        & (m_exp_counts_full > 0)
+    )
+    m_asm_filter = jnp.where(m_fwd_is_asm & m_is_input, m_recipe_ok, True)
+    slot_usable = slot_usable & m_asm_filter
 
     deposit_idx = jnp.argmax(
         slot_usable.astype(jnp.int32), axis=-1
@@ -438,10 +591,37 @@ def _arm_deposit_phase(
     )
     slot_empty = fwd_slot_counts == 0
     slot_matches = fwd_slot_items == arm_items[:, :, None]
+    cap = jnp.where(
+        fwd_mtype == MachineType.ASSEMBLER,
+        MAX_ASSEMBLER_STACK_SIZE,
+        MAX_MACHINE_STACK_SIZE,
+    )
     slot_has_space = (slot_empty | slot_matches) & (
-        fwd_slot_counts < MAX_MACHINE_STACK_SIZE
+        fwd_slot_counts < cap[:, :, None]
     )
     slot_usable = is_deposit_role & slot_has_space  # (H, W, 8)
+
+    # For assembler targets, input slots only accept the recipe's expected
+    # item for that slot position.  Build a per-slot mask.
+    fwd_is_asm = (fwd_mtype == MachineType.ASSEMBLER)[:, :, None]  # (H, W, 1)
+    fwd_recipe = state.machine_selected_recipe[fwd_row, fwd_col]  # (H, W)
+    fwd_expected_items = ASSEMBLER_RECIPE_INPUT_ITEMS[fwd_recipe]  # (H, W, 2)
+    fwd_expected_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[fwd_recipe]  # (H, W, 2)
+    # Pad to 8 slots: slots 2-7 get EMPTY/0 (never match an input filter).
+    pad6 = jnp.zeros((*fwd_expected_items.shape[:2], 6), dtype=jnp.int32)
+    expected_full = jnp.concatenate([fwd_expected_items, pad6], axis=-1)
+    pad6_c = jnp.zeros((*fwd_expected_counts.shape[:2], 6), dtype=jnp.int32)
+    expected_counts_full = jnp.concatenate([fwd_expected_counts, pad6_c], axis=-1)
+    # A slot is recipe-compatible if the item matches the expected item
+    # and the recipe actually needs that slot (count > 0).
+    is_input_role = fwd_slot_roles == _DEPOSIT_ROLE_INPUT
+    recipe_ok = (
+        (arm_items[:, :, None] == expected_full)
+        & (expected_counts_full > 0)
+    )
+    # For non-assembler targets or non-input roles, always allow.
+    asm_filter = jnp.where(fwd_is_asm & is_input_role, recipe_ok, True)
+    slot_usable = slot_usable & asm_filter
 
     deposit_idx = jnp.argmax(slot_usable.astype(jnp.int32), axis=-1)  # (H, W)
     has_deposit = jnp.any(slot_usable, axis=-1)

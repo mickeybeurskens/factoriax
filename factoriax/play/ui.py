@@ -15,6 +15,7 @@ import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
+    ASSEMBLER_RECIPE_NAMES,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
@@ -26,6 +27,7 @@ from factoriax.constants import (
     SLOT_ROLE_LABELS,
     Action,
     ItemType,
+    MachineType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
@@ -94,6 +96,10 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.CHEST: "Chest",
     ItemType.CONVEYOR_BELT: "Belt",
     ItemType.ARM: "Arm",
+    ItemType.ASSEMBLER: "Assembler",
+    ItemType.HULL: "Hull",
+    ItemType.FUEL_PACK: "Fuel Pk",
+    ItemType.ROCKET: "Rocket",
 }
 
 # Comma-separated preference list for pygame.font.SysFont.  Terminus is a
@@ -854,6 +860,18 @@ def render_machine_menu(
         overlay, menu_x, menu_y, menu_w, machine_name, header_font, False
     )
 
+    # --- Assembler recipe subtitle ---
+    if machine_type == int(MachineType.ASSEMBLER):
+        sel_recipe = int(state.machine_selected_recipe[ty, tx])
+        recipe_name = ASSEMBLER_RECIPE_NAMES[sel_recipe]
+        asm_power = int(state.machine_power[ty, tx])
+        status = "Idle" if asm_power == 0 else f"{asm_power} ticks left"
+        subtitle = f"Recipe: {recipe_name}  |  {status}"
+        sub_arr = _render_text_rgba(subtitle, body_font, (180, 170, 130))
+        sub_x = menu_x + (menu_w - sub_arr.shape[1]) // 2
+        _blit_rgba(overlay, sub_arr, content_y, sub_x)
+        content_y += sub_arr.shape[0] + 6
+
     # --- Slot grid ---
     grid_w = menu_w - 2 * padding
     cell_w = (
@@ -1014,9 +1032,12 @@ def render_machine_menu(
 
     # --- Hint bar ---
     hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    hints = "[E] Transfer  [W/S] Switch panel  [A/D] Select  [ESC] Close"
+    if machine_type == int(MachineType.ASSEMBLER):
+        hints = "[Q] Recipe  " + hints
     _render_control_hints(
         overlay,
-        "[E] Transfer  [W/S] Switch panel  [A/D] Select  [ESC] Close",
+        hints,
         menu_x + _BORDER_PX,
         hint_y,
         menu_w - 2 * _BORDER_PX,

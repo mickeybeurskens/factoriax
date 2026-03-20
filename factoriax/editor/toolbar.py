@@ -49,6 +49,7 @@ MACHINE_ITEMS: list[tuple[int, str]] = [
     (int(MachineType.CHEST), "Chest"),
     (int(MachineType.CONVEYOR_BELT), "Belt"),
     (int(MachineType.ARM), "Arm"),
+    (int(MachineType.ASSEMBLER), "Assembler"),
 ]
 
 MACHINE_TO_ITEM_MAP: dict[int, int] = {
@@ -56,6 +57,7 @@ MACHINE_TO_ITEM_MAP: dict[int, int] = {
     int(MachineType.CHEST): int(ItemType.CHEST),
     int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
     int(MachineType.ARM): int(ItemType.ARM),
+    int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
 }
 
 

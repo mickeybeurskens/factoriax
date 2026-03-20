@@ -105,6 +105,7 @@ _MACHINE_KEYS = {
     pygame.K_7: 1,
     pygame.K_8: 2,
     pygame.K_9: 3,
+    pygame.K_0: 4,
 }
 
 

@@ -11,6 +11,7 @@ from jax import random
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
+    NUM_ASSEMBLER_RECIPES,
     NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     Action,
@@ -531,7 +532,31 @@ def _play_loop(
                                 player_slot,
                             )
                 elif event.key == pygame.K_q:
-                    hotbar_page = 1 - hotbar_page
+                    machine_type = int(
+                        state.machine_types[machine_ty, machine_tx]  # type: ignore[union-attr]
+                    )
+                    is_idle = int(state.machine_power[machine_ty, machine_tx]) == 0  # type: ignore[union-attr]
+                    mc = state.machine_inventory_counts  # type: ignore[union-attr]
+                    has_inputs = (
+                        int(mc[machine_ty, machine_tx, 0]) > 0
+                        or int(mc[machine_ty, machine_tx, 1]) > 0
+                        or int(mc[machine_ty, machine_tx, 2]) > 0
+                    )
+                    if (
+                        machine_type == int(MachineType.ASSEMBLER)
+                        and is_idle
+                        and not has_inputs
+                    ):
+                        cur_recipe = int(
+                            state.machine_selected_recipe[machine_ty, machine_tx]  # type: ignore[union-attr]
+                        )
+                        new_recipe = (cur_recipe + 1) % NUM_ASSEMBLER_RECIPES
+                        new_sel = state.machine_selected_recipe.at[  # type: ignore[union-attr]
+                            machine_ty, machine_tx
+                        ].set(new_recipe)
+                        state = state.replace(machine_selected_recipe=new_sel)  # type: ignore[union-attr]
+                    elif machine_type != int(MachineType.ASSEMBLER):
+                        hotbar_page = 1 - hotbar_page
                 elif event.key == pygame.K_i:
                     inventory_open = not inventory_open
                     if inventory_open:

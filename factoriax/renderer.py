@@ -274,6 +274,7 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
 MACHINE_TO_ITEM: dict[int, int] = {
     int(MachineType.MINER): int(ItemType.MINER),
     int(MachineType.CHEST): int(ItemType.CHEST),
+    int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
     int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
     int(MachineType.ARM): int(ItemType.ARM),
 }
@@ -567,6 +568,8 @@ def render_machine_overlays(
                 active = is_miner_active(state, y, x)
             elif machine_type == int(MachineType.ARM):
                 active = is_arm_active(state, y, x)
+            elif machine_type == int(MachineType.ASSEMBLER):
+                active = int(state.machine_power[y, x]) > 0
             else:
                 active = True
             icon = apply_activity_tint(icon, active, frame_tick)

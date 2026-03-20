@@ -26,8 +26,11 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.constants import (
+    ASSEMBLER_RECIPE_INPUT_COUNTS,
+    ASSEMBLER_RECIPE_INPUT_ITEMS,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
+    MAX_ASSEMBLER_STACK_SIZE,
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
     NUM_INVENTORY_SLOTS,
@@ -260,7 +263,9 @@ def deposit_to_machine(
         return state
 
     m_count = int(state.machine_inventory_counts[ty, tx, target])
-    space = MAX_MACHINE_STACK_SIZE - m_count
+    is_asm = machine_type == int(MachineType.ASSEMBLER)
+    cap = MAX_ASSEMBLER_STACK_SIZE if is_asm else MAX_MACHINE_STACK_SIZE
+    space = cap - m_count
     transfer = min(count, space)
     if transfer <= 0:
         return state
@@ -304,6 +309,10 @@ def _find_deposit_slot(
     2. First slot left-to-right with same item and space.
     3. First empty INPUT/STORAGE slot left-to-right.
 
+    For assemblers, INPUT slots only accept the item that the current
+    recipe expects in that specific slot position. A slot whose recipe
+    input count is zero is treated as unavailable.
+
     Args:
         state: Current environment state.
         tx: X tile coordinate of the machine.
@@ -317,31 +326,52 @@ def _find_deposit_slot(
         Slot index to deposit into, or ``None`` if no slot can accept.
     """
     slot_roles = MACHINE_SLOT_ROLES[machine_type]
+    is_assembler = machine_type == int(MachineType.ASSEMBLER)
+    cap = MAX_ASSEMBLER_STACK_SIZE if is_assembler else MAX_MACHINE_STACK_SIZE
+
+    # For assemblers, precompute which item each input slot accepts.
+    if is_assembler:
+        recipe = int(state.machine_selected_recipe[ty, tx])
+        expected_items = [
+            int(ASSEMBLER_RECIPE_INPUT_ITEMS[recipe, i]) for i in range(2)
+        ]
+        expected_counts = [
+            int(ASSEMBLER_RECIPE_INPUT_COUNTS[recipe, i]) for i in range(2)
+        ]
+
+    def _slot_accepts(s: int) -> bool:
+        """Check if slot *s* can accept the given item type."""
+        role = int(slot_roles[s])
+        if role not in _DEPOSIT_ROLES:
+            return False
+        if is_assembler and role == int(SlotRole.INPUT):
+            if s >= 2 or expected_counts[s] == 0 or expected_items[s] != item:
+                return False
+        return True
 
     # Step 1: try focused slot.
-    role = int(slot_roles[focused_slot])
-    if role in _DEPOSIT_ROLES:
+    if _slot_accepts(focused_slot):
         m_item = int(state.machine_inventory_items[ty, tx, focused_slot])
         m_count = int(state.machine_inventory_counts[ty, tx, focused_slot])
-        if (m_item == item or m_item == 0) and m_count < MAX_MACHINE_STACK_SIZE:
+        if (m_item == item or m_item == 0) and m_count < cap:
             return focused_slot
 
     # Step 2: scan for a slot with the same item and space.
     for s in range(num_slots):
         if s == focused_slot:
             continue
-        if int(slot_roles[s]) not in _DEPOSIT_ROLES:
+        if not _slot_accepts(s):
             continue
         m_item = int(state.machine_inventory_items[ty, tx, s])
         m_count = int(state.machine_inventory_counts[ty, tx, s])
-        if m_item == item and m_count < MAX_MACHINE_STACK_SIZE:
+        if m_item == item and m_count < cap:
             return s
 
     # Step 3: scan for any empty compatible slot.
     for s in range(num_slots):
         if s == focused_slot:
             continue
-        if int(slot_roles[s]) not in _DEPOSIT_ROLES:
+        if not _slot_accepts(s):
             continue
         if int(state.machine_inventory_items[ty, tx, s]) == 0:
             return s
