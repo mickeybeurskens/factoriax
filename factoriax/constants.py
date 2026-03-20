@@ -221,7 +221,7 @@ ASSEMBLER_RECIPES = [
     },
     {
         "output": ItemType.ROCKET,
-        "inputs": [(ItemType.HULL, 500), (ItemType.FUEL_PACK, 200)],
+        "inputs": [(ItemType.HULL, 50), (ItemType.FUEL_PACK, 20)],
         "ticks": 100,
     },
 ]
@@ -248,7 +248,7 @@ ASSEMBLER_RECIPE_INPUT_COUNTS = jnp.array(
     [
         [5, 0],  # Hull
         [3, 2],  # Fuel Pack
-        [500, 200],  # Rocket
+        [50, 20],  # Rocket
     ],
     dtype=jnp.int32,
 )

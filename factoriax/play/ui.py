@@ -560,13 +560,14 @@ def render_pause_menu(
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the pause menu as an RGBA overlay.
 
-    Displays a centered panel with Resume and Quit Game options. The selected
-    option is highlighted with a brighter background.
+    Displays a centered panel with Resume, Reset, and Quit Game options.
+    The selected option is highlighted with a brighter background.
 
     Args:
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
-        selected_option: Currently selected option index (0=Resume, 1=Quit).
+        selected_option: Currently selected option index
+            (0=Resume, 1=Reset, 2=Quit).
 
     Returns:
         Tuple of (RGBA overlay array, list of click regions).
@@ -591,7 +592,7 @@ def render_pause_menu(
     sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
     overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
 
-    options = ["Resume", "Quit Game"]
+    options = ["Resume", "Reset", "Quit Game"]
     option_h = 40
     options_start_y = sep_y + _SEP_H + 24
 
@@ -745,6 +746,67 @@ def render_welcome_screen(
     cy += 16
     hint_arr = _render_text_rgba("[SPACE / ENTER]  Start", hint_font, _HINT_COLOR)
     _blit_rgba(overlay, hint_arr, cy, menu_x + (menu_w - hint_arr.shape[1]) // 2)
+
+    return overlay
+
+
+def render_victory_screen(
+    screen_width: int,
+    screen_height: int,
+) -> np.ndarray:
+    """Render a celebration overlay when the player builds a rocket.
+
+    Args:
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+
+    Returns:
+        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+    overlay[:, :] = (0, 0, 0, 200)
+
+    menu_w = int(screen_width * 0.5)
+    menu_h = 180
+    menu_x = (screen_width - menu_w) // 2
+    menu_y = (screen_height - menu_h) // 2
+
+    draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
+
+    title_font = get_pixel_font(28)
+    body_font = get_pixel_font(_FONT_BODY)
+    hint_font = get_pixel_font(_FONT_HINT)
+
+    title = _render_text_rgba("ROCKET LAUNCHED", title_font, (215, 195, 65))
+    _blit_rgba(
+        overlay, title,
+        menu_y + _BORDER_PX + 16,
+        menu_x + (menu_w - title.shape[1]) // 2,
+    )
+
+    sep_y = menu_y + _BORDER_PX + 16 + title.shape[0] + 12
+    overlay[
+        sep_y : sep_y + _SEP_H,
+        menu_x + 20 : menu_x + menu_w - 20,
+    ] = _BORDER
+
+    msg = _render_text_rgba(
+        "You escaped the planet.", body_font, (200, 195, 160),
+    )
+    _blit_rgba(
+        overlay, msg,
+        sep_y + _SEP_H + 16,
+        menu_x + (menu_w - msg.shape[1]) // 2,
+    )
+
+    hint = _render_text_rgba(
+        "[SPACE / ENTER]  Continue", hint_font, _HINT_COLOR,
+    )
+    _blit_rgba(
+        overlay, hint,
+        menu_y + menu_h - _BORDER_PX - hint.shape[0] - 8,
+        menu_x + (menu_w - hint.shape[1]) // 2,
+    )
 
     return overlay
 
@@ -1566,7 +1628,6 @@ _HELP_LINES: list[str] = [
     "",
     "-- Other --",
     "P             Achievements",
-    "R             Restart level",
     "?             This help screen",
     "ESC           Close menu / pause",
 ]

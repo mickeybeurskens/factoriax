@@ -15,6 +15,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     Action,
+    ItemType,
     MachineType,
 )
 from factoriax.envs.factoriax_env import make_factoriax_env
@@ -34,6 +35,7 @@ from factoriax.play.ui import (
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
+    render_victory_screen,
     render_welcome_screen,
 )
 from factoriax.renderer import render_pixels
@@ -334,6 +336,7 @@ def _play_loop(
     hotbar_page = 0
     held_slot: int | None = None
     welcome_open = True
+    victory_open = False
 
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
     win_ox = (window_width - ui_w * win_scale) // 2
@@ -355,6 +358,14 @@ def _play_loop(
                     pygame.K_ESCAPE,
                 ):
                     welcome_open = False
+                continue
+            elif victory_open:
+                if event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_SPACE,
+                    pygame.K_RETURN,
+                    pygame.K_ESCAPE,
+                ):
+                    victory_open = False
                 continue
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 base_x = (event.pos[0] - win_ox) // win_scale
@@ -415,6 +426,13 @@ def _play_loop(
                     elif hit.action == "pause_option":
                         if hit.param == 0:
                             pause_open = False
+                        elif hit.param == 1:
+                            pause_open = False
+                            if level is not None:
+                                obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                            else:
+                                rng, reset_key = random.split(rng)
+                                obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
                         else:
                             running = False
                 elif not (
@@ -456,10 +474,17 @@ def _play_loop(
                     if event.key == pygame.K_w:
                         pause_selection = max(0, pause_selection - 1)
                     elif event.key == pygame.K_s:
-                        pause_selection = min(1, pause_selection + 1)
+                        pause_selection = min(2, pause_selection + 1)
                     elif event.key in (pygame.K_RETURN, pygame.K_e):
                         if pause_selection == 0:
                             pause_open = False
+                        elif pause_selection == 1:
+                            pause_open = False
+                            if level is not None:
+                                obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                            else:
+                                rng, reset_key = random.split(rng)
+                                obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
                         else:
                             running = False
                 elif event.key == pygame.K_f:
@@ -591,12 +616,6 @@ def _play_loop(
                     event.key == pygame.K_SLASH and shift_held
                 ):
                     help_open = True
-                elif event.key == pygame.K_r:
-                    if level is not None:
-                        obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
-                    else:
-                        rng, reset_key = random.split(rng)
-                        obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
                 elif inventory_open and menu_focus == "inventory":
                     selected_player = int(state.selected_player)  # type: ignore[union-attr]
                     current = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
@@ -693,6 +712,14 @@ def _play_loop(
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
 
+            # Check for rocket in any player's inventory.
+            if not victory_open:
+                has_rocket = jnp.any(
+                    state.inventory_items == int(ItemType.ROCKET)  # type: ignore[union-attr]
+                )
+                if has_rocket:
+                    victory_open = True
+
         pixels = render_pixels(
             state, block_pixel_size=tile_px, frame_tick=frame_tick
         )
@@ -759,6 +786,11 @@ def _play_loop(
                 ui_frame, render_help_overlay(ui_w, ui_h)
             )
 
+        if victory_open:
+            composite_rgba_over_rgb(
+                ui_frame, render_victory_screen(ui_w, ui_h)
+            )
+
         if welcome_open:
             composite_rgba_over_rgb(
                 ui_frame, render_welcome_screen(ui_w, ui_h)
@@ -793,8 +825,7 @@ def main() -> None:
         1-8: Quick-select inventory slot 1-8
         Shift+1-2: Quick-select inventory slot 9-10
         Ctrl+1-9: Select player (if that many players exist)
-        R: Reset the game
-        Escape: Close menus / Open pause menu
+        Escape: Close menus / Open pause menu (with Reset option)
     """
     pygame.init()
 
