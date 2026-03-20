@@ -18,6 +18,7 @@ from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.levels import Level
 from factoriax.play.transfer import (
     deposit_to_machine,
+    rotate_machine,
     swap_inventory_slots,
     withdraw_from_machine,
 )
@@ -556,6 +557,15 @@ def _play_loop(
                         != int(MachineType.NONE)
                     )
                     action = Action.PICKUP if has_machine else Action.PLACE
+                elif event.key == pygame.K_t:
+                    selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                    tx, ty = _tile_in_front(state, selected_player)
+                    map_h, map_w = state.map.shape  # type: ignore[union-attr]
+                    if (
+                        0 <= tx < map_w
+                        and 0 <= ty < map_h
+                    ):
+                        state = rotate_machine(state, tx, ty)
                 elif ctrl_held and event.key in key_to_player:
                     player_idx = key_to_player[event.key]
                     if player_idx < params.num_players:

@@ -8,11 +8,13 @@ import pytest
 from factoriax.constants import (
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
+    Action,
     ItemType,
     MachineType,
 )
 from factoriax.play.transfer import (
     deposit_to_machine,
+    rotate_machine,
     swap_inventory_slots,
     withdraw_from_machine,
 )
@@ -327,3 +329,98 @@ class TestSwapInventorySlots:
         result = swap_inventory_slots(state, 0, 2, 7)
         assert int(result.inventory_items[0, 2]) == 0
         assert int(result.inventory_items[0, 7]) == 0
+
+    def test_merge_same_item_type(self, state_factory) -> None:
+        """Moving onto the same item type merges stacks."""
+        state = _state_with_machine(
+            state_factory,
+            MachineType.CHEST,
+            p_items=[int(ItemType.COAL), int(ItemType.COAL)],
+            p_counts=[10, 20],
+        )
+        result = swap_inventory_slots(state, 0, 0, 1)
+        assert int(result.inventory_items[0, 1]) == int(ItemType.COAL)
+        assert int(result.inventory_counts[0, 1]) == 30
+        assert int(result.inventory_items[0, 0]) == 0
+        assert int(result.inventory_counts[0, 0]) == 0
+
+    def test_merge_overflow_stays_in_source(self, state_factory) -> None:
+        """When the destination is nearly full, overflow stays in source."""
+        state = _state_with_machine(
+            state_factory,
+            MachineType.CHEST,
+            p_items=[int(ItemType.IRON), int(ItemType.IRON)],
+            p_counts=[30, MAX_STACK_SIZE - 10],
+        )
+        result = swap_inventory_slots(state, 0, 0, 1)
+        assert int(result.inventory_counts[0, 1]) == MAX_STACK_SIZE
+        assert int(result.inventory_items[0, 0]) == int(ItemType.IRON)
+        assert int(result.inventory_counts[0, 0]) == 20
+
+    def test_merge_destination_already_full(self, state_factory) -> None:
+        """Merging onto a full stack transfers nothing."""
+        state = _state_with_machine(
+            state_factory,
+            MachineType.CHEST,
+            p_items=[int(ItemType.COAL), int(ItemType.COAL)],
+            p_counts=[5, MAX_STACK_SIZE],
+        )
+        result = swap_inventory_slots(state, 0, 0, 1)
+        assert int(result.inventory_counts[0, 0]) == 5
+        assert int(result.inventory_counts[0, 1]) == MAX_STACK_SIZE
+
+
+# ---------------------------------------------------------------------------
+# rotate_machine
+# ---------------------------------------------------------------------------
+
+
+class TestRotateMachine:
+    """Tests for the rotate_machine helper."""
+
+    def test_cycles_direction_clockwise(self, state_factory) -> None:
+        """Each call advances direction one step in the clockwise cycle."""
+        shape = (4, 4)
+        dirs = jnp.full(shape, int(Action.DOWN), dtype=jnp.int32)
+        state = state_factory(
+            world_map=jnp.zeros(shape, dtype=jnp.int32),
+            machine_types=jnp.full(
+                shape, int(MachineType.CONVEYOR_BELT), dtype=jnp.int32
+            ),
+            machine_direction=dirs,
+        )
+        # DOWN -> RIGHT -> UP -> LEFT -> DOWN
+        expected = [
+            int(Action.RIGHT),
+            int(Action.UP),
+            int(Action.LEFT),
+            int(Action.DOWN),
+        ]
+        for exp in expected:
+            state = rotate_machine(state, 0, 0)
+            assert int(state.machine_direction[0, 0]) == exp
+
+    def test_noop_on_empty_tile(self, state_factory) -> None:
+        """Rotating a tile with no machine returns state unchanged."""
+        shape = (4, 4)
+        state = state_factory(
+            world_map=jnp.zeros(shape, dtype=jnp.int32),
+        )
+        result = rotate_machine(state, 1, 1)
+        assert result is state
+
+    def test_does_not_affect_other_tiles(self, state_factory) -> None:
+        """Rotation only changes the targeted tile's direction."""
+        shape = (4, 4)
+        dirs = jnp.full(shape, int(Action.DOWN), dtype=jnp.int32)
+        state = state_factory(
+            world_map=jnp.zeros(shape, dtype=jnp.int32),
+            machine_types=jnp.full(
+                shape, int(MachineType.CONVEYOR_BELT), dtype=jnp.int32
+            ),
+            machine_direction=dirs,
+        )
+        result = rotate_machine(state, 1, 1)
+        assert int(result.machine_direction[1, 1]) == int(Action.RIGHT)
+        assert int(result.machine_direction[0, 0]) == int(Action.DOWN)
+        assert int(result.machine_direction[2, 3]) == int(Action.DOWN)

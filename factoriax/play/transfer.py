@@ -31,6 +31,8 @@ from factoriax.constants import (
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
     NUM_INVENTORY_SLOTS,
+    Action,
+    MachineType,
     SlotRole,
 )
 from factoriax.state import EnvState
@@ -39,6 +41,13 @@ _DEPOSIT_ROLES: frozenset[int] = frozenset(
     [int(SlotRole.INPUT), int(SlotRole.STORAGE)]
 )
 
+_DIR_CYCLE: list[int] = [
+    int(Action.DOWN),
+    int(Action.RIGHT),
+    int(Action.UP),
+    int(Action.LEFT),
+]
+
 
 def swap_inventory_slots(
     state: EnvState,
@@ -46,19 +55,21 @@ def swap_inventory_slots(
     slot_a: int,
     slot_b: int,
 ) -> EnvState:
-    """Swap the contents of two inventory slots for a player.
+    """Move or merge the item in *slot_a* into *slot_b*.
 
-    If both slots are identical this is a no-op.  Works correctly when
-    one or both slots are empty.
+    When both slots hold the same item type the stacks are merged up to
+    ``MAX_STACK_SIZE``, with any overflow remaining in *slot_a*.  When
+    the item types differ (or one slot is empty) the two slots are
+    swapped outright.  Same-slot calls are a no-op.
 
     Args:
         state: Current environment state.
         player_idx: Index of the acting player.
-        slot_a: First inventory slot index.
-        slot_b: Second inventory slot index.
+        slot_a: Source inventory slot (the "held" item).
+        slot_b: Destination inventory slot.
 
     Returns:
-        Updated state with the two slots' items and counts exchanged.
+        Updated state with stacks merged or swapped.
     """
     if slot_a == slot_b:
         return state
@@ -68,22 +79,70 @@ def swap_inventory_slots(
     item_b = int(state.inventory_items[player_idx, slot_b])
     count_b = int(state.inventory_counts[player_idx, slot_b])
 
-    new_items = (
-        state.inventory_items.at[player_idx, slot_a]
-        .set(item_b)
-        .at[player_idx, slot_b]
-        .set(item_a)
-    )
-    new_counts = (
-        state.inventory_counts.at[player_idx, slot_a]
-        .set(count_b)
-        .at[player_idx, slot_b]
-        .set(count_a)
-    )
+    # Merge when both slots hold the same non-empty item type.
+    if item_a != 0 and item_a == item_b:
+        transfer = min(count_a, MAX_STACK_SIZE - count_b)
+        new_count_b = count_b + transfer
+        new_count_a = count_a - transfer
+        new_item_a = item_a if new_count_a > 0 else 0
+
+        new_items = state.inventory_items.at[
+            player_idx, slot_a
+        ].set(new_item_a)
+        new_counts = (
+            state.inventory_counts.at[player_idx, slot_a]
+            .set(new_count_a)
+            .at[player_idx, slot_b]
+            .set(new_count_b)
+        )
+    else:
+        new_items = (
+            state.inventory_items.at[player_idx, slot_a]
+            .set(item_b)
+            .at[player_idx, slot_b]
+            .set(item_a)
+        )
+        new_counts = (
+            state.inventory_counts.at[player_idx, slot_a]
+            .set(count_b)
+            .at[player_idx, slot_b]
+            .set(count_a)
+        )
     return state.replace(
         inventory_items=new_items,
         inventory_counts=new_counts,
     )
+
+
+def rotate_machine(
+    state: EnvState,
+    tx: int,
+    ty: int,
+) -> EnvState:
+    """Cycle the direction of the machine at (tx, ty) clockwise.
+
+    The cycle order is DOWN -> RIGHT -> UP -> LEFT -> DOWN, matching the
+    editor's rotation behaviour.  Does nothing if there is no machine at
+    the given tile.
+
+    Args:
+        state: Current environment state.
+        tx: X tile coordinate of the machine.
+        ty: Y tile coordinate of the machine.
+
+    Returns:
+        Updated state with the machine's direction advanced one step,
+        or the original state if no machine is present.
+    """
+    machine_type = int(state.machine_types[ty, tx])
+    if machine_type == int(MachineType.NONE):
+        return state
+
+    current = int(state.machine_direction[ty, tx])
+    idx = _DIR_CYCLE.index(current) if current in _DIR_CYCLE else 0
+    new_dir = _DIR_CYCLE[(idx + 1) % len(_DIR_CYCLE)]
+    new_dirs = state.machine_direction.at[ty, tx].set(new_dir)
+    return state.replace(machine_direction=new_dirs)
 
 
 def withdraw_from_machine(

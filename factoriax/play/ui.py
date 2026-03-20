@@ -656,6 +656,7 @@ def render_welcome_screen(
         ("E", "Place machine"),
         ("I", "Inventory & crafting"),
         ("F", "Inspect machine"),
+        ("?", "Full controls list"),
     ]
 
     key_col_w = 64
@@ -676,7 +677,7 @@ def render_welcome_screen(
         + 16  # gap before hint
         + _HINT_HEIGHT
     )
-    menu_h = inner_h + 2 * (_BORDER_PX + 16)
+    menu_h = min(inner_h + 2 * (_BORDER_PX + 16), screen_height - 4)
     menu_y = (screen_height - menu_h) // 2
 
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h, bg=(22, 22, 22, 255))
@@ -1498,6 +1499,7 @@ _HELP_LINES: list[str] = [
     "-- Actions --",
     "SPACE         Mine ore at current tile",
     "E             Place / pick up machine",
+    "T             Rotate machine in front",
     "F             Inspect machine in front",
     "",
     "-- Inventory & Crafting --",
