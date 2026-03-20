@@ -12,8 +12,9 @@ import numpy as np
 import pygame
 
 from factoriax.constants import (
+    ITEM_TO_MACHINE,
+    MACHINE_TYPE_NAMES,
     BlockType,
-    ItemType,
     MachineType,
 )
 from factoriax.play.ui import ClickRegion, get_pixel_font
@@ -36,28 +37,24 @@ TOOL_PAINT = "paint"
 TOOL_FILL = "fill"
 TOOL_ERASE = "erase"
 
+# Auto-derive palette entries from the enum definitions so new types
+# appear in the editor without manual updates.
+
 BLOCK_ITEMS: list[tuple[int, str]] = [
-    (int(BlockType.DIRT), "Dirt"),
-    (int(BlockType.WATER), "Water"),
-    (int(BlockType.IRON), "Iron"),
-    (int(BlockType.COPPER), "Copper"),
-    (int(BlockType.COAL), "Coal"),
+    (int(b), b.name.capitalize())
+    for b in BlockType
+    if b not in (BlockType.INVALID, BlockType.OUT_OF_BOUNDS)
 ]
 
 MACHINE_ITEMS: list[tuple[int, str]] = [
-    (int(MachineType.MINER), "Miner"),
-    (int(MachineType.CHEST), "Chest"),
-    (int(MachineType.CONVEYOR_BELT), "Belt"),
-    (int(MachineType.ARM), "Arm"),
-    (int(MachineType.ASSEMBLER), "Assembler"),
+    (int(m), MACHINE_TYPE_NAMES.get(int(m), m.name.capitalize()))
+    for m in MachineType
+    if m != MachineType.NONE
 ]
 
 MACHINE_TO_ITEM_MAP: dict[int, int] = {
-    int(MachineType.MINER): int(ItemType.MINER),
-    int(MachineType.CHEST): int(ItemType.CHEST),
-    int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
-    int(MachineType.ARM): int(ItemType.ARM),
-    int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
+    int(machine): int(item)
+    for item, machine in ITEM_TO_MACHINE.items()
 }
 
 

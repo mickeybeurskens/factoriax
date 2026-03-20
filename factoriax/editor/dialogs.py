@@ -463,7 +463,7 @@ _HELP_LINES = [
     "X  Eraser tool (clears both layers)",
     "B  Paint tool    F  Fill rect tool",
     "1-5  Terrain: Dirt Water Iron Copper Coal",
-    "6-9,0  Machine: Miner Chest Belt Arm Asm",
+    "6-0  Select machine from palette",
     "R  Rotate machine (or rotate under cursor)",
     "",
     "-- Resources --",
