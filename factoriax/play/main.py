@@ -8,14 +8,13 @@ import numpy as np
 import pygame
 from jax import random
 
-from factoriax.achievements import NUM_ACHIEVEMENTS
+from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
     NUM_ASSEMBLER_RECIPES,
     NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     Action,
-    ItemType,
     MachineType,
 )
 from factoriax.envs.factoriax_env import make_factoriax_env
@@ -40,6 +39,10 @@ from factoriax.play.ui import (
 )
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
+
+_ROCKET_ACHIEVEMENT_IDX: int = next(
+    i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
+)
 
 
 def composite_rgba_over_rgb(
@@ -337,6 +340,7 @@ def _play_loop(
     held_slot: int | None = None
     welcome_open = True
     victory_open = False
+    victory_shown = False
 
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
     win_ox = (window_width - ui_w * win_scale) // 2
@@ -712,13 +716,14 @@ def _play_loop(
                     rng, reset_key = random.split(rng)
                     obs, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
 
-            # Check for rocket in any player's inventory.
-            if not victory_open:
-                has_rocket = jnp.any(
-                    state.inventory_items == int(ItemType.ROCKET)  # type: ignore[union-attr]
+            # Show victory screen once when rocket achievement unlocks.
+            if not victory_shown:
+                rocket_unlocked = bool(
+                    state.achievements_unlocked[_ROCKET_ACHIEVEMENT_IDX]  # type: ignore[union-attr]
                 )
-                if has_rocket:
+                if rocket_unlocked:
                     victory_open = True
+                    victory_shown = True
 
         pixels = render_pixels(
             state, block_pixel_size=tile_px, frame_tick=frame_tick
