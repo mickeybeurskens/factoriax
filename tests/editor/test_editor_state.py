@@ -255,6 +255,35 @@ class TestLevelConversion:
         assert state.block_resources[0, 0] == BLOCK_MAX_RESOURCES
         assert state.block_resources[1, 1] == 0
 
+    def test_directions_preserved(self) -> None:
+        """Machine directions must survive editor round-trip."""
+        block_map = np.full((5, 5), int(BlockType.DIRT), dtype=np.int32)
+        machines = np.full(
+            (5, 5), int(MachineType.NONE), dtype=np.int32
+        )
+        machines[1, 1] = int(MachineType.ARM)
+        dirs = np.zeros((5, 5), dtype=np.int32)
+        dirs[1, 1] = int(Action.RIGHT)
+        original = Level(
+            name="dir_test",
+            map_width=5,
+            map_height=5,
+            block_map=block_map,
+            machine_types=machines,
+            machine_directions=dirs,
+        )
+        state = editor_state_from_level(original)
+        assert state.machine_directions[1, 1] == int(Action.RIGHT)
+        level = editor_state_to_level(state)
+        assert level.machine_directions is not None
+        assert level.machine_directions[1, 1] == int(Action.RIGHT)
+
+    def test_all_zero_directions_become_none(self) -> None:
+        """All-zero directions should be stored as None."""
+        state = new_editor_state(5, 5)
+        level = editor_state_to_level(state)
+        assert level.machine_directions is None
+
 
 class TestAddColumn:
     """Tests for add_column."""

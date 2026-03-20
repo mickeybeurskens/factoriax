@@ -133,6 +133,13 @@ def editor_state_from_level(level: Level) -> EditorState:
             dtype=np.int32,
         )
     )
+    directions = (
+        level.machine_directions.copy()
+        if level.machine_directions is not None
+        else np.zeros(
+            (level.map_height, level.map_width), dtype=np.int32
+        )
+    )
     return EditorState(
         name=level.name,
         map_width=level.map_width,
@@ -140,9 +147,7 @@ def editor_state_from_level(level: Level) -> EditorState:
         block_map=level.block_map.copy(),
         block_resources=resources.astype(np.int32),
         machine_types=machines.astype(np.int32),
-        machine_directions=np.zeros(
-            (level.map_height, level.map_width), dtype=np.int32
-        ),
+        machine_directions=directions.astype(np.int32),
     )
 
 
@@ -166,6 +171,10 @@ def editor_state_to_level(state: EditorState) -> Level:
     if np.all(machines == int(MachineType.NONE)):
         machines = None
 
+    directions: np.ndarray | None = state.machine_directions.copy()
+    if np.all(directions == 0):
+        directions = None
+
     return Level(
         name=state.name,
         map_width=state.map_width,
@@ -173,6 +182,7 @@ def editor_state_to_level(state: EditorState) -> Level:
         block_map=state.block_map.copy(),
         block_resources=resources,
         machine_types=machines,
+        machine_directions=directions,
     )
 
 

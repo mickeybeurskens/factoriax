@@ -282,6 +282,28 @@ class TestBuildState:
         state = build_state(_dirt_level(), _PARAMS_1P)
         assert jnp.all(state.machine_types == int(MachineType.NONE))
 
+    def test_machine_directions_zero_by_default(self) -> None:
+        """Without directions in the level, all default to zero."""
+        state = build_state(_dirt_level(), _PARAMS_1P)
+        assert jnp.all(state.machine_direction == 0)
+
+    def test_machine_directions_preserved(self) -> None:
+        """Directions set in the Level must appear in the built state."""
+        dirs = np.zeros((8, 8), dtype=np.int32)
+        dirs[3, 3] = int(Action.RIGHT)
+        machines = np.full((8, 8), int(MachineType.NONE), dtype=np.int32)
+        machines[3, 3] = int(MachineType.CONVEYOR_BELT)
+        level = Level(
+            name="dir_test",
+            map_width=8,
+            map_height=8,
+            block_map=np.full((8, 8), int(BlockType.DIRT), dtype=np.int32),
+            machine_types=machines,
+            machine_directions=dirs,
+        )
+        state = build_state(level, _PARAMS_1P)
+        assert int(state.machine_direction[3, 3]) == int(Action.RIGHT)
+
 
 # ---------------------------------------------------------------------------
 # Serialization
@@ -336,6 +358,58 @@ class TestSerialization:
             path = Path(d) / "nested" / "dir" / "level.json"
             save_level(level, path)
             assert path.exists()
+
+    def test_roundtrip_with_machine_directions(self) -> None:
+        """Machine directions must survive save/load."""
+        machines = np.full((4, 4), int(MachineType.NONE), dtype=np.int32)
+        machines[1, 2] = int(MachineType.ARM)
+        dirs = np.zeros((4, 4), dtype=np.int32)
+        dirs[1, 2] = int(Action.LEFT)
+        level = Level(
+            name="dir",
+            map_width=4,
+            map_height=4,
+            block_map=np.full(
+                (4, 4), int(BlockType.DIRT), dtype=np.int32
+            ),
+            machine_types=machines,
+            machine_directions=dirs,
+        )
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "level.json"
+            save_level(level, path)
+            loaded = load_level(path)
+        assert loaded.machine_directions is not None
+        np.testing.assert_array_equal(
+            loaded.machine_directions, dirs
+        )
+
+    def test_roundtrip_no_directions_stays_none(self) -> None:
+        """Levels without directions must load as None."""
+        level = _dirt_level()
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "level.json"
+            save_level(level, path)
+            loaded = load_level(path)
+        assert loaded.machine_directions is None
+
+    def test_load_legacy_file_without_directions(self) -> None:
+        """Files saved before directions existed must load fine."""
+        import orjson
+
+        payload = {
+            "name": "legacy",
+            "map_width": 2,
+            "map_height": 2,
+            "block_map": [[2, 2], [2, 2]],
+            "block_resources": None,
+            "machine_types": None,
+        }
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "level.json"
+            path.write_bytes(orjson.dumps(payload))
+            loaded = load_level(path)
+        assert loaded.machine_directions is None
 
     def test_load_missing_file_raises(self) -> None:
         with pytest.raises(FileNotFoundError):

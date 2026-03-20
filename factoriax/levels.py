@@ -87,6 +87,7 @@ class Level:
     block_map: np.ndarray
     block_resources: np.ndarray | None = None
     machine_types: np.ndarray | None = None
+    machine_directions: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         """Validate array shapes match declared dimensions.
@@ -104,6 +105,14 @@ class Level:
         if self.machine_types is not None and self.machine_types.shape != expected:
             raise ValueError(
                 f"machine_types shape {self.machine_types.shape} != {expected}"
+            )
+        if (
+            self.machine_directions is not None
+            and self.machine_directions.shape != expected
+        ):
+            raise ValueError(
+                f"machine_directions shape "
+                f"{self.machine_directions.shape} != {expected}"
             )
 
 
@@ -336,6 +345,11 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             (level.map_height, level.map_width), int(MachineType.NONE), dtype=np.int32
         )
     )
+    machine_dirs_np = (
+        level.machine_directions
+        if level.machine_directions is not None
+        else np.zeros((level.map_height, level.map_width), dtype=np.int32)
+    )
 
     map_shape = (level.map_height, level.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
@@ -360,7 +374,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         machine_inventory_counts=jnp.zeros(machine_inv_shape, dtype=jnp.int16),
         machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_direction=jnp.zeros(map_shape, dtype=jnp.int32),
+        machine_direction=jnp.array(machine_dirs_np, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
@@ -636,6 +650,11 @@ def save_level(level: Level, path: Path) -> None:
         "machine_types": (
             level.machine_types.tolist() if level.machine_types is not None else None
         ),
+        "machine_directions": (
+            level.machine_directions.tolist()
+            if level.machine_directions is not None
+            else None
+        ),
     }
     path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
 
@@ -653,6 +672,7 @@ def load_level(path: Path) -> Level:
         FileNotFoundError: If *path* does not exist.
     """
     payload = orjson.loads(Path(path).read_bytes())
+    raw_dirs = payload.get("machine_directions")
     return Level(
         name=payload["name"],
         map_width=payload["map_width"],
@@ -666,6 +686,11 @@ def load_level(path: Path) -> Level:
         machine_types=(
             np.array(payload["machine_types"], dtype=np.int32)
             if payload["machine_types"] is not None
+            else None
+        ),
+        machine_directions=(
+            np.array(raw_dirs, dtype=np.int32)
+            if raw_dirs is not None
             else None
         ),
     )
