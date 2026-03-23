@@ -31,17 +31,15 @@ def _fig_to_rgb(fig: plt.Figure, width: int, height: int) -> np.ndarray:
     """
     fig.set_size_inches(width / fig.dpi, height / fig.dpi)
     fig.canvas.draw()
-    buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    img = buf.reshape(
-        int(fig.get_figheight() * fig.dpi), int(fig.get_figwidth() * fig.dpi), 3
-    )
+    rgba = np.asarray(fig.canvas.buffer_rgba())
+    img = rgba[:, :, :3].copy()
     plt.close(fig)
     # Resize to exact target if rounding caused a mismatch.
     if img.shape[0] != height or img.shape[1] != width:
-        from PIL import Image
-
-        pil = Image.fromarray(img).resize((width, height), Image.NEAREST)
-        img = np.array(pil)
+        # Simple nearest-neighbor resize via numpy (no PIL dependency).
+        ys = np.linspace(0, img.shape[0] - 1, height).astype(int)
+        xs = np.linspace(0, img.shape[1] - 1, width).astype(int)
+        img = img[np.ix_(ys, xs)]
     return img
 
 

@@ -196,7 +196,7 @@ def _draw_position_dot(
         sx = wx + int(px * cw / max_x)
         sy = wy + int(py * ch / max_y)
 
-        color = PLAYER_COLORS[p % len(PLAYER_COLORS)]
+        body_color, _ = PLAYER_COLORS[p % len(PLAYER_COLORS)]
         r = 3
         for dy in range(-r, r + 1):
             for dx in range(-r, r + 1):
@@ -204,4 +204,4 @@ def _draw_position_dot(
                     fy = sy + dy
                     fx = sx + dx
                     if 0 <= fy < frame.shape[0] and 0 <= fx < frame.shape[1]:
-                        frame[fy, fx] = color[:3]
+                        frame[fy, fx] = body_color

@@ -79,7 +79,8 @@ def render_info_panel(
     # Position.
     if traj.positions is not None:
         pos = traj.positions[episode, step]
-        if traj.is_multi_player:
+        # Positions may be (P, 2) or (2,) depending on multi-player.
+        if pos.ndim > 1:
             pos = pos[player]
         px, py_val = int(pos[0]), int(pos[1])
         _draw_text(panel, f"Pos: ({px}, {py_val})", small_font, _VALUE_COLOR, 4, y)
@@ -89,12 +90,12 @@ def render_info_panel(
     if traj.inventory_items is not None and traj.inventory_counts is not None:
         _draw_text(panel, "Inventory:", small_font, _LABEL_COLOR, 4, y)
         y += 14
-        if traj.is_multi_player:
-            items = traj.inventory_items[episode, step, player]
-            counts = traj.inventory_counts[episode, step, player]
-        else:
-            items = traj.inventory_items[episode, step]
-            counts = traj.inventory_counts[episode, step]
+        items = traj.inventory_items[episode, step]
+        counts = traj.inventory_counts[episode, step]
+        # May be (P, slots) or (slots,) depending on multi-player.
+        if items.ndim > 1:
+            items = items[player]
+            counts = counts[player]
 
         icon_size = 14
         col = 0
