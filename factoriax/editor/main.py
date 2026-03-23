@@ -269,7 +269,9 @@ def _update_viewport(
         reset_camera: If ``True`` the camera is moved to (0, 0).
     """
     vp.canvas_w = editor.map_width * vp.tile_size
-    vp.canvas_h = editor.map_height * vp.tile_size
+    # Toolbar needs ~420px minimum height; enforce a floor so that small
+    # maps don't clip the sidebar icons.
+    vp.canvas_h = max(editor.map_height * vp.tile_size, 420)
     if reset_camera:
         vp.camera_x = 0.0
         vp.camera_y = 0.0
@@ -799,9 +801,7 @@ def _render_frame(
     frame[base_h - STATUS_BAR_HEIGHT :, :] = status_bar
 
     if inspector_dialog is not None:
-        composite_rgba_over_rgb(
-            frame, inspector_dialog.render(base_w, base_h)
-        )
+        composite_rgba_over_rgb(frame, inspector_dialog.render(base_w, base_h))
     if file_dialog is not None:
         composite_rgba_over_rgb(frame, file_dialog.render(base_w, base_h))
     if dialog is not None:
@@ -819,11 +819,29 @@ def _render_frame(
 # ---------------------------------------------------------------------------
 
 
+def _export_benchmark_levels() -> None:
+    """Write benchmark levels as JSON files into the levels/ directory.
+
+    Called at editor startup so that benchmark levels are always available
+    in the Load dialog. The levels/ directory is gitignored, so these
+    files are regenerated each run and never committed.
+    """
+    from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+    from factoriax.editor.dialogs import LEVELS_DIR
+
+    LEVELS_DIR.mkdir(parents=True, exist_ok=True)
+    for bl in BASIC_SKILLS_LEVELS:
+        path = LEVELS_DIR / f"{bl.name}.json"
+        if not path.exists():
+            save_level(bl.level, path)
+
+
 def main() -> None:
     """Run the FactoriaX level editor.
 
     Press ``?`` for a full list of controls.
     """
+    _export_benchmark_levels()
     pygame.init()
 
     editor = new_editor_state(15, 15)
@@ -882,7 +900,8 @@ def main() -> None:
                     if path is not None:
                         if file_dialog.mode == "save":
                             save_level(
-                                editor_state_to_level(editor), path,
+                                editor_state_to_level(editor),
+                                path,
                             )
                             editor.dirty = False
                         else:
@@ -890,10 +909,14 @@ def main() -> None:
                                 level = load_level(path)
                                 editor = editor_state_from_level(level)
                                 _update_viewport(
-                                    editor, vp, reset_camera=True,
+                                    editor,
+                                    vp,
+                                    reset_camera=True,
                                 )
                                 base_w, base_h, scale = _recalc_layout(
-                                    vp, window_w, window_h,
+                                    vp,
+                                    window_w,
+                                    window_h,
                                 )
                     file_dialog = None
                 elif result == "cancel":
