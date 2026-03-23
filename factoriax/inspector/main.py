@@ -35,7 +35,7 @@ def main(path: str, level_path: str | None = None) -> None:
     traj = Trajectory.load(path)
     state = InspectorState()
 
-    # If a level is provided, replay actions to get rendered frames.
+    # Build rendered frames from the best available source.
     frames: list[np.ndarray] | None = None
     if level_path is not None:
         from factoriax.inspector.replay import load_replay_frames
@@ -43,6 +43,14 @@ def main(path: str, level_path: str | None = None) -> None:
         print(f"Replaying actions on {level_path}...")
         frames = load_replay_frames(level_path, traj, episode=0)
         print(f"Captured {len(frames)} frames.")
+    elif traj.block_map is not None:
+        from factoriax.analysis.trajectory import trajectory_to_states
+        from factoriax.renderer import render_pixels
+
+        print("Rendering from trajectory state data...")
+        env_states = trajectory_to_states(traj, episode=0)
+        frames = [render_pixels(s, block_pixel_size=24) for s in env_states]
+        print(f"Rendered {len(frames)} frames.")
 
     # Render at a compact base resolution, then integer-scale to fill
     # the screen. This keeps pixel-font text crisp and readable.
