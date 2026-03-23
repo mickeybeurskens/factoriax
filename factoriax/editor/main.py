@@ -262,15 +262,31 @@ def _update_viewport(
     vp: Viewport,
     reset_camera: bool = False,
 ) -> None:
-    """Recalculate viewport dimensions after the map size changes.
+    """Recalculate tile size so the map fits inside the fixed canvas area.
+
+    The canvas dimensions stay constant (set once at startup from the
+    window size). Only ``tile_size`` changes so that the full map is
+    visible without scrolling. The zoom can still be adjusted manually
+    afterwards.
 
     Args:
         editor: Current editor state (read-only).
         vp: Viewport to update in place.
         reset_camera: If ``True`` the camera is moved to (0, 0).
     """
-    vp.canvas_w = editor.map_width * vp.tile_size
-    vp.canvas_h = editor.map_height * vp.tile_size
+    # Pick the largest tile size from the allowed set that fits the map
+    # inside the current canvas.
+    allowed = [48, 32, 24, 16]
+    for ts in allowed:
+        if (
+            editor.map_width * ts <= vp.canvas_w
+            and editor.map_height * ts <= vp.canvas_h
+        ):
+            vp.tile_size = ts
+            break
+    else:
+        vp.tile_size = allowed[-1]
+
     if reset_camera:
         vp.camera_x = 0.0
         vp.camera_y = 0.0
@@ -967,6 +983,9 @@ def main() -> None:
 
             if event.type == pygame.VIDEORESIZE:
                 window_w, window_h = event.w, event.h
+                vp.canvas_w = window_w - TOOLBAR_WIDTH
+                vp.canvas_h = window_h - MENU_BAR_HEIGHT - STATUS_BAR_HEIGHT
+                clamp_camera(vp, editor.map_width, editor.map_height)
                 base_w, base_h, scale = _recalc_layout(
                     vp,
                     window_w,
