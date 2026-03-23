@@ -324,6 +324,7 @@ def _draw_chevron(
 def _draw_belt_arrows(
     icon: np.ndarray,
     direction: int,
+    frame_tick: int = 0,
 ) -> None:
     """Draw three evenly spaced chevron arrows onto an icon array.
 
@@ -333,18 +334,26 @@ def _draw_belt_arrows(
     """
     size = icon.shape[0]
     arrow_size = max(1, size // 8)
-    mid = size // 2
+    # mid = size // 2
+
+    spacing = max(arrow_size * 3 + 1, size // 4)
+    offset = frame_tick % spacing
 
     if direction in (Action.LEFT, Action.RIGHT):
-        cy = mid
-        for i in range(3):
-            cx = size * (1 + 2 * i) // 6
-            _draw_chevron(icon, cy, cx, arrow_size, direction)
+        cy = size // 2
+
+        # Positive scroll for right/down, negative for left/up.
+        scroll = offset if direction == Action.RIGHT else -offset
+
+        for cx in range(-spacing, size + spacing * 2, spacing):
+            _draw_chevron(icon, cy, cx + scroll, arrow_size, direction)
+
     elif direction in (Action.UP, Action.DOWN):
-        cx = mid
-        for i in range(3):
-            cy = size * (1 + 2 * i) // 6
-            _draw_chevron(icon, cy, cx, arrow_size, direction)
+        cx = size // 2
+        scroll = offset if direction == Action.DOWN else -offset
+
+        for cy in range(-spacing, size + spacing * 2, spacing):
+            _draw_chevron(icon, cy + scroll, cx, arrow_size, direction)
 
 
 # Colours for the arm (inserter) direction overlay.
@@ -491,6 +500,7 @@ def render_item_icon(
     item_type: int,
     size: int,
     direction: int | None = None,
+    frame_tick: int = 0,
 ) -> np.ndarray:
     """Render a square RGBA icon for an item type.
 
@@ -517,7 +527,7 @@ def render_item_icon(
 
     if item_type == ItemType.CONVEYOR_BELT and size >= 6:
         belt_dir = direction if direction is not None else int(Action.RIGHT)
-        _draw_belt_arrows(icon, belt_dir)
+        _draw_belt_arrows(icon, belt_dir, frame_tick)
     elif item_type == ItemType.ARM and size >= 6:
         arm_dir = direction if direction is not None else int(Action.RIGHT)
         _draw_arm_indicator(icon, arm_dir)
@@ -562,7 +572,8 @@ def render_machine_overlays(
         item_type = MACHINE_TO_ITEM.get(machine_type, int(ItemType.EMPTY))
         direction = int(directions[y, x])
 
-        icon = render_item_icon(item_type, machine_size, direction)
+        icon_frame_tick = frame_tick if machine_type == int(MachineType.CONVEYOR_BELT) else 0
+        icon = render_item_icon(item_type, machine_size, direction, icon_frame_tick)
 
         if frame_tick > 0:
             if machine_type == int(MachineType.MINER):
