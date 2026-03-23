@@ -326,6 +326,8 @@ class Action(IntEnum):
     NEXT_RECIPE = 10
     PREV_RECIPE = 11
     PICKUP = 12
+    DEPOSIT = 13
+    WITHDRAW = 14
 
 
 DIRECTIONS = jnp.array(
@@ -343,6 +345,8 @@ DIRECTIONS = jnp.array(
         [0, 0],  # NEXT_RECIPE (no movement)
         [0, 0],  # PREV_RECIPE (no movement)
         [0, 0],  # PICKUP (no movement)
+        [0, 0],  # DEPOSIT (no movement)
+        [0, 0],  # WITHDRAW (no movement)
     ],
     dtype=jnp.int32,
 )

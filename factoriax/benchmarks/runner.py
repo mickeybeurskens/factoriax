@@ -218,4 +218,5 @@ class BenchmarkRunner:
             timesteps_used=len(actions_log),
             actions=np.array(actions_log, dtype=np.int32),
             constraint_costs=constraint_costs,
+            final_state=state,
         )

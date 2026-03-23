@@ -11,7 +11,12 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.achievements import ACHIEVEMENT_REWARDS
-from factoriax.constants import MINEABLE_BLOCKS, ItemType
+from factoriax.constants import (
+    MAX_MACHINE_STACK_SIZE,
+    MINEABLE_BLOCKS,
+    ItemType,
+    MachineType,
+)
 from factoriax.state import EnvParams, EnvState
 
 
@@ -112,4 +117,66 @@ def sparse_mining_reward(
         new_state.items_mined[ore_items] - prev_state.items_mined[ore_items]
     )
     reward: jax.Array = delta.astype(jnp.float32)
+    return reward
+
+
+def sparse_crafting_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward of 1.0 for each new crafted item that appears in inventory.
+
+    Counts the total increase in non-ore, non-empty item stacks across all
+    player inventory slots.  Ore items (coal, iron, copper) are excluded so
+    that mining does not generate spurious crafting reward.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface uniformity).
+
+    Returns:
+        Scalar float32 reward.
+    """
+    ore_set = jnp.array(
+        [ItemType.EMPTY, ItemType.COAL, ItemType.IRON, ItemType.COPPER],
+        dtype=jnp.int32,
+    )
+
+    def _count_crafted(state: EnvState) -> jax.Array:
+        items = state.inventory_items
+        counts = state.inventory_counts
+        is_excluded = jnp.any(items[..., None] == ore_set[None, None, :], axis=-1)
+        crafted_counts = jnp.where(is_excluded, 0, counts)
+        return jnp.sum(crafted_counts)
+
+    delta = _count_crafted(new_state) - _count_crafted(prev_state)
+    reward: jax.Array = jnp.maximum(delta, 0).astype(jnp.float32)
+    return reward
+
+
+def chest_filling_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward of 1.0 for each new full stack deposited into a chest.
+
+    A "full stack" is a machine inventory slot in a chest-type machine that
+    has reached ``MAX_MACHINE_STACK_SIZE`` (64) items.  The reward fires
+    once per slot per episode, when it transitions from below 64 to exactly
+    64.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface uniformity).
+
+    Returns:
+        Scalar float32 reward.
+    """
+    is_chest = new_state.machine_types == MachineType.CHEST
+    prev_full = prev_state.machine_inventory_counts >= MAX_MACHINE_STACK_SIZE
+    new_full = new_state.machine_inventory_counts >= MAX_MACHINE_STACK_SIZE
+    newly_full = new_full & ~prev_full
+    chest_mask = is_chest[..., None]
+    count = jnp.sum(newly_full & chest_mask)
+    reward: jax.Array = count.astype(jnp.float32)
     return reward

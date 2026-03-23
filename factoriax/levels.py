@@ -79,6 +79,9 @@ class Level:
             tiles receive ``BLOCK_MAX_RESOURCES``, others receive 0.
         machine_types: Per-tile machine-type grid of shape
             ``(map_height, map_width)``, or ``None`` for an empty world.
+        player_inventory: Starting items for every player, as a list of
+            ``(ItemType, count)`` pairs.  Each pair fills one inventory
+            slot, applied in order.  ``None`` (default) means empty.
     """
 
     name: str
@@ -91,6 +94,7 @@ class Level:
     machine_inventory_items: np.ndarray | None = None
     machine_inventory_counts: np.ndarray | None = None
     machine_selected_recipe: np.ndarray | None = None
+    player_inventory: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
         """Validate array shapes match declared dimensions.
@@ -183,6 +187,7 @@ class LevelBuilder:
         self._block_map = np.full((height, width), int(default_block), dtype=np.int32)
         self._block_resources: np.ndarray | None = None
         self._machine_types: np.ndarray | None = None
+        self._machine_directions: np.ndarray | None = None
         self._machine_inv_items: np.ndarray | None = None
         self._machine_inv_counts: np.ndarray | None = None
         self._machine_selected_recipe: np.ndarray | None = None
@@ -277,13 +282,11 @@ class LevelBuilder:
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
-                f"Tile ({x}, {y}) is outside the "
-                f"{self._width}x{self._height} map."
+                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
             )
         if not (0 <= slot < MAX_MACHINE_INVENTORY_SLOTS):
             raise IndexError(
-                f"Slot {slot} is outside range "
-                f"[0, {MAX_MACHINE_INVENTORY_SLOTS})."
+                f"Slot {slot} is outside range [0, {MAX_MACHINE_INVENTORY_SLOTS})."
             )
         if self._machine_inv_items is None:
             shape = (self._height, self._width, MAX_MACHINE_INVENTORY_SLOTS)
@@ -293,9 +296,7 @@ class LevelBuilder:
         self._machine_inv_counts[y, x, slot] = count  # type: ignore[index]
         return self
 
-    def set_machine_recipe(
-        self, x: int, y: int, recipe_idx: int
-    ) -> LevelBuilder:
+    def set_machine_recipe(self, x: int, y: int, recipe_idx: int) -> LevelBuilder:
         """Set the selected assembler recipe for a machine tile.
 
         Args:
@@ -311,14 +312,53 @@ class LevelBuilder:
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
-                f"Tile ({x}, {y}) is outside the "
-                f"{self._width}x{self._height} map."
+                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
             )
         if self._machine_selected_recipe is None:
             self._machine_selected_recipe = np.zeros(
                 (self._height, self._width), dtype=np.int32
             )
         self._machine_selected_recipe[y, x] = recipe_idx
+        return self
+
+    def place_machine(
+        self,
+        x: int,
+        y: int,
+        machine_type: int,
+        direction: int = 0,
+    ) -> LevelBuilder:
+        """Place a machine on a tile with an optional facing direction.
+
+        Args:
+            x: Column (0-indexed).
+            y: Row (0-indexed).
+            machine_type: ``MachineType`` integer value.
+            direction: Facing direction as an ``Action`` integer value
+                (e.g. ``Action.RIGHT``).  Defaults to 0 (no direction).
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            IndexError: If ``(x, y)`` is outside the map.
+        """
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise IndexError(
+                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
+            )
+        if self._machine_types is None:
+            self._machine_types = np.full(
+                (self._height, self._width),
+                int(MachineType.NONE),
+                dtype=np.int32,
+            )
+        if self._machine_directions is None:
+            self._machine_directions = np.zeros(
+                (self._height, self._width), dtype=np.int32
+            )
+        self._machine_types[y, x] = machine_type
+        self._machine_directions[y, x] = direction
         return self
 
     def build(self, name: str) -> Level:
@@ -341,8 +381,11 @@ class LevelBuilder:
                 else None
             ),
             machine_types=(
-                self._machine_types.copy()
-                if self._machine_types is not None
+                self._machine_types.copy() if self._machine_types is not None else None
+            ),
+            machine_directions=(
+                self._machine_directions.copy()
+                if self._machine_directions is not None
                 else None
             ),
             machine_inventory_items=(
@@ -489,13 +532,23 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         else np.zeros(map_shape, dtype=np.int32)
     )
 
+    inv_items_np = np.zeros(inv_shape, dtype=np.int32)
+    inv_counts_np = np.zeros(inv_shape, dtype=np.int32)
+    if level.player_inventory is not None:
+        for slot_idx, (item_type, count) in enumerate(level.player_inventory):
+            if slot_idx >= NUM_INVENTORY_SLOTS:
+                break
+            for p in range(params.num_players):
+                inv_items_np[p, slot_idx] = item_type
+                inv_counts_np[p, slot_idx] = count
+
     return EnvState(
         map=jnp.array(block_map, dtype=jnp.int32),
         player_positions=jnp.array(player_positions_np, dtype=jnp.int32),
         player_directions=jnp.full(player_shape, int(Action.DOWN), dtype=jnp.int32),
         timestep=0,
-        inventory_items=jnp.zeros(inv_shape, dtype=jnp.int32),
-        inventory_counts=jnp.zeros(inv_shape, dtype=jnp.int32),
+        inventory_items=jnp.array(inv_items_np, dtype=jnp.int32),
+        inventory_counts=jnp.array(inv_counts_np, dtype=jnp.int32),
         selected_player=0,
         selected_slots=jnp.zeros(player_shape, dtype=jnp.int32),
         selected_recipes=jnp.zeros(player_shape, dtype=jnp.int32),
@@ -504,9 +557,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         machine_types=jnp.array(machine_types_np, dtype=jnp.int32),
         machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_inventory_items=jnp.array(machine_inv_items_np, dtype=jnp.int32),
-        machine_inventory_counts=jnp.array(
-            machine_inv_counts_np, dtype=jnp.int16
-        ),
+        machine_inventory_counts=jnp.array(machine_inv_counts_np, dtype=jnp.int16),
         machine_selected_recipe=jnp.array(machine_recipe_np, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_direction=jnp.array(machine_dirs_np, dtype=jnp.int32),
@@ -552,9 +603,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     player_directions = jnp.full(params.num_players, int(Action.DOWN), dtype=jnp.int32)
 
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
-    block_resources = jnp.where(
-        is_mineable, params.base_resources, 0
-    ).astype(jnp.int16)
+    block_resources = jnp.where(is_mineable, params.base_resources, 0).astype(jnp.int16)
 
     map_shape = (params.map_height, params.map_width)
     inv_shape = (params.num_players, NUM_INVENTORY_SLOTS)
@@ -616,7 +665,8 @@ def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
 
 
 def _generate_terrain_uniform(
-    rng: jax.Array, params: EnvParams,
+    rng: jax.Array,
+    params: EnvParams,
 ) -> jax.Array:
     """Generate terrain with independent per-tile random rolls.
 
@@ -634,7 +684,8 @@ def _generate_terrain_uniform(
         2D int32 array of shape ``(map_height, map_width)``.
     """
     random_values = random.uniform(
-        rng, (params.map_height, params.map_width),
+        rng,
+        (params.map_height, params.map_width),
     )
 
     water_threshold = params.water_probability
@@ -704,7 +755,8 @@ def _smooth_noise(
 
 
 def _generate_terrain_patched(
-    rng: jax.Array, params: EnvParams,
+    rng: jax.Array,
+    params: EnvParams,
 ) -> jax.Array:
     """Generate terrain with smooth resource patches and water bodies.
 
@@ -783,9 +835,7 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "machine_types": (
-            level.machine_types.tolist()
-            if level.machine_types is not None
-            else None
+            level.machine_types.tolist() if level.machine_types is not None else None
         ),
         "machine_directions": (
             level.machine_directions.tolist()
@@ -807,6 +857,7 @@ def save_level(level: Level, path: Path) -> None:
             if level.machine_selected_recipe is not None
             else None
         ),
+        "player_inventory": level.player_inventory,
     }
     path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
 
@@ -844,9 +895,7 @@ def load_level(path: Path) -> Level:
             else None
         ),
         machine_directions=(
-            np.array(raw_dirs, dtype=np.int32)
-            if raw_dirs is not None
-            else None
+            np.array(raw_dirs, dtype=np.int32) if raw_dirs is not None else None
         ),
         machine_inventory_items=(
             np.array(raw_inv_items, dtype=np.int32)
@@ -859,10 +908,9 @@ def load_level(path: Path) -> Level:
             else None
         ),
         machine_selected_recipe=(
-            np.array(raw_recipe, dtype=np.int32)
-            if raw_recipe is not None
-            else None
+            np.array(raw_recipe, dtype=np.int32) if raw_recipe is not None else None
         ),
+        player_inventory=payload.get("player_inventory"),
     )
 
 

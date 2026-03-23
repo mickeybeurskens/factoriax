@@ -20,7 +20,7 @@ import jax
 import numpy as np
 
 from factoriax.levels import Level
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
 
 # A policy maps a JAX float32 observation array to a JAX integer action scalar.
 # This is intentionally minimal: any callable with this signature works,
@@ -82,6 +82,7 @@ class LevelResult:
     timesteps_used: int
     actions: np.ndarray
     constraint_costs: np.ndarray | None = None
+    final_state: EnvState | None = None
 
 
 @dataclasses.dataclass
