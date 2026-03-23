@@ -29,4 +29,6 @@ class InspectorState:
     selected_episode: int = 0
     reward_chart_cache: np.ndarray | None = None
     action_strip_cache: np.ndarray | None = None
+    action_legend_cache: np.ndarray | None = None
+    sankey_cache: np.ndarray | None = None
     timeline_dragging: bool = False

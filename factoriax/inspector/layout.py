@@ -7,6 +7,8 @@ import numpy as np
 from factoriax.analysis.trajectory import Trajectory
 from factoriax.inspector.charts import (
     draw_cursor,
+    render_action_legend,
+    render_action_sankey,
     render_action_strip,
     render_reward_chart,
 )
@@ -23,6 +25,8 @@ INFO_PANEL_WIDTH = 180
 TIMELINE_HEIGHT = 32
 CHART_HEIGHT = 100
 ACTION_STRIP_HEIGHT = 24
+LEGEND_HEIGHT = 20
+SANKEY_HEIGHT = 120
 
 # Minimum canvas area for the game world.
 MIN_CANVAS_W = 300
@@ -49,6 +53,8 @@ def compute_base_dimensions(
         + TIMELINE_HEIGHT
         + CHART_HEIGHT
         + ACTION_STRIP_HEIGHT
+        + LEGEND_HEIGHT
+        + SANKEY_HEIGHT
     )
     return bw, bh
 
@@ -74,6 +80,20 @@ def rebuild_caches(
         state.selected_player,
         chart_width,
         ACTION_STRIP_HEIGHT,
+    )
+    state.action_legend_cache = render_action_legend(
+        traj,
+        state.selected_episode,
+        state.selected_player,
+        chart_width,
+        LEGEND_HEIGHT,
+    )
+    state.sankey_cache = render_action_sankey(
+        traj,
+        state.selected_episode,
+        state.selected_player,
+        chart_width,
+        SANKEY_HEIGHT,
     )
 
 
@@ -170,6 +190,22 @@ def render_frame(
         sh = min(strip.shape[0], ACTION_STRIP_HEIGHT)
         sw = min(strip.shape[1], chart_width)
         frame[strip_y : strip_y + sh, :sw] = strip[:sh, :sw]
+
+    # Action legend.
+    legend_y = strip_y + ACTION_STRIP_HEIGHT
+    if state.action_legend_cache is not None:
+        lg = state.action_legend_cache
+        lh = min(lg.shape[0], LEGEND_HEIGHT)
+        lw = min(lg.shape[1], chart_width)
+        frame[legend_y : legend_y + lh, :lw] = lg[:lh, :lw]
+
+    # Action transition heatmap (Sankey).
+    sankey_y = legend_y + LEGEND_HEIGHT
+    if state.sankey_cache is not None:
+        sk = state.sankey_cache
+        skh = min(sk.shape[0], SANKEY_HEIGHT)
+        skw = min(sk.shape[1], chart_width)
+        frame[sankey_y : sankey_y + skh, :skw] = sk[:skh, :skw]
 
     return frame
 
