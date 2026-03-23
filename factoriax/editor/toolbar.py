@@ -53,8 +53,7 @@ MACHINE_ITEMS: list[tuple[int, str]] = [
 ]
 
 MACHINE_TO_ITEM_MAP: dict[int, int] = {
-    int(machine): int(item)
-    for item, machine in ITEM_TO_MACHINE.items()
+    int(machine): int(item) for item, machine in ITEM_TO_MACHINE.items()
 }
 
 
@@ -148,7 +147,10 @@ def render_toolbar(
     from factoriax.editor.state import ResourceBrush
 
     brush: ResourceBrush = resource_brush  # type: ignore[assignment]
-    bar = np.full((height, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
+    # Render at full content height so small maps don't clip icons.
+    # The caller slices the visible portion using a scroll offset.
+    render_h = max(height, 600)
+    bar = np.full((render_h, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
     regions: list[ClickRegion] = []
     font = get_pixel_font(12)
     y = 4

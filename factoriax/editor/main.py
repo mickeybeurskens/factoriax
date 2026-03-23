@@ -160,6 +160,7 @@ class ToolState:
     fill_rect: tuple[int, int, int, int] | None = None
     middle_dragging: bool = False
     middle_last: tuple[int, int] = (0, 0)
+    toolbar_scroll: int = 0
 
     @property
     def layer(self) -> str:
@@ -269,9 +270,7 @@ def _update_viewport(
         reset_camera: If ``True`` the camera is moved to (0, 0).
     """
     vp.canvas_w = editor.map_width * vp.tile_size
-    # Toolbar needs ~420px minimum height; enforce a floor so that small
-    # maps don't clip the sidebar icons.
-    vp.canvas_h = max(editor.map_height * vp.tile_size, 420)
+    vp.canvas_h = editor.map_height * vp.tile_size
     if reset_camera:
         vp.camera_x = 0.0
         vp.camera_y = 0.0
@@ -782,8 +781,13 @@ def _render_frame(
 
     frame = np.full((base_h, base_w, 3), (30, 30, 30), dtype=np.uint8)
     frame[:MENU_BAR_HEIGHT, :] = menu_bar
-    tb_h = min(toolbar.shape[0], vp.canvas_h)
-    frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_h, :TOOLBAR_WIDTH] = toolbar[:tb_h]
+    tb_visible_h = min(toolbar.shape[0], vp.canvas_h)
+    scroll = min(ts.toolbar_scroll, max(0, toolbar.shape[0] - tb_visible_h))
+    ts.toolbar_scroll = scroll
+    tb_slice = toolbar[scroll : scroll + tb_visible_h]
+    frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_slice.shape[0], :TOOLBAR_WIDTH] = (
+        tb_slice
+    )
 
     canvas_rgb = canvas_img[:, :, :3]
     alpha = canvas_img[:, :, 3:4].astype(np.float32) / 255.0
@@ -982,17 +986,21 @@ def main() -> None:
                     continue
 
                 if event.button in (4, 5):
-                    cx = mx - TOOLBAR_WIDTH
-                    cy = my - MENU_BAR_HEIGHT
-                    if cx >= 0 and cy >= 0:
-                        zoom(
-                            vp,
-                            1 if event.button == 4 else -1,
-                            cx,
-                            cy,
-                            editor.map_width,
-                            editor.map_height,
-                        )
+                    if mx < TOOLBAR_WIDTH and my >= MENU_BAR_HEIGHT:
+                        step = -20 if event.button == 4 else 20
+                        ts.toolbar_scroll = max(0, ts.toolbar_scroll + step)
+                    else:
+                        cx = mx - TOOLBAR_WIDTH
+                        cy = my - MENU_BAR_HEIGHT
+                        if cx >= 0 and cy >= 0:
+                            zoom(
+                                vp,
+                                1 if event.button == 4 else -1,
+                                cx,
+                                cy,
+                                editor.map_width,
+                                editor.map_height,
+                            )
                     continue
 
                 if event.button == 1:
@@ -1026,7 +1034,7 @@ def main() -> None:
                         adjusted = [
                             ClickRegion(
                                 r.x,
-                                r.y + MENU_BAR_HEIGHT,
+                                r.y + MENU_BAR_HEIGHT - ts.toolbar_scroll,
                                 r.w,
                                 r.h,
                                 r.action,
