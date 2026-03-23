@@ -84,6 +84,7 @@ def render_frame(
     base_h: int,
     canvas_w: int,
     canvas_h: int,
+    frames: list[np.ndarray] | None = None,
 ) -> np.ndarray:
     """Compose the full inspector frame from all panels.
 
@@ -94,6 +95,7 @@ def render_frame(
         base_h: Total frame height in pixels.
         canvas_w: Game world canvas width.
         canvas_h: Game world canvas height.
+        frames: Pre-rendered game world frames from replay, or None.
 
     Returns:
         RGB uint8 array of shape ``(base_h, base_w, 3)``.
@@ -124,13 +126,21 @@ def render_frame(
     ih = min(info.shape[0], canvas_h)
     frame[y_off : y_off + ih, :INFO_PANEL_WIDTH] = info[:ih]
 
-    # Game world placeholder (dark area for now — phase 2 adds rendering).
+    # Game world area.
     world_x = INFO_PANEL_WIDTH
     world_y = MENU_BAR_HEIGHT
     frame[world_y : world_y + canvas_h, world_x : world_x + canvas_w] = (20, 20, 25)
-    # Draw a simple position dot if positions are available.
-    if traj.positions is not None:
-        _draw_position_dot(frame, traj, state, world_x, world_y, canvas_w, canvas_h)
+    if frames is not None and state.current_step < len(frames):
+        _blit_game_frame(
+            frame,
+            frames[state.current_step],
+            world_x,
+            world_y,
+            canvas_w,
+            canvas_h,
+        )
+    elif traj.positions is not None:
+        _draw_world(frame, traj, state, world_x, world_y, canvas_w, canvas_h)
 
     # Timeline.
     tl_y = MENU_BAR_HEIGHT + canvas_h
@@ -164,7 +174,41 @@ def render_frame(
     return frame
 
 
-def _draw_position_dot(
+def _blit_game_frame(
+    frame: np.ndarray,
+    game_img: np.ndarray,
+    wx: int,
+    wy: int,
+    cw: int,
+    ch: int,
+) -> None:
+    """Scale and center a pre-rendered game image into the world canvas."""
+    gh, gw = game_img.shape[:2]
+    # Fit to canvas, preserving aspect ratio.
+    scale = min(cw / gw, ch / gh)
+    new_w = max(1, int(gw * scale))
+    new_h = max(1, int(gh * scale))
+
+    # Nearest-neighbor resize via index mapping.
+    ys = np.linspace(0, gh - 1, new_h).astype(int)
+    xs = np.linspace(0, gw - 1, new_w).astype(int)
+    scaled = game_img[np.ix_(ys, xs)]
+
+    # Center in canvas.
+    ox = wx + (cw - new_w) // 2
+    oy = wy + (ch - new_h) // 2
+    # Clip to frame bounds.
+    sy = max(0, -oy)
+    sx = max(0, -ox)
+    dy = max(0, oy)
+    dx = max(0, ox)
+    bh = min(new_h - sy, frame.shape[0] - dy)
+    bw = min(new_w - sx, frame.shape[1] - dx)
+    if bh > 0 and bw > 0:
+        frame[dy : dy + bh, dx : dx + bw] = scaled[sy : sy + bh, sx : sx + bw]
+
+
+def _draw_world(
     frame: np.ndarray,
     traj: Trajectory,
     state: InspectorState,
@@ -173,35 +217,66 @@ def _draw_position_dot(
     cw: int,
     ch: int,
 ) -> None:
-    """Draw a colored dot for each player's position on the world area."""
+    """Draw a grid-based world view with player positions."""
     from factoriax.renderer import PLAYER_COLORS
 
     ep = state.selected_episode
     step = state.current_step
     num_p = traj.num_players
 
-    # Determine map bounds from positions to scale dot placement.
-    all_pos = traj.positions[ep]  # (T, P, 2) or (T, 2)
+    all_pos = traj.positions[ep]
     if all_pos.ndim == 2:
         all_pos = all_pos[:, np.newaxis, :]
-    max_x = max(int(all_pos[:, :, 0].max()) + 1, 1)
-    max_y = max(int(all_pos[:, :, 1].max()) + 1, 1)
+    grid_w = max(int(all_pos[:, :, 0].max()) + 1, 1)
+    grid_h = max(int(all_pos[:, :, 1].max()) + 1, 1)
 
+    # Compute tile size so the grid fits the canvas.
+    tile_w = max(1, cw // grid_w)
+    tile_h = max(1, ch // grid_h)
+    tile = min(tile_w, tile_h)
+
+    # Center the grid in the canvas.
+    ox = wx + (cw - grid_w * tile) // 2
+    oy = wy + (ch - grid_h * tile) // 2
+
+    # Draw tile backgrounds (alternating dark shades).
+    for gy in range(grid_h):
+        for gx in range(grid_w):
+            x0 = ox + gx * tile
+            y0 = oy + gy * tile
+            shade = 32 if (gx + gy) % 2 == 0 else 38
+            x1 = min(x0 + tile, frame.shape[1])
+            y1 = min(y0 + tile, frame.shape[0])
+            if x0 < frame.shape[1] and y0 < frame.shape[0]:
+                frame[y0:y1, x0:x1] = (shade, shade, shade + 5)
+
+    # Draw grid lines.
+    grid_color = (55, 55, 60)
+    for gx in range(grid_w + 1):
+        lx = ox + gx * tile
+        if 0 <= lx < frame.shape[1]:
+            y0 = max(0, oy)
+            y1 = min(frame.shape[0], oy + grid_h * tile)
+            frame[y0:y1, lx] = grid_color
+    for gy in range(grid_h + 1):
+        ly = oy + gy * tile
+        if 0 <= ly < frame.shape[0]:
+            x0 = max(0, ox)
+            x1 = min(frame.shape[1], ox + grid_w * tile)
+            frame[ly, x0:x1] = grid_color
+
+    # Draw player dots.
     for p in range(num_p):
         pos = all_pos[step, p]
-        px = int(pos[0])
-        py = int(pos[1])
-
-        # Scale to canvas pixels.
-        sx = wx + int(px * cw / max_x)
-        sy = wy + int(py * ch / max_y)
+        px, py = int(pos[0]), int(pos[1])
+        cx = ox + px * tile + tile // 2
+        cy = oy + py * tile + tile // 2
 
         body_color, _ = PLAYER_COLORS[p % len(PLAYER_COLORS)]
-        r = 3
+        r = max(2, tile // 3)
         for dy in range(-r, r + 1):
             for dx in range(-r, r + 1):
                 if dx * dx + dy * dy <= r * r:
-                    fy = sy + dy
-                    fx = sx + dx
+                    fy, fx = cy + dy, cx + dx
                     if 0 <= fy < frame.shape[0] and 0 <= fx < frame.shape[1]:
                         frame[fy, fx] = body_color
