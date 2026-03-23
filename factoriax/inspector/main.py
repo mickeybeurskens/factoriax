@@ -7,12 +7,7 @@ import pygame
 
 from factoriax.analysis.trajectory import Trajectory
 from factoriax.inspector.layout import (
-    ACTION_STRIP_HEIGHT,
-    CHART_HEIGHT,
-    INFO_PANEL_WIDTH,
     MENU_BAR_HEIGHT,
-    MIN_CANVAS_H,
-    MIN_CANVAS_W,
     TIMELINE_HEIGHT,
     compute_base_dimensions,
     rebuild_caches,
@@ -21,6 +16,7 @@ from factoriax.inspector.layout import (
 from factoriax.inspector.panels import render_timeline
 from factoriax.inspector.state import InspectorState
 from factoriax.ui.primitives import hit_test_regions
+from factoriax.ui.window import calculate_window_size
 
 
 def main(path: str, level_path: str | None = None) -> None:
@@ -46,17 +42,13 @@ def main(path: str, level_path: str | None = None) -> None:
         frames = load_replay_frames(level_path, traj, episode=0)
         print(f"Captured {len(frames)} frames.")
 
-    # Use a fixed initial window size; everything renders at 1:1.
-    window_w, window_h = 800, 600
-    canvas_w = window_w - INFO_PANEL_WIDTH
-    canvas_h = (
-        window_h
-        - MENU_BAR_HEIGHT
-        - TIMELINE_HEIGHT
-        - CHART_HEIGHT
-        - ACTION_STRIP_HEIGHT
-    )
+    # Render at a compact base resolution, then integer-scale to fill
+    # the screen. This keeps pixel-font text crisp and readable.
+    canvas_w = 420
+    canvas_h = 260
     base_w, base_h = compute_base_dimensions(canvas_w, canvas_h)
+    window_w, window_h = calculate_window_size(base_w, base_h)
+    scale = max(1, min(window_w // base_w, window_h // base_h))
 
     screen = pygame.display.set_mode((window_w, window_h), pygame.RESIZABLE)
     pygame.display.set_caption(
@@ -77,30 +69,21 @@ def main(path: str, level_path: str | None = None) -> None:
 
             if event.type == pygame.VIDEORESIZE:
                 window_w, window_h = event.w, event.h
-                canvas_w = max(MIN_CANVAS_W, window_w - INFO_PANEL_WIDTH)
-                canvas_h = max(
-                    MIN_CANVAS_H,
-                    window_h
-                    - MENU_BAR_HEIGHT
-                    - TIMELINE_HEIGHT
-                    - CHART_HEIGHT
-                    - ACTION_STRIP_HEIGHT,
-                )
-                base_w, base_h = compute_base_dimensions(canvas_w, canvas_h)
-                rebuild_caches(traj, state, base_w)
+                scale = max(1, min(window_w // base_w, window_h // base_h))
 
             if event.type == pygame.KEYDOWN:
                 _handle_key(event, traj, state)
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
+                mx = event.pos[0] // scale
+                my = event.pos[1] // scale
                 _handle_click(mx, my, event.button, traj, state, base_w, canvas_h)
 
             if event.type == pygame.MOUSEBUTTONUP:
                 state.timeline_dragging = False
 
             if event.type == pygame.MOUSEMOTION and state.timeline_dragging:
-                _handle_scrub(event.pos[0], traj, state, base_w)
+                _handle_scrub(event.pos[0] // scale, traj, state, base_w)
 
         # Playback advance.
         if state.playing and traj is not None:
@@ -117,8 +100,9 @@ def main(path: str, level_path: str | None = None) -> None:
         )
 
         surface = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
+        scaled = pygame.transform.scale(surface, (base_w * scale, base_h * scale))
         screen.fill((0, 0, 0))
-        screen.blit(surface, (0, 0))
+        screen.blit(scaled, (0, 0))
         pygame.display.flip()
         clock.tick(30)
 
