@@ -6,6 +6,7 @@ import numpy as np
 import pygame
 
 from factoriax.analysis.trajectory import Trajectory
+from factoriax.inspector.dialogs import FileBrowserDialog
 from factoriax.inspector.layout import (
     MENU_BAR_HEIGHT,
     TIMELINE_HEIGHT,
@@ -15,6 +16,7 @@ from factoriax.inspector.layout import (
 )
 from factoriax.inspector.panels import render_timeline
 from factoriax.inspector.state import InspectorState
+from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import hit_test_regions
 from factoriax.ui.window import calculate_window_size
 
@@ -60,6 +62,30 @@ def main(path: str, level_path: str | None = None) -> None:
 
     clock = pygame.time.Clock()
     running = True
+    dialog: FileBrowserDialog | None = None
+
+    def _load_trajectory(new_path: str) -> None:
+        nonlocal traj, frames, path
+        path = new_path
+        traj = Trajectory.load(new_path)
+        frames = None
+        state.current_step = 0
+        state.selected_episode = 0
+        state.playing = False
+        rebuild_caches(traj, state, base_w)
+        pygame.display.set_caption(
+            f"FactoriaX Inspector - {path} "
+            f"({traj.num_episodes} eps, {traj.episode_length} steps)"
+        )
+
+    def _load_level(new_level_path: str) -> None:
+        nonlocal frames, level_path
+        from factoriax.inspector.replay import load_replay_frames
+
+        level_path = new_level_path
+        print(f"Replaying actions on {level_path}...")
+        frames = load_replay_frames(level_path, traj, episode=0)
+        print(f"Captured {len(frames)} frames.")
 
     while running:
         for event in pygame.event.get():
@@ -71,8 +97,33 @@ def main(path: str, level_path: str | None = None) -> None:
                 window_w, window_h = event.w, event.h
                 scale = max(1, min(window_w // base_w, window_h // base_h))
 
+            # Dialog modal: consume all events while open.
+            if dialog is not None:
+                result = dialog.handle_event(event)
+                if result == "ok":
+                    chosen = dialog.get_path()
+                    if chosen is not None:
+                        if dialog.pattern.endswith(".npz"):
+                            _load_trajectory(chosen)
+                        else:
+                            _load_level(chosen)
+                    dialog = None
+                elif result == "cancel":
+                    dialog = None
+                continue
+
             if event.type == pygame.KEYDOWN:
-                _handle_key(event, traj, state)
+                if event.key == pygame.K_l:
+                    dialog = FileBrowserDialog(
+                        title="Load Trajectory", pattern="**/*.npz"
+                    )
+                elif event.key == pygame.K_k:
+                    dialog = FileBrowserDialog(
+                        title="Load Level (for replay)",
+                        pattern="**/*.json",
+                    )
+                else:
+                    _handle_key(event, traj, state)
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx = event.pos[0] // scale
@@ -89,20 +140,32 @@ def main(path: str, level_path: str | None = None) -> None:
         if state.playing and traj is not None:
             total_steps = traj.episode_length
             state.current_step = min(
-                state.current_step + state.playback_speed, total_steps - 1
+                state.current_step + state.playback_speed,
+                total_steps - 1,
             )
             if state.current_step >= total_steps - 1:
                 state.playing = False
 
         # Render.
         frame = render_frame(
-            traj, state, base_w, base_h, canvas_w, canvas_h, frames=frames
+            traj,
+            state,
+            base_w,
+            base_h,
+            canvas_w,
+            canvas_h,
+            frames=frames,
         )
 
+        # Overlay dialog if open.
+        if dialog is not None:
+            overlay = dialog.render(base_w, base_h)
+            composite_rgba_over_rgb(frame, overlay)
+
         surface = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
-        scaled = pygame.transform.scale(surface, (base_w * scale, base_h * scale))
+        scaled_surf = pygame.transform.scale(surface, (base_w * scale, base_h * scale))
         screen.fill((0, 0, 0))
-        screen.blit(scaled, (0, 0))
+        screen.blit(scaled_surf, (0, 0))
         pygame.display.flip()
         clock.tick(30)
 
