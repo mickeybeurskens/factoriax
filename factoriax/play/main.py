@@ -39,110 +39,13 @@ from factoriax.play.ui import (
 )
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
+from factoriax.ui.compositing import composite_rgba_over_rgb  # noqa: F401
+from factoriax.ui.primitives import hit_test_regions  # noqa: F401
+from factoriax.ui.window import calculate_window_size  # noqa: F401
 
 _ROCKET_ACHIEVEMENT_IDX: int = next(
     i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
 )
-
-
-def composite_rgba_over_rgb(
-    background: np.ndarray, overlay: np.ndarray
-) -> None:
-    """Composite an RGBA overlay onto an RGB background in-place.
-
-    Only blends pixels within the bounding box of non-transparent
-    overlay content, skipping the float arithmetic for the large
-    fully-transparent regions that surround a centered menu panel.
-
-    Args:
-        background: RGB image array of shape (H, W, 3), modified
-            in place.
-        overlay: RGBA image array of shape (H, W, 4).
-    """
-    alpha_chan = overlay[:, :, 3]
-    row_has_alpha = np.any(alpha_chan > 0, axis=1)
-    if not np.any(row_has_alpha):
-        return
-    col_has_alpha = np.any(alpha_chan > 0, axis=0)
-
-    r0 = int(np.argmax(row_has_alpha))
-    r1 = len(row_has_alpha) - int(np.argmax(row_has_alpha[::-1]))
-    c0 = int(np.argmax(col_has_alpha))
-    c1 = len(col_has_alpha) - int(np.argmax(col_has_alpha[::-1]))
-
-    a = overlay[r0:r1, c0:c1, 3:4].astype(np.float32) / 255.0
-    fg = overlay[r0:r1, c0:c1, :3].astype(np.float32)
-    bg = background[r0:r1, c0:c1].astype(np.float32)
-    background[r0:r1, c0:c1] = (fg * a + bg * (1 - a)).astype(
-        np.uint8
-    )
-
-
-def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion | None:
-    """Find the first click region containing the given point.
-
-    Args:
-        regions: List of click regions to test.
-        x: X coordinate in base resolution.
-        y: Y coordinate in base resolution.
-
-    Returns:
-        The first matching ClickRegion, or None if no hit.
-    """
-    for region in regions:
-        if region.x <= x < region.x + region.w and region.y <= y < region.y + region.h:
-            return region
-    return None
-
-
-_monitor_size: tuple[int, int] | None = None
-
-
-def _get_monitor_size() -> tuple[int, int]:
-    """Return the monitor resolution, cached on first call.
-
-    ``pygame.display.Info()`` reports the monitor size before any
-    display mode is set, but returns the *window* size afterwards.
-    This function captures the true monitor dimensions once and
-    reuses them for all subsequent calls.
-
-    Returns:
-        ``(width, height)`` of the primary monitor in pixels.
-    """
-    global _monitor_size  # noqa: PLW0603
-    if _monitor_size is None:
-        info = pygame.display.Info()
-        _monitor_size = (info.current_w, info.current_h)
-    return _monitor_size
-
-
-def calculate_window_size(
-    base_width: int, base_height: int, scale_factor: float = 0.8
-) -> tuple[int, int]:
-    """Calculate window size using integer scaling for crisp pixel art.
-
-    Uses the largest integer scale factor that fits within scale_factor
-    (default 80%) of the screen. Integer scaling ensures every pixel is
-    rendered at exactly the same size, preventing blurry text and artifacts.
-
-    Args:
-        base_width: Base render width in pixels
-        base_height: Base render height in pixels
-        scale_factor: Fraction of screen to use (0.0 to 1.0)
-
-    Returns:
-        Tuple of (window_width, window_height) in pixels
-    """
-    monitor_w, monitor_h = _get_monitor_size()
-    max_width = int(monitor_w * scale_factor)
-    max_height = int(monitor_h * scale_factor)
-
-    # Find the largest integer scale that fits the screen
-    max_scale_w = max_width // base_width
-    max_scale_h = max_height // base_height
-    scale = max(1, min(max_scale_w, max_scale_h))
-
-    return base_width * scale, base_height * scale
 
 
 def _tile_in_front(state: object, player_idx: int) -> tuple[int, int]:
@@ -602,9 +505,7 @@ def _play_loop(
                 elif achievement_open:
                     row_h = 36
                     if event.key == pygame.K_w:
-                        achievement_selection = max(
-                            0, achievement_selection - 1
-                        )
+                        achievement_selection = max(0, achievement_selection - 1)
                     elif event.key == pygame.K_s:
                         achievement_selection = min(
                             NUM_ACHIEVEMENTS - 1,
@@ -670,10 +571,7 @@ def _play_loop(
                     selected_player = int(state.selected_player)  # type: ignore[union-attr]
                     tx, ty = _tile_in_front(state, selected_player)
                     map_h, map_w = state.map.shape  # type: ignore[union-attr]
-                    if (
-                        0 <= tx < map_w
-                        and 0 <= ty < map_h
-                    ):
+                    if 0 <= tx < map_w and 0 <= ty < map_h:
                         state = rotate_machine(state, tx, ty)
                 elif ctrl_held and event.key in key_to_player:
                     player_idx = key_to_player[event.key]
@@ -725,9 +623,7 @@ def _play_loop(
                     victory_open = True
                     victory_shown = True
 
-        pixels = render_pixels(
-            state, block_pixel_size=tile_px, frame_tick=frame_tick
-        )
+        pixels = render_pixels(state, block_pixel_size=tile_px, frame_tick=frame_tick)
         click_regions = []
 
         # Build the UI frame.  The world is rendered at a tile size
@@ -738,9 +634,7 @@ def _play_loop(
         ui_frame[world_oy : world_oy + ph, world_ox : world_ox + pw] = pixels
 
         # Persistent hotbar at the bottom of every frame.
-        hotbar_overlay, hotbar_regions = render_hotbar(
-            state, ui_w, ui_h, hotbar_page
-        )
+        hotbar_overlay, hotbar_regions = render_hotbar(state, ui_w, ui_h, hotbar_page)
         composite_rgba_over_rgb(ui_frame, hotbar_overlay)
         click_regions.extend(hotbar_regions)
 
@@ -787,19 +681,13 @@ def _play_loop(
             click_regions.extend(pause_regions)
 
         if help_open:
-            composite_rgba_over_rgb(
-                ui_frame, render_help_overlay(ui_w, ui_h)
-            )
+            composite_rgba_over_rgb(ui_frame, render_help_overlay(ui_w, ui_h))
 
         if victory_open:
-            composite_rgba_over_rgb(
-                ui_frame, render_victory_screen(ui_w, ui_h)
-            )
+            composite_rgba_over_rgb(ui_frame, render_victory_screen(ui_w, ui_h))
 
         if welcome_open:
-            composite_rgba_over_rgb(
-                ui_frame, render_welcome_screen(ui_w, ui_h)
-            )
+            composite_rgba_over_rgb(ui_frame, render_welcome_screen(ui_w, ui_h))
 
         final_surface = pygame.surfarray.make_surface(
             np.transpose(ui_frame, (1, 0, 2)),
