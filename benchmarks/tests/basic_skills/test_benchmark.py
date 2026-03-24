@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax import Action, BlockType, ItemType
-from factoriax.benchmarks.basic_skills import BasicSkillsBenchmark
-from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
-from factoriax.benchmarks.basic_skills.scoring import (
+from benchmarks.basic_skills import BasicSkillsBenchmark
+from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+from benchmarks.basic_skills.scoring import (
     aggregate_scores,
     score_craft,
     score_fill,
     score_mine,
 )
+from factoriax import Action, BlockType, ItemType
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
@@ -330,7 +330,7 @@ class TestBasicSkillsBenchmark:
 
     def test_protocol_compliance(self) -> None:
         """Benchmark should satisfy the Benchmark protocol."""
-        from factoriax.benchmarks.core import Benchmark
+        from benchmarks.core import Benchmark
 
         b = BasicSkillsBenchmark()
         assert isinstance(b, Benchmark)

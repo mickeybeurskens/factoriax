@@ -40,12 +40,12 @@ from flax import struct
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from factoriax.benchmarks.basic_skills.benchmark import (
+from benchmarks.basic_skills.benchmark import (
     REWARD_FNS,
     BasicSkillsBenchmark,
 )
-from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.benchmarks.runner import BenchmarkRunner
+from benchmarks.core import BenchmarkLevel
+from benchmarks.runner import BenchmarkRunner
 from factoriax.constants import NUM_ACTIONS
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state

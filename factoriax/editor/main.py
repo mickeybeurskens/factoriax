@@ -846,7 +846,7 @@ def _export_benchmark_levels() -> None:
     in the Load dialog. The levels/ directory is gitignored, so these
     files are regenerated each run and never committed.
     """
-    from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+    from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
     from factoriax.editor.dialogs import LEVELS_DIR
 
     LEVELS_DIR.mkdir(parents=True, exist_ok=True)

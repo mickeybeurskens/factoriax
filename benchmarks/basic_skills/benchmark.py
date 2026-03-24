@@ -12,8 +12,8 @@ single skill dominates the overall number.
 
 Typical usage::
 
-    from factoriax.benchmarks.basic_skills import BasicSkillsBenchmark
-    from factoriax.benchmarks.runner import BenchmarkRunner
+    from benchmarks.basic_skills import BasicSkillsBenchmark
+    from benchmarks.runner import BenchmarkRunner
 
     benchmark = BasicSkillsBenchmark()
     runner = BenchmarkRunner(seed=0)
@@ -27,14 +27,14 @@ from collections.abc import Callable
 
 import jax
 
-from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
-from factoriax.benchmarks.basic_skills.scoring import (
+from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+from benchmarks.basic_skills.scoring import (
     aggregate_scores,
     score_craft,
     score_fill,
     score_mine,
 )
-from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
+from benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.rewards import (
     chest_filling_reward,
     sparse_crafting_reward,

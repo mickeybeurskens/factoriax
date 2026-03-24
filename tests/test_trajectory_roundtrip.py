@@ -12,12 +12,12 @@ import jax
 import numpy as np
 import numpy.testing as npt
 
+from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from factoriax.analysis.trajectory import (
     Trajectory,
     states_to_trajectory,
     trajectory_to_states,
 )
-from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from factoriax.constants import Action, BlockType, MachineType
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import LevelBuilder, build_state

@@ -1,9 +1,9 @@
 """Balanced gathering benchmark for curriculum-based constraint transfer.
 
-See :mod:`~factoriax.benchmarks.balanced_gathering.benchmark` for usage.
+See :mod:`~benchmarks.balanced_gathering.benchmark` for usage.
 """
 
-from factoriax.benchmarks.balanced_gathering.benchmark import (
+from benchmarks.balanced_gathering.benchmark import (
     BalancedGatheringBenchmark,
 )
 

@@ -12,22 +12,19 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax
-import jax.numpy as jnp
-
-from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
-from factoriax.benchmarks.runner import BenchmarkRunner
-from factoriax.benchmarks.single_agent_mining.benchmark import (
+from benchmarks.core import BenchmarkLevel, BenchmarkResult, LevelResult
+from benchmarks.runner import BenchmarkRunner
+from benchmarks.single_agent_mining.benchmark import (
     SingleAgentMiningBenchmark,
 )
-from factoriax.benchmarks.single_agent_mining.levels import MINING_LEVELS
-from factoriax.benchmarks.single_agent_mining.scoring import (
+from benchmarks.single_agent_mining.levels import MINING_LEVELS
+from benchmarks.single_agent_mining.scoring import (
     RESOURCE_WEIGHTS,
     aggregate_scores,
     score_items,
 )
-from factoriax.constants import BlockType, NUM_ITEM_TYPES, ItemType
-from factoriax.levels import LevelBuilder, generate_state
+from factoriax.constants import NUM_ITEM_TYPES, BlockType, ItemType
+from factoriax.levels import LevelBuilder
 from factoriax.rewards import sparse_mining_reward
 from factoriax.state import EnvParams
 
@@ -57,7 +54,11 @@ class TestScoreItems:
         assert score_items({"miner": 100, "coal": 1}) == pytest.approx(1.0)
 
     def test_equal_weights(self) -> None:
-        assert RESOURCE_WEIGHTS["coal"] == RESOURCE_WEIGHTS["iron"] == RESOURCE_WEIGHTS["copper"]
+        assert (
+            RESOURCE_WEIGHTS["coal"]
+            == RESOURCE_WEIGHTS["iron"]
+            == RESOURCE_WEIGHTS["copper"]
+        )
 
 
 class TestAggregateScores:

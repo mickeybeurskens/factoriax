@@ -47,14 +47,14 @@ from flax import struct
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.benchmarks.runner import BenchmarkRunner
-from factoriax.benchmarks.single_agent_mining.analysis import (
+from benchmarks.core import BenchmarkLevel
+from benchmarks.runner import BenchmarkRunner
+from benchmarks.single_agent_mining.analysis import (
     log_to_wandb,
     render_level_video,
     save_mp4,
 )
-from factoriax.benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
+from benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import local_array
@@ -254,9 +254,7 @@ def update_running_stats(stats: RunningStats, batch: jax.Array) -> RunningStats:
     delta = batch_mean - stats.mean
     new_mean = stats.mean + delta * (n / total)
     new_var = (
-        stats.var * stats.count
-        + batch_var * n
-        + delta**2 * stats.count * n / total
+        stats.var * stats.count + batch_var * n + delta**2 * stats.count * n / total
     ) / total
     return RunningStats(mean=new_mean, var=new_var, count=total)
 
@@ -271,9 +269,7 @@ def normalize_obs(stats: RunningStats, obs: jax.Array) -> jax.Array:
     Returns:
         Normalized observation array of the same shape.
     """
-    return jnp.clip(
-        (obs - stats.mean) / jnp.sqrt(stats.var + 1e-8), -10.0, 10.0
-    )
+    return jnp.clip((obs - stats.mean) / jnp.sqrt(stats.var + 1e-8), -10.0, 10.0)
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +408,9 @@ def make_collect_fn(
             states, cur_obs, step_rng = carry
             step_rng, key_act, key_step = jax.random.split(step_rng, 3)
 
-            norm = normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
+            norm = (
+                normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
+            )
             logits, values = network.apply(params, norm)
 
             actions = jax.random.categorical(key_act, logits)
@@ -420,7 +418,9 @@ def make_collect_fn(
 
             keys_step = jax.random.split(key_step, num_envs)
             prev_states = states
-            _, next_states, _, dones, _ = vmap_step(keys_step, states, actions, env_params)
+            _, next_states, _, dones, _ = vmap_step(
+                keys_step, states, actions, env_params
+            )
             rewards = vmap_reward(prev_states, next_states, env_params)
 
             def _where(r: jax.Array, s: jax.Array) -> jax.Array:
@@ -445,7 +445,9 @@ def make_collect_fn(
             None,
             length=config.rollout_steps,
         )
-        norm_last = normalize_obs(obs_stats, next_obs) if config.normalize_obs else next_obs
+        norm_last = (
+            normalize_obs(obs_stats, next_obs) if config.normalize_obs else next_obs
+        )
         _, last_values = network.apply(params, norm_last)
         return trajectories, next_states, next_obs, last_values, rng
 
@@ -532,7 +534,9 @@ def make_update_fn(
                 jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv,
             ).mean()
             value_loss = 0.5 * ((values - rets) ** 2).mean()
-            total = pg_loss + config.value_coef * value_loss - config.entropy_coef * entropy
+            total = (
+                pg_loss + config.value_coef * value_loss - config.entropy_coef * entropy
+            )
             return total, {
                 "loss/total": total,
                 "loss/policy": pg_loss,
@@ -693,7 +697,11 @@ def _run_sequential(
             if (it + 1) % config.log_interval == 0 or it == iters_per_level - 1:
                 elapsed = time.time() - t_start
                 sps = (it + 1) * steps_per_iter / elapsed
-                mean_ret = float(np.mean(list(completed_returns))) if completed_returns else 0.0
+                mean_ret = (
+                    float(np.mean(list(completed_returns)))
+                    if completed_returns
+                    else 0.0
+                )
                 logger.info(
                     "  [%s] iter=%d/%d  step=%d  sps=%.0f  "
                     "mean_ret=%.3f  loss=%.4f  entropy=%.4f",
@@ -853,7 +861,9 @@ def _run_mixed(
         if (it + 1) % config.log_interval == 0 or it == num_iters - 1:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
-            mean_ret = float(np.mean(list(completed_returns))) if completed_returns else 0.0
+            mean_ret = (
+                float(np.mean(list(completed_returns))) if completed_returns else 0.0
+            )
             logger.info(
                 "iter=%d/%d  step=%d  sps=%.0f  mean_ret=%.3f  "
                 "loss=%.4f  entropy=%.4f  kl=%.5f",
@@ -906,7 +916,9 @@ def _plot_benchmark_boxplots(
         [[lr.weighted_score for lr in r.level_results] for r in results]
     )  # (n_seeds, n_levels)
     aggregate_scores = np.array([r.aggregate_score for r in results])  # (n_seeds,)
-    all_scores = np.hstack([level_scores, aggregate_scores[:, None]])  # (n_seeds, n_levels+1)
+    all_scores = np.hstack(
+        [level_scores, aggregate_scores[:, None]]
+    )  # (n_seeds, n_levels+1)
 
     fig, ax = plt.subplots(figsize=(max(8, len(labels) * 1.6), 5))
     bp = ax.boxplot(
@@ -958,7 +970,10 @@ def train(config: Config) -> None:
                 project=config.wandb_project,
                 name=config.wandb_run_name,
                 config=dataclasses.asdict(config),
-                tags=[f"mode_{config.sampling_mode}", f"obs_local_r{config.obs_radius}"],
+                tags=[
+                    f"mode_{config.sampling_mode}",
+                    f"obs_local_r{config.obs_radius}",
+                ],
             )
         except ImportError:
             logger.error("wandb not found. Install with: uv add wandb")
@@ -1101,7 +1116,9 @@ def train(config: Config) -> None:
                 "benchmark/aggregate_std": float(np.std(aggregate_scores)),
             }
             for j, name in enumerate(level_names):
-                score_data[f"benchmark/{name}/mean"] = float(np.mean(level_scores[:, j]))
+                score_data[f"benchmark/{name}/mean"] = float(
+                    np.mean(level_scores[:, j])
+                )
                 score_data[f"benchmark/{name}/median"] = float(
                     np.median(level_scores[:, j])
                 )
@@ -1114,7 +1131,9 @@ def train(config: Config) -> None:
         except ImportError:
             pass
 
-    print(f"\nBenchmark : {eval_results[0].benchmark_name}  ({config.eval_seeds} seeds)")
+    print(
+        f"\nBenchmark : {eval_results[0].benchmark_name}  ({config.eval_seeds} seeds)"
+    )
     print(
         f"Aggregate : {np.mean(aggregate_scores):.2f}"
         f" ± {np.std(aggregate_scores):.2f}"

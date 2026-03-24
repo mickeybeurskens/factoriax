@@ -11,8 +11,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
-from factoriax.benchmarks.runner import BenchmarkRunner
+from benchmarks.core import BenchmarkLevel, LevelResult
+from benchmarks.runner import BenchmarkRunner
 from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
