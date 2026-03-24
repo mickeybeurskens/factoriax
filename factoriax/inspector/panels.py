@@ -193,8 +193,17 @@ def render_menu_bar(width: int) -> tuple[np.ndarray, list[ClickRegion]]:
     bar = np.full((height, width, 3), (35, 35, 35), dtype=np.uint8)
     bar[height - 1, :] = (60, 60, 60)
     font = get_pixel_font(11)
+    small = get_pixel_font(9)
     txt = render_text_rgba("FactoriaX Inspector", font, _ACCENT_COLOR)
     _blit_rgb_from_rgba(bar, txt, (height - txt.shape[0]) // 2, 6)
+    hint = render_text_rgba(
+        "L:load  K:level  [/]:speed  ,/.:episode  Tab:player  S:png  V:mp4",
+        small,
+        _LABEL_COLOR,
+    )
+    _blit_rgb_from_rgba(
+        bar, hint, (height - hint.shape[0]) // 2, width - hint.shape[1] - 6
+    )
     return bar, []
 
 

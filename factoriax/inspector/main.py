@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pygame
 
@@ -21,6 +23,49 @@ from factoriax.ui.primitives import hit_test_regions
 from factoriax.ui.window import calculate_window_size
 
 
+def _render_frames_from_states(
+    traj: Trajectory, episode: int
+) -> list[np.ndarray] | None:
+    """Render frames from trajectory state data if available.
+
+    Args:
+        traj: Loaded trajectory.
+        episode: Episode index.
+
+    Returns:
+        List of RGB frames, or None if state data is missing.
+    """
+    if traj.block_map is None:
+        return None
+    from factoriax.analysis.trajectory import trajectory_to_states
+    from factoriax.renderer import render_pixels
+
+    env_states = trajectory_to_states(traj, episode=episode)
+    return [render_pixels(s, block_pixel_size=24) for s in env_states]
+
+
+def _build_frames(
+    traj: Trajectory,
+    state: InspectorState,
+    level_path: str | None,
+) -> list[np.ndarray] | None:
+    """Build rendered frames from the best available source.
+
+    Args:
+        traj: Loaded trajectory.
+        state: Inspector state (for episode index).
+        level_path: Optional level file for action replay.
+
+    Returns:
+        List of RGB frames, or None.
+    """
+    if level_path is not None:
+        from factoriax.inspector.replay import load_replay_frames
+
+        return load_replay_frames(level_path, traj, episode=state.selected_episode)
+    return _render_frames_from_states(traj, state.selected_episode)
+
+
 def main(path: str, level_path: str | None = None) -> None:
     """Launch the trajectory inspector.
 
@@ -35,22 +80,15 @@ def main(path: str, level_path: str | None = None) -> None:
     traj = Trajectory.load(path)
     state = InspectorState()
 
-    # Build rendered frames from the best available source.
-    frames: list[np.ndarray] | None = None
-    if level_path is not None:
-        from factoriax.inspector.replay import load_replay_frames
-
-        print(f"Replaying actions on {level_path}...")
-        frames = load_replay_frames(level_path, traj, episode=0)
-        print(f"Captured {len(frames)} frames.")
-    elif traj.block_map is not None:
-        from factoriax.analysis.trajectory import trajectory_to_states
-        from factoriax.renderer import render_pixels
-
-        print("Rendering from trajectory state data...")
-        env_states = trajectory_to_states(traj, episode=0)
-        frames = [render_pixels(s, block_pixel_size=24) for s in env_states]
+    frames = _build_frames(traj, state, level_path)
+    if frames is not None:
         print(f"Rendered {len(frames)} frames.")
+    elif traj.block_map is None and level_path is None:
+        print(
+            "No state data in trajectory (block_map missing). "
+            "Game world will not render.\n"
+            "  Record with states_to_trajectory(), or provide --level."
+        )
 
     # Render at a compact base resolution, then integer-scale to fill
     # the screen. This keeps pixel-font text crisp and readable.
@@ -61,39 +99,42 @@ def main(path: str, level_path: str | None = None) -> None:
     scale = max(1, min(window_w // base_w, window_h // base_h))
 
     screen = pygame.display.set_mode((window_w, window_h), pygame.RESIZABLE)
-    pygame.display.set_caption(
-        f"FactoriaX Inspector - {path} "
-        f"({traj.num_episodes} eps, {traj.episode_length} steps)"
-    )
+    _update_caption(path, traj, state)
 
     rebuild_caches(traj, state, base_w)
 
     clock = pygame.time.Clock()
     running = True
     dialog: FileBrowserDialog | None = None
+    last_frame: np.ndarray | None = None
 
     def _load_trajectory(new_path: str) -> None:
         nonlocal traj, frames, path
         path = new_path
         traj = Trajectory.load(new_path)
-        frames = None
         state.current_step = 0
         state.selected_episode = 0
+        state.selected_player = 0
         state.playing = False
+        frames = _build_frames(traj, state, level_path)
         rebuild_caches(traj, state, base_w)
-        pygame.display.set_caption(
-            f"FactoriaX Inspector - {path} "
-            f"({traj.num_episodes} eps, {traj.episode_length} steps)"
-        )
+        _update_caption(path, traj, state)
 
     def _load_level(new_level_path: str) -> None:
         nonlocal frames, level_path
-        from factoriax.inspector.replay import load_replay_frames
-
         level_path = new_level_path
-        print(f"Replaying actions on {level_path}...")
-        frames = load_replay_frames(level_path, traj, episode=0)
-        print(f"Captured {len(frames)} frames.")
+        frames = _build_frames(traj, state, level_path)
+
+    def _on_episode_change() -> None:
+        nonlocal frames
+        state.current_step = 0
+        state.playing = False
+        frames = _build_frames(traj, state, level_path)
+        rebuild_caches(traj, state, base_w)
+        _update_caption(path, traj, state)
+
+    def _on_player_change() -> None:
+        rebuild_caches(traj, state, base_w)
 
     while running:
         for event in pygame.event.get():
@@ -121,21 +162,47 @@ def main(path: str, level_path: str | None = None) -> None:
                 continue
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_l:
+                key = event.key
+                if key == pygame.K_l:
                     dialog = FileBrowserDialog(
                         title="Load Trajectory", pattern="**/*.npz"
                     )
-                elif event.key == pygame.K_k:
+                elif key == pygame.K_k:
                     dialog = FileBrowserDialog(
                         title="Load Level (for replay)",
                         pattern="**/*.json",
                     )
+                elif key == pygame.K_TAB:
+                    if traj.is_multi_player:
+                        state.selected_player = (
+                            state.selected_player + 1
+                        ) % traj.num_players
+                        _on_player_change()
+                elif key == pygame.K_PERIOD:
+                    if state.selected_episode < traj.num_episodes - 1:
+                        state.selected_episode += 1
+                        _on_episode_change()
+                elif key == pygame.K_COMMA:
+                    if state.selected_episode > 0:
+                        state.selected_episode -= 1
+                        _on_episode_change()
+                elif key == pygame.K_LEFTBRACKET:
+                    state.playback_speed = max(1, state.playback_speed - 1)
+                elif key == pygame.K_RIGHTBRACKET:
+                    state.playback_speed = min(20, state.playback_speed + 1)
+                elif key == pygame.K_s and last_frame is not None:
+                    _export_png(last_frame, path, state)
+                elif key == pygame.K_v:
+                    _export_mp4(frames, path, state)
                 else:
                     _handle_key(event, traj, state)
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx = event.pos[0] // scale
                 my = event.pos[1] // scale
+                # Scroll wheel on game world area: no-op for now.
+                if event.button in (4, 5):
+                    continue
                 _handle_click(mx, my, event.button, traj, state, base_w, canvas_h)
 
             if event.type == pygame.MOUSEBUTTONUP:
@@ -155,7 +222,7 @@ def main(path: str, level_path: str | None = None) -> None:
                 state.playing = False
 
         # Render.
-        frame = render_frame(
+        frame: np.ndarray = render_frame(
             traj,
             state,
             base_w,
@@ -164,6 +231,8 @@ def main(path: str, level_path: str | None = None) -> None:
             canvas_h,
             frames=frames,
         )
+
+        last_frame = frame
 
         # Overlay dialog if open.
         if dialog is not None:
@@ -180,12 +249,55 @@ def main(path: str, level_path: str | None = None) -> None:
     pygame.quit()
 
 
+def _update_caption(path: str, traj: Trajectory, state: InspectorState) -> None:
+    """Update the window title with current trajectory info."""
+    ep = f"ep {state.selected_episode + 1}/{traj.num_episodes}"
+    speed = f"x{state.playback_speed}" if state.playback_speed > 1 else ""
+    parts = [f"FactoriaX Inspector - {path}", ep]
+    if traj.is_multi_player:
+        parts.append(f"P{state.selected_player}")
+    if speed:
+        parts.append(speed)
+    pygame.display.set_caption("  ".join(parts))
+
+
+def _export_png(frame: np.ndarray, path: str, state: InspectorState) -> None:
+    """Save the current frame as a PNG."""
+    out = Path(path).stem + f"_step{state.current_step}.png"
+    try:
+        import imageio.v3 as iio
+
+        iio.imwrite(out, frame)
+        print(f"Saved screenshot: {out}")
+    except ImportError:
+        print("imageio required for PNG export.")
+
+
+def _export_mp4(
+    frames: list[np.ndarray] | None,
+    path: str,
+    state: InspectorState,
+) -> None:
+    """Export the game world frames as an MP4 video."""
+    if frames is None or not frames:
+        print("No frames to export.")
+        return
+    out = Path(path).stem + f"_ep{state.selected_episode}.mp4"
+    try:
+        from factoriax.benchmarks.single_agent_mining.analysis import save_mp4
+
+        save_mp4(frames, Path(out), fps=10)
+        print(f"Saved video: {out}")
+    except ImportError:
+        print("imageio[ffmpeg] required for MP4 export.")
+
+
 def _handle_key(
     event: pygame.event.Event,
     traj: Trajectory,
     state: InspectorState,
 ) -> None:
-    """Process keyboard input.
+    """Process keyboard input for playback controls.
 
     Args:
         event: pygame KEYDOWN event.
@@ -211,19 +323,6 @@ def _handle_key(
     elif key == pygame.K_END:
         state.current_step = total_steps - 1
         state.playing = False
-    elif key == pygame.K_TAB:
-        if traj.is_multi_player:
-            state.selected_player = (state.selected_player + 1) % traj.num_players
-    elif key == pygame.K_PERIOD:
-        if state.selected_episode < traj.num_episodes - 1:
-            state.selected_episode += 1
-            state.current_step = 0
-            state.playing = False
-    elif key == pygame.K_COMMA:
-        if state.selected_episode > 0:
-            state.selected_episode -= 1
-            state.current_step = 0
-            state.playing = False
 
 
 def _handle_click(
@@ -257,7 +356,6 @@ def _handle_click(
             base_w,
             TIMELINE_HEIGHT,
         )
-        # Offset regions to frame coordinates.
         adjusted = [
             type(r)(r.x, r.y + tl_y, r.w, r.h, r.action, r.param) for r in regions
         ]
