@@ -435,19 +435,21 @@ def render_pause_menu(
 def render_welcome_screen(
     screen_width: int,
     screen_height: int,
-) -> np.ndarray:
+    record_enabled: bool = False,
+) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the one-time welcome screen shown at game start.
 
-    Displays a brief narrative hook, a compact control reference, and a
-    prompt to dismiss.  Returned as a fully-opaque RGBA overlay so it
-    completely covers the world behind it.
+    Displays a brief narrative hook, a compact control reference, a
+    data-collection toggle, and a prompt to dismiss.  Returned as a
+    fully-opaque RGBA overlay so it completely covers the world behind it.
 
     Args:
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
+        record_enabled: Whether the trajectory recording checkbox is on.
 
     Returns:
-        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
+        ``(overlay, regions)`` — RGBA array and click regions.
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     overlay[:, :, :3] = 10
@@ -489,6 +491,8 @@ def render_welcome_screen(
         + _SEP_H
         + 8  # separator
         + controls_h  # control rows
+        + 16  # gap before record toggle
+        + control_row_h  # record checkbox row
         + 16  # gap before hint
         + _HINT_HEIGHT
     )
@@ -529,12 +533,50 @@ def render_welcome_screen(
         _blit_rgba(overlay, desc_arr, row_y, controls_x + key_col_w + 16)
         cy += control_row_h
 
-    # Dismiss hint
+    # Record trajectory toggle.
+    cy += 16
+    box_size = hint_h
+    box_x = menu_x + (menu_w - 200) // 2
+    box_y = cy + (control_row_h - box_size) // 2
+    # Draw checkbox outline.
+    overlay[box_y : box_y + box_size, box_x : box_x + box_size] = (100, 100, 100, 255)
+    overlay[box_y + 1 : box_y + box_size - 1, box_x + 1 : box_x + box_size - 1] = (
+        35,
+        35,
+        35,
+        255,
+    )
+    if record_enabled:
+        # Fill with accent color for "checked".
+        overlay[
+            box_y + 2 : box_y + box_size - 2,
+            box_x + 2 : box_x + box_size - 2,
+        ] = (110, 200, 110, 255)
+    rec_label = _render_text_rgba(
+        "Record trajectory [R]",
+        hint_font,
+        (190, 185, 155) if not record_enabled else (110, 220, 110),
+    )
+    _blit_rgba(overlay, rec_label, box_y, box_x + box_size + 8)
+    # Click region covers the checkbox and its label.
+    regions: list[ClickRegion] = [
+        ClickRegion(
+            box_x,
+            box_y,
+            box_size + 8 + rec_label.shape[1],
+            control_row_h,
+            "toggle_record",
+            0,
+        ),
+    ]
+    cy += control_row_h
+
+    # Dismiss hint.
     cy += 16
     hint_arr = _render_text_rgba("[SPACE / ENTER]  Start", hint_font, _HINT_COLOR)
     _blit_rgba(overlay, hint_arr, cy, menu_x + (menu_w - hint_arr.shape[1]) // 2)
 
-    return overlay
+    return overlay, regions
 
 
 def render_victory_screen(

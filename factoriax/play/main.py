@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -244,6 +246,10 @@ def _play_loop(
     welcome_open = True
     victory_open = False
     victory_shown = False
+    record_enabled = False
+    recorded_states: list = []
+    recorded_actions: list[int] = []
+    recorded_rewards: list[float] = []
 
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
     win_ox = (window_width - ui_w * win_scale) // 2
@@ -259,12 +265,26 @@ def _play_loop(
             if event.type == pygame.QUIT:
                 running = False
             elif welcome_open:
-                if event.type == pygame.KEYDOWN and event.key in (
-                    pygame.K_SPACE,
-                    pygame.K_RETURN,
-                    pygame.K_ESCAPE,
-                ):
-                    welcome_open = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        record_enabled = not record_enabled
+                    elif event.key in (
+                        pygame.K_SPACE,
+                        pygame.K_RETURN,
+                        pygame.K_ESCAPE,
+                    ):
+                        welcome_open = False
+                        if record_enabled:
+                            recorded_states.append(state)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx = (event.pos[0] - win_ox) // win_scale
+                    my = (event.pos[1] - win_oy) // win_scale
+                    _, welcome_regions = render_welcome_screen(
+                        ui_w, ui_h, record_enabled
+                    )
+                    hit = hit_test_regions(welcome_regions, mx, my)
+                    if hit is not None and hit.action == "toggle_record":
+                        record_enabled = not record_enabled
                 continue
             elif victory_open:
                 if event.type == pygame.KEYDOWN and event.key in (
@@ -607,6 +627,10 @@ def _play_loop(
                 action,
                 params,
             )
+            if record_enabled:
+                recorded_actions.append(int(action))
+                recorded_rewards.append(float(reward))
+                recorded_states.append(state)
             if done:
                 if level is not None:
                     obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
@@ -687,7 +711,8 @@ def _play_loop(
             composite_rgba_over_rgb(ui_frame, render_victory_screen(ui_w, ui_h))
 
         if welcome_open:
-            composite_rgba_over_rgb(ui_frame, render_welcome_screen(ui_w, ui_h))
+            welcome_overlay, _ = render_welcome_screen(ui_w, ui_h, record_enabled)
+            composite_rgba_over_rgb(ui_frame, welcome_overlay)
 
         final_surface = pygame.surfarray.make_surface(
             np.transpose(ui_frame, (1, 0, 2)),
@@ -701,6 +726,36 @@ def _play_loop(
         pygame.display.flip()
         frame_tick += 1
         clock.tick(30)
+
+    # Save recorded trajectory on exit.
+    if record_enabled and recorded_states:
+        _save_recorded_trajectory(recorded_states, recorded_actions, recorded_rewards)
+
+
+def _save_recorded_trajectory(
+    states: list,
+    actions: list[int],
+    rewards: list[float],
+) -> None:
+    """Save a recorded play session as a timestamped .npz trajectory.
+
+    Args:
+        states: List of EnvState snapshots.
+        actions: List of action integers.
+        rewards: List of reward floats.
+    """
+    from datetime import datetime
+
+    from factoriax.analysis.trajectory import states_to_trajectory
+
+    # Pad actions/rewards to match states length (states has initial + per-step).
+    act = np.array(actions + [0] * (len(states) - len(actions)), dtype=np.int32)
+    rew = np.array(rewards + [0.0] * (len(states) - len(rewards)), dtype=np.float32)
+    traj = states_to_trajectory(states, actions=act, rewards=rew)
+    ts = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+    path = f"trajectory_{ts}.npz"
+    traj.save(path)
+    print(f"Saved trajectory: {path} ({len(states)} steps)")
 
 
 def main() -> None:
