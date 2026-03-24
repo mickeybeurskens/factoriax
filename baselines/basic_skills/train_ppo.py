@@ -766,11 +766,28 @@ def train(config: Config) -> None:
     _obs_stats = obs_stats
     _normalize = config.normalize_obs
 
-    def trained_policy(obs: jax.Array) -> jax.Array:
-        """Greedy policy: pick the highest-logit action."""
-        norm = normalize_obs(_obs_stats, obs) if _normalize else obs
-        logits, _ = jit_apply(params, norm)
-        return jnp.argmax(logits)
+    def _make_policy(seed: int) -> Callable[[jax.Array], jax.Array]:
+        """Build a stochastic policy with a per-seed PRNG.
+
+        Each seed produces a different action sequence, giving meaningful
+        variance across evaluation runs even though the environment is
+        deterministic.
+
+        Args:
+            seed: Random seed for action sampling.
+
+        Returns:
+            Policy function mapping observation to action.
+        """
+        state_holder = {"rng": jax.random.PRNGKey(seed + 1000)}
+
+        def policy(obs: jax.Array) -> jax.Array:
+            state_holder["rng"], key = jax.random.split(state_holder["rng"])
+            norm = normalize_obs(_obs_stats, obs) if _normalize else obs
+            logits, _ = jit_apply(params, norm)
+            return jax.random.categorical(key, logits)
+
+        return policy
 
     def eval_obs_fn(
         state: EnvState, env_params: EnvParams, player_idx: int
@@ -778,12 +795,19 @@ def train(config: Config) -> None:
         """Extract local observations for the benchmark runner."""
         return local_array(state, env_params, player_idx, config.obs_radius)
 
-    logger.info("Evaluating trained policy (%d seeds)...", config.eval_seeds)
+    logger.info(
+        "Evaluating trained policy (%d seeds, stochastic)...",
+        config.eval_seeds,
+    )
     eval_results = []
     for seed in range(config.eval_seeds):
         runner = BenchmarkRunner(seed=seed)
         eval_results.append(
-            runner.run(benchmark, policies=[trained_policy], obs_fn=eval_obs_fn)
+            runner.run(
+                benchmark,
+                policies=[_make_policy(seed)],
+                obs_fn=eval_obs_fn,
+            )
         )
 
     level_names = [lr.level_name for lr in eval_results[0].level_results]
