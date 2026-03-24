@@ -260,24 +260,46 @@ class Trajectory:
 
     # ---- I/O helpers ----
 
+    # Metadata keys persisted as numpy scalars in .npz files.
+    # Prefixed with underscore to distinguish from array fields.
+    _METADATA_KEYS: tuple[str, ...] = ("obs_type", "obs_radius")
+
     def save(self, path: str) -> None:
-        """Save trajectory to a compressed ``.npz`` file."""
+        """Save trajectory to a compressed ``.npz`` file.
+
+        Metadata entries listed in ``_METADATA_KEYS`` are stored as
+        numpy scalar arrays with an underscore prefix so they survive
+        the ``.npz`` round-trip.
+        """
         arrays: dict = {"actions": self.actions}
         for name in _OPTIONAL_ARRAY_FIELDS:
             val = getattr(self, name)
             if val is not None:
                 arrays[name] = val
+        for key in self._METADATA_KEYS:
+            if key in self.metadata:
+                arrays[f"_{key}"] = np.int32(self.metadata[key])
         np.savez_compressed(path, **arrays)
 
     @classmethod
     def load(cls, path: str, **metadata) -> Trajectory:
-        """Load trajectory from a ``.npz`` file."""
+        """Load trajectory from a ``.npz`` file.
+
+        Underscore-prefixed scalar entries are extracted into the
+        ``metadata`` dict automatically.
+        """
         data = np.load(path)
         kwargs: dict = {"actions": data["actions"]}
         for name in _OPTIONAL_ARRAY_FIELDS:
             if name in data:
                 kwargs[name] = data[name]
-        kwargs["metadata"] = metadata
+        # Restore persisted metadata scalars.
+        loaded_meta = dict(metadata)
+        for key in cls._METADATA_KEYS:
+            npz_key = f"_{key}"
+            if npz_key in data:
+                loaded_meta[key] = int(data[npz_key])
+        kwargs["metadata"] = loaded_meta
         return cls(**kwargs)
 
     def __repr__(self) -> str:

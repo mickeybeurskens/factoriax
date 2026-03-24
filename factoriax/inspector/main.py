@@ -200,6 +200,8 @@ def main(path: str, level_path: str | None = None) -> None:
                     _export_png(last_frame, path, state)
                 elif key == pygame.K_v:
                     _export_mp4(frames, path, state)
+                elif key == pygame.K_o:
+                    state.show_obs_overlay = not state.show_obs_overlay
                 elif key == pygame.K_SLASH or key == pygame.K_QUESTION:
                     state.show_help = True
                 else:

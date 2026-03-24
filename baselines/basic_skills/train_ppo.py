@@ -926,6 +926,8 @@ def _save_eval_trajectories(
             dtype=np.float32,
         )
         traj = states_to_trajectory(states, actions=act, rewards=rew)
+        traj.metadata["obs_type"] = 2  # LOCAL
+        traj.metadata["obs_radius"] = config.obs_radius
         path = out_dir / f"{bl.name}_trajectory.npz"
         traj.save(str(path))
         logger.info(

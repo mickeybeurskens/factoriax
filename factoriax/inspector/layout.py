@@ -151,14 +151,11 @@ def render_frame(
     world_y = MENU_BAR_HEIGHT
     frame[world_y : world_y + canvas_h, world_x : world_x + canvas_w] = (20, 20, 25)
     if frames is not None and state.current_step < len(frames):
-        _blit_game_frame(
-            frame,
-            frames[state.current_step],
-            world_x,
-            world_y,
-            canvas_w,
-            canvas_h,
-        )
+        game_img = frames[state.current_step]
+        # Apply fog-of-war for LOCAL observations.
+        if state.show_obs_overlay:
+            game_img = _maybe_apply_fog(game_img, traj, state)
+        _blit_game_frame(frame, game_img, world_x, world_y, canvas_w, canvas_h)
     elif traj.positions is not None:
         _draw_world(frame, traj, state, world_x, world_y, canvas_w, canvas_h)
 
@@ -208,6 +205,45 @@ def render_frame(
         frame[sankey_y : sankey_y + skh, :skw] = sk[:skh, :skw]
 
     return frame
+
+
+def _maybe_apply_fog(
+    game_img: np.ndarray,
+    traj: Trajectory,
+    state: InspectorState,
+) -> np.ndarray:
+    """Apply fog-of-war if the trajectory uses LOCAL observations.
+
+    Returns the image unmodified for GLOBAL/UNDETERMINED/PLAYER types.
+    """
+    from factoriax.inspector.obs_types import ObservationType, apply_fog_of_war
+
+    obs_type = traj.metadata.get("obs_type", ObservationType.UNDETERMINED)
+    if obs_type != ObservationType.LOCAL:
+        return game_img
+
+    radius = traj.metadata.get("obs_radius", 7)
+
+    # Get player position at current step.
+    if traj.positions is None:
+        return game_img
+    pos = traj.positions[state.selected_episode, state.current_step]
+    if pos.ndim > 1:
+        pos = pos[state.selected_player]
+    px, py = int(pos[0]), int(pos[1])
+
+    # Infer tile size and map dimensions from the rendered frame and map data.
+    if traj.block_map is not None:
+        map_data = traj.block_map[state.selected_episode, state.current_step]
+        map_h, map_w = map_data.shape
+    else:
+        map_h = max(1, int(traj.positions[state.selected_episode, :, ..., 1].max()) + 1)
+        map_w = max(1, int(traj.positions[state.selected_episode, :, ..., 0].max()) + 1)
+
+    fh, fw = game_img.shape[:2]
+    tile_size = max(1, min(fw // map_w, fh // map_h))
+
+    return apply_fog_of_war(game_img, px, py, radius, tile_size, map_w, map_h)
 
 
 def _blit_game_frame(

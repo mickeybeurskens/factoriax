@@ -197,7 +197,7 @@ def render_menu_bar(width: int) -> tuple[np.ndarray, list[ClickRegion]]:
     txt = render_text_rgba("FactoriaX Inspector", font, _ACCENT_COLOR)
     _blit_rgb_from_rgba(bar, txt, (height - txt.shape[0]) // 2, 6)
     hint = render_text_rgba(
-        "L:load  K:level  [/]:speed  ,/.:episode  Tab:player  S:png  V:mp4",
+        "L:load  K:level  [/]:speed  ,/.:ep  Tab:player  O:fog  S:png  V:mp4",
         small,
         _LABEL_COLOR,
     )
@@ -221,6 +221,9 @@ _HELP_LINES = [
     "Files",
     "  L            Load trajectory (.npz)",
     "  K            Load level (.json) for replay",
+    "",
+    "View",
+    "  O            Toggle obs fog-of-war",
     "",
     "Export",
     "  S            Save screenshot (PNG)",
