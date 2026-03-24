@@ -207,6 +207,79 @@ def render_menu_bar(width: int) -> tuple[np.ndarray, list[ClickRegion]]:
     return bar, []
 
 
+_HELP_LINES = [
+    "Playback",
+    "  Space        Play / pause",
+    "  Left/Right   Step back / forward",
+    "  Home/End     First / last step",
+    "  [ / ]        Slower / faster (1x-20x)",
+    "",
+    "Navigation",
+    "  , / .        Prev / next episode",
+    "  Tab          Cycle player (multi-agent)",
+    "",
+    "Files",
+    "  L            Load trajectory (.npz)",
+    "  K            Load level (.json) for replay",
+    "",
+    "Export",
+    "  S            Save screenshot (PNG)",
+    "  V            Save video (MP4)",
+    "",
+    "  ?            Toggle this help",
+    "  Escape       Quit",
+]
+
+
+def render_help_overlay(width: int, height: int) -> np.ndarray:
+    """Render a translucent help overlay listing all controls.
+
+    Args:
+        width: Frame width in pixels.
+        height: Frame height in pixels.
+
+    Returns:
+        RGBA uint8 array of shape ``(height, width, 4)``.
+    """
+    from factoriax.ui.compositing import blit_rgba
+
+    overlay = np.zeros((height, width, 4), dtype=np.uint8)
+    overlay[:, :] = (0, 0, 0, 180)
+
+    font = get_pixel_font(10)
+    title_font = get_pixel_font(12)
+
+    # Title.
+    title = render_text_rgba("Inspector Controls", title_font, _ACCENT_COLOR)
+    tx = (width - title.shape[1]) // 2
+    blit_rgba(overlay, title, 12, tx)
+
+    y = 30
+    for line in _HELP_LINES:
+        if not line:
+            y += 6
+            continue
+        # Section headers have no leading spaces.
+        if not line.startswith(" "):
+            txt = render_text_rgba(line, font, _ACCENT_COLOR)
+        else:
+            # Split into key and description at the first multi-space gap.
+            parts = line.split("  ", 1)
+            key_part = parts[0].strip()
+            desc_part = parts[1].strip() if len(parts) > 1 else ""
+            key_txt = render_text_rgba(key_part, font, (220, 215, 180))
+            blit_rgba(overlay, key_txt, y, 30)
+            if desc_part:
+                desc_txt = render_text_rgba(desc_part, font, _LABEL_COLOR)
+                blit_rgba(overlay, desc_txt, y, 140)
+            y += 13
+            continue
+        blit_rgba(overlay, txt, y, 20)
+        y += 15
+
+    return overlay
+
+
 def _draw_text(
     img: np.ndarray,
     text: str,

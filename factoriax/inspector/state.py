@@ -32,3 +32,4 @@ class InspectorState:
     action_legend_cache: np.ndarray | None = None
     sankey_cache: np.ndarray | None = None
     timeline_dragging: bool = False
+    show_help: bool = False

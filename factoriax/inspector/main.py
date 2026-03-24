@@ -146,6 +146,12 @@ def main(path: str, level_path: str | None = None) -> None:
                 window_w, window_h = event.w, event.h
                 scale = max(1, min(window_w // base_w, window_h // base_h))
 
+            # Help overlay: any key dismisses it.
+            if state.show_help:
+                if event.type == pygame.KEYDOWN:
+                    state.show_help = False
+                continue
+
             # Dialog modal: consume all events while open.
             if dialog is not None:
                 result = dialog.handle_event(event)
@@ -194,6 +200,8 @@ def main(path: str, level_path: str | None = None) -> None:
                     _export_png(last_frame, path, state)
                 elif key == pygame.K_v:
                     _export_mp4(frames, path, state)
+                elif key == pygame.K_SLASH or key == pygame.K_QUESTION:
+                    state.show_help = True
                 else:
                     _handle_key(event, traj, state)
 
@@ -234,10 +242,15 @@ def main(path: str, level_path: str | None = None) -> None:
 
         last_frame = frame
 
-        # Overlay dialog if open.
+        # Overlay dialog or help if open.
         if dialog is not None:
             overlay = dialog.render(base_w, base_h)
             composite_rgba_over_rgb(frame, overlay)
+        if state.show_help:
+            from factoriax.inspector.panels import render_help_overlay
+
+            help_overlay = render_help_overlay(base_w, base_h)
+            composite_rgba_over_rgb(frame, help_overlay)
 
         surface = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
         scaled_surf = pygame.transform.scale(surface, (base_w * scale, base_h * scale))
