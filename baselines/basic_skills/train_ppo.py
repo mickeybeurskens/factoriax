@@ -856,6 +856,85 @@ def train(config: Config) -> None:
             f"  [{np.min(s):.0f}, {np.max(s):.0f}]"
         )
 
+    # Save per-level trajectories for the inspector.
+    _save_eval_trajectories(
+        benchmark, _make_policy(0), eval_obs_fn, level_reward_fns, config
+    )
+
+
+# ---------------------------------------------------------------------------
+# Trajectory saving for inspector
+# ---------------------------------------------------------------------------
+
+
+def _save_eval_trajectories(
+    benchmark: BasicSkillsBenchmark,
+    policy: Callable[[jax.Array], jax.Array],
+    obs_fn: Callable,
+    level_reward_fns: list[Callable],
+    config: Config,
+) -> None:
+    """Re-run the policy on each level and save full-state trajectories.
+
+    Each trajectory is saved as a ``.npz`` file that the inspector can
+    load directly (with full state data for game world rendering).
+
+    Args:
+        benchmark: The basic_skills benchmark.
+        policy: Trained policy function.
+        obs_fn: Observation extraction function.
+        level_reward_fns: Reward function per level.
+        config: Training configuration.
+    """
+    from factoriax.analysis.trajectory import states_to_trajectory
+    from factoriax.envs import FactoriaXEnv
+
+    env = FactoriaXEnv()
+    jit_step = jax.jit(env.step_env)
+    out_dir = Path(config.save_path) if config.save_path else Path(".")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for bl, rfn in zip(benchmark.levels(), level_reward_fns):
+        params_l = bl.env_params
+        state = build_state(bl.level, params_l)
+        rng = jax.random.PRNGKey(config.seed)
+
+        states = [state]
+        actions_log: list[int] = []
+        rewards_log: list[float] = []
+
+        for _ in range(params_l.max_timesteps):
+            obs = obs_fn(state, params_l, 0)
+            action = policy(obs)
+            rng, subkey = jax.random.split(rng)
+            prev_state = state
+            _, state, _, done, _ = jit_step(subkey, state, action, params_l)
+            reward = float(rfn(prev_state, state, params_l))
+            actions_log.append(int(action))
+            rewards_log.append(reward)
+            states.append(state)
+            if bool(done):
+                break
+
+        # Pad actions/rewards to match states length.
+        act = np.array(
+            actions_log + [0] * (len(states) - len(actions_log)),
+            dtype=np.int32,
+        )
+        rew = np.array(
+            rewards_log + [0.0] * (len(states) - len(rewards_log)),
+            dtype=np.float32,
+        )
+        traj = states_to_trajectory(states, actions=act, rewards=rew)
+        path = out_dir / f"{bl.name}_trajectory.npz"
+        traj.save(str(path))
+        logger.info(
+            "Saved trajectory: %s  (%d steps, reward=%.1f)",
+            path,
+            len(actions_log),
+            sum(rewards_log),
+        )
+
 
 # ---------------------------------------------------------------------------
 # CLI
