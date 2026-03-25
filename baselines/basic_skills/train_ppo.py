@@ -674,8 +674,8 @@ def _plot_eval_diagnostics(
         figs["action_raster"] = fig_ar
 
         fig_ng, _ = plot_ngram_sweep(
-            traj, n_range=(2, 10), top_k=3,
-            title=f"{name} -- top 3 n-grams (n=2..10)",
+            traj, n_range=(2, 5), top_k=5,
+            title=f"{name} -- top 5 n-grams (n=2..5)",
         )
         figs["ngram_sweep"] = fig_ng
 

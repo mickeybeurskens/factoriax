@@ -467,6 +467,14 @@ def plot_ngram_sweep(
     )
     axes = axes[:, 0]
 
+    from matplotlib.patches import Rectangle
+    from matplotlib.transforms import blended_transform_factory
+
+    # Square size in axes-fraction (x) and data units (y).
+    sq_w = 0.018
+    sq_gap = 0.003
+    sq_h = 0.7
+
     for row, n in enumerate(n_values):
         ax = axes[row]
         grams_int = action_ngrams(traj, n, player, top_k)
@@ -491,6 +499,18 @@ def plot_ngram_sweep(
         ax.tick_params(axis="x", labelsize=7)
         if row < num_rows - 1:
             ax.set_xticklabels([])
+
+        # Draw colored action squares between labels and bars.
+        trans = blended_transform_factory(ax.transAxes, ax.transData)
+        for idx, (gram, _) in enumerate(grams_int):
+            for j, a in enumerate(gram):
+                x = -(len(gram) - j) * (sq_w + sq_gap)
+                ax.add_patch(Rectangle(
+                    (x, idx - sq_h / 2), sq_w, sq_h,
+                    facecolor=colors[min(a, len(colors) - 1)],
+                    edgecolor="white", linewidth=0.3,
+                    transform=trans, clip_on=False,
+                ))
 
     axes[-1].set_xlabel("Count")
     if title:
