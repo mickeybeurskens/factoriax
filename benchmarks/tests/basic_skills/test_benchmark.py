@@ -160,33 +160,70 @@ class TestSparseCraftingReward:
         reward = sparse_chest_crafting_reward(prev, new, params)
         assert float(reward) == 0.0
 
+    def test_crafting_conveyor_belt_gives_no_reward(self, state_factory) -> None:
+        """Non-chest crafted items should not trigger reward."""
+        _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
+        prev = state_factory(world_map=_map)
+        new = state_factory(
+            world_map=_map,
+            inventory_items=jnp.array(
+                [[ItemType.CONVEYOR_BELT] + [0] * 9], dtype=jnp.int32,
+            ),
+            inventory_counts=jnp.array([[3] + [0] * 9], dtype=jnp.int32),
+        )
+        params = EnvParams(map_width=3, map_height=3, num_players=1)
+        reward = sparse_chest_crafting_reward(prev, new, params)
+        assert float(reward) == 0.0
+
 
 class TestChestFillingReward:
-    """Tests for the chest_filling_reward function."""
+    """Tests for the chest_filling_reward function (per-item deposit)."""
 
-    def test_full_stack_gives_reward(self, state_factory) -> None:
-        """Reaching 64 items in a chest slot should give +1.0."""
+    def test_deposit_gives_per_item_reward(self, state_factory) -> None:
+        """Depositing 10 items into a chest should give reward 10.0."""
         _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
         m_types = jnp.full((3, 3), MachineType.NONE, dtype=jnp.int32)
         m_types = m_types.at[1, 1].set(MachineType.CHEST)
 
-        m_counts_prev = jnp.zeros((3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-        m_counts_prev = m_counts_prev.at[1, 1, 0].set(63)
-        m_items = jnp.zeros((3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32)
-        m_items = m_items.at[1, 1, 0].set(ItemType.IRON)
-
-        m_counts_new = m_counts_prev.at[1, 1, 0].set(MAX_MACHINE_STACK_SIZE)
+        m_counts_prev = jnp.zeros(
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+        )
+        m_counts_new = m_counts_prev.at[1, 1, 0].set(10)
 
         prev = state_factory(
             world_map=_map,
             machine_types=m_types,
-            machine_inventory_items=m_items,
             machine_inventory_counts=m_counts_prev,
         )
         new = state_factory(
             world_map=_map,
             machine_types=m_types,
-            machine_inventory_items=m_items,
+            machine_inventory_counts=m_counts_new,
+        )
+        params = EnvParams(map_width=3, map_height=3, num_players=1)
+        reward = chest_filling_reward(prev, new, params)
+        assert float(reward) == 10.0
+
+    def test_single_item_deposit(self, state_factory) -> None:
+        """Depositing 1 item into a chest should give reward 1.0."""
+        _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
+        m_types = jnp.full((3, 3), MachineType.NONE, dtype=jnp.int32)
+        m_types = m_types.at[1, 1].set(MachineType.CHEST)
+
+        m_counts_prev = jnp.zeros(
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+        )
+        m_counts_prev = m_counts_prev.at[1, 1, 0].set(63)
+        m_counts_new = m_counts_prev.at[1, 1, 0].set(MAX_MACHINE_STACK_SIZE)
+
+        prev = state_factory(
+            world_map=_map,
+            machine_types=m_types,
+            machine_inventory_counts=m_counts_prev,
+        )
+        new = state_factory(
+            world_map=_map,
+            machine_types=m_types,
             machine_inventory_counts=m_counts_new,
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
@@ -194,13 +231,15 @@ class TestChestFillingReward:
         assert float(reward) == 1.0
 
     def test_non_chest_machine_no_reward(self, state_factory) -> None:
-        """Full stack in a non-chest machine should give no reward."""
+        """Items added to a non-chest machine should give no reward."""
         _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
         m_types = jnp.full((3, 3), MachineType.NONE, dtype=jnp.int32)
         m_types = m_types.at[1, 1].set(MachineType.MINER)
 
-        m_counts_new = jnp.zeros((3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-        m_counts_new = m_counts_new.at[1, 1, 0].set(MAX_MACHINE_STACK_SIZE)
+        m_counts_new = jnp.zeros(
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+        )
+        m_counts_new = m_counts_new.at[1, 1, 0].set(10)
 
         prev = state_factory(world_map=_map, machine_types=m_types)
         new = state_factory(
@@ -212,14 +251,16 @@ class TestChestFillingReward:
         reward = chest_filling_reward(prev, new, params)
         assert float(reward) == 0.0
 
-    def test_already_full_gives_no_repeat_reward(self, state_factory) -> None:
-        """A slot that was already full should not reward again."""
+    def test_no_change_gives_zero_reward(self, state_factory) -> None:
+        """No change in chest contents should give zero reward."""
         _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
         m_types = jnp.full((3, 3), MachineType.NONE, dtype=jnp.int32)
         m_types = m_types.at[1, 1].set(MachineType.CHEST)
 
-        m_counts = jnp.zeros((3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-        m_counts = m_counts.at[1, 1, 0].set(MAX_MACHINE_STACK_SIZE)
+        m_counts = jnp.zeros(
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+        )
+        m_counts = m_counts.at[1, 1, 0].set(30)
 
         prev = state_factory(
             world_map=_map,
