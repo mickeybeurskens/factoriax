@@ -33,7 +33,10 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MAX_STACK_SIZE,
     NUM_ACTIONS,
+    NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    NUM_RECIPES,
+    RECIPES,
     BlockType,
     MachineType,
 )
@@ -43,6 +46,7 @@ from factoriax.state import EnvParams, EnvState
 _MAP_NORM: float = float(BlockType.COAL)
 _MACHINE_NORM: float = float(max(MachineType))
 _INV_ITEM_NORM: float = float(NUM_ITEM_TYPES)
+_MAX_CRAFT_TICKS: float = float(max(r["ticks"] for r in RECIPES))
 
 
 def _player_scalars(
@@ -52,13 +56,16 @@ def _player_scalars(
 ) -> jax.Array:
     """Build the per-player scalar vector shared by all observation types.
 
+    Includes position, direction, timestep, inventory contents, and
+    crafting UI state (selected recipe, selected slot, craft progress).
+
     Args:
         state: Current environment state.
         params: Environment parameters.
         player_idx: Index of the player whose scalars to extract.
 
     Returns:
-        Float32 array of shape ``(4 + 2 * NUM_INVENTORY_SLOTS,)``.
+        Float32 array of shape ``(7 + 2 * NUM_INVENTORY_SLOTS,)``.
     """
     pos = state.player_positions[player_idx]
     scalars = jnp.array(
@@ -67,6 +74,9 @@ def _player_scalars(
             pos[1] / params.map_height,
             state.player_directions[player_idx] / NUM_ACTIONS,
             state.timestep / params.max_timesteps,
+            state.selected_recipes[player_idx] / NUM_RECIPES,
+            state.selected_slots[player_idx] / NUM_INVENTORY_SLOTS,
+            state.craft_progress[player_idx] / _MAX_CRAFT_TICKS,
         ],
         dtype=jnp.float32,
     )
@@ -93,7 +103,7 @@ def global_array(
 
     Returns:
         Float32 array of shape
-        ``(map_h * map_w + 4 + 2 * NUM_INVENTORY_SLOTS,)``.
+        ``(map_h * map_w + 7 + 2 * NUM_INVENTORY_SLOTS,)``.
     """
     flat_map = state.map.flatten().astype(jnp.float32) / _MAP_NORM
     return jnp.concatenate([flat_map, _player_scalars(state, params, player_idx)])
@@ -130,7 +140,7 @@ def local_array(
 
     Returns:
         Float32 array of shape
-        ``(3 * (2*radius+1)**2 + 4 + 2 * NUM_INVENTORY_SLOTS,)``.
+        ``(3 * (2*radius+1)**2 + 7 + 2 * NUM_INVENTORY_SLOTS,)``.
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))
