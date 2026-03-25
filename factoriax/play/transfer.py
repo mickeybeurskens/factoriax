@@ -26,17 +26,19 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.constants import (
-    ASSEMBLER_RECIPE_INPUT_COUNTS,
-    ASSEMBLER_RECIPE_INPUT_ITEMS,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
-    MAX_ASSEMBLER_STACK_SIZE,
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
     NUM_INVENTORY_SLOTS,
     Action,
     MachineType,
     SlotRole,
+)
+from factoriax.recipes import (
+    ASSEMBLER_RECIPE_INPUT_COUNTS,
+    ASSEMBLER_RECIPE_INPUT_ITEMS,
+    MAX_ASSEMBLER_STACK_SIZE,
 )
 from factoriax.state import EnvState
 

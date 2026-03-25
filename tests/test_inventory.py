@@ -10,6 +10,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
 )
+from factoriax.observations import NUM_PLAYER_SCALARS
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 from factoriax.world_gen import generate_world
@@ -78,7 +79,9 @@ class TestInventoryObservation:
         obs, state = env.reset_env(rng, params)
 
         expected_size = (
-            params.map_width * params.map_height + 4 + NUM_INVENTORY_SLOTS * 2
+            params.map_width * params.map_height
+            + NUM_PLAYER_SCALARS
+            + NUM_INVENTORY_SLOTS * 2
         )
         assert obs.shape == (expected_size,)
 
@@ -98,7 +101,7 @@ class TestInventoryObservation:
         obs, state = env.reset_env(rng, params)
 
         map_size = params.map_width * params.map_height
-        inv_start = map_size + 4
+        inv_start = map_size + NUM_PLAYER_SCALARS
         inv_data = obs[inv_start:]
 
         assert jnp.all(inv_data >= 0.0)
@@ -118,7 +121,7 @@ class TestInventoryObservation:
 
         obs = env.get_obs(state, params)
         map_size = params.map_width * params.map_height
-        inv_items_start = map_size + 4
+        inv_items_start = map_size + NUM_PLAYER_SCALARS
         inv_counts_start = inv_items_start + NUM_INVENTORY_SLOTS
 
         expected_item = float(ItemType.COAL) / NUM_ITEM_TYPES

@@ -9,7 +9,7 @@ from gymnax.environments import environment, spaces
 from factoriax.constants import NUM_ACTIONS, NUM_INVENTORY_SLOTS
 from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.levels import Level, build_state, generate_state
-from factoriax.observations import global_array
+from factoriax.observations import NUM_PLAYER_SCALARS, global_array
 from factoriax.renderer import render_pixels
 from factoriax.rewards import achievement_reward
 from factoriax.state import EnvParams, EnvState
@@ -112,7 +112,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
         Returns:
             Float32 array of shape
-            ``(map_h * map_w + 4 + 2 * NUM_INVENTORY_SLOTS,)``.
+            ``(map_h * map_w + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS,)``.
         """
         return global_array(state, params, state.selected_player)
 
@@ -148,7 +148,11 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Box observation space matching the flattened observation
         """
-        obs_size = params.map_width * params.map_height + 4 + NUM_INVENTORY_SLOTS * 2
+        obs_size = (
+            params.map_width * params.map_height
+            + NUM_PLAYER_SCALARS
+            + NUM_INVENTORY_SLOTS * 2
+        )
         return spaces.Box(
             low=0.0,
             high=1.0,

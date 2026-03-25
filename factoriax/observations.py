@@ -35,11 +35,10 @@ from factoriax.constants import (
     NUM_ACTIONS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
-    NUM_RECIPES,
-    RECIPES,
     BlockType,
     MachineType,
 )
+from factoriax.recipes import NUM_RECIPES, RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
@@ -47,6 +46,20 @@ _MAP_NORM: float = float(BlockType.COAL)
 _MACHINE_NORM: float = float(max(MachineType))
 _INV_ITEM_NORM: float = float(NUM_ITEM_TYPES)
 _MAX_CRAFT_TICKS: float = float(max(r["ticks"] for r in RECIPES))
+
+
+# Scalar fields prepended before inventory in every observation vector.
+# Update this list when adding new per-player scalars.
+_PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
+    "pos_x",
+    "pos_y",
+    "direction",
+    "timestep",
+    "selected_recipe",
+    "selected_slot",
+    "craft_progress",
+)
+NUM_PLAYER_SCALARS: int = len(_PLAYER_SCALAR_FIELDS)
 
 
 def _player_scalars(
@@ -65,7 +78,8 @@ def _player_scalars(
         player_idx: Index of the player whose scalars to extract.
 
     Returns:
-        Float32 array of shape ``(7 + 2 * NUM_INVENTORY_SLOTS,)``.
+        Float32 array of shape
+        ``(NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS,)``.
     """
     pos = state.player_positions[player_idx]
     scalars = jnp.array(

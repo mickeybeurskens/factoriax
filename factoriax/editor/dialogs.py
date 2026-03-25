@@ -16,12 +16,10 @@ import numpy as np
 import pygame
 
 from factoriax.constants import (
-    ASSEMBLER_RECIPE_NAMES,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
     MAX_MACHINE_STACK_SIZE,
-    NUM_ASSEMBLER_RECIPES,
     SLOT_ROLE_COLORS,
     SLOT_ROLE_LABELS,
     ItemType,
@@ -29,6 +27,7 @@ from factoriax.constants import (
     SlotRole,
 )
 from factoriax.play.ui import get_pixel_font
+from factoriax.recipes import ASSEMBLER_RECIPE_NAMES, NUM_ASSEMBLER_RECIPES
 from factoriax.renderer import render_item_icon
 
 _BG = (22, 22, 22, 228)

@@ -30,7 +30,7 @@ from typing import Any
 
 import numpy as np
 
-from .trajectory import Trajectory
+from .trajectory import _STATE_TO_TRAJ, Trajectory
 
 
 @dataclass
@@ -167,6 +167,9 @@ class RolloutRecorder:
 
         This method concatenates all recorded chunks along the time axis,
         then splits them into individual episodes using the ``done`` flags.
+        When ``record_states=True`` was set, state fields are segmented
+        using the same episode boundaries and included in the returned
+        Trajectory.
 
         Parameters
         ----------
@@ -180,7 +183,8 @@ class RolloutRecorder:
         Trajectory
             With actions shaped ``(B, T_max)`` or ``(B, T_max, P)`` for
             multi-player, where B is the number of episodes and T_max
-            is the length of the longest episode.
+            is the length of the longest episode. State fields are
+            included when ``record_states=True``.
         """
         if not self._action_chunks:
             raise ValueError("No data recorded. Call record() first.")
@@ -190,11 +194,20 @@ class RolloutRecorder:
         all_rewards = np.concatenate(self._reward_chunks, axis=0)
         all_dones = np.concatenate(self._done_chunks, axis=0)
 
+        # Concatenate state chunks: {field_name: (T_total, N, ...)}
+        all_states: dict[str, np.ndarray] = {}
+        for fname, chunks in self._state_chunks.items():
+            if chunks:
+                all_states[fname] = np.concatenate(chunks, axis=0)
+
         T_total, N = all_dones.shape[:2]
 
         # Segment into episodes per environment
         episodes_actions: list[np.ndarray] = []
         episodes_rewards: list[np.ndarray] = []
+        episodes_states: dict[str, list[np.ndarray]] = {
+            fname: [] for fname in all_states
+        }
 
         for env_idx in range(N):
             env_actions = all_actions[:, env_idx]  # (T_total, ...)
@@ -209,6 +222,8 @@ class RolloutRecorder:
             for s, e in zip(starts, ends):
                 episodes_actions.append(env_actions[s:e])
                 episodes_rewards.append(env_rewards[s:e])
+                for fname, arr in all_states.items():
+                    episodes_states[fname].append(arr[s:e, env_idx])
 
             # Handle trailing incomplete episode
             if pad_incomplete and (
@@ -217,6 +232,8 @@ class RolloutRecorder:
                 last_start = 0 if len(done_indices) == 0 else done_indices[-1] + 1
                 episodes_actions.append(env_actions[last_start:])
                 episodes_rewards.append(env_rewards[last_start:])
+                for fname, arr in all_states.items():
+                    episodes_states[fname].append(arr[last_start:, env_idx])
 
         if not episodes_actions:
             raise ValueError(
@@ -228,6 +245,10 @@ class RolloutRecorder:
         if self.max_episodes is not None:
             episodes_actions = episodes_actions[: self.max_episodes]
             episodes_rewards = episodes_rewards[: self.max_episodes]
+            for fname in episodes_states:
+                episodes_states[fname] = episodes_states[fname][
+                    : self.max_episodes
+                ]
 
         # Pad to uniform length
         max_len = max(ep.shape[0] for ep in episodes_actions)
@@ -244,9 +265,26 @@ class RolloutRecorder:
             padded_actions[i, :L] = a
             padded_rewards[i, :L] = r
 
+        # Pad state fields to (B, T_max, ...)
+        padded_states: dict[str, np.ndarray] = {}
+        for fname, ep_list in episodes_states.items():
+            if not ep_list:
+                continue
+            extra_shape = ep_list[0].shape[1:]
+            padded = np.zeros(
+                (B, max_len, *extra_shape), dtype=ep_list[0].dtype
+            )
+            for i, arr in enumerate(ep_list):
+                L = arr.shape[0]
+                padded[i, :L] = arr
+            # Map EnvState field names to Trajectory field names
+            traj_name = _STATE_TO_TRAJ.get(fname, fname)
+            padded_states[traj_name] = padded
+
         return Trajectory(
             actions=padded_actions,
             rewards=padded_rewards,
+            **padded_states,
         )
 
     def reset(self) -> None:

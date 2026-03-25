@@ -21,6 +21,8 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from factoriax.constants import NUM_ACTIONS
+
 from .actions import (
     DEFAULT_ACTION_LABELS,
     action_raster,
@@ -43,7 +45,7 @@ def _require_multi_player(traj: Trajectory) -> None:
 
 def plot_comparative_raster(
     traj: Trajectory,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     action_labels: list[str] | None = None,
     colors: Sequence[str] | None = None,
     figsize_per_player: tuple[float, float] = (14, 4),
@@ -100,7 +102,7 @@ def plot_comparative_raster(
 
 def role_divergence(
     traj: Trajectory,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     time_range: tuple[int, int] | None = None,
 ) -> np.ndarray:
     """Compute pairwise Jensen-Shannon divergence between players' action distributions.
@@ -151,7 +153,7 @@ def role_divergence(
 
 def plot_role_divergence(
     traj: Trajectory,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     phases: list[tuple[int, int]] | None = None,
     player_labels: list[str] | None = None,
     figsize: tuple[float, float] = (6, 5),
@@ -317,7 +319,7 @@ def joint_action_matrix(
     traj: Trajectory,
     player_a: int = 0,
     player_b: int = 1,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     normalize: bool = True,
     time_range: tuple[int, int] | None = None,
 ) -> np.ndarray:
@@ -362,7 +364,7 @@ def plot_joint_actions(
     traj: Trajectory,
     player_a: int = 0,
     player_b: int = 1,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     action_labels: list[str] | None = None,
     time_range: tuple[int, int] | None = None,
     ax: Axes | None = None,

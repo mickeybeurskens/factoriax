@@ -16,14 +16,10 @@ import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
-    ASSEMBLER_RECIPE_NAMES,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
     NUM_INVENTORY_SLOTS,
-    NUM_RECIPES,
-    RECIPE_NAMES,
-    RECIPES,
     SLOT_ROLE_COLORS,
     SLOT_ROLE_LABELS,
     Action,
@@ -31,6 +27,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
+from factoriax.recipes import ASSEMBLER_RECIPE_NAMES, NUM_RECIPES, RECIPE_NAMES, RECIPES
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvState
 

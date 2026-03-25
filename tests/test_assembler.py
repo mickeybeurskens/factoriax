@@ -3,11 +3,11 @@
 from jax import random
 
 from factoriax.constants import (
-    MAX_ASSEMBLER_STACK_SIZE,
     ItemType,
     MachineType,
 )
 from factoriax.machines import run_assemblers
+from factoriax.recipes import MAX_ASSEMBLER_STACK_SIZE
 from factoriax.state import EnvParams
 from factoriax.world_gen import generate_world
 

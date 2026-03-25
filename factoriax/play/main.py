@@ -13,7 +13,6 @@ from jax import random
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
-    NUM_ASSEMBLER_RECIPES,
     NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     Action,
@@ -39,6 +38,7 @@ from factoriax.play.ui import (
     render_victory_screen,
     render_welcome_screen,
 )
+from factoriax.recipes import NUM_ASSEMBLER_RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 from factoriax.ui.compositing import composite_rgba_over_rgb  # noqa: F401

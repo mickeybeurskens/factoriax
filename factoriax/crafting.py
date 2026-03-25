@@ -5,15 +5,17 @@ import jax.numpy as jnp
 from jax import lax
 
 from factoriax.constants import (
-    MAX_RECIPE_INPUTS,
     MAX_STACK_SIZE,
     NUM_INVENTORY_SLOTS,
+    ItemType,
+)
+from factoriax.recipes import (
+    MAX_RECIPE_INPUTS,
     NUM_RECIPES,
     RECIPE_INPUT_COUNTS,
     RECIPE_INPUT_ITEMS,
     RECIPE_OUTPUTS,
     RECIPE_TICKS,
-    ItemType,
 )
 from factoriax.state import EnvState
 

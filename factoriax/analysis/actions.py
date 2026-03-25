@@ -27,30 +27,16 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
+from factoriax.constants import NUM_ACTIONS, Action
+
 from .trajectory import Trajectory
 
-# Default action labels matching factoriax Action enum
-DEFAULT_ACTION_LABELS = [
-    "NOOP",
-    "LEFT",
-    "RIGHT",
-    "UP",
-    "DOWN",
-    "MINE",
-    "CRAFT",
-    "PLACE",
-    "NEXT_SLOT",
-    "PREV_SLOT",
-    "NEXT_RECIPE",
-    "PREV_RECIPE",
-    "PICKUP",
-    "DEPOSIT",
-    "WITHDRAW",
-]
+# Derived from the Action enum so labels stay in sync automatically.
+DEFAULT_ACTION_LABELS: list[str] = [a.name for a in Action]
 
-# Qualitative colormap designed for 15 distinguishable actions.
+# Qualitative colormap for distinguishable actions.
 # Movement = cool tones, interaction = warm tones, UI = grays/purples.
-DEFAULT_ACTION_COLORS = [
+DEFAULT_ACTION_COLORS: list[str] = [
     "#bdbdbd",  # NOOP       - gray
     "#1f77b4",  # LEFT       - blue
     "#aec7e8",  # RIGHT      - light blue
@@ -96,7 +82,7 @@ def _resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:
 def action_raster(
     traj: Trajectory,
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     action_labels: list[str] | None = None,
     colors: Sequence[str] | None = None,
     episode_labels: list[str] | None = None,
@@ -194,7 +180,7 @@ def action_raster(
 def transition_matrix(
     traj: Trajectory,
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     normalize: bool = True,
     time_range: tuple[int, int] | None = None,
 ) -> np.ndarray:
@@ -237,7 +223,7 @@ def transition_matrix(
 def plot_transition_matrix(
     traj: Trajectory,
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     action_labels: list[str] | None = None,
     time_range: tuple[int, int] | None = None,
     normalize: bool = True,
@@ -309,7 +295,7 @@ def plot_phase_transitions(
     traj: Trajectory,
     phases: list[tuple[int, int]],
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     action_labels: list[str] | None = None,
     figsize_per_phase: tuple[float, float] = (5, 4.5),
     cmap: str = "Blues",
@@ -600,7 +586,7 @@ def plot_ngrams(
 def action_entropy(
     traj: Trajectory,
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     window: int = 1,
 ) -> np.ndarray:
     """Compute per-timestep action entropy across episodes.
@@ -642,7 +628,7 @@ def action_entropy(
 def plot_entropy(
     traj: Trajectory,
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     window: int = 5,
     ax: Axes | None = None,
     figsize: tuple[float, float] = (12, 4),
@@ -729,7 +715,7 @@ def plot_run_lengths(
     traj: Trajectory,
     player: int | None = None,
     action_labels: list[str] | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     colors: Sequence[str] | None = None,
     ax: Axes | None = None,
     figsize: tuple[float, float] = (10, 5),
@@ -796,7 +782,7 @@ def plot_run_lengths(
 def plot_action_distribution(
     traj: Trajectory,
     player: int | None = None,
-    num_actions: int = 12,
+    num_actions: int = NUM_ACTIONS,
     action_labels: list[str] | None = None,
     colors: Sequence[str] | None = None,
     window: int = 10,

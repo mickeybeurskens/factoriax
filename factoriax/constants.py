@@ -145,116 +145,26 @@ SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {
     int(SlotRole.STORAGE): (80, 115, 175),
 }
 
-RECIPES = [
-    {
-        "output": ItemType.MINER,
-        "inputs": [(ItemType.COPPER, 5), (ItemType.IRON, 5)],
-        "ticks": 3,
-    },
-    {
-        "output": ItemType.CHEST,
-        "inputs": [(ItemType.IRON, 5)],
-        "ticks": 2,
-    },
-    {
-        "output": ItemType.CONVEYOR_BELT,
-        "inputs": [(ItemType.IRON, 1)],
-        "ticks": 1,
-    },
-    {
-        "output": ItemType.ARM,
-        "inputs": [(ItemType.IRON, 5), (ItemType.COPPER, 1)],
-        "ticks": 5,
-    },
-    {
-        "output": ItemType.ASSEMBLER,
-        "inputs": [(ItemType.IRON, 10), (ItemType.COPPER, 5)],
-        "ticks": 5,
-    },
-]
-
-NUM_RECIPES = len(RECIPES)
-MAX_RECIPE_INPUTS = 2
-
-RECIPE_NAMES = ["Miner", "Chest", "Conveyor Belt", "Arm", "Assembler"]
-
-RECIPE_OUTPUTS = jnp.array(
-    [
-        ItemType.MINER,
-        ItemType.CHEST,
-        ItemType.CONVEYOR_BELT,
-        ItemType.ARM,
-        ItemType.ASSEMBLER,
-    ],
-    dtype=jnp.int32,
-)
-RECIPE_TICKS = jnp.array([3, 2, 1, 5, 5], dtype=jnp.int32)
-RECIPE_INPUT_ITEMS = jnp.array(
-    [
-        [ItemType.COPPER, ItemType.IRON],  # Miner
-        [ItemType.IRON, ItemType.EMPTY],  # Chest
-        [ItemType.IRON, ItemType.EMPTY],  # Conveyor Belt
-        [ItemType.IRON, ItemType.COPPER],  # Arm
-        [ItemType.IRON, ItemType.COPPER],  # Assembler
-    ],
-    dtype=jnp.int32,
-)
-RECIPE_INPUT_COUNTS = jnp.array(
-    [
-        [5, 5],  # Miner
-        [5, 0],  # Chest
-        [1, 0],  # Conveyor Belt
-        [5, 1],  # Arm
-        [10, 5],  # Assembler
-    ],
-    dtype=jnp.int32,
-)
-
-MAX_ASSEMBLER_STACK_SIZE = 1000
-
-ASSEMBLER_RECIPES = [
-    {
-        "output": ItemType.HULL,
-        "inputs": [(ItemType.IRON, 5)],
-        "ticks": 4,
-    },
-    {
-        "output": ItemType.FUEL_PACK,
-        "inputs": [(ItemType.COPPER, 3), (ItemType.COAL, 2)],
-        "ticks": 6,
-    },
-    {
-        "output": ItemType.ROCKET,
-        "inputs": [(ItemType.HULL, 50), (ItemType.FUEL_PACK, 20)],
-        "ticks": 100,
-    },
-]
-
-NUM_ASSEMBLER_RECIPES = len(ASSEMBLER_RECIPES)
-MAX_ASSEMBLER_RECIPE_INPUTS = 2
-
-ASSEMBLER_RECIPE_NAMES = ["Hull", "Fuel Pack", "Rocket"]
-
-ASSEMBLER_RECIPE_OUTPUTS = jnp.array(
-    [ItemType.HULL, ItemType.FUEL_PACK, ItemType.ROCKET],
-    dtype=jnp.int32,
-)
-ASSEMBLER_RECIPE_TICKS = jnp.array([4, 6, 100], dtype=jnp.int32)
-ASSEMBLER_RECIPE_INPUT_ITEMS = jnp.array(
-    [
-        [ItemType.IRON, ItemType.EMPTY],  # Hull
-        [ItemType.COPPER, ItemType.COAL],  # Fuel Pack
-        [ItemType.HULL, ItemType.FUEL_PACK],  # Rocket
-    ],
-    dtype=jnp.int32,
-)
-ASSEMBLER_RECIPE_INPUT_COUNTS = jnp.array(
-    [
-        [5, 0],  # Hull
-        [3, 2],  # Fuel Pack
-        [50, 20],  # Rocket
-    ],
-    dtype=jnp.int32,
+# Recipes are defined in factoriax.recipes (single source of truth).
+# Re-exported here for backward compatibility.
+from factoriax.recipes import (  # noqa: E402, F401
+    ASSEMBLER_RECIPE_INPUT_COUNTS,
+    ASSEMBLER_RECIPE_INPUT_ITEMS,
+    ASSEMBLER_RECIPE_NAMES,
+    ASSEMBLER_RECIPE_OUTPUTS,
+    ASSEMBLER_RECIPE_TICKS,
+    ASSEMBLER_RECIPES,
+    MAX_ASSEMBLER_RECIPE_INPUTS,
+    MAX_ASSEMBLER_STACK_SIZE,
+    MAX_RECIPE_INPUTS,
+    NUM_ASSEMBLER_RECIPES,
+    NUM_RECIPES,
+    RECIPE_INPUT_COUNTS,
+    RECIPE_INPUT_ITEMS,
+    RECIPE_NAMES,
+    RECIPE_OUTPUTS,
+    RECIPE_TICKS,
+    RECIPES,
 )
 
 PLACEABLE_ITEMS = jnp.array(

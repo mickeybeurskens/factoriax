@@ -7,7 +7,12 @@ import pytest
 from jax import random
 
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
-from factoriax.constants import BLOCK_PIXEL_SIZE, SOLID_BLOCKS, MachineType
+from factoriax.constants import (
+    BLOCK_PIXEL_SIZE,
+    NUM_INVENTORY_SLOTS,
+    SOLID_BLOCKS,
+    MachineType,
+)
 from factoriax.game_logic import (
     get_block_at,
     is_game_over,
@@ -15,6 +20,7 @@ from factoriax.game_logic import (
     is_position_walkable,
     move_player,
 )
+from factoriax.observations import NUM_PLAYER_SCALARS
 from factoriax.renderer import (
     create_default_textures,
     render_pixels,
@@ -351,7 +357,11 @@ class TestEnvironment:
         """Observation space should match expected dimensions."""
         env, params = make_factoriax_env()
         obs_space = env.observation_space(params)
-        expected_size = params.map_width * params.map_height + 4 + 20
+        expected_size = (
+            params.map_width * params.map_height
+            + NUM_PLAYER_SCALARS
+            + NUM_INVENTORY_SLOTS * 2
+        )
         assert obs_space.shape == (expected_size,)
 
     def test_jit_compilation(self) -> None:

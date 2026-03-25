@@ -20,7 +20,13 @@ from factoriax.constants import (
     BlockType,
     MachineType,
 )
-from factoriax.observations import _player_scalars, global_array, local_array, rgb
+from factoriax.observations import (
+    NUM_PLAYER_SCALARS,
+    _player_scalars,
+    global_array,
+    local_array,
+    rgb,
+)
 from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
@@ -35,7 +41,9 @@ _DEFAULT_PARAMS = EnvParams(
 )
 
 _GLOBAL_OBS_SIZE = (
-    _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height + 4 + 2 * NUM_INVENTORY_SLOTS
+    _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
+    + NUM_PLAYER_SCALARS
+    + 2 * NUM_INVENTORY_SLOTS
 )
 
 
@@ -53,7 +61,7 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
         out = _player_scalars(state, _DEFAULT_PARAMS, 0)
-        assert out.shape == (4 + 2 * NUM_INVENTORY_SLOTS,)
+        assert out.shape == (NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS,)
 
     def test_values_in_range(self, state_factory) -> None:
         """All scalar values must lie in [0, 1]."""
@@ -97,9 +105,10 @@ class TestPlayerScalars:
         )
         scalars_p0 = np.array(_player_scalars(state, _DEFAULT_PARAMS, 0))
         scalars_p1 = np.array(_player_scalars(state, _DEFAULT_PARAMS, 1))
-        # Inventory items start at index 4
-        assert scalars_p0[4] == pytest.approx(0.0)
-        assert scalars_p1[4] > 0.0
+        # Inventory items start after the player scalars.
+        inv_start = NUM_PLAYER_SCALARS
+        assert scalars_p0[inv_start] == pytest.approx(0.0)
+        assert scalars_p1[inv_start] > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +120,7 @@ class TestGlobalArray:
     """Tests for global_array."""
 
     def test_shape(self, state_factory) -> None:
-        """Output shape matches map_h * map_w + 4 + 2 * NUM_INVENTORY_SLOTS."""
+        """Output shape includes map, player scalars, and inventory."""
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
@@ -192,7 +201,7 @@ class TestGlobalArray:
 
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
-_LOCAL_OBS_SIZE = 3 * _WINDOW**2 + 4 + 2 * NUM_INVENTORY_SLOTS
+_LOCAL_OBS_SIZE = 3 * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS
 
 
 class TestLocalArray:
@@ -202,7 +211,7 @@ class TestLocalArray:
         """Output shape is correct for radius=10 (default)."""
         radius = 10
         window = 2 * radius + 1
-        expected = 3 * window**2 + 4 + 2 * NUM_INVENTORY_SLOTS
+        expected = 3 * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),

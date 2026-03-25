@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 
 from factoriax import BlockType, ItemType
-from factoriax.constants import NUM_INVENTORY_SLOTS, NUM_RECIPES
+from factoriax.constants import NUM_INVENTORY_SLOTS
 from factoriax.crafting import (
     add_item_to_inventory,
     can_afford_recipe,
@@ -14,6 +14,7 @@ from factoriax.crafting import (
     start_crafting,
     update_crafting,
 )
+from factoriax.recipes import NUM_RECIPES
 
 
 class TestInventoryHelpers:

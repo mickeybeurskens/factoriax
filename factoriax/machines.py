@@ -4,15 +4,10 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.constants import (
-    ASSEMBLER_RECIPE_INPUT_COUNTS,
-    ASSEMBLER_RECIPE_INPUT_ITEMS,
-    ASSEMBLER_RECIPE_OUTPUTS,
-    ASSEMBLER_RECIPE_TICKS,
     BLOCK_TO_ITEM_ARRAY,
     MACHINE_MINING_RATE,
     MACHINE_POWER_CONSUMPTION,
     MACHINE_SLOT_ROLES,
-    MAX_ASSEMBLER_STACK_SIZE,
     MAX_MACHINE_STACK_SIZE,
     POWER_PER_COAL,
     Action,
@@ -20,6 +15,13 @@ from factoriax.constants import (
     ItemType,
     MachineType,
     SlotRole,
+)
+from factoriax.recipes import (
+    ASSEMBLER_RECIPE_INPUT_COUNTS,
+    ASSEMBLER_RECIPE_INPUT_ITEMS,
+    ASSEMBLER_RECIPE_OUTPUTS,
+    ASSEMBLER_RECIPE_TICKS,
+    MAX_ASSEMBLER_STACK_SIZE,
 )
 from factoriax.state import EnvState
 

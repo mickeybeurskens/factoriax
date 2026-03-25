@@ -6,13 +6,10 @@ from jax import lax
 
 from factoriax.achievements import check_achievements
 from factoriax.constants import (
-    ASSEMBLER_RECIPE_INPUT_COUNTS,
-    ASSEMBLER_RECIPE_INPUT_ITEMS,
     BLOCK_TO_ITEM_ARRAY,
     DIRECTIONS,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
-    MAX_ASSEMBLER_STACK_SIZE,
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
@@ -27,6 +24,11 @@ from factoriax.constants import (
 from factoriax.crafting import cycle_recipe, cycle_slot, start_crafting, update_crafting
 from factoriax.machines import update_all_machines
 from factoriax.placement import pickup_machine, place_machine
+from factoriax.recipes import (
+    ASSEMBLER_RECIPE_INPUT_COUNTS,
+    ASSEMBLER_RECIPE_INPUT_ITEMS,
+    MAX_ASSEMBLER_STACK_SIZE,
+)
 from factoriax.state import EnvParams, EnvState
 
 
