@@ -653,7 +653,7 @@ def _plot_eval_diagnostics(
     Returns:
         Nested dict ``{level_name: {plot_name: Figure}}``.
     """
-    from factoriax.analysis.actions import plot_ngram_sweep
+    from factoriax.analysis.actions import action_raster, plot_ngram_sweep
     from factoriax.analysis.state import plot_episode_rewards
     from factoriax.analysis.trajectory import Trajectory
 
@@ -667,6 +667,11 @@ def _plot_eval_diagnostics(
                 traj, episode=0, title=f"{name} -- evaluation rewards",
             )
             figs["rewards"] = fig_r
+
+        fig_ar, _ = action_raster(
+            traj, title=f"{name} -- action raster",
+        )
+        figs["action_raster"] = fig_ar
 
         fig_ng, _ = plot_ngram_sweep(
             traj, n_range=(2, 10), top_k=3,

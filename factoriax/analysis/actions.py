@@ -407,12 +407,23 @@ def action_ngrams(
     return counter.most_common(top_k)
 
 
+def _blend_ngram_color(
+    action_indices: tuple[int, ...],
+    colors: Sequence[str],
+) -> str:
+    """Average the RGB values of the actions in an n-gram."""
+    rgbs = [mcolors.to_rgb(colors[min(i, len(colors) - 1)]) for i in action_indices]
+    avg = tuple(sum(c) / len(c) for c in zip(*rgbs))
+    return mcolors.to_hex(avg)
+
+
 def plot_ngram_sweep(
     traj: Trajectory,
     n_range: tuple[int, int] = (2, 10),
     player: int | None = None,
     top_k: int = 3,
     action_labels: list[str] | None = None,
+    colors: Sequence[str] | None = None,
     figsize: tuple[float, float] | None = None,
     title: str | None = None,
 ) -> tuple[Figure, np.ndarray]:
@@ -429,6 +440,9 @@ def plot_ngram_sweep(
         player: Player index for multi-player trajectories.
         top_k: Number of top n-grams per row.
         action_labels: Human-readable labels per action.
+        colors: Hex colors per action, matching the raster palette.
+            Each bar is colored by blending the colors of its
+            constituent actions.
         figsize: Figure size. Defaults to a height scaled by the
             number of rows.
         title: Overall figure title.
@@ -439,6 +453,8 @@ def plot_ngram_sweep(
     """
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS
+    if colors is None:
+        colors = DEFAULT_ACTION_COLORS
     n_min, n_max = n_range
     n_values = list(range(n_min, n_max + 1))
     num_rows = len(n_values)
@@ -453,13 +469,21 @@ def plot_ngram_sweep(
 
     for row, n in enumerate(n_values):
         ax = axes[row]
-        grams = action_ngrams(traj, n, player, top_k, action_labels)
-        if not grams:
+        grams_int = action_ngrams(traj, n, player, top_k)
+        if not grams_int:
             ax.set_visible(False)
             continue
-        labels = [" ".join(g) for g, _ in grams]
-        counts = [c for _, c in grams]
-        ax.barh(range(len(labels)), counts, color="#4c72b0", height=0.7)
+        labels = [
+            " ".join(action_labels[a] for a in g)
+            for g, _ in grams_int
+        ]
+        counts = [c for _, c in grams_int]
+        bar_colors = [
+            _blend_ngram_color(g, colors) for g, _ in grams_int
+        ]
+        ax.barh(
+            range(len(labels)), counts, color=bar_colors, height=0.7,
+        )
         ax.set_yticks(range(len(labels)))
         ax.set_yticklabels(labels, fontsize=7, family="monospace")
         ax.invert_yaxis()
