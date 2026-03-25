@@ -19,8 +19,8 @@ from pathlib import Path
 
 import jax
 
-from factoriax.benchmarks.runner import BenchmarkRunner
-from factoriax.benchmarks.single_agent_mining.analysis import (
+from benchmarks.runner import BenchmarkRunner
+from benchmarks.single_agent_mining.analysis import (
     log_to_wandb,
     plot_action_distribution,
     plot_level_scores,
@@ -28,11 +28,13 @@ from factoriax.benchmarks.single_agent_mining.analysis import (
     render_level_video,
     save_mp4,
 )
-from factoriax.benchmarks.single_agent_mining.benchmark import (
+from benchmarks.single_agent_mining.benchmark import (
     SingleAgentMiningBenchmark,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -50,8 +52,12 @@ def _make_random_policy() -> ...:
 
 def main() -> None:
     """Run a random policy through the single-agent mining benchmark."""
-    p = argparse.ArgumentParser(description="Single-agent mining benchmark — random policy")
-    p.add_argument("--use-wandb", action="store_true", help="Log results to Weights & Biases.")
+    p = argparse.ArgumentParser(
+        description="Single-agent mining benchmark — random policy"
+    )
+    p.add_argument(
+        "--use-wandb", action="store_true", help="Log results to Weights & Biases."
+    )
     p.add_argument("--wandb-project", type=str, default="factoriax-benchmarks")
     p.add_argument("--wandb-run-name", type=str, default=None)
     p.add_argument("--seed", type=int, default=42)
@@ -81,7 +87,9 @@ def main() -> None:
     fig_scores.savefig("benchmark_scores.png", dpi=120, bbox_inches="tight")
     fig_breakdown.savefig("benchmark_breakdown.png", dpi=120, bbox_inches="tight")
     fig_actions.savefig("benchmark_actions.png", dpi=120, bbox_inches="tight")
-    logger.info("Plots saved: benchmark_scores.png, benchmark_breakdown.png, benchmark_actions.png")
+    logger.info(
+        "Plots saved: benchmark_scores.png, benchmark_breakdown.png, benchmark_actions.png"
+    )
 
     # Render one video per level. Each level gets a fresh policy so the
     # videos are independent of the scoring run above.
@@ -97,6 +105,7 @@ def main() -> None:
     if args.use_wandb:
         try:
             import wandb  # type: ignore[import-untyped]
+
             wandb_run = wandb.init(
                 project=args.wandb_project,
                 name=args.wandb_run_name,

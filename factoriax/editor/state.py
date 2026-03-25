@@ -92,6 +92,7 @@ class EditorState:
     machine_inventory_items: np.ndarray
     machine_inventory_counts: np.ndarray
     machine_selected_recipe: np.ndarray
+    player_inventory: list[tuple[int, int]] | None = None
     dirty: bool = False
 
 
@@ -114,9 +115,7 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
         map_height=height,
         block_map=block_map,
         block_resources=np.zeros((height, width), dtype=np.int32),
-        machine_types=np.full(
-            (height, width), int(MachineType.NONE), dtype=np.int32
-        ),
+        machine_types=np.full((height, width), int(MachineType.NONE), dtype=np.int32),
         machine_directions=np.zeros((height, width), dtype=np.int32),
         machine_inventory_items=np.zeros(inv_shape, dtype=np.int32),
         machine_inventory_counts=np.zeros(inv_shape, dtype=np.int32),
@@ -152,9 +151,7 @@ def editor_state_from_level(level: Level) -> EditorState:
     directions = (
         level.machine_directions.copy()
         if level.machine_directions is not None
-        else np.zeros(
-            (level.map_height, level.map_width), dtype=np.int32
-        )
+        else np.zeros((level.map_height, level.map_width), dtype=np.int32)
     )
     inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
     inv_items = (
@@ -170,9 +167,7 @@ def editor_state_from_level(level: Level) -> EditorState:
     recipe = (
         level.machine_selected_recipe.copy()
         if level.machine_selected_recipe is not None
-        else np.zeros(
-            (level.map_height, level.map_width), dtype=np.int32
-        )
+        else np.zeros((level.map_height, level.map_width), dtype=np.int32)
     )
     return EditorState(
         name=level.name,
@@ -185,6 +180,7 @@ def editor_state_from_level(level: Level) -> EditorState:
         machine_inventory_items=inv_items.astype(np.int32),
         machine_inventory_counts=inv_counts.astype(np.int32),
         machine_selected_recipe=recipe.astype(np.int32),
+        player_inventory=level.player_inventory,
     )
 
 
@@ -235,6 +231,7 @@ def editor_state_to_level(state: EditorState) -> Level:
         machine_inventory_items=inv_items,
         machine_inventory_counts=inv_counts,
         machine_selected_recipe=recipe,
+        player_inventory=state.player_inventory,
     )
 
 

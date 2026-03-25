@@ -112,25 +112,32 @@ class TestRenderWelcomeScreen:
 
     def test_returns_uint8_rgba(self) -> None:
         """Must return a uint8 RGBA array matching the requested dimensions."""
-        result = render_welcome_screen(self._W, self._H)
+        result, regions = render_welcome_screen(self._W, self._H)
         assert result.dtype == np.uint8
         assert result.shape == (self._H, self._W, 4)
+        assert isinstance(regions, list)
 
     def test_fully_opaque(self) -> None:
         """Welcome screen must be fully opaque (alpha=255 everywhere)."""
-        result = render_welcome_screen(self._W, self._H)
+        result, _ = render_welcome_screen(self._W, self._H)
         assert np.all(result[:, :, 3] == 255)
 
     def test_not_all_black(self) -> None:
         """At least some pixels must be non-black (panel and text are visible)."""
-        result = render_welcome_screen(self._W, self._H)
+        result, _ = render_welcome_screen(self._W, self._H)
         assert np.any(result[:, :, :3] > 20)
 
     def test_various_sizes(self) -> None:
         """Should render cleanly at different screen sizes without crashing."""
         for w, h in [(320, 320), (640, 480), (1024, 768)]:
-            result = render_welcome_screen(w, h)
+            result, _ = render_welcome_screen(w, h)
             assert result.shape == (h, w, 4)
+
+    def test_record_toggle_region(self) -> None:
+        """Should return a click region for the record checkbox."""
+        _, regions = render_welcome_screen(self._W, self._H)
+        record_regions = [r for r in regions if r.action == "toggle_record"]
+        assert len(record_regions) == 1
 
 
 class TestRenderPauseMenu:

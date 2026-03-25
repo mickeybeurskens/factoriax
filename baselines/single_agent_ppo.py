@@ -254,9 +254,7 @@ def update_running_stats(stats: RunningStats, batch: jax.Array) -> RunningStats:
     delta = batch_mean - stats.mean
     new_mean = stats.mean + delta * (n / total)
     new_var = (
-        stats.var * stats.count
-        + batch_var * n
-        + delta**2 * stats.count * n / total
+        stats.var * stats.count + batch_var * n + delta**2 * stats.count * n / total
     ) / total
     return RunningStats(mean=new_mean, var=new_var, count=total)
 
@@ -271,9 +269,7 @@ def normalize_obs(stats: RunningStats, obs: jax.Array) -> jax.Array:
     Returns:
         Normalized observation array of the same shape.
     """
-    return jnp.clip(
-        (obs - stats.mean) / jnp.sqrt(stats.var + 1e-8), -10.0, 10.0
-    )
+    return jnp.clip((obs - stats.mean) / jnp.sqrt(stats.var + 1e-8), -10.0, 10.0)
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +384,7 @@ def make_train_fns(
         reset_states: EnvState,
     ) -> EnvState:
         """Replace terminated environment states with fresh reset states."""
+
         def _where(r: jax.Array, s: jax.Array) -> jax.Array:
             pad = dones.reshape((-1,) + (1,) * (s.ndim - 1))
             return jnp.where(pad, r, s)
@@ -422,21 +419,15 @@ def make_train_fns(
             _: None,
         ) -> tuple[tuple[EnvState, jax.Array, jax.Array], Transition]:
             states, cur_obs, step_rng = carry
-            step_rng, key_act, key_step, key_reset = jax.random.split(
-                step_rng, 4
-            )
+            step_rng, key_act, key_step, key_reset = jax.random.split(step_rng, 4)
 
             norm = (
-                normalize_obs(obs_stats, cur_obs)
-                if config.normalize_obs
-                else cur_obs
+                normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
             )
             logits, values = network.apply(params, norm)
 
             actions = jax.random.categorical(key_act, logits)  # (N,)
-            log_probs = (
-                jax.nn.log_softmax(logits)[jnp.arange(num_envs), actions]
-            )
+            log_probs = jax.nn.log_softmax(logits)[jnp.arange(num_envs), actions]
 
             keys_step = jax.random.split(key_step, num_envs)
             prev_states = states
@@ -470,9 +461,7 @@ def make_train_fns(
 
         # Bootstrap value for the last observation.
         norm_last = (
-            normalize_obs(obs_stats, next_obs)
-            if config.normalize_obs
-            else next_obs
+            normalize_obs(obs_stats, next_obs) if config.normalize_obs else next_obs
         )
         _, last_values = network.apply(params, norm_last)
         return trajectories, next_states, next_obs, last_values, rng
@@ -528,27 +517,20 @@ def make_train_fns(
             ratio = jnp.exp(lp - old_lp)
             pg_loss = -jnp.minimum(
                 ratio * adv,
-                jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps)
-                * adv,
+                jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv,
             ).mean()
             value_loss = 0.5 * ((values - rets) ** 2).mean()
             total = (
-                pg_loss
-                + config.value_coef * value_loss
-                - config.entropy_coef * entropy
+                pg_loss + config.value_coef * value_loss - config.entropy_coef * entropy
             )
             metrics = {
                 "loss/total": total,
                 "loss/policy": pg_loss,
                 "loss/value": value_loss,
                 "loss/entropy": entropy,
-                "misc/approx_kl": (
-                    (ratio - 1.0) - jnp.log(ratio)
-                ).mean(),
+                "misc/approx_kl": ((ratio - 1.0) - jnp.log(ratio)).mean(),
                 "misc/clip_frac": (
-                    (jnp.abs(ratio - 1.0) > config.clip_eps).astype(
-                        jnp.float32
-                    )
+                    (jnp.abs(ratio - 1.0) > config.clip_eps).astype(jnp.float32)
                 ).mean(),
             }
             return total, metrics
@@ -564,9 +546,7 @@ def make_train_fns(
             ],
         ) -> tuple[tuple[Any, optax.OptState], dict[str, jax.Array]]:
             p, os = carry
-            (loss, m), grads = jax.value_and_grad(_loss, has_aux=True)(
-                p, *mb
-            )
+            (loss, m), grads = jax.value_and_grad(_loss, has_aux=True)(p, *mb)
             updates, new_os = optimizer.update(grads, os, p)
             return (optax.apply_updates(p, updates), new_os), m
 
@@ -582,9 +562,7 @@ def make_train_fns(
             perm = jax.random.permutation(key_perm, batch_size)
 
             def _reshape(x: jax.Array) -> jax.Array:
-                return x[perm].reshape(
-                    (config.num_minibatches, mb_size) + x.shape[1:]
-                )
+                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
 
             mbs = (
                 _reshape(flat_obs),
@@ -593,9 +571,7 @@ def make_train_fns(
                 _reshape(flat_advantages),
                 _reshape(flat_returns),
             )
-            (p, os), metrics = jax.lax.scan(
-                _minibatch_step, (p, os), mbs
-            )
+            (p, os), metrics = jax.lax.scan(_minibatch_step, (p, os), mbs)
             return (p, os, epoch_rng), metrics
 
         (params, opt_state, rng), metrics = jax.lax.scan(
@@ -632,9 +608,7 @@ def save_checkpoint(
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
-        "params": jax.device_get(
-            jax.tree_util.tree_map(np.array, params)
-        ),
+        "params": jax.device_get(jax.tree_util.tree_map(np.array, params)),
         "obs_mean": np.array(obs_stats.mean),
         "obs_var": np.array(obs_stats.var),
         "obs_count": int(obs_stats.count),
@@ -704,7 +678,9 @@ def _draw_hud(frame: np.ndarray, action_name: str, cum_return: float) -> np.ndar
 
     draw.rectangle([4, 4, 4 + box_w, 4 + box_h], fill=(0, 0, 0, 150))
     for i, line in enumerate(lines):
-        draw.text((4 + pad, 4 + pad + i * line_h), line, font=font, fill=(255, 255, 255, 255))
+        draw.text(
+            (4 + pad, 4 + pad + i * line_h), line, font=font, fill=(255, 255, 255, 255)
+        )
 
     return np.array(Image.alpha_composite(img, overlay).convert("RGB"))
 
@@ -759,7 +735,9 @@ def render_episode(
     _w_action = int(jnp.argmax(_w_logits))
     rng, _key_warmup = jax.random.split(rng)
     jit_step(_key_warmup, state, _w_action, env_params)  # compile only; discard
-    logger.info("  Kernels ready; collecting up to %d frames...", env_params.max_timesteps)
+    logger.info(
+        "  Kernels ready; collecting up to %d frames...", env_params.max_timesteps
+    )
 
     frames: list[np.ndarray] = []
     actions: list[int] = []
@@ -778,7 +756,9 @@ def render_episode(
         frames.append(_draw_hud(frame, Action(action).name, cum_return))
         state = next_state
         if bool(done):
-            frames.append(_draw_hud(render_pixels(state), Action(action).name, cum_return))
+            frames.append(
+                _draw_hud(render_pixels(state), Action(action).name, cum_return)
+            )
             break
 
     logger.info("  Episode finished: %d frames collected.", len(frames))
@@ -961,9 +941,7 @@ def _save_analysis_plots(
         action_labels=action_labels,
         title="Action raster — final rendered episode",
     )
-    fig.savefig(
-        out_dir / "final_episode_actions.png", dpi=120, bbox_inches="tight"
-    )
+    fig.savefig(out_dir / "final_episode_actions.png", dpi=120, bbox_inches="tight")
     plt.close(fig)
     logger.info("  Saved final_episode_actions.png")
 
@@ -1007,8 +985,7 @@ def train(config: Config) -> None:
             )
         except ImportError:
             logger.error(
-                "wandb not found. Install with: uv add wandb  "
-                "(continuing without W&B)"
+                "wandb not found. Install with: uv add wandb  (continuing without W&B)"
             )
 
     # --- Environment and network setup ---------------------------------------
@@ -1046,6 +1023,7 @@ def train(config: Config) -> None:
 
         def _reset_fn(keys: jax.Array, params: EnvParams) -> EnvState:
             """Return the fixed level state broadcast across all environments."""
+
             def _broadcast(x: jax.Array) -> jax.Array:
                 a = jnp.asarray(x)
                 return jnp.broadcast_to(a[None], (config.num_envs,) + a.shape)
@@ -1068,9 +1046,7 @@ def train(config: Config) -> None:
     # NOOP=0, LEFT=1, RIGHT=2, UP=3, DOWN=4, MINE=5 are the first 6 actions.
     num_actions = 6 if config.restrict_actions else int(env.action_space(env_params).n)
 
-    network = ActorCritic(
-        hidden_dims=config.hidden_dims, num_actions=num_actions
-    )
+    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=num_actions)
     optimizer = optax.chain(
         optax.clip_by_global_norm(config.max_grad_norm),
         optax.adam(config.learning_rate),
@@ -1087,9 +1063,7 @@ def train(config: Config) -> None:
         load_path = Path(config.load_path)
         params, obs_stats, start_step = load_checkpoint(load_path)
         opt_state = optimizer.init(params)
-        logger.info(
-            "Resumed from %s at step %d", load_path, start_step
-        )
+        logger.info("Resumed from %s at step %d", load_path, start_step)
 
     # --- Build JIT'd training functions --------------------------------------
     collect_fn, update_fn = make_train_fns(
@@ -1116,9 +1090,7 @@ def train(config: Config) -> None:
         f"{total_iters * steps_per_iter:,}",
     )
     obs_label = (
-        f"local(r={config.obs_radius})"
-        if config.obs_type == "local"
-        else "global"
+        f"local(r={config.obs_radius})" if config.obs_type == "local" else "global"
     )
     level_label = config.level_name if config.level_name else "procedural"
     logger.info(
@@ -1134,9 +1106,7 @@ def train(config: Config) -> None:
         env_params.max_timesteps,
     )
     if config.save_path is not None:
-        logger.info(
-            "Checkpoints will be saved to %s", Path(config.save_path)
-        )
+        logger.info("Checkpoints will be saved to %s", Path(config.save_path))
 
     # --- Initialize vectorized environments ----------------------------------
     logger.info(
@@ -1203,7 +1173,7 @@ def train(config: Config) -> None:
 
         # Track completed episodes via done signals -------------------------
         rewards_np = np.array(trajectories.reward)  # (T, N)
-        dones_np = np.array(trajectories.done)       # (T, N)
+        dones_np = np.array(trajectories.done)  # (T, N)
         for t in range(rewards_np.shape[0]):
             running_ep_return += rewards_np[t]
             running_ep_length += 1
@@ -1219,9 +1189,14 @@ def train(config: Config) -> None:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
             if completed_ep_returns:
-                mean_ep_reward = float(np.mean(
-                    [r / l for r, l in zip(completed_ep_returns, completed_ep_lengths)]
-                ))
+                mean_ep_reward = float(
+                    np.mean(
+                        [
+                            r / l
+                            for r, l in zip(completed_ep_returns, completed_ep_lengths)
+                        ]
+                    )
+                )
                 max_ep_return = float(np.max(completed_ep_returns))
             else:
                 mean_ep_reward = 0.0
@@ -1248,10 +1223,7 @@ def train(config: Config) -> None:
                 wandb_run.log(log_data, step=current_step)
 
         # Checkpointing -----------------------------------------------------
-        if (
-            config.save_path is not None
-            and (it + 1) % config.log_interval == 0
-        ):
+        if config.save_path is not None and (it + 1) % config.log_interval == 0:
             ckpt_path = Path(config.save_path) / f"step_{current_step}.pkl"
             save_checkpoint(ckpt_path, params, obs_stats, current_step)
 
@@ -1259,9 +1231,7 @@ def train(config: Config) -> None:
     if config.save_path is not None:
         final_path = Path(config.save_path) / "final.pkl"
         save_checkpoint(final_path, params, obs_stats, current_step)
-        logger.info(
-            "Final checkpoint saved. To resume: --load-path %s", final_path
-        )
+        logger.info("Final checkpoint saved. To resume: --load-path %s", final_path)
 
     # --- Visualization of final policy ---------------------------------------
     logger.info("Rendering final-policy episode...")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -39,110 +41,13 @@ from factoriax.play.ui import (
 )
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
+from factoriax.ui.compositing import composite_rgba_over_rgb  # noqa: F401
+from factoriax.ui.primitives import hit_test_regions  # noqa: F401
+from factoriax.ui.window import calculate_window_size  # noqa: F401
 
 _ROCKET_ACHIEVEMENT_IDX: int = next(
     i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
 )
-
-
-def composite_rgba_over_rgb(
-    background: np.ndarray, overlay: np.ndarray
-) -> None:
-    """Composite an RGBA overlay onto an RGB background in-place.
-
-    Only blends pixels within the bounding box of non-transparent
-    overlay content, skipping the float arithmetic for the large
-    fully-transparent regions that surround a centered menu panel.
-
-    Args:
-        background: RGB image array of shape (H, W, 3), modified
-            in place.
-        overlay: RGBA image array of shape (H, W, 4).
-    """
-    alpha_chan = overlay[:, :, 3]
-    row_has_alpha = np.any(alpha_chan > 0, axis=1)
-    if not np.any(row_has_alpha):
-        return
-    col_has_alpha = np.any(alpha_chan > 0, axis=0)
-
-    r0 = int(np.argmax(row_has_alpha))
-    r1 = len(row_has_alpha) - int(np.argmax(row_has_alpha[::-1]))
-    c0 = int(np.argmax(col_has_alpha))
-    c1 = len(col_has_alpha) - int(np.argmax(col_has_alpha[::-1]))
-
-    a = overlay[r0:r1, c0:c1, 3:4].astype(np.float32) / 255.0
-    fg = overlay[r0:r1, c0:c1, :3].astype(np.float32)
-    bg = background[r0:r1, c0:c1].astype(np.float32)
-    background[r0:r1, c0:c1] = (fg * a + bg * (1 - a)).astype(
-        np.uint8
-    )
-
-
-def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion | None:
-    """Find the first click region containing the given point.
-
-    Args:
-        regions: List of click regions to test.
-        x: X coordinate in base resolution.
-        y: Y coordinate in base resolution.
-
-    Returns:
-        The first matching ClickRegion, or None if no hit.
-    """
-    for region in regions:
-        if region.x <= x < region.x + region.w and region.y <= y < region.y + region.h:
-            return region
-    return None
-
-
-_monitor_size: tuple[int, int] | None = None
-
-
-def _get_monitor_size() -> tuple[int, int]:
-    """Return the monitor resolution, cached on first call.
-
-    ``pygame.display.Info()`` reports the monitor size before any
-    display mode is set, but returns the *window* size afterwards.
-    This function captures the true monitor dimensions once and
-    reuses them for all subsequent calls.
-
-    Returns:
-        ``(width, height)`` of the primary monitor in pixels.
-    """
-    global _monitor_size  # noqa: PLW0603
-    if _monitor_size is None:
-        info = pygame.display.Info()
-        _monitor_size = (info.current_w, info.current_h)
-    return _monitor_size
-
-
-def calculate_window_size(
-    base_width: int, base_height: int, scale_factor: float = 0.8
-) -> tuple[int, int]:
-    """Calculate window size using integer scaling for crisp pixel art.
-
-    Uses the largest integer scale factor that fits within scale_factor
-    (default 80%) of the screen. Integer scaling ensures every pixel is
-    rendered at exactly the same size, preventing blurry text and artifacts.
-
-    Args:
-        base_width: Base render width in pixels
-        base_height: Base render height in pixels
-        scale_factor: Fraction of screen to use (0.0 to 1.0)
-
-    Returns:
-        Tuple of (window_width, window_height) in pixels
-    """
-    monitor_w, monitor_h = _get_monitor_size()
-    max_width = int(monitor_w * scale_factor)
-    max_height = int(monitor_h * scale_factor)
-
-    # Find the largest integer scale that fits the screen
-    max_scale_w = max_width // base_width
-    max_scale_h = max_height // base_height
-    scale = max(1, min(max_scale_w, max_scale_h))
-
-    return base_width * scale, base_height * scale
 
 
 def _tile_in_front(state: object, player_idx: int) -> tuple[int, int]:
@@ -341,6 +246,10 @@ def _play_loop(
     welcome_open = True
     victory_open = False
     victory_shown = False
+    record_enabled = False
+    recorded_states: list = []
+    recorded_actions: list[int] = []
+    recorded_rewards: list[float] = []
 
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))
     win_ox = (window_width - ui_w * win_scale) // 2
@@ -356,12 +265,26 @@ def _play_loop(
             if event.type == pygame.QUIT:
                 running = False
             elif welcome_open:
-                if event.type == pygame.KEYDOWN and event.key in (
-                    pygame.K_SPACE,
-                    pygame.K_RETURN,
-                    pygame.K_ESCAPE,
-                ):
-                    welcome_open = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        record_enabled = not record_enabled
+                    elif event.key in (
+                        pygame.K_SPACE,
+                        pygame.K_RETURN,
+                        pygame.K_ESCAPE,
+                    ):
+                        welcome_open = False
+                        if record_enabled:
+                            recorded_states.append(state)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mx = (event.pos[0] - win_ox) // win_scale
+                    my = (event.pos[1] - win_oy) // win_scale
+                    _, welcome_regions = render_welcome_screen(
+                        ui_w, ui_h, record_enabled
+                    )
+                    hit = hit_test_regions(welcome_regions, mx, my)
+                    if hit is not None and hit.action == "toggle_record":
+                        record_enabled = not record_enabled
                 continue
             elif victory_open:
                 if event.type == pygame.KEYDOWN and event.key in (
@@ -602,9 +525,7 @@ def _play_loop(
                 elif achievement_open:
                     row_h = 36
                     if event.key == pygame.K_w:
-                        achievement_selection = max(
-                            0, achievement_selection - 1
-                        )
+                        achievement_selection = max(0, achievement_selection - 1)
                     elif event.key == pygame.K_s:
                         achievement_selection = min(
                             NUM_ACHIEVEMENTS - 1,
@@ -670,10 +591,7 @@ def _play_loop(
                     selected_player = int(state.selected_player)  # type: ignore[union-attr]
                     tx, ty = _tile_in_front(state, selected_player)
                     map_h, map_w = state.map.shape  # type: ignore[union-attr]
-                    if (
-                        0 <= tx < map_w
-                        and 0 <= ty < map_h
-                    ):
+                    if 0 <= tx < map_w and 0 <= ty < map_h:
                         state = rotate_machine(state, tx, ty)
                 elif ctrl_held and event.key in key_to_player:
                     player_idx = key_to_player[event.key]
@@ -709,6 +627,10 @@ def _play_loop(
                 action,
                 params,
             )
+            if record_enabled:
+                recorded_actions.append(int(action))
+                recorded_rewards.append(float(reward))
+                recorded_states.append(state)
             if done:
                 if level is not None:
                     obs, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
@@ -725,9 +647,7 @@ def _play_loop(
                     victory_open = True
                     victory_shown = True
 
-        pixels = render_pixels(
-            state, block_pixel_size=tile_px, frame_tick=frame_tick
-        )
+        pixels = render_pixels(state, block_pixel_size=tile_px, frame_tick=frame_tick)
         click_regions = []
 
         # Build the UI frame.  The world is rendered at a tile size
@@ -738,9 +658,7 @@ def _play_loop(
         ui_frame[world_oy : world_oy + ph, world_ox : world_ox + pw] = pixels
 
         # Persistent hotbar at the bottom of every frame.
-        hotbar_overlay, hotbar_regions = render_hotbar(
-            state, ui_w, ui_h, hotbar_page
-        )
+        hotbar_overlay, hotbar_regions = render_hotbar(state, ui_w, ui_h, hotbar_page)
         composite_rgba_over_rgb(ui_frame, hotbar_overlay)
         click_regions.extend(hotbar_regions)
 
@@ -787,19 +705,14 @@ def _play_loop(
             click_regions.extend(pause_regions)
 
         if help_open:
-            composite_rgba_over_rgb(
-                ui_frame, render_help_overlay(ui_w, ui_h)
-            )
+            composite_rgba_over_rgb(ui_frame, render_help_overlay(ui_w, ui_h))
 
         if victory_open:
-            composite_rgba_over_rgb(
-                ui_frame, render_victory_screen(ui_w, ui_h)
-            )
+            composite_rgba_over_rgb(ui_frame, render_victory_screen(ui_w, ui_h))
 
         if welcome_open:
-            composite_rgba_over_rgb(
-                ui_frame, render_welcome_screen(ui_w, ui_h)
-            )
+            welcome_overlay, _ = render_welcome_screen(ui_w, ui_h, record_enabled)
+            composite_rgba_over_rgb(ui_frame, welcome_overlay)
 
         final_surface = pygame.surfarray.make_surface(
             np.transpose(ui_frame, (1, 0, 2)),
@@ -813,6 +726,37 @@ def _play_loop(
         pygame.display.flip()
         frame_tick += 1
         clock.tick(30)
+
+    # Save recorded trajectory on exit.
+    if record_enabled and recorded_states:
+        _save_recorded_trajectory(recorded_states, recorded_actions, recorded_rewards)
+
+
+def _save_recorded_trajectory(
+    states: list,
+    actions: list[int],
+    rewards: list[float],
+) -> None:
+    """Save a recorded play session as a timestamped .npz trajectory.
+
+    Args:
+        states: List of EnvState snapshots.
+        actions: List of action integers.
+        rewards: List of reward floats.
+    """
+    from datetime import datetime
+
+    from factoriax.analysis.trajectory import states_to_trajectory
+
+    # Pad actions/rewards to match states length (states has initial + per-step).
+    act = np.array(actions + [0] * (len(states) - len(actions)), dtype=np.int32)
+    rew = np.array(rewards + [0.0] * (len(states) - len(rewards)), dtype=np.float32)
+    traj = states_to_trajectory(states, actions=act, rewards=rew)
+    traj.metadata["obs_type"] = 3  # PLAYER
+    ts = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+    path = f"trajectory_{ts}.npz"
+    traj.save(path)
+    print(f"Saved trajectory: {path} ({len(states)} steps)")
 
 
 def main() -> None:

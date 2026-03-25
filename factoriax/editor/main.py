@@ -160,6 +160,7 @@ class ToolState:
     fill_rect: tuple[int, int, int, int] | None = None
     middle_dragging: bool = False
     middle_last: tuple[int, int] = (0, 0)
+    toolbar_scroll: int = 0
 
     @property
     def layer(self) -> str:
@@ -261,15 +262,31 @@ def _update_viewport(
     vp: Viewport,
     reset_camera: bool = False,
 ) -> None:
-    """Recalculate viewport dimensions after the map size changes.
+    """Recalculate tile size so the map fits inside the fixed canvas area.
+
+    The canvas dimensions stay constant (set once at startup from the
+    window size). Only ``tile_size`` changes so that the full map is
+    visible without scrolling. The zoom can still be adjusted manually
+    afterwards.
 
     Args:
         editor: Current editor state (read-only).
         vp: Viewport to update in place.
         reset_camera: If ``True`` the camera is moved to (0, 0).
     """
-    vp.canvas_w = editor.map_width * vp.tile_size
-    vp.canvas_h = editor.map_height * vp.tile_size
+    # Pick the largest tile size from the allowed set that fits the map
+    # inside the current canvas.
+    allowed = [48, 32, 24, 16]
+    for ts in allowed:
+        if (
+            editor.map_width * ts <= vp.canvas_w
+            and editor.map_height * ts <= vp.canvas_h
+        ):
+            vp.tile_size = ts
+            break
+    else:
+        vp.tile_size = allowed[-1]
+
     if reset_camera:
         vp.camera_x = 0.0
         vp.camera_y = 0.0
@@ -780,8 +797,13 @@ def _render_frame(
 
     frame = np.full((base_h, base_w, 3), (30, 30, 30), dtype=np.uint8)
     frame[:MENU_BAR_HEIGHT, :] = menu_bar
-    tb_h = min(toolbar.shape[0], vp.canvas_h)
-    frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_h, :TOOLBAR_WIDTH] = toolbar[:tb_h]
+    tb_visible_h = min(toolbar.shape[0], vp.canvas_h)
+    scroll = min(ts.toolbar_scroll, max(0, toolbar.shape[0] - tb_visible_h))
+    ts.toolbar_scroll = scroll
+    tb_slice = toolbar[scroll : scroll + tb_visible_h]
+    frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_slice.shape[0], :TOOLBAR_WIDTH] = (
+        tb_slice
+    )
 
     canvas_rgb = canvas_img[:, :, :3]
     alpha = canvas_img[:, :, 3:4].astype(np.float32) / 255.0
@@ -799,9 +821,7 @@ def _render_frame(
     frame[base_h - STATUS_BAR_HEIGHT :, :] = status_bar
 
     if inspector_dialog is not None:
-        composite_rgba_over_rgb(
-            frame, inspector_dialog.render(base_w, base_h)
-        )
+        composite_rgba_over_rgb(frame, inspector_dialog.render(base_w, base_h))
     if file_dialog is not None:
         composite_rgba_over_rgb(frame, file_dialog.render(base_w, base_h))
     if dialog is not None:
@@ -819,11 +839,29 @@ def _render_frame(
 # ---------------------------------------------------------------------------
 
 
+def _export_benchmark_levels() -> None:
+    """Write benchmark levels as JSON files into the levels/ directory.
+
+    Called at editor startup so that benchmark levels are always available
+    in the Load dialog. The levels/ directory is gitignored, so these
+    files are regenerated each run and never committed.
+    """
+    from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+    from factoriax.editor.dialogs import LEVELS_DIR
+
+    LEVELS_DIR.mkdir(parents=True, exist_ok=True)
+    for bl in BASIC_SKILLS_LEVELS:
+        path = LEVELS_DIR / f"{bl.name}.json"
+        if not path.exists():
+            save_level(bl.level, path)
+
+
 def main() -> None:
     """Run the FactoriaX level editor.
 
     Press ``?`` for a full list of controls.
     """
+    _export_benchmark_levels()
     pygame.init()
 
     editor = new_editor_state(15, 15)
@@ -882,7 +920,8 @@ def main() -> None:
                     if path is not None:
                         if file_dialog.mode == "save":
                             save_level(
-                                editor_state_to_level(editor), path,
+                                editor_state_to_level(editor),
+                                path,
                             )
                             editor.dirty = False
                         else:
@@ -890,10 +929,14 @@ def main() -> None:
                                 level = load_level(path)
                                 editor = editor_state_from_level(level)
                                 _update_viewport(
-                                    editor, vp, reset_camera=True,
+                                    editor,
+                                    vp,
+                                    reset_camera=True,
                                 )
                                 base_w, base_h, scale = _recalc_layout(
-                                    vp, window_w, window_h,
+                                    vp,
+                                    window_w,
+                                    window_h,
                                 )
                     file_dialog = None
                 elif result == "cancel":
@@ -940,6 +983,9 @@ def main() -> None:
 
             if event.type == pygame.VIDEORESIZE:
                 window_w, window_h = event.w, event.h
+                vp.canvas_w = window_w - TOOLBAR_WIDTH
+                vp.canvas_h = window_h - MENU_BAR_HEIGHT - STATUS_BAR_HEIGHT
+                clamp_camera(vp, editor.map_width, editor.map_height)
                 base_w, base_h, scale = _recalc_layout(
                     vp,
                     window_w,
@@ -959,17 +1005,21 @@ def main() -> None:
                     continue
 
                 if event.button in (4, 5):
-                    cx = mx - TOOLBAR_WIDTH
-                    cy = my - MENU_BAR_HEIGHT
-                    if cx >= 0 and cy >= 0:
-                        zoom(
-                            vp,
-                            1 if event.button == 4 else -1,
-                            cx,
-                            cy,
-                            editor.map_width,
-                            editor.map_height,
-                        )
+                    if mx < TOOLBAR_WIDTH and my >= MENU_BAR_HEIGHT:
+                        step = -20 if event.button == 4 else 20
+                        ts.toolbar_scroll = max(0, ts.toolbar_scroll + step)
+                    else:
+                        cx = mx - TOOLBAR_WIDTH
+                        cy = my - MENU_BAR_HEIGHT
+                        if cx >= 0 and cy >= 0:
+                            zoom(
+                                vp,
+                                1 if event.button == 4 else -1,
+                                cx,
+                                cy,
+                                editor.map_width,
+                                editor.map_height,
+                            )
                     continue
 
                 if event.button == 1:
@@ -1003,7 +1053,7 @@ def main() -> None:
                         adjusted = [
                             ClickRegion(
                                 r.x,
-                                r.y + MENU_BAR_HEIGHT,
+                                r.y + MENU_BAR_HEIGHT - ts.toolbar_scroll,
                                 r.w,
                                 r.h,
                                 r.action,

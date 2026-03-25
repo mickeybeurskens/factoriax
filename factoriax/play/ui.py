@@ -3,12 +3,13 @@
 This module is intentionally separate from renderer.py so that the RL
 environment never pulls in a pygame dependency.  Only the play subpackage
 (and any other human-facing entry points) should import from here.
+
+Generic UI primitives (ClickRegion, draw_panel, fonts, compositing) now
+live in :mod:`factoriax.ui` and are re-exported here for backward
+compatibility.
 """
 
 from __future__ import annotations
-
-import functools
-from dataclasses import dataclass
 
 import numpy as np
 import pygame
@@ -33,55 +34,38 @@ from factoriax.crafting import can_afford_recipe, count_item_in_inventory
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvState
 
+# Re-export shared primitives so existing ``from factoriax.play.ui import``
+# statements keep working.
+from factoriax.ui.compositing import blit_rgba as _blit_rgba  # noqa: F401
+from factoriax.ui.compositing import (
+    blit_scroll_view,  # noqa: F401
+    clip_scroll_offset,  # noqa: F401
+)
+from factoriax.ui.fonts import get_pixel_font  # noqa: F401
+from factoriax.ui.fonts import render_text_rgba as _render_text_rgba  # noqa: F401
+from factoriax.ui.primitives import (
+    ClickRegion,  # noqa: F401
+    draw_panel,  # noqa: F401
+)
+from factoriax.ui.theme import BORDER as _BORDER
+from factoriax.ui.theme import BORDER_PX as _BORDER_PX
+from factoriax.ui.theme import FONT_BODY as _FONT_BODY
+from factoriax.ui.theme import FONT_HEADER as _FONT_HEADER
+from factoriax.ui.theme import FONT_HINT as _FONT_HINT
+from factoriax.ui.theme import HEADER_H as _HEADER_H
+from factoriax.ui.theme import HINT_COLOR as _HINT_COLOR
+from factoriax.ui.theme import HINT_HEIGHT as _HINT_HEIGHT
+from factoriax.ui.theme import SCROLL_STEP  # noqa: F401
+from factoriax.ui.theme import SCROLLBAR_BG as _SCROLLBAR_BG  # noqa: F401
+from factoriax.ui.theme import SCROLLBAR_THUMB as _SCROLLBAR_THUMB  # noqa: F401
+from factoriax.ui.theme import SCROLLBAR_W as _SCROLLBAR_W  # noqa: F401
+from factoriax.ui.theme import SEP_H as _SEP_H
+from factoriax.ui.theme import SLOT_COUNT_COLOR as _SLOT_COUNT_COLOR
 
-@dataclass(frozen=True, slots=True)
-class ClickRegion:
-    """Represents a clickable rectangular area in the UI.
-
-    Coordinates are in base render resolution (before window scaling).
-
-    Attributes:
-        x: Left edge of the region in pixels.
-        y: Top edge of the region in pixels.
-        w: Width of the region in pixels.
-        h: Height of the region in pixels.
-        action: Type of action to perform ("select_slot", "select_recipe",
-            "focus_inventory", "focus_crafting", "pause_option").
-        param: Action-specific parameter (slot/recipe index, option index).
-    """
-
-    x: int
-    y: int
-    w: int
-    h: int
-    action: str
-    param: int
-
-# ---------------------------------------------------------------------------
-# Style constants — edit here to restyle every menu at once.
-# All values are sized for the 32 px-per-block base resolution.
-# ---------------------------------------------------------------------------
-
-_PANEL_BG: tuple[int, int, int, int] = (22, 22, 22, 228)
+# Play-specific style constants not shared with other apps.
 _PAUSE_OPTION_NORMAL: tuple[int, int, int, int] = (45, 45, 45, 255)
 _PAUSE_OPTION_SELECTED: tuple[int, int, int, int] = (75, 75, 75, 255)
-_BORDER: tuple[int, int, int, int] = (190, 165, 55, 255)
-_BORDER_PX: int = 4
 _FOCUS_STRIP: tuple[int, int, int, int] = (55, 130, 55, 255)
-_HEADER_H: int = 44  # height reserved for each section label row
-_SEP_H: int = 4  # height of the gold separator beneath labels
-_FONT_HEADER: int = 26  # section label font size
-_FONT_BODY: int = 20  # item names, counts, recipe info font size
-_FONT_HINT: int = 14  # control hint font size
-_HINT_HEIGHT: int = 24  # height reserved for hint bar at bottom of menus
-_HINT_COLOR: tuple[int, int, int] = (180, 175, 140)
-_SLOT_COUNT_COLOR: tuple[int, int, int] = (220, 215, 180)
-
-# Scroll system constants — shared by every scrollable menu.
-SCROLL_STEP: int = 24
-_SCROLLBAR_W: int = 8
-_SCROLLBAR_BG: tuple[int, int, int, int] = (40, 40, 40, 200)
-_SCROLLBAR_THUMB: tuple[int, int, int, int] = (140, 130, 80, 255)
 
 # Crafting ingredient affordability colours.
 _AFFORD_COLOR: tuple[int, int, int] = (110, 220, 110)
@@ -102,153 +86,9 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.ROCKET: "Rocket",
 }
 
-# Comma-separated preference list for pygame.font.SysFont.  Terminus is a
-# 1:1 pixel bitmap font common on Linux; the rest are fallbacks.
-_PIXEL_FONT_PREFERENCE = "terminus,fixedsys excelsior,courier new,monospace,courier"
-
-
 # ---------------------------------------------------------------------------
-# Core drawing primitives
+# Core drawing primitives (re-exported from factoriax.ui)
 # ---------------------------------------------------------------------------
-
-
-@functools.lru_cache(maxsize=16)
-def get_pixel_font(size: int) -> pygame.font.Font:
-    """Return a pixel-style monospace font at the requested size.
-
-    Results are cached so font objects are created at most once per unique
-    size, regardless of how many frames are rendered.  Requires
-    pygame.font to be initialised before the first call.
-
-    Args:
-        size: Desired font height in pixels.
-
-    Returns:
-        A pygame.font.Font instance.
-    """
-    font = pygame.font.SysFont(_PIXEL_FONT_PREFERENCE, size)
-    if font is not None:
-        return font
-    return pygame.font.Font(pygame.font.get_default_font(), size)
-
-
-def draw_panel(
-    overlay: np.ndarray,
-    x: int,
-    y: int,
-    w: int,
-    h: int,
-    *,
-    bg: tuple[int, int, int, int] = _PANEL_BG,
-    border: tuple[int, int, int, int] = _BORDER,
-    border_px: int = _BORDER_PX,
-) -> None:
-    """Draw a rectangular panel: solid background with a uniform border.
-
-    All menus call this first so their look is controlled by the style
-    constants above.  Modifies *overlay* in place.
-
-    Args:
-        overlay: Destination RGBA array of shape (H, W, 4).
-        x: Left column of the panel.
-        y: Top row of the panel.
-        w: Panel width in pixels.
-        h: Panel height in pixels.
-        bg: Background RGBA colour.
-        border: Border RGBA colour.
-        border_px: Border thickness in pixels.
-    """
-    overlay[y : y + h, x : x + w] = bg
-    for i in range(border_px):
-        overlay[y + i, x : x + w] = border
-        overlay[y + h - 1 - i, x : x + w] = border
-        overlay[y : y + h, x + i] = border
-        overlay[y : y + h, x + w - 1 - i] = border
-
-
-# Cache for rendered text arrays, keyed by (font identity, text, color).
-# Font objects come from get_pixel_font (lru_cached), so their id() is
-# stable for the lifetime of the process.  The cache avoids repeated
-# pygame font rasterisation for text that hasn't changed between frames.
-_text_rgba_cache: dict[
-    tuple[int, str, tuple[int, int, int]], np.ndarray
-] = {}
-
-
-def _render_text_rgba(
-    text: str,
-    font: pygame.font.Font,
-    color: tuple[int, int, int],
-) -> np.ndarray:
-    """Render text to an RGBA array with a fully transparent background.
-
-    Results are cached by ``(id(font), text, color)`` so that identical
-    text drawn on consecutive frames is rasterised at most once.
-    antialias=False keeps every pixel either the exact glyph colour or
-    transparent, which is what gives the pixelated look.
-
-    Args:
-        text: String to render.
-        font: pygame Font to use.
-        color: RGB glyph colour.
-
-    Returns:
-        RGBA numpy array of shape (H, W, 4).
-    """
-    key = (id(font), text, color)
-    cached = _text_rgba_cache.get(key)
-    if cached is not None:
-        return cached
-
-    surface = font.render(text, False, color)
-    w, h = surface.get_size()
-    # surfarray returns (W, H, 3); transpose to (H, W, 3).
-    rgb = pygame.surfarray.array3d(surface).transpose(1, 0, 2)
-    result = np.zeros((h, w, 4), dtype=np.uint8)
-    result[:, :, :3] = rgb
-    result[:, :, 3] = np.where(np.any(rgb != 0, axis=2), 255, 0)
-
-    _text_rgba_cache[key] = result
-    return result
-
-
-def _blit_rgba(
-    overlay: np.ndarray,
-    src: np.ndarray,
-    y: int,
-    x: int,
-) -> None:
-    """Alpha-composite *src* onto *overlay* at (y, x), clipping to bounds.
-
-    Args:
-        overlay: Destination RGBA array of shape (H, W, 4); modified in place.
-        src: Source RGBA array of shape (h, w, 4).
-        y: Top row in *overlay*.
-        x: Left column in *overlay*.
-    """
-    oh, ow = overlay.shape[:2]
-    sh, sw = src.shape[:2]
-
-    src_y0 = max(0, -y)
-    src_x0 = max(0, -x)
-    dst_y0, dst_x0 = max(0, y), max(0, x)
-    dst_y1 = min(oh, y + sh)
-    dst_x1 = min(ow, x + sw)
-
-    if dst_y1 <= dst_y0 or dst_x1 <= dst_x0:
-        return
-
-    crop_h = dst_y1 - dst_y0
-    crop_w = dst_x1 - dst_x0
-    src_crop = src[src_y0 : src_y0 + crop_h, src_x0 : src_x0 + crop_w]
-    dst = overlay[dst_y0:dst_y1, dst_x0:dst_x1]
-
-    alpha = src_crop[:, :, 3:4].astype(np.float32) / 255.0
-    dst[:, :, :3] = (
-        src_crop[:, :, :3].astype(np.float32) * alpha
-        + dst[:, :, :3].astype(np.float32) * (1.0 - alpha)
-    ).astype(np.uint8)
-    dst[:, :, 3] = np.maximum(dst[:, :, 3], src_crop[:, :, 3])
 
 
 def _draw_section_header(
@@ -327,61 +167,8 @@ def _render_control_hints(
 # ---------------------------------------------------------------------------
 
 
-def clip_scroll_offset(offset: int, content_h: int, viewport_h: int) -> int:
-    """Clamp a scroll offset to the valid range for the given content and viewport.
-
-    Args:
-        offset: Proposed scroll offset in pixels.
-        content_h: Total height of the scrollable content in pixels.
-        viewport_h: Height of the visible viewport in pixels.
-
-    Returns:
-        Clamped offset in ``[0, max(0, content_h - viewport_h)]``.
-    """
-    return max(0, min(offset, max(0, content_h - viewport_h)))
-
-
-def blit_scroll_view(
-    overlay: np.ndarray,
-    content: np.ndarray,
-    vp_x: int,
-    vp_y: int,
-    vp_w: int,
-    vp_h: int,
-    scroll_offset: int,
-) -> None:
-    """Composite a scrollable content canvas into a viewport on *overlay*.
-
-    When the content is taller than the viewport a scrollbar is drawn along
-    the right edge of the viewport.  The scrollbar appearance is fully
-    controlled by this function so every menu looks identical — callers only
-    choose the viewport geometry.
-
-    Args:
-        overlay: Destination RGBA array; modified in place.
-        content: Full content RGBA canvas of shape ``(content_h, vp_w, 4)``.
-        vp_x: Left edge of the viewport in overlay coordinates.
-        vp_y: Top edge of the viewport in overlay coordinates.
-        vp_w: Viewport width in pixels (includes scrollbar when shown).
-        vp_h: Viewport height in pixels.
-        scroll_offset: Number of content pixels scrolled off the top.
-    """
-    content_h = content.shape[0]
-    needs_bar = content_h > vp_h
-    render_w = vp_w - (_SCROLLBAR_W if needs_bar else 0)
-
-    visible = content[scroll_offset : scroll_offset + vp_h, :render_w]
-    _blit_rgba(overlay, visible, vp_y, vp_x)
-
-    if needs_bar:
-        bar_x = vp_x + vp_w - _SCROLLBAR_W
-        overlay[vp_y : vp_y + vp_h, bar_x : bar_x + _SCROLLBAR_W] = _SCROLLBAR_BG
-        thumb_h = max(12, vp_h * vp_h // content_h)
-        max_scroll = content_h - vp_h
-        thumb_y = vp_y + int((vp_h - thumb_h) * scroll_offset / max(1, max_scroll))
-        overlay[
-            thumb_y : thumb_y + thumb_h, bar_x : bar_x + _SCROLLBAR_W
-        ] = _SCROLLBAR_THUMB
+# clip_scroll_offset and blit_scroll_view are re-exported from factoriax.ui
+# at the top of this file.
 
 
 def scroll_adjust_regions(
@@ -648,19 +435,21 @@ def render_pause_menu(
 def render_welcome_screen(
     screen_width: int,
     screen_height: int,
-) -> np.ndarray:
+    record_enabled: bool = False,
+) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the one-time welcome screen shown at game start.
 
-    Displays a brief narrative hook, a compact control reference, and a
-    prompt to dismiss.  Returned as a fully-opaque RGBA overlay so it
-    completely covers the world behind it.
+    Displays a brief narrative hook, a compact control reference, a
+    data-collection toggle, and a prompt to dismiss.  Returned as a
+    fully-opaque RGBA overlay so it completely covers the world behind it.
 
     Args:
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
+        record_enabled: Whether the trajectory recording checkbox is on.
 
     Returns:
-        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
+        ``(overlay, regions)`` — RGBA array and click regions.
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     overlay[:, :, :3] = 10
@@ -702,6 +491,8 @@ def render_welcome_screen(
         + _SEP_H
         + 8  # separator
         + controls_h  # control rows
+        + 16  # gap before record toggle
+        + control_row_h  # record checkbox row
         + 16  # gap before hint
         + _HINT_HEIGHT
     )
@@ -742,12 +533,50 @@ def render_welcome_screen(
         _blit_rgba(overlay, desc_arr, row_y, controls_x + key_col_w + 16)
         cy += control_row_h
 
-    # Dismiss hint
+    # Record trajectory toggle.
+    cy += 16
+    box_size = hint_h
+    box_x = menu_x + (menu_w - 200) // 2
+    box_y = cy + (control_row_h - box_size) // 2
+    # Draw checkbox outline.
+    overlay[box_y : box_y + box_size, box_x : box_x + box_size] = (100, 100, 100, 255)
+    overlay[box_y + 1 : box_y + box_size - 1, box_x + 1 : box_x + box_size - 1] = (
+        35,
+        35,
+        35,
+        255,
+    )
+    if record_enabled:
+        # Fill with accent color for "checked".
+        overlay[
+            box_y + 2 : box_y + box_size - 2,
+            box_x + 2 : box_x + box_size - 2,
+        ] = (110, 200, 110, 255)
+    rec_label = _render_text_rgba(
+        "Record trajectory [R]",
+        hint_font,
+        (190, 185, 155) if not record_enabled else (110, 220, 110),
+    )
+    _blit_rgba(overlay, rec_label, box_y, box_x + box_size + 8)
+    # Click region covers the checkbox and its label.
+    regions: list[ClickRegion] = [
+        ClickRegion(
+            box_x,
+            box_y,
+            box_size + 8 + rec_label.shape[1],
+            control_row_h,
+            "toggle_record",
+            0,
+        ),
+    ]
+    cy += control_row_h
+
+    # Dismiss hint.
     cy += 16
     hint_arr = _render_text_rgba("[SPACE / ENTER]  Start", hint_font, _HINT_COLOR)
     _blit_rgba(overlay, hint_arr, cy, menu_x + (menu_w - hint_arr.shape[1]) // 2)
 
-    return overlay
+    return overlay, regions
 
 
 def render_victory_screen(
@@ -779,7 +608,8 @@ def render_victory_screen(
 
     title = _render_text_rgba("ROCKET LAUNCHED", title_font, (215, 195, 65))
     _blit_rgba(
-        overlay, title,
+        overlay,
+        title,
         menu_y + _BORDER_PX + 16,
         menu_x + (menu_w - title.shape[1]) // 2,
     )
@@ -791,19 +621,25 @@ def render_victory_screen(
     ] = _BORDER
 
     msg = _render_text_rgba(
-        "You escaped the planet.", body_font, (200, 195, 160),
+        "You escaped the planet.",
+        body_font,
+        (200, 195, 160),
     )
     _blit_rgba(
-        overlay, msg,
+        overlay,
+        msg,
         sep_y + _SEP_H + 16,
         menu_x + (menu_w - msg.shape[1]) // 2,
     )
 
     hint = _render_text_rgba(
-        "[SPACE / ENTER]  Continue", hint_font, _HINT_COLOR,
+        "[SPACE / ENTER]  Continue",
+        hint_font,
+        _HINT_COLOR,
     )
     _blit_rgba(
-        overlay, hint,
+        overlay,
+        hint,
         menu_y + menu_h - _BORDER_PX - hint.shape[0] - 8,
         menu_x + (menu_w - hint.shape[1]) // 2,
     )
@@ -1005,7 +841,9 @@ def render_machine_menu(
                 ] = icon
 
             count_arr = _render_text_rgba(
-                f"x{count}", body_font, _SLOT_COUNT_COLOR,
+                f"x{count}",
+                body_font,
+                _SLOT_COUNT_COLOR,
             )
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
             count_y = icon_y + icon_size + 4
@@ -1177,9 +1015,7 @@ def render_hotbar(
             overlay[row, c0:c1, :3] = colors[0]
             overlay[row, c0:c1, 3] = 255
 
-    label = _render_text_rgba(
-        f"P{selected_player + 1}", hint_font, (255, 255, 255)
-    )
+    label = _render_text_rgba(f"P{selected_player + 1}", hint_font, (255, 255, 255))
     _blit_rgba(
         overlay,
         label,
@@ -1221,13 +1057,9 @@ def render_hotbar(
         if is_selected:
             white = (255, 255, 255, 255)
             overlay[icon_y, icon_x : icon_x + icon_size] = white
-            overlay[
-                icon_y + icon_size - 1, icon_x : icon_x + icon_size
-            ] = white
+            overlay[icon_y + icon_size - 1, icon_x : icon_x + icon_size] = white
             overlay[icon_y : icon_y + icon_size, icon_x] = white
-            overlay[
-                icon_y : icon_y + icon_size, icon_x + icon_size - 1
-            ] = white
+            overlay[icon_y : icon_y + icon_size, icon_x + icon_size - 1] = white
 
         item_type = int(inventory_items[slot_idx])
         count = int(inventory_counts[slot_idx])
@@ -1241,7 +1073,9 @@ def render_hotbar(
                     icon_x + pad : icon_x + pad + icon_s,
                 ] = icon_arr
             count_arr = _render_text_rgba(
-                f"{count}", hint_font, _SLOT_COUNT_COLOR,
+                f"{count}",
+                hint_font,
+                _SLOT_COUNT_COLOR,
             )
             count_x = icon_x + icon_size - count_arr.shape[1] - 1
             count_y = icon_y + icon_size - count_arr.shape[0]
@@ -1263,12 +1097,8 @@ def render_hotbar(
     btn_y = bar_y + 8
     btn_w = 36
     btn_h = _HOTBAR_H - 16
-    overlay[btn_y : btn_y + btn_h, btn_x : btn_x + btn_w] = (
-        55, 55, 55, 255
-    )
-    page_label = _render_text_rgba(
-        f"{hotbar_page + 1}/2", hint_font, (180, 175, 150)
-    )
+    overlay[btn_y : btn_y + btn_h, btn_x : btn_x + btn_w] = (55, 55, 55, 255)
+    page_label = _render_text_rgba(f"{hotbar_page + 1}/2", hint_font, (180, 175, 150))
     _blit_rgba(
         overlay,
         page_label,
@@ -1461,7 +1291,9 @@ def render_inventory_menu(
                 ] = icon
 
             count_arr = _render_text_rgba(
-                f"x{count}", body_font, _SLOT_COUNT_COLOR,
+                f"x{count}",
+                body_font,
+                _SLOT_COUNT_COLOR,
             )
             count_y = cell_y + icon_size + 4
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
@@ -1551,9 +1383,9 @@ def render_inventory_menu(
             inp_s = min(inp_icon, vp_w_craft - inp_x)
             if inp_s > 0:
                 inp_icon_arr = render_item_icon(item_type, inp_s)
-                recipe_content[
-                    inp_y : inp_y + inp_s, inp_x : inp_x + inp_s
-                ] = inp_icon_arr
+                recipe_content[inp_y : inp_y + inp_s, inp_x : inp_x + inp_s] = (
+                    inp_icon_arr
+                )
             count_color: tuple[int, int, int] = (
                 _AFFORD_COLOR if have >= required else _CANNOT_AFFORD_COLOR
             )
@@ -1566,15 +1398,26 @@ def render_inventory_menu(
             bar_w = vp_w_craft - 16
             filled = int(bar_w * (1 - craft_progress / recipe["ticks"]))
             recipe_content[bar_y : bar_y + 8, craft_pad : craft_pad + bar_w] = (
-                35, 35, 35, 255,
+                35,
+                35,
+                35,
+                255,
             )
             if filled > 0:
-                recipe_content[
-                    bar_y : bar_y + 8, craft_pad : craft_pad + filled
-                ] = (100, 200, 100, 255)
+                recipe_content[bar_y : bar_y + 8, craft_pad : craft_pad + filled] = (
+                    100,
+                    200,
+                    100,
+                    255,
+                )
 
     blit_scroll_view(
-        overlay, recipe_content, vp_x_craft, vp_y_craft, vp_w_craft, vp_h_craft,
+        overlay,
+        recipe_content,
+        vp_x_craft,
+        vp_y_craft,
+        vp_w_craft,
+        vp_h_craft,
         craft_scroll,
     )
     click_regions.extend(
@@ -1666,7 +1509,9 @@ def render_help_overlay(
 
     title = _render_text_rgba("Controls", title_font, (215, 195, 65))
     _blit_rgba(
-        overlay, title, py + _BORDER_PX + 6,
+        overlay,
+        title,
+        py + _BORDER_PX + 6,
         px + (panel_w - title.shape[1]) // 2,
     )
 
@@ -1685,9 +1530,7 @@ def render_help_overlay(
         _blit_rgba(overlay, arr, cy, px + 16)
         cy += line_h
 
-    dismiss = _render_text_rgba(
-        "Press any key to close", font, _HINT_COLOR
-    )
+    dismiss = _render_text_rgba("Press any key to close", font, _HINT_COLOR)
     _blit_rgba(
         overlay,
         dismiss,

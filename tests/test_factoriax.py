@@ -345,7 +345,7 @@ class TestEnvironment:
         """Action space should match the number of defined actions."""
         env, params = make_factoriax_env()
         action_space = env.action_space(params)
-        assert action_space.n == 13
+        assert action_space.n == 15
 
     def test_observation_space(self) -> None:
         """Observation space should match expected dimensions."""

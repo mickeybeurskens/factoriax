@@ -209,6 +209,7 @@ __marimo__/
 # File types
 *.mp4
 *.png
+*.npz
 
 # Project specific
 CLAUDE.md
