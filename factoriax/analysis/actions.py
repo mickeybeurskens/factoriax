@@ -490,26 +490,37 @@ def plot_ngram_sweep(
             _blend_ngram_color(g, colors) for g, _ in grams_int
         ]
         ax.barh(
-            range(len(labels)), counts, color=bar_colors, height=0.7,
+            range(len(labels)), counts, color=bar_colors,
+            height=0.7, zorder=2,
         )
-        ax.set_yticks(range(len(labels)))
-        ax.set_yticklabels(labels, fontsize=7, family="monospace")
+        # Place text labels inside the bars (behind the color boxes).
+        for idx, label in enumerate(labels):
+            ax.text(
+                0.02, idx, f"  {label}", va="center", ha="left",
+                fontsize=7, family="monospace", zorder=3,
+                transform=blended_transform_factory(
+                    ax.transAxes, ax.transData,
+                ),
+            )
+        ax.set_yticks([])
         ax.invert_yaxis()
         ax.set_ylabel(f"n={n}", fontsize=9, rotation=0, labelpad=30)
+        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
         ax.tick_params(axis="x", labelsize=7)
         if row < num_rows - 1:
             ax.set_xticklabels([])
 
-        # Draw colored action squares between labels and bars.
+        # Draw colored action squares on top of the bars.
         trans = blended_transform_factory(ax.transAxes, ax.transData)
         for idx, (gram, _) in enumerate(grams_int):
             for j, a in enumerate(gram):
-                x = -(len(gram) - j) * (sq_w + sq_gap)
+                x = 0.02 + j * (sq_w + sq_gap)
                 ax.add_patch(Rectangle(
                     (x, idx - sq_h / 2), sq_w, sq_h,
                     facecolor=colors[min(a, len(colors) - 1)],
                     edgecolor="white", linewidth=0.3,
                     transform=trans, clip_on=False,
+                    zorder=4,
                 ))
 
     axes[-1].set_xlabel("Count")
