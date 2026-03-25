@@ -459,71 +459,23 @@ def plot_ngram_sweep(
     n_values = list(range(n_min, n_max + 1))
     num_rows = len(n_values)
 
-    if figsize is None:
-        figsize = (12, 1.2 + 1.4 * num_rows)
-
-    fig, axes = plt.subplots(
-        num_rows, 1, figsize=figsize, squeeze=False,
-    )
-    axes = axes[:, 0]
-
     from matplotlib.patches import Patch, Rectangle
-    from matplotlib.transforms import blended_transform_factory
 
-    # Square size in axes-fraction (x) and data units (y).
-    sq_w = 0.018
-    sq_gap = 0.003
-    sq_h = 0.7
-    # Reserve left margin for colored boxes (widest n-gram determines width).
-    box_margin = (n_max + 1) * (sq_w + sq_gap)
+    # Compute layout: each row is a text table, no axes needed.
+    # n=N | [colored boxes] | ACTION ACTION ACTION (xN count)
+    sq_size = 0.015  # box size in figure fraction
+    sq_gap = 0.002
+    row_h = max(0.06, 0.8 / (num_rows * top_k))
+    legend_h = 0.08
+    header_h = 0.04
 
-    for row, n in enumerate(n_values):
-        ax = axes[row]
-        grams_int = action_ngrams(traj, n, player, top_k)
-        if not grams_int:
-            ax.set_visible(False)
-            continue
-        labels = [
-            " ".join(action_labels[a] for a in g)
-            for g, _ in grams_int
-        ]
-        counts = [c for _, c in grams_int]
-        bar_colors = [
-            _blend_ngram_color(g, colors) for g, _ in grams_int
-        ]
-        ax.barh(
-            range(len(labels)), counts, color=bar_colors, height=0.7,
-        )
-        # Action name text to the right of each bar.
-        for idx, (label, count) in enumerate(zip(labels, counts)):
-            ax.text(
-                count, idx, f"  {label}", va="center", ha="left",
-                fontsize=7, family="monospace",
-            )
-        ax.set_yticks([])
-        ax.invert_yaxis()
-        ax.set_ylabel(f"n={n}", fontsize=9, rotation=0, labelpad=30)
-        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-        ax.tick_params(axis="x", labelsize=7)
-        if row < num_rows - 1:
-            ax.set_xticklabels([])
-        # Expand x-axis to fit text labels.
-        if counts:
-            ax.set_xlim(right=max(counts) * 2.5)
+    total_h = legend_h + header_h + num_rows * top_k * row_h + 0.04
+    if figsize is None:
+        figsize = (12, max(3.0, total_h))
 
-        # Colored action squares in the left margin.
-        trans = blended_transform_factory(ax.transAxes, ax.transData)
-        for idx, (gram, _) in enumerate(grams_int):
-            for j, a in enumerate(gram):
-                x = -box_margin + j * (sq_w + sq_gap)
-                ax.add_patch(Rectangle(
-                    (x, idx - sq_h / 2), sq_w, sq_h,
-                    facecolor=colors[min(a, len(colors) - 1)],
-                    edgecolor="white", linewidth=0.3,
-                    transform=trans, clip_on=False,
-                ))
+    fig = plt.figure(figsize=figsize)
 
-    # Action color legend at the top of the figure.
+    # Action color legend at the top.
     num_actions = len(action_labels)
     legend_patches = [
         Patch(facecolor=colors[i], label=action_labels[i])
@@ -535,15 +487,63 @@ def plot_ngram_sweep(
         ncol=min(num_actions, 8),
         fontsize=7,
         frameon=True,
-        bbox_to_anchor=(0.5, 1.0),
+        bbox_to_anchor=(0.5, 0.99),
     )
 
-    axes[-1].set_xlabel("Count")
     if title:
-        fig.suptitle(title, fontsize=11, y=1.06)
+        fig.text(0.5, 0.995, title, ha="center", fontsize=11)
 
-    fig.tight_layout(rect=[0, 0, 1, 0.94])
-    return fig, axes
+    # Layout columns (in figure fraction).
+    col_n = 0.04       # "n=N"
+    col_boxes = 0.08   # start of colored boxes
+    col_text = col_boxes + (n_max + 1) * (sq_size + sq_gap) + 0.01
+    col_count = 0.92    # right-aligned count
+
+    y_cursor = 1.0 - legend_h - header_h
+
+    for row, n in enumerate(n_values):
+        grams_int = action_ngrams(traj, n, player, top_k)
+        if not grams_int:
+            y_cursor -= top_k * row_h
+            continue
+
+        for idx, (gram, count) in enumerate(grams_int):
+            y = y_cursor - idx * row_h
+
+            # n=N label (only on first entry per group).
+            if idx == 0:
+                fig.text(
+                    col_n, y, f"n={n}", fontsize=9, fontweight="bold",
+                    va="center", ha="left",
+                )
+
+            # Colored boxes.
+            for j, a in enumerate(gram):
+                bx = col_boxes + j * (sq_size + sq_gap)
+                fig.add_artist(Rectangle(
+                    (bx, y - sq_size / 2), sq_size, sq_size,
+                    facecolor=colors[min(a, len(colors) - 1)],
+                    edgecolor="white", linewidth=0.3,
+                    transform=fig.transFigure, clip_on=False,
+                ))
+
+            # Action name sequence.
+            label = " ".join(action_labels[a] for a in gram)
+            fig.text(
+                col_text, y, label, fontsize=7, family="monospace",
+                va="center", ha="left",
+            )
+
+            # Count on the right.
+            fig.text(
+                col_count, y, f"x{count}", fontsize=7,
+                va="center", ha="right", color="gray",
+            )
+
+        y_cursor -= top_k * row_h + 0.01
+
+    # Return empty axes array for API consistency.
+    return fig, np.array([])
 
 
 def plot_ngrams(
