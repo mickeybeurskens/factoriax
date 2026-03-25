@@ -37,7 +37,7 @@ from benchmarks.basic_skills.scoring import (
 from benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.rewards import (
     chest_filling_reward,
-    sparse_crafting_reward,
+    sparse_chest_crafting_reward,
     sparse_mining_reward,
 )
 from factoriax.state import EnvParams, EnvState
@@ -48,7 +48,7 @@ from factoriax.state import EnvParams, EnvState
 # reward function per level using this mapping.
 REWARD_FNS: dict[str, Callable[[EnvState, EnvState, EnvParams], jax.Array]] = {
     "mine_resources": sparse_mining_reward,
-    "craft_chests": sparse_crafting_reward,
+    "craft_chests": sparse_chest_crafting_reward,
     "fill_chest": chest_filling_reward,
 }
 

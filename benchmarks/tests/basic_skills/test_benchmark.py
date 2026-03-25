@@ -23,7 +23,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.levels import LevelBuilder, build_state
-from factoriax.rewards import chest_filling_reward, sparse_crafting_reward
+from factoriax.rewards import chest_filling_reward, sparse_chest_crafting_reward
 from factoriax.state import EnvParams
 
 # -----------------------------------------------------------------------
@@ -132,7 +132,7 @@ class TestPlayerInventory:
 
 
 class TestSparseCraftingReward:
-    """Tests for the sparse_crafting_reward function."""
+    """Tests for the sparse_chest_crafting_reward function."""
 
     def test_crafting_chest_gives_reward(self, state_factory) -> None:
         """Reward should fire when a chest appears in inventory."""
@@ -144,7 +144,7 @@ class TestSparseCraftingReward:
             inventory_counts=jnp.array([[1] + [0] * 9], dtype=jnp.int32),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
-        reward = sparse_crafting_reward(prev, new, params)
+        reward = sparse_chest_crafting_reward(prev, new, params)
         assert float(reward) == 1.0
 
     def test_mining_ore_gives_no_crafting_reward(self, state_factory) -> None:
@@ -157,7 +157,7 @@ class TestSparseCraftingReward:
             inventory_counts=jnp.array([[5] + [0] * 9], dtype=jnp.int32),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
-        reward = sparse_crafting_reward(prev, new, params)
+        reward = sparse_chest_crafting_reward(prev, new, params)
         assert float(reward) == 0.0
 
 
