@@ -247,12 +247,6 @@ class RolloutRecorder:
         return Trajectory(
             actions=padded_actions,
             rewards=padded_rewards,
-            metadata={
-                "num_envs": N,
-                "total_steps_recorded": T_total * N,
-                "num_complete_episodes": self._num_complete_episodes,
-                "max_episode_length": max_len,
-            },
         )
 
     def reset(self) -> None:

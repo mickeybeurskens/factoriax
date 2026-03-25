@@ -4,8 +4,9 @@ The ``ObservationType`` enum categorizes how an agent observes the
 environment. It lives in the inspector layer (not in ``factoriax/``)
 so the core simulation stays unaware of observation categorization.
 
-The enum value is stored as an int in ``Trajectory.metadata["obs_type"]``
-and interpreted by the inspector to choose the right visualization.
+The enum value is stored as an int in
+``Trajectory.observation_scheme["type"]`` and interpreted by the inspector
+to choose the right visualization.
 """
 
 from __future__ import annotations

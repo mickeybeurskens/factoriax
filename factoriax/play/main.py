@@ -751,8 +751,10 @@ def _save_recorded_trajectory(
     # Pad actions/rewards to match states length (states has initial + per-step).
     act = np.array(actions + [0] * (len(states) - len(actions)), dtype=np.int32)
     rew = np.array(rewards + [0.0] * (len(states) - len(rewards)), dtype=np.float32)
+    from dataclasses import replace
+
     traj = states_to_trajectory(states, actions=act, rewards=rew)
-    traj.metadata["obs_type"] = 3  # PLAYER
+    traj = replace(traj, observation_scheme={"type": 3})  # PLAYER
     ts = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
     path = f"trajectory_{ts}.npz"
     traj.save(path)

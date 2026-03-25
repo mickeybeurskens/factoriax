@@ -22,6 +22,14 @@ With full state information:
 ...     timesteps=timesteps,           # (B, T)
 ... )
 
+With scheme descriptors that capture how the trajectory was produced:
+>>> traj = Trajectory(
+...     actions=actions,
+...     observation_scheme={"type": "local", "radius": 7},
+...     reward_scheme={"type": "shaped", "weights": {"mine": 1.0}},
+...     cost_scheme={"type": "action_penalty", "scale": 0.01},
+... )
+
 State round-trip (requires factoriax.state):
 >>> from factoriax.analysis.trajectory import states_to_trajectory, trajectory_to_states
 >>> traj = states_to_trajectory(states, actions)
@@ -30,9 +38,10 @@ State round-trip (requires factoriax.state):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
+import orjson
 
 # All optional array fields in the order they are declared.
 # Used by save/load/slice/repr to avoid hardcoding the list in 6 places.
@@ -133,8 +142,15 @@ class Trajectory:
         Per-step rewards.  Shape ``(B, T)`` or ``(B, T, P)``.
     timesteps : np.ndarray, optional
         Timestep indices.  Shape ``(B, T)``.
-    metadata : dict, optional
-        Arbitrary metadata (hyperparameters, run ID, etc.).
+    observation_scheme : dict, optional
+        Describes how observations were produced (e.g. type, radius,
+        channels).  Persisted through save/load as JSON.
+    reward_scheme : dict, optional
+        Describes the reward function used to generate the ``rewards``
+        array (e.g. type, shaping weights, sparse vs dense).
+    cost_scheme : dict, optional
+        Describes any cost or penalty function applied during training
+        (e.g. action penalty scale, entropy bonus coefficient).
     """
 
     actions: np.ndarray
@@ -166,7 +182,10 @@ class Trajectory:
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None
 
-    metadata: dict = field(default_factory=dict)
+    # Scheme descriptors — capture how the trajectory was produced.
+    observation_scheme: dict | None = None
+    reward_scheme: dict | None = None
+    cost_scheme: dict | None = None
 
     def __post_init__(self) -> None:
         """Coerce actions to numpy and ensure batch dimension."""
@@ -223,7 +242,7 @@ class Trajectory:
             val = getattr(self, name)
             if val is not None:
                 kwargs[name] = val[s]
-        kwargs["metadata"] = self.metadata
+        kwargs.update(self._scheme_kwargs())
         return Trajectory(**kwargs)
 
     def player(self, idx: int) -> Trajectory:
@@ -245,7 +264,7 @@ class Trajectory:
                     kwargs[name] = val
             else:
                 kwargs[name] = val
-        kwargs["metadata"] = self.metadata
+        kwargs.update(self._scheme_kwargs())
         return Trajectory(**kwargs)
 
     def time_slice(self, start: int, end: int) -> Trajectory:
@@ -255,51 +274,71 @@ class Trajectory:
             val = getattr(self, name)
             if val is not None:
                 kwargs[name] = val[:, start:end]
-        kwargs["metadata"] = self.metadata
+        kwargs.update(self._scheme_kwargs())
         return Trajectory(**kwargs)
 
-    # ---- I/O helpers ----
+    # ---- Internal helpers ----
 
-    # Metadata keys persisted as numpy scalars in .npz files.
-    # Prefixed with underscore to distinguish from array fields.
-    _METADATA_KEYS: tuple[str, ...] = ("obs_type", "obs_radius")
+    # Scheme field names, used by save/load/slice to avoid repetition.
+    _SCHEME_FIELDS: tuple[str, ...] = (
+        "observation_scheme",
+        "reward_scheme",
+        "cost_scheme",
+    )
+
+    def _scheme_kwargs(self) -> dict:
+        """Return a dict of non-None scheme fields for forwarding."""
+        return {
+            name: getattr(self, name)
+            for name in self._SCHEME_FIELDS
+            if getattr(self, name) is not None
+        }
+
+    # ---- I/O helpers ----
 
     def save(self, path: str) -> None:
         """Save trajectory to a compressed ``.npz`` file.
 
-        Metadata entries listed in ``_METADATA_KEYS`` are stored as
-        numpy scalar arrays with an underscore prefix so they survive
-        the ``.npz`` round-trip.
+        Scheme dicts are serialized as JSON byte strings stored under
+        keys with an underscore prefix (e.g. ``_observation_scheme``).
         """
         arrays: dict = {"actions": self.actions}
         for name in _OPTIONAL_ARRAY_FIELDS:
             val = getattr(self, name)
             if val is not None:
                 arrays[name] = val
-        for key in self._METADATA_KEYS:
-            if key in self.metadata:
-                arrays[f"_{key}"] = np.int32(self.metadata[key])
+        for name in self._SCHEME_FIELDS:
+            val = getattr(self, name)
+            if val is not None:
+                arrays[f"_{name}"] = np.void(orjson.dumps(val))
         np.savez_compressed(path, **arrays)
 
     @classmethod
-    def load(cls, path: str, **metadata) -> Trajectory:
+    def load(cls, path: str) -> Trajectory:
         """Load trajectory from a ``.npz`` file.
 
-        Underscore-prefixed scalar entries are extracted into the
-        ``metadata`` dict automatically.
+        Underscore-prefixed JSON entries are deserialized back into
+        their corresponding scheme dicts.  Legacy files with scalar
+        ``_obs_type`` / ``_obs_radius`` keys are migrated into
+        ``observation_scheme`` automatically.
         """
-        data = np.load(path)
+        data = np.load(path, allow_pickle=True)
         kwargs: dict = {"actions": data["actions"]}
         for name in _OPTIONAL_ARRAY_FIELDS:
             if name in data:
                 kwargs[name] = data[name]
-        # Restore persisted metadata scalars.
-        loaded_meta = dict(metadata)
-        for key in cls._METADATA_KEYS:
-            npz_key = f"_{key}"
+        # Restore scheme dicts from JSON byte strings.
+        for name in cls._SCHEME_FIELDS:
+            npz_key = f"_{name}"
             if npz_key in data:
-                loaded_meta[key] = int(data[npz_key])
-        kwargs["metadata"] = loaded_meta
+                kwargs[name] = orjson.loads(bytes(data[npz_key]))
+        # Legacy migration: old files stored _obs_type / _obs_radius
+        # as scalar int32 arrays.  Fold them into observation_scheme.
+        if "_obs_type" in data and "observation_scheme" not in kwargs:
+            legacy: dict = {"type": int(data["_obs_type"])}
+            if "_obs_radius" in data:
+                legacy["radius"] = int(data["_obs_radius"])
+            kwargs["observation_scheme"] = legacy
         return cls(**kwargs)
 
     def __repr__(self) -> str:
@@ -314,6 +353,11 @@ class Trajectory:
         ]
         if extras:
             parts.append(f"fields=[{', '.join(extras)}]")
+        schemes = [
+            name for name in self._SCHEME_FIELDS if getattr(self, name) is not None
+        ]
+        if schemes:
+            parts.append(f"schemes=[{', '.join(schemes)}]")
         return ", ".join(parts) + ")"
 
 

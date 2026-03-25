@@ -312,14 +312,13 @@ def plot_resource_depletion(
     -------
     fig, ax : Figure, Axes
     """
-    if not hasattr(traj, "metadata") or "block_resources" not in (traj.metadata or {}):
-        # Check if it's stored as a direct field via metadata
+    if traj.block_resources is None:
         raise ValueError(
             "plot_resource_depletion requires block_resources data. "
-            "Store it via trajectory metadata or extend the Trajectory class."
+            "Snapshot env_state.block_resources during rollouts."
         )
 
-    resources = traj.metadata["block_resources"]  # (B, T, H, W)
+    resources = traj.block_resources  # (B, T, H, W)
     total = resources.sum(axis=(-1, -2))  # (B, T)
     mean = total.mean(axis=0)
     std = total.std(axis=0)

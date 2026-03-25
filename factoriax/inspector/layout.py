@@ -218,11 +218,14 @@ def _maybe_apply_fog(
     """
     from factoriax.inspector.obs_types import ObservationType, apply_fog_of_war
 
-    obs_type = traj.metadata.get("obs_type", ObservationType.UNDETERMINED)
+    scheme = traj.observation_scheme
+    if scheme is None:
+        return game_img
+    obs_type = scheme.get("type", ObservationType.UNDETERMINED)
     if obs_type != ObservationType.LOCAL:
         return game_img
 
-    radius = traj.metadata.get("obs_radius", 7)
+    radius = scheme.get("radius", 7)
 
     # Get player position at current step.
     if traj.positions is None:

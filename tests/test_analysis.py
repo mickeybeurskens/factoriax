@@ -592,23 +592,26 @@ class TestState:
         assert isinstance(ax, Axes)
         plt.close("all")
 
-    def test_plot_resource_depletion_raises_without_metadata(self) -> None:
+    def test_plot_resource_depletion_raises_without_field(self) -> None:
         """plot_resource_depletion raises ValueError when block_resources is missing."""
         traj = make_minimal_traj(4, 20)
         with pytest.raises(ValueError):
             plot_resource_depletion(traj)
 
-    def test_plot_resource_depletion_raises_keyerror_converted(self) -> None:
-        """Missing block_resources raises ValueError, not KeyError."""
+    def test_plot_resource_depletion_raises_without_block_resources_field(
+        self,
+    ) -> None:
+        """Missing block_resources field raises ValueError."""
         traj = Trajectory(
             actions=np.zeros((4, 20), dtype=np.int32),
-            metadata={"other_key": 42},
         )
         with pytest.raises(ValueError):
             plot_resource_depletion(traj)
 
-    def test_plot_resource_depletion_with_metadata_returns_fig_ax(self) -> None:
-        """plot_resource_depletion returns (Figure, Axes) when metadata is present."""
+    def test_plot_resource_depletion_with_block_resources_returns_fig_ax(
+        self,
+    ) -> None:
+        """plot_resource_depletion returns (Figure, Axes) when field is set."""
         num_eps, num_steps = 4, 20
         height, width = 8, 8
         resources = np.random.randint(
@@ -616,7 +619,7 @@ class TestState:
         ).astype(np.float32)
         traj = Trajectory(
             actions=np.zeros((num_eps, num_steps), dtype=np.int32),
-            metadata={"block_resources": resources},
+            block_resources=resources,
         )
         fig, ax = plot_resource_depletion(traj)
         assert isinstance(fig, Figure)
@@ -933,7 +936,7 @@ class TestMultiagent:
 
 
 class TestRolloutRecorder:
-    """Tests for RolloutRecorder: segmentation, padding, and metadata."""
+    """Tests for RolloutRecorder: segmentation, padding, and output shape."""
 
     def _make_rollout(
         self,
@@ -1076,8 +1079,8 @@ class TestRolloutRecorder:
         with pytest.raises(ValueError):
             rec.finish()
 
-    def test_metadata_contains_recording_statistics(self) -> None:
-        """Output Trajectory metadata includes recording statistics."""
+    def test_finish_returns_trajectory_without_schemes(self) -> None:
+        """Recorder output has no scheme fields set by default."""
         num_steps, num_envs = 5, 2
         dones = np.zeros((num_steps, num_envs), dtype=bool)
         dones[-1, :] = True
@@ -1089,9 +1092,9 @@ class TestRolloutRecorder:
         rec = RolloutRecorder()
         rec.record(rollout)
         traj = rec.finish()
-        assert "num_envs" in traj.metadata
-        assert "total_steps_recorded" in traj.metadata
-        assert "num_complete_episodes" in traj.metadata
+        assert traj.observation_scheme is None
+        assert traj.reward_scheme is None
+        assert traj.cost_scheme is None
 
     def test_multi_env_produces_one_episode_per_env(self) -> None:
         """Each env completing one episode yields one episode per env."""

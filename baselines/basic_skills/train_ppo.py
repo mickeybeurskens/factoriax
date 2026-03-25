@@ -26,6 +26,7 @@ import pickle
 import time
 from collections import deque
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -926,8 +927,10 @@ def _save_eval_trajectories(
             dtype=np.float32,
         )
         traj = states_to_trajectory(states, actions=act, rewards=rew)
-        traj.metadata["obs_type"] = 2  # LOCAL
-        traj.metadata["obs_radius"] = config.obs_radius
+        traj = replace(traj, observation_scheme={
+            "type": 2,  # LOCAL
+            "radius": config.obs_radius,
+        })
         path = out_dir / f"{bl.name}_trajectory.npz"
         traj.save(str(path))
         logger.info(

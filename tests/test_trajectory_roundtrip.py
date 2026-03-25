@@ -250,6 +250,51 @@ class TestSaveLoadRoundTrip:
             assert int(recon.timestep) == int(orig.timestep)
 
 
+class TestSchemeRoundTrip:
+    """Scheme dicts survive save/load cycles."""
+
+    def test_schemes_roundtrip(self, tmp_path: Path) -> None:
+        """All three scheme dicts survive a save/load cycle."""
+        obs_scheme = {"type": 2, "radius": 7, "channels": ["rgb"]}
+        reward_scheme = {"type": "shaped", "weights": {"mine": 1.0}}
+        cost_scheme = {"type": "action_penalty", "scale": 0.01}
+        traj = Trajectory(
+            actions=np.zeros((1, 10), dtype=np.int32),
+            observation_scheme=obs_scheme,
+            reward_scheme=reward_scheme,
+            cost_scheme=cost_scheme,
+        )
+        path = str(tmp_path / "schemes.npz")
+        traj.save(path)
+        loaded = Trajectory.load(path)
+
+        assert loaded.observation_scheme == obs_scheme
+        assert loaded.reward_scheme == reward_scheme
+        assert loaded.cost_scheme == cost_scheme
+
+    def test_none_schemes_stay_none(self, tmp_path: Path) -> None:
+        """Unset scheme fields remain None after save/load."""
+        traj = Trajectory(actions=np.zeros((1, 10), dtype=np.int32))
+        path = str(tmp_path / "no_schemes.npz")
+        traj.save(path)
+        loaded = Trajectory.load(path)
+
+        assert loaded.observation_scheme is None
+        assert loaded.reward_scheme is None
+        assert loaded.cost_scheme is None
+
+    def test_schemes_propagate_through_slicing(self) -> None:
+        """Scheme dicts are preserved by episode/time_slice/player."""
+        scheme = {"type": "local", "radius": 5}
+        traj = Trajectory(
+            actions=np.zeros((4, 10, 2), dtype=np.int32),
+            observation_scheme=scheme,
+        )
+        assert traj.episode(0).observation_scheme == scheme
+        assert traj.time_slice(0, 5).observation_scheme == scheme
+        assert traj.player(0).observation_scheme == scheme
+
+
 class TestBackwardCompatibility:
     """Old trajectories with fewer fields still load correctly."""
 
@@ -262,3 +307,16 @@ class TestBackwardCompatibility:
         assert traj.block_map is None
         assert traj.positions is None
         npt.assert_array_equal(traj.actions, actions)
+
+    def test_legacy_obs_type_migrated(self, tmp_path: Path) -> None:
+        """Old _obs_type/_obs_radius scalars migrate to observation_scheme."""
+        actions = np.zeros((1, 10), dtype=np.int32)
+        path = str(tmp_path / "legacy.npz")
+        np.savez_compressed(
+            path,
+            actions=actions,
+            _obs_type=np.int32(2),
+            _obs_radius=np.int32(7),
+        )
+        traj = Trajectory.load(path)
+        assert traj.observation_scheme == {"type": 2, "radius": 7}
