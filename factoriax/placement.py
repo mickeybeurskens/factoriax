@@ -10,13 +10,13 @@ from factoriax.constants import (
     MACHINE_TO_ITEM_ARRAY,
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_STACK_SIZE,
-    NUM_INVENTORY_SLOTS,
     PLACEABLE_ITEMS,
     SOLID_BLOCKS,
     Action,
     ItemType,
     MachineType,
 )
+from factoriax.inventory import add_items_to_slots
 from factoriax.state import EnvState
 
 
@@ -192,48 +192,18 @@ def can_fit_in_inventory(
         amount = counts_to_add[idx]
         is_nonempty = (item_type != ItemType.EMPTY) & (amount > 0)
 
-        def add_to_inv(
+        def do_add(
             state: tuple[jax.Array, jax.Array, jax.Array],
         ) -> tuple[jax.Array, jax.Array, jax.Array]:
             inv_i, inv_c, remaining = state
-
-            def add_to_slot(
-                carry: tuple[jax.Array, jax.Array, jax.Array],
-                slot_idx: jax.Array,
-            ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], None]:
-                i_arr, c_arr, rem = carry
-                slot_item = i_arr[slot_idx]
-                slot_count = c_arr[slot_idx]
-
-                can_stack = (slot_item == item_type) & (slot_count < MAX_STACK_SIZE)
-                is_empty = slot_item == ItemType.EMPTY
-
-                space = jnp.where(can_stack, MAX_STACK_SIZE - slot_count, 0)
-                space = jnp.where(is_empty, MAX_STACK_SIZE, space)
-                to_add = jnp.minimum(rem, space)
-
-                new_count = slot_count + to_add
-                new_rem = rem - to_add
-
-                i_arr = jnp.where(
-                    is_empty & (to_add > 0),
-                    i_arr.at[slot_idx].set(item_type),
-                    i_arr,
-                )
-                c_arr = c_arr.at[slot_idx].set(new_count)
-
-                return (i_arr, c_arr, new_rem), None
-
-            (inv_i, inv_c, remaining), _ = lax.scan(
-                add_to_slot,
-                (inv_i, inv_c, remaining),
-                jnp.arange(NUM_INVENTORY_SLOTS),
+            inv_i, inv_c, remaining = add_items_to_slots(
+                inv_i, inv_c, item_type, remaining, MAX_STACK_SIZE
             )
             return inv_i, inv_c, remaining
 
         inv_items, inv_counts, leftover = lax.cond(
             is_nonempty,
-            add_to_inv,
+            do_add,
             lambda s: (s[0], s[1], jnp.int32(0)),
             (inv_items, inv_counts, amount),
         )

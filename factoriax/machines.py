@@ -101,6 +101,131 @@ def refuel_machines(state: EnvState) -> EnvState:
     )
 
 
+_ASSEMBLER_OUTPUT_SLOT: int = 3
+
+
+def _assembler_complete_crafts(
+    is_asm: jax.Array,
+    power: jax.Array,
+    inv_items: jax.Array,
+    inv_counts: jax.Array,
+    recipe_out: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Complete assembler crafts where the countdown reaches 1.
+
+    Deposits the recipe output into the output slot if it has space
+    (empty or matching item below the stack limit). Resets power to 0
+    on completion.
+
+    Args:
+        is_asm: Boolean mask of assembler tiles, shape ``(H, W)``.
+        power: Craft countdown per tile, shape ``(H, W)``.
+        inv_items: Machine inventory item types, shape ``(H, W, S)``.
+        inv_counts: Machine inventory counts, shape ``(H, W, S)``.
+        recipe_out: Output item type per tile, shape ``(H, W)``.
+
+    Returns:
+        Tuple of ``(inv_items, inv_counts, power)`` after completions.
+    """
+    out_item = inv_items[..., _ASSEMBLER_OUTPUT_SLOT]
+    out_count = inv_counts[..., _ASSEMBLER_OUTPUT_SLOT]
+
+    completing = is_asm & (power == 1)
+    out_has_space = (
+        (out_count == 0) | (out_item == recipe_out)
+    ) & (out_count < MAX_ASSEMBLER_STACK_SIZE)
+    can_complete = completing & out_has_space
+
+    inv_items = inv_items.at[..., _ASSEMBLER_OUTPUT_SLOT].set(
+        jnp.where(can_complete, recipe_out, out_item)
+    )
+    inv_counts = inv_counts.at[..., _ASSEMBLER_OUTPUT_SLOT].set(
+        jnp.where(can_complete, out_count + jnp.int16(1), out_count)
+    )
+    power = jnp.where(can_complete, 0, power)
+
+    return inv_items, inv_counts, power
+
+
+def _assembler_start_crafts(
+    is_asm: jax.Array,
+    power: jax.Array,
+    inv_items: jax.Array,
+    inv_counts: jax.Array,
+    recipe_in_items: jax.Array,
+    recipe_in_counts: jax.Array,
+    recipe_out: jax.Array,
+    recipe_ticks: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Start new assembler crafts when idle and inputs are sufficient.
+
+    Consumes input materials from slots 0 and 1, clearing the item
+    type when a slot is fully depleted. Sets power to the recipe's
+    tick count to begin the countdown.
+
+    Args:
+        is_asm: Boolean mask of assembler tiles, shape ``(H, W)``.
+        power: Craft countdown per tile, shape ``(H, W)``.
+        inv_items: Machine inventory item types, shape ``(H, W, S)``.
+        inv_counts: Machine inventory counts, shape ``(H, W, S)``.
+        recipe_in_items: Expected input item types, shape ``(H, W, 2)``.
+        recipe_in_counts: Required input counts, shape ``(H, W, 2)``.
+        recipe_out: Output item type per tile, shape ``(H, W)``.
+        recipe_ticks: Craft duration per tile, shape ``(H, W)``.
+
+    Returns:
+        Tuple of ``(inv_items, inv_counts, power)`` after starts.
+    """
+    idle = is_asm & (power == 0)
+
+    slot0_item = inv_items[..., 0]
+    slot0_count = inv_counts[..., 0]
+    slot1_item = inv_items[..., 1]
+    slot1_count = inv_counts[..., 1]
+
+    need0 = recipe_in_counts[..., 0]
+    need1 = recipe_in_counts[..., 1]
+
+    has_input0 = (slot0_item == recipe_in_items[..., 0]) & (slot0_count >= need0)
+    has_input1 = (need1 == 0) | (
+        (slot1_item == recipe_in_items[..., 1]) & (slot1_count >= need1)
+    )
+
+    out_item = inv_items[..., _ASSEMBLER_OUTPUT_SLOT]
+    out_count = inv_counts[..., _ASSEMBLER_OUTPUT_SLOT]
+    out_ok = ((out_count == 0) | (out_item == recipe_out)) & (
+        out_count < MAX_ASSEMBLER_STACK_SIZE
+    )
+
+    can_start = idle & has_input0 & has_input1 & out_ok
+
+    new_count0 = inv_counts[..., 0] - need0.astype(jnp.int16)
+    new_count1 = inv_counts[..., 1] - need1.astype(jnp.int16)
+    inv_counts = inv_counts.at[..., 0].set(
+        jnp.where(can_start, new_count0, inv_counts[..., 0])
+    )
+    inv_counts = inv_counts.at[..., 1].set(
+        jnp.where(can_start, new_count1, inv_counts[..., 1])
+    )
+    inv_items = inv_items.at[..., 0].set(
+        jnp.where(
+            can_start & (inv_counts[..., 0] == 0),
+            ItemType.EMPTY,
+            inv_items[..., 0],
+        )
+    )
+    inv_items = inv_items.at[..., 1].set(
+        jnp.where(
+            can_start & (inv_counts[..., 1] == 0),
+            ItemType.EMPTY,
+            inv_items[..., 1],
+        )
+    )
+    power = jnp.where(can_start, recipe_ticks, power)
+
+    return inv_items, inv_counts, power
+
+
 def run_assemblers(state: EnvState) -> EnvState:
     """Execute assembler crafting logic for all assemblers in parallel.
 
@@ -122,100 +247,27 @@ def run_assemblers(state: EnvState) -> EnvState:
     recipe = state.machine_selected_recipe
     recipe_out = ASSEMBLER_RECIPE_OUTPUTS[recipe]
     recipe_ticks = ASSEMBLER_RECIPE_TICKS[recipe]
-    recipe_in_items = ASSEMBLER_RECIPE_INPUT_ITEMS[recipe]  # (H, W, 2)
-    recipe_in_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[recipe]  # (H, W, 2)
+    recipe_in_items = ASSEMBLER_RECIPE_INPUT_ITEMS[recipe]
+    recipe_in_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[recipe]
 
     power = state.machine_power
     inv_items = state.machine_inventory_items
     inv_counts = state.machine_inventory_counts
 
-    out_slot = 3
-    out_item = inv_items[..., out_slot]
-    out_count = inv_counts[..., out_slot]
-
-    # --- Phase 1: Complete crafts (power == 1) ---
-    completing = is_asm & (power == 1)
-    out_empty = out_count == 0
-    out_matches = out_item == recipe_out
-    out_has_space = (out_empty | out_matches) & (
-        out_count < MAX_ASSEMBLER_STACK_SIZE
+    # Phase 1: complete crafts.
+    inv_items, inv_counts, power = _assembler_complete_crafts(
+        is_asm, power, inv_items, inv_counts, recipe_out
     )
-    can_complete = completing & out_has_space
 
-    inv_items = inv_items.at[..., out_slot].set(
-        jnp.where(can_complete, recipe_out, inv_items[..., out_slot])
-    )
-    inv_counts = inv_counts.at[..., out_slot].set(
-        jnp.where(
-            can_complete,
-            inv_counts[..., out_slot] + jnp.int16(1),
-            inv_counts[..., out_slot],
-        )
-    )
-    power = jnp.where(can_complete, 0, power)
-
-    # --- Phase 2: Progress (power > 1) ---
+    # Phase 2: progress (power > 1).
     progressing = is_asm & (power > 1)
     power = jnp.where(progressing, power - 1, power)
 
-    # --- Phase 3: Start new craft (power == 0) ---
-    idle = is_asm & (power == 0)
-
-    slot0_item = inv_items[..., 0]
-    slot0_count = inv_counts[..., 0]
-    slot1_item = inv_items[..., 1]
-    slot1_count = inv_counts[..., 1]
-
-    need0 = recipe_in_counts[..., 0]
-    need1 = recipe_in_counts[..., 1]
-
-    has_input0 = (slot0_item == recipe_in_items[..., 0]) & (
-        slot0_count >= need0
+    # Phase 3: start new crafts.
+    inv_items, inv_counts, power = _assembler_start_crafts(
+        is_asm, power, inv_items, inv_counts,
+        recipe_in_items, recipe_in_counts, recipe_out, recipe_ticks,
     )
-    # Second input: satisfied if recipe needs 0 of it, or item matches
-    # and count is sufficient.
-    has_input1 = (need1 == 0) | (
-        (slot1_item == recipe_in_items[..., 1]) & (slot1_count >= need1)
-    )
-
-    # Re-read output after phase 1 updates
-    out_item_now = inv_items[..., out_slot]
-    out_count_now = inv_counts[..., out_slot]
-    out_ok = (out_count_now == 0) | (out_item_now == recipe_out)
-    out_ok = out_ok & (out_count_now < MAX_ASSEMBLER_STACK_SIZE)
-
-    can_start = idle & has_input0 & has_input1 & out_ok
-
-    inv_counts = inv_counts.at[..., 0].set(
-        jnp.where(
-            can_start,
-            inv_counts[..., 0] - need0.astype(jnp.int16),
-            inv_counts[..., 0],
-        )
-    )
-    inv_counts = inv_counts.at[..., 1].set(
-        jnp.where(
-            can_start,
-            inv_counts[..., 1] - need1.astype(jnp.int16),
-            inv_counts[..., 1],
-        )
-    )
-    # Clear item type when count hits zero
-    inv_items = inv_items.at[..., 0].set(
-        jnp.where(
-            can_start & (inv_counts[..., 0] == 0),
-            ItemType.EMPTY,
-            inv_items[..., 0],
-        )
-    )
-    inv_items = inv_items.at[..., 1].set(
-        jnp.where(
-            can_start & (inv_counts[..., 1] == 0),
-            ItemType.EMPTY,
-            inv_items[..., 1],
-        )
-    )
-    power = jnp.where(can_start, recipe_ticks, power)
 
     return state.replace(
         machine_power=power,

@@ -22,6 +22,7 @@ from factoriax.constants import (
     SlotRole,
 )
 from factoriax.crafting import cycle_recipe, cycle_slot, start_crafting, update_crafting
+from factoriax.inventory import find_best_slot
 from factoriax.machines import update_all_machines
 from factoriax.placement import pickup_machine, place_machine
 from factoriax.recipes import (
@@ -170,22 +171,10 @@ def mine_block(state: EnvState, player_idx: int | jax.Array) -> EnvState:
     player_inv_items = state.inventory_items[player_idx]
     player_inv_counts = state.inventory_counts[player_idx]
 
-    matching_slot_mask = (player_inv_items == item_type) & (
-        player_inv_counts < MAX_STACK_SIZE
+    slot_idx, can_add_to_inventory = find_best_slot(
+        player_inv_items, player_inv_counts, item_type, MAX_STACK_SIZE
     )
-    has_matching_slot = jnp.any(matching_slot_mask)
-    matching_slot_idx = jnp.argmax(matching_slot_mask)
-
-    empty_slot_mask = player_inv_items == ItemType.EMPTY
-    has_empty_slot = jnp.any(empty_slot_mask)
-    empty_slot_idx = jnp.argmax(empty_slot_mask)
-
-    can_stack = has_matching_slot
-    can_use_empty = ~has_matching_slot & has_empty_slot
-    can_add_to_inventory = can_stack | can_use_empty
     can_mine = is_mineable & has_resources & can_add_to_inventory
-
-    slot_idx = jnp.where(can_stack, matching_slot_idx, empty_slot_idx)
 
     new_inventory_items = lax.cond(
         can_mine,
@@ -242,6 +231,158 @@ _WITHDRAW_PRIORITY = jnp.array(
 )
 
 
+def _resolve_adjacent_machine(
+    state: EnvState, player_idx: int | jax.Array
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Resolve the machine on the tile in front of the player.
+
+    Shared setup for deposit and withdraw: finds the target tile,
+    checks bounds, and reads the machine's slot contents.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the acting player.
+
+    Returns:
+        Tuple of ``(target_x, target_y, in_bounds, machine_type,
+        slot_items, slot_counts, num_slots)``.
+    """
+    from factoriax.placement import get_tile_in_front
+
+    target_x, target_y = get_tile_in_front(state, player_idx)
+    map_h, map_w = state.map.shape
+
+    in_bounds = is_position_in_bounds(
+        jnp.array([target_x, target_y]), map_w, map_h
+    )
+
+    machine_type = jnp.where(
+        in_bounds, state.machine_types[target_y, target_x], MachineType.NONE
+    )
+
+    slot_items = jnp.where(
+        in_bounds,
+        state.machine_inventory_items[target_y, target_x],
+        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int32),
+    )
+    slot_counts = jnp.where(
+        in_bounds,
+        state.machine_inventory_counts[target_y, target_x],
+        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int16),
+    )
+    num_slots = _MACHINE_NUM_SLOTS_JAX[machine_type]
+
+    return (
+        target_x, target_y, in_bounds, machine_type,
+        slot_items, slot_counts, num_slots,
+    )
+
+
+def _find_deposit_slot(
+    machine_type: jax.Array,
+    slot_items: jax.Array,
+    slot_counts: jax.Array,
+    num_slots: jax.Array,
+    item: jax.Array,
+    recipe: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Find the best machine slot for depositing an item.
+
+    Eligible slots are INPUT and STORAGE roles within range. For
+    assembler INPUT slots, the item must match the recipe's expected
+    input. Matching slots are preferred over empty ones.
+
+    Args:
+        machine_type: Type of the target machine.
+        slot_items: Machine slot item types, shape ``(MAX_MACHINE_INVENTORY_SLOTS,)``.
+        slot_counts: Machine slot counts, shape ``(MAX_MACHINE_INVENTORY_SLOTS,)``.
+        num_slots: Number of active slots for this machine type.
+        item: Item type the player wants to deposit.
+        recipe: The machine's selected recipe index.
+
+    Returns:
+        Tuple of ``(best_slot, has_slot, cap)`` where ``cap`` is the
+        per-slot stack limit for the machine type.
+    """
+    slot_roles = _SLOT_ROLES_JAX[machine_type]
+    is_deposit_role = (slot_roles == SlotRole.INPUT) | (slot_roles == SlotRole.STORAGE)
+    slot_idx_range = jnp.arange(MAX_MACHINE_INVENTORY_SLOTS)
+    in_range = slot_idx_range < num_slots
+
+    cap = jnp.where(
+        machine_type == MachineType.ASSEMBLER,
+        MAX_ASSEMBLER_STACK_SIZE,
+        MAX_MACHINE_STACK_SIZE,
+    )
+
+    slot_empty = slot_counts == 0
+    slot_matches = slot_items == item
+    slot_has_space = (slot_empty | slot_matches) & (slot_counts < cap)
+
+    # Assembler recipe filter for INPUT slots.
+    is_asm = machine_type == MachineType.ASSEMBLER
+    expected_items = ASSEMBLER_RECIPE_INPUT_ITEMS[recipe]
+    expected_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[recipe]
+    pad = jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS - 2, dtype=jnp.int32)
+    expected_items_full = jnp.concatenate([expected_items, pad])
+    expected_counts_full = jnp.concatenate([expected_counts, pad])
+    is_input = slot_roles == SlotRole.INPUT
+    recipe_ok = (item == expected_items_full) & (expected_counts_full > 0)
+    asm_filter = jnp.where(is_asm & is_input, recipe_ok, True)
+
+    slot_usable = is_deposit_role & in_range & slot_has_space & asm_filter
+
+    # Prefer matching slots over empty ones. Non-usable slots get -1.
+    priority = jnp.where(
+        slot_usable & slot_matches,
+        2,
+        jnp.where(slot_usable & slot_empty, 1, -1),
+    )
+    best_slot = jnp.argmax(priority)
+    has_slot = jnp.any(slot_usable)
+
+    return best_slot, has_slot, cap
+
+
+def _find_withdraw_slot(
+    machine_type: jax.Array,
+    slot_items: jax.Array,
+    slot_counts: jax.Array,
+    num_slots: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Find the best machine slot to withdraw from.
+
+    Scans slots by priority: OUTPUT first, then STORAGE, then INPUT.
+    Within the same role, the lowest slot index wins.
+
+    Args:
+        machine_type: Type of the target machine.
+        slot_items: Machine slot item types, shape ``(MAX_MACHINE_INVENTORY_SLOTS,)``.
+        slot_counts: Machine slot counts, shape ``(MAX_MACHINE_INVENTORY_SLOTS,)``.
+        num_slots: Number of active slots for this machine type.
+
+    Returns:
+        Tuple of ``(best_slot, has_source, source_item, source_count)``.
+    """
+    slot_roles = _SLOT_ROLES_JAX[machine_type]
+    slot_idx_range = jnp.arange(MAX_MACHINE_INVENTORY_SLOTS)
+    in_range = slot_idx_range < num_slots
+    has_items = slot_counts > 0
+    not_none_role = slot_roles != SlotRole.NONE
+
+    role_priority = _WITHDRAW_PRIORITY[slot_roles]
+    eligible = in_range & has_items & not_none_role
+    effective_priority = jnp.where(eligible, role_priority, jnp.int32(99))
+    score = effective_priority * MAX_MACHINE_INVENTORY_SLOTS + slot_idx_range
+    best_slot = jnp.argmin(score)
+    has_source = eligible[best_slot]
+
+    source_item = slot_items[best_slot]
+    source_count = slot_counts[best_slot].astype(jnp.int32)
+
+    return best_slot, has_source, source_item, source_count
+
+
 def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvState:
     """Deposit the player's selected inventory stack into the machine in front.
 
@@ -263,17 +404,8 @@ def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvStat
     Returns:
         Updated state with items transferred, or unchanged if invalid.
     """
-    from factoriax.placement import get_tile_in_front
-
-    target_x, target_y = get_tile_in_front(state, player_idx)
-    map_h, map_w = state.map.shape
-
-    in_bounds = (
-        (target_x >= 0) & (target_x < map_w) & (target_y >= 0) & (target_y < map_h)
-    )
-
-    machine_type = jnp.where(
-        in_bounds, state.machine_types[target_y, target_x], MachineType.NONE
+    target_x, target_y, in_bounds, machine_type, slot_items, slot_counts, num_slots = (
+        _resolve_adjacent_machine(state, player_idx)
     )
     has_machine = machine_type != MachineType.NONE
 
@@ -282,61 +414,14 @@ def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvStat
     count = state.inventory_counts[player_idx, selected_slot]
     has_item = (item != ItemType.EMPTY) & (count > 0)
 
-    slot_roles = _SLOT_ROLES_JAX[machine_type]
-    num_slots = _MACHINE_NUM_SLOTS_JAX[machine_type]
-    slot_items = jnp.where(
-        in_bounds,
-        state.machine_inventory_items[target_y, target_x],
-        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int32),
-    )
-    slot_counts = jnp.where(
-        in_bounds,
-        state.machine_inventory_counts[target_y, target_x],
-        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int16),
-    )
-
-    is_deposit_role = (slot_roles == SlotRole.INPUT) | (slot_roles == SlotRole.STORAGE)
-    slot_idx_range = jnp.arange(MAX_MACHINE_INVENTORY_SLOTS)
-    in_range = slot_idx_range < num_slots
-
-    cap = jnp.where(
-        machine_type == MachineType.ASSEMBLER,
-        MAX_ASSEMBLER_STACK_SIZE,
-        MAX_MACHINE_STACK_SIZE,
-    )
-
-    slot_empty = slot_counts == 0
-    slot_matches = slot_items == item
-    slot_has_space = (slot_empty | slot_matches) & (slot_counts < cap)
-
-    # Assembler recipe filter for INPUT slots.
-    is_asm = machine_type == MachineType.ASSEMBLER
     recipe = jnp.where(
         in_bounds,
         state.machine_selected_recipe[target_y, target_x],
         jnp.int32(0),
     )
-    expected_items = ASSEMBLER_RECIPE_INPUT_ITEMS[recipe]
-    expected_counts = ASSEMBLER_RECIPE_INPUT_COUNTS[recipe]
-    pad = jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS - 2, dtype=jnp.int32)
-    expected_items_full = jnp.concatenate([expected_items, pad])
-    expected_counts_full = jnp.concatenate([expected_counts, pad])
-    is_input = slot_roles == SlotRole.INPUT
-    recipe_ok = (item == expected_items_full) & (expected_counts_full > 0)
-    asm_filter = jnp.where(is_asm & is_input, recipe_ok, True)
-
-    slot_usable = is_deposit_role & in_range & slot_has_space & asm_filter
-
-    # Prefer matching slots over empty ones. Non-usable slots get -1.
-    priority = jnp.where(
-        slot_usable & slot_matches,
-        2,
-        jnp.where(slot_usable & slot_empty, 1, -1),
+    best_slot, has_slot, cap = _find_deposit_slot(
+        machine_type, slot_items, slot_counts, num_slots, item, recipe
     )
-    # Pick highest-priority usable slot (ties broken by lowest index via
-    # argmax returning the first maximum).
-    best_slot = jnp.argmax(priority)
-    has_slot = jnp.any(slot_usable)
 
     can_deposit = in_bounds & has_machine & has_item & has_slot
 
@@ -388,51 +473,15 @@ def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvS
         Updated state with items transferred, or unchanged if invalid.
     """
     from factoriax.crafting import add_item_to_inventory
-    from factoriax.placement import get_tile_in_front
 
-    target_x, target_y = get_tile_in_front(state, player_idx)
-    map_h, map_w = state.map.shape
-
-    in_bounds = (
-        (target_x >= 0) & (target_x < map_w) & (target_y >= 0) & (target_y < map_h)
-    )
-
-    machine_type = jnp.where(
-        in_bounds, state.machine_types[target_y, target_x], MachineType.NONE
+    target_x, target_y, in_bounds, machine_type, slot_items, slot_counts, num_slots = (
+        _resolve_adjacent_machine(state, player_idx)
     )
     has_machine = machine_type != MachineType.NONE
 
-    slot_roles = _SLOT_ROLES_JAX[machine_type]
-    num_slots = _MACHINE_NUM_SLOTS_JAX[machine_type]
-    slot_items = jnp.where(
-        in_bounds,
-        state.machine_inventory_items[target_y, target_x],
-        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int32),
+    best_slot, has_source, source_item, source_count = _find_withdraw_slot(
+        machine_type, slot_items, slot_counts, num_slots
     )
-    slot_counts = jnp.where(
-        in_bounds,
-        state.machine_inventory_counts[target_y, target_x],
-        jnp.zeros(MAX_MACHINE_INVENTORY_SLOTS, dtype=jnp.int16),
-    )
-
-    slot_idx_range = jnp.arange(MAX_MACHINE_INVENTORY_SLOTS)
-    in_range = slot_idx_range < num_slots
-    has_items = slot_counts > 0
-    not_none_role = slot_roles != SlotRole.NONE
-
-    # Priority: OUTPUT (0) > STORAGE (1) > INPUT (2) > NONE (3).
-    role_priority = _WITHDRAW_PRIORITY[slot_roles]
-    # Ineligible slots get max priority so they sort last.
-    eligible = in_range & has_items & not_none_role
-    effective_priority = jnp.where(eligible, role_priority, jnp.int32(99))
-    # Within same priority, prefer lower slot index. Combine into a single
-    # sortable score: priority * MAX_SLOTS + slot_index.
-    score = effective_priority * MAX_MACHINE_INVENTORY_SLOTS + slot_idx_range
-    best_slot = jnp.argmin(score)
-    has_source = eligible[best_slot]
-
-    source_item = slot_items[best_slot]
-    source_count = slot_counts[best_slot].astype(jnp.int32)
 
     # Check player has space for at least one item.
     p_items = state.inventory_items[player_idx]
@@ -453,8 +502,6 @@ def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvS
             machine_inventory_items=new_m_items,
             machine_inventory_counts=new_m_counts,
         )
-        # Add to player inventory (overflow is lost per add_item_to_inventory
-        # contract, but we checked space above so at least 1 item fits).
         return add_item_to_inventory(s, player_idx, source_item, source_count)
 
     return lax.cond(can_withdraw, do_withdraw, lambda s: s, state)

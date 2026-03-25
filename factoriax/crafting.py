@@ -9,6 +9,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     ItemType,
 )
+from factoriax.inventory import add_items_to_slots
 from factoriax.recipes import (
     MAX_RECIPE_INPUTS,
     NUM_RECIPES,
@@ -179,37 +180,9 @@ def add_item_to_inventory(
     """
     items = state.inventory_items[player_idx]
     counts = state.inventory_counts[player_idx]
-    remaining = amount
 
-    def add_to_slot(carry: tuple, slot_idx: int) -> tuple:
-        items_arr, counts_arr, remaining_amt = carry
-        slot_item = items_arr[slot_idx]
-        slot_count = counts_arr[slot_idx]
-
-        can_stack = (slot_item == item_type) & (slot_count < MAX_STACK_SIZE)
-        is_empty = slot_item == ItemType.EMPTY
-
-        space = jnp.where(can_stack, MAX_STACK_SIZE - slot_count, 0)
-        space = jnp.where(is_empty, MAX_STACK_SIZE, space)
-
-        to_add = jnp.minimum(remaining_amt, space)
-
-        new_count = slot_count + to_add
-        new_remaining = remaining_amt - to_add
-
-        items_arr = jnp.where(
-            (is_empty & (to_add > 0)),
-            items_arr.at[slot_idx].set(item_type),
-            items_arr,
-        )
-        counts_arr = counts_arr.at[slot_idx].set(new_count)
-
-        return (items_arr, counts_arr, new_remaining), None
-
-    (new_items, new_counts, _), _ = lax.scan(
-        add_to_slot,
-        (items, counts, remaining),
-        jnp.arange(NUM_INVENTORY_SLOTS),
+    new_items, new_counts, _ = add_items_to_slots(
+        items, counts, item_type, amount, MAX_STACK_SIZE
     )
 
     return state.replace(
