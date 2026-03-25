@@ -467,13 +467,15 @@ def plot_ngram_sweep(
     )
     axes = axes[:, 0]
 
-    from matplotlib.patches import Rectangle
+    from matplotlib.patches import Patch, Rectangle
     from matplotlib.transforms import blended_transform_factory
 
     # Square size in axes-fraction (x) and data units (y).
     sq_w = 0.018
     sq_gap = 0.003
     sq_h = 0.7
+    # Reserve left margin for colored boxes (widest n-gram determines width).
+    box_margin = (n_max + 1) * (sq_w + sq_gap)
 
     for row, n in enumerate(n_values):
         ax = axes[row]
@@ -490,17 +492,13 @@ def plot_ngram_sweep(
             _blend_ngram_color(g, colors) for g, _ in grams_int
         ]
         ax.barh(
-            range(len(labels)), counts, color=bar_colors,
-            height=0.7, zorder=2,
+            range(len(labels)), counts, color=bar_colors, height=0.7,
         )
-        # Place text labels inside the bars (behind the color boxes).
-        for idx, label in enumerate(labels):
+        # Action name text to the right of each bar.
+        for idx, (label, count) in enumerate(zip(labels, counts)):
             ax.text(
-                0.02, idx, f"  {label}", va="center", ha="left",
-                fontsize=7, family="monospace", zorder=3,
-                transform=blended_transform_factory(
-                    ax.transAxes, ax.transData,
-                ),
+                count, idx, f"  {label}", va="center", ha="left",
+                fontsize=7, family="monospace",
             )
         ax.set_yticks([])
         ax.invert_yaxis()
@@ -509,25 +507,42 @@ def plot_ngram_sweep(
         ax.tick_params(axis="x", labelsize=7)
         if row < num_rows - 1:
             ax.set_xticklabels([])
+        # Expand x-axis to fit text labels.
+        if counts:
+            ax.set_xlim(right=max(counts) * 2.5)
 
-        # Draw colored action squares on top of the bars.
+        # Colored action squares in the left margin.
         trans = blended_transform_factory(ax.transAxes, ax.transData)
         for idx, (gram, _) in enumerate(grams_int):
             for j, a in enumerate(gram):
-                x = 0.02 + j * (sq_w + sq_gap)
+                x = -box_margin + j * (sq_w + sq_gap)
                 ax.add_patch(Rectangle(
                     (x, idx - sq_h / 2), sq_w, sq_h,
                     facecolor=colors[min(a, len(colors) - 1)],
                     edgecolor="white", linewidth=0.3,
                     transform=trans, clip_on=False,
-                    zorder=4,
                 ))
+
+    # Action color legend at the top of the figure.
+    num_actions = len(action_labels)
+    legend_patches = [
+        Patch(facecolor=colors[i], label=action_labels[i])
+        for i in range(min(num_actions, len(colors)))
+    ]
+    fig.legend(
+        handles=legend_patches,
+        loc="upper center",
+        ncol=min(num_actions, 8),
+        fontsize=7,
+        frameon=True,
+        bbox_to_anchor=(0.5, 1.0),
+    )
 
     axes[-1].set_xlabel("Count")
     if title:
-        fig.suptitle(title, fontsize=11, y=1.0)
+        fig.suptitle(title, fontsize=11, y=1.06)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
     return fig, axes
 
 
