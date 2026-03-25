@@ -34,6 +34,21 @@ from factoriax.state import EnvParams, EnvState
 logger = logging.getLogger(__name__)
 
 
+def _split3(
+    keys: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Split a batch of PRNG keys into three batches.
+
+    Args:
+        keys: Array of shape ``(N, 2)``.
+
+    Returns:
+        Three arrays of shape ``(N, 2)``.
+    """
+    keys = jax.vmap(lambda k: jax.random.split(k, 3))(keys)
+    return keys[:, 0], keys[:, 1], keys[:, 2]
+
+
 class BenchmarkRunner:
     """Executes a list of policies against a ``Benchmark`` and returns results.
 
@@ -138,6 +153,165 @@ class BenchmarkRunner:
             level_results=level_results,
             aggregate_score=aggregate,
         )
+
+    def run_batched(
+        self,
+        benchmark: Benchmark,
+        policy_fn: Callable[[jax.Array, jax.Array], jax.Array],
+        seeds: list[int],
+        obs_fn: Callable[[EnvState, EnvParams, int], jax.Array] | None = None,
+    ) -> list[BenchmarkResult]:
+        """Run a policy across multiple seeds in parallel using vmap.
+
+        Much faster than calling :meth:`run` in a loop because all seeds
+        share a single ``jax.lax.scan`` per level, keeping computation
+        on-device.
+
+        Only supports single-player benchmarks. The policy must be a
+        pure function compatible with JAX tracing.
+
+        Args:
+            benchmark: Benchmark to evaluate against.
+            policy_fn: Pure policy function with signature
+                ``(obs, rng_key) -> action``. The runner manages PRNG
+                splitting. ``obs`` is a float32 array and ``action`` is
+                an integer scalar. The function must be JIT-traceable.
+            seeds: List of integer seeds, one per parallel evaluation.
+            obs_fn: Observation extraction function. Defaults to
+                ``global_array``.
+
+        Returns:
+            List of ``BenchmarkResult``, one per seed, in the same
+            order as ``seeds``.
+
+        Raises:
+            ValueError: If the benchmark requires more than one player.
+        """
+        if benchmark.num_players != 1:
+            raise ValueError(
+                "run_batched only supports single-player benchmarks, "
+                f"got num_players={benchmark.num_players}."
+            )
+        _obs_fn = obs_fn if obs_fn is not None else global_array
+        num_seeds = len(seeds)
+        levels = benchmark.levels()
+
+        # Per-level batched results: level_name -> (final_states, actions, timesteps)
+        level_data: list[
+            tuple[BenchmarkLevel, EnvState, np.ndarray, np.ndarray]
+        ] = []
+
+        for bench_level in levels:
+            params = bench_level.env_params
+            state0 = build_state(bench_level.level, params)
+            max_steps = params.max_timesteps
+
+            # Broadcast initial state to (num_seeds, ...).
+            states = jax.tree.map(
+                lambda x: jnp.broadcast_to(
+                    jnp.asarray(x)[None], (num_seeds,) + jnp.asarray(x).shape,
+                ),
+                state0,
+            )
+
+            rngs = jax.vmap(jax.random.PRNGKey)(jnp.array(seeds))
+
+            vmap_step = jax.vmap(
+                self._env.step_env, in_axes=(0, 0, 0, None),
+            )
+
+            def _obs_single(s: EnvState) -> jax.Array:
+                return _obs_fn(s, params, 0)
+
+            vmap_obs = jax.vmap(_obs_single)
+            vmap_policy = jax.vmap(policy_fn, in_axes=(0, 0))
+
+            @jax.jit
+            def _scan(
+                states: EnvState, rngs: jax.Array,
+            ) -> tuple[EnvState, jax.Array, jax.Array, jax.Array]:
+                def step(
+                    carry: tuple[EnvState, jax.Array, jax.Array, jax.Array],
+                    _: None,
+                ) -> tuple[
+                    tuple[EnvState, jax.Array, jax.Array, jax.Array],
+                    jax.Array,
+                ]:
+                    st, rn, dones, t_used = carry
+                    obs = vmap_obs(st)
+                    rn, act_keys, step_keys = _split3(rn)
+                    actions = vmap_policy(obs, act_keys)
+
+                    _, next_st, _, step_done, _ = vmap_step(
+                        step_keys, st, actions, params,
+                    )
+
+                    # Freeze states that are already done.
+                    next_st = jax.tree.map(
+                        lambda o, n: jnp.where(
+                            dones.reshape((-1,) + (1,) * (n.ndim - 1)),
+                            o, n,
+                        ),
+                        st, next_st,
+                    )
+                    new_dones = dones | step_done
+                    t_used = t_used + (~dones).astype(jnp.int32)
+                    recorded = jnp.where(dones, 0, actions)
+                    return (next_st, rn, new_dones, t_used), recorded
+
+                init_dones = jnp.zeros(num_seeds, dtype=bool)
+                init_t = jnp.zeros(num_seeds, dtype=jnp.int32)
+                (final_st, _, _, t_used), all_actions = jax.lax.scan(
+                    step, (states, rngs, init_dones, init_t),
+                    None, length=max_steps,
+                )
+                # all_actions: (T, N)
+                return final_st, all_actions, t_used
+
+            final_states, all_actions, timesteps_used = _scan(states, rngs)
+
+            # Transfer to CPU once.
+            all_actions_np = np.asarray(all_actions)  # (T, N)
+            timesteps_np = np.asarray(timesteps_used)  # (N,)
+            level_data.append(
+                (bench_level, final_states, all_actions_np, timesteps_np)
+            )
+
+        # Assemble per-seed BenchmarkResults.
+        results: list[BenchmarkResult] = []
+        for i in range(num_seeds):
+            level_results: list[LevelResult] = []
+            for bench_level, final_states, all_actions_np, timesteps_np in level_data:
+                t_used = int(timesteps_np[i])
+                fs_i = jax.tree.map(lambda x: x[i], final_states)
+                items_mined = {
+                    "coal": int(fs_i.items_mined[ItemType.COAL]),
+                    "iron": int(fs_i.items_mined[ItemType.IRON]),
+                    "copper": int(fs_i.items_mined[ItemType.COPPER]),
+                }
+                score = benchmark.score_level(bench_level, items_mined)
+                level_results.append(LevelResult(
+                    level_name=bench_level.name,
+                    items_mined=items_mined,
+                    weighted_score=score,
+                    timesteps_used=t_used,
+                    actions=all_actions_np[:t_used, i],
+                    final_state=fs_i,
+                ))
+            agg = benchmark.score(level_results)
+            results.append(BenchmarkResult(
+                benchmark_name=benchmark.name,
+                level_results=level_results,
+                aggregate_score=agg,
+            ))
+
+        agg_scores = [r.aggregate_score for r in results]
+        logger.info(
+            "Benchmark '%s' batched (%d seeds): mean=%.3f  std=%.3f",
+            benchmark.name, num_seeds,
+            float(np.mean(agg_scores)), float(np.std(agg_scores)),
+        )
+        return results
 
     def _run_level(
         self,

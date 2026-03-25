@@ -43,10 +43,13 @@ DEFAULT_ACTION_LABELS = [
     "PREV_SLOT",
     "NEXT_RECIPE",
     "PREV_RECIPE",
+    "PICKUP",
+    "DEPOSIT",
+    "WITHDRAW",
 ]
 
-# Qualitative colormap designed for 12 distinguishable actions.
-# Movement = cool tones, interaction = warm tones, UI = grays.
+# Qualitative colormap designed for 15 distinguishable actions.
+# Movement = cool tones, interaction = warm tones, UI = grays/purples.
 DEFAULT_ACTION_COLORS = [
     "#bdbdbd",  # NOOP       - gray
     "#1f77b4",  # LEFT       - blue
@@ -60,6 +63,9 @@ DEFAULT_ACTION_COLORS = [
     "#c5b0d5",  # PREV_SLOT  - light purple
     "#8c564b",  # NEXT_REC   - brown
     "#c49c94",  # PREV_REC   - light brown
+    "#e377c2",  # PICKUP     - pink
+    "#17becf",  # DEPOSIT    - cyan
+    "#bcbd22",  # WITHDRAW   - olive
 ]
 
 
@@ -399,6 +405,75 @@ def action_ngrams(
         return labeled.most_common(top_k)
 
     return counter.most_common(top_k)
+
+
+def plot_ngram_sweep(
+    traj: Trajectory,
+    n_range: tuple[int, int] = (2, 10),
+    player: int | None = None,
+    top_k: int = 3,
+    action_labels: list[str] | None = None,
+    figsize: tuple[float, float] | None = None,
+    title: str | None = None,
+) -> tuple[Figure, np.ndarray]:
+    """Plot top-k n-grams for each n in a range, one row per n.
+
+    Produces a vertically stacked set of horizontal bar charts. Each
+    row shows the *top_k* most frequent n-grams for one value of *n*,
+    making it easy to spot dominant action sequences at every scale
+    from bigrams up to long motifs.
+
+    Args:
+        traj: Trajectory data.
+        n_range: Inclusive ``(min_n, max_n)`` range for n-gram lengths.
+        player: Player index for multi-player trajectories.
+        top_k: Number of top n-grams per row.
+        action_labels: Human-readable labels per action.
+        figsize: Figure size. Defaults to a height scaled by the
+            number of rows.
+        title: Overall figure title.
+
+    Returns:
+        Tuple of ``(fig, axes)`` where *axes* is a 1-D array of
+        ``Axes``, one per n value.
+    """
+    if action_labels is None:
+        action_labels = DEFAULT_ACTION_LABELS
+    n_min, n_max = n_range
+    n_values = list(range(n_min, n_max + 1))
+    num_rows = len(n_values)
+
+    if figsize is None:
+        figsize = (12, 1.2 + 1.4 * num_rows)
+
+    fig, axes = plt.subplots(
+        num_rows, 1, figsize=figsize, squeeze=False,
+    )
+    axes = axes[:, 0]
+
+    for row, n in enumerate(n_values):
+        ax = axes[row]
+        grams = action_ngrams(traj, n, player, top_k, action_labels)
+        if not grams:
+            ax.set_visible(False)
+            continue
+        labels = [" ".join(g) for g, _ in grams]
+        counts = [c for _, c in grams]
+        ax.barh(range(len(labels)), counts, color="#4c72b0", height=0.7)
+        ax.set_yticks(range(len(labels)))
+        ax.set_yticklabels(labels, fontsize=7, family="monospace")
+        ax.invert_yaxis()
+        ax.set_ylabel(f"n={n}", fontsize=9, rotation=0, labelpad=30)
+        ax.tick_params(axis="x", labelsize=7)
+        if row < num_rows - 1:
+            ax.set_xticklabels([])
+
+    axes[-1].set_xlabel("Count")
+    if title:
+        fig.suptitle(title, fontsize=11, y=1.0)
+
+    fig.tight_layout()
+    return fig, axes
 
 
 def plot_ngrams(

@@ -12,8 +12,8 @@ DEPOSIT action.
 
 Usage::
 
-    python -m baselines.basic_skills.train_ppo
-    python -m baselines.basic_skills.train_ppo --use-wandb --total-steps 10000000
+    python -m baselines.basic_skills.train_ppo --mode mixed --use-wandb
+    python -m baselines.basic_skills.train_ppo --mode single --use-wandb
     python -m baselines.basic_skills.train_ppo --total-steps 100000  # smoke test
 """
 
@@ -90,6 +90,9 @@ class Config:
         save_path: Directory for the final checkpoint (None = disabled).
         eval_seeds: Number of evaluation seeds for benchmark scoring.
         log_interval: Iterations between console and W&B log lines.
+        mode: Training mode. ``"mixed"`` trains one shared policy on all
+            levels simultaneously. ``"single"`` trains a separate policy
+            per level (one run each).
         use_wandb: Whether to log to Weights and Biases.
         wandb_project: W&B project name.
         wandb_run_name: W&B run name (None = auto-generated).
@@ -114,6 +117,7 @@ class Config:
     save_path: str | None = None
     eval_seeds: int = 10
     log_interval: int = 10
+    mode: str = "mixed"
     use_wandb: bool = False
     wandb_project: str = "factoriax-basic-skills"
     wandb_run_name: str | None = None
@@ -634,6 +638,47 @@ def _run_mixed(
 # ---------------------------------------------------------------------------
 
 
+def _plot_eval_diagnostics(
+    traj_paths: dict[str, Path],
+) -> dict[str, dict[str, plt.Figure]]:
+    """Generate reward and action-sequence diagnostic plots per level.
+
+    For each level, produces:
+    - ``rewards``: per-step and cumulative reward curves.
+    - ``ngram_sweep``: top-3 n-grams for n = 2..10.
+
+    Args:
+        traj_paths: Mapping from level name to saved ``.npz`` path.
+
+    Returns:
+        Nested dict ``{level_name: {plot_name: Figure}}``.
+    """
+    from factoriax.analysis.actions import plot_ngram_sweep
+    from factoriax.analysis.state import plot_episode_rewards
+    from factoriax.analysis.trajectory import Trajectory
+
+    results: dict[str, dict[str, plt.Figure]] = {}
+    for name, path in traj_paths.items():
+        traj = Trajectory.load(str(path))
+        figs: dict[str, plt.Figure] = {}
+
+        if traj.rewards is not None:
+            fig_r, _ = plot_episode_rewards(
+                traj, episode=0, title=f"{name} -- evaluation rewards",
+            )
+            figs["rewards"] = fig_r
+
+        fig_ng, _ = plot_ngram_sweep(
+            traj, n_range=(2, 10), top_k=3,
+            title=f"{name} -- top 3 n-grams (n=2..10)",
+        )
+        figs["ngram_sweep"] = fig_ng
+
+        results[name] = figs
+
+    return results
+
+
 def _plot_benchmark_boxplots(results: list) -> plt.Figure:
     """Box plot of per-level and aggregate scores across evaluation seeds."""
     level_names = [lr.level_name for lr in results[0].level_results]
@@ -672,50 +717,64 @@ def _plot_benchmark_boxplots(results: list) -> plt.Figure:
 # ---------------------------------------------------------------------------
 
 
-def train(config: Config) -> None:
-    """Run PPO training and evaluate on the basic_skills benchmark."""
-    rng = jax.random.PRNGKey(config.seed)
+def _train_run(
+    config: Config,
+    run_tag: str,
+    train_levels: list[BenchmarkLevel],
+    train_rfns: list[Callable],
+    benchmark: BasicSkillsBenchmark,
+    all_level_reward_fns: list[Callable],
+    network: ActorCritic,
+    optimizer: optax.GradientTransformation,
+    obs_dim: int,
+    rng: jax.Array,
+) -> None:
+    """Execute one training run: train, evaluate, render, and upload.
 
+    Handles wandb lifecycle internally so it can be called once (mixed)
+    or per-level (single).
+
+    Args:
+        config: Training configuration.
+        run_tag: Short label used in wandb run name and output directory.
+        train_levels: Levels to train on.
+        train_rfns: Reward functions for training levels (same order).
+        benchmark: Full benchmark used for evaluation.
+        all_level_reward_fns: Reward functions for all benchmark levels.
+        network: Actor-critic network (architecture only, params are freshly
+            initialised each call).
+        optimizer: Optax optimizer.
+        obs_dim: Observation vector length.
+        rng: PRNG key.
+    """
+    from benchmarks.single_agent_mining.analysis import (
+        render_level_video,
+        save_mp4,
+    )
+
+    # wandb init.
     wandb_run = None
     if config.use_wandb:
         try:
             import wandb  # type: ignore[import-untyped]
 
+            run_name = config.wandb_run_name or run_tag
             wandb_run = wandb.init(
                 project=config.wandb_project,
-                name=config.wandb_run_name,
+                name=run_name,
                 config=dataclasses.asdict(config),
-                tags=["basic_skills", f"obs_local_r{config.obs_radius}"],
+                tags=[
+                    "basic_skills",
+                    config.mode,
+                    f"obs_local_r{config.obs_radius}",
+                ],
             )
         except ImportError:
             logger.error("wandb not found. Install with: uv add wandb")
 
-    benchmark = BasicSkillsBenchmark()
-    levels = benchmark.levels()
     env = FactoriaXEnv()
-    num_actions = NUM_ACTIONS
 
-    # Map each level to its reward function.
-    level_reward_fns = [REWARD_FNS[bl.name] for bl in levels]
-
-    # Derive obs_dim from a sample build.
-    _sample_state = build_state(levels[0].level, levels[0].env_params)
-    obs_dim = int(
-        local_array(_sample_state, levels[0].env_params, 0, config.obs_radius).shape[0]
-    )
-    logger.info(
-        "obs_dim=%d (local obs, radius=%d)  num_actions=%d",
-        obs_dim,
-        config.obs_radius,
-        num_actions,
-    )
-
-    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=num_actions)
-    optimizer = optax.chain(
-        optax.clip_by_global_norm(config.max_grad_norm),
-        optax.adam(config.learning_rate),
-    )
-
+    # Fresh network parameters and optimizer state per run.
     rng, key_init = jax.random.split(rng)
     params = network.init(key_init, jnp.zeros(obs_dim))
     opt_state = optimizer.init(params)
@@ -723,17 +782,17 @@ def train(config: Config) -> None:
     update_fn = make_update_fn(network, optimizer, config)
 
     logger.info(
-        "Starting training: %d total steps  %d levels  %d envs/level  %d actions",
+        "[%s] Starting training: %d total steps  %d levels  %d envs/level",
+        run_tag,
         config.total_steps,
-        len(levels),
+        len(train_levels),
         config.num_envs,
-        num_actions,
     )
 
     rng, key_train = jax.random.split(rng)
     params, obs_stats = _run_mixed(
-        levels=levels,
-        level_reward_fns=level_reward_fns,
+        levels=train_levels,
+        level_reward_fns=train_rfns,
         env=env,
         network=network,
         update_fn=update_fn,
@@ -747,48 +806,32 @@ def train(config: Config) -> None:
     )
 
     # Save checkpoint.
-    if config.save_path is not None:
-        out_dir = Path(config.save_path)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        ckpt_path = out_dir / "final.pkl"
-        data = {
-            "params": jax.device_get(jax.tree_util.tree_map(np.array, params)),
-            "obs_mean": np.array(obs_stats.mean),
-            "obs_var": np.array(obs_stats.var),
-            "obs_count": int(obs_stats.count),
-            "config": dataclasses.asdict(config),
-        }
-        with open(ckpt_path, "wb") as f:
-            pickle.dump(data, f)
-        logger.info("Checkpoint saved -> %s", ckpt_path)
+    out_dir = Path(config.save_path or ".") / run_tag
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = out_dir / "final.pkl"
+    data = {
+        "params": jax.device_get(jax.tree_util.tree_map(np.array, params)),
+        "obs_mean": np.array(obs_stats.mean),
+        "obs_var": np.array(obs_stats.var),
+        "obs_count": int(obs_stats.count),
+        "config": dataclasses.asdict(config),
+    }
+    with open(ckpt_path, "wb") as f:
+        pickle.dump(data, f)
+    logger.info("[%s] Checkpoint saved -> %s", run_tag, ckpt_path)
 
-    # Evaluate trained policy.
-    jit_apply = jax.jit(network.apply)
+    # Build a pure policy function for batched evaluation.
+    # Closes over trained params and obs stats so the signature is
+    # (obs, rng_key) -> action, compatible with vmap + scan.
+    _params = params
     _obs_stats = obs_stats
     _normalize = config.normalize_obs
 
-    def _make_policy(seed: int) -> Callable[[jax.Array], jax.Array]:
-        """Build a stochastic policy with a per-seed PRNG.
-
-        Each seed produces a different action sequence, giving meaningful
-        variance across evaluation runs even though the environment is
-        deterministic.
-
-        Args:
-            seed: Random seed for action sampling.
-
-        Returns:
-            Policy function mapping observation to action.
-        """
-        state_holder = {"rng": jax.random.PRNGKey(seed + 1000)}
-
-        def policy(obs: jax.Array) -> jax.Array:
-            state_holder["rng"], key = jax.random.split(state_holder["rng"])
-            norm = normalize_obs(_obs_stats, obs) if _normalize else obs
-            logits, _ = jit_apply(params, norm)
-            return jax.random.categorical(key, logits)
-
-        return policy
+    def _pure_policy(obs: jax.Array, key: jax.Array) -> jax.Array:
+        """Stochastic policy: normalize, forward pass, sample."""
+        norm = normalize_obs(_obs_stats, obs) if _normalize else obs
+        logits, _ = network.apply(_params, norm)
+        return jax.random.categorical(key, logits)
 
     def eval_obs_fn(
         state: EnvState, env_params: EnvParams, player_idx: int
@@ -796,20 +839,32 @@ def train(config: Config) -> None:
         """Extract local observations for the benchmark runner."""
         return local_array(state, env_params, player_idx, config.obs_radius)
 
+    # Evaluate on the full benchmark (all seeds in parallel).
     logger.info(
-        "Evaluating trained policy (%d seeds, stochastic)...",
-        config.eval_seeds,
+        "[%s] Evaluating (%d seeds, batched)...", run_tag, config.eval_seeds
     )
-    eval_results = []
-    for seed in range(config.eval_seeds):
-        runner = BenchmarkRunner(seed=seed)
-        eval_results.append(
-            runner.run(
-                benchmark,
-                policies=[_make_policy(seed)],
-                obs_fn=eval_obs_fn,
-            )
-        )
+    runner = BenchmarkRunner()
+    eval_results = runner.run_batched(
+        benchmark,
+        policy_fn=_pure_policy,
+        seeds=list(range(config.eval_seeds)),
+        obs_fn=eval_obs_fn,
+    )
+
+    # _make_policy for trajectory saving / video rendering (seed 0).
+    jit_apply = jax.jit(network.apply)
+
+    def _make_policy(seed: int) -> Callable[[jax.Array], jax.Array]:
+        """Build a stochastic policy with a per-seed PRNG."""
+        state_holder = {"rng": jax.random.PRNGKey(seed + 1000)}
+
+        def policy(obs: jax.Array) -> jax.Array:
+            state_holder["rng"], key = jax.random.split(state_holder["rng"])
+            norm = normalize_obs(_obs_stats, obs) if _normalize else obs
+            logits, _ = jit_apply(_params, norm)
+            return jax.random.categorical(key, logits)
+
+        return policy
 
     level_names = [lr.level_name for lr in eval_results[0].level_results]
     level_scores = np.array(
@@ -817,32 +872,8 @@ def train(config: Config) -> None:
     )
     agg_scores = np.array([r.aggregate_score for r in eval_results])
 
-    # Log to W&B.
-    if wandb_run is not None:
-        try:
-            import wandb  # type: ignore[import-untyped]
-
-            score_data: dict[str, object] = {
-                "benchmark/aggregate_mean": float(np.mean(agg_scores)),
-                "benchmark/aggregate_median": float(np.median(agg_scores)),
-                "benchmark/aggregate_std": float(np.std(agg_scores)),
-            }
-            for j, name in enumerate(level_names):
-                score_data[f"benchmark/{name}/mean"] = float(
-                    np.mean(level_scores[:, j])
-                )
-                score_data[f"benchmark/{name}/std"] = float(np.std(level_scores[:, j]))
-
-            fig_box = _plot_benchmark_boxplots(eval_results)
-            score_data["benchmark/score_distribution"] = wandb.Image(fig_box)
-            plt.close(fig_box)
-            wandb_run.log(score_data)
-            wandb_run.finish()
-        except ImportError:
-            pass
-
     # Print results.
-    print(f"\nBenchmark: basic_skills  ({config.eval_seeds} seeds)")
+    print(f"\n[{run_tag}] Benchmark: basic_skills  ({config.eval_seeds} seeds)")
     print(
         f"Aggregate: {np.mean(agg_scores):.3f}"
         f" +/- {np.std(agg_scores):.3f}"
@@ -857,10 +888,144 @@ def train(config: Config) -> None:
             f"  [{np.min(s):.0f}, {np.max(s):.0f}]"
         )
 
-    # Save per-level trajectories for the inspector.
-    _save_eval_trajectories(
-        benchmark, _make_policy(0), eval_obs_fn, level_reward_fns, config
+    # Save trajectories and render videos for each level.
+    traj_paths = _save_eval_trajectories(
+        benchmark, _make_policy(0), eval_obs_fn, all_level_reward_fns,
+        config, out_dir,
     )
+    video_paths: dict[str, Path] = {}
+    for bl in benchmark.levels():
+        frames = render_level_video(
+            bl, _make_policy(0), seed=config.seed, obs_fn=eval_obs_fn,
+        )
+        mp4_path = out_dir / f"{bl.name}.mp4"
+        save_mp4(frames, mp4_path)
+        video_paths[bl.name] = mp4_path
+        logger.info(
+            "[%s] Rendered video: %s (%d frames)",
+            run_tag, mp4_path, len(frames),
+        )
+
+    # Generate diagnostic plots (rewards + n-gram sweeps) per level.
+    diag_figs = _plot_eval_diagnostics(traj_paths)
+    for level_name, figs in diag_figs.items():
+        for plot_name, fig in figs.items():
+            fig_path = out_dir / f"{level_name}_{plot_name}.png"
+            fig.savefig(fig_path, dpi=150)
+            logger.info("[%s] Saved %s: %s", run_tag, plot_name, fig_path)
+
+    # Upload everything to wandb.
+    if wandb_run is not None:
+        try:
+            import wandb  # type: ignore[import-untyped]
+
+            log_data: dict[str, object] = {
+                "benchmark/aggregate_mean": float(np.mean(agg_scores)),
+                "benchmark/aggregate_median": float(np.median(agg_scores)),
+                "benchmark/aggregate_std": float(np.std(agg_scores)),
+            }
+            for j, name in enumerate(level_names):
+                log_data[f"benchmark/{name}/mean"] = float(
+                    np.mean(level_scores[:, j])
+                )
+                log_data[f"benchmark/{name}/std"] = float(
+                    np.std(level_scores[:, j])
+                )
+            fig_box = _plot_benchmark_boxplots(eval_results)
+            log_data["benchmark/score_distribution"] = wandb.Image(fig_box)
+            plt.close(fig_box)
+
+            for name, mp4_path in video_paths.items():
+                log_data[f"videos/{name}"] = wandb.Video(
+                    str(mp4_path), fps=10, format="mp4",
+                )
+
+            for level_name, figs in diag_figs.items():
+                for plot_name, fig in figs.items():
+                    log_data[f"{plot_name}/{level_name}"] = wandb.Image(fig)
+                    plt.close(fig)
+
+            wandb_run.log(log_data)
+
+            # Upload trajectories as an artifact.
+            artifact = wandb.Artifact(
+                f"trajectories-{run_tag}", type="trajectory",
+            )
+            for name, traj_path in traj_paths.items():
+                artifact.add_file(str(traj_path), name=f"{name}.npz")
+            wandb_run.log_artifact(artifact)
+
+            wandb_run.finish()
+        except ImportError:
+            pass
+    else:
+        for figs in diag_figs.values():
+            for fig in figs.values():
+                plt.close(fig)
+
+
+def train(config: Config) -> None:
+    """Run PPO training and evaluate on the basic_skills benchmark.
+
+    In ``"mixed"`` mode, trains one shared policy on all levels. In
+    ``"single"`` mode, trains a separate policy on each level.
+    """
+    rng = jax.random.PRNGKey(config.seed)
+
+    benchmark = BasicSkillsBenchmark()
+    all_levels = benchmark.levels()
+    all_level_reward_fns = [REWARD_FNS[bl.name] for bl in all_levels]
+
+    # Derive obs_dim from a sample build.
+    _sample_state = build_state(all_levels[0].level, all_levels[0].env_params)
+    obs_dim = int(
+        local_array(
+            _sample_state, all_levels[0].env_params, 0, config.obs_radius,
+        ).shape[0]
+    )
+    logger.info(
+        "obs_dim=%d (local obs, radius=%d)  num_actions=%d  mode=%s",
+        obs_dim,
+        config.obs_radius,
+        NUM_ACTIONS,
+        config.mode,
+    )
+
+    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS)
+    optimizer = optax.chain(
+        optax.clip_by_global_norm(config.max_grad_norm),
+        optax.adam(config.learning_rate),
+    )
+
+    if config.mode == "single":
+        for bl, rfn in zip(all_levels, all_level_reward_fns):
+            rng, key_run = jax.random.split(rng)
+            _train_run(
+                config,
+                run_tag=bl.name,
+                train_levels=[bl],
+                train_rfns=[rfn],
+                benchmark=benchmark,
+                all_level_reward_fns=all_level_reward_fns,
+                network=network,
+                optimizer=optimizer,
+                obs_dim=obs_dim,
+                rng=key_run,
+            )
+    else:
+        rng, key_run = jax.random.split(rng)
+        _train_run(
+            config,
+            run_tag="mixed",
+            train_levels=all_levels,
+            train_rfns=all_level_reward_fns,
+            benchmark=benchmark,
+            all_level_reward_fns=all_level_reward_fns,
+            network=network,
+            optimizer=optimizer,
+            obs_dim=obs_dim,
+            rng=key_run,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -874,7 +1039,8 @@ def _save_eval_trajectories(
     obs_fn: Callable,
     level_reward_fns: list[Callable],
     config: Config,
-) -> None:
+    out_dir: Path,
+) -> dict[str, Path]:
     """Re-run the policy on each level and save full-state trajectories.
 
     Each trajectory is saved as a ``.npz`` file that the inspector can
@@ -886,14 +1052,18 @@ def _save_eval_trajectories(
         obs_fn: Observation extraction function.
         level_reward_fns: Reward function per level.
         config: Training configuration.
+        out_dir: Directory to write trajectory files into.
+
+    Returns:
+        Mapping from level name to the saved ``.npz`` path.
     """
     from factoriax.analysis.trajectory import states_to_trajectory
     from factoriax.envs import FactoriaXEnv
 
     env = FactoriaXEnv()
     jit_step = jax.jit(env.step_env)
-    out_dir = Path(config.save_path) if config.save_path else Path(".")
     out_dir.mkdir(parents=True, exist_ok=True)
+    paths: dict[str, Path] = {}
 
     for bl, rfn in zip(benchmark.levels(), level_reward_fns):
         params_l = bl.env_params
@@ -933,12 +1103,15 @@ def _save_eval_trajectories(
         })
         path = out_dir / f"{bl.name}_trajectory.npz"
         traj.save(str(path))
+        paths[bl.name] = path
         logger.info(
             "Saved trajectory: %s  (%d steps, reward=%.1f)",
             path,
             len(actions_log),
             sum(rewards_log),
         )
+
+    return paths
 
 
 # ---------------------------------------------------------------------------
@@ -974,6 +1147,13 @@ def _parse_args() -> Config:
     p.add_argument("--save-path", type=str, default=None)
     p.add_argument("--eval-seeds", type=int, default=10)
     p.add_argument("--log-interval", type=int, default=10)
+    p.add_argument(
+        "--mode",
+        type=str,
+        default="mixed",
+        choices=["single", "mixed"],
+        help="'single' trains one policy per level; 'mixed' trains one shared policy",
+    )
     p.add_argument("--use-wandb", action="store_true")
     p.add_argument("--wandb-project", type=str, default="factoriax-basic-skills")
     p.add_argument("--wandb-run-name", type=str, default=None)
@@ -998,6 +1178,7 @@ def _parse_args() -> Config:
         save_path=args.save_path,
         eval_seeds=args.eval_seeds,
         log_interval=args.log_interval,
+        mode=args.mode,
         use_wandb=args.use_wandb,
         wandb_project=args.wandb_project,
         wandb_run_name=args.wandb_run_name,

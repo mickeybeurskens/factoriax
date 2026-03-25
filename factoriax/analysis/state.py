@@ -17,6 +17,8 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
+from .trajectory import Trajectory
+
 # Default item labels matching factoriax ItemType enum
 DEFAULT_ITEM_LABELS = ["EMPTY", "COAL", "IRON", "COPPER", "MINER"]
 DEFAULT_ITEM_COLORS = ["#bdbdbd", "#363636", "#c0c0c0", "#b87333", "#00c800"]
@@ -338,3 +340,61 @@ def plot_resource_depletion(
 
     fig.tight_layout()
     return fig, ax
+
+
+# ---------------------------------------------------------------------------
+# Episode reward curves
+# ---------------------------------------------------------------------------
+
+
+def plot_episode_rewards(
+    traj: Trajectory,
+    episode: int = 0,
+    figsize: tuple[float, float] = (10, 6),
+    title: str | None = None,
+) -> tuple[Figure, np.ndarray]:
+    """Plot per-step and cumulative rewards for a single episode.
+
+    The top panel shows a bar chart of per-step rewards and the bottom
+    panel shows the cumulative reward curve with shaded area.
+
+    Args:
+        traj: Trajectory with the ``rewards`` field populated.
+        episode: Episode index to plot.
+        figsize: Figure size.
+        title: Title for the top panel.
+
+    Returns:
+        Tuple of ``(fig, axes)`` where *axes* is a length-2 array
+        of the step-reward and cumulative-reward axes.
+
+    Raises:
+        ValueError: If the trajectory has no ``rewards`` field.
+    """
+    if traj.rewards is None:
+        raise ValueError(
+            "plot_episode_rewards requires the rewards field."
+        )
+
+    r = traj.rewards[episode].astype(np.float64)
+    cumulative = np.cumsum(r)
+    steps = np.arange(len(r))
+
+    fig, axes = plt.subplots(2, 1, figsize=figsize, sharex=True)
+    ax_step, ax_cum = axes
+
+    ax_step.bar(steps, r, width=1.0, color="steelblue", alpha=0.7)
+    ax_step.set_ylabel("Step reward")
+    ax_step.set_title(title or "Evaluation episode rewards")
+    ax_step.grid(axis="y", linestyle="--", alpha=0.4)
+
+    ax_cum.plot(steps, cumulative, color="darkorange", linewidth=1.5)
+    ax_cum.fill_between(
+        steps, 0, cumulative, color="darkorange", alpha=0.2,
+    )
+    ax_cum.set_xlabel("Timestep")
+    ax_cum.set_ylabel("Cumulative reward")
+    ax_cum.grid(axis="y", linestyle="--", alpha=0.4)
+
+    fig.tight_layout()
+    return fig, axes
