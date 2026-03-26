@@ -122,12 +122,12 @@ def sparse_mining_reward(
 def sparse_chest_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Sparse reward of 1.0 for each newly crafted chest.
+    """Sparse reward of 1.0 for each chest gained via crafting.
 
-    Counts chests across both player inventory and placed machines on
-    the map, so picking up a placed chest and putting it back down is
-    net zero. Only genuine crafting (new chests entering the world)
-    produces reward.
+    Detects crafting by requiring that the player's inventory gained
+    chests *and* lost iron in the same step. Moving chests between
+    inventory and machines changes chest count without consuming iron,
+    so place/pickup/deposit/withdraw exploits yield zero reward.
 
     Args:
         prev_state: State immediately before the step.
@@ -138,21 +138,22 @@ def sparse_chest_crafting_reward(
         Scalar float32 reward.
     """
 
-    def _count_all_chests(state: EnvState) -> jax.Array:
-        inv_chests = jnp.sum(
-            jnp.where(
-                state.inventory_items == ItemType.CHEST,
-                state.inventory_counts,
-                0,
-            )
-        )
-        placed_chests = jnp.sum(
-            (state.machine_types == MachineType.CHEST).astype(jnp.int32)
-        )
-        return inv_chests + placed_chests
+    def _count_item(state: EnvState, item: int) -> jax.Array:
+        is_item = state.inventory_items == item
+        return jnp.sum(jnp.where(is_item, state.inventory_counts, 0))
 
-    delta = _count_all_chests(new_state) - _count_all_chests(prev_state)
-    reward: jax.Array = jnp.maximum(delta, 0).astype(jnp.float32)
+    chest_delta = _count_item(new_state, ItemType.CHEST) - _count_item(
+        prev_state, ItemType.CHEST
+    )
+    iron_delta = _count_item(new_state, ItemType.IRON) - _count_item(
+        prev_state, ItemType.IRON
+    )
+
+    # Crafting consumes iron and produces chests in the same step.
+    is_craft = (chest_delta > 0) & (iron_delta < 0)
+    reward: jax.Array = jnp.where(is_craft, chest_delta, 0).astype(
+        jnp.float32
+    )
     return reward
 
 
