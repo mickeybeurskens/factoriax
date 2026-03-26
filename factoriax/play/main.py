@@ -34,7 +34,7 @@ from factoriax.play.ui import (
     render_victory_screen,
     render_welcome_screen,
 )
-from factoriax.recipes import NUM_ASSEMBLER_RECIPES
+from factoriax.recipes import NUM_ASSEMBLER_RECIPES, NUM_RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 from factoriax.ui.compositing import composite_rgba_over_rgb  # noqa: F401
@@ -244,9 +244,7 @@ def _handle_click(
                 ps.menu_focus = "inventory"
         elif hit.action == "select_recipe":
             ps.menu_focus = "crafting"
-            selected_player = int(state.selected_player)  # type: ignore[union-attr]
-            new_recipes = state.selected_recipes.at[selected_player].set(hit.param)  # type: ignore[union-attr]
-            state = state.replace(selected_recipes=new_recipes)  # type: ignore[union-attr]
+            ps.selected_recipe = hit.param
         elif hit.action == "select_machine_slot":
             machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])  # type: ignore[union-attr]
             num_slots = int(MACHINE_NUM_SLOTS[machine_type])
@@ -638,13 +636,13 @@ def _handle_crafting_nav(
     """
     action = int(Action.NOOP)
     if event.key == pygame.K_w:
-        action = int(Action.PREV_RECIPE)
+        ps.selected_recipe = (ps.selected_recipe - 1) % NUM_RECIPES
     elif event.key == pygame.K_s:
-        action = int(Action.NEXT_RECIPE)
+        ps.selected_recipe = (ps.selected_recipe + 1) % NUM_RECIPES
     elif event.key == pygame.K_a:
         ps.menu_focus = "inventory"
     elif event.key == pygame.K_e:
-        action = int(Action.CRAFT)
+        action = int(Action.CRAFT_MINER) + ps.selected_recipe
     return ps, action
 
 
@@ -712,6 +710,7 @@ def _render_frame(
     if ps.inventory_open:
         menu_overlay, inv_regions = render_inventory_menu(
             state, ui_w, ui_h, ps.menu_focus, ps.held_slot,
+            ps.selected_recipe,
         )
         composite_rgba_over_rgb(ui_frame, menu_overlay)
         click_regions.extend(inv_regions)

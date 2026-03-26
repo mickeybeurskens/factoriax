@@ -1122,6 +1122,7 @@ def render_inventory_menu(
     screen_height: int,
     menu_focus: str = "inventory",
     held_slot: int | None = None,
+    selected_recipe: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the inventory and crafting menu as an RGBA overlay.
 
@@ -1205,7 +1206,6 @@ def render_inventory_menu(
 
     selected_player = int(state.selected_player)
     selected_slot = int(state.selected_slots[selected_player])
-    selected_recipe = int(state.selected_recipes[selected_player])
     craft_progress = int(state.craft_progress[selected_player])
     inventory_items = np.array(state.inventory_items[selected_player])
     inventory_counts = np.array(state.inventory_counts[selected_player])
@@ -1390,7 +1390,7 @@ def render_inventory_menu(
             _blit_rgba(recipe_content, ratio_arr, inp_y, inp_x + inp_icon + 6)
             inp_x += inp_icon + 6 + ratio_arr.shape[1] + 12
 
-        if craft_progress > 0 and is_selected_recipe:
+        if craft_progress > 0 and is_selected_recipe and recipe["ticks"] > 0:
             bar_y = ry + recipe_h - 20
             bar_w = vp_w_craft - 16
             filled = int(bar_w * (1 - craft_progress / recipe["ticks"]))

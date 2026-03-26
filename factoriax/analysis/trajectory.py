@@ -52,7 +52,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "inventory_items",
     "inventory_counts",
     "selected_slots",
-    "selected_recipes",
+    "crafting_recipe",
     "craft_progress",
     # Map fields — shape (B, T, H, W, ...).
     "block_map",
@@ -80,7 +80,7 @@ _PLAYER_FIELDS: frozenset[str] = frozenset(
         "inventory_items",
         "inventory_counts",
         "selected_slots",
-        "selected_recipes",
+        "crafting_recipe",
         "craft_progress",
     }
 )
@@ -110,8 +110,8 @@ class Trajectory:
         Stack counts per inventory slot.  Shape ``(B, T, P, num_slots)``.
     selected_slots : np.ndarray, optional
         Selected inventory slot per player.  Shape ``(B, T, P)``.
-    selected_recipes : np.ndarray, optional
-        Selected recipe index per player.  Shape ``(B, T, P)``.
+    crafting_recipe : np.ndarray, optional
+        Recipe in progress per player.  Shape ``(B, T, P)``.
     craft_progress : np.ndarray, optional
         Crafting ticks remaining per player.  Shape ``(B, T, P)``.
     block_map : np.ndarray, optional
@@ -161,7 +161,7 @@ class Trajectory:
     inventory_items: np.ndarray | None = None
     inventory_counts: np.ndarray | None = None
     selected_slots: np.ndarray | None = None
-    selected_recipes: np.ndarray | None = None
+    crafting_recipe: np.ndarray | None = None
     craft_progress: np.ndarray | None = None
 
     # Map fields — (B, T, H, W, ...).

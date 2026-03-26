@@ -229,18 +229,20 @@ class Action(IntEnum):
     UP = 3
     DOWN = 4
     MINE = 5
-    CRAFT = 6
-    PLACE = 7
-    NEXT_SLOT = 8
-    PREV_SLOT = 9
-    NEXT_RECIPE = 10
-    PREV_RECIPE = 11
-    PICKUP = 12
-    DEPOSIT = 13
-    WITHDRAW = 14
-    ROTATE = 15
-    NEXT_MACHINE_SLOT = 16
-    PREV_MACHINE_SLOT = 17
+    PLACE = 6
+    NEXT_SLOT = 7
+    PREV_SLOT = 8
+    PICKUP = 9
+    DEPOSIT = 10
+    WITHDRAW = 11
+    ROTATE = 12
+    NEXT_MACHINE_SLOT = 13
+    PREV_MACHINE_SLOT = 14
+    CRAFT_MINER = 15
+    CRAFT_CHEST = 16
+    CRAFT_BELT = 17
+    CRAFT_ARM = 18
+    CRAFT_ASSEMBLER = 19
 
 
 DIRECTIONS = jnp.array(
@@ -250,19 +252,21 @@ DIRECTIONS = jnp.array(
         [1, 0],  # RIGHT
         [0, -1],  # UP
         [0, 1],  # DOWN
-        [0, 0],  # MINE (no movement)
-        [0, 0],  # CRAFT (no movement)
-        [0, 0],  # PLACE (no movement)
-        [0, 0],  # NEXT_SLOT (no movement)
-        [0, 0],  # PREV_SLOT (no movement)
-        [0, 0],  # NEXT_RECIPE (no movement)
-        [0, 0],  # PREV_RECIPE (no movement)
-        [0, 0],  # PICKUP (no movement)
-        [0, 0],  # DEPOSIT (no movement)
-        [0, 0],  # WITHDRAW (no movement)
-        [0, 0],  # ROTATE (no movement)
-        [0, 0],  # NEXT_MACHINE_SLOT (no movement)
-        [0, 0],  # PREV_MACHINE_SLOT (no movement)
+        [0, 0],  # MINE
+        [0, 0],  # PLACE
+        [0, 0],  # NEXT_SLOT
+        [0, 0],  # PREV_SLOT
+        [0, 0],  # PICKUP
+        [0, 0],  # DEPOSIT
+        [0, 0],  # WITHDRAW
+        [0, 0],  # ROTATE
+        [0, 0],  # NEXT_MACHINE_SLOT
+        [0, 0],  # PREV_MACHINE_SLOT
+        [0, 0],  # CRAFT_MINER
+        [0, 0],  # CRAFT_CHEST
+        [0, 0],  # CRAFT_BELT
+        [0, 0],  # CRAFT_ARM
+        [0, 0],  # CRAFT_ASSEMBLER
     ],
     dtype=jnp.int32,
 )

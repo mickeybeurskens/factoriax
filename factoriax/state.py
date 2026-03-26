@@ -22,10 +22,10 @@ class EnvState:
         selected_player: Index of the currently selected player for UI/input
         selected_slots: Currently selected inventory slot per player
             with shape (num_players,)
-        selected_recipes: Currently selected recipe index per player
-            with shape (num_players,)
+        crafting_recipe: Recipe index of the craft in progress per player
+            with shape (num_players,). Only meaningful when craft_progress > 0.
         craft_progress: Ticks remaining in current craft per player
-            with shape (num_players,)
+            with shape (num_players,). Zero means no craft is active.
         block_resources: Remaining resources for each tile with shape (height, width)
         machine_types: Machine type at each tile with shape (height, width)
         machine_power: Remaining power for each machine with shape (height, width)
@@ -51,7 +51,7 @@ class EnvState:
     inventory_counts: jnp.ndarray
     selected_player: int
     selected_slots: jnp.ndarray
-    selected_recipes: jnp.ndarray
+    crafting_recipe: jnp.ndarray
     craft_progress: jnp.ndarray
     block_resources: jnp.ndarray
     machine_types: jnp.ndarray

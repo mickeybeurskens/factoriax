@@ -59,6 +59,7 @@ class PlayState:
     machine_panel_active: bool = True
     hotbar_page: int = 0
     held_slot: int | None = None
+    selected_recipe: int = 0
 
     # Recording
     record_enabled: bool = False

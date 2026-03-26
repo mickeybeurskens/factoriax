@@ -12,7 +12,6 @@ from factoriax.constants import (
 from factoriax.inventory import add_items_to_slots
 from factoriax.recipes import (
     MAX_RECIPE_INPUTS,
-    NUM_RECIPES,
     RECIPE_INPUT_COUNTS,
     RECIPE_INPUT_ITEMS,
     RECIPE_OUTPUTS,
@@ -191,54 +190,74 @@ def add_item_to_inventory(
     )
 
 
-def start_crafting(state: EnvState, player_idx: int | jax.Array) -> EnvState:
-    """Start crafting the currently selected recipe for a player.
+def start_crafting(
+    state: EnvState,
+    player_idx: int | jax.Array,
+    recipe_idx: int | jax.Array,
+) -> EnvState:
+    """Craft a specific recipe for a player.
 
-    Checks if the player can afford the recipe and is not already crafting.
-    If valid, consumes materials and sets the craft timer.
+    Checks affordability and that no craft is already in progress. When
+    ``RECIPE_TICKS`` is 0 (the default), crafting is instant: materials
+    are consumed and the output appears in the same step. When ticks > 0,
+    materials are consumed immediately but the output is deferred until
+    ``update_crafting`` counts the progress down to zero.
 
     Args:
-        state: Current environment state
-        player_idx: Index of the player
+        state: Current environment state.
+        player_idx: Index of the player.
+        recipe_idx: Index of the recipe to craft.
 
     Returns:
-        Updated state with crafting started (or unchanged if invalid)
+        Updated state with crafting started (or unchanged if invalid).
     """
-    recipe_idx = state.selected_recipes[player_idx]
     is_crafting = state.craft_progress[player_idx] > 0
     can_afford = can_afford_recipe(state, player_idx, recipe_idx)
-
     should_start = can_afford & ~is_crafting
 
     craft_ticks = RECIPE_TICKS[recipe_idx]
+    is_instant = craft_ticks == 0
 
-    new_state = lax.cond(
-        should_start,
-        lambda s: consume_recipe_materials(s, player_idx, recipe_idx).replace(
-            craft_progress=s.craft_progress.at[player_idx].set(craft_ticks)
-        ),
-        lambda s: s,
-        state,
-    )
+    def do_craft(s: EnvState) -> EnvState:
+        s = consume_recipe_materials(s, player_idx, recipe_idx)
+        output_item = RECIPE_OUTPUTS[recipe_idx]
+        # Instant: add output now. Delayed: set progress countdown.
+        s = lax.cond(
+            is_instant,
+            lambda s2: add_item_to_inventory(s2, player_idx, output_item, 1),
+            lambda s2: s2.replace(
+                craft_progress=s2.craft_progress.at[player_idx].set(
+                    craft_ticks
+                ),
+                crafting_recipe=s2.crafting_recipe.at[player_idx].set(
+                    recipe_idx
+                ),
+            ),
+            s,
+        )
+        return s
 
-    return new_state
+    return lax.cond(should_start, do_craft, lambda s: s, state)
 
 
 def update_crafting(state: EnvState) -> EnvState:
     """Progress all active crafts and complete finished ones.
 
     Called each game step. Decrements craft_progress for all players with
-    active crafts. When a craft completes (progress reaches 0), adds the
-    output item to the player's inventory.
+    active crafts. When a craft completes (progress reaches 0), reads
+    the recipe from ``crafting_recipe`` and adds the output item to the
+    player's inventory.
 
     Args:
-        state: Current environment state
+        state: Current environment state.
 
     Returns:
-        Updated state with crafting progressed
+        Updated state with crafting progressed.
     """
 
-    def update_player_craft(state: EnvState, player_idx: int) -> tuple[EnvState, None]:
+    def update_player_craft(
+        state: EnvState, player_idx: int
+    ) -> tuple[EnvState, None]:
         progress = state.craft_progress[player_idx]
         is_crafting = progress > 0
 
@@ -246,15 +265,19 @@ def update_crafting(state: EnvState) -> EnvState:
         just_finished = is_crafting & (new_progress == 0)
 
         state = state.replace(
-            craft_progress=state.craft_progress.at[player_idx].set(new_progress)
+            craft_progress=state.craft_progress.at[player_idx].set(
+                new_progress
+            )
         )
 
-        recipe_idx = state.selected_recipes[player_idx]
+        recipe_idx = state.crafting_recipe[player_idx]
         output_item = RECIPE_OUTPUTS[recipe_idx]
 
         state = lax.cond(
             just_finished,
-            lambda s: add_item_to_inventory(s, player_idx, output_item, 1),
+            lambda s: add_item_to_inventory(
+                s, player_idx, output_item, 1
+            ),
             lambda s: s,
             state,
         )
@@ -262,48 +285,31 @@ def update_crafting(state: EnvState) -> EnvState:
         return state, None
 
     num_players = state.player_positions.shape[0]
-    state, _ = lax.scan(update_player_craft, state, jnp.arange(num_players))
+    state, _ = lax.scan(
+        update_player_craft, state, jnp.arange(num_players)
+    )
 
     return state
 
 
 def cycle_slot(
-    state: EnvState, player_idx: int | jax.Array, direction: int | jax.Array
+    state: EnvState,
+    player_idx: int | jax.Array,
+    direction: int | jax.Array,
 ) -> EnvState:
     """Cycle the selected inventory slot for a player.
 
     Args:
-        state: Current environment state
-        player_idx: Index of the player
-        direction: 1 for next slot, -1 for previous slot
+        state: Current environment state.
+        player_idx: Index of the player.
+        direction: 1 for next slot, -1 for previous slot.
 
     Returns:
-        Updated state with new selected slot
+        Updated state with new selected slot.
     """
     current_slot = state.selected_slots[player_idx]
     new_slot = (current_slot + direction) % NUM_INVENTORY_SLOTS
 
     return state.replace(
         selected_slots=state.selected_slots.at[player_idx].set(new_slot)
-    )
-
-
-def cycle_recipe(
-    state: EnvState, player_idx: int | jax.Array, direction: int | jax.Array
-) -> EnvState:
-    """Cycle the selected recipe for a player.
-
-    Args:
-        state: Current environment state
-        player_idx: Index of the player
-        direction: 1 for next recipe, -1 for previous recipe
-
-    Returns:
-        Updated state with new selected recipe
-    """
-    current_recipe = state.selected_recipes[player_idx]
-    new_recipe = (current_recipe + direction) % NUM_RECIPES
-
-    return state.replace(
-        selected_recipes=state.selected_recipes.at[player_idx].set(new_recipe)
     )

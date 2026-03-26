@@ -49,7 +49,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         inventory_counts=jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32),
         selected_player=0,
         selected_slots=jnp.zeros((1,), dtype=jnp.int32),
-        selected_recipes=jnp.zeros((1,), dtype=jnp.int32),
+        crafting_recipe=jnp.zeros((1,), dtype=jnp.int32),
         craft_progress=jnp.zeros((1,), dtype=jnp.int32),
         block_resources=jnp.zeros(shape, dtype=jnp.int16),
         machine_types=jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32),

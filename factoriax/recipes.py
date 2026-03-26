@@ -6,9 +6,10 @@ programmatically from these dicts, eliminating manual duplication.
 
 Player-craftable recipes
 ------------------------
-Players craft these by hand via the CRAFT action. Each recipe consumes
-materials from the player's inventory and produces one output item after
-a fixed number of ticks.
+Players craft these via direct actions (e.g. ``CRAFT_MINER``). Each
+recipe consumes materials from the player's inventory and produces one
+output item. Crafting is instant by default (ticks=0). Set ticks > 0
+to introduce a countdown delay for research purposes.
 
 Assembler recipes
 -----------------
@@ -31,27 +32,27 @@ RECIPES: list[dict] = [
     {
         "output": ItemType.MINER,
         "inputs": [(ItemType.COPPER, 5), (ItemType.IRON, 5)],
-        "ticks": 3,
+        "ticks": 0,
     },
     {
         "output": ItemType.CHEST,
         "inputs": [(ItemType.IRON, 5)],
-        "ticks": 2,
+        "ticks": 0,
     },
     {
         "output": ItemType.CONVEYOR_BELT,
         "inputs": [(ItemType.IRON, 1)],
-        "ticks": 1,
+        "ticks": 0,
     },
     {
         "output": ItemType.ARM,
         "inputs": [(ItemType.IRON, 5), (ItemType.COPPER, 1)],
-        "ticks": 5,
+        "ticks": 0,
     },
     {
         "output": ItemType.ASSEMBLER,
         "inputs": [(ItemType.IRON, 10), (ItemType.COPPER, 5)],
-        "ticks": 5,
+        "ticks": 0,
     },
 ]
 

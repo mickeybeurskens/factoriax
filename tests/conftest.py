@@ -43,7 +43,7 @@ def state_factory():
         inventory_counts: jnp.ndarray | None = None,
         selected_player: int = 0,
         selected_slots: jnp.ndarray | None = None,
-        selected_recipes: jnp.ndarray | None = None,
+        crafting_recipe: jnp.ndarray | None = None,
         craft_progress: jnp.ndarray | None = None,
         num_players: int = 1,
         block_resources: jnp.ndarray | None = None,
@@ -70,7 +70,7 @@ def state_factory():
             inventory_counts: Inventory counts, shape (num_players, NUM_INVENTORY_SLOTS)
             selected_player: Currently selected player index, defaults to 0
             selected_slots: Selected inventory slot per player, defaults to zeros
-            selected_recipes: Selected recipe per player, defaults to zeros
+            crafting_recipe: Recipe in progress per player, defaults to zeros
             craft_progress: Crafting progress per player, defaults to zeros
             num_players: Number of players (used for defaults), defaults to 1
             block_resources: Resources per tile, defaults to zeros
@@ -131,8 +131,8 @@ def state_factory():
             selected_slots=selected_slots
             if selected_slots is not None
             else jnp.zeros(player_shape, dtype=jnp.int32),
-            selected_recipes=selected_recipes
-            if selected_recipes is not None
+            crafting_recipe=crafting_recipe
+            if crafting_recipe is not None
             else jnp.zeros(player_shape, dtype=jnp.int32),
             craft_progress=craft_progress
             if craft_progress is not None

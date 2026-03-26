@@ -21,7 +21,7 @@ from factoriax.constants import (
     MachineType,
     SlotRole,
 )
-from factoriax.crafting import cycle_recipe, cycle_slot, start_crafting, update_crafting
+from factoriax.crafting import cycle_slot, start_crafting, update_crafting
 from factoriax.inventory import find_best_slot
 from factoriax.machines import update_all_machines
 from factoriax.placement import pickup_machine, place_machine
@@ -658,12 +658,9 @@ def _handle_player_action(
         Updated environment state
     """
     is_mine = action == Action.MINE
-    is_craft = action == Action.CRAFT
     is_place = action == Action.PLACE
     is_next_slot = action == Action.NEXT_SLOT
     is_prev_slot = action == Action.PREV_SLOT
-    is_next_recipe = action == Action.NEXT_RECIPE
-    is_prev_recipe = action == Action.PREV_RECIPE
     is_pickup = action == Action.PICKUP
     is_deposit = action == Action.DEPOSIT
     is_withdraw = action == Action.WITHDRAW
@@ -671,15 +668,29 @@ def _handle_player_action(
     is_next_m_slot = action == Action.NEXT_MACHINE_SLOT
     is_prev_m_slot = action == Action.PREV_MACHINE_SLOT
 
-    state = lax.cond(is_mine, lambda s: mine_block(s, player_idx), lambda s: s, state)
+    # Direct craft actions: contiguous range CRAFT_MINER..CRAFT_ASSEMBLER.
+    recipe_idx = action - Action.CRAFT_MINER
+    is_craft = (action >= Action.CRAFT_MINER) & (
+        action <= Action.CRAFT_ASSEMBLER
+    )
+
     state = lax.cond(
-        is_craft, lambda s: start_crafting(s, player_idx), lambda s: s, state
+        is_mine, lambda s: mine_block(s, player_idx), lambda s: s, state
+    )
+    state = lax.cond(
+        is_craft,
+        lambda s: start_crafting(s, player_idx, recipe_idx),
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_place, lambda s: place_machine(s, player_idx), lambda s: s, state
     )
     state = lax.cond(
-        is_pickup, lambda s: pickup_machine(s, player_idx), lambda s: s, state
+        is_pickup,
+        lambda s: pickup_machine(s, player_idx),
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_deposit,
@@ -694,19 +705,22 @@ def _handle_player_action(
         state,
     )
     state = lax.cond(
-        is_rotate, lambda s: rotate_adjacent(s, player_idx), lambda s: s, state
+        is_rotate,
+        lambda s: rotate_adjacent(s, player_idx),
+        lambda s: s,
+        state,
     )
     state = lax.cond(
-        is_next_slot, lambda s: cycle_slot(s, player_idx, 1), lambda s: s, state
+        is_next_slot,
+        lambda s: cycle_slot(s, player_idx, 1),
+        lambda s: s,
+        state,
     )
     state = lax.cond(
-        is_prev_slot, lambda s: cycle_slot(s, player_idx, -1), lambda s: s, state
-    )
-    state = lax.cond(
-        is_next_recipe, lambda s: cycle_recipe(s, player_idx, 1), lambda s: s, state
-    )
-    state = lax.cond(
-        is_prev_recipe, lambda s: cycle_recipe(s, player_idx, -1), lambda s: s, state
+        is_prev_slot,
+        lambda s: cycle_slot(s, player_idx, -1),
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_next_m_slot,
@@ -731,13 +745,14 @@ def _handle_player_action(
         | is_rotate
         | is_next_slot
         | is_prev_slot
-        | is_next_recipe
-        | is_prev_recipe
         | is_next_m_slot
         | is_prev_m_slot
     )
     state = lax.cond(
-        is_movement, lambda s: move_player(s, action, player_idx), lambda s: s, state
+        is_movement,
+        lambda s: move_player(s, action, player_idx),
+        lambda s: s,
+        state,
     )
 
     return state

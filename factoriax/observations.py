@@ -38,6 +38,7 @@ from factoriax.constants import (
     BlockType,
     MachineType,
 )
+from factoriax.crafting import can_afford_recipe
 from factoriax.recipes import NUM_RECIPES, RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
@@ -45,7 +46,7 @@ from factoriax.state import EnvParams, EnvState
 _MAP_NORM: float = float(BlockType.COAL)
 _MACHINE_NORM: float = float(max(MachineType))
 _INV_ITEM_NORM: float = float(NUM_ITEM_TYPES)
-_MAX_CRAFT_TICKS: float = float(max(r["ticks"] for r in RECIPES))
+_MAX_CRAFT_TICKS: float = max(1.0, float(max(r["ticks"] for r in RECIPES)))
 
 
 # Scalar fields prepended before inventory in every observation vector.
@@ -55,9 +56,13 @@ _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "pos_y",
     "direction",
     "timestep",
-    "selected_recipe",
     "selected_slot",
     "craft_progress",
+    "afford_miner",
+    "afford_chest",
+    "afford_belt",
+    "afford_arm",
+    "afford_assembler",
 )
 NUM_PLAYER_SCALARS: int = len(_PLAYER_SCALAR_FIELDS)
 
@@ -82,18 +87,26 @@ def _player_scalars(
         ``(NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS,)``.
     """
     pos = state.player_positions[player_idx]
+    # Per-recipe affordability: 1.0 if the player can afford it, else 0.0.
+    afford = jnp.array(
+        [
+            can_afford_recipe(state, player_idx, i).astype(jnp.float32)
+            for i in range(NUM_RECIPES)
+        ]
+    )
+
     scalars = jnp.array(
         [
             pos[0] / params.map_width,
             pos[1] / params.map_height,
             state.player_directions[player_idx] / NUM_ACTIONS,
             state.timestep / params.max_timesteps,
-            state.selected_recipes[player_idx] / NUM_RECIPES,
             state.selected_slots[player_idx] / NUM_INVENTORY_SLOTS,
             state.craft_progress[player_idx] / _MAX_CRAFT_TICKS,
         ],
         dtype=jnp.float32,
     )
+    scalars = jnp.concatenate([scalars, afford])
     inv_items = state.inventory_items[player_idx].astype(jnp.float32) / _INV_ITEM_NORM
     inv_counts = state.inventory_counts[player_idx].astype(jnp.float32) / MAX_STACK_SIZE
     return jnp.concatenate([scalars, inv_items, inv_counts])
