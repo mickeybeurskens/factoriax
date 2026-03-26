@@ -5,6 +5,8 @@ from typing import ClassVar
 import jax.numpy as jnp
 from flax import struct
 
+from factoriax.constants import Action
+
 
 @struct.dataclass
 class EnvState:
@@ -91,4 +93,4 @@ class EnvParams:
     coal_probability: float = 0.12
     base_resources: int = 1000
 
-    NUM_ACTIONS: ClassVar[int] = 13
+    NUM_ACTIONS: ClassVar[int] = len(Action)

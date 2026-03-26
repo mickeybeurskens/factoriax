@@ -223,6 +223,14 @@ def mine_block(state: EnvState, player_idx: int | jax.Array) -> EnvState:
 _SLOT_ROLES_JAX = jnp.array(MACHINE_SLOT_ROLES, dtype=jnp.int32)
 _MACHINE_NUM_SLOTS_JAX = jnp.array(MACHINE_NUM_SLOTS, dtype=jnp.int32)
 
+# Clockwise direction cycle: DOWN -> RIGHT -> UP -> LEFT -> DOWN.
+# Indexed by Action value (UP=3, DOWN=4, LEFT=1, RIGHT=2); others map to DOWN.
+_NEXT_DIR = jnp.zeros(len(Action), dtype=jnp.int32)
+_NEXT_DIR = _NEXT_DIR.at[Action.DOWN].set(Action.RIGHT)
+_NEXT_DIR = _NEXT_DIR.at[Action.RIGHT].set(Action.UP)
+_NEXT_DIR = _NEXT_DIR.at[Action.UP].set(Action.LEFT)
+_NEXT_DIR = _NEXT_DIR.at[Action.LEFT].set(Action.DOWN)
+
 # Slot scan order for withdraw: OUTPUT first, then STORAGE, then INPUT.
 # Built as an argsort over a priority array keyed by SlotRole.
 _WITHDRAW_PRIORITY = jnp.array(
@@ -278,6 +286,91 @@ def _resolve_adjacent_machine(
     )
 
 
+def rotate_adjacent(
+    state: EnvState, player_idx: int | jax.Array
+) -> EnvState:
+    """Rotate the machine in front of the player one step clockwise.
+
+    The cycle order is DOWN -> RIGHT -> UP -> LEFT -> DOWN, matching
+    the editor's rotation behaviour. No-op if the tile in front has
+    no machine or is out of bounds.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the acting player.
+
+    Returns:
+        Updated state with the machine's direction advanced one step.
+    """
+    from factoriax.placement import get_tile_in_front
+
+    target_x, target_y = get_tile_in_front(state, player_idx)
+    map_h, map_w = state.map.shape
+    in_bounds = is_position_in_bounds(
+        jnp.array([target_x, target_y]), map_w, map_h
+    )
+
+    machine_type = jnp.where(
+        in_bounds, state.machine_types[target_y, target_x], MachineType.NONE
+    )
+    has_machine = machine_type != MachineType.NONE
+
+    current_dir = jnp.where(
+        in_bounds, state.machine_direction[target_y, target_x], jnp.int32(0)
+    )
+    new_dir = _NEXT_DIR[current_dir]
+
+    def do_rotate(s: EnvState) -> EnvState:
+        new_dirs = s.machine_direction.at[target_y, target_x].set(new_dir)
+        return s.replace(machine_direction=new_dirs)
+
+    return lax.cond(in_bounds & has_machine, do_rotate, lambda s: s, state)
+
+
+def cycle_machine_slot(
+    state: EnvState, player_idx: int | jax.Array, direction: int
+) -> EnvState:
+    """Advance or retreat the selected machine slot for the tile in front.
+
+    Wraps around so that advancing past the last slot returns to slot 0.
+    No-op if no machine is present or the machine has zero slots.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the acting player.
+        direction: +1 to advance, -1 to retreat.
+
+    Returns:
+        Updated state with ``machine_selected_slot`` changed.
+    """
+    from factoriax.placement import get_tile_in_front
+
+    target_x, target_y = get_tile_in_front(state, player_idx)
+    map_h, map_w = state.map.shape
+    in_bounds = is_position_in_bounds(
+        jnp.array([target_x, target_y]), map_w, map_h
+    )
+
+    machine_type = jnp.where(
+        in_bounds, state.machine_types[target_y, target_x], MachineType.NONE
+    )
+    num_slots = _MACHINE_NUM_SLOTS_JAX[machine_type]
+    has_slots = num_slots > 0
+
+    current = jnp.where(
+        in_bounds, state.machine_selected_slot[target_y, target_x], jnp.int32(0)
+    )
+    new_slot = (current + direction) % jnp.maximum(num_slots, 1)
+
+    def do_cycle(s: EnvState) -> EnvState:
+        new_sel = s.machine_selected_slot.at[target_y, target_x].set(new_slot)
+        return s.replace(machine_selected_slot=new_sel)
+
+    return lax.cond(
+        in_bounds & has_slots, do_cycle, lambda s: s, state
+    )
+
+
 def _find_deposit_slot(
     machine_type: jax.Array,
     slot_items: jax.Array,
@@ -285,8 +378,15 @@ def _find_deposit_slot(
     num_slots: jax.Array,
     item: jax.Array,
     recipe: jax.Array,
+    focused_slot: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Find the best machine slot for depositing an item.
+
+    The ``focused_slot`` (from ``machine_selected_slot``) is given the
+    highest priority when it is usable, matching the interactive player's
+    behaviour of trying the highlighted slot first. When no explicit
+    selection has been made (default 0), slot 0 gets the same small bias,
+    keeping behaviour close to the previous auto-routing.
 
     Eligible slots are INPUT and STORAGE roles within range. For
     assembler INPUT slots, the item must match the recipe's expected
@@ -299,6 +399,7 @@ def _find_deposit_slot(
         num_slots: Number of active slots for this machine type.
         item: Item type the player wants to deposit.
         recipe: The machine's selected recipe index.
+        focused_slot: Preferred slot index from ``machine_selected_slot``.
 
     Returns:
         Tuple of ``(best_slot, has_slot, cap)`` where ``cap`` is the
@@ -332,11 +433,20 @@ def _find_deposit_slot(
 
     slot_usable = is_deposit_role & in_range & slot_has_space & asm_filter
 
-    # Prefer matching slots over empty ones. Non-usable slots get -1.
+    # Priority: focused+matching > matching > focused+empty > empty > unusable.
+    is_focused = slot_idx_range == focused_slot
     priority = jnp.where(
-        slot_usable & slot_matches,
-        2,
-        jnp.where(slot_usable & slot_empty, 1, -1),
+        slot_usable & slot_matches & is_focused,
+        4,
+        jnp.where(
+            slot_usable & slot_matches,
+            3,
+            jnp.where(
+                slot_usable & slot_empty & is_focused,
+                2,
+                jnp.where(slot_usable & slot_empty, 1, -1),
+            ),
+        ),
     )
     best_slot = jnp.argmax(priority)
     has_slot = jnp.any(slot_usable)
@@ -349,17 +459,21 @@ def _find_withdraw_slot(
     slot_items: jax.Array,
     slot_counts: jax.Array,
     num_slots: jax.Array,
+    focused_slot: jax.Array,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Find the best machine slot to withdraw from.
 
-    Scans slots by priority: OUTPUT first, then STORAGE, then INPUT.
-    Within the same role, the lowest slot index wins.
+    When the ``focused_slot`` (from ``machine_selected_slot``) holds
+    items and has a valid role, it is returned directly. Otherwise
+    slots are scanned by priority: OUTPUT first, then STORAGE, then
+    INPUT. Within the same role the lowest slot index wins.
 
     Args:
         machine_type: Type of the target machine.
         slot_items: Machine slot item types, shape ``(MAX_MACHINE_INVENTORY_SLOTS,)``.
         slot_counts: Machine slot counts, shape ``(MAX_MACHINE_INVENTORY_SLOTS,)``.
         num_slots: Number of active slots for this machine type.
+        focused_slot: Preferred slot index from ``machine_selected_slot``.
 
     Returns:
         Tuple of ``(best_slot, has_source, source_item, source_count)``.
@@ -372,8 +486,15 @@ def _find_withdraw_slot(
 
     role_priority = _WITHDRAW_PRIORITY[slot_roles]
     eligible = in_range & has_items & not_none_role
+
+    # Within the same role, the focused slot wins ties. The focused
+    # flag does not override role priority so OUTPUT still beats INPUT
+    # even when INPUT is focused.
+    is_focused = slot_idx_range == focused_slot
     effective_priority = jnp.where(eligible, role_priority, jnp.int32(99))
-    score = effective_priority * MAX_MACHINE_INVENTORY_SLOTS + slot_idx_range
+    # Break ties: focused slots get sub-index 0, others get slot_idx + 1.
+    sub_index = jnp.where(is_focused, jnp.int32(0), slot_idx_range + 1)
+    score = effective_priority * (MAX_MACHINE_INVENTORY_SLOTS + 1) + sub_index
     best_slot = jnp.argmin(score)
     has_source = eligible[best_slot]
 
@@ -387,12 +508,13 @@ def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvStat
     """Deposit the player's selected inventory stack into the machine in front.
 
     Transfers the full stack from the player's currently selected slot into
-    the first compatible machine slot. Slot compatibility follows the same
-    rules as arm deposits: only INPUT and STORAGE slots are eligible, and
-    assembler INPUT slots are filtered by the machine's selected recipe.
+    the best compatible machine slot. The machine's ``machine_selected_slot``
+    is tried first; when it can accept the item it takes priority over
+    other slots. Otherwise the function auto-routes: a matching slot (same
+    item type with space) is preferred, then an empty INPUT/STORAGE slot.
+    Assembler INPUT slots are filtered by the machine's selected recipe.
 
-    A matching slot (same item type with space) is preferred over an empty
-    slot. No-op when:
+    No-op when:
     - No machine is in front of the player
     - The selected inventory slot is empty
     - No compatible machine slot has space
@@ -419,8 +541,14 @@ def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvStat
         state.machine_selected_recipe[target_y, target_x],
         jnp.int32(0),
     )
+    focused_slot = jnp.where(
+        in_bounds,
+        state.machine_selected_slot[target_y, target_x],
+        jnp.int32(0),
+    )
     best_slot, has_slot, cap = _find_deposit_slot(
-        machine_type, slot_items, slot_counts, num_slots, item, recipe
+        machine_type, slot_items, slot_counts, num_slots, item, recipe,
+        focused_slot,
     )
 
     can_deposit = in_bounds & has_machine & has_item & has_slot
@@ -456,9 +584,11 @@ def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvStat
 def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvState:
     """Withdraw items from the machine in front into the player's inventory.
 
-    Scans machine slots in priority order (OUTPUT, STORAGE, INPUT) and
-    takes the full stack from the first non-empty slot. The stack is merged
-    into existing matching player stacks first, then placed in empty slots.
+    When the machine's ``machine_selected_slot`` holds items, that slot
+    is withdrawn from directly. Otherwise slots are scanned in priority
+    order (OUTPUT, STORAGE, INPUT) and the first non-empty slot is taken.
+    The stack is merged into existing matching player stacks first, then
+    placed in empty slots.
 
     No-op when:
     - No machine is in front of the player
@@ -479,8 +609,13 @@ def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvS
     )
     has_machine = machine_type != MachineType.NONE
 
+    focused_slot = jnp.where(
+        in_bounds,
+        state.machine_selected_slot[target_y, target_x],
+        jnp.int32(0),
+    )
     best_slot, has_source, source_item, source_count = _find_withdraw_slot(
-        machine_type, slot_items, slot_counts, num_slots
+        machine_type, slot_items, slot_counts, num_slots, focused_slot
     )
 
     # Check player has space for at least one item.
@@ -532,6 +667,9 @@ def _handle_player_action(
     is_pickup = action == Action.PICKUP
     is_deposit = action == Action.DEPOSIT
     is_withdraw = action == Action.WITHDRAW
+    is_rotate = action == Action.ROTATE
+    is_next_m_slot = action == Action.NEXT_MACHINE_SLOT
+    is_prev_m_slot = action == Action.PREV_MACHINE_SLOT
 
     state = lax.cond(is_mine, lambda s: mine_block(s, player_idx), lambda s: s, state)
     state = lax.cond(
@@ -556,6 +694,9 @@ def _handle_player_action(
         state,
     )
     state = lax.cond(
+        is_rotate, lambda s: rotate_adjacent(s, player_idx), lambda s: s, state
+    )
+    state = lax.cond(
         is_next_slot, lambda s: cycle_slot(s, player_idx, 1), lambda s: s, state
     )
     state = lax.cond(
@@ -567,6 +708,18 @@ def _handle_player_action(
     state = lax.cond(
         is_prev_recipe, lambda s: cycle_recipe(s, player_idx, -1), lambda s: s, state
     )
+    state = lax.cond(
+        is_next_m_slot,
+        lambda s: cycle_machine_slot(s, player_idx, 1),
+        lambda s: s,
+        state,
+    )
+    state = lax.cond(
+        is_prev_m_slot,
+        lambda s: cycle_machine_slot(s, player_idx, -1),
+        lambda s: s,
+        state,
+    )
 
     is_movement = ~(
         is_mine
@@ -575,10 +728,13 @@ def _handle_player_action(
         | is_pickup
         | is_deposit
         | is_withdraw
+        | is_rotate
         | is_next_slot
         | is_prev_slot
         | is_next_recipe
         | is_prev_recipe
+        | is_next_m_slot
+        | is_prev_m_slot
     )
     state = lax.cond(
         is_movement, lambda s: move_player(s, action, player_idx), lambda s: s, state

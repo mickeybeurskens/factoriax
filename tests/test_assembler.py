@@ -203,18 +203,21 @@ class TestAssemblerDepositFiltering:
 
     def test_correct_item_accepted(self) -> None:
         """Iron into slot 0 of hull recipe should succeed."""
-        from factoriax.play.transfer import deposit_to_machine
+        from factoriax.constants import Action
+        from factoriax.game_logic import deposit_to_adjacent
 
         state = _make_state_with_assembler(recipe=0)
-        # Give the player iron in slot 0.
+        # Place player at (1,0) facing LEFT toward assembler at (0,0).
         state = state.replace(
+            player_positions=state.player_positions.at[0].set([1, 0]),
+            player_directions=state.player_directions.at[0].set(Action.LEFT),
             inventory_items=state.inventory_items.at[0, 0].set(
                 int(ItemType.IRON)
             ),
             inventory_counts=state.inventory_counts.at[0, 0].set(10),
             selected_slots=state.selected_slots.at[0].set(0),
         )
-        new_state = deposit_to_machine(state, 0, 0, 0, 0, 0)
+        new_state = deposit_to_adjacent(state, 0)
         assert int(new_state.machine_inventory_items[0, 0, 0]) == int(
             ItemType.IRON
         )
@@ -222,35 +225,42 @@ class TestAssemblerDepositFiltering:
 
     def test_wrong_item_rejected(self) -> None:
         """Copper into slot 0 of hull recipe should be rejected."""
-        from factoriax.play.transfer import deposit_to_machine
+        from factoriax.constants import Action
+        from factoriax.game_logic import deposit_to_adjacent
 
         state = _make_state_with_assembler(recipe=0)
         state = state.replace(
+            player_positions=state.player_positions.at[0].set([1, 0]),
+            player_directions=state.player_directions.at[0].set(Action.LEFT),
             inventory_items=state.inventory_items.at[0, 0].set(
                 int(ItemType.COPPER)
             ),
             inventory_counts=state.inventory_counts.at[0, 0].set(10),
             selected_slots=state.selected_slots.at[0].set(0),
         )
-        new_state = deposit_to_machine(state, 0, 0, 0, 0, 0)
+        new_state = deposit_to_adjacent(state, 0)
         # Copper should stay in player inventory, assembler slot unchanged.
         assert int(new_state.machine_inventory_counts[0, 0, 0]) == 0
         assert int(new_state.inventory_counts[0, 0]) == 10
 
     def test_unused_slot_rejected(self) -> None:
-        """Hull recipe uses 1 input; slot 1 (unused) should reject items."""
-        from factoriax.play.transfer import deposit_to_machine
+        """Hull recipe uses 1 input; focused slot 1 should not accept items."""
+        from factoriax.constants import Action
+        from factoriax.game_logic import deposit_to_adjacent
 
         state = _make_state_with_assembler(recipe=0)
         state = state.replace(
+            player_positions=state.player_positions.at[0].set([1, 0]),
+            player_directions=state.player_directions.at[0].set(Action.LEFT),
             inventory_items=state.inventory_items.at[0, 0].set(
                 int(ItemType.IRON)
             ),
             inventory_counts=state.inventory_counts.at[0, 0].set(10),
             selected_slots=state.selected_slots.at[0].set(0),
+            # Focus machine slot 1 — hull recipe has 0 count for second input.
+            machine_selected_slot=state.machine_selected_slot.at[0, 0].set(1),
         )
-        # Target slot 1 — hull recipe has 0 count for second input.
-        new_state = deposit_to_machine(state, 0, 0, 0, 1, 0)
+        new_state = deposit_to_adjacent(state, 0)
         assert int(new_state.machine_inventory_counts[0, 0, 1]) == 0
 
 

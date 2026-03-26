@@ -9,6 +9,7 @@ from jax import random
 from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
+    NUM_ACTIONS,
     NUM_INVENTORY_SLOTS,
     SOLID_BLOCKS,
     MachineType,
@@ -351,7 +352,7 @@ class TestEnvironment:
         """Action space should match the number of defined actions."""
         env, params = make_factoriax_env()
         action_space = env.action_space(params)
-        assert action_space.n == 15
+        assert action_space.n == NUM_ACTIONS
 
     def test_observation_space(self) -> None:
         """Observation space should match expected dimensions."""
