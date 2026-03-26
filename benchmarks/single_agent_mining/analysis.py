@@ -191,7 +191,7 @@ def render_level_video(
     from factoriax.envs import FactoriaXEnv
     from factoriax.levels import build_state
     from factoriax.observations import global_array
-    from factoriax.renderer import render_pixels
+    from factoriax.renderer import render_inventory_bar, render_pixels
 
     _obs_fn = obs_fn if obs_fn is not None else global_array
     env = FactoriaXEnv()
@@ -202,7 +202,9 @@ def render_level_video(
 
     frames: list[np.ndarray] = []
     for _ in range(params.max_timesteps):
-        frames.append(render_pixels(state))
+        world = render_pixels(state)
+        inv = render_inventory_bar(state, world.shape[1])
+        frames.append(np.concatenate([world, inv], axis=0))
         obs = _obs_fn(state, params, 0)
         action = policy(obs)
         rng, subkey = jax.random.split(rng)
@@ -210,7 +212,9 @@ def render_level_video(
         if bool(done):
             break
 
-    frames.append(render_pixels(state))
+    world = render_pixels(state)
+    inv = render_inventory_bar(state, world.shape[1])
+    frames.append(np.concatenate([world, inv], axis=0))
     return frames
 
 
