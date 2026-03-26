@@ -1,15 +1,17 @@
-"""Train a PPO agent on mining, then transfer to chest crafting.
+"""Sequenced curriculum training across basic_skills levels.
 
-Sequenced curriculum: the agent first learns to mine until it converges
-(mean episode return >= threshold), then the same network continues
-training on the crafting level. This tests whether mining skills
-transfer to crafting, which requires mining + the CRAFT_CHEST action.
+Each phase trains on one level until the mean episode return exceeds
+a convergence threshold, then carries the network weights forward to
+the next level. This tests whether skills transfer across tasks.
 
-Usage::
+Phases are specified as positional ``level:threshold`` pairs::
 
-    python -m baselines.basic_skills.train_sequenced
-    python -m baselines.basic_skills.train_sequenced --mine-threshold 16
-    python -m baselines.basic_skills.train_sequenced --use-wandb
+    python -m baselines.basic_skills.train_sequenced mine_resources:16 craft_chests
+    python -m baselines.basic_skills.train_sequenced \\
+        mine_resources:16 craft_chests:5 fill_chest
+
+A phase without a threshold (no colon) trains for ``--max-steps-per-phase``
+steps without early stopping. The last phase typically has no threshold.
 """
 
 from __future__ import annotations
@@ -53,16 +55,29 @@ _LEVEL_MAP = {bl.name: bl for bl in BASIC_SKILLS_LEVELS}
 
 
 @dataclasses.dataclass
+class Phase:
+    """One phase in the training sequence.
+
+    Attributes:
+        level_name: Name of the basic_skills level to train on.
+        threshold: Convergence threshold for mean episode return.
+            ``None`` means train for the full step budget.
+    """
+
+    level_name: str
+    threshold: float | None = None
+
+
+@dataclasses.dataclass
 class Config:
     """Hyperparameters for sequenced training.
 
     Attributes:
+        phases: Ordered list of training phases.
         hidden_dims: MLP hidden layer sizes.
         num_envs: Parallel environments.
         rollout_steps: Steps per env per update.
-        mine_max_steps: Max env steps for the mining phase.
-        mine_threshold: Mean episode return to consider mining converged.
-        craft_max_steps: Max env steps for the crafting phase.
+        max_steps_per_phase: Max env steps per phase.
         learning_rate: Adam learning rate.
         gamma: Discount factor.
         gae_lambda: GAE lambda.
@@ -82,12 +97,11 @@ class Config:
         wandb_run_name: W&B run name.
     """
 
+    phases: list[Phase] = dataclasses.field(default_factory=list)
     hidden_dims: tuple[int, ...] = (256, 256)
     num_envs: int = 64
     rollout_steps: int = 128
-    mine_max_steps: int = 10_000_000
-    mine_threshold: float = 16.0
-    craft_max_steps: int = 10_000_000
+    max_steps_per_phase: int = 10_000_000
     learning_rate: float = 2.5e-4
     gamma: float = 0.99
     gae_lambda: float = 0.95
@@ -700,25 +714,65 @@ def _evaluate(
 # ---------------------------------------------------------------------------
 
 
-def train(config: Config) -> None:
-    """Run two-phase sequenced training: mine then craft.
+def _parse_phase(spec: str) -> Phase:
+    """Parse a ``level_name:threshold`` or ``level_name`` string.
 
     Args:
-        config: Training configuration.
+        spec: Phase specification.
+
+    Returns:
+        Parsed ``Phase``.
+
+    Raises:
+        ValueError: If the level name is not recognized.
     """
+    if ":" in spec:
+        name, thresh_str = spec.split(":", 1)
+        threshold: float | None = float(thresh_str)
+    else:
+        name = spec
+        threshold = None
+
+    if name not in _LEVEL_MAP:
+        available = ", ".join(_LEVEL_MAP.keys())
+        raise ValueError(
+            f"Unknown level {name!r}. Choose from: {available}"
+        )
+    return Phase(level_name=name, threshold=threshold)
+
+
+def train(config: Config) -> None:
+    """Run sequenced curriculum training across all configured phases.
+
+    Each phase trains on one level until convergence (or the step
+    budget), then the network weights carry forward to the next phase.
+
+    Args:
+        config: Training configuration with ordered phases.
+    """
+    if not config.phases:
+        raise ValueError("No phases specified.")
+
     rng = jax.random.PRNGKey(config.seed)
 
-    mine_level = _LEVEL_MAP["mine_resources"]
-    craft_level = _LEVEL_MAP["craft_chests"]
-
-    # Derive obs_dim from the mining level (local obs, fixed radius).
-    sample_state = build_state(mine_level.level, mine_level.env_params)
+    # Derive obs_dim from the first level.
+    first_level = _LEVEL_MAP[config.phases[0].level_name]
+    sample_state = build_state(first_level.level, first_level.env_params)
     obs_dim = int(
         local_array(
-            sample_state, mine_level.env_params, 0, config.obs_radius
+            sample_state, first_level.env_params, 0, config.obs_radius
         ).shape[0]
     )
-    logger.info("obs_dim=%d  num_actions=%d", obs_dim, NUM_ACTIONS)
+
+    phase_desc = " -> ".join(
+        f"{p.level_name}(>={p.threshold})" if p.threshold is not None
+        else p.level_name
+        for p in config.phases
+    )
+    logger.info(
+        "Sequenced training: %s  obs_dim=%d  num_actions=%d",
+        phase_desc, obs_dim, NUM_ACTIONS,
+    )
 
     network = ActorCritic(
         hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS
@@ -741,79 +795,64 @@ def train(config: Config) -> None:
         try:
             import wandb  # type: ignore[import-untyped]
 
+            phase_names = "_".join(
+                p.level_name for p in config.phases
+            )
+            run_name = config.wandb_run_name or f"seq_{phase_names}"
             wandb_run = wandb.init(
                 project=config.wandb_project,
-                name=config.wandb_run_name or "sequenced_mine_then_craft",
+                name=run_name,
                 config=dataclasses.asdict(config),
                 tags=["basic_skills", "sequenced"],
             )
         except ImportError:
             logger.error("wandb not found. Install with: uv add wandb")
 
-    # Phase 1: Mining.
-    rng, key_mine = jax.random.split(rng)
-    (
-        params, opt_state, obs_mean, obs_var, obs_count, _, mine_steps
-    ) = _train_phase(
-        phase_name="mine",
-        bench_level=mine_level,
-        reward_fn=REWARD_FNS["mine_resources"],
-        network=network,
-        params=params,
-        opt_state=opt_state,
-        optimizer=optimizer,
-        obs_mean=obs_mean,
-        obs_var=obs_var,
-        obs_count=obs_count,
-        obs_dim=obs_dim,
-        config=config,
-        max_steps=config.mine_max_steps,
-        convergence_threshold=config.mine_threshold,
-        rng=key_mine,
-        wandb_run=wandb_run,
-        global_step_offset=0,
-    )
+    global_steps = 0
+    phase_steps_log: list[tuple[str, int]] = []
 
-    _evaluate(
-        "mine", mine_level, REWARD_FNS["mine_resources"],
-        network, params, obs_mean, obs_var,
-        config.obs_radius, config.seed, wandb_run,
-    )
+    for i, phase in enumerate(config.phases):
+        bench_level = _LEVEL_MAP[phase.level_name]
+        reward_fn = REWARD_FNS[phase.level_name]
 
-    # Phase 2: Crafting (continue from mining params).
-    rng, key_craft = jax.random.split(rng)
-    (
-        params, opt_state, obs_mean, obs_var, obs_count, _, craft_steps
-    ) = _train_phase(
-        phase_name="craft",
-        bench_level=craft_level,
-        reward_fn=REWARD_FNS["craft_chests"],
-        network=network,
-        params=params,
-        opt_state=opt_state,
-        optimizer=optimizer,
-        obs_mean=obs_mean,
-        obs_var=obs_var,
-        obs_count=obs_count,
-        obs_dim=obs_dim,
-        config=config,
-        max_steps=config.craft_max_steps,
-        convergence_threshold=None,
-        rng=key_craft,
-        wandb_run=wandb_run,
-        global_step_offset=mine_steps,
-    )
+        rng, key_phase = jax.random.split(rng)
+        (
+            params, opt_state, obs_mean, obs_var, obs_count,
+            _, phase_steps,
+        ) = _train_phase(
+            phase_name=f"{i + 1}_{phase.level_name}",
+            bench_level=bench_level,
+            reward_fn=reward_fn,
+            network=network,
+            params=params,
+            opt_state=opt_state,
+            optimizer=optimizer,
+            obs_mean=obs_mean,
+            obs_var=obs_var,
+            obs_count=obs_count,
+            obs_dim=obs_dim,
+            config=config,
+            max_steps=config.max_steps_per_phase,
+            convergence_threshold=phase.threshold,
+            rng=key_phase,
+            wandb_run=wandb_run,
+            global_step_offset=global_steps,
+        )
 
-    _evaluate(
-        "craft", craft_level, REWARD_FNS["craft_chests"],
-        network, params, obs_mean, obs_var,
-        config.obs_radius, config.seed, wandb_run,
-    )
+        _evaluate(
+            f"{i + 1}_{phase.level_name}",
+            bench_level, reward_fn,
+            network, params, obs_mean, obs_var,
+            config.obs_radius, config.seed, wandb_run,
+        )
 
-    logger.info(
-        "Sequenced training complete. Mine: %dk steps, Craft: %dk steps",
-        mine_steps // 1000, craft_steps // 1000,
+        global_steps += phase_steps
+        phase_steps_log.append((phase.level_name, phase_steps))
+
+    summary = "  ".join(
+        f"{name}: {steps // 1000}k" for name, steps in phase_steps_log
     )
+    logger.info("Sequenced training complete. %s", summary)
 
     if wandb_run is not None:
         wandb_run.finish()
@@ -822,19 +861,21 @@ def train(config: Config) -> None:
 def main() -> None:
     """Parse arguments and run sequenced training."""
     parser = argparse.ArgumentParser(
-        description="Sequenced PPO: mine until convergence, then craft.",
+        description=(
+            "Sequenced PPO curriculum. Specify phases as "
+            "level_name:threshold pairs."
+        ),
     )
     parser.add_argument(
-        "--mine-threshold", type=float, default=16.0,
-        help="Mean return to consider mining converged (default: 16).",
+        "phases", nargs="+",
+        help=(
+            "Training phases as level:threshold pairs. "
+            "Example: mine_resources:16 craft_chests"
+        ),
     )
     parser.add_argument(
-        "--mine-max-steps", type=int, default=10_000_000,
-        help="Max steps for mining phase (default: 10M).",
-    )
-    parser.add_argument(
-        "--craft-max-steps", type=int, default=10_000_000,
-        help="Max steps for crafting phase (default: 10M).",
+        "--max-steps-per-phase", type=int, default=10_000_000,
+        help="Max steps per phase (default: 10M).",
     )
     parser.add_argument(
         "--num-envs", type=int, default=64,
@@ -860,10 +901,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    phases = [_parse_phase(spec) for spec in args.phases]
     config = Config(
-        mine_max_steps=args.mine_max_steps,
-        mine_threshold=args.mine_threshold,
-        craft_max_steps=args.craft_max_steps,
+        phases=phases,
+        max_steps_per_phase=args.max_steps_per_phase,
         num_envs=args.num_envs,
         seed=args.seed,
         log_interval=args.log_interval,
