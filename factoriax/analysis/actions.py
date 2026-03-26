@@ -35,23 +35,29 @@ from .trajectory import Trajectory
 DEFAULT_ACTION_LABELS: list[str] = [a.name for a in Action]
 
 # Qualitative colormap for distinguishable actions.
-# Movement = cool tones, interaction = warm tones, UI = grays/purples.
+# Movement = cool tones, world interaction = warm tones,
+# UI/slot cycling = grays/purples, crafting = oranges.
 DEFAULT_ACTION_COLORS: list[str] = [
-    "#bdbdbd",  # NOOP       - gray
-    "#1f77b4",  # LEFT       - blue
-    "#aec7e8",  # RIGHT      - light blue
-    "#2ca02c",  # UP         - green
-    "#98df8a",  # DOWN       - light green
-    "#d62728",  # MINE       - red
-    "#ff7f0e",  # CRAFT      - orange
-    "#ffbb78",  # PLACE      - light orange
-    "#9467bd",  # NEXT_SLOT  - purple
-    "#c5b0d5",  # PREV_SLOT  - light purple
-    "#8c564b",  # NEXT_REC   - brown
-    "#c49c94",  # PREV_REC   - light brown
-    "#e377c2",  # PICKUP     - pink
-    "#17becf",  # DEPOSIT    - cyan
-    "#bcbd22",  # WITHDRAW   - olive
+    "#bdbdbd",  # NOOP              - gray
+    "#1f77b4",  # LEFT              - blue
+    "#aec7e8",  # RIGHT             - light blue
+    "#2ca02c",  # UP                - green
+    "#98df8a",  # DOWN              - light green
+    "#d62728",  # MINE              - red
+    "#ffbb78",  # PLACE             - light orange
+    "#9467bd",  # NEXT_SLOT         - purple
+    "#c5b0d5",  # PREV_SLOT         - light purple
+    "#e377c2",  # PICKUP            - pink
+    "#17becf",  # DEPOSIT           - cyan
+    "#bcbd22",  # WITHDRAW          - olive
+    "#8c564b",  # ROTATE            - brown
+    "#c49c94",  # NEXT_MACHINE_SLOT - light brown
+    "#7f7f7f",  # PREV_MACHINE_SLOT - dark gray
+    "#ff7f0e",  # CRAFT_MINER       - orange
+    "#ff9e4a",  # CRAFT_CHEST       - light orange
+    "#ffb347",  # CRAFT_BELT        - peach
+    "#ffcc80",  # CRAFT_ARM         - pale orange
+    "#ffe0b2",  # CRAFT_ASSEMBLER   - cream orange
 ]
 
 
