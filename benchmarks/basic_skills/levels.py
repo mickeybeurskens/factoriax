@@ -67,12 +67,11 @@ _LEVEL_MINE = BenchmarkLevel(
 # ---------------------------------------------------------------------------
 # Level 2 — craft_chests
 # ---------------------------------------------------------------------------
-# 7x7 dirt map. A 3x3 iron patch at (0, 0) with 5 ore per tile (45 total).
+# 7x7 dirt map. A 3x3 iron patch at (0, 0) with 20 ore per tile (180 total).
 # Player starts with 30 iron in inventory, enough for 6 chests outright.
-# Each chest costs 5 iron and takes 2 ticks to craft (recipe index 1).
-# Mining more iron from the map allows additional chests. 200 ticks gives
-# plenty of time to craft all possible chests.
-# Tests: recipe selection + craft action, optional mining for more materials.
+# Each chest costs 5 iron (instant craft). Mining more iron from the map
+# allows additional chests. 200 ticks gives plenty of time.
+# Tests: crafting action, optional mining for more materials.
 
 _LEVEL_CRAFT = BenchmarkLevel(
     name="craft_chests",
@@ -83,7 +82,7 @@ _LEVEL_CRAFT = BenchmarkLevel(
     ),
     level=(
         LevelBuilder(7, 7)
-        .fill_rect(0, 0, 3, 3, BlockType.IRON, resources=5)
+        .fill_rect(0, 0, 3, 3, BlockType.IRON, resources=20)
         .build("basic_craft_chests")
     ),
     env_params=_params(7, 7, 200),
