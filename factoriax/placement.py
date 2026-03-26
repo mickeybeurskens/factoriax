@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from factoriax.constants import (
-    DIRECTION_OFFSETS,
+    DIRECTIONS,
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_TO_ITEM_ARRAY,
     MAX_MACHINE_INVENTORY_SLOTS,
@@ -37,15 +37,12 @@ def get_tile_in_front(
     pos = state.player_positions[player_idx]
     direction = state.player_directions[player_idx]
 
-    dx, dy = 0, 0
-    for action, (ox, oy) in DIRECTION_OFFSETS.items():
-        dx = jnp.where(direction == action, ox, dx)
-        dy = jnp.where(direction == action, oy, dy)
+    # Direct lookup: DIRECTIONS[action] gives (dx, dy) for movement
+    # actions and (0, 0) for non-movement actions. Clamp to array bounds.
+    d = jnp.clip(direction, 0, DIRECTIONS.shape[0] - 1)
+    offset = DIRECTIONS[d]
 
-    target_x = pos[0] + dx
-    target_y = pos[1] + dy
-
-    return target_x, target_y
+    return pos[0] + offset[0], pos[1] + offset[1]
 
 
 def is_valid_placement_tile(
