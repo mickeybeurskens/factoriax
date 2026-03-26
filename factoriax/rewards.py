@@ -122,11 +122,12 @@ def sparse_mining_reward(
 def sparse_chest_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Sparse reward of 1.0 for each new chest item in the player inventory.
+    """Sparse reward of 1.0 for each newly crafted chest.
 
-    Counts the total increase in ``ItemType.CHEST`` stacks across all
-    player inventory slots.  Only chest items count, so crafting cheaper
-    recipes (conveyor belts, miners) yields zero reward.
+    Counts chests across both player inventory and placed machines on
+    the map, so picking up a placed chest and putting it back down is
+    net zero. Only genuine crafting (new chests entering the world)
+    produces reward.
 
     Args:
         prev_state: State immediately before the step.
@@ -137,11 +138,20 @@ def sparse_chest_crafting_reward(
         Scalar float32 reward.
     """
 
-    def _count_chests(state: EnvState) -> jax.Array:
-        is_chest = state.inventory_items == ItemType.CHEST
-        return jnp.sum(jnp.where(is_chest, state.inventory_counts, 0))
+    def _count_all_chests(state: EnvState) -> jax.Array:
+        inv_chests = jnp.sum(
+            jnp.where(
+                state.inventory_items == ItemType.CHEST,
+                state.inventory_counts,
+                0,
+            )
+        )
+        placed_chests = jnp.sum(
+            (state.machine_types == MachineType.CHEST).astype(jnp.int32)
+        )
+        return inv_chests + placed_chests
 
-    delta = _count_chests(new_state) - _count_chests(prev_state)
+    delta = _count_all_chests(new_state) - _count_all_chests(prev_state)
     reward: jax.Array = jnp.maximum(delta, 0).astype(jnp.float32)
     return reward
 
