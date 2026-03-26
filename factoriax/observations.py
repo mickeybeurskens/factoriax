@@ -88,12 +88,12 @@ def _player_scalars(
     """
     pos = state.player_positions[player_idx]
     # Per-recipe affordability: 1.0 if the player can afford it, else 0.0.
-    afford = jnp.array(
-        [
-            can_afford_recipe(state, player_idx, i).astype(jnp.float32)
-            for i in range(NUM_RECIPES)
-        ]
-    )
+    # Vectorized over recipes so JAX can batch the inventory scans.
+    afford = jax.vmap(
+        lambda r: can_afford_recipe(state, player_idx, r).astype(
+            jnp.float32
+        )
+    )(jnp.arange(NUM_RECIPES))
 
     scalars = jnp.array(
         [
