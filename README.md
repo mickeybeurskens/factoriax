@@ -34,7 +34,7 @@ python baselines/single_agent_ppo.py --num-envs 64 --total-steps 10_000_000
 
 ## How the game works
 
-You have 13 actions: move in four directions, mine the block you're facing, craft a recipe, place a machine, pick up a machine, and cycle through your inventory slots and recipes.
+You have 20 actions: move in four directions, mine the block you're facing, craft a specific machine, place or pick up a machine, deposit items into or withdraw items from a machine, rotate a machine, and cycle through your inventory slots and machine slots.
 
 Resources on the map are finite. Once you mine an ore tile down to zero, it turns to dirt permanently. This is what makes the problem hard for agents: there's no undo, and wasting materials early can make late-game goals impossible.
 
@@ -42,11 +42,15 @@ Resources on the map are finite. Once you mine an ore tile down to zero, it turn
 
 | Recipe | Ingredients | Time |
 |--------|------------|------|
-| Miner | 5 copper, 5 iron | 3 ticks |
-| Chest | 5 iron | 2 ticks |
-| Conveyor Belt | 1 iron | 1 tick |
-| Arm | 5 iron, 1 copper | 5 ticks |
-| Assembler | 10 iron, 5 copper | 5 ticks |
+| Recipe | Ingredients |
+|--------|------------|
+| Miner | 5 copper, 5 iron |
+| Chest | 5 iron |
+| Conveyor Belt | 1 iron |
+| Arm | 5 iron, 1 copper |
+| Assembler | 10 iron, 5 copper |
+
+Each recipe is a single action (e.g. `CRAFT_MINER`). Crafting is instant by default: materials are consumed and the output appears in your inventory in the same step. Researchers can set non-zero tick durations in `recipes.py` to study delayed crafting rewards.
 
 Once you have an assembler placed, it can produce the rocket components:
 
@@ -57,6 +61,16 @@ Once you have an assembler placed, it can produce the rocket components:
 | Rocket | 50 hulls, 20 fuel packs | 100 ticks |
 
 Place the rocket on the map and you win.
+
+## Design principles
+
+Every action in the environment follows three properties that make the benchmark RL-native.
+
+**Atomic.** One action, one outcome. The agent never needs a multi-step sequence to achieve a single effect. Crafting a miner is one action (`CRAFT_MINER`), not "cycle recipe three times, then press craft." If the preconditions aren't met, the action is a no-op. There is no hidden sequencing the agent has to discover.
+
+**Observable.** The agent can see whether an action will succeed before taking it, and can see the result afterward. The observation includes per-recipe affordability signals so the agent knows which recipes it can afford right now, not just which recipe happens to be selected in some menu. Spatial state (what's around me, what machines are nearby) is directly visible in the observation window.
+
+**Composable.** Actions work the same way regardless of context. Crafting consumes items from inventory and adds the result, just like mining adds items and placing consumes them. There is no separate "crafting mode" with different rules. The agent's policy operates in one consistent space.
 
 ## For researchers
 
