@@ -3,16 +3,15 @@
 import jax
 import jax.numpy as jnp
 
-from factoriax import BlockType, ItemType
+from factoriax import BlockType, EnvState, ItemType
 from factoriax.achievements import (
     ACHIEVEMENT_INFO,
-    NUM_ACHIEVEMENTS,
-    check_achievements,
-    compute_all_conditions,
+    core_game_conditions,
     count_machines,
     count_total_items,
 )
 from factoriax.constants import (
+    MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     MachineType,
@@ -109,8 +108,8 @@ class TestConditionComputation:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        conditions = compute_all_conditions(state)
-        assert conditions.shape == (NUM_ACHIEVEMENTS,)
+        conditions = core_game_conditions(state)
+        assert conditions.shape == (MAX_ACHIEVEMENTS,)
         assert not jnp.any(conditions)
 
     def test_first_ore_condition(self, state_factory) -> None:
@@ -124,7 +123,7 @@ class TestConditionComputation:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         idx = _achievement_index("first_ore")
         assert conditions[idx]
 
@@ -140,7 +139,7 @@ class TestConditionComputation:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("stockpile")]
 
     def test_fueled_up_condition(self, state_factory) -> None:
@@ -162,7 +161,7 @@ class TestConditionComputation:
             machine_inventory_items=machine_inv_items,
             machine_inventory_counts=machine_inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("fueled_up")]
 
     def test_automated_mining_condition(self, state_factory) -> None:
@@ -184,7 +183,7 @@ class TestConditionComputation:
             machine_inventory_items=machine_inv_items,
             machine_inventory_counts=machine_inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("automated_mining")]
 
     def test_moving_parts_requires_both(self, state_factory) -> None:
@@ -199,7 +198,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=world_map, machine_types=arm_only
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert not conditions[_achievement_index("moving_parts")]
 
         # Both arm and chest — should satisfy.
@@ -209,7 +208,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=world_map, machine_types=both
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("moving_parts")]
 
     def test_first_pipeline_condition(self, state_factory) -> None:
@@ -231,7 +230,7 @@ class TestConditionComputation:
             machine_inventory_items=machine_inv_items,
             machine_inventory_counts=machine_inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("first_pipeline")]
 
     def test_industrialist_condition(self, state_factory) -> None:
@@ -242,7 +241,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=world_map, machine_types=machine_types
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("industrialist")]
 
     def test_assembler_crafted_condition(self, state_factory) -> None:
@@ -257,7 +256,7 @@ class TestConditionComputation:
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("assembler_crafted")]
 
     def test_assembly_line_condition(self, state_factory) -> None:
@@ -269,7 +268,7 @@ class TestConditionComputation:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=machine_types,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("assembly_line")]
 
     def test_first_assembly_condition(self, state_factory) -> None:
@@ -295,7 +294,7 @@ class TestConditionComputation:
             machine_inventory_items=machine_inv_items,
             machine_inventory_counts=machine_inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("first_assembly")]
 
     def test_hull_production_condition(self, state_factory) -> None:
@@ -310,7 +309,7 @@ class TestConditionComputation:
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("hull_production")]
 
     def test_fuel_production_condition(self, state_factory) -> None:
@@ -325,7 +324,7 @@ class TestConditionComputation:
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("fuel_production")]
 
     def test_rocket_complete_condition(self, state_factory) -> None:
@@ -337,19 +336,27 @@ class TestConditionComputation:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=machine_types,
         )
-        conditions = compute_all_conditions(state)
+        conditions = core_game_conditions(state)
         assert conditions[_achievement_index("rocket_complete")]
 
 
+def _apply_achievements(state: EnvState) -> EnvState:
+    """Apply core game conditions to state (test helper)."""
+    conditions = core_game_conditions(state)
+    return state.replace(
+        achievements_unlocked=state.achievements_unlocked | conditions,
+    )
+
+
 class TestAchievementUnlocking:
-    """Tests for achievement state updates via check_achievements."""
+    """Tests for achievement state updates via condition application."""
 
     def test_no_achievements_unlocked_for_empty_state(self, state_factory) -> None:
         """No achievements should be unlocked for a fresh state."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        new_state = check_achievements(state)
+        new_state = _apply_achievements(state)
         assert not jnp.any(new_state.achievements_unlocked)
 
     def test_first_ore_unlocked(self, state_factory) -> None:
@@ -363,19 +370,19 @@ class TestAchievementUnlocking:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        new_state = check_achievements(state)
+        new_state = _apply_achievements(state)
         assert new_state.achievements_unlocked[_achievement_index("first_ore")]
 
     def test_already_unlocked_achievement_stays_unlocked(self, state_factory) -> None:
         """Previously unlocked achievements must remain unlocked."""
-        already_unlocked = jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_)
+        already_unlocked = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
         already_unlocked = already_unlocked.at[0].set(True)
 
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             achievements_unlocked=already_unlocked,
         )
-        new_state = check_achievements(state)
+        new_state = _apply_achievements(state)
         assert new_state.achievements_unlocked[0]
 
     def test_multiple_achievements_unlocked_simultaneously(
@@ -391,7 +398,7 @@ class TestAchievementUnlocking:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        new_state = check_achievements(state)
+        new_state = _apply_achievements(state)
         assert new_state.achievements_unlocked[_achievement_index("first_ore")]
         assert new_state.achievements_unlocked[_achievement_index("stockpile")]
 
@@ -399,17 +406,17 @@ class TestAchievementUnlocking:
 class TestJITCompatibility:
     """Tests for JIT compilation compatibility."""
 
-    def test_check_achievements_jit_compatible(self, state_factory) -> None:
-        """check_achievements should be JIT-compilable."""
+    def test_core_conditions_jit_compatible(self, state_factory) -> None:
+        """core_game_conditions should be JIT-compilable."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        jit_check = jax.jit(check_achievements)
+        jit_check = jax.jit(_apply_achievements)
         new_state = jit_check(state)
         assert not jnp.any(new_state.achievements_unlocked)
 
-    def test_check_achievements_jit_unlocks_correctly(self, state_factory) -> None:
-        """JIT-compiled check_achievements should unlock achievements correctly."""
+    def test_core_conditions_jit_unlocks_correctly(self, state_factory) -> None:
+        """JIT-compiled conditions should unlock achievements correctly."""
         from factoriax.constants import NUM_ITEM_TYPES
 
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
@@ -419,7 +426,7 @@ class TestJITCompatibility:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        jit_check = jax.jit(check_achievements)
+        jit_check = jax.jit(_apply_achievements)
         new_state = jit_check(state)
         assert new_state.achievements_unlocked[_achievement_index("first_ore")]
 

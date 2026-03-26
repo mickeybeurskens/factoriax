@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from factoriax.achievements import check_achievements
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
     DIRECTIONS,
@@ -792,7 +791,6 @@ def factoriax_step(
     state = _handle_player_action(state, action, player_idx)
     state = update_crafting(state)
     state = update_all_machines(state)
-    state = check_achievements(state)
     return state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined, no-any-return]
 
 

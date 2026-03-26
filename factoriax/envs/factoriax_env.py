@@ -1,11 +1,15 @@
 """FactoriaX environment implementing the gymnax interface."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces
 
+from factoriax.achievements import core_game_conditions
 from factoriax.constants import NUM_ACTIONS, NUM_INVENTORY_SLOTS
 from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.levels import Level, build_state, generate_state
@@ -18,21 +22,39 @@ from factoriax.state import EnvParams, EnvState
 class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """FactoriaX JAX-based grid environment.
 
-    A minimal environment where a player can move on a grid of dirt and water tiles.
-    Water tiles block movement. The environment follows the gymnax interface for
-    compatibility with JAX-based RL algorithms.
+    The ``achievement_fn`` parameter controls which achievement
+    conditions are checked after each step. It must be a JAX-
+    compatible function with signature
+    ``(EnvState) -> jax.Array`` returning a boolean array of shape
+    ``(MAX_ACHIEVEMENTS,)``.  The default uses the 17 core game
+    milestones. Benchmarks can inject their own condition function
+    to define custom one-shot reward events.
+
+    Args:
+        achievement_fn: Achievement condition function. Defaults to
+            :func:`~factoriax.achievements.core_game_conditions`.
     """
 
-    def __init__(self) -> None:
-        """Initialize the environment."""
+    def __init__(
+        self,
+        achievement_fn: Callable[
+            [EnvState], jax.Array
+        ] = core_game_conditions,
+    ) -> None:
+        """Initialize the environment.
+
+        Args:
+            achievement_fn: Achievement condition function.
+        """
         super().__init__()
+        self._achievement_fn = achievement_fn
 
     @property
     def default_params(self) -> EnvParams:
         """Return default environment parameters.
 
         Returns:
-            Default EnvParams instance
+            Default EnvParams instance.
         """
         return EnvParams()
 
@@ -45,18 +67,30 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
         """Execute one environment step.
 
+        Runs game mechanics, then checks achievements using the
+        injected condition function, then computes the reward from
+        newly unlocked achievements.
+
         Args:
-            key: JAX random key
-            state: Current environment state
-            action: Action to take
-            params: Environment parameters
+            key: JAX random key.
+            state: Current environment state.
+            action: Action to take.
+            params: Environment parameters.
 
         Returns:
-            Tuple of (observation, new_state, reward, done, info)
+            Tuple of (observation, new_state, reward, done, info).
         """
         action_arr = jnp.int32(action)
         prev_state = state
         new_state = factoriax_step(key, prev_state, action_arr, params)
+
+        # Achievement checking — condition function is baked into JIT.
+        conditions = self._achievement_fn(new_state)
+        new_state = new_state.replace(
+            achievements_unlocked=new_state.achievements_unlocked
+            | conditions
+        )
+
         reward = achievement_reward(prev_state, new_state, params)
         done = is_game_over(new_state, params)
         obs = self.get_obs(new_state, params)
@@ -69,11 +103,11 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """Reset the environment to an initial state.
 
         Args:
-            key: JAX random key for world generation
-            params: Environment parameters
+            key: JAX random key for world generation.
+            params: Environment parameters.
 
         Returns:
-            Tuple of (initial_observation, initial_state)
+            Tuple of (initial_observation, initial_state).
         """
         state = generate_state(key, params)
         obs = self.get_obs(state, params)
@@ -84,47 +118,40 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     ) -> tuple[jax.Array, EnvState]:
         """Reset the environment to a pre-built level.
 
-        Players are placed near the centre of the map according to
-        ``params.num_players``.  No random key is needed because pre-built
-        levels are deterministic.
-
         Args:
-            level: Level definition.  Its dimensions must match those in
-                ``params``.
-            params: Environment parameters, including ``num_players``.
+            level: Level definition.
+            params: Environment parameters.
 
         Returns:
-            Tuple of ``(initial_observation, initial_state)``.
+            Tuple of (initial_observation, initial_state).
         """
         state = build_state(level, params)
         obs = self.get_obs(state, params)
         return obs, state
 
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Get observation from the current state for the selected player.
-
-        Delegates to :func:`factoriax.observations.global_array` using
-        ``state.selected_player`` as the player index.
+        """Get observation for the selected player.
 
         Args:
             state: Current environment state.
             params: Environment parameters.
 
         Returns:
-            Float32 array of shape
-            ``(map_h * map_w + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS,)``.
+            Float32 observation array.
         """
         return global_array(state, params, state.selected_player)
 
-    def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
+    def is_terminal(
+        self, state: EnvState, params: EnvParams
+    ) -> jax.Array:
         """Check if the current state is terminal.
 
         Args:
-            state: Current environment state
-            params: Environment parameters
+            state: Current environment state.
+            params: Environment parameters.
 
         Returns:
-            Boolean indicating whether state is terminal
+            Boolean indicating whether state is terminal.
         """
         return is_game_over(state, params)
 
@@ -132,10 +159,10 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """Return the action space.
 
         Args:
-            params: Environment parameters
+            params: Environment parameters.
 
         Returns:
-            Discrete action space with 5 actions (NOOP, LEFT, RIGHT, UP, DOWN)
+            Discrete action space.
         """
         return spaces.Discrete(NUM_ACTIONS)
 
@@ -143,10 +170,10 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """Return the observation space.
 
         Args:
-            params: Environment parameters
+            params: Environment parameters.
 
         Returns:
-            Box observation space matching the flattened observation
+            Box observation space.
         """
         obs_size = (
             params.map_width * params.map_height
@@ -164,20 +191,29 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """Render the environment state as pixels.
 
         Args:
-            state: Current environment state
+            state: Current environment state.
 
         Returns:
-            RGB pixel array of the rendered scene
+            RGB pixel array.
         """
         return jnp.array(render_pixels(state))
 
 
-def make_factoriax_env() -> tuple[FactoriaXEnv, EnvParams]:
-    """Create a FactoriaX environment with default parameters.
+def make_factoriax_env(
+    achievement_fn: Callable[
+        [EnvState], jax.Array
+    ] = core_game_conditions,
+) -> tuple[FactoriaXEnv, EnvParams]:
+    """Create a FactoriaX environment.
+
+    Args:
+        achievement_fn: Achievement condition function. Defaults to
+            the core game milestones. Pass a custom function for
+            benchmark-specific achievements.
 
     Returns:
-        Tuple of (environment, default_params)
+        Tuple of (environment, default_params).
     """
-    env = FactoriaXEnv()
+    env = FactoriaXEnv(achievement_fn=achievement_fn)
     params = env.default_params
     return env, params

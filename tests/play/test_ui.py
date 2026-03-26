@@ -9,8 +9,7 @@ intentionally absent.
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.achievements import NUM_ACHIEVEMENTS
-from factoriax.constants import ItemType
+from factoriax.constants import MAX_ACHIEVEMENTS, ItemType
 from factoriax.play.ui import (
     ClickRegion,
     render_achievement_menu,
@@ -37,7 +36,7 @@ class TestRenderAchievementMenu:
         """Should not crash when no achievements are unlocked."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-            achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+            achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
         )
         result = render_achievement_menu(state, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
@@ -46,7 +45,7 @@ class TestRenderAchievementMenu:
         """Should not crash when every achievement is unlocked."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-            achievements_unlocked=jnp.ones(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+            achievements_unlocked=jnp.ones(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
         )
         result = render_achievement_menu(state, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)

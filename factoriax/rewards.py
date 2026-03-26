@@ -10,7 +10,7 @@ to :func:`jax.jit`.
 import jax
 import jax.numpy as jnp
 
-from factoriax.achievements import ACHIEVEMENT_REWARDS
+from factoriax.achievements import CORE_ACHIEVEMENT_WEIGHTS
 from factoriax.constants import (
     MINEABLE_BLOCKS,
     ItemType,
@@ -20,25 +20,34 @@ from factoriax.state import EnvParams, EnvState
 
 
 def achievement_reward(
-    prev_state: EnvState, new_state: EnvState, params: EnvParams
+    prev_state: EnvState,
+    new_state: EnvState,
+    params: EnvParams,
+    weights: jax.Array = CORE_ACHIEVEMENT_WEIGHTS,
 ) -> jax.Array:
-    """Sparse reward equal to the sum of rewards for newly unlocked achievements.
+    """Sparse reward for newly unlocked achievements.
 
-    Compares ``achievements_unlocked`` between the two states and returns one
-    reward unit per newly satisfied achievement.  The magnitude of each unit
-    is defined by :data:`factoriax.achievements.ACHIEVEMENT_REWARDS` (default
-    1.0 for all achievements).
+    Compares ``achievements_unlocked`` between the two states and
+    returns the weighted sum of newly satisfied slots. The ``weights``
+    vector controls the magnitude per slot — slots with zero weight
+    contribute nothing.
 
     Args:
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface uniformity).
+        params: Environment parameters (unused; present for interface
+            uniformity).
+        weights: Per-slot reward magnitudes, shape
+            ``(MAX_ACHIEVEMENTS,)``. Defaults to the core game weights
+            (1.0 for the 17 tutorial milestones, 0.0 elsewhere).
 
     Returns:
         Scalar float32 reward.
     """
-    newly_unlocked = new_state.achievements_unlocked & ~prev_state.achievements_unlocked
-    reward: jax.Array = jnp.sum(ACHIEVEMENT_REWARDS * newly_unlocked)
+    newly_unlocked = (
+        new_state.achievements_unlocked & ~prev_state.achievements_unlocked
+    )
+    reward: jax.Array = jnp.sum(weights * newly_unlocked)
     return reward
 
 

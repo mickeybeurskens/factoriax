@@ -41,9 +41,9 @@ import numpy as np
 import orjson
 from jax import random
 
-from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
+    MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     MINEABLE_BLOCKS,
     NUM_INVENTORY_SLOTS,
@@ -561,7 +561,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         machine_selected_recipe=jnp.array(machine_recipe_np, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_direction=jnp.array(machine_dirs_np, dtype=jnp.int32),
-        achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
 
@@ -633,7 +633,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         machine_selected_recipe=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_selected_slot=jnp.zeros(map_shape, dtype=jnp.int32),
         machine_direction=jnp.zeros(map_shape, dtype=jnp.int32),
-        achievements_unlocked=jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
     )
 

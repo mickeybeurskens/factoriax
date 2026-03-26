@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import ItemType, MachineType
+from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, MachineType
 from factoriax.state import EnvState
 
 
@@ -137,9 +137,14 @@ ACHIEVEMENT_INFO = [
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 
-#: Per-achievement reward magnitudes used by
-#: :func:`factoriax.rewards.achievement_reward`.
-ACHIEVEMENT_REWARDS = jnp.ones(NUM_ACHIEVEMENTS, dtype=jnp.float32)
+#: Per-achievement reward magnitudes for the core game, used by
+#: :func:`factoriax.rewards.achievement_reward` as the default weights.
+#: Shape ``(MAX_ACHIEVEMENTS,)`` — slots beyond the 17 core achievements
+#: are zero so they contribute no reward.
+CORE_ACHIEVEMENT_WEIGHTS = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
+CORE_ACHIEVEMENT_WEIGHTS = CORE_ACHIEVEMENT_WEIGHTS.at[:NUM_ACHIEVEMENTS].set(
+    1.0
+)
 
 # Miner machine inventory layout (mirrors machines.py constants).
 _MINER_FUEL_SLOT: int = 0
@@ -240,19 +245,22 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
     return jnp.any(is_asm & has_output)
 
 
-def compute_all_conditions(state: EnvState) -> jax.Array:
-    """Compute whether each achievement condition is met.
+def core_game_conditions(state: EnvState) -> jax.Array:
+    """Compute the 17 core game achievement conditions.
 
-    This is the JAX-compatible version that computes all conditions
-    as a single vectorized operation, avoiding Python list indexing
-    with traced values.
+    Returns a boolean array of shape ``(MAX_ACHIEVEMENTS,)``. The
+    first ``NUM_ACHIEVEMENTS`` slots correspond to the core tutorial
+    milestones. Remaining slots are False.
+
+    This is the default condition function for
+    :func:`~factoriax.envs.factoriax_env.make_factoriax_env`.
+    Benchmarks can provide their own function with the same signature.
 
     Args:
-        state: Current environment state
+        state: Current environment state.
 
     Returns:
-        Boolean array of shape (NUM_ACHIEVEMENTS,) indicating which
-        achievement conditions are currently satisfied
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
     total_mined = (
         state.items_mined[ItemType.COAL]
@@ -310,24 +318,7 @@ def compute_all_conditions(state: EnvState) -> jax.Array:
         ],
         dtype=jnp.bool_,
     )
-    return conditions
-
-
-def check_achievements(state: EnvState) -> EnvState:
-    """Update ``achievements_unlocked`` in state based on current conditions.
-
-    Uses vectorized JAX operations to check all achievement conditions
-    simultaneously.  Reward computation has moved to
-    :func:`factoriax.rewards.achievement_reward`, which compares the
-    before/after states.
-
-    Args:
-        state: Current environment state.
-
-    Returns:
-        Updated state with any newly satisfied achievements marked as
-        unlocked.
-    """
-    conditions_met = compute_all_conditions(state)
-    new_unlocked = state.achievements_unlocked | conditions_met
-    return state.replace(achievements_unlocked=new_unlocked)  # type: ignore[attr-defined, no-any-return]
+    # Pad to MAX_ACHIEVEMENTS.
+    return jnp.concatenate(
+        [conditions, jnp.zeros(MAX_ACHIEVEMENTS - NUM_ACHIEVEMENTS, dtype=jnp.bool_)]
+    )

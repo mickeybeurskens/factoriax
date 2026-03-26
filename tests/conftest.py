@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax import Action, EnvState
-from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.constants import (
+    MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
@@ -163,7 +163,7 @@ def state_factory():
             else jnp.zeros(shape, dtype=jnp.int32),
             achievements_unlocked=achievements_unlocked
             if achievements_unlocked is not None
-            else jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_),
+            else jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
             items_mined=items_mined
             if items_mined is not None
             else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),

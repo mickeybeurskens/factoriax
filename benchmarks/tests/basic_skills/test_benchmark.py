@@ -135,13 +135,27 @@ class TestSparseCraftingReward:
     """Tests for the sparse_chest_crafting_reward function."""
 
     def test_crafting_chest_gives_reward(self, state_factory) -> None:
-        """Reward should fire when a chest appears in inventory."""
+        """Reward should fire when a chest appears and iron was consumed."""
         _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
-        prev = state_factory(world_map=_map)
+        # prev: player has 5 iron, no chests
+        prev = state_factory(
+            world_map=_map,
+            inventory_items=jnp.array(
+                [[ItemType.IRON] + [0] * 9], dtype=jnp.int32
+            ),
+            inventory_counts=jnp.array(
+                [[5] + [0] * 9], dtype=jnp.int32
+            ),
+        )
+        # new: iron consumed, chest appeared (instant craft)
         new = state_factory(
             world_map=_map,
-            inventory_items=jnp.array([[ItemType.CHEST] + [0] * 9], dtype=jnp.int32),
-            inventory_counts=jnp.array([[1] + [0] * 9], dtype=jnp.int32),
+            inventory_items=jnp.array(
+                [[ItemType.CHEST] + [0] * 9], dtype=jnp.int32
+            ),
+            inventory_counts=jnp.array(
+                [[1] + [0] * 9], dtype=jnp.int32
+            ),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         reward = sparse_chest_crafting_reward(prev, new, params)

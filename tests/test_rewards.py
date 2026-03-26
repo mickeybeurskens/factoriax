@@ -5,10 +5,16 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax import BlockType, ItemType
-from factoriax.achievements import NUM_ACHIEVEMENTS
-from factoriax.constants import NUM_ITEM_TYPES
+from factoriax.achievements import core_game_conditions
+from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
 from factoriax.rewards import achievement_reward, mining_reward, sparse_mining_reward
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
+
+
+def _apply_conds(state: EnvState) -> EnvState:
+    """Apply core game conditions to state (test helper)."""
+    conds = core_game_conditions(state)
+    return state.replace(achievements_unlocked=state.achievements_unlocked | conds)
 
 
 @pytest.fixture
@@ -42,10 +48,7 @@ class TestAchievementReward:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
         )
-        # Unlock the coal achievement on new_state
-        from factoriax.achievements import check_achievements
-
-        new_state = check_achievements(new_state)
+        new_state = _apply_conds(new_state)
         reward = achievement_reward(prev_state, new_state, params)
         assert float(reward) == 1.0
 
@@ -53,7 +56,7 @@ class TestAchievementReward:
         self, state_factory, params
     ) -> None:
         """No reward when the achievement was already unlocked in prev_state."""
-        already = jnp.zeros(NUM_ACHIEVEMENTS, dtype=jnp.bool_).at[0].set(True)
+        already = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_).at[0].set(True)
         prev_state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             achievements_unlocked=already,
@@ -67,8 +70,6 @@ class TestAchievementReward:
 
     def test_multiple_achievements_reward(self, state_factory, params) -> None:
         """Reward equals the number of newly unlocked achievements."""
-        from factoriax.achievements import check_achievements
-
         # Mining 10 total ores unlocks both First Ore and Stockpile.
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         items_mined = items_mined.at[ItemType.IRON].set(10)
@@ -76,7 +77,7 @@ class TestAchievementReward:
         prev_state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        new_state = check_achievements(
+        new_state = _apply_conds(
             state_factory(
                 world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
                 items_mined=items_mined,
@@ -96,13 +97,11 @@ class TestAchievementReward:
 
     def test_vmap_compatible(self, state_factory, params) -> None:
         """achievement_reward should be vmappable over batched states."""
-        from factoriax.achievements import check_achievements
-
         items_mined = (
             jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
         )
         prev = state_factory(world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32))
-        new = check_achievements(
+        new = _apply_conds(
             state_factory(
                 world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
                 items_mined=items_mined,
