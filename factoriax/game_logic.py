@@ -669,7 +669,10 @@ def _handle_player_action(
     is_prev_m_slot = action == Action.PREV_MACHINE_SLOT
 
     # Direct craft actions: contiguous range CRAFT_MINER..CRAFT_ASSEMBLER.
-    recipe_idx = action - Action.CRAFT_MINER
+    # Clamp recipe_idx to [0, NUM_RECIPES-1] so that non-craft actions
+    # (which produce negative indices) don't corrupt state when both
+    # branches of lax.cond are evaluated under vmap.
+    recipe_idx = jnp.clip(action - Action.CRAFT_MINER, 0, 4)
     is_craft = (action >= Action.CRAFT_MINER) & (
         action <= Action.CRAFT_ASSEMBLER
     )
