@@ -9,6 +9,7 @@ from factoriax.constants import (
     MACHINE_POWER_CONSUMPTION,
     MACHINE_SLOT_ROLES,
     MAX_MACHINE_STACK_SIZE,
+    NUM_ITEM_TYPES,
     POWER_PER_COAL,
     Action,
     BlockType,
@@ -131,9 +132,9 @@ def _assembler_complete_crafts(
     out_count = inv_counts[..., _ASSEMBLER_OUTPUT_SLOT]
 
     completing = is_asm & (power == 1)
-    out_has_space = (
-        (out_count == 0) | (out_item == recipe_out)
-    ) & (out_count < MAX_ASSEMBLER_STACK_SIZE)
+    out_has_space = ((out_count == 0) | (out_item == recipe_out)) & (
+        out_count < MAX_ASSEMBLER_STACK_SIZE
+    )
     can_complete = completing & out_has_space
 
     inv_items = inv_items.at[..., _ASSEMBLER_OUTPUT_SLOT].set(
@@ -265,8 +266,14 @@ def run_assemblers(state: EnvState) -> EnvState:
 
     # Phase 3: start new crafts.
     inv_items, inv_counts, power = _assembler_start_crafts(
-        is_asm, power, inv_items, inv_counts,
-        recipe_in_items, recipe_in_counts, recipe_out, recipe_ticks,
+        is_asm,
+        power,
+        inv_items,
+        inv_counts,
+        recipe_in_items,
+        recipe_in_counts,
+        recipe_out,
+        recipe_ticks,
     )
 
     return state.replace(
@@ -330,12 +337,19 @@ def run_miners(state: EnvState) -> EnvState:
         new_output_item
     )
 
+    # Track machine-mined ore in the global items_mined counter so that
+    # reward functions and scoring see automated extraction.
+    mined_per_type = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+    mined_per_type = mined_per_type.at[block_item.ravel()].add(mine_amount.ravel())
+    new_items_mined = state.items_mined + mined_per_type
+
     return state.replace(
         block_resources=new_resources,
         machine_inventory_items=new_inv_items,
         machine_inventory_counts=new_inv_counts,
         machine_power=new_power,
         map=new_map,
+        items_mined=new_items_mined,
     )
 
 
@@ -359,24 +373,18 @@ def push_miner_output(state: EnvState) -> EnvState:
     cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
 
     direction = state.machine_direction
-    dx = (
-        jnp.where(direction == Action.LEFT, -1, 0)
-        + jnp.where(direction == Action.RIGHT, 1, 0)
+    dx = jnp.where(direction == Action.LEFT, -1, 0) + jnp.where(
+        direction == Action.RIGHT, 1, 0
     )
-    dy = (
-        jnp.where(direction == Action.UP, -1, 0)
-        + jnp.where(direction == Action.DOWN, 1, 0)
+    dy = jnp.where(direction == Action.UP, -1, 0) + jnp.where(
+        direction == Action.DOWN, 1, 0
     )
 
     fwd_row = jnp.clip(rows + dy, 0, h - 1)
     fwd_col = jnp.clip(cols + dx, 0, w - 1)
 
-    miner_items = state.machine_inventory_items[
-        ..., _MINER_OUTPUT_SLOT
-    ]
-    miner_counts = state.machine_inventory_counts[
-        ..., _MINER_OUTPUT_SLOT
-    ]
+    miner_items = state.machine_inventory_items[..., _MINER_OUTPUT_SLOT]
+    miner_counts = state.machine_inventory_counts[..., _MINER_OUTPUT_SLOT]
 
     fwd_mtype = state.machine_types[fwd_row, fwd_col]
     fwd_not_none = fwd_mtype != MachineType.NONE
@@ -386,9 +394,9 @@ def push_miner_output(state: EnvState) -> EnvState:
     fwd_slot_items = state.machine_inventory_items[fwd_row, fwd_col]
     fwd_slot_counts = state.machine_inventory_counts[fwd_row, fwd_col]
 
-    is_deposit_role = (
-        fwd_slot_roles == _DEPOSIT_ROLE_INPUT
-    ) | (fwd_slot_roles == _DEPOSIT_ROLE_STORAGE)
+    is_deposit_role = (fwd_slot_roles == _DEPOSIT_ROLE_INPUT) | (
+        fwd_slot_roles == _DEPOSIT_ROLE_STORAGE
+    )
     slot_empty = fwd_slot_counts == 0
     slot_matches = fwd_slot_items == miner_items[:, :, None]
     miner_cap = jnp.where(
@@ -411,37 +419,24 @@ def push_miner_output(state: EnvState) -> EnvState:
     m_pad6_c = jnp.zeros((*m_exp_counts.shape[:2], 6), dtype=jnp.int32)
     m_exp_counts_full = jnp.concatenate([m_exp_counts, m_pad6_c], axis=-1)
     m_is_input = fwd_slot_roles == _DEPOSIT_ROLE_INPUT
-    m_recipe_ok = (
-        (miner_items[:, :, None] == m_exp_full)
-        & (m_exp_counts_full > 0)
-    )
+    m_recipe_ok = (miner_items[:, :, None] == m_exp_full) & (m_exp_counts_full > 0)
     m_asm_filter = jnp.where(m_fwd_is_asm & m_is_input, m_recipe_ok, True)
     slot_usable = slot_usable & m_asm_filter
 
-    deposit_idx = jnp.argmax(
-        slot_usable.astype(jnp.int32), axis=-1
-    )
+    deposit_idx = jnp.argmax(slot_usable.astype(jnp.int32), axis=-1)
     has_deposit = jnp.any(slot_usable, axis=-1)
 
-    can_push = (
-        is_miner
-        & (miner_counts > 0)
-        & fwd_not_none
-        & fwd_not_self
-        & has_deposit
-    )
+    can_push = is_miner & (miner_counts > 0) & fwd_not_none & fwd_not_self & has_deposit
 
-    transfer_count = jnp.where(
-        can_push, miner_counts, jnp.int16(0)
-    )
+    transfer_count = jnp.where(can_push, miner_counts, jnp.int16(0))
     transfer_item = jnp.where(can_push, miner_items, 0)
 
-    new_counts = state.machine_inventory_counts.at[
-        fwd_row, fwd_col, deposit_idx
-    ].add(transfer_count)
-    new_items = state.machine_inventory_items.at[
-        fwd_row, fwd_col, deposit_idx
-    ].max(transfer_item)
+    new_counts = state.machine_inventory_counts.at[fwd_row, fwd_col, deposit_idx].add(
+        transfer_count
+    )
+    new_items = state.machine_inventory_items.at[fwd_row, fwd_col, deposit_idx].max(
+        transfer_item
+    )
 
     new_counts = new_counts.at[..., _MINER_OUTPUT_SLOT].set(
         jnp.where(
@@ -451,9 +446,7 @@ def push_miner_output(state: EnvState) -> EnvState:
         )
     )
     new_items = new_items.at[..., _MINER_OUTPUT_SLOT].set(
-        jnp.where(
-            can_push, 0, new_items[..., _MINER_OUTPUT_SLOT]
-        )
+        jnp.where(can_push, 0, new_items[..., _MINER_OUTPUT_SLOT])
     )
 
     return state.replace(
@@ -486,13 +479,11 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     src_counts = state.machine_inventory_counts[..., _BELT_SLOT]  # int16
 
     direction = state.machine_direction
-    dx = (
-        jnp.where(direction == Action.LEFT, -1, 0)
-        + jnp.where(direction == Action.RIGHT, 1, 0)
+    dx = jnp.where(direction == Action.LEFT, -1, 0) + jnp.where(
+        direction == Action.RIGHT, 1, 0
     )
-    dy = (
-        jnp.where(direction == Action.UP, -1, 0)
-        + jnp.where(direction == Action.DOWN, 1, 0)
+    dy = jnp.where(direction == Action.UP, -1, 0) + jnp.where(
+        direction == Action.DOWN, 1, 0
     )
 
     rows = jnp.broadcast_to(jnp.arange(h)[:, None], (h, w))
@@ -501,19 +492,15 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     tgt_row = jnp.clip(rows + dy, 0, h - 1)
     tgt_col = jnp.clip(cols + dx, 0, w - 1)
 
-    tgt_is_belt = (
-        state.machine_types[tgt_row, tgt_col] == MachineType.CONVEYOR_BELT
-    )
+    tgt_is_belt = state.machine_types[tgt_row, tgt_col] == MachineType.CONVEYOR_BELT
     tgt_items = state.machine_inventory_items[tgt_row, tgt_col, _BELT_SLOT]
     tgt_counts = state.machine_inventory_counts[tgt_row, tgt_col, _BELT_SLOT]
-    tgt_has_space = (
-        (tgt_counts == 0) | (tgt_items == src_items)
-    ) & (tgt_counts < MAX_MACHINE_STACK_SIZE)
+    tgt_has_space = ((tgt_counts == 0) | (tgt_items == src_items)) & (
+        tgt_counts < MAX_MACHINE_STACK_SIZE
+    )
 
     not_self = (tgt_row != rows) | (tgt_col != cols)
-    can_push = (
-        is_belt & (src_counts > 0) & tgt_is_belt & tgt_has_space & not_self
-    )
+    can_push = is_belt & (src_counts > 0) & tgt_is_belt & tgt_has_space & not_self
 
     push_counts = jnp.where(can_push, src_counts, jnp.int16(0))
     push_items = jnp.where(can_push, src_items, 0)
@@ -524,12 +511,10 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     stayed_items = jnp.where(can_push, 0, src_items).ravel()
 
     # Scatter incoming items to target positions (int16 for counts)
-    recv_counts = jnp.zeros(h * w, dtype=jnp.int16).at[flat_tgt].add(
-        push_counts.ravel()
+    recv_counts = (
+        jnp.zeros(h * w, dtype=jnp.int16).at[flat_tgt].add(push_counts.ravel())
     )
-    recv_items = jnp.zeros(h * w, dtype=jnp.int32).at[flat_tgt].max(
-        push_items.ravel()
-    )
+    recv_items = jnp.zeros(h * w, dtype=jnp.int32).at[flat_tgt].max(push_items.ravel())
 
     final_counts = jnp.minimum(
         stayed_counts + recv_counts,
@@ -588,13 +573,11 @@ def run_arms(state: EnvState) -> EnvState:
     cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
 
     direction = state.machine_direction
-    dx = (
-        jnp.where(direction == Action.LEFT, -1, 0)
-        + jnp.where(direction == Action.RIGHT, 1, 0)
+    dx = jnp.where(direction == Action.LEFT, -1, 0) + jnp.where(
+        direction == Action.RIGHT, 1, 0
     )
-    dy = (
-        jnp.where(direction == Action.UP, -1, 0)
-        + jnp.where(direction == Action.DOWN, 1, 0)
+    dy = jnp.where(direction == Action.UP, -1, 0) + jnp.where(
+        direction == Action.DOWN, 1, 0
     )
 
     fwd_row = jnp.clip(rows + dy, 0, h - 1)
@@ -628,7 +611,7 @@ def _arm_deposit_phase(
     Returns:
         Updated state after deposit
     """
-    arm_items = state.machine_inventory_items[..., _ARM_SLOT]    # (H, W) int32
+    arm_items = state.machine_inventory_items[..., _ARM_SLOT]  # (H, W) int32
     arm_counts = state.machine_inventory_counts[..., _ARM_SLOT]  # (H, W) int16
 
     fwd_mtype = state.machine_types[fwd_row, fwd_col]
@@ -637,7 +620,7 @@ def _arm_deposit_phase(
 
     # Slot roles for every forward neighbour: (H, W, 8)
     fwd_slot_roles = _SLOT_ROLES_JAX[fwd_mtype]
-    fwd_slot_items = state.machine_inventory_items[fwd_row, fwd_col]   # (H, W, 8)
+    fwd_slot_items = state.machine_inventory_items[fwd_row, fwd_col]  # (H, W, 8)
     fwd_slot_counts = state.machine_inventory_counts[fwd_row, fwd_col]  # int16
 
     is_deposit_role = (fwd_slot_roles == _DEPOSIT_ROLE_INPUT) | (
@@ -650,9 +633,7 @@ def _arm_deposit_phase(
         MAX_ASSEMBLER_STACK_SIZE,
         MAX_MACHINE_STACK_SIZE,
     )
-    slot_has_space = (slot_empty | slot_matches) & (
-        fwd_slot_counts < cap[:, :, None]
-    )
+    slot_has_space = (slot_empty | slot_matches) & (fwd_slot_counts < cap[:, :, None])
     slot_usable = is_deposit_role & slot_has_space  # (H, W, 8)
 
     # For assembler targets, input slots only accept the recipe's expected
@@ -669,10 +650,7 @@ def _arm_deposit_phase(
     # A slot is recipe-compatible if the item matches the expected item
     # and the recipe actually needs that slot (count > 0).
     is_input_role = fwd_slot_roles == _DEPOSIT_ROLE_INPUT
-    recipe_ok = (
-        (arm_items[:, :, None] == expected_full)
-        & (expected_counts_full > 0)
-    )
+    recipe_ok = (arm_items[:, :, None] == expected_full) & (expected_counts_full > 0)
     # For non-assembler targets or non-input roles, always allow.
     asm_filter = jnp.where(fwd_is_asm & is_input_role, recipe_ok, True)
     slot_usable = slot_usable & asm_filter
@@ -680,19 +658,17 @@ def _arm_deposit_phase(
     deposit_idx = jnp.argmax(slot_usable.astype(jnp.int32), axis=-1)  # (H, W)
     has_deposit = jnp.any(slot_usable, axis=-1)
 
-    can_deposit = (
-        is_arm & (arm_counts > 0) & fwd_not_none & fwd_not_self & has_deposit
-    )
+    can_deposit = is_arm & (arm_counts > 0) & fwd_not_none & fwd_not_self & has_deposit
 
     transfer_count = jnp.where(can_deposit, arm_counts, jnp.int16(0))  # int16
     transfer_item = jnp.where(can_deposit, arm_items, 0)
 
-    new_counts = state.machine_inventory_counts.at[
-        fwd_row, fwd_col, deposit_idx
-    ].add(transfer_count)
-    new_items = state.machine_inventory_items.at[
-        fwd_row, fwd_col, deposit_idx
-    ].max(transfer_item)
+    new_counts = state.machine_inventory_counts.at[fwd_row, fwd_col, deposit_idx].add(
+        transfer_count
+    )
+    new_items = state.machine_inventory_items.at[fwd_row, fwd_col, deposit_idx].max(
+        transfer_item
+    )
 
     # Clear the arm buffer for arms that successfully deposited.
     # Use new_counts/new_items as the base so the deposit scatter is preserved.
@@ -738,7 +714,7 @@ def _arm_pick_phase(
 
     # Slot roles for every backward neighbour: (H, W, 8)
     bwd_slot_roles = _SLOT_ROLES_JAX[bwd_mtype]
-    bwd_slot_items = state.machine_inventory_items[bwd_row, bwd_col]    # (H, W, 8)
+    bwd_slot_items = state.machine_inventory_items[bwd_row, bwd_col]  # (H, W, 8)
     bwd_slot_counts = state.machine_inventory_counts[bwd_row, bwd_col]  # int16
 
     is_pick_role = (bwd_slot_roles == _PICK_ROLE_OUTPUT) | (
@@ -756,17 +732,15 @@ def _arm_pick_phase(
     picked_item = jnp.sum(
         bwd_slot_items * slot_one_hot.astype(jnp.int32), axis=-1
     )  # (H, W)
-    picked_count = jnp.sum(
-        bwd_slot_counts * slot_one_hot, axis=-1
-    ).astype(jnp.int16)
+    picked_count = jnp.sum(bwd_slot_counts * slot_one_hot, axis=-1).astype(jnp.int16)
 
     pick_item = jnp.where(can_pick, picked_item, 0)
     pick_count = jnp.where(can_pick, picked_count, jnp.int16(0))
 
     # Clear the picked slot in the backward neighbour.
-    new_counts = state.machine_inventory_counts.at[
-        bwd_row, bwd_col, pick_idx
-    ].add(-pick_count)
+    new_counts = state.machine_inventory_counts.at[bwd_row, bwd_col, pick_idx].add(
+        -pick_count
+    )
 
     # Zero out item type where the picked slot was fully depleted.
     # Use a min-scatter: depleted slots scatter 0, others scatter their
@@ -780,9 +754,9 @@ def _arm_pick_phase(
         0,
         state.machine_inventory_items[bwd_row, bwd_col, pick_idx],
     )
-    new_items = state.machine_inventory_items.at[
-        bwd_row, bwd_col, pick_idx
-    ].min(depleted_item)
+    new_items = state.machine_inventory_items.at[bwd_row, bwd_col, pick_idx].min(
+        depleted_item
+    )
 
     # Fill the arm buffer.  Use new_counts/new_items (not the original
     # state) so the scatter changes above are preserved for non-arm tiles

@@ -44,9 +44,7 @@ def achievement_reward(
     Returns:
         Scalar float32 reward.
     """
-    newly_unlocked = (
-        new_state.achievements_unlocked & ~prev_state.achievements_unlocked
-    )
+    newly_unlocked = new_state.achievements_unlocked & ~prev_state.achievements_unlocked
     reward: jax.Array = jnp.sum(weights * newly_unlocked)
     return reward
 
@@ -160,9 +158,100 @@ def sparse_chest_crafting_reward(
 
     # Crafting consumes iron and produces chests in the same step.
     is_craft = (chest_delta > 0) & (iron_delta < 0)
-    reward: jax.Array = jnp.where(is_craft, chest_delta, 0).astype(
-        jnp.float32
+    reward: jax.Array = jnp.where(is_craft, chest_delta, 0).astype(jnp.float32)
+    return reward
+
+
+def sparse_miner_crafting_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward of 1.0 for each miner gained via crafting.
+
+    Detects crafting by requiring that the player's inventory gained
+    miners *and* lost both iron and copper in the same step. Moving
+    miners between inventory and the map via place/pickup does not
+    consume resources, so those actions yield zero reward.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface
+            uniformity).
+
+    Returns:
+        Scalar float32 reward.
+    """
+
+    def _count_item(state: EnvState, item: int) -> jax.Array:
+        is_item = state.inventory_items == item
+        return jnp.sum(jnp.where(is_item, state.inventory_counts, 0))
+
+    miner_delta = _count_item(new_state, ItemType.MINER) - _count_item(
+        prev_state, ItemType.MINER
     )
+    iron_delta = _count_item(new_state, ItemType.IRON) - _count_item(
+        prev_state, ItemType.IRON
+    )
+    copper_delta = _count_item(new_state, ItemType.COPPER) - _count_item(
+        prev_state, ItemType.COPPER
+    )
+
+    is_craft = (miner_delta > 0) & (iron_delta < 0) & (copper_delta < 0)
+    reward: jax.Array = jnp.where(is_craft, miner_delta, 0).astype(jnp.float32)
+    return reward
+
+
+def miner_output_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Reward for each ore item produced by placed miners.
+
+    Counts the total increase in item counts across the output slots
+    (slot index 1) of all miner-type machines. This gives a dense
+    signal that fires every tick a fueled miner extracts ore.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface
+            uniformity).
+
+    Returns:
+        Scalar float32 reward.
+    """
+    is_miner = new_state.machine_types == MachineType.MINER
+    # Miner output is slot 1.
+    prev_output = jnp.where(is_miner, prev_state.machine_inventory_counts[..., 1], 0)
+    new_output = jnp.where(is_miner, new_state.machine_inventory_counts[..., 1], 0)
+    delta = jnp.sum(new_output) - jnp.sum(prev_output)
+    reward: jax.Array = delta.astype(jnp.float32)
+    return reward
+
+
+def miner_throughput_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Reward for ore extracted from blocks by placed miners each tick.
+
+    Measures the decrease in ``block_resources`` on tiles that have a
+    miner. This counts actual extraction from the ground rather than
+    output slot changes, so it is unaffected by the agent withdrawing
+    from or ignoring the output slot.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface
+            uniformity).
+
+    Returns:
+        Scalar float32 reward (non-negative).
+    """
+    is_miner = new_state.machine_types == MachineType.MINER
+    prev_res = prev_state.block_resources.astype(jnp.int32)
+    new_res = new_state.block_resources.astype(jnp.int32)
+    depleted = jnp.where(is_miner, prev_res - new_res, 0)
+    reward: jax.Array = jnp.sum(jnp.maximum(depleted, 0)).astype(jnp.float32)
     return reward
 
 
@@ -188,5 +277,5 @@ def chest_filling_reward(
     prev_counts = jnp.where(chest_mask, prev_state.machine_inventory_counts, 0)
     new_counts = jnp.where(chest_mask, new_state.machine_inventory_counts, 0)
     delta = jnp.sum(new_counts) - jnp.sum(prev_counts)
-    reward: jax.Array = jnp.maximum(delta, 0).astype(jnp.float32)
+    reward: jax.Array = delta.astype(jnp.float32)
     return reward

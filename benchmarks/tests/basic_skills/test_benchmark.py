@@ -13,8 +13,11 @@ from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from benchmarks.basic_skills.scoring import (
     aggregate_scores,
     score_craft,
+    score_craft_miners,
+    score_deploy_miner,
     score_fill,
     score_mine,
+    score_mining_factory,
 )
 from factoriax import Action, BlockType, ItemType
 from factoriax.constants import (
@@ -140,22 +143,14 @@ class TestSparseCraftingReward:
         # prev: player has 5 iron, no chests
         prev = state_factory(
             world_map=_map,
-            inventory_items=jnp.array(
-                [[ItemType.IRON] + [0] * 9], dtype=jnp.int32
-            ),
-            inventory_counts=jnp.array(
-                [[5] + [0] * 9], dtype=jnp.int32
-            ),
+            inventory_items=jnp.array([[ItemType.IRON] + [0] * 9], dtype=jnp.int32),
+            inventory_counts=jnp.array([[5] + [0] * 9], dtype=jnp.int32),
         )
         # new: iron consumed, chest appeared (instant craft)
         new = state_factory(
             world_map=_map,
-            inventory_items=jnp.array(
-                [[ItemType.CHEST] + [0] * 9], dtype=jnp.int32
-            ),
-            inventory_counts=jnp.array(
-                [[1] + [0] * 9], dtype=jnp.int32
-            ),
+            inventory_items=jnp.array([[ItemType.CHEST] + [0] * 9], dtype=jnp.int32),
+            inventory_counts=jnp.array([[1] + [0] * 9], dtype=jnp.int32),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         reward = sparse_chest_crafting_reward(prev, new, params)
@@ -181,7 +176,8 @@ class TestSparseCraftingReward:
         new = state_factory(
             world_map=_map,
             inventory_items=jnp.array(
-                [[ItemType.CONVEYOR_BELT] + [0] * 9], dtype=jnp.int32,
+                [[ItemType.CONVEYOR_BELT] + [0] * 9],
+                dtype=jnp.int32,
             ),
             inventory_counts=jnp.array([[3] + [0] * 9], dtype=jnp.int32),
         )
@@ -200,7 +196,8 @@ class TestChestFillingReward:
         m_types = m_types.at[1, 1].set(MachineType.CHEST)
 
         m_counts_prev = jnp.zeros(
-            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS),
+            dtype=jnp.int16,
         )
         m_counts_new = m_counts_prev.at[1, 1, 0].set(10)
 
@@ -225,7 +222,8 @@ class TestChestFillingReward:
         m_types = m_types.at[1, 1].set(MachineType.CHEST)
 
         m_counts_prev = jnp.zeros(
-            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS),
+            dtype=jnp.int16,
         )
         m_counts_prev = m_counts_prev.at[1, 1, 0].set(63)
         m_counts_new = m_counts_prev.at[1, 1, 0].set(MAX_MACHINE_STACK_SIZE)
@@ -251,7 +249,8 @@ class TestChestFillingReward:
         m_types = m_types.at[1, 1].set(MachineType.MINER)
 
         m_counts_new = jnp.zeros(
-            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS),
+            dtype=jnp.int16,
         )
         m_counts_new = m_counts_new.at[1, 1, 0].set(10)
 
@@ -272,7 +271,8 @@ class TestChestFillingReward:
         m_types = m_types.at[1, 1].set(MachineType.CHEST)
 
         m_counts = jnp.zeros(
-            (3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16,
+            (3, 3, MAX_MACHINE_INVENTORY_SLOTS),
+            dtype=jnp.int16,
         )
         m_counts = m_counts.at[1, 1, 0].set(30)
 
@@ -363,16 +363,55 @@ class TestScoring:
         )
         assert score_fill(state) == 2.0
 
+    def test_score_craft_miners(self, state_factory) -> None:
+        """Miner-crafting score should count miner items in inventory."""
+        _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
+        state = state_factory(
+            world_map=_map,
+            inventory_items=jnp.array(
+                [[ItemType.MINER, ItemType.MINER] + [0] * 8],
+                dtype=jnp.int32,
+            ),
+            inventory_counts=jnp.array([[2, 1] + [0] * 8], dtype=jnp.int32),
+        )
+        assert score_craft_miners(state) == 3.0
+
+    def test_score_deploy_miner(self, state_factory) -> None:
+        """Deploy-miner score should count items in miner output slots."""
+        _map = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
+        m_types = jnp.full((3, 3), MachineType.NONE, dtype=jnp.int32)
+        m_types = m_types.at[0, 0].set(MachineType.MINER)
+        m_counts = jnp.zeros((3, 3, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
+        m_counts = m_counts.at[0, 0, 1].set(42)  # slot 1 = output
+        state = state_factory(
+            world_map=_map,
+            machine_types=m_types,
+            machine_inventory_counts=m_counts,
+        )
+        assert score_deploy_miner(state) == 42.0
+
+    def test_score_mining_factory(self) -> None:
+        """Mining-factory score should sum all ore types."""
+        assert score_mining_factory({"coal": 10, "iron": 20, "copper": 5}) == 35.0
+
     def test_aggregate_normalises(self) -> None:
         """Aggregate should normalise to [0, 1] per level."""
-        score = aggregate_scores(18.0, 15.0, 8.0)
-        assert abs(score - 1.0) < 1e-6
+        scores = {
+            "mine_resources": 18.0,
+            "craft_chests": 15.0,
+            "fill_chest": 8.0,
+        }
+        assert abs(aggregate_scores(scores) - 1.0) < 1e-6
 
     def test_aggregate_partial(self) -> None:
         """Partial scores should produce sub-1.0 aggregate."""
-        score = aggregate_scores(9.0, 0.0, 0.0)
+        scores = {
+            "mine_resources": 9.0,
+            "craft_chests": 0.0,
+            "fill_chest": 0.0,
+        }
         expected = (0.5 + 0.0 + 0.0) / 3.0
-        assert abs(score - expected) < 1e-6
+        assert abs(aggregate_scores(scores) - expected) < 1e-6
 
 
 # -----------------------------------------------------------------------
@@ -398,11 +437,18 @@ class TestBasicSkillsBenchmark:
         """Should require 1 player."""
         assert BasicSkillsBenchmark().num_players == 1
 
-    def test_three_levels(self) -> None:
-        """Should have exactly three levels."""
-        assert len(BasicSkillsBenchmark().levels()) == 3
+    def test_six_levels(self) -> None:
+        """Should have exactly six levels."""
+        assert len(BasicSkillsBenchmark().levels()) == 6
 
     def test_level_names(self) -> None:
         """Level names should match expected values."""
         names = [lvl.name for lvl in BasicSkillsBenchmark().levels()]
-        assert names == ["mine_resources", "craft_chests", "fill_chest"]
+        assert names == [
+            "mine_resources",
+            "craft_chests",
+            "fill_chest",
+            "craft_miners",
+            "deploy_miner",
+            "mining_factory",
+        ]

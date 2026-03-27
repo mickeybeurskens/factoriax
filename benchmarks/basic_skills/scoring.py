@@ -4,6 +4,9 @@ Each level has a different metric:
 - **mine_resources**: total ore mined (coal + iron).
 - **craft_chests**: number of chest items in the player's inventory.
 - **fill_chest**: number of full stacks (64 items) across all chest machines.
+- **craft_miners**: number of miner items in the player's inventory.
+- **deploy_miner**: total items in miner output slots.
+- **mining_factory**: total ore mined across all types.
 
 Per-level scores are normalised to [0, 1] using theoretical maximums before
 averaging, so no single level dominates the aggregate.
@@ -27,6 +30,13 @@ MAX_MINE_SCORE: float = 18.0
 MAX_CRAFT_SCORE: float = 15.0
 # Level 3: 8 chest slots, each fillable to 64.
 MAX_FILL_SCORE: float = 8.0
+# Level 4: 180 iron + 180 copper = 36 miners at 10 ore each, but inventory
+# caps at 10 slots * 64 stack = practical max ~9 in 300 ticks.
+MAX_CRAFT_MINERS_SCORE: float = 9.0
+# Level 5: miner output slot caps at 64 items.
+MAX_DEPLOY_MINER_SCORE: float = 64.0
+# Level 6: reasonable target for combined hand + automated mining in 500 ticks.
+MAX_MINING_FACTORY_SCORE: float = 200.0
 
 
 def score_mine(items_mined: dict[str, int]) -> float:
@@ -77,25 +87,81 @@ def score_fill(final_state: EnvState) -> float:
     return float(jnp.sum(chest_full))
 
 
-def aggregate_scores(
-    mine_score: float,
-    craft_score: float,
-    fill_score: float,
-) -> float:
+def score_craft_miners(final_state: EnvState) -> float:
+    """Score the miner-crafting level: miner items in player inventory.
+
+    Counts the total number of miner items across all inventory slots
+    for the first player.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total miner items in inventory.
+    """
+    items = final_state.inventory_items[0]
+    counts = final_state.inventory_counts[0]
+    miner_mask = items == ItemType.MINER
+    return float(jnp.sum(jnp.where(miner_mask, counts, 0)))
+
+
+def score_deploy_miner(final_state: EnvState) -> float:
+    """Score the deploy-miner level: items in miner output slots.
+
+    Counts the total item count in slot 1 (OUTPUT) of all miner-type
+    machines on the map.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total items in miner output slots.
+    """
+    is_miner = final_state.machine_types == MachineType.MINER
+    output_counts = final_state.machine_inventory_counts[..., 1]
+    return float(jnp.sum(jnp.where(is_miner, output_counts, 0)))
+
+
+def score_mining_factory(items_mined: dict[str, int]) -> float:
+    """Score the mining-factory level: total ore mined across all types.
+
+    Args:
+        items_mined: Resources collected, keyed by item name.
+
+    Returns:
+        Sum of coal, iron, and copper mined.
+    """
+    return float(
+        items_mined.get("coal", 0)
+        + items_mined.get("iron", 0)
+        + items_mined.get("copper", 0)
+    )
+
+
+def aggregate_scores(scores: dict[str, float]) -> float:
     """Aggregate normalised per-level scores into one scalar.
 
     Each score is divided by its theoretical maximum to produce a [0, 1]
-    value, then the three are averaged.
+    value, then all are averaged equally.
 
     Args:
-        mine_score: Raw mining level score.
-        craft_score: Raw crafting level score.
-        fill_score: Raw chest-filling level score.
+        scores: Raw per-level scores keyed by level name.
 
     Returns:
-        Mean of the three normalised scores.
+        Mean of the normalised scores.
     """
-    norm_mine = min(mine_score / MAX_MINE_SCORE, 1.0)
-    norm_craft = min(craft_score / MAX_CRAFT_SCORE, 1.0)
-    norm_fill = min(fill_score / MAX_FILL_SCORE, 1.0)
-    return (norm_mine + norm_craft + norm_fill) / 3.0
+    maximums: dict[str, float] = {
+        "mine_resources": MAX_MINE_SCORE,
+        "craft_chests": MAX_CRAFT_SCORE,
+        "fill_chest": MAX_FILL_SCORE,
+        "craft_miners": MAX_CRAFT_MINERS_SCORE,
+        "deploy_miner": MAX_DEPLOY_MINER_SCORE,
+        "mining_factory": MAX_MINING_FACTORY_SCORE,
+    }
+    total = 0.0
+    count = 0
+    for name, raw in scores.items():
+        cap = maximums.get(name, 1.0)
+        total += min(raw / cap, 1.0)
+        count += 1
+    return total / max(count, 1)
