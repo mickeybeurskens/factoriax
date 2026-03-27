@@ -27,16 +27,26 @@ import time
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import matplotlib
 import numpy as np
 import optax
-from flax import struct
 
+from baselines.ppo import (
+    ActorCritic,
+    PPOConfig,
+    RunningStats,
+    Transition,
+    compute_gae,
+    init_running_stats,
+    make_update_fn,
+    normalize_obs,
+    update_running_stats,
+)
+from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
 from factoriax.analysis import actions as ana_actions
 from factoriax.analysis.recorder import RolloutRecorder
 from factoriax.analysis.trajectory import Trajectory as AnalysisTrajectory
@@ -66,261 +76,40 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class Config:
-    """Hyperparameters and runtime settings for PPO training.
+    """Domain-specific settings for single-agent PPO training.
+
+    PPO hyperparameters live in the embedded ``ppo`` field. Only
+    domain-specific knobs (observation type, level, reward function,
+    etc.) are kept here.
 
     Attributes:
-        hidden_dims: Sizes of the shared MLP hidden layers.
-        num_envs: Number of parallel training environments.
-        rollout_steps: Steps collected per environment per iteration.
-        total_timesteps: Total environment steps to train for.
-        learning_rate: Adam learning rate.
-        gamma: Discount factor.
-        gae_lambda: GAE lambda smoothing parameter.
-        clip_eps: PPO surrogate clipping epsilon.
-        value_coef: Weight of the value loss term.
-        entropy_coef: Weight of the entropy bonus.
-        update_epochs: PPO update epochs per data collection batch.
-        num_minibatches: Minibatches per epoch.
-        max_grad_norm: Global gradient clipping norm.
-        normalize_obs: Whether to apply online observation normalization.
-        restrict_actions: Limit the agent to NOOP, movement, and MINE only.
-        obs_type: Observation type: "global" (full flattened map) or "local"
-            (windowed patch centered on the agent).
-        obs_radius: Half-width of the local observation window in tiles.
-            Only used when obs_type is "local".
-        level_name: Name of a built-in level (key in ``factoriax.levels.LEVELS``)
-            to use for all resets instead of procedural generation.  Defaults
-            to ``"15x15_resources"``.  Pass ``None`` for random procedural
+        ppo: Shared PPO hyperparameters and runtime settings.
+        restrict_actions: Limit the agent to NOOP, movement, and
+            MINE only.
+        obs_type: Observation type: "global" (full flattened map) or
+            "local" (windowed patch centered on the agent).
+        level_name: Name of a built-in level (key in
+            ``factoriax.levels.LEVELS``) to use for all resets instead
+            of procedural generation. Defaults to
+            ``"15x15_resources"``. Pass ``None`` for random procedural
             generation.
-        reward_type: Reward function to use during training.  ``"mining"``
-            (default) gives a dense proximity-plus-bonus reward.
-            ``"achievement"`` gives sparse +1 per newly unlocked achievement.
-        resource_density: Per-type resource spawn probability (coal/iron/copper).
-            Only applies when ``level_name`` is ``None``.
-        seed: Random seed.
-        save_path: Directory for checkpoints (None = disabled).
+        reward_type: Reward function to use during training.
+            ``"mining"`` (default) gives a dense proximity-plus-bonus
+            reward. ``"achievement"`` gives sparse +1 per newly
+            unlocked achievement.
+        resource_density: Per-type resource spawn probability
+            (coal/iron/copper). Only applies when ``level_name`` is
+            ``None``.
         load_path: Path to a checkpoint file to resume from.
-        log_interval: Iterations between console/W&B log lines.
-        use_wandb: Whether to log to Weights & Biases.
-        wandb_project: W&B project name.
-        wandb_run_name: W&B run name (None = auto-generated).
     """
 
-    hidden_dims: tuple[int, ...] = (256, 256)
-    num_envs: int = 64
-    rollout_steps: int = 128
-    total_timesteps: int = 10_000_000
-    learning_rate: float = 2.5e-4
-    gamma: float = 0.99
-    gae_lambda: float = 0.95
-    clip_eps: float = 0.2
-    value_coef: float = 0.5
-    entropy_coef: float = 0.01
-    update_epochs: int = 4
-    num_minibatches: int = 8
-    max_grad_norm: float = 0.5
-    normalize_obs: bool = True
+    ppo: PPOConfig = dataclasses.field(default_factory=PPOConfig)
     restrict_actions: bool = False
     obs_type: str = "global"
-    obs_radius: int = 10
     level_name: str | None = "15x15_resources"
     reward_type: str = "mining"
     resource_density: float = 0.02
-    seed: int = 0
-    save_path: str | None = None
     load_path: str | None = None
-    log_interval: int = 10
-    use_wandb: bool = False
-    wandb_project: str = "factoriax-ppo"
-    wandb_run_name: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Network
-# ---------------------------------------------------------------------------
-
-
-class ActorCritic(nn.Module):
-    """Shared-trunk MLP with separate policy and value heads.
-
-    A single ``LayerNorm -> tanh`` block is applied after each hidden
-    layer, which stabilizes training on the flat 1048-dim FactoriaX
-    observation without requiring input normalization to warm up first.
-
-    Attributes:
-        hidden_dims: Sizes of shared hidden layers.
-        num_actions: Number of discrete actions.
-    """
-
-    hidden_dims: tuple[int, ...]
-    num_actions: int
-
-    @nn.compact
-    def __call__(self, obs: jax.Array) -> tuple[jax.Array, jax.Array]:
-        """Compute action logits and scalar state value.
-
-        Args:
-            obs: Observation array of shape ``(..., obs_dim)``.
-
-        Returns:
-            Tuple ``(logits, value)`` with shapes
-            ``(..., num_actions)`` and ``(...,)``.
-        """
-        x = obs.astype(jnp.float32)
-        for dim in self.hidden_dims:
-            x = nn.Dense(dim)(x)
-            x = nn.LayerNorm()(x)
-            x = nn.tanh(x)
-        logits = nn.Dense(self.num_actions)(x)
-        value = nn.Dense(1)(x).squeeze(-1)
-        return logits, value
-
-
-# ---------------------------------------------------------------------------
-# Rollout storage
-# ---------------------------------------------------------------------------
-
-
-class Transition(NamedTuple):
-    """One (s, a, log_π, V, r, done) tuple per environment step.
-
-    Attributes:
-        obs: Raw (un-normalized) observation of shape ``(obs_dim,)``.
-        action: Chosen action index.
-        log_prob: Log-probability under the behavior policy.
-        value: Value estimate from the value head.
-        reward: Received reward.
-        done: Whether the episode ended at this step.
-    """
-
-    obs: jax.Array
-    action: jax.Array
-    log_prob: jax.Array
-    value: jax.Array
-    reward: jax.Array
-    done: jax.Array
-
-
-# ---------------------------------------------------------------------------
-# Observation normalizer
-# ---------------------------------------------------------------------------
-
-
-@struct.dataclass
-class RunningStats:
-    """Welford online mean/variance tracker for observation normalization.
-
-    Attributes:
-        mean: Running mean of shape ``(obs_dim,)``.
-        var: Running variance of shape ``(obs_dim,)``.
-        count: Total number of samples seen.
-    """
-
-    mean: jax.Array
-    var: jax.Array
-    count: jax.Array
-
-
-def init_running_stats(obs_dim: int) -> RunningStats:
-    """Create zero-initialized running statistics.
-
-    Args:
-        obs_dim: Dimensionality of the observation vector.
-
-    Returns:
-        RunningStats with zero mean, unit variance, and zero count.
-    """
-    return RunningStats(
-        mean=jnp.zeros(obs_dim, dtype=jnp.float32),
-        var=jnp.ones(obs_dim, dtype=jnp.float32),
-        count=jnp.array(0, dtype=jnp.int32),
-    )
-
-
-def update_running_stats(stats: RunningStats, batch: jax.Array) -> RunningStats:
-    """Welford parallel batch update of running mean and variance.
-
-    Args:
-        stats: Current running statistics.
-        batch: New observations of shape ``(N, obs_dim)``.
-
-    Returns:
-        Updated RunningStats.
-    """
-    n = batch.shape[0]
-    batch_mean = batch.mean(axis=0)
-    batch_var = batch.var(axis=0)
-    total = stats.count + n
-    delta = batch_mean - stats.mean
-    new_mean = stats.mean + delta * (n / total)
-    new_var = (
-        stats.var * stats.count + batch_var * n + delta**2 * stats.count * n / total
-    ) / total
-    return RunningStats(mean=new_mean, var=new_var, count=total)
-
-
-def normalize_obs(stats: RunningStats, obs: jax.Array) -> jax.Array:
-    """Normalize observations with running statistics, clipped to [-10, 10].
-
-    Args:
-        stats: Running observation statistics.
-        obs: Raw observation array of any batch shape.
-
-    Returns:
-        Normalized observation array of the same shape.
-    """
-    return jnp.clip((obs - stats.mean) / jnp.sqrt(stats.var + 1e-8), -10.0, 10.0)
-
-
-# ---------------------------------------------------------------------------
-# GAE
-# ---------------------------------------------------------------------------
-
-
-def compute_gae(
-    rewards: jax.Array,
-    values: jax.Array,
-    dones: jax.Array,
-    last_value: jax.Array,
-    gamma: float,
-    gae_lambda: float,
-) -> tuple[jax.Array, jax.Array]:
-    """Compute generalized advantage estimates (GAE) and value targets.
-
-    Scans backwards over the time dimension so the entire computation
-    is a single ``jax.lax.scan`` call — no Python loops.
-
-    Args:
-        rewards: Shape ``(T, N)``.
-        values: Shape ``(T, N)``.
-        dones: Terminal flags, shape ``(T, N)``.
-        last_value: Bootstrap value after the rollout, shape ``(N,)``.
-        gamma: Discount factor.
-        gae_lambda: GAE smoothing parameter.
-
-    Returns:
-        Tuple of ``(advantages, returns)`` each with shape ``(T, N)``.
-    """
-    not_done = 1.0 - dones.astype(jnp.float32)
-    # next_values[t] = values[t+1] for t < T-1, last_value for t = T-1
-    next_values = jnp.concatenate([values[1:], last_value[None]], axis=0)
-
-    def _step(
-        gae: jax.Array,
-        xs: tuple[jax.Array, jax.Array, jax.Array, jax.Array],
-    ) -> tuple[jax.Array, jax.Array]:
-        r, v, nd, nv = xs
-        delta = r + gamma * nv * nd - v
-        gae = delta + gamma * gae_lambda * nd * gae
-        return gae, gae
-
-    _, advantages = jax.lax.scan(
-        _step,
-        jnp.zeros_like(last_value),
-        (rewards[::-1], values[::-1], not_done[::-1], next_values[::-1]),
-    )
-    advantages = advantages[::-1]
-    return advantages, advantages + values
 
 
 # ---------------------------------------------------------------------------
@@ -371,8 +160,8 @@ def make_train_fns(
         The key array has shape ``(N, 2)`` and may be ignored (e.g. for
         deterministic level resets).
     """
-    num_envs = config.num_envs
-    rollout_steps = config.rollout_steps
+    num_envs = config.ppo.num_envs
+    rollout_steps = config.ppo.rollout_steps
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_obs_fn = jax.vmap(obs_fn, in_axes=(0, None))
@@ -422,7 +211,9 @@ def make_train_fns(
             step_rng, key_act, key_step, key_reset = jax.random.split(step_rng, 4)
 
             norm = (
-                normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
+                normalize_obs(obs_stats, cur_obs)
+                if config.ppo.normalize_obs
+                else cur_obs
             )
             logits, values = network.apply(params, norm)
 
@@ -461,128 +252,12 @@ def make_train_fns(
 
         # Bootstrap value for the last observation.
         norm_last = (
-            normalize_obs(obs_stats, next_obs) if config.normalize_obs else next_obs
+            normalize_obs(obs_stats, next_obs) if config.ppo.normalize_obs else next_obs
         )
         _, last_values = network.apply(params, norm_last)
         return trajectories, next_states, next_obs, last_values, rng
 
-    @jax.jit
-    def update(
-        params: Any,
-        opt_state: optax.OptState,
-        obs_stats: RunningStats,
-        flat_obs: jax.Array,
-        flat_actions: jax.Array,
-        flat_log_probs: jax.Array,
-        flat_advantages: jax.Array,
-        flat_returns: jax.Array,
-        rng: jax.Array,
-    ) -> tuple[Any, optax.OptState, dict[str, jax.Array], jax.Array]:
-        """Run PPO epochs on a flattened trajectory batch.
-
-        Args:
-            params: Current network parameters.
-            opt_state: Current optimizer state.
-            obs_stats: Running observation statistics.
-            flat_obs: Observations, shape ``(T*N, obs_dim)``.
-            flat_actions: Actions, shape ``(T*N,)``.
-            flat_log_probs: Behavior log-probabilities, shape ``(T*N,)``.
-            flat_advantages: GAE advantages, shape ``(T*N,)``.
-            flat_returns: Value targets, shape ``(T*N,)``.
-            rng: PRNG key.
-
-        Returns:
-            Tuple ``(new_params, new_opt_state, metrics_dict, new_rng)``.
-        """
-        batch_size = flat_obs.shape[0]
-        mb_size = batch_size // config.num_minibatches
-
-        def _loss(
-            p: Any,
-            obs: jax.Array,
-            actions: jax.Array,
-            old_lp: jax.Array,
-            adv: jax.Array,
-            rets: jax.Array,
-        ) -> tuple[jax.Array, dict[str, jax.Array]]:
-            norm = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
-            logits, values = network.apply(p, norm)
-            log_probs_all = jax.nn.log_softmax(logits)
-            lp = log_probs_all[jnp.arange(obs.shape[0]), actions]
-
-            probs = jax.nn.softmax(logits)
-            entropy = -(probs * log_probs_all).sum(axis=-1).mean()
-
-            adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-            ratio = jnp.exp(lp - old_lp)
-            pg_loss = -jnp.minimum(
-                ratio * adv,
-                jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv,
-            ).mean()
-            value_loss = 0.5 * ((values - rets) ** 2).mean()
-            total = (
-                pg_loss + config.value_coef * value_loss - config.entropy_coef * entropy
-            )
-            metrics = {
-                "loss/total": total,
-                "loss/policy": pg_loss,
-                "loss/value": value_loss,
-                "loss/entropy": entropy,
-                "misc/approx_kl": ((ratio - 1.0) - jnp.log(ratio)).mean(),
-                "misc/clip_frac": (
-                    (jnp.abs(ratio - 1.0) > config.clip_eps).astype(jnp.float32)
-                ).mean(),
-            }
-            return total, metrics
-
-        def _minibatch_step(
-            carry: tuple[Any, optax.OptState],
-            mb: tuple[
-                jax.Array,
-                jax.Array,
-                jax.Array,
-                jax.Array,
-                jax.Array,
-            ],
-        ) -> tuple[tuple[Any, optax.OptState], dict[str, jax.Array]]:
-            p, os = carry
-            (loss, m), grads = jax.value_and_grad(_loss, has_aux=True)(p, *mb)
-            updates, new_os = optimizer.update(grads, os, p)
-            return (optax.apply_updates(p, updates), new_os), m
-
-        def _epoch(
-            carry: tuple[Any, optax.OptState, jax.Array],
-            _: None,
-        ) -> tuple[
-            tuple[Any, optax.OptState, jax.Array],
-            dict[str, jax.Array],
-        ]:
-            p, os, epoch_rng = carry
-            epoch_rng, key_perm = jax.random.split(epoch_rng)
-            perm = jax.random.permutation(key_perm, batch_size)
-
-            def _reshape(x: jax.Array) -> jax.Array:
-                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
-
-            mbs = (
-                _reshape(flat_obs),
-                _reshape(flat_actions),
-                _reshape(flat_log_probs),
-                _reshape(flat_advantages),
-                _reshape(flat_returns),
-            )
-            (p, os), metrics = jax.lax.scan(_minibatch_step, (p, os), mbs)
-            return (p, os, epoch_rng), metrics
-
-        (params, opt_state, rng), metrics = jax.lax.scan(
-            _epoch,
-            (params, opt_state, rng),
-            None,
-            length=config.update_epochs,
-        )
-        # Average metrics over epochs and minibatches.
-        metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
-        return params, opt_state, metrics, rng
+    update = make_update_fn(network, optimizer, config.ppo)
 
     return collect, update
 
@@ -963,11 +638,11 @@ def train(config: Config) -> None:
     Args:
         config: Training configuration.
     """
-    rng = jax.random.PRNGKey(config.seed)
+    rng = jax.random.PRNGKey(config.ppo.seed)
 
     # --- W&B setup -----------------------------------------------------------
     wandb_run = None
-    if config.use_wandb:
+    if config.ppo.use_wandb:
         try:
             import wandb  # type: ignore[import-untyped]
 
@@ -978,8 +653,8 @@ def train(config: Config) -> None:
                 f"reward_{config.reward_type}",
             ]
             wandb_run = wandb.init(
-                project=config.wandb_project,
-                name=config.wandb_run_name,
+                project=config.ppo.wandb_project,
+                name=config.ppo.wandb_run_name,
                 config=dataclasses.asdict(config),
                 tags=tags,
             )
@@ -1008,7 +683,7 @@ def train(config: Config) -> None:
         )
 
     # --- Build observation function ------------------------------------------
-    _obs_radius = config.obs_radius
+    _obs_radius = config.ppo.obs_radius
     _obs_type = config.obs_type
 
     def _obs_fn(state: EnvState, params: EnvParams) -> jax.Array:
@@ -1026,7 +701,7 @@ def train(config: Config) -> None:
 
             def _broadcast(x: jax.Array) -> jax.Array:
                 a = jnp.asarray(x)
-                return jnp.broadcast_to(a[None], (config.num_envs,) + a.shape)
+                return jnp.broadcast_to(a[None], (config.ppo.num_envs,) + a.shape)
 
             return jax.tree_util.tree_map(_broadcast, _level_state)
     else:
@@ -1046,10 +721,10 @@ def train(config: Config) -> None:
     # NOOP=0, LEFT=1, RIGHT=2, UP=3, DOWN=4, MINE=5 are the first 6 actions.
     num_actions = 6 if config.restrict_actions else int(env.action_space(env_params).n)
 
-    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=num_actions)
+    network = ActorCritic(hidden_dims=config.ppo.hidden_dims, num_actions=num_actions)
     optimizer = optax.chain(
-        optax.clip_by_global_norm(config.max_grad_norm),
-        optax.adam(config.learning_rate),
+        optax.clip_by_global_norm(config.ppo.max_grad_norm),
+        optax.adam(config.ppo.learning_rate),
     )
 
     rng, key_init = jax.random.split(rng)
@@ -1071,8 +746,8 @@ def train(config: Config) -> None:
     )
 
     # --- Compute loop counts -------------------------------------------------
-    steps_per_iter = config.num_envs * config.rollout_steps
-    remaining = config.total_timesteps - start_step
+    steps_per_iter = config.ppo.num_envs * config.ppo.rollout_steps
+    remaining = config.ppo.total_steps - start_step
     total_iters = max(1, remaining // steps_per_iter)
     current_step = start_step
 
@@ -1090,7 +765,7 @@ def train(config: Config) -> None:
         f"{total_iters * steps_per_iter:,}",
     )
     obs_label = (
-        f"local(r={config.obs_radius})" if config.obs_type == "local" else "global"
+        f"local(r={config.ppo.obs_radius})" if config.obs_type == "local" else "global"
     )
     level_label = config.level_name if config.level_name else "procedural"
     logger.info(
@@ -1101,27 +776,27 @@ def train(config: Config) -> None:
         obs_dim,
         config.reward_type,
         num_actions,
-        config.num_envs,
-        config.rollout_steps,
+        config.ppo.num_envs,
+        config.ppo.rollout_steps,
         env_params.max_timesteps,
     )
-    if config.save_path is not None:
-        logger.info("Checkpoints will be saved to %s", Path(config.save_path))
+    if config.ppo.save_path is not None:
+        logger.info("Checkpoints will be saved to %s", Path(config.ppo.save_path))
 
     # --- Initialize vectorized environments ----------------------------------
     logger.info(
         "Compiling and initializing %d environments (first JIT — may take a minute)...",
-        config.num_envs,
+        config.ppo.num_envs,
     )
     rng, key_envs = jax.random.split(rng)
-    keys_envs = jax.random.split(key_envs, config.num_envs)
+    keys_envs = jax.random.split(key_envs, config.ppo.num_envs)
     env_states = _reset_fn(keys_envs, env_params)
     obs = jax.vmap(_obs_fn, in_axes=(0, None))(env_states, env_params)
     logger.info("Environments ready.")
 
     t_start = time.time()
-    running_ep_return = np.zeros(config.num_envs, dtype=np.float32)
-    running_ep_length = np.zeros(config.num_envs, dtype=np.int32)
+    running_ep_return = np.zeros(config.ppo.num_envs, dtype=np.float32)
+    running_ep_length = np.zeros(config.ppo.num_envs, dtype=np.int32)
     completed_ep_returns: deque[float] = deque(maxlen=1000)
     completed_ep_lengths: deque[int] = deque(maxlen=1000)
 
@@ -1147,8 +822,8 @@ def train(config: Config) -> None:
             trajectories.value,
             trajectories.done,
             last_values,
-            config.gamma,
-            config.gae_lambda,
+            config.ppo.gamma,
+            config.ppo.gae_lambda,
         )
 
         # PPO update --------------------------------------------------------
@@ -1185,15 +860,18 @@ def train(config: Config) -> None:
                 running_ep_length[n] = 0
 
         # Logging -----------------------------------------------------------
-        if (it + 1) % config.log_interval == 0 or it == total_iters - 1:
+        if (it + 1) % config.ppo.log_interval == 0 or it == total_iters - 1:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
             if completed_ep_returns:
                 mean_ep_reward = float(
                     np.mean(
                         [
-                            r / l
-                            for r, l in zip(completed_ep_returns, completed_ep_lengths)
+                            ret / length
+                            for ret, length in zip(
+                                completed_ep_returns,
+                                completed_ep_lengths,
+                            )
                         ]
                     )
                 )
@@ -1223,13 +901,13 @@ def train(config: Config) -> None:
                 wandb_run.log(log_data, step=current_step)
 
         # Checkpointing -----------------------------------------------------
-        if config.save_path is not None and (it + 1) % config.log_interval == 0:
-            ckpt_path = Path(config.save_path) / f"step_{current_step}.pkl"
+        if config.ppo.save_path is not None and (it + 1) % config.ppo.log_interval == 0:
+            ckpt_path = Path(config.ppo.save_path) / f"step_{current_step}.pkl"
             save_checkpoint(ckpt_path, params, obs_stats, current_step)
 
     # --- Final checkpoint ----------------------------------------------------
-    if config.save_path is not None:
-        final_path = Path(config.save_path) / "final.pkl"
+    if config.ppo.save_path is not None:
+        final_path = Path(config.ppo.save_path) / "final.pkl"
         save_checkpoint(final_path, params, obs_stats, current_step)
         logger.info("Final checkpoint saved. To resume: --load-path %s", final_path)
 
@@ -1244,10 +922,12 @@ def train(config: Config) -> None:
         env_params,
         _obs_fn,
         key_vis,
-        normalize=config.normalize_obs,
+        normalize=config.ppo.normalize_obs,
         initial_state=_level_state if _level is not None else None,
     )
-    out_dir = Path(config.save_path) if config.save_path is not None else Path(".")
+    out_dir = (
+        Path(config.ppo.save_path) if config.ppo.save_path is not None else Path(".")
+    )
     mp4_path = out_dir / "final_episode.mp4"
     save_mp4(frames, mp4_path)
     save_episode_return_plot(rewards, out_dir / "final_episode_return.png")
@@ -1302,40 +982,17 @@ def _parse_args() -> Config:
         description="Single-agent PPO for FactoriaX",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--num-envs", type=int, default=64)
-    p.add_argument("--rollout-steps", type=int, default=128)
-    p.add_argument("--total-steps", type=int, default=10_000_000)
-    p.add_argument("--lr", type=float, default=2.5e-4, dest="learning_rate")
-    p.add_argument("--gamma", type=float, default=0.99)
-    p.add_argument("--gae-lambda", type=float, default=0.95)
-    p.add_argument("--clip-eps", type=float, default=0.2)
-    p.add_argument("--value-coef", type=float, default=0.5)
-    p.add_argument("--entropy-coef", type=float, default=0.01)
-    p.add_argument("--update-epochs", type=int, default=4)
-    p.add_argument("--num-minibatches", type=int, default=8)
-    p.add_argument("--max-grad-norm", type=float, default=0.5)
-    p.add_argument(
-        "--no-normalize-obs",
-        action="store_false",
-        dest="normalize_obs",
-    )
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--save-path", type=str, default=None)
-    p.add_argument("--load-path", type=str, default=None)
-    p.add_argument("--log-interval", type=int, default=10)
+    add_ppo_args(p)
     p.add_argument("--restrict-actions", action="store_true")
     p.add_argument(
         "--obs-type",
         type=str,
         default="global",
         choices=["global", "local"],
-        help="Observation type: 'global' (full flattened map) or 'local' (windowed patch).",
-    )
-    p.add_argument(
-        "--obs-radius",
-        type=int,
-        default=10,
-        help="Half-width of the local observation window in tiles (local obs only).",
+        help=(
+            "Observation type: 'global' (full flattened map) "
+            "or 'local' (windowed patch)."
+        ),
     )
     p.add_argument(
         "--level",
@@ -1343,7 +1000,7 @@ def _parse_args() -> Config:
         default="15x15_resources",
         dest="level_name",
         choices=list(LEVELS),
-        help="Built-in level name for fixed resets. Omit for procedural generation.",
+        help="Built-in level name for fixed resets.",
     )
     p.add_argument(
         "--reward-type",
@@ -1351,43 +1008,28 @@ def _parse_args() -> Config:
         default="mining",
         choices=["achievement", "mining"],
         help=(
-            "Reward function: 'achievement' (sparse +1 per unlocked achievement) "
-            "or 'mining' (dense proximity + ore-extraction bonus)."
+            "Reward function: 'achievement' (sparse +1 per "
+            "unlocked achievement) or 'mining' (dense "
+            "proximity + ore-extraction bonus)."
         ),
     )
     p.add_argument("--resource-density", type=float, default=0.02)
-    p.add_argument("--use-wandb", action="store_true")
-    p.add_argument("--wandb-project", type=str, default="factoriax-ppo")
-    p.add_argument("--wandb-run-name", type=str, default=None)
+    p.add_argument("--load-path", type=str, default=None)
 
     args = p.parse_args()
+    ppo = ppo_config_from_args(
+        args,
+        wandb_project="factoriax-ppo",
+        obs_radius=getattr(args, "obs_radius", 10),
+    )
     return Config(
-        num_envs=args.num_envs,
-        rollout_steps=args.rollout_steps,
-        total_timesteps=args.total_steps,
-        learning_rate=args.learning_rate,
-        gamma=args.gamma,
-        gae_lambda=args.gae_lambda,
-        clip_eps=args.clip_eps,
-        value_coef=args.value_coef,
-        entropy_coef=args.entropy_coef,
-        update_epochs=args.update_epochs,
-        num_minibatches=args.num_minibatches,
-        max_grad_norm=args.max_grad_norm,
-        normalize_obs=args.normalize_obs,
+        ppo=ppo,
         restrict_actions=args.restrict_actions,
         obs_type=args.obs_type,
-        obs_radius=args.obs_radius,
         level_name=args.level_name,
         reward_type=args.reward_type,
         resource_density=args.resource_density,
-        seed=args.seed,
-        save_path=args.save_path,
         load_path=args.load_path,
-        log_interval=args.log_interval,
-        use_wandb=args.use_wandb,
-        wandb_project=args.wandb_project,
-        wandb_run_name=args.wandb_run_name,
     )
 
 

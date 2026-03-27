@@ -34,18 +34,28 @@ import time
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import matplotlib
 import numpy as np
 import optax
-from flax import struct
 
 matplotlib.use("Agg")
 
+from baselines.ppo import (
+    ActorCritic,
+    PPOConfig,
+    RunningStats,
+    Transition,
+    compute_gae,
+    init_running_stats,
+    make_update_fn,
+    normalize_obs,
+    update_running_stats,
+)
+from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
 from benchmarks.balanced_gathering import BalancedGatheringBenchmark
 from benchmarks.balanced_gathering.scoring import constraint_summary
 from benchmarks.core import BenchmarkLevel
@@ -80,196 +90,20 @@ _NUM_ACTIONS = 6
 class Config:
     """Training configuration for balanced gathering PPO.
 
+    Embeds a ``PPOConfig`` for shared hyperparameters and adds
+    domain-specific fields for the balanced gathering benchmark.
+
     Attributes:
-        hidden_dims: Shared MLP hidden layer sizes.
-        num_envs: Parallel training environments.
-        rollout_steps: Steps per env per iteration.
-        total_timesteps: Total env steps (per level in sequential mode).
-        learning_rate: Adam learning rate.
-        gamma: Discount factor.
-        gae_lambda: GAE smoothing.
-        clip_eps: PPO clipping.
-        value_coef: Value loss weight.
-        entropy_coef: Entropy bonus weight.
-        update_epochs: PPO epochs per batch.
-        num_minibatches: Minibatches per epoch.
-        max_grad_norm: Gradient clipping norm.
-        normalize_obs: Online observation normalization.
-        obs_radius: Local observation radius.
+        ppo: Shared PPO hyperparameters.
         lambda_cost: Lagrange multiplier for balance constraint penalty.
         balance_threshold: Ratio threshold for balance_cost.
         mode: Training mode: "independent", "sequential", or "mixed".
-        seed: Random seed.
-        save_path: Checkpoint directory.
-        log_interval: Iterations between log lines.
-        use_wandb: Enable W&B logging.
-        wandb_project: W&B project name.
-        wandb_run_name: W&B run name.
     """
 
-    hidden_dims: tuple[int, ...] = (256, 256)
-    num_envs: int = 64
-    rollout_steps: int = 128
-    total_timesteps: int = 5_000_000
-    learning_rate: float = 2.5e-4
-    gamma: float = 0.99
-    gae_lambda: float = 0.95
-    clip_eps: float = 0.2
-    value_coef: float = 0.5
-    entropy_coef: float = 0.01
-    update_epochs: int = 4
-    num_minibatches: int = 8
-    max_grad_norm: float = 0.5
-    normalize_obs: bool = True
-    obs_radius: int = 7
+    ppo: PPOConfig = dataclasses.field(default_factory=PPOConfig)
     lambda_cost: float = 0.5
     balance_threshold: float = 3.0
     mode: str = "sequential"
-    seed: int = 0
-    save_path: str | None = None
-    log_interval: int = 10
-    use_wandb: bool = False
-    wandb_project: str = "factoriax-balanced"
-    wandb_run_name: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Network (same as single_agent_ppo)
-# ---------------------------------------------------------------------------
-
-
-class ActorCritic(nn.Module):
-    """Shared-trunk MLP with separate policy and value heads."""
-
-    hidden_dims: tuple[int, ...]
-    num_actions: int
-
-    @nn.compact
-    def __call__(self, obs: jax.Array) -> tuple[jax.Array, jax.Array]:
-        """Compute action logits and state value.
-
-        Args:
-            obs: Observation array.
-
-        Returns:
-            ``(logits, value)`` tuple.
-        """
-        x = obs.astype(jnp.float32)
-        for dim in self.hidden_dims:
-            x = nn.Dense(dim)(x)
-            x = nn.LayerNorm()(x)
-            x = nn.tanh(x)
-        logits = nn.Dense(self.num_actions)(x)
-        value = nn.Dense(1)(x).squeeze(-1)
-        return logits, value
-
-
-# ---------------------------------------------------------------------------
-# Observation normalization
-# ---------------------------------------------------------------------------
-
-
-@struct.dataclass
-class RunningStats:
-    """Welford online mean/variance tracker."""
-
-    mean: jax.Array
-    var: jax.Array
-    count: jax.Array
-
-
-def init_running_stats(obs_dim: int) -> RunningStats:
-    """Create zero-initialized running statistics."""
-    return RunningStats(
-        mean=jnp.zeros(obs_dim, dtype=jnp.float32),
-        var=jnp.ones(obs_dim, dtype=jnp.float32),
-        count=jnp.array(0, dtype=jnp.int32),
-    )
-
-
-def update_running_stats(
-    stats: RunningStats,
-    batch: jax.Array,
-) -> RunningStats:
-    """Welford parallel batch update."""
-    n = batch.shape[0]
-    batch_mean = batch.mean(axis=0)
-    batch_var = batch.var(axis=0)
-    total = stats.count + n
-    delta = batch_mean - stats.mean
-    new_mean = stats.mean + delta * (n / total)
-    new_var = (
-        stats.var * stats.count + batch_var * n + delta**2 * stats.count * n / total
-    ) / total
-    return RunningStats(mean=new_mean, var=new_var, count=total)
-
-
-def normalize_obs(stats: RunningStats, obs: jax.Array) -> jax.Array:
-    """Normalize and clip observations."""
-    return jnp.clip(
-        (obs - stats.mean) / jnp.sqrt(stats.var + 1e-8),
-        -10.0,
-        10.0,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Rollout storage
-# ---------------------------------------------------------------------------
-
-
-class Transition(NamedTuple):
-    """One step of experience."""
-
-    obs: jax.Array
-    action: jax.Array
-    log_prob: jax.Array
-    value: jax.Array
-    reward: jax.Array
-    done: jax.Array
-
-
-# ---------------------------------------------------------------------------
-# GAE
-# ---------------------------------------------------------------------------
-
-
-def compute_gae(
-    rewards: jax.Array,
-    values: jax.Array,
-    dones: jax.Array,
-    last_value: jax.Array,
-    gamma: float,
-    gae_lambda: float,
-) -> tuple[jax.Array, jax.Array]:
-    """Compute GAE advantages and value targets."""
-    not_done = 1.0 - dones.astype(jnp.float32)
-    next_values = jnp.concatenate(
-        [values[1:], last_value[None]],
-        axis=0,
-    )
-
-    def _step(
-        gae: jax.Array,
-        xs: tuple[jax.Array, jax.Array, jax.Array, jax.Array],
-    ) -> tuple[jax.Array, jax.Array]:
-        r, v, nd, nv = xs
-        delta = r + gamma * nv * nd - v
-        gae = delta + gamma * gae_lambda * nd * gae
-        return gae, gae
-
-    _, advantages = jax.lax.scan(
-        _step,
-        jnp.zeros_like(last_value),
-        (
-            rewards[::-1],
-            values[::-1],
-            not_done[::-1],
-            next_values[::-1],
-        ),
-    )
-    advantages = advantages[::-1]
-    return advantages, advantages + values
 
 
 # ---------------------------------------------------------------------------
@@ -277,33 +111,32 @@ def compute_gae(
 # ---------------------------------------------------------------------------
 
 
-def make_train_fns(
+def make_collect_fn(
     env: FactoriaXEnv,
     env_params: EnvParams,
     network: ActorCritic,
-    optimizer: optax.GradientTransformation,
     config: Config,
     obs_fn: Callable[[EnvState, EnvParams], jax.Array],
     reset_fn: Callable[[jax.Array, EnvParams], EnvState],
     reward_fn: Callable[[EnvState, EnvState, EnvParams], jax.Array],
-) -> tuple[Any, Any]:
-    """Build JIT-compiled collect and update functions.
+) -> Any:
+    """Build a JIT-compiled collect function for rollout collection.
 
     Args:
         env: Environment instance.
         env_params: Environment parameters.
         network: Actor-critic module.
-        optimizer: Optax optimizer.
         config: Training config.
         obs_fn: Observation function.
         reset_fn: Reset function for vectorized envs.
         reward_fn: Reward function (should include constraint penalty).
 
     Returns:
-        ``(collect_fn, update_fn)`` closures.
+        ``collect_fn`` closure.
     """
-    num_envs = config.num_envs
-    rollout_steps = config.rollout_steps
+    ppo = config.ppo
+    num_envs = ppo.num_envs
+    rollout_steps = ppo.rollout_steps
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_obs_fn = jax.vmap(obs_fn, in_axes=(0, None))
@@ -342,9 +175,7 @@ def make_train_fns(
                 step_rng,
                 4,
             )
-            norm = (
-                normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
-            )
+            norm = normalize_obs(obs_stats, cur_obs) if ppo.normalize_obs else cur_obs
             logits, values = network.apply(params, norm)
             actions = jax.random.categorical(key_act, logits)
             log_probs = jax.nn.log_softmax(logits)[jnp.arange(num_envs), actions]
@@ -389,131 +220,12 @@ def make_train_fns(
             length=rollout_steps,
         )
         norm_last = (
-            normalize_obs(obs_stats, next_obs) if config.normalize_obs else next_obs
+            normalize_obs(obs_stats, next_obs) if ppo.normalize_obs else next_obs
         )
         _, last_values = network.apply(params, norm_last)
         return trajectories, next_states, next_obs, last_values, rng
 
-    @jax.jit
-    def update(
-        params: Any,
-        opt_state: optax.OptState,
-        obs_stats: RunningStats,
-        flat_obs: jax.Array,
-        flat_actions: jax.Array,
-        flat_log_probs: jax.Array,
-        flat_advantages: jax.Array,
-        flat_returns: jax.Array,
-        rng: jax.Array,
-    ) -> tuple[Any, optax.OptState, dict[str, jax.Array], jax.Array]:
-        """Run PPO epochs on a flattened trajectory batch."""
-        batch_size = flat_obs.shape[0]
-        mb_size = batch_size // config.num_minibatches
-
-        def _loss(
-            p: Any,
-            obs: jax.Array,
-            actions: jax.Array,
-            old_lp: jax.Array,
-            adv: jax.Array,
-            rets: jax.Array,
-        ) -> tuple[jax.Array, dict[str, jax.Array]]:
-            norm = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
-            logits, values = network.apply(p, norm)
-            log_probs_all = jax.nn.log_softmax(logits)
-            lp = log_probs_all[jnp.arange(obs.shape[0]), actions]
-            probs = jax.nn.softmax(logits)
-            entropy = -(probs * log_probs_all).sum(axis=-1).mean()
-            adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-            ratio = jnp.exp(lp - old_lp)
-            pg_loss = -jnp.minimum(
-                ratio * adv,
-                jnp.clip(
-                    ratio,
-                    1.0 - config.clip_eps,
-                    1.0 + config.clip_eps,
-                )
-                * adv,
-            ).mean()
-            value_loss = 0.5 * ((values - rets) ** 2).mean()
-            total = (
-                pg_loss + config.value_coef * value_loss - config.entropy_coef * entropy
-            )
-            metrics = {
-                "loss/total": total,
-                "loss/policy": pg_loss,
-                "loss/value": value_loss,
-                "loss/entropy": entropy,
-                "misc/approx_kl": ((ratio - 1.0) - jnp.log(ratio)).mean(),
-                "misc/clip_frac": (
-                    (jnp.abs(ratio - 1.0) > config.clip_eps).astype(
-                        jnp.float32,
-                    )
-                ).mean(),
-            }
-            return total, metrics
-
-        def _minibatch_step(
-            carry: tuple[Any, optax.OptState],
-            mb: tuple[
-                jax.Array,
-                jax.Array,
-                jax.Array,
-                jax.Array,
-                jax.Array,
-            ],
-        ) -> tuple[
-            tuple[Any, optax.OptState],
-            dict[str, jax.Array],
-        ]:
-            p, os = carry
-            (loss, m), grads = jax.value_and_grad(_loss, has_aux=True)(
-                p,
-                *mb,
-            )
-            updates, new_os = optimizer.update(grads, os, p)
-            return (optax.apply_updates(p, updates), new_os), m
-
-        def _epoch(
-            carry: tuple[Any, optax.OptState, jax.Array],
-            _: None,
-        ) -> tuple[
-            tuple[Any, optax.OptState, jax.Array],
-            dict[str, jax.Array],
-        ]:
-            p, os, epoch_rng = carry
-            epoch_rng, key_perm = jax.random.split(epoch_rng)
-            perm = jax.random.permutation(key_perm, batch_size)
-
-            def _reshape(x: jax.Array) -> jax.Array:
-                return x[perm].reshape(
-                    (config.num_minibatches, mb_size) + x.shape[1:],
-                )
-
-            mbs = (
-                _reshape(flat_obs),
-                _reshape(flat_actions),
-                _reshape(flat_log_probs),
-                _reshape(flat_advantages),
-                _reshape(flat_returns),
-            )
-            (p, os), metrics = jax.lax.scan(
-                _minibatch_step,
-                (p, os),
-                mbs,
-            )
-            return (p, os, epoch_rng), metrics
-
-        (params, opt_state, rng), metrics = jax.lax.scan(
-            _epoch,
-            (params, opt_state, rng),
-            None,
-            length=config.update_epochs,
-        )
-        metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
-        return params, opt_state, metrics, rng
-
-    return collect, update
+    return collect
 
 
 # ---------------------------------------------------------------------------
@@ -539,22 +251,24 @@ def train_on_level(
         params: Network params to warm-start from, or None for fresh init.
         opt_state: Optimizer state to resume, or None for fresh init.
         obs_stats: Observation stats to resume, or None for fresh init.
-        rng: PRNG key, or None to create from config.seed.
+        rng: PRNG key, or None to create from config.ppo.seed.
         wandb_run: Active W&B run for logging, or None.
         level_tag: Prefix for log keys (e.g. "L1/" for level 1).
 
     Returns:
         ``(params, opt_state, obs_stats, rng)`` after training.
     """
+    ppo = config.ppo
+
     if rng is None:
-        rng = jax.random.PRNGKey(config.seed)
+        rng = jax.random.PRNGKey(ppo.seed)
 
     env = FactoriaXEnv()
     env_params = bench_level.env_params
 
     level_state = build_state(bench_level.level, env_params)
 
-    _obs_radius = config.obs_radius
+    _obs_radius = ppo.obs_radius
 
     def _obs_fn(state: EnvState, params: EnvParams) -> jax.Array:
         return local_array(
@@ -584,12 +298,12 @@ def train_on_level(
         return r - _lam * jnp.sum(cost)
 
     network = ActorCritic(
-        hidden_dims=config.hidden_dims,
+        hidden_dims=ppo.hidden_dims,
         num_actions=_NUM_ACTIONS,
     )
     optimizer = optax.chain(
-        optax.clip_by_global_norm(config.max_grad_norm),
-        optax.adam(config.learning_rate),
+        optax.clip_by_global_norm(ppo.max_grad_norm),
+        optax.adam(ppo.learning_rate),
     )
 
     if params is None:
@@ -606,27 +320,27 @@ def train_on_level(
     ) -> EnvState:
         def _broadcast(x: jax.Array) -> jax.Array:
             a = jnp.asarray(x)
-            return jnp.broadcast_to(a[None], (config.num_envs,) + a.shape)
+            return jnp.broadcast_to(a[None], (ppo.num_envs,) + a.shape)
 
         return jax.tree_util.tree_map(_broadcast, level_state)
 
-    collect_fn, update_fn = make_train_fns(
+    collect_fn = make_collect_fn(
         env,
         env_params,
         network,
-        optimizer,
         config,
         _obs_fn,
         _reset_fn,
         _reward_fn,
     )
+    update_fn = make_update_fn(network, optimizer, ppo)
 
-    steps_per_iter = config.num_envs * config.rollout_steps
-    total_iters = max(1, config.total_timesteps // steps_per_iter)
+    steps_per_iter = ppo.num_envs * ppo.rollout_steps
+    total_iters = max(1, ppo.total_steps // steps_per_iter)
     current_step = 0
 
     rng, key_envs = jax.random.split(rng)
-    keys_envs = jax.random.split(key_envs, config.num_envs)
+    keys_envs = jax.random.split(key_envs, ppo.num_envs)
     env_states = _reset_fn(keys_envs, env_params)
     obs = jax.vmap(_obs_fn, in_axes=(0, None))(env_states, env_params)
 
@@ -638,7 +352,7 @@ def train_on_level(
     )
 
     running_returns: deque[float] = deque(maxlen=200)
-    running_ep_return = np.zeros(config.num_envs, dtype=np.float32)
+    running_ep_return = np.zeros(ppo.num_envs, dtype=np.float32)
     t_start = time.time()
 
     for it in range(total_iters):
@@ -660,8 +374,8 @@ def train_on_level(
             trajectories.value,
             trajectories.done,
             last_values,
-            config.gamma,
-            config.gae_lambda,
+            ppo.gamma,
+            ppo.gae_lambda,
         )
 
         params, opt_state, metrics, _ = update_fn(
@@ -687,7 +401,7 @@ def train_on_level(
                 running_returns.append(float(running_ep_return[n]))
                 running_ep_return[n] = 0.0
 
-        if (it + 1) % config.log_interval == 0 or it == total_iters - 1:
+        if (it + 1) % ppo.log_interval == 0 or it == total_iters - 1:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
             mean_ret = float(np.mean(running_returns)) if running_returns else 0.0
@@ -737,9 +451,10 @@ def evaluate(
         config: Training config (for obs settings).
         wandb_run: W&B run for logging, or None.
     """
+    ppo = config.ppo
     benchmark = BalancedGatheringBenchmark()
-    _obs_radius = config.obs_radius
-    _rng = jax.random.PRNGKey(config.seed + 999)
+    _obs_radius = ppo.obs_radius
+    _rng = jax.random.PRNGKey(ppo.seed + 999)
 
     def _obs_fn(
         state: EnvState,
@@ -750,7 +465,7 @@ def evaluate(
 
     def _policy(obs: jax.Array) -> jax.Array:
         nonlocal _rng
-        norm = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
+        norm = normalize_obs(obs_stats, obs) if ppo.normalize_obs else obs
         logits, _ = network.apply(params, norm)
         _rng, key = jax.random.split(_rng)
         return jax.random.categorical(key, logits)
@@ -760,7 +475,7 @@ def evaluate(
         threshold=config.balance_threshold,
     )
 
-    runner = BenchmarkRunner(seed=config.seed)
+    runner = BenchmarkRunner(seed=ppo.seed)
     result = runner.run(
         benchmark,
         policies=[_policy],
@@ -768,7 +483,7 @@ def evaluate(
         constraint_fn=constraint_fn,
     )
 
-    out_dir = Path(config.save_path) if config.save_path else Path(".")
+    out_dir = Path(ppo.save_path) if ppo.save_path else Path(".")
 
     logger.info("=== Evaluation Results ===")
     logger.info("Aggregate score: %.3f", result.aggregate_score)
@@ -808,7 +523,7 @@ def evaluate(
     levels = benchmark.levels()
     for bl in levels:
         logger.info("  Rendering %s...", bl.name)
-        frames = render_level_video(bl, _policy, seed=config.seed, obs_fn=_obs_fn)
+        frames = render_level_video(bl, _policy, seed=ppo.seed, obs_fn=_obs_fn)
         mp4_path = out_dir / f"eval_{bl.name}.mp4"
         save_mp4(frames, mp4_path)
         logger.info("  Saved %s (%d frames)", mp4_path, len(frames))
@@ -836,14 +551,15 @@ def train(config: Config) -> None:
     Args:
         config: Training configuration.
     """
+    ppo = config.ppo
     wandb_run = None
-    if config.use_wandb:
+    if ppo.use_wandb:
         try:
             import wandb
 
             wandb_run = wandb.init(
-                project=config.wandb_project,
-                name=config.wandb_run_name,
+                project=ppo.wandb_project,
+                name=ppo.wandb_run_name,
                 config=dataclasses.asdict(config),
                 tags=[
                     f"mode_{config.mode}",
@@ -856,10 +572,10 @@ def train(config: Config) -> None:
 
     benchmark = BalancedGatheringBenchmark()
     levels = benchmark.levels()
-    rng = jax.random.PRNGKey(config.seed)
+    rng = jax.random.PRNGKey(ppo.seed)
 
     network = ActorCritic(
-        hidden_dims=config.hidden_dims,
+        hidden_dims=ppo.hidden_dims,
         num_actions=_NUM_ACTIONS,
     )
 
@@ -870,7 +586,7 @@ def train(config: Config) -> None:
         for i, bl in enumerate(levels):
             tag = f"{bl.name}/"
             logger.info(
-                "=== Sequential: Level %d/%d — %s ===",
+                "=== Sequential: Level %d/%d -- %s ===",
                 i + 1,
                 len(levels),
                 bl.name,
@@ -891,7 +607,7 @@ def train(config: Config) -> None:
         for i, bl in enumerate(levels):
             tag = f"{bl.name}/"
             logger.info(
-                "=== Independent: Level %d/%d — %s ===",
+                "=== Independent: Level %d/%d -- %s ===",
                 i + 1,
                 len(levels),
                 bl.name,
@@ -926,8 +642,8 @@ def train(config: Config) -> None:
     logger.info("Training complete. Running evaluation...")
     evaluate(params, network, obs_stats, config, wandb_run)
 
-    if config.save_path is not None:
-        ckpt = Path(config.save_path) / "final.pkl"
+    if ppo.save_path is not None:
+        ckpt = Path(ppo.save_path) / "final.pkl"
         ckpt.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "params": jax.device_get(
@@ -956,46 +672,27 @@ def main() -> None:
         description="Balanced gathering PPO training",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--num-envs", type=int, default=64)
-    p.add_argument("--rollout-steps", type=int, default=128)
-    p.add_argument("--total-steps", type=int, default=5_000_000)
-    p.add_argument("--lr", type=float, default=2.5e-4, dest="learning_rate")
-    p.add_argument("--gamma", type=float, default=0.99)
-    p.add_argument("--entropy-coef", type=float, default=0.01)
+    add_ppo_args(p)
     p.add_argument("--lambda-cost", type=float, default=0.5)
     p.add_argument("--balance-threshold", type=float, default=3.0)
-    p.add_argument("--obs-radius", type=int, default=7)
     p.add_argument(
         "--mode",
         type=str,
         default="sequential",
         choices=["independent", "sequential", "mixed"],
     )
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--save-path", type=str, default=None)
-    p.add_argument("--log-interval", type=int, default=10)
-    p.add_argument("--use-wandb", action="store_true")
-    p.add_argument("--wandb-project", type=str, default="factoriax-balanced")
-    p.add_argument("--wandb-run-name", type=str, default=None)
 
     args = p.parse_args()
+    ppo = ppo_config_from_args(
+        args,
+        wandb_project="factoriax-balanced",
+        total_steps=5_000_000,
+    )
     config = Config(
-        num_envs=args.num_envs,
-        rollout_steps=args.rollout_steps,
-        total_timesteps=args.total_steps,
-        learning_rate=args.learning_rate,
-        gamma=args.gamma,
-        entropy_coef=args.entropy_coef,
+        ppo=ppo,
         lambda_cost=args.lambda_cost,
         balance_threshold=args.balance_threshold,
-        obs_radius=args.obs_radius,
         mode=args.mode,
-        seed=args.seed,
-        save_path=args.save_path,
-        log_interval=args.log_interval,
-        use_wandb=args.use_wandb,
-        wandb_project=args.wandb_project,
-        wandb_run_name=args.wandb_run_name,
     )
     train(config)
 

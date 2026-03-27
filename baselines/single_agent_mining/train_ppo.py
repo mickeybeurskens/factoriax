@@ -34,19 +34,29 @@ import time
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import matplotlib
 import numpy as np
 import optax
-from flax import struct
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from baselines.ppo import (
+    ActorCritic,
+    PPOConfig,
+    RunningStats,
+    Transition,
+    compute_gae,
+    init_running_stats,
+    make_update_fn,
+    normalize_obs,
+    update_running_stats,
+)
+from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
 from benchmarks.core import BenchmarkLevel
 from benchmarks.runner import BenchmarkRunner
 from benchmarks.single_agent_mining.analysis import (
@@ -81,242 +91,20 @@ _NUM_ACTIONS = 6
 class Config:
     """Hyperparameters for PPO curriculum training on the mining benchmark.
 
+    Embeds a ``PPOConfig`` for shared PPO hyperparameters and adds
+    domain-specific fields for the mining curriculum.
+
     Attributes:
-        hidden_dims: Sizes of shared MLP hidden layers.
-        num_envs: Parallel environments per level.
-        rollout_steps: Steps collected per environment per update iteration.
-        total_steps: Total environment steps to train for. In sequential mode
-            this is divided evenly across the five levels. In mixed mode this
-            is the total across all levels combined (effective per-level steps
-            equals total_steps / 5).
-        learning_rate: Adam learning rate.
-        gamma: Discount factor.
-        gae_lambda: GAE lambda smoothing parameter.
-        clip_eps: PPO surrogate clipping epsilon.
-        value_coef: Weight of the value loss term.
-        entropy_coef: Weight of the entropy bonus.
-        update_epochs: PPO update epochs per data collection batch.
-        num_minibatches: Minibatches per epoch.
-        max_grad_norm: Global gradient clipping norm.
-        normalize_obs: Whether to apply online observation normalization.
-        obs_radius: Half-width of the local observation window in tiles.
-            All five levels share this fixed observation dimension.
+        ppo: Shared PPO hyperparameters (network, optimizer, logging, etc.).
         sampling_mode: ``"sequential"`` trains all steps on one level before
             progressing; ``"mixed"`` collects from all levels each iteration.
-        seed: Random seed.
-        save_path: Directory for the final checkpoint (None = disabled).
-        log_interval: Iterations between console and W&B log lines.
-        use_wandb: Whether to log to Weights and Biases.
-        wandb_project: W&B project name.
-        wandb_run_name: W&B run name (None = auto-generated).
+        eval_seeds: Number of independent evaluation seeds for benchmark
+            scoring.
     """
 
-    hidden_dims: tuple[int, ...] = (256, 256)
-    num_envs: int = 64
-    rollout_steps: int = 128
-    total_steps: int = 10_000_000
-    learning_rate: float = 2.5e-4
-    gamma: float = 0.99
-    gae_lambda: float = 0.95
-    clip_eps: float = 0.2
-    value_coef: float = 0.5
-    entropy_coef: float = 0.01
-    update_epochs: int = 4
-    num_minibatches: int = 8
-    max_grad_norm: float = 0.5
-    normalize_obs: bool = True
-    obs_radius: int = 7
+    ppo: PPOConfig = dataclasses.field(default_factory=PPOConfig)
     sampling_mode: str = "mixed"
-    seed: int = 0
-    save_path: str | None = None
     eval_seeds: int = 10
-    log_interval: int = 10
-    use_wandb: bool = False
-    wandb_project: str = "factoriax-mining"
-    wandb_run_name: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Network
-# ---------------------------------------------------------------------------
-
-
-class ActorCritic(nn.Module):
-    """Shared-trunk MLP with separate policy and value heads.
-
-    A ``LayerNorm -> tanh`` block after each hidden layer stabilizes
-    training on the flat local observation without requiring warm-up.
-
-    Attributes:
-        hidden_dims: Sizes of shared hidden layers.
-        num_actions: Number of discrete actions.
-    """
-
-    hidden_dims: tuple[int, ...]
-    num_actions: int
-
-    @nn.compact
-    def __call__(self, obs: jax.Array) -> tuple[jax.Array, jax.Array]:
-        """Compute action logits and scalar state value.
-
-        Args:
-            obs: Observation array of shape ``(..., obs_dim)``.
-
-        Returns:
-            Tuple ``(logits, value)`` with shapes ``(..., num_actions)``
-            and ``(...,)``.
-        """
-        x = obs.astype(jnp.float32)
-        for dim in self.hidden_dims:
-            x = nn.Dense(dim)(x)
-            x = nn.LayerNorm()(x)
-            x = nn.tanh(x)
-        logits = nn.Dense(self.num_actions)(x)
-        value = nn.Dense(1)(x).squeeze(-1)
-        return logits, value
-
-
-# ---------------------------------------------------------------------------
-# Rollout storage
-# ---------------------------------------------------------------------------
-
-
-class Transition(NamedTuple):
-    """One ``(s, a, log_π, V, r, done)`` tuple per environment step.
-
-    Attributes:
-        obs: Raw observation of shape ``(obs_dim,)``.
-        action: Chosen action index.
-        log_prob: Log-probability under the behavior policy.
-        value: Value estimate.
-        reward: Received reward.
-        done: Whether the episode ended at this step.
-    """
-
-    obs: jax.Array
-    action: jax.Array
-    log_prob: jax.Array
-    value: jax.Array
-    reward: jax.Array
-    done: jax.Array
-
-
-# ---------------------------------------------------------------------------
-# Observation normalizer
-# ---------------------------------------------------------------------------
-
-
-@struct.dataclass
-class RunningStats:
-    """Welford online mean/variance tracker for observation normalization.
-
-    Attributes:
-        mean: Running mean of shape ``(obs_dim,)``.
-        var: Running variance of shape ``(obs_dim,)``.
-        count: Total number of samples seen.
-    """
-
-    mean: jax.Array
-    var: jax.Array
-    count: jax.Array
-
-
-def init_running_stats(obs_dim: int) -> RunningStats:
-    """Create zero-initialized running statistics.
-
-    Args:
-        obs_dim: Dimensionality of the observation vector.
-
-    Returns:
-        RunningStats with zero mean, unit variance, and zero count.
-    """
-    return RunningStats(
-        mean=jnp.zeros(obs_dim, dtype=jnp.float32),
-        var=jnp.ones(obs_dim, dtype=jnp.float32),
-        count=jnp.array(0, dtype=jnp.int32),
-    )
-
-
-def update_running_stats(stats: RunningStats, batch: jax.Array) -> RunningStats:
-    """Welford parallel batch update of running mean and variance.
-
-    Args:
-        stats: Current running statistics.
-        batch: New observations of shape ``(N, obs_dim)``.
-
-    Returns:
-        Updated RunningStats.
-    """
-    n = batch.shape[0]
-    batch_mean = batch.mean(axis=0)
-    batch_var = batch.var(axis=0)
-    total = stats.count + n
-    delta = batch_mean - stats.mean
-    new_mean = stats.mean + delta * (n / total)
-    new_var = (
-        stats.var * stats.count + batch_var * n + delta**2 * stats.count * n / total
-    ) / total
-    return RunningStats(mean=new_mean, var=new_var, count=total)
-
-
-def normalize_obs(stats: RunningStats, obs: jax.Array) -> jax.Array:
-    """Normalize observations with running statistics, clipped to [-10, 10].
-
-    Args:
-        stats: Running observation statistics.
-        obs: Raw observation array of any batch shape.
-
-    Returns:
-        Normalized observation array of the same shape.
-    """
-    return jnp.clip((obs - stats.mean) / jnp.sqrt(stats.var + 1e-8), -10.0, 10.0)
-
-
-# ---------------------------------------------------------------------------
-# GAE
-# ---------------------------------------------------------------------------
-
-
-def compute_gae(
-    rewards: jax.Array,
-    values: jax.Array,
-    dones: jax.Array,
-    last_value: jax.Array,
-    gamma: float,
-    gae_lambda: float,
-) -> tuple[jax.Array, jax.Array]:
-    """Compute generalized advantage estimates and value targets.
-
-    Args:
-        rewards: Shape ``(T, N)``.
-        values: Shape ``(T, N)``.
-        dones: Terminal flags, shape ``(T, N)``.
-        last_value: Bootstrap value after the rollout, shape ``(N,)``.
-        gamma: Discount factor.
-        gae_lambda: GAE smoothing parameter.
-
-    Returns:
-        Tuple ``(advantages, returns)`` each with shape ``(T, N)``.
-    """
-    not_done = 1.0 - dones.astype(jnp.float32)
-    next_values = jnp.concatenate([values[1:], last_value[None]], axis=0)
-
-    def _step(
-        gae: jax.Array,
-        xs: tuple[jax.Array, jax.Array, jax.Array, jax.Array],
-    ) -> tuple[jax.Array, jax.Array]:
-        r, v, nd, nv = xs
-        delta = r + gamma * nv * nd - v
-        gae = delta + gamma * gae_lambda * nd * gae
-        return gae, gae
-
-    _, advantages = jax.lax.scan(
-        _step,
-        jnp.zeros_like(last_value),
-        (rewards[::-1], values[::-1], not_done[::-1], next_values[::-1]),
-    )
-    advantages = advantages[::-1]
-    return advantages, advantages + values
 
 
 # ---------------------------------------------------------------------------
@@ -353,8 +141,8 @@ def make_collect_fn(
     """
     env_params = bench_level.env_params
     level_state = build_state(bench_level.level, env_params)
-    num_envs = config.num_envs
-    obs_radius = config.obs_radius
+    num_envs = config.ppo.num_envs
+    obs_radius = config.ppo.obs_radius
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_reward = jax.vmap(mining_reward, in_axes=(0, 0, None))
@@ -409,7 +197,9 @@ def make_collect_fn(
             step_rng, key_act, key_step = jax.random.split(step_rng, 3)
 
             norm = (
-                normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
+                normalize_obs(obs_stats, cur_obs)
+                if config.ppo.normalize_obs
+                else cur_obs
             )
             logits, values = network.apply(params, norm)
 
@@ -443,151 +233,15 @@ def make_collect_fn(
             rollout_step,
             (env_states, obs, rng),
             None,
-            length=config.rollout_steps,
+            length=config.ppo.rollout_steps,
         )
         norm_last = (
-            normalize_obs(obs_stats, next_obs) if config.normalize_obs else next_obs
+            normalize_obs(obs_stats, next_obs) if config.ppo.normalize_obs else next_obs
         )
         _, last_values = network.apply(params, norm_last)
         return trajectories, next_states, next_obs, last_values, rng
 
     return collect, init
-
-
-# ---------------------------------------------------------------------------
-# PPO update (shared across levels and modes)
-# ---------------------------------------------------------------------------
-
-
-def make_update_fn(
-    network: ActorCritic,
-    optimizer: optax.GradientTransformation,
-    config: Config,
-) -> Callable:
-    """Build a JIT-compiled PPO update function.
-
-    The same function is used for both sampling modes. The batch size is
-    fixed by the first call and inferred from ``flat_obs.shape[0]`` at
-    JIT trace time, so sequential and mixed modes each compile their own
-    version when they first call it.
-
-    Args:
-        network: Actor-critic Flax module.
-        optimizer: Optax gradient transformation.
-        config: Training configuration.
-
-    Returns:
-        ``update_fn(params, opt_state, obs_stats, flat_obs, flat_actions,
-        flat_log_probs, flat_advantages, flat_returns, rng)`` returning
-        ``(new_params, new_opt_state, metrics_dict, new_rng)``.
-    """
-
-    @jax.jit
-    def update(
-        params: Any,
-        opt_state: optax.OptState,
-        obs_stats: RunningStats,
-        flat_obs: jax.Array,
-        flat_actions: jax.Array,
-        flat_log_probs: jax.Array,
-        flat_advantages: jax.Array,
-        flat_returns: jax.Array,
-        rng: jax.Array,
-    ) -> tuple[Any, optax.OptState, dict[str, jax.Array], jax.Array]:
-        """Run PPO epochs on a flattened trajectory batch.
-
-        Args:
-            params: Current network parameters.
-            opt_state: Current optimizer state.
-            obs_stats: Running observation statistics.
-            flat_obs: Shape ``(B, obs_dim)``.
-            flat_actions: Shape ``(B,)``.
-            flat_log_probs: Behavior log-probabilities, shape ``(B,)``.
-            flat_advantages: GAE advantages, shape ``(B,)``.
-            flat_returns: Value targets, shape ``(B,)``.
-            rng: PRNG key.
-
-        Returns:
-            Tuple ``(new_params, new_opt_state, metrics_dict, new_rng)``.
-        """
-        batch_size = flat_obs.shape[0]
-        mb_size = batch_size // config.num_minibatches
-
-        def _loss(
-            p: Any,
-            obs: jax.Array,
-            actions: jax.Array,
-            old_lp: jax.Array,
-            adv: jax.Array,
-            rets: jax.Array,
-        ) -> tuple[jax.Array, dict[str, jax.Array]]:
-            norm = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
-            logits, values = network.apply(p, norm)
-            log_probs_all = jax.nn.log_softmax(logits)
-            lp = log_probs_all[jnp.arange(obs.shape[0]), actions]
-            probs = jax.nn.softmax(logits)
-            entropy = -(probs * log_probs_all).sum(axis=-1).mean()
-            adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-            ratio = jnp.exp(lp - old_lp)
-            pg_loss = -jnp.minimum(
-                ratio * adv,
-                jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv,
-            ).mean()
-            value_loss = 0.5 * ((values - rets) ** 2).mean()
-            total = (
-                pg_loss + config.value_coef * value_loss - config.entropy_coef * entropy
-            )
-            return total, {
-                "loss/total": total,
-                "loss/policy": pg_loss,
-                "loss/value": value_loss,
-                "loss/entropy": entropy,
-                "misc/approx_kl": ((ratio - 1.0) - jnp.log(ratio)).mean(),
-                "misc/clip_frac": (
-                    (jnp.abs(ratio - 1.0) > config.clip_eps).astype(jnp.float32)
-                ).mean(),
-            }
-
-        def _minibatch_step(
-            carry: tuple[Any, optax.OptState],
-            mb: tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array],
-        ) -> tuple[tuple[Any, optax.OptState], dict[str, jax.Array]]:
-            p, os = carry
-            (_, m), grads = jax.value_and_grad(_loss, has_aux=True)(p, *mb)
-            updates, new_os = optimizer.update(grads, os, p)
-            return (optax.apply_updates(p, updates), new_os), m
-
-        def _epoch(
-            carry: tuple[Any, optax.OptState, jax.Array],
-            _: None,
-        ) -> tuple[tuple[Any, optax.OptState, jax.Array], dict[str, jax.Array]]:
-            p, os, epoch_rng = carry
-            epoch_rng, key_perm = jax.random.split(epoch_rng)
-            perm = jax.random.permutation(key_perm, batch_size)
-
-            def _reshape(x: jax.Array) -> jax.Array:
-                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
-
-            mbs = (
-                _reshape(flat_obs),
-                _reshape(flat_actions),
-                _reshape(flat_log_probs),
-                _reshape(flat_advantages),
-                _reshape(flat_returns),
-            )
-            (p, os), metrics = jax.lax.scan(_minibatch_step, (p, os), mbs)
-            return (p, os, epoch_rng), metrics
-
-        (params, opt_state, rng), metrics = jax.lax.scan(
-            _epoch,
-            (params, opt_state, rng),
-            None,
-            length=config.update_epochs,
-        )
-        metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
-        return params, opt_state, metrics, rng
-
-    return update
 
 
 # ---------------------------------------------------------------------------
@@ -630,14 +284,14 @@ def _run_sequential(
     Returns:
         Tuple ``(params, obs_stats)`` after training all levels.
     """
-    steps_per_level = config.total_steps // len(levels)
-    steps_per_iter = config.num_envs * config.rollout_steps
+    steps_per_level = config.ppo.total_steps // len(levels)
+    steps_per_iter = config.ppo.num_envs * config.ppo.rollout_steps
     iters_per_level = max(1, steps_per_level // steps_per_iter)
     current_step = 0
 
     for level_idx, bl in enumerate(levels):
         logger.info(
-            "--- Level %d/%d: %s  (%d iters × %d steps) ---",
+            "--- Level %d/%d: %s  (%d iters x %d steps) ---",
             level_idx + 1,
             len(levels),
             bl.name,
@@ -649,8 +303,8 @@ def _run_sequential(
 
         t_start = time.time()
         completed_returns: deque[float] = deque(maxlen=1000)
-        running_ep_return = np.zeros(config.num_envs, dtype=np.float32)
-        running_ep_length = np.zeros(config.num_envs, dtype=np.int32)
+        running_ep_return = np.zeros(config.ppo.num_envs, dtype=np.float32)
+        running_ep_length = np.zeros(config.ppo.num_envs, dtype=np.int32)
 
         for it in range(iters_per_level):
             rng, key_collect, key_update = jax.random.split(rng, 3)
@@ -667,8 +321,8 @@ def _run_sequential(
                 trajectories.value,
                 trajectories.done,
                 last_values,
-                config.gamma,
-                config.gae_lambda,
+                config.ppo.gamma,
+                config.ppo.gae_lambda,
             )
 
             params, opt_state, metrics, _ = update_fn(
@@ -694,7 +348,7 @@ def _run_sequential(
                     running_ep_return[n] = 0.0
                     running_ep_length[n] = 0
 
-            if (it + 1) % config.log_interval == 0 or it == iters_per_level - 1:
+            if (it + 1) % config.ppo.log_interval == 0 or it == iters_per_level - 1:
                 elapsed = time.time() - t_start
                 sps = (it + 1) * steps_per_iter / elapsed
                 mean_ret = (
@@ -773,12 +427,12 @@ def _run_mixed(
         Tuple ``(params, obs_stats)`` after training.
     """
     num_levels = len(levels)
-    steps_per_iter_per_level = config.num_envs * config.rollout_steps
+    steps_per_iter_per_level = config.ppo.num_envs * config.ppo.rollout_steps
     steps_per_iter_total = steps_per_iter_per_level * num_levels
-    num_iters = max(1, config.total_steps // steps_per_iter_total)
+    num_iters = max(1, config.ppo.total_steps // steps_per_iter_total)
 
     logger.info(
-        "Mixed: %d levels × %d steps/iter = %d combined steps/iter  (%d iters total)",
+        "Mixed: %d levels x %d steps/iter = %d combined steps/iter  (%d iters total)",
         num_levels,
         steps_per_iter_per_level,
         steps_per_iter_total,
@@ -797,8 +451,8 @@ def _run_mixed(
 
     t_start = time.time()
     completed_returns: deque[float] = deque(maxlen=1000)
-    running_ep_return = np.zeros(config.num_envs * num_levels, dtype=np.float32)
-    running_ep_length = np.zeros(config.num_envs * num_levels, dtype=np.int32)
+    running_ep_return = np.zeros(config.ppo.num_envs * num_levels, dtype=np.float32)
+    running_ep_length = np.zeros(config.ppo.num_envs * num_levels, dtype=np.int32)
     current_step = 0
 
     for it in range(num_iters):
@@ -812,8 +466,18 @@ def _run_mixed(
 
         for l_idx, (collect_fn, bl) in enumerate(zip(collect_fns, levels)):
             rng, key_l = jax.random.split(rng)
-            traj, level_env_states[l_idx], level_obs[l_idx], last_vals, _ = collect_fn(
-                params, obs_stats, level_env_states[l_idx], level_obs[l_idx], key_l
+            (
+                traj,
+                level_env_states[l_idx],
+                level_obs[l_idx],
+                last_vals,
+                _,
+            ) = collect_fn(
+                params,
+                obs_stats,
+                level_env_states[l_idx],
+                level_obs[l_idx],
+                key_l,
             )
 
             adv, ret = compute_gae(
@@ -821,8 +485,8 @@ def _run_mixed(
                 traj.value,
                 traj.done,
                 last_vals,
-                config.gamma,
-                config.gae_lambda,
+                config.ppo.gamma,
+                config.ppo.gae_lambda,
             )
 
             all_obs.append(traj.obs.reshape(-1, obs_dim))
@@ -833,10 +497,12 @@ def _run_mixed(
 
             rewards_np = np.array(traj.reward)
             dones_np = np.array(traj.done)
-            offset = l_idx * config.num_envs
+            offset = l_idx * config.ppo.num_envs
             for t in range(rewards_np.shape[0]):
-                running_ep_return[offset : offset + config.num_envs] += rewards_np[t]
-                running_ep_length[offset : offset + config.num_envs] += 1
+                running_ep_return[offset : offset + config.ppo.num_envs] += rewards_np[
+                    t
+                ]
+                running_ep_length[offset : offset + config.ppo.num_envs] += 1
                 for n in np.where(dones_np[t])[0]:
                     completed_returns.append(float(running_ep_return[offset + n]))
                     running_ep_return[offset + n] = 0.0
@@ -858,7 +524,7 @@ def _run_mixed(
         )
         current_step += steps_per_iter_total
 
-        if (it + 1) % config.log_interval == 0 or it == num_iters - 1:
+        if (it + 1) % config.ppo.log_interval == 0 or it == num_iters - 1:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
             mean_ret = (
@@ -900,7 +566,7 @@ def _plot_benchmark_boxplots(
 ) -> plt.Figure:
     """Box plot of per-level and aggregate scores across multiple evaluation seeds.
 
-    Each box spans seeds min–max with median marked, making it easy to see
+    Each box spans seeds min-max with median marked, making it easy to see
     which levels are solved consistently versus which are volatile.
 
     Args:
@@ -936,7 +602,8 @@ def _plot_benchmark_boxplots(
     ax.set_ylabel("Weighted score")
     ax.set_title(
         f"Benchmark score distribution  ({len(results)} seeds)"
-        f"  —  aggregate median = {float(np.median(aggregate_scores)):.1f}"
+        f"  --  aggregate median ="
+        f" {float(np.median(aggregate_scores)):.1f}"
     )
     ax.tick_params(axis="x", rotation=15)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
@@ -959,20 +626,20 @@ def train(config: Config) -> None:
     Args:
         config: Training configuration.
     """
-    rng = jax.random.PRNGKey(config.seed)
+    rng = jax.random.PRNGKey(config.ppo.seed)
 
     wandb_run = None
-    if config.use_wandb:
+    if config.ppo.use_wandb:
         try:
             import wandb  # type: ignore[import-untyped]
 
             wandb_run = wandb.init(
-                project=config.wandb_project,
-                name=config.wandb_run_name,
+                project=config.ppo.wandb_project,
+                name=config.ppo.wandb_run_name,
                 config=dataclasses.asdict(config),
                 tags=[
                     f"mode_{config.sampling_mode}",
-                    f"obs_local_r{config.obs_radius}",
+                    f"obs_local_r{config.ppo.obs_radius}",
                 ],
             )
         except ImportError:
@@ -982,36 +649,41 @@ def train(config: Config) -> None:
     levels = benchmark.levels()
     env = FactoriaXEnv()
 
-    # Derive obs_dim from a sample build — consistent across all levels.
+    # Derive obs_dim from a sample build -- consistent across all levels.
     _sample_state = build_state(levels[0].level, levels[0].env_params)
     obs_dim = int(
-        local_array(_sample_state, levels[0].env_params, 0, config.obs_radius).shape[0]
+        local_array(
+            _sample_state,
+            levels[0].env_params,
+            0,
+            config.ppo.obs_radius,
+        ).shape[0]
     )
     logger.info(
         "obs_dim=%d (local obs, radius=%d)  num_actions=%d  mode=%s",
         obs_dim,
-        config.obs_radius,
+        config.ppo.obs_radius,
         _NUM_ACTIONS,
         config.sampling_mode,
     )
 
-    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=_NUM_ACTIONS)
+    network = ActorCritic(hidden_dims=config.ppo.hidden_dims, num_actions=_NUM_ACTIONS)
     optimizer = optax.chain(
-        optax.clip_by_global_norm(config.max_grad_norm),
-        optax.adam(config.learning_rate),
+        optax.clip_by_global_norm(config.ppo.max_grad_norm),
+        optax.adam(config.ppo.learning_rate),
     )
 
     rng, key_init = jax.random.split(rng)
     params = network.init(key_init, jnp.zeros(obs_dim))
     opt_state = optimizer.init(params)
     obs_stats = init_running_stats(obs_dim)
-    update_fn = make_update_fn(network, optimizer, config)
+    update_fn = make_update_fn(network, optimizer, config.ppo)
 
     logger.info(
         "Starting training: %d total steps  %d levels  %d envs/level",
-        config.total_steps,
+        config.ppo.total_steps,
         len(levels),
-        config.num_envs,
+        config.ppo.num_envs,
     )
 
     rng, key_train = jax.random.split(rng)
@@ -1034,8 +706,8 @@ def train(config: Config) -> None:
     else:
         params, obs_stats = _run_mixed(**train_kwargs)
 
-    if config.save_path is not None:
-        out_dir = Path(config.save_path)
+    if config.ppo.save_path is not None:
+        out_dir = Path(config.ppo.save_path)
         out_dir.mkdir(parents=True, exist_ok=True)
         ckpt_path = out_dir / "final.pkl"
         data = {
@@ -1054,7 +726,7 @@ def train(config: Config) -> None:
     # so the policy sees the same observation format it was trained on.
     jit_apply = jax.jit(network.apply)
     _obs_stats = obs_stats
-    _normalize = config.normalize_obs
+    _normalize = config.ppo.normalize_obs
 
     def trained_policy(obs: jax.Array) -> jax.Array:
         """Greedy policy: pick the highest-logit action.
@@ -1082,7 +754,7 @@ def train(config: Config) -> None:
         Returns:
             Local observation array.
         """
-        return local_array(state, env_params, player_idx, config.obs_radius)
+        return local_array(state, env_params, player_idx, config.ppo.obs_radius)
 
     # Run the benchmark eval_seeds times for statistical robustness. Each run
     # uses a different PRNG seed for step_env so stochastic episode transitions
@@ -1136,14 +808,15 @@ def train(config: Config) -> None:
     )
     print(
         f"Aggregate : {np.mean(aggregate_scores):.2f}"
-        f" ± {np.std(aggregate_scores):.2f}"
+        f" +/- {np.std(aggregate_scores):.2f}"
         f"  (median {np.median(aggregate_scores):.2f})"
     )
     print()
     for j, name in enumerate(level_names):
         s = level_scores[:, j]
         print(
-            f"  {name:<28}  mean={np.mean(s):6.1f} ± {np.std(s):5.1f}"
+            f"  {name:<28}  mean={np.mean(s):6.1f}"
+            f" +/- {np.std(s):5.1f}"
             f"  median={np.median(s):6.1f}"
             f"  [{np.min(s):.0f}, {np.max(s):.0f}]"
         )
@@ -1156,11 +829,16 @@ def train(config: Config) -> None:
     # Videos are saved alongside the checkpoint (or the current directory if no
     # save_path was set) and uploaded to W&B under a dedicated videos/ category.
     logger.info("Rendering final-policy videos for each level...")
-    out_dir = Path(config.save_path) if config.save_path is not None else Path(".")
+    out_dir = (
+        Path(config.ppo.save_path) if config.ppo.save_path is not None else Path(".")
+    )
     videos: dict[str, Path] = {}
     for bl in benchmark.levels():
         frames = render_level_video(
-            bl, trained_policy, seed=config.seed, obs_fn=eval_obs_fn
+            bl,
+            trained_policy,
+            seed=config.ppo.seed,
+            obs_fn=eval_obs_fn,
         )
         path = out_dir / f"{bl.name}.mp4"
         save_mp4(frames, path)
@@ -1184,7 +862,7 @@ def _parse_args() -> Config:
         Populated Config dataclass.
     """
     p = argparse.ArgumentParser(
-        description="PPO curriculum training on the single-agent mining benchmark",
+        description=("PPO curriculum training on the single-agent mining benchmark"),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument(
@@ -1192,61 +870,20 @@ def _parse_args() -> Config:
         choices=["mixed", "sequential"],
         default="mixed",
         help=(
-            "mixed: collect from all levels each iteration, single joint update. "
-            "sequential: train all steps on one level before progressing."
+            "mixed: collect from all levels each iteration,"
+            " single joint update. "
+            "sequential: train all steps on one level"
+            " before progressing."
         ),
     )
-    p.add_argument("--num-envs", type=int, default=64)
-    p.add_argument("--rollout-steps", type=int, default=128)
-    p.add_argument("--total-steps", type=int, default=10_000_000)
-    p.add_argument("--lr", type=float, default=2.5e-4, dest="learning_rate")
-    p.add_argument("--gamma", type=float, default=0.99)
-    p.add_argument("--gae-lambda", type=float, default=0.95)
-    p.add_argument("--clip-eps", type=float, default=0.2)
-    p.add_argument("--value-coef", type=float, default=0.5)
-    p.add_argument("--entropy-coef", type=float, default=0.01)
-    p.add_argument("--update-epochs", type=int, default=4)
-    p.add_argument("--num-minibatches", type=int, default=8)
-    p.add_argument("--max-grad-norm", type=float, default=0.5)
-    p.add_argument("--no-normalize-obs", action="store_false", dest="normalize_obs")
-    p.add_argument(
-        "--obs-radius",
-        type=int,
-        default=7,
-        help="Half-width of the local observation window (tiles).",
-    )
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--save-path", type=str, default=None)
     p.add_argument("--eval-seeds", type=int, default=10)
-    p.add_argument("--log-interval", type=int, default=10)
-    p.add_argument("--use-wandb", action="store_true")
-    p.add_argument("--wandb-project", type=str, default="factoriax-mining")
-    p.add_argument("--wandb-run-name", type=str, default=None)
+    add_ppo_args(p)
 
     args = p.parse_args()
     return Config(
+        ppo=ppo_config_from_args(args, wandb_project="factoriax-mining"),
         sampling_mode=args.sampling_mode,
-        num_envs=args.num_envs,
-        rollout_steps=args.rollout_steps,
-        total_steps=args.total_steps,
-        learning_rate=args.learning_rate,
-        gamma=args.gamma,
-        gae_lambda=args.gae_lambda,
-        clip_eps=args.clip_eps,
-        value_coef=args.value_coef,
-        entropy_coef=args.entropy_coef,
-        update_epochs=args.update_epochs,
-        num_minibatches=args.num_minibatches,
-        max_grad_norm=args.max_grad_norm,
-        normalize_obs=args.normalize_obs,
-        obs_radius=args.obs_radius,
-        seed=args.seed,
-        save_path=args.save_path,
         eval_seeds=args.eval_seeds,
-        log_interval=args.log_interval,
-        use_wandb=args.use_wandb,
-        wandb_project=args.wandb_project,
-        wandb_run_name=args.wandb_run_name,
     )
 
 
