@@ -178,29 +178,25 @@ class TestGameLogic:
         # Miner tile is not walkable
         assert not is_position_walkable(state, jnp.array([2, 0]))
 
-    def test_move_player_left(self, simple_state: EnvState) -> None:
-        """Player should move left on dirt."""
-        new_state = move_player(simple_state, Action.LEFT, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 1]))
-        assert new_state.player_directions[0] == Action.LEFT
-
-    def test_move_player_right(self, simple_state: EnvState) -> None:
-        """Player should move right on dirt."""
-        new_state = move_player(simple_state, Action.RIGHT, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array([2, 1]))
-        assert new_state.player_directions[0] == Action.RIGHT
-
-    def test_move_player_up(self, simple_state: EnvState) -> None:
-        """Player should move up on dirt."""
-        new_state = move_player(simple_state, Action.UP, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array([1, 0]))
-        assert new_state.player_directions[0] == Action.UP
-
-    def test_move_player_down(self, simple_state: EnvState) -> None:
-        """Player should move down on dirt."""
-        new_state = move_player(simple_state, Action.DOWN, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array([1, 2]))
-        assert new_state.player_directions[0] == Action.DOWN
+    @pytest.mark.parametrize(
+        "action, expected_pos",
+        [
+            (Action.LEFT, [0, 1]),
+            (Action.RIGHT, [2, 1]),
+            (Action.UP, [1, 0]),
+            (Action.DOWN, [1, 2]),
+        ],
+        ids=["left", "right", "up", "down"],
+    )
+    def test_move_player(
+        self, simple_state: EnvState, action: int, expected_pos: list[int]
+    ) -> None:
+        """Player should move in the given direction on dirt."""
+        new_state = move_player(simple_state, action, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array(expected_pos)
+        )
+        assert new_state.player_directions[0] == action
 
     def test_move_player_blocked_by_water(self, state_factory) -> None:
         """Player should not move into water."""

@@ -1,6 +1,7 @@
 """Tests for the machine placement system."""
 
 import jax.numpy as jnp
+import pytest
 
 from factoriax import Action, BlockType, ItemType
 from factoriax.constants import NUM_INVENTORY_SLOTS, MachineType
@@ -15,77 +16,28 @@ from factoriax.placement import (
 class TestDirectionOffsets:
     """Tests for direction-based tile lookup."""
 
-    def test_tile_in_front_facing_up(self, state_factory) -> None:
-        """Should return tile above player when facing up."""
+    @pytest.mark.parametrize(
+        "direction, expected_x, expected_y",
+        [
+            (Action.UP, 1, 0),
+            (Action.DOWN, 1, 2),
+            (Action.LEFT, 0, 1),
+            (Action.RIGHT, 2, 1),
+        ],
+        ids=["up", "down", "left", "right"],
+    )
+    def test_tile_in_front(
+        self, state_factory, direction, expected_x, expected_y
+    ) -> None:
+        """Should return the correct adjacent tile for the given direction."""
         state = state_factory(
-            world_map=jnp.array(
-                [
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                ],
-                dtype=jnp.int32,
-            ),
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
-            player_direction=Action.UP,
+            player_direction=direction,
         )
         x, y = get_tile_in_front(state, 0)
-        assert int(x) == 1
-        assert int(y) == 0
-
-    def test_tile_in_front_facing_down(self, state_factory) -> None:
-        """Should return tile below player when facing down."""
-        state = state_factory(
-            world_map=jnp.array(
-                [
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                ],
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 1),
-            player_direction=Action.DOWN,
-        )
-        x, y = get_tile_in_front(state, 0)
-        assert int(x) == 1
-        assert int(y) == 2
-
-    def test_tile_in_front_facing_left(self, state_factory) -> None:
-        """Should return tile left of player when facing left."""
-        state = state_factory(
-            world_map=jnp.array(
-                [
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                ],
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 1),
-            player_direction=Action.LEFT,
-        )
-        x, y = get_tile_in_front(state, 0)
-        assert int(x) == 0
-        assert int(y) == 1
-
-    def test_tile_in_front_facing_right(self, state_factory) -> None:
-        """Should return tile right of player when facing right."""
-        state = state_factory(
-            world_map=jnp.array(
-                [
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                ],
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 1),
-            player_direction=Action.RIGHT,
-        )
-        x, y = get_tile_in_front(state, 0)
-        assert int(x) == 2
-        assert int(y) == 1
+        assert int(x) == expected_x
+        assert int(y) == expected_y
 
 
 class TestPlacementValidation:
@@ -126,21 +78,19 @@ class TestPlacementValidation:
 class TestPlaceableItems:
     """Tests for placeable item checking."""
 
-    def test_miner_is_placeable(self) -> None:
-        """MINER item should be placeable."""
-        assert is_placeable_item(ItemType.MINER)
-
-    def test_coal_is_not_placeable(self) -> None:
-        """COAL item should not be placeable."""
-        assert not is_placeable_item(ItemType.COAL)
-
-    def test_iron_is_not_placeable(self) -> None:
-        """IRON item should not be placeable."""
-        assert not is_placeable_item(ItemType.IRON)
-
-    def test_empty_is_not_placeable(self) -> None:
-        """EMPTY item should not be placeable."""
-        assert not is_placeable_item(ItemType.EMPTY)
+    @pytest.mark.parametrize(
+        "item, expected",
+        [
+            (ItemType.MINER, True),
+            (ItemType.COAL, False),
+            (ItemType.IRON, False),
+            (ItemType.EMPTY, False),
+        ],
+        ids=["miner", "coal", "iron", "empty"],
+    )
+    def test_is_placeable(self, item, expected) -> None:
+        """Item placeability should match the expected value."""
+        assert is_placeable_item(item) == expected
 
 
 class TestMachinePlacement:

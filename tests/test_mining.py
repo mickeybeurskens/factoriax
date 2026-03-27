@@ -110,23 +110,27 @@ class TestMiningResources:
         assert new_state.inventory_counts[0, 0] == 0
         assert new_state.block_resources[0, 0] == 0
 
-    def test_mining_iron_and_copper(self, state_factory) -> None:
-        """Iron and copper blocks should work the same as coal."""
-        for block_type, item_type in [
+    @pytest.mark.parametrize(
+        "block_type, item_type",
+        [
             (BlockType.IRON, ItemType.IRON),
             (BlockType.COPPER, ItemType.COPPER),
-        ]:
-            state = state_factory(
-                world_map=jnp.array([[block_type]], dtype=jnp.int32),
-                block_resources=jnp.array([[5]], dtype=jnp.int16),
-            )
+        ],
+        ids=["iron", "copper"],
+    )
+    def test_mining_ore_type(self, state_factory, block_type, item_type) -> None:
+        """Mining should work correctly for the given ore type."""
+        state = state_factory(
+            world_map=jnp.array([[block_type]], dtype=jnp.int32),
+            block_resources=jnp.array([[5]], dtype=jnp.int16),
+        )
 
-            new_state = mine_block(state, 0)
+        new_state = mine_block(state, 0)
 
-            assert new_state.block_resources[0, 0] == 4
-            assert new_state.inventory_items[0, 0] == item_type
-            assert new_state.inventory_counts[0, 0] == 1
-            assert new_state.map[0, 0] == block_type
+        assert new_state.block_resources[0, 0] == 4
+        assert new_state.inventory_items[0, 0] == item_type
+        assert new_state.inventory_counts[0, 0] == 1
+        assert new_state.map[0, 0] == block_type
 
 
 class TestMiningEdgeCases:

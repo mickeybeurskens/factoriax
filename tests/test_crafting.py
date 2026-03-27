@@ -1,6 +1,7 @@
 """Tests for the crafting system."""
 
 import jax.numpy as jnp
+import pytest
 
 from factoriax import BlockType, ItemType
 from factoriax.constants import NUM_INVENTORY_SLOTS
@@ -257,34 +258,28 @@ class TestCraftingProgress:
 class TestSlotAndRecipeCycling:
     """Tests for slot and recipe cycling."""
 
-    def test_cycle_slot_forward(self, state_factory) -> None:
-        """Should cycle slot forward."""
+    @pytest.mark.parametrize(
+        "direction, expected",
+        [(1, 1), (-1, NUM_INVENTORY_SLOTS - 1)],
+        ids=["forward", "backward"],
+    )
+    def test_cycle_slot(self, state_factory, direction, expected) -> None:
+        """Should cycle slot in the given direction with wrap."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        new_state = cycle_slot(state, 0, 1)
-        assert new_state.selected_slots[0] == 1
+        new_state = cycle_slot(state, 0, direction)
+        assert new_state.selected_slots[0] == expected
 
-    def test_cycle_slot_backward(self, state_factory) -> None:
-        """Should cycle slot backward with wrap."""
+    @pytest.mark.parametrize(
+        "direction, expected",
+        [(1, 1), (-1, NUM_RECIPES - 1)],
+        ids=["forward", "backward"],
+    )
+    def test_cycle_recipe(self, state_factory, direction, expected) -> None:
+        """Should cycle recipe in the given direction with wrap."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        new_state = cycle_slot(state, 0, -1)
-        assert new_state.selected_slots[0] == NUM_INVENTORY_SLOTS - 1
-
-    def test_cycle_recipe_forward(self, state_factory) -> None:
-        """Should cycle recipe forward and wrap around."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-        )
-        new_state = cycle_recipe(state, 0, 1)
-        assert new_state.selected_recipes[0] == 1
-
-    def test_cycle_recipe_backward(self, state_factory) -> None:
-        """Should cycle recipe backward and wrap around."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-        )
-        new_state = cycle_recipe(state, 0, -1)
-        assert new_state.selected_recipes[0] == NUM_RECIPES - 1
+        new_state = cycle_recipe(state, 0, direction)
+        assert new_state.selected_recipes[0] == expected

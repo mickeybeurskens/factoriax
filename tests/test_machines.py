@@ -1,6 +1,7 @@
 """Tests for the machine system."""
 
 import jax.numpy as jnp
+import pytest
 from jax import random
 
 from factoriax import BlockType, EnvParams, ItemType
@@ -277,10 +278,18 @@ class TestMinerOperation:
 class TestMinerDifferentOres:
     """Tests for miners on different ore types."""
 
-    def test_miner_on_iron(self, state_factory) -> None:
-        """Miner should correctly mine iron ore."""
+    @pytest.mark.parametrize(
+        "block_type, item_type",
+        [
+            (BlockType.IRON, ItemType.IRON),
+            (BlockType.COPPER, ItemType.COPPER),
+        ],
+        ids=["iron", "copper"],
+    )
+    def test_miner_on_ore(self, state_factory, block_type, item_type) -> None:
+        """Miner should correctly mine the given ore type."""
         state = state_factory(
-            world_map=jnp.array([[BlockType.IRON]], dtype=jnp.int32),
+            world_map=jnp.array([[block_type]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[10]], dtype=jnp.int32),
@@ -288,21 +297,7 @@ class TestMinerDifferentOres:
 
         new_state = run_miners(state)
 
-        assert new_state.machine_inventory_items[0, 0, 1] == ItemType.IRON
-        assert new_state.machine_inventory_counts[0, 0, 1] == 3
-
-    def test_miner_on_copper(self, state_factory) -> None:
-        """Miner should correctly mine copper ore."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.COPPER]], dtype=jnp.int32),
-            block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
-        )
-
-        new_state = run_miners(state)
-
-        assert new_state.machine_inventory_items[0, 0, 1] == ItemType.COPPER
+        assert new_state.machine_inventory_items[0, 0, 1] == item_type
         assert new_state.machine_inventory_counts[0, 0, 1] == 3
 
 
