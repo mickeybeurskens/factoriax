@@ -203,7 +203,7 @@ class TestGlobalArray:
 
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
-_LOCAL_OBS_SIZE = 3 * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
+_LOCAL_OBS_SIZE = 4 * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
 
 
 class TestLocalArray:
@@ -213,7 +213,7 @@ class TestLocalArray:
         """Output shape is correct for radius=10 (default)."""
         radius = 10
         window = 2 * radius + 1
-        expected = 3 * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
+        expected = 4 * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),

@@ -51,6 +51,7 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
         int(BlockType.IRON): (192, 192, 192),
         int(BlockType.COPPER): (184, 115, 51),
         int(BlockType.COAL): (54, 54, 54),
+        int(BlockType.NEST): (90, 40, 60),
     }
     textures: dict[int, np.ndarray] = {}
     for block_id, (r, g, b) in colors.items():
@@ -137,6 +138,42 @@ def create_player_texture(
             player[pys_clipped, px] = [*indicator_color, 255]
 
     return player
+
+
+BITER_COLOR = (180, 40, 40)
+
+
+def create_biter_texture(size: int = BLOCK_PIXEL_SIZE) -> np.ndarray:
+    """Create a biter texture as a small red circle.
+
+    Args:
+        size: Side length of the texture in pixels.
+
+    Returns:
+        RGBA numpy array of shape (size, size, 4).
+    """
+    texture = np.zeros((size, size, 4), dtype=np.uint8)
+    center = size // 2
+    radius = size // 4
+    ys, xs = np.ogrid[:size, :size]
+    dist = np.sqrt((xs - center) ** 2 + (ys - center) ** 2)
+    texture[dist <= radius] = [*BITER_COLOR, 220]
+    # Dark outline.
+    texture[(dist > radius) & (dist <= radius + 1)] = [100, 20, 20, 200]
+    return texture
+
+
+@functools.lru_cache(maxsize=8)
+def _get_biter_texture(size: int) -> np.ndarray:
+    """Cached biter texture.
+
+    Args:
+        size: Block pixel size.
+
+    Returns:
+        RGBA numpy array of shape (size, size, 4).
+    """
+    return create_biter_texture(size)
 
 
 @functools.lru_cache(maxsize=8)
@@ -656,6 +693,26 @@ def render_pixels(
             px_start,
             block_pixel_size,
         )
+
+    # --- Biter rendering ---
+    biter_positions = np.array(state.biter_positions)
+    biter_health = np.array(state.biter_health)
+    biter_texture = _get_biter_texture(block_pixel_size)
+    map_h, map_w = state.map.shape
+
+    for biter_idx in range(biter_health.shape[0]):
+        if int(biter_health[biter_idx]) <= 0:
+            continue
+        bx = int(biter_positions[biter_idx, 0])
+        by = int(biter_positions[biter_idx, 1])
+        if 0 <= bx < map_w and 0 <= by < map_h:
+            _alpha_blend_inplace(
+                image,
+                biter_texture,
+                by * block_pixel_size,
+                bx * block_pixel_size,
+                block_pixel_size,
+            )
 
     return image[:, :, :3]
 

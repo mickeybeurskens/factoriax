@@ -174,7 +174,7 @@ def local_array(
 
     Returns:
         Float32 array of shape
-        ``(3 * (2*radius+1)**2 + 7 + 2 * NUM_INVENTORY_SLOTS,)``.
+        ``(4 * (2*radius+1)**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES,)``.
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))
@@ -210,12 +210,35 @@ def local_array(
     start = (pos[1], pos[0])
     slice_shape = (size, size)
 
+    # Biter presence grid: scatter active biters onto (H, W) grid.
+    h, w = state.map.shape
+    biter_grid = jnp.zeros((h, w), dtype=jnp.float32)
+    is_active = state.biter_health > 0
+    bx = state.biter_positions[:, 0]
+    by = state.biter_positions[:, 1]
+    biter_grid = biter_grid.at[by, bx].add(is_active.astype(jnp.float32))
+    # Clamp to 1.0 (multiple biters on same tile still = 1.0).
+    biter_grid = jnp.minimum(biter_grid, 1.0)
+
+    padded_biters = jnp.pad(
+        biter_grid,
+        pw,
+        mode="constant",
+        constant_values=0.0,
+    )
+
     window_map = jax.lax.dynamic_slice(padded_map, start, slice_shape)
     window_machines = jax.lax.dynamic_slice(padded_machines, start, slice_shape)
     window_resources = jax.lax.dynamic_slice(padded_resources, start, slice_shape)
+    window_biters = jax.lax.dynamic_slice(padded_biters, start, slice_shape)
 
     spatial = jnp.concatenate(
-        [window_map.ravel(), window_machines.ravel(), window_resources.ravel()]
+        [
+            window_map.ravel(),
+            window_machines.ravel(),
+            window_resources.ravel(),
+            window_biters.ravel(),
+        ]
     )
     return jnp.concatenate([spatial, _player_scalars(state, params, player_idx)])
 
