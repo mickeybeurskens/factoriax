@@ -133,6 +133,26 @@ ACHIEVEMENT_INFO = [
         name="Rocket Complete",
         hint="Craft a rocket in an assembler and place it on the map.",
     ),
+    AchievementInfo(
+        id="first_science",
+        name="First Science",
+        hint="Produce a science pack in an assembler.",
+    ),
+    AchievementInfo(
+        id="first_research",
+        name="First Research",
+        hint="Use science packs to unlock a technology.",
+    ),
+    AchievementInfo(
+        id="advanced_science",
+        name="Advanced Science",
+        hint="Produce an advanced science pack.",
+    ),
+    AchievementInfo(
+        id="full_research",
+        name="Full Research",
+        hint="Unlock all technologies.",
+    ),
 ]
 
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
@@ -246,7 +266,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
 
 
 def core_game_conditions(state: EnvState) -> jax.Array:
-    """Compute the 17 core game achievement conditions.
+    """Compute the 21 core game achievement conditions.
 
     Returns a boolean array of shape ``(MAX_ACHIEVEMENTS,)``. The
     first ``NUM_ACHIEVEMENTS`` slots correspond to the core tutorial
@@ -315,6 +335,19 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             count_total_items(state, ItemType.FUEL_PACK) >= 10,
             # 16 Rocket Complete — place a rocket on the map
             count_machines(state, MachineType.ROCKET) >= 1,
+            # 17 First Science — hold any science pack
+            (
+                count_total_items(state, ItemType.BASIC_SCIENCE_PACK)
+                + count_total_items(state, ItemType.FUEL_SCIENCE_PACK)
+                + count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK)
+            )
+            >= 1,
+            # 18 First Research — any technology unlocked
+            jnp.any(state.research_unlocked),
+            # 19 Advanced Science — hold an advanced science pack
+            count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK) >= 1,
+            # 20 Full Research — all technologies unlocked
+            jnp.all(state.research_unlocked),
         ],
         dtype=jnp.bool_,
     )

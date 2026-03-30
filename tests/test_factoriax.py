@@ -11,6 +11,7 @@ from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     NUM_ACTIONS,
     NUM_INVENTORY_SLOTS,
+    NUM_TECHNOLOGIES,
     SOLID_BLOCKS,
     MachineType,
 )
@@ -358,6 +359,7 @@ class TestEnvironment:
             params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
             + NUM_INVENTORY_SLOTS * 2
+            + NUM_TECHNOLOGIES * 2
         )
         assert obs_space.shape == (expected_size,)
 

@@ -17,6 +17,7 @@ import pytest
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     NUM_INVENTORY_SLOTS,
+    NUM_TECHNOLOGIES,
     BlockType,
     MachineType,
 )
@@ -44,6 +45,7 @@ _GLOBAL_OBS_SIZE = (
     _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
     + NUM_PLAYER_SCALARS
     + 2 * NUM_INVENTORY_SLOTS
+    + 2 * NUM_TECHNOLOGIES
 )
 
 
@@ -61,7 +63,7 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
         out = _player_scalars(state, _DEFAULT_PARAMS, 0)
-        assert out.shape == (NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS,)
+        assert out.shape == (NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES,)
 
     def test_values_in_range(self, state_factory) -> None:
         """All scalar values must lie in [0, 1]."""
@@ -201,7 +203,7 @@ class TestGlobalArray:
 
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
-_LOCAL_OBS_SIZE = 3 * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS
+_LOCAL_OBS_SIZE = 3 * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
 
 
 class TestLocalArray:
@@ -211,7 +213,7 @@ class TestLocalArray:
         """Output shape is correct for radius=10 (default)."""
         radius = 10
         window = 2 * radius + 1
-        expected = 3 * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS
+        expected = 3 * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),

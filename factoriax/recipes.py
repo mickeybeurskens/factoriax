@@ -107,6 +107,21 @@ ASSEMBLER_RECIPES: list[dict] = [
         "inputs": [(ItemType.HULL, 50), (ItemType.FUEL_PACK, 20)],
         "ticks": 100,
     },
+    {
+        "output": ItemType.BASIC_SCIENCE_PACK,
+        "inputs": [(ItemType.IRON, 1), (ItemType.COPPER, 1)],
+        "ticks": 4,
+    },
+    {
+        "output": ItemType.FUEL_SCIENCE_PACK,
+        "inputs": [(ItemType.IRON, 1), (ItemType.COAL, 1)],
+        "ticks": 4,
+    },
+    {
+        "output": ItemType.ADVANCED_SCIENCE_PACK,
+        "inputs": [(ItemType.HULL, 1), (ItemType.FUEL_PACK, 1)],
+        "ticks": 8,
+    },
 ]
 
 NUM_ASSEMBLER_RECIPES: int = len(ASSEMBLER_RECIPES)
@@ -114,7 +129,14 @@ MAX_ASSEMBLER_RECIPE_INPUTS: int = max(
     len(r["inputs"]) for r in ASSEMBLER_RECIPES
 )
 
-ASSEMBLER_RECIPE_NAMES: list[str] = ["Hull", "Fuel Pack", "Rocket"]
+ASSEMBLER_RECIPE_NAMES: list[str] = [
+    "Hull",
+    "Fuel Pack",
+    "Rocket",
+    "Basic Science Pack",
+    "Fuel Science Pack",
+    "Advanced Science Pack",
+]
 
 ASSEMBLER_RECIPE_OUTPUTS: jnp.ndarray = jnp.array(
     [r["output"] for r in ASSEMBLER_RECIPES], dtype=jnp.int32

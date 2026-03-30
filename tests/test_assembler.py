@@ -2,7 +2,10 @@
 
 from jax import random
 
+import jax.numpy as jnp
+
 from factoriax.constants import (
+    NUM_TECHNOLOGIES,
     ItemType,
     MachineType,
 )
@@ -21,6 +24,7 @@ def _make_state_with_assembler(
     slot3_item: int = 0,
     slot3_count: int = 0,
     power: int = 0,
+    research_unlocked: jnp.ndarray | None = None,
 ) -> object:
     """Create a minimal world state with an assembler at (0, 0).
 
@@ -33,6 +37,8 @@ def _make_state_with_assembler(
         slot3_item: Item type in output slot 3.
         slot3_count: Stack count in output slot 3.
         power: Initial machine_power value.
+        research_unlocked: Boolean array of unlocked technologies.
+            Defaults to all True so existing tests pass without modification.
 
     Returns:
         An EnvState with the assembler configured.
@@ -41,10 +47,14 @@ def _make_state_with_assembler(
     params = EnvParams(map_width=4, map_height=4, num_players=1)
     state = generate_world(rng, params)
 
+    if research_unlocked is None:
+        research_unlocked = jnp.ones(NUM_TECHNOLOGIES, dtype=jnp.bool_)
+
     state = state.replace(
         machine_types=state.machine_types.at[0, 0].set(MachineType.ASSEMBLER),
         machine_selected_recipe=state.machine_selected_recipe.at[0, 0].set(recipe),
         machine_power=state.machine_power.at[0, 0].set(power),
+        research_unlocked=research_unlocked,
     )
 
     inv_items = state.machine_inventory_items

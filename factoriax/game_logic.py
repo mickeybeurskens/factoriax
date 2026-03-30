@@ -7,12 +7,15 @@ from jax import lax
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
     DIRECTIONS,
+    IS_RESEARCH_ITEM,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
     MINEABLE_BLOCKS,
+    RESEARCH_COST,
+    SCIENCE_PACK_TO_TECH,
     SOLID_BLOCKS,
     Action,
     BlockType,
@@ -641,6 +644,60 @@ def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvS
     return lax.cond(can_withdraw, do_withdraw, lambda s: s, state)
 
 
+def apply_research(
+    state: EnvState, player_idx: int | jax.Array
+) -> EnvState:
+    """Consume one science pack from the player's selected slot to advance research.
+
+    Checks the selected inventory slot. If it holds a researchable science
+    pack, one unit is consumed and the matching technology's progress
+    increments. When progress reaches RESEARCH_COST, the technology unlocks.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the player performing research.
+
+    Returns:
+        Updated state (unchanged if the selected slot has no science pack).
+    """
+    slot = state.selected_slots[player_idx]
+    item = state.inventory_items[player_idx, slot]
+    count = state.inventory_counts[player_idx, slot]
+
+    is_science = IS_RESEARCH_ITEM[item]
+    has_item = count > 0
+    tech_idx = SCIENCE_PACK_TO_TECH[item]
+    already_unlocked = state.research_unlocked[tech_idx]
+    can_research = is_science & has_item & ~already_unlocked
+
+    # Consume one science pack.
+    new_count = count - 1
+    new_inv_counts = state.inventory_counts.at[player_idx, slot].set(
+        jnp.where(can_research, new_count, count)
+    )
+    # Clear item type if stack depleted.
+    new_inv_items = state.inventory_items.at[player_idx, slot].set(
+        jnp.where(can_research & (new_count == 0), ItemType.EMPTY, item)
+    )
+
+    # Advance research progress.
+    new_progress = state.research_progress.at[tech_idx].add(
+        jnp.where(can_research, 1, 0)
+    )
+    # Unlock if progress reaches cost.
+    new_unlocked = state.research_unlocked.at[tech_idx].set(
+        state.research_unlocked[tech_idx]
+        | (new_progress[tech_idx] >= RESEARCH_COST)
+    )
+
+    return state.replace(
+        inventory_items=new_inv_items,
+        inventory_counts=new_inv_counts,
+        research_progress=new_progress,
+        research_unlocked=new_unlocked,
+    )
+
+
 def _handle_player_action(
     state: EnvState, action: int | jax.Array, player_idx: int | jax.Array
 ) -> EnvState:
@@ -666,6 +723,7 @@ def _handle_player_action(
     is_rotate = action == Action.ROTATE
     is_next_m_slot = action == Action.NEXT_MACHINE_SLOT
     is_prev_m_slot = action == Action.PREV_MACHINE_SLOT
+    is_research = action == Action.RESEARCH
 
     # Direct craft actions: contiguous range CRAFT_MINER..CRAFT_ASSEMBLER.
     # Clamp recipe_idx to [0, NUM_RECIPES-1] so that non-craft actions
@@ -736,6 +794,12 @@ def _handle_player_action(
         lambda s: s,
         state,
     )
+    state = lax.cond(
+        is_research,
+        lambda s: apply_research(s, player_idx),
+        lambda s: s,
+        state,
+    )
 
     is_movement = ~(
         is_mine
@@ -749,6 +813,7 @@ def _handle_player_action(
         | is_prev_slot
         | is_next_m_slot
         | is_prev_m_slot
+        | is_research
     )
     state = lax.cond(
         is_movement,

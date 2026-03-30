@@ -10,7 +10,9 @@ from factoriax.constants import (
     MACHINE_SLOT_ROLES,
     MAX_MACHINE_STACK_SIZE,
     NUM_ITEM_TYPES,
+    NUM_TECHNOLOGIES,
     POWER_PER_COAL,
+    TECH_GATES_RECIPE,
     Action,
     BlockType,
     ItemType,
@@ -23,6 +25,7 @@ from factoriax.recipes import (
     ASSEMBLER_RECIPE_OUTPUTS,
     ASSEMBLER_RECIPE_TICKS,
     MAX_ASSEMBLER_STACK_SIZE,
+    NUM_ASSEMBLER_RECIPES,
 )
 from factoriax.state import EnvState
 
@@ -264,9 +267,30 @@ def run_assemblers(state: EnvState) -> EnvState:
     progressing = is_asm & (power > 1)
     power = jnp.where(progressing, power - 1, power)
 
+    # Build per-tile recipe-allowed mask from research state.
+    # A recipe is allowed if no technology gates it, or if the gating
+    # technology has been unlocked.
+    # TECH_GATES_RECIPE maps tech_index -> recipe_index.
+    # Build a (NUM_ASSEMBLER_RECIPES,) bool: is recipe r gated by any tech?
+    _all_recipes = jnp.arange(NUM_ASSEMBLER_RECIPES)
+    # For each recipe, check if any tech gates it and whether that tech
+    # is unlocked.  recipe_gated[r] = True if some tech gates recipe r.
+    recipe_gated = jnp.any(
+        TECH_GATES_RECIPE[..., None] == _all_recipes[None, ...], axis=0
+    )
+    # recipe_tech_unlocked[r] = True if the tech gating recipe r is unlocked
+    # (or if recipe r is ungated).
+    _tech_for_recipe = jnp.zeros(NUM_ASSEMBLER_RECIPES, dtype=jnp.int32)
+    for t in range(NUM_TECHNOLOGIES):
+        _tech_for_recipe = _tech_for_recipe.at[TECH_GATES_RECIPE[t]].set(t)
+    recipe_tech_unlocked = state.research_unlocked[_tech_for_recipe]
+    recipe_available = ~recipe_gated | recipe_tech_unlocked  # (NUM_ASSEMBLER_RECIPES,)
+    # Index into per-tile selected recipe.
+    tile_recipe_allowed = recipe_available[recipe]  # (H, W)
+
     # Phase 3: start new crafts.
     inv_items, inv_counts, power = _assembler_start_crafts(
-        is_asm,
+        is_asm & tile_recipe_allowed,
         power,
         inv_items,
         inv_counts,

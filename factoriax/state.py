@@ -41,6 +41,10 @@ class EnvState:
         achievements_unlocked: Boolean array tracking unlocked achievements
             with shape (NUM_ACHIEVEMENTS,)
         items_mined: Lifetime mined count per item type with shape (NUM_ITEM_TYPES,)
+        research_progress: Science packs consumed per technology
+            with shape (NUM_TECHNOLOGIES,)
+        research_unlocked: Boolean array of unlocked technologies
+            with shape (NUM_TECHNOLOGIES,)
     """
 
     map: jnp.ndarray
@@ -63,6 +67,8 @@ class EnvState:
     machine_direction: jnp.ndarray
     achievements_unlocked: jnp.ndarray
     items_mined: jnp.ndarray
+    research_progress: jnp.ndarray
+    research_unlocked: jnp.ndarray
 
 
 @struct.dataclass

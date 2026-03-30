@@ -15,6 +15,7 @@ from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    NUM_TECHNOLOGIES,
     Action,
     BlockType,
     MachineType,
@@ -65,6 +66,8 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         machine_direction=jnp.zeros(shape, dtype=jnp.int32),
+        research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
+        research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
     )
 
 

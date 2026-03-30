@@ -68,6 +68,8 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "selected_player",
     "achievements",
     "items_mined",
+    "research_progress",
+    "research_unlocked",
     "rewards",
     "timesteps",
 )
@@ -179,6 +181,8 @@ class Trajectory:
     selected_player: np.ndarray | None = None
     achievements: np.ndarray | None = None
     items_mined: np.ndarray | None = None
+    research_progress: np.ndarray | None = None
+    research_unlocked: np.ndarray | None = None
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None
 

@@ -36,6 +36,9 @@ class ItemType(IntEnum):
     HULL = 9
     FUEL_PACK = 10
     ROCKET = 11
+    BASIC_SCIENCE_PACK = 12
+    FUEL_SCIENCE_PACK = 13
+    ADVANCED_SCIENCE_PACK = 14
 
 
 class MachineType(IntEnum):
@@ -116,6 +119,9 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.HULL: (170, 170, 190),
     ItemType.FUEL_PACK: (220, 140, 40),
     ItemType.ROCKET: (240, 240, 240),
+    ItemType.BASIC_SCIENCE_PACK: (200, 50, 50),
+    ItemType.FUEL_SCIENCE_PACK: (50, 150, 50),
+    ItemType.ADVANCED_SCIENCE_PACK: (50, 50, 200),
 }
 
 # Human-readable display names for each MachineType, used by the UI.
@@ -167,6 +173,36 @@ from factoriax.recipes import (  # noqa: E402, F401
     RECIPES,
 )
 
+# ---------------------------------------------------------------------------
+# Technology / research tree
+# ---------------------------------------------------------------------------
+
+NUM_TECHNOLOGIES: int = 2
+RESEARCH_COST: int = 10  # science packs per unlock
+
+# Maps science pack item type -> technology index.
+# BASIC_SCIENCE_PACK unlocks tech 0 (Hull), FUEL_SCIENCE_PACK unlocks tech 1 (Fuel Pack).
+SCIENCE_PACK_TO_TECH = jnp.zeros(len(ItemType), dtype=jnp.int32).at[
+    ItemType.BASIC_SCIENCE_PACK
+].set(0).at[
+    ItemType.FUEL_SCIENCE_PACK
+].set(1)
+
+# Whether an item type is a science pack that can be used for research.
+IS_RESEARCH_ITEM = jnp.zeros(len(ItemType), dtype=jnp.bool_).at[
+    ItemType.BASIC_SCIENCE_PACK
+].set(True).at[
+    ItemType.FUEL_SCIENCE_PACK
+].set(True)
+
+# Which assembler recipe index each technology gates.
+# Tech 0 gates assembler recipe 0 (Hull), tech 1 gates recipe 1 (Fuel Pack).
+TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
+
+# Which assembler recipes require no research (ungated).
+# Recipes not in TECH_GATES_RECIPE are always available.
+# Science pack recipes (indices 3, 4, 5) and Rocket (index 2) are ungated.
+
 PLACEABLE_ITEMS = jnp.array(
     [
         ItemType.MINER,
@@ -202,6 +238,9 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.NONE,  # HULL
         MachineType.NONE,  # FUEL_PACK
         MachineType.ROCKET,  # ROCKET
+        MachineType.NONE,  # BASIC_SCIENCE_PACK
+        MachineType.NONE,  # FUEL_SCIENCE_PACK
+        MachineType.NONE,  # ADVANCED_SCIENCE_PACK
     ],
     dtype=jnp.int32,
 )
@@ -243,6 +282,7 @@ class Action(IntEnum):
     CRAFT_BELT = 17
     CRAFT_ARM = 18
     CRAFT_ASSEMBLER = 19
+    RESEARCH = 20
 
 
 DIRECTIONS = jnp.array(
@@ -267,6 +307,7 @@ DIRECTIONS = jnp.array(
         [0, 0],  # CRAFT_BELT
         [0, 0],  # CRAFT_ARM
         [0, 0],  # CRAFT_ASSEMBLER
+        [0, 0],  # RESEARCH
     ],
     dtype=jnp.int32,
 )

@@ -35,6 +35,8 @@ from factoriax.constants import (
     NUM_ACTIONS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    NUM_TECHNOLOGIES,
+    RESEARCH_COST,
     BlockType,
     MachineType,
 )
@@ -109,7 +111,12 @@ def _player_scalars(
     scalars = jnp.concatenate([scalars, afford])
     inv_items = state.inventory_items[player_idx].astype(jnp.float32) / _INV_ITEM_NORM
     inv_counts = state.inventory_counts[player_idx].astype(jnp.float32) / MAX_STACK_SIZE
-    return jnp.concatenate([scalars, inv_items, inv_counts])
+    # Research state: per-technology [unlocked, progress/cost].
+    research_unlocked = state.research_unlocked.astype(jnp.float32)
+    research_progress = state.research_progress.astype(jnp.float32) / RESEARCH_COST
+    return jnp.concatenate(
+        [scalars, inv_items, inv_counts, research_unlocked, research_progress]
+    )
 
 
 def global_array(

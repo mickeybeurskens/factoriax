@@ -9,6 +9,7 @@ from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    NUM_TECHNOLOGIES,
     MachineType,
 )
 
@@ -56,6 +57,8 @@ def state_factory():
         machine_direction: jnp.ndarray | None = None,
         achievements_unlocked: jnp.ndarray | None = None,
         items_mined: jnp.ndarray | None = None,
+        research_progress: jnp.ndarray | None = None,
+        research_unlocked: jnp.ndarray | None = None,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
 
@@ -167,6 +170,12 @@ def state_factory():
             items_mined=items_mined
             if items_mined is not None
             else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
+            research_progress=research_progress
+            if research_progress is not None
+            else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
+            research_unlocked=research_unlocked
+            if research_unlocked is not None
+            else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
         )
 
     return _create
