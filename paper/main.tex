@@ -1,0 +1,98 @@
+\documentclass{article}
+\usepackage[preprint]{neurips_2025}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+
+\title{Factoriax - An Open Ended Multi Agent Factorio Benchmark}
+
+\author{
+  Author Name \\
+  Department \\
+  Institution \\
+  \texttt{email@example.com}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  This abstract is the start of something beautiful.
+\end{abstract}
+
+\section{Introduction}
+
+Benchmarking pushes forward reinforcement learning.
+Reinforcement learning in particular benefits from speedups that JAX and other GPU powered frameworks provide.
+Currently fast benchmark mostly focus on rather simple tasks with short task horizons.
+A notable exception is CRAFTAX, which is a complex GPU accelerated dungeon crawler challenge.
+The complexity in this setting scales, making the challenge "open ended". 
+This open endedness is good for benchmarking. 
+A solved benchmark measures nothing, yet open ended benchmarks allow comparison of a whole host of techniques.
+Craftax is complex in a particular way.
+The player needs to explore dungeons, which requires gathering supplies, exploring the landscape and reacting to fast changing conditions.
+
+Factoriax offers another kind of complexity, which we consider worthwhile testing as well.
+In factoriax the goal is to build, maintain and expand a giant factory. 
+Each part in the factory powers and supplies the next. 
+This benchmark focuses on a setting where colaborative building, resource management, trouble shooting, and infrastructure building are necessary. 
+These challenges are meaningfully different from a dungeon exploration setting. 
+The focus is more on designing and maintaining an operational factory, and defending it from adversaries.
+
+
+In addition, the agents need to produce "science points" to unlock certain buildings or technologies. 
+These can be unlocked in many different orders. 
+Agents therefore do not only need to learn to navigate physically. 
+They need to manage resources, and learn to manage research progression as well.
+
+The challenge scales arbitrarily. 
+More machines and resource types can be added easily to make the supply chaines more complex.
+In the end, the challenge is about producing as much science as possible.
+This open ended structure allows for much creativity in solving it. 
+Ever larger factories and ever more functional designs can arrise from the design space. 
+This is also the case in the Factorio Learning Environment. However, this is much faster and easier to modify.
+Thus it fills an important need in the RL community.
+
+Factoriax is unique:
+- Multi agent
+- Logistic challenge
+- Open ended complexity (game scales in complexity as more machines become available)
+- Coordination
+- Designing and coordinating builds
+- Resource management
+- (Possible extra feature): Adversaries (biters)
+- Suitable for human-machine interaction research. People can play this game
+
+Other than other benchmarks:
+ - Long term building -> how you design and execute designs impacts future, just like real logistic designs. But now attribution and feedback loops are directly connected to agent. Mistakes in design or execution costs agents later on.
+- Can be easily divided into sub tasks. Build machine A, produce x items per tick.
+- Cooperative and competitive settings in the same environment, depending on scenario in play
+- Multiple levels of engagement. Factory design level or execution level can be dedicated to different agents.
+- 
+
+GPU accelerated, 
+
+
+\section{Related Work}
+
+\section{Method}
+
+\section{Experiments}
+
+\section{Conclusion}
+
+Placeholder citation~\cite{placeholder}.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
