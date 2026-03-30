@@ -20,6 +20,8 @@ from factoriax.constants import (
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
     NUM_INVENTORY_SLOTS,
+    NUM_TECHNOLOGIES,
+    RESEARCH_COST,
     SLOT_ROLE_COLORS,
     SLOT_ROLE_LABELS,
     Action,
@@ -81,6 +83,9 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.HULL: "Hull",
     ItemType.FUEL_PACK: "Fuel Pk",
     ItemType.ROCKET: "Rocket",
+    ItemType.BASIC_SCIENCE_PACK: "Basic Sci",
+    ItemType.FUEL_SCIENCE_PACK: "Fuel Sci",
+    ItemType.ADVANCED_SCIENCE_PACK: "Adv Sci",
 }
 
 # ---------------------------------------------------------------------------
@@ -1089,6 +1094,27 @@ def render_hotbar(
             )
         )
 
+    # --- Research status (compact, right of slots) ---
+    _TECH_NAMES = ["Hull", "Fuel Pk"]
+    _TECH_COLORS = [
+        (200, 50, 50),   # Basic science -> red
+        (50, 150, 50),   # Fuel science -> green
+    ]
+    research_x = screen_width - 220
+    ry = bar_y + 6
+    for t in range(NUM_TECHNOLOGIES):
+        progress = int(state.research_progress[t])
+        unlocked = bool(state.research_unlocked[t])
+        color = (110, 220, 110) if unlocked else _TECH_COLORS[t]
+        label = _TECH_NAMES[t]
+        if unlocked:
+            txt = f"{label}: OK"
+        else:
+            txt = f"{label}: {progress}/{RESEARCH_COST}"
+        tech_surf = _render_text_rgba(txt, hint_font, color)
+        _blit_rgba(overlay, tech_surf, ry, research_x)
+        ry += tech_surf.shape[0] + 2
+
     # --- Page button ---
     btn_x = screen_width - 96
     btn_y = bar_y + 8
@@ -1465,6 +1491,9 @@ _HELP_LINES: list[str] = [
     "W/S           Switch machine / player panel",
     "A/D           Select slot",
     "E             Transfer items",
+    "",
+    "-- Research --",
+    "R             Use science pack for research",
     "",
     "-- Other --",
     "P             Achievements",
