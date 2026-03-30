@@ -5,6 +5,7 @@ import pytest
 
 from factoriax import Action, EnvState
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
@@ -59,6 +60,7 @@ def state_factory():
         items_mined: jnp.ndarray | None = None,
         research_progress: jnp.ndarray | None = None,
         research_unlocked: jnp.ndarray | None = None,
+        machine_health: jnp.ndarray | None = None,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
 
@@ -176,6 +178,17 @@ def state_factory():
             research_unlocked=research_unlocked
             if research_unlocked is not None
             else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+            machine_health=machine_health
+            if machine_health is not None
+            else (
+                jnp.where(
+                    (machine_types if machine_types is not None
+                     else jnp.full(shape, MachineType.NONE, dtype=jnp.int32))
+                    != int(MachineType.NONE),
+                    DEFAULT_MACHINE_MAX_HEALTH,
+                    0,
+                ).astype(jnp.int32)
+            ),
         )
 
     return _create

@@ -16,6 +16,7 @@ import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
@@ -882,8 +883,10 @@ def render_machine_menu(
     header_offset = _BORDER_PX + _HEADER_H + _SEP_H + 8
 
     # Fixed overhead: everything except the slot grid itself.
+    health_bar_h = 32  # bar (10) + text (~14) + spacing (8)
     overhead_h = (
         header_offset
+        + health_bar_h
         + padding
         + (padding if slot_rows > 0 else 0)
         + player_strip_h
@@ -910,9 +913,9 @@ def render_machine_menu(
     )
 
     menu_w = int(screen_width * 0.72)
-    menu_h = overhead_h + slot_area_h
+    menu_h = min(overhead_h + slot_area_h, screen_height - 4)
     menu_x = (screen_width - menu_w) // 2
-    menu_y = (screen_height - menu_h) // 2
+    menu_y = max(2, (screen_height - menu_h) // 2)
 
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
@@ -920,6 +923,29 @@ def render_machine_menu(
     content_y = _draw_section_header(
         overlay, menu_x, menu_y, menu_w, machine_name, header_font, False
     )
+
+    # --- Health bar ---
+    if machine_type != int(MachineType.NONE):
+        health = int(state.machine_health[ty, tx])
+        max_hp = DEFAULT_MACHINE_MAX_HEALTH
+        bar_w = min(160, menu_w - 40)
+        bar_h = 10
+        bar_x = menu_x + (menu_w - bar_w) // 2
+        bar_y = content_y + 2
+        overlay[bar_y : bar_y + bar_h, bar_x : bar_x + bar_w] = (25, 25, 25, 255)
+        fill_w = int(bar_w * health / max_hp) if max_hp > 0 else 0
+        if fill_w > 0:
+            hp_frac = health / max_hp
+            bar_color = (
+                (75, 215, 75, 255) if hp_frac > 0.5
+                else (215, 195, 65, 255) if hp_frac > 0.25
+                else (215, 65, 65, 255)
+            )
+            overlay[bar_y : bar_y + bar_h, bar_x : bar_x + fill_w] = bar_color
+        hp_text = f"HP: {health}/{max_hp}"
+        hp_arr = _render_text_rgba(hp_text, body_font, (180, 175, 150))
+        _blit_rgba(overlay, hp_arr, bar_y + bar_h + 2, bar_x + (bar_w - hp_arr.shape[1]) // 2)
+        content_y = bar_y + bar_h + hp_arr.shape[0] + 8
 
     # --- Assembler recipe subtitle ---
     if machine_type == int(MachineType.ASSEMBLER):
@@ -1634,6 +1660,7 @@ _HELP_LINES: list[str] = [
     "SPACE         Mine ore at current tile",
     "E             Place / pick up machine",
     "R             Rotate machine in front",
+    "G             Repair machine in front",
     "F             Inspect machine in front",
     "",
     "-- Inventory & Crafting --",

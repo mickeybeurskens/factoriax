@@ -6,10 +6,12 @@ from jax import lax
 
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
+    DEFAULT_MACHINE_MAX_HEALTH,
     DIRECTIONS,
     IS_RESEARCH_ITEM,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
+    MACHINE_TO_RECIPE,
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
     MAX_STACK_SIZE,
@@ -31,6 +33,9 @@ from factoriax.recipes import (
     ASSEMBLER_RECIPE_INPUT_COUNTS,
     ASSEMBLER_RECIPE_INPUT_ITEMS,
     MAX_ASSEMBLER_STACK_SIZE,
+    MAX_RECIPE_INPUTS,
+    RECIPE_INPUT_COUNTS,
+    RECIPE_INPUT_ITEMS,
 )
 from factoriax.state import EnvParams, EnvState
 
@@ -698,6 +703,106 @@ def apply_research(
     )
 
 
+def repair_machine(
+    state: EnvState, player_idx: int | jax.Array
+) -> EnvState:
+    """Repair the machine on the tile in front of the player.
+
+    Consumes the full crafting recipe cost from the player's inventory
+    and restores the machine to full health. No-op if the machine is
+    already at full health, if there is no machine, or if the player
+    lacks the required materials.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the player performing the repair.
+
+    Returns:
+        Updated state (unchanged if repair is not possible).
+    """
+    from factoriax.placement import get_tile_in_front
+
+    tx, ty = get_tile_in_front(state, player_idx)
+    map_h, map_w = state.map.shape
+    in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
+
+    machine_type = jnp.where(
+        in_bounds, state.machine_types[ty, tx], MachineType.NONE
+    )
+    has_machine = machine_type != MachineType.NONE
+    current_health = jnp.where(in_bounds, state.machine_health[ty, tx], 0)
+    needs_repair = current_health < DEFAULT_MACHINE_MAX_HEALTH
+
+    recipe_idx = jnp.clip(MACHINE_TO_RECIPE[machine_type], 0, MAX_RECIPE_INPUTS)
+    is_repairable = MACHINE_TO_RECIPE[machine_type] >= 0
+
+    # Check player can afford all recipe inputs.
+    inv_items = state.inventory_items[player_idx]
+    inv_counts = state.inventory_counts[player_idx]
+
+    recipe_items = RECIPE_INPUT_ITEMS[recipe_idx]
+    recipe_counts = RECIPE_INPUT_COUNTS[recipe_idx]
+
+    def _has_ingredient(idx: jax.Array) -> jax.Array:
+        """Check if the player has enough of one ingredient."""
+        needed_item = recipe_items[idx]
+        needed_count = recipe_counts[idx]
+        is_needed = (needed_item != ItemType.EMPTY) & (needed_count > 0)
+        matching = (inv_items == needed_item) & (inv_counts >= needed_count)
+        has_it = jnp.any(matching)
+        return ~is_needed | has_it
+
+    can_afford = jnp.all(
+        jax.vmap(_has_ingredient)(jnp.arange(MAX_RECIPE_INPUTS))
+    )
+
+    can_repair = (
+        has_machine & needs_repair & is_repairable & can_afford & in_bounds
+    )
+
+    def do_repair(s: EnvState) -> EnvState:
+        """Consume materials and restore health."""
+        p_items = s.inventory_items[player_idx]
+        p_counts = s.inventory_counts[player_idx]
+
+        def consume_one(
+            carry: tuple[jax.Array, jax.Array], idx: jax.Array
+        ) -> tuple[tuple[jax.Array, jax.Array], None]:
+            items, counts = carry
+            needed_item = recipe_items[idx]
+            needed_count = recipe_counts[idx]
+            is_needed = (needed_item != ItemType.EMPTY) & (needed_count > 0)
+            # Find first matching slot with enough.
+            match = (items == needed_item) & (counts >= needed_count)
+            slot = jnp.argmax(match)
+            new_count = counts[slot] - needed_count
+            counts = jnp.where(
+                is_needed, counts.at[slot].set(new_count), counts
+            )
+            items = jnp.where(
+                is_needed & (new_count == 0),
+                items.at[slot].set(ItemType.EMPTY),
+                items,
+            )
+            return (items, counts), None
+
+        (p_items, p_counts), _ = lax.scan(
+            consume_one, (p_items, p_counts), jnp.arange(MAX_RECIPE_INPUTS)
+        )
+
+        return s.replace(
+            inventory_items=s.inventory_items.at[player_idx].set(p_items),
+            inventory_counts=s.inventory_counts.at[player_idx].set(
+                p_counts.astype(jnp.int16)
+            ),
+            machine_health=s.machine_health.at[ty, tx].set(
+                DEFAULT_MACHINE_MAX_HEALTH
+            ),
+        )
+
+    return lax.cond(can_repair, do_repair, lambda s: s, state)
+
+
 def _handle_player_action(
     state: EnvState, action: int | jax.Array, player_idx: int | jax.Array
 ) -> EnvState:
@@ -724,6 +829,7 @@ def _handle_player_action(
     is_next_m_slot = action == Action.NEXT_MACHINE_SLOT
     is_prev_m_slot = action == Action.PREV_MACHINE_SLOT
     is_research = action == Action.RESEARCH
+    is_repair = action == Action.REPAIR
 
     # Direct craft actions: contiguous range CRAFT_MINER..CRAFT_ASSEMBLER.
     # Clamp recipe_idx to [0, NUM_RECIPES-1] so that non-craft actions
@@ -800,6 +906,12 @@ def _handle_player_action(
         lambda s: s,
         state,
     )
+    state = lax.cond(
+        is_repair,
+        lambda s: repair_machine(s, player_idx),
+        lambda s: s,
+        state,
+    )
 
     is_movement = ~(
         is_mine
@@ -814,6 +926,7 @@ def _handle_player_action(
         | is_next_m_slot
         | is_prev_m_slot
         | is_research
+        | is_repair
     )
     state = lax.cond(
         is_movement,

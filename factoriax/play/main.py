@@ -797,6 +797,7 @@ _NAV_KEYS = {
 
 _KEY_TO_ACTION = {
     pygame.K_SPACE: Action.MINE,
+    pygame.K_g: Action.REPAIR,
 }
 
 _KEY_TO_SLOT = {

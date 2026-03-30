@@ -68,6 +68,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         machine_direction=jnp.zeros(shape, dtype=jnp.int32),
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+        machine_health=jnp.zeros(shape, dtype=jnp.int32),
     )
 
 

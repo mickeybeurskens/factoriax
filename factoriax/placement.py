@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     DIRECTIONS,
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_TO_ITEM_ARRAY,
@@ -152,6 +153,9 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
             machine_direction=s.machine_direction.at[target_y, target_x].set(
                 placed_dir
             ),
+            machine_health=s.machine_health.at[target_y, target_x].set(
+                DEFAULT_MACHINE_MAX_HEALTH
+            ),
         )
         return s
 
@@ -293,6 +297,7 @@ def pickup_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
 
         s = s.replace(
             machine_types=s.machine_types.at[target_y, target_x].set(MachineType.NONE),
+            machine_health=s.machine_health.at[target_y, target_x].set(0),
             machine_power=s.machine_power.at[target_y, target_x].set(0),
             machine_inventory_items=s.machine_inventory_items.at[
                 target_y, target_x

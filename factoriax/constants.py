@@ -203,6 +203,27 @@ TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
 # Recipes not in TECH_GATES_RECIPE are always available.
 # Science pack recipes (indices 3, 4, 5) and Rocket (index 2) are ungated.
 
+# ---------------------------------------------------------------------------
+# Machine health / repair
+# ---------------------------------------------------------------------------
+
+DEFAULT_MACHINE_MAX_HEALTH: int = 100
+
+# Maps MachineType -> player recipe index for repair cost.
+# -1 means not repairable (NONE, ROCKET).
+MACHINE_TO_RECIPE = jnp.array(
+    [
+        -1,  # NONE
+        0,   # MINER -> recipe 0 (5 copper, 5 iron)
+        1,   # CHEST -> recipe 1 (5 iron)
+        4,   # ASSEMBLER -> recipe 4 (10 iron, 5 copper)
+        2,   # CONVEYOR_BELT -> recipe 2 (1 iron)
+        3,   # ARM -> recipe 3 (5 iron, 1 copper)
+        -1,  # ROCKET
+    ],
+    dtype=jnp.int32,
+)
+
 PLACEABLE_ITEMS = jnp.array(
     [
         ItemType.MINER,
@@ -283,6 +304,7 @@ class Action(IntEnum):
     CRAFT_ARM = 18
     CRAFT_ASSEMBLER = 19
     RESEARCH = 20
+    REPAIR = 21
 
 
 DIRECTIONS = jnp.array(
@@ -308,6 +330,7 @@ DIRECTIONS = jnp.array(
         [0, 0],  # CRAFT_ARM
         [0, 0],  # CRAFT_ASSEMBLER
         [0, 0],  # RESEARCH
+        [0, 0],  # REPAIR
     ],
     dtype=jnp.int32,
 )

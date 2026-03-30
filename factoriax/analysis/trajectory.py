@@ -70,6 +70,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "items_mined",
     "research_progress",
     "research_unlocked",
+    "machine_health",
     "rewards",
     "timesteps",
 )
@@ -183,6 +184,7 @@ class Trajectory:
     items_mined: np.ndarray | None = None
     research_progress: np.ndarray | None = None
     research_unlocked: np.ndarray | None = None
+    machine_health: np.ndarray | None = None
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None
 

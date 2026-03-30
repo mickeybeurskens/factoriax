@@ -45,6 +45,8 @@ class EnvState:
             with shape (NUM_TECHNOLOGIES,)
         research_unlocked: Boolean array of unlocked technologies
             with shape (NUM_TECHNOLOGIES,)
+        machine_health: Current health per tile with shape (height, width).
+            Zero means disabled (machine present but non-operational).
     """
 
     map: jnp.ndarray
@@ -69,6 +71,7 @@ class EnvState:
     items_mined: jnp.ndarray
     research_progress: jnp.ndarray
     research_unlocked: jnp.ndarray
+    machine_health: jnp.ndarray
 
 
 @struct.dataclass
@@ -98,5 +101,6 @@ class EnvParams:
     copper_probability: float = 0.12
     coal_probability: float = 0.12
     base_resources: int = 1000
+    machine_max_health: int = 100
 
     NUM_ACTIONS: ClassVar[int] = len(Action)

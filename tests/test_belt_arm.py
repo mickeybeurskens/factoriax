@@ -5,6 +5,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
     Action,
@@ -36,12 +37,18 @@ def _belt_state(
         inv_counts = inv_counts.at[..., 0].set(
             jnp.asarray(slot_counts, dtype=jnp.int16)
         )
+    health = jnp.where(
+        machine_types != int(MachineType.NONE),
+        DEFAULT_MACHINE_MAX_HEALTH,
+        0,
+    ).astype(jnp.int32)
     return state_factory(
         world_map=jnp.zeros(shape, dtype=jnp.int32),
         machine_types=machine_types,
         machine_direction=machine_direction,
         machine_inventory_items=inv_items,
         machine_inventory_counts=inv_counts,
+        machine_health=health,
     )
 
 
@@ -54,12 +61,18 @@ def _arm_state(
     inv_counts: jnp.ndarray,
 ):
     """Build a state with the given machine grid and full inventory arrays."""
+    health = jnp.where(
+        machine_types != int(MachineType.NONE),
+        DEFAULT_MACHINE_MAX_HEALTH,
+        0,
+    ).astype(jnp.int32)
     return state_factory(
         world_map=jnp.zeros(machine_types.shape, dtype=jnp.int32),
         machine_types=machine_types,
         machine_direction=machine_direction,
         machine_inventory_items=inv_items,
         machine_inventory_counts=inv_counts,
+        machine_health=health,
     )
 
 

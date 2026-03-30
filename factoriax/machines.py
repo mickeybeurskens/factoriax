@@ -246,7 +246,9 @@ def run_assemblers(state: EnvState) -> EnvState:
     Returns:
         Updated state with assembler operations applied.
     """
-    is_asm = state.machine_types == MachineType.ASSEMBLER
+    is_asm = (state.machine_types == MachineType.ASSEMBLER) & (
+        state.machine_health > 0
+    )
 
     recipe = state.machine_selected_recipe
     recipe_out = ASSEMBLER_RECIPE_OUTPUTS[recipe]
@@ -320,7 +322,9 @@ def run_miners(state: EnvState) -> EnvState:
     Returns:
         Updated state with miner operations applied
     """
-    is_miner = state.machine_types == MachineType.MINER
+    is_miner = (state.machine_types == MachineType.MINER) & (
+        state.machine_health > 0
+    )
     has_power = state.machine_power > 0
     has_resources = state.block_resources > 0
 
@@ -497,7 +501,9 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
         Updated state with belt items advanced one tile
     """
     h, w = state.machine_types.shape
-    is_belt = state.machine_types == MachineType.CONVEYOR_BELT
+    is_belt = (state.machine_types == MachineType.CONVEYOR_BELT) & (
+        state.machine_health > 0
+    )
 
     src_items = state.machine_inventory_items[..., _BELT_SLOT]
     src_counts = state.machine_inventory_counts[..., _BELT_SLOT]  # int16
@@ -591,7 +597,9 @@ def run_arms(state: EnvState) -> EnvState:
         Updated state with arm operations applied
     """
     h, w = state.machine_types.shape
-    is_arm = state.machine_types == MachineType.ARM
+    is_arm = (state.machine_types == MachineType.ARM) & (
+        state.machine_health > 0
+    )
 
     rows = jnp.broadcast_to(jnp.arange(h)[:, None], (h, w))
     cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))

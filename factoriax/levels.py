@@ -48,6 +48,7 @@ from factoriax.constants import (
     MINEABLE_BLOCKS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    DEFAULT_MACHINE_MAX_HEALTH,
     NUM_TECHNOLOGIES,
     Action,
     BlockType,
@@ -566,6 +567,11 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+        machine_health=jnp.where(
+            jnp.array(machine_types_np, dtype=jnp.int32) != int(MachineType.NONE),
+            DEFAULT_MACHINE_MAX_HEALTH,
+            0,
+        ).astype(jnp.int32),
     )
 
 
@@ -640,6 +646,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+        machine_health=jnp.zeros(map_shape, dtype=jnp.int32),
     )
 
 

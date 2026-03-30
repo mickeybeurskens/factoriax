@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from jax import random
 
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     NUM_TECHNOLOGIES,
     RESEARCH_COST,
     Action,
@@ -48,6 +49,9 @@ def _make_assembler_state(
         machine_types=state.machine_types.at[0, 0].set(MachineType.ASSEMBLER),
         machine_selected_recipe=state.machine_selected_recipe.at[0, 0].set(
             recipe
+        ),
+        machine_health=state.machine_health.at[0, 0].set(
+            DEFAULT_MACHINE_MAX_HEALTH
         ),
         research_unlocked=research_unlocked,
     )
