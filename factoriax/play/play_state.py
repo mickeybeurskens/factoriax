@@ -42,6 +42,7 @@ class PlayState:
     # Menu visibility
     inventory_open: bool = False
     achievement_open: bool = False
+    research_open: bool = False
     pause_open: bool = False
     help_open: bool = False
     machine_open: bool = False
@@ -52,6 +53,7 @@ class PlayState:
     # Menu navigation
     achievement_scroll: int = 0
     achievement_selection: int = 0
+    research_selection: int = 0
     pause_selection: int = 0
     menu_focus: str = "inventory"
     machine_tx: int = 0

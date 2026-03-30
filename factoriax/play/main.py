@@ -14,6 +14,7 @@ from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
     NUM_INVENTORY_SLOTS,
+    NUM_TECHNOLOGIES,
     PLACEABLE_ITEMS,
     Action,
     MachineType,
@@ -31,6 +32,7 @@ from factoriax.play.ui import (
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
+    render_research_menu,
     render_victory_screen,
     render_welcome_screen,
 )
@@ -287,8 +289,8 @@ def _handle_click(
             else:
                 running = False
     elif not (
-        ps.inventory_open or ps.achievement_open or ps.machine_open
-        or ps.pause_open or ps.welcome_open or ps.help_open
+        ps.inventory_open or ps.achievement_open or ps.research_open
+        or ps.machine_open or ps.pause_open or ps.welcome_open or ps.help_open
     ):
         selected_player = int(state.selected_player)  # type: ignore[union-attr]
         slot_idx = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
@@ -341,6 +343,8 @@ def _handle_keydown(
             ps.held_slot = None
         elif ps.achievement_open:
             ps.achievement_open = False
+        elif ps.research_open:
+            ps.research_open = False
         elif ps.machine_open:
             ps.machine_open = False
         else:
@@ -371,6 +375,14 @@ def _handle_keydown(
             ps.achievement_selection = 0
     elif ps.achievement_open:
         ps = _handle_achievement_keys(event, ps)
+    elif event.key == pygame.K_t and not ps.inventory_open:
+        ps.research_open = not ps.research_open
+        if ps.research_open:
+            ps.inventory_open = False
+            ps.achievement_open = False
+            ps.research_selection = 0
+    elif ps.research_open:
+        ps, action = _handle_research_keys(event, ps)
     elif event.key == pygame.K_QUESTION or (
         event.key == pygame.K_SLASH and shift_held
     ):
@@ -381,7 +393,7 @@ def _handle_keydown(
         ps, action = _handle_crafting_nav(event, ps)
     elif event.key == pygame.K_e:
         action = _handle_world_interact(state)
-    elif event.key == pygame.K_t:
+    elif event.key == pygame.K_r:
         action = int(Action.ROTATE)
     elif ctrl_held and event.key in _KEY_TO_PLAYER:
         player_idx = _KEY_TO_PLAYER[event.key]
@@ -583,6 +595,34 @@ def _handle_achievement_keys(
     return ps
 
 
+def _handle_research_keys(
+    event: pygame.event.Event,
+    ps: PlayState,
+) -> tuple[PlayState, int]:
+    """Handle keyboard navigation in the research menu.
+
+    W/S navigate between technologies, E spends a science pack
+    (triggers RESEARCH action).
+
+    Args:
+        event: Pygame KEYDOWN event.
+        ps: Current play state.
+
+    Returns:
+        Tuple of (updated play state, action to execute).
+    """
+    action = int(Action.NOOP)
+    if event.key == pygame.K_w:
+        ps.research_selection = max(0, ps.research_selection - 1)
+    elif event.key == pygame.K_s:
+        ps.research_selection = min(
+            NUM_TECHNOLOGIES - 1, ps.research_selection + 1
+        )
+    elif event.key == pygame.K_e:
+        action = int(Action.RESEARCH)
+    return ps, action
+
+
 def _handle_inventory_nav(
     event: pygame.event.Event,
     ps: PlayState,
@@ -721,6 +761,12 @@ def _render_frame(
         )
         composite_rgba_over_rgb(ui_frame, ach_overlay)
 
+    if ps.research_open:
+        research_overlay = render_research_menu(
+            state, ui_w, ui_h, ps.research_selection,
+        )
+        composite_rgba_over_rgb(ui_frame, research_overlay)
+
     if ps.pause_open:
         pause_overlay, pause_regions = render_pause_menu(
             ui_w, ui_h, ps.pause_selection,
@@ -751,7 +797,6 @@ _NAV_KEYS = {
 
 _KEY_TO_ACTION = {
     pygame.K_SPACE: Action.MINE,
-    pygame.K_r: Action.RESEARCH,
 }
 
 _KEY_TO_SLOT = {

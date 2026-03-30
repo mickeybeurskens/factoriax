@@ -342,6 +342,167 @@ def render_achievement_menu(
     return overlay
 
 
+# Technology descriptions shown in the research menu.
+_TECH_DESCRIPTIONS: list[dict[str, str]] = [
+    {
+        "name": "Hull Manufacturing",
+        "science": "Basic Science Pack",
+        "unlocks": "Hull assembler recipe (5 iron -> 1 hull)",
+        "desc": "Hulls form the structural shell of the rocket.",
+    },
+    {
+        "name": "Fuel Pack Manufacturing",
+        "science": "Fuel Science Pack",
+        "unlocks": "Fuel Pack assembler recipe (3 copper + 2 coal)",
+        "desc": "Fuel packs provide thrust for the rocket launch.",
+    },
+]
+
+_TECH_BADGE_COLORS: list[tuple[int, int, int]] = [
+    (200, 50, 50),
+    (50, 150, 50),
+]
+
+
+def render_research_menu(
+    state: EnvState,
+    screen_width: int,
+    screen_height: int,
+    selected_index: int = 0,
+) -> np.ndarray:
+    """Render the research menu as an RGBA overlay.
+
+    Shows each technology with its progress, required science pack,
+    and what it unlocks. The selected technology is highlighted.
+
+    Args:
+        state: Current environment state.
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+        selected_index: Currently highlighted technology row.
+
+    Returns:
+        RGBA numpy array of shape ``(screen_height, screen_width, 4)``.
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+
+    menu_w = int(screen_width * 0.55)
+    menu_h = int(screen_height * 0.60)
+    menu_x = (screen_width - menu_w) // 2
+    menu_y = (screen_height - menu_h) // 2
+
+    draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
+
+    title_font = get_pixel_font(32)
+    body_font = get_pixel_font(_FONT_BODY)
+    hint_font = get_pixel_font(_FONT_HINT)
+
+    title_arr = _render_text_rgba("RESEARCH", title_font, (215, 195, 65))
+    title_x = menu_x + (menu_w - title_arr.shape[1]) // 2
+    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 16, title_x)
+
+    sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
+    overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = (
+        _BORDER
+    )
+
+    cy = sep_y + _SEP_H + 12
+    card_w = menu_w - 2 * _BORDER_PX - 20
+    card_x = menu_x + _BORDER_PX + 10
+
+    for i, tech in enumerate(_TECH_DESCRIPTIONS):
+        progress = int(state.research_progress[i])
+        unlocked = bool(state.research_unlocked[i])
+        is_selected = i == selected_index
+
+        card_h = 80
+        bg_color = (
+            (42, 68, 42, 210) if unlocked
+            else (55, 55, 65, 210) if is_selected
+            else (35, 35, 40, 210)
+        )
+        overlay[cy : cy + card_h, card_x : card_x + card_w] = bg_color
+
+        if is_selected:
+            t = 2
+            overlay[cy : cy + t, card_x : card_x + card_w] = _BORDER
+            overlay[cy + card_h - t : cy + card_h, card_x : card_x + card_w] = (
+                _BORDER
+            )
+            overlay[cy : cy + card_h, card_x : card_x + t] = _BORDER
+            overlay[
+                cy : cy + card_h, card_x + card_w - t : card_x + card_w
+            ] = _BORDER
+
+        # Status badge
+        badge_w = 12
+        badge_color = (
+            (75, 215, 75, 255) if unlocked
+            else (*_TECH_BADGE_COLORS[i], 255)
+        )
+        overlay[
+            cy + 8 : cy + 8 + badge_w, card_x + 10 : card_x + 10 + badge_w
+        ] = badge_color
+
+        # Tech name
+        name_color = (235, 228, 185) if unlocked else (210, 205, 180)
+        name_arr = _render_text_rgba(tech["name"], body_font, name_color)
+        _blit_rgba(overlay, name_arr, cy + 8, card_x + 30)
+
+        # Progress bar
+        bar_x = card_x + card_w - 120
+        bar_y = cy + 10
+        bar_w = 100
+        bar_h = 12
+        overlay[bar_y : bar_y + bar_h, bar_x : bar_x + bar_w] = (
+            25, 25, 25, 255
+        )
+        if unlocked:
+            fill_w = bar_w
+        else:
+            fill_w = int(bar_w * progress / RESEARCH_COST)
+        if fill_w > 0:
+            fill_color = (
+                (75, 215, 75, 255) if unlocked
+                else (*_TECH_BADGE_COLORS[i], 255)
+            )
+            overlay[
+                bar_y : bar_y + bar_h, bar_x : bar_x + fill_w
+            ] = fill_color
+
+        # Progress text
+        prog_text = "Unlocked" if unlocked else f"{progress}/{RESEARCH_COST}"
+        prog_arr = _render_text_rgba(prog_text, hint_font, (180, 175, 150))
+        _blit_rgba(overlay, prog_arr, bar_y + bar_h + 2, bar_x)
+
+        # Description lines
+        desc_y = cy + 30
+        requires = f"Requires: {tech['science']}"
+        req_arr = _render_text_rgba(requires, hint_font, (160, 155, 135))
+        _blit_rgba(overlay, req_arr, desc_y, card_x + 30)
+
+        unlocks_text = f"Unlocks: {tech['unlocks']}"
+        unl_arr = _render_text_rgba(unlocks_text, hint_font, (160, 155, 135))
+        _blit_rgba(overlay, unl_arr, desc_y + req_arr.shape[0] + 3, card_x + 30)
+
+        desc_arr = _render_text_rgba(tech["desc"], hint_font, (130, 128, 115))
+        _blit_rgba(
+            overlay, desc_arr, desc_y + req_arr.shape[0] + unl_arr.shape[0] + 6,
+            card_x + 30,
+        )
+
+        cy += card_h + 8
+
+    # Hints
+    hint_y = menu_y + menu_h - _BORDER_PX - _HINT_HEIGHT
+    hints = "[W/S] Select | [E] Spend science pack | [ESC] Close"
+    _render_control_hints(
+        overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
+    )
+
+    return overlay
+
+
 def render_pause_menu(
     screen_width: int,
     screen_height: int,
@@ -1472,7 +1633,7 @@ _HELP_LINES: list[str] = [
     "-- Actions --",
     "SPACE         Mine ore at current tile",
     "E             Place / pick up machine",
-    "T             Rotate machine in front",
+    "R             Rotate machine in front",
     "F             Inspect machine in front",
     "",
     "-- Inventory & Crafting --",
@@ -1493,7 +1654,9 @@ _HELP_LINES: list[str] = [
     "E             Transfer items",
     "",
     "-- Research --",
-    "R             Use science pack for research",
+    "T             Toggle research menu",
+    "W/S           Select technology",
+    "E             Spend science pack",
     "",
     "-- Other --",
     "P             Achievements",
