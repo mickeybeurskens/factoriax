@@ -37,13 +37,13 @@
 % happens where concerns interact. No fast benchmark tests this.
 % =============================================================================
 
-GPU-accelerated reinforcement learning environments have dramatically reduced the cost of running experiments.
+GPU-accelerated reinforcement learning environments have dramatically reduced the cost of running artificial intelligence experiments and training runs.
 However, most environments test a narrow band of intelligence, such as continuous control tasks, board games, grid navigation or combinatorial puzzles.
 % [CITE: Brax -- continuous locomotion control. Check Freeman et al. 2021 or latest version]
 % [CITE: Jumanji -- combinatorial optimization. Check Bonnet et al. 2023]
 % [CITE: PGX -- board games. Check Koyamada et al. 2023]
 % [CITE: MiniGrid/BabyAI -- grid navigation + language. Check Chevalier-Boisvert et al.]
-Most of these operate on limited time scales, which means that actions hardly have long term consequences.
+Most of these operate on short time scales where actions have no lasting consequences.
 % [CITE: Craftax -- Matthews et al. 2024]
 Craftax is currently the closest thing to a long term GPU accelerated benchmark, testing exploration, survival, and adaptation in a procedurally generated dungeon.
 Its scaling complexity ensures it stays useful as methods improve.
@@ -54,11 +54,15 @@ In supply chain management, an allocation decision is simultaneously a resource 
 % [CITE: look for RL applied to supply chain optimization]
 In multi-robot construction, placing a beam is at once a building action, a constraint on future placements, and a dependency for every structure built on top of it.
 % [CITE: look for multi-robot construction/assembly RL work. Check Werfel et al. or recent warehouse robotics papers]
-What makes these problems hard is not any single concern in isolation, but the fact that design, execution, resource allocation, and coordination are all coupled.
-A design decision constrains what can be built. What gets built determines what can be maintained. Maintenance needs reshape future design.
-New insights into agent behavior emerge precisely at the points where these systems interact, yet no GPU-accelerated benchmark creates the conditions to study them.
+What these problems share is that agents consume finite resources to build persistent infrastructure, multiple actors draw from the same shared pools, and the physical structure of what gets built determines what can be maintained and expanded later.
+The incentives cannot be decomposed: an agent cannot optimize construction independently of maintenance, or resource allocation independently of coordination with other actors.
+
+Factory-building is a natural setting for exactly these dynamics.
+A factory consumes finite raw materials to produce machines that form physical supply chains.
+Multiple workers share the same resource deposits and infrastructure.
+The spatial layout of the factory determines throughput, and a design that is hard to maintain will degrade and cost future production.
 % [CITE: Factorio Learning Environment]
-The Factorio Learning Environment demonstrated that factory-building mechanics produce exactly this kind of integrated challenge, but it wraps the Factorio game engine, limiting both throughput and modifiability.
+The Factorio Learning Environment demonstrated that these mechanics produce rich, integrated RL challenges, but it wraps the Factorio game engine, limiting both throughput and modifiability.
 
 % =============================================================================
 % P2: WHAT FACTORIAX IS
@@ -67,64 +71,54 @@ The Factorio Learning Environment demonstrated that factory-building mechanics p
 % =============================================================================
 
 Factoriax makes this problem structure accessible at GPU scale.
-It is a fully JAX-native environment where multiple agents share a grid map containing finite deposits of several base materials.
-Agents mine ore by hand, craft it into machines, and place those machines to automate production.
-A miner extracts ore from the ground. A conveyor belt moves items between locations. An arm transfers items into and out of machines. An assembler combines raw materials into rocket components.
-The goal is to produce enough hulls and fuel packs to build and launch a rocket.
-Every ore tile depletes permanently: once mined to zero, it turns to dirt and never comes back.
-Every machine costs materials that are consumed on crafting.
-The physical layout of the factory, where each machine sits and how they connect, determines whether production flows or stalls.
-The entire step function is JIT-compiled and vectorized, allowing parallel rollouts across dozens of environments on a single GPU.
-% [TODO: Add a concrete steps/sec number here once benchmarked. "Achieving X million steps per second on a single A100" would anchor the speed claim.]
-Progress through the game is measured by a series of milestones, from mining the first ore to launching the rocket, while the overall objective, maximizing science production, keeps the challenge open-ended and the benchmark from being solved.
-% [NOTE: achievements draw on the approach used in Craftax and MineRL -- cite both if you want to credit the design pattern]
+It is a fully JAX-native environment where multiple agents inhabit a shared grid world containing finite deposits of raw materials.
+Agents start with nothing. They mine ore by hand, craft it into machines, and place those machines on the map to automate what they were doing manually.
+Each new machine opens possibilities but costs materials that are gone permanently, and the physical arrangement of machines on the map determines whether resources flow through the factory or stall at a bottleneck.
+As the factory grows, so does its vulnerability: the architecture is designed to support environmental threats that can damage infrastructure, and depleted resource patches force agents to adapt or relocate parts of their production chain.
+Machines can produce science packs, a dedicated resource that is the environment's measure of productivity.
+Agents can also spend science packs to unlock new technologies in a research tree, gaining access to more advanced machines and recipes.
+The benchmark is never solved: the optimization target is fundamentally open, and there is always a more efficient factory to build.
+Progress is measurable through a series of milestones spanning the full arc from first ore mined to final product launched.
+% [NOTE: milestone design draws on Craftax and MineRL -- cite both if crediting the pattern]
+The entire step function is JIT-compiled and vectorized, running parallel rollouts across dozens of environments on GPU.
+% [TODO: Add a concrete steps/sec number here once benchmarked.]
 
 % =============================================================================
 % P3: WHY BUILDING A FACTORY IS HARD
-% Argument: The difficulty comes from the coupling between systems.
-% Each concern interacts with every other. Walk through the loop.
+% Argument: The coupled feedback loop (single-agent), then multi-agent
+% as an equal concern that multiplies the difficulty.
 % =============================================================================
 
-Building a factory is hard precisely because the concerns that other benchmarks study in isolation are here entangled into a single feedback loop.
-
-The agent designs the system it will later operate.
-A miner needs fuel, which means an arm must feed it coal from a belt, which must connect to another miner at a coal patch.
-Each piece must be placed in the right location, oriented correctly, and connected to the right neighbors.
-Getting one piece wrong does not produce an error signal. The miner simply sits there, unfueled, producing nothing.
-The quality of this design directly determines whether the factory runs at all.
-
-But building the design costs resources that do not come back.
-An agent that crafts ten miners when it needed five has consumed iron and copper that will never be available for rocket hulls.
-The feedback arrives hundreds of steps later, when materials run out and the agent cannot build what it needs.
-There is no undo, no resource respawn.
-Every construction decision is simultaneously an allocation decision, and the two cannot be separated.
+In Factoriax the agent designs the system it will later operate.
+Each machine must be placed in the right location, oriented correctly, and connected to its neighbors.
+A single misplacement can silently break an entire production chain.
+Building that design costs resources that do not come back.
+Every construction decision is simultaneously an allocation decision, and the consequences surface only hundreds of steps later when materials run out.
 % [TODO: Can you quantify the credit assignment horizon from training runs? e.g., "the earliest resource decision that affects rocket viability occurs on average at step X" -- strong empirical claim if available]
+Once running, the factory must be maintained: resources deplete, bottlenecks emerge, and production degrades in ways that require the agent to diagnose \emph{which} part of the chain it built has broken and why.
+Design feeds construction, construction constrains maintenance, and maintenance reshapes future design. The loop never closes.
 
-Once built, the factory must be maintained.
-An ore patch runs dry and a miner goes idle. A chest fills up and a belt backs up behind it. An assembler stalls because its input arm cannot reach the right source.
-Production drops, and the agent must diagnose \emph{why}: which part of the chain broke, and what to change.
-This is troubleshooting, not exploration. It requires reasoning about the causal structure of something the agent itself constructed.
-Maintenance, in turn, feeds back into design: a factory that depletes its ore patches must be redesigned around new resource locations, not merely repaired.
-
-When multiple agents share the same map, these feedback loops multiply.
-Three ore types must be budgeted not only across the tech tree but across every agent competing for the same finite deposits.
-Who mines iron? Who lays the belt network?
-Overlapping work wastes resources. Gaps leave bottlenecks.
-The division of labor must emerge from interaction, and it must adapt as the factory grows and resource patches deplete.
-% [CITE: check Melting Pot (Leibo et al. 2021) and Overcooked (Carroll et al. 2019). Key difference: those have cooperation but no persistent infrastructure or irreversible resource depletion that feeds back into coordination. Verify years.]
-Cooperation and competition coexist naturally in this setting: agents benefit from specialization but compete for the same finite materials.
+When multiple agents share the same map, these feedback loops interact across agents.
+Every resource one agent spends is unavailable to the others. Every machine one agent places occupies space and consumes materials that could have served a different part of the factory.
+Agents must divide labor, specialize, and coordinate their construction plans, all while competing for the same finite deposits.
+% [CITE: check Melting Pot and Overcooked for multi-agent comparison. Key difference: those have cooperation but no persistent shared infrastructure where one agent's construction physically constrains another's options.]
+This is a richer coordination problem than existing multi-agent benchmarks offer: agents are not merely sharing a space, they are co-constructing a system whose performance depends on how well their individual contributions fit together.
+A belt network laid by one agent becomes the backbone that another agent's production depends on. A resource patch claimed by one agent forces others to find alternative supply routes.
+The division of labor must adapt continuously as the shared factory grows and the map changes beneath it.
 
 % =============================================================================
-% P4: WHAT MAKES FACTORIAX UNIQUE AS A BENCHMARK
-% Argument: Connect the difficulties back to the benchmark landscape.
+% P4: RESEARCH OPPORTUNITIES
+% Argument: Beyond RL benchmarking, this environment opens doors for
+% other research communities. Light touch, 2-4 sentences.
 % =============================================================================
 
-These properties make Factoriax a distinct point in the benchmark landscape.
-Its complexity is open-ended: adding machine types and recipes extends the supply chain without changing the environment's interface, so the same benchmark grows harder as methods improve.
-Decisions are irreversible with feedback loops spanning hundreds of steps, creating a natural testbed for long-horizon credit assignment.
-The same environment supports both cooperative and competitive dynamics depending on how agents are configured, without requiring a separate implementation.
-The game is also playable by humans, making it suitable for studying human-AI collaboration and providing an intuitive reference point for evaluating agent behavior.
-The architecture is designed to accommodate future extensions, including adversarial pressure from environmental threats.
+Beyond reinforcement learning, the structure of Factoriax lends itself to questions that other benchmarks cannot easily pose.
+The environment is playable by humans, creating a natural setting for human-AI collaboration research where people and agents build together on the same map.
+% [CITE: look for human-AI teaming / human-in-the-loop RL benchmarks to position against]
+Its multi-agent dynamics and configurable incentive structures make it a candidate testbed for alignment and safety research, where observable agent behavior in a complex but interpretable world can be studied under controlled conditions.
+% [CITE: look for AI safety benchmarks / multi-agent safety testbeds. Check MARL safety literature.]
+Because all game state is represented as structured arrays, agent decision-making is amenable to interpretability techniques that require access to the full causal chain from observation to action to outcome.
+% [NOTE: these are directions this paper does not pursue in depth, but they motivate the design choices and signal relevance to a broader audience]
 
 % =============================================================================
 % P5: CONTRIBUTIONS
@@ -132,8 +126,8 @@ The architecture is designed to accommodate future extensions, including adversa
 
 We make the following contributions:
 \begin{enumerate}
-    \item An open-source, fully JAX-native factory-building environment supporting 1 to N agents on a shared map with partial observability.
-    \item A benchmark progression of 17 achievement milestones spanning from first ore mined to rocket launched, providing sparse reward signal across the full game.
+    \item An open-source, fully JAX-native factory-building environment supporting 1 to N agents on a shared map with partial observability, configurable incentives, and open-ended scaling.
+    \item A benchmark progression of milestones spanning the full game, providing measurable progress signal while keeping the overall challenge unsolved.
     \item Baseline reinforcement learning results demonstrating that the environment is learnable but far from solved, with analysis of where current methods break down.
     % [TODO: contribution 3 requires running PPO baselines and analyzing failure modes before this is ready]
 \end{enumerate}
