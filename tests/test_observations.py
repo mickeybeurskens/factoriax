@@ -145,7 +145,7 @@ class TestGlobalArray:
         state = state_factory(world_map=world_map)
         out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
         map_size = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
-        expected_val = float(BlockType.COAL) / float(BlockType.COAL)  # = 1.0
+        expected_val = float(BlockType.COAL) / float(max(BlockType))
         np.testing.assert_allclose(out[:map_size], expected_val)
 
     def test_player_idx_independent(self, state_factory) -> None:
@@ -251,8 +251,8 @@ class TestLocalArray:
         )
         out = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
         map_flat = out[: _WINDOW**2]
-        oob_val = float(BlockType.OUT_OF_BOUNDS) / float(BlockType.COAL)
-        dirt_val = float(BlockType.DIRT) / float(BlockType.COAL)
+        oob_val = float(BlockType.OUT_OF_BOUNDS) / float(max(BlockType))
+        dirt_val = float(BlockType.DIRT) / float(max(BlockType))
         # Top-left element of the window is fully outside → OUT_OF_BOUNDS.
         assert map_flat[0] == pytest.approx(oob_val), (
             f"Expected OOB value {oob_val:.4f} at window corner, got {map_flat[0]:.4f}"
@@ -275,10 +275,10 @@ class TestLocalArray:
         obs_far = np.array(local_array(state_far, _DEFAULT_PARAMS, 0, radius=_RADIUS))
 
         # The map segment of the near observation should contain a COAL value.
-        coal_val = float(BlockType.COAL) / float(BlockType.COAL)
-        assert coal_val in obs_near[:window_size]
+        coal_val = float(BlockType.COAL) / float(max(BlockType))
+        assert np.any(np.isclose(obs_near[:window_size], coal_val))
         # The far observation's map segment should contain only DIRT and OOB.
-        assert coal_val not in obs_far[:window_size]
+        assert not np.any(np.isclose(obs_far[:window_size], coal_val))
 
     def test_machine_channel_present(self, state_factory) -> None:
         """A MINER at the player's position appears in the machine channel."""

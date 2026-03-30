@@ -15,6 +15,7 @@ from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    DEFAULT_MAX_BITERS,
     NUM_TECHNOLOGIES,
     Action,
     BlockType,
@@ -69,6 +70,9 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
         machine_health=jnp.zeros(shape, dtype=jnp.int32),
+        biter_positions=jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
+        biter_health=jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
+        scent_field=jnp.zeros(shape, dtype=jnp.float32),
     )
 
 

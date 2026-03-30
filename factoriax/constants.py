@@ -19,6 +19,7 @@ class BlockType(IntEnum):
     IRON = 4
     COPPER = 5
     COAL = 6
+    NEST = 7
 
 
 class ItemType(IntEnum):
@@ -208,6 +209,7 @@ TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
 # ---------------------------------------------------------------------------
 
 DEFAULT_MACHINE_MAX_HEALTH: int = 100
+DEFAULT_MAX_BITERS: int = 32
 
 # Maps MachineType -> player recipe index for repair cost.
 # -1 means not repairable (NONE, ROCKET).
@@ -357,7 +359,9 @@ BLOCK_TO_ITEM_ARRAY = jnp.array(
     dtype=jnp.int32,
 )
 
-SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32)
+SOLID_BLOCKS = jnp.array(
+    [BlockType.WATER, BlockType.OUT_OF_BOUNDS, BlockType.NEST], dtype=jnp.int32
+)
 
 BLOCK_MAX_RESOURCES = 1000
 

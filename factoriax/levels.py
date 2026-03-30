@@ -49,6 +49,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     DEFAULT_MACHINE_MAX_HEALTH,
+    DEFAULT_MAX_BITERS,
     NUM_TECHNOLOGIES,
     Action,
     BlockType,
@@ -572,6 +573,9 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             DEFAULT_MACHINE_MAX_HEALTH,
             0,
         ).astype(jnp.int32),
+        biter_positions=jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
+        biter_health=jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
+        scent_field=jnp.zeros(map_shape, dtype=jnp.float32),
     )
 
 
@@ -611,6 +615,26 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     player_positions_arr = jnp.array(player_positions, dtype=jnp.int32)
     player_directions = jnp.full(params.num_players, int(Action.DOWN), dtype=jnp.int32)
 
+    # Place nests on dirt tiles away from the center.
+    rng_nest, _ = random.split(rng_map)
+    nest_noise = random.uniform(
+        rng_nest, shape=(params.map_height, params.map_width)
+    )
+    ys = jnp.broadcast_to(
+        jnp.arange(params.map_height)[:, None],
+        (params.map_height, params.map_width),
+    )
+    xs = jnp.broadcast_to(
+        jnp.arange(params.map_width)[None, :],
+        (params.map_height, params.map_width),
+    )
+    dist_from_center = jnp.abs(xs - center_x) + jnp.abs(ys - center_y)
+    min_nest_dist = max(params.map_width, params.map_height) // 4
+    is_dirt = world_map == BlockType.DIRT
+    nest_eligible = is_dirt & (dist_from_center >= min_nest_dist)
+    place_nest = nest_eligible & (nest_noise < params.nest_probability)
+    world_map = jnp.where(place_nest, BlockType.NEST, world_map)
+
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
     block_resources = jnp.where(is_mineable, params.base_resources, 0).astype(jnp.int16)
 
@@ -647,6 +671,9 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
         machine_health=jnp.zeros(map_shape, dtype=jnp.int32),
+        biter_positions=jnp.zeros((params.max_biters, 2), dtype=jnp.int32),
+        biter_health=jnp.zeros(params.max_biters, dtype=jnp.int32),
+        scent_field=jnp.zeros(map_shape, dtype=jnp.float32),
     )
 
 

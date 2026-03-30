@@ -25,6 +25,7 @@ from factoriax.constants import (
     MachineType,
     SlotRole,
 )
+from factoriax.biters import update_biters, update_scent_field
 from factoriax.crafting import cycle_slot, start_crafting, update_crafting
 from factoriax.inventory import find_best_slot
 from factoriax.machines import update_all_machines
@@ -969,6 +970,8 @@ def factoriax_step(
     state = _handle_player_action(state, action, player_idx)
     state = update_crafting(state)
     state = update_all_machines(state)
+    state = update_scent_field(state, params)
+    state = update_biters(state, params, rng)
     return state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined, no-any-return]
 
 

@@ -47,6 +47,10 @@ class EnvState:
             with shape (NUM_TECHNOLOGIES,)
         machine_health: Current health per tile with shape (height, width).
             Zero means disabled (machine present but non-operational).
+        biter_positions: (x, y) coordinates per biter with shape (max_biters, 2).
+        biter_health: HP per biter with shape (max_biters,). Zero means inactive.
+        scent_field: Machine scent intensity per tile with shape (height, width).
+            Used for biter navigation. Not included in agent observations.
     """
 
     map: jnp.ndarray
@@ -72,6 +76,9 @@ class EnvState:
     research_progress: jnp.ndarray
     research_unlocked: jnp.ndarray
     machine_health: jnp.ndarray
+    biter_positions: jnp.ndarray
+    biter_health: jnp.ndarray
+    scent_field: jnp.ndarray
 
 
 @struct.dataclass
@@ -102,5 +109,13 @@ class EnvParams:
     coal_probability: float = 0.12
     base_resources: int = 1000
     machine_max_health: int = 100
+    max_biters: int = 32
+    biter_spawn_rate: float = 0.05
+    biter_tick_interval: int = 3
+    biter_attack_damage: int = 5
+    biter_health_default: int = 20
+    scent_decay: float = 0.8
+    scent_emission: float = 1.0
+    nest_probability: float = 0.02
 
     NUM_ACTIONS: ClassVar[int] = len(Action)

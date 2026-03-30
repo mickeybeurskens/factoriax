@@ -45,7 +45,7 @@ from factoriax.recipes import NUM_RECIPES, RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
-_MAP_NORM: float = float(BlockType.COAL)
+_MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(MachineType))
 _INV_ITEM_NORM: float = float(NUM_ITEM_TYPES)
 _MAX_CRAFT_TICKS: float = max(1.0, float(max(r["ticks"] for r in RECIPES)))

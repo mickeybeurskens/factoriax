@@ -6,6 +6,7 @@ import pytest
 from factoriax import Action, EnvState
 from factoriax.constants import (
     DEFAULT_MACHINE_MAX_HEALTH,
+    DEFAULT_MAX_BITERS,
     MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
@@ -61,6 +62,9 @@ def state_factory():
         research_progress: jnp.ndarray | None = None,
         research_unlocked: jnp.ndarray | None = None,
         machine_health: jnp.ndarray | None = None,
+        biter_positions: jnp.ndarray | None = None,
+        biter_health: jnp.ndarray | None = None,
+        scent_field: jnp.ndarray | None = None,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
 
@@ -189,6 +193,15 @@ def state_factory():
                     0,
                 ).astype(jnp.int32)
             ),
+            biter_positions=biter_positions
+            if biter_positions is not None
+            else jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
+            biter_health=biter_health
+            if biter_health is not None
+            else jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
+            scent_field=scent_field
+            if scent_field is not None
+            else jnp.zeros(shape, dtype=jnp.float32),
         )
 
     return _create

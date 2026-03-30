@@ -71,6 +71,9 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "research_progress",
     "research_unlocked",
     "machine_health",
+    "biter_positions",
+    "biter_health",
+    "scent_field",
     "rewards",
     "timesteps",
 )
@@ -185,6 +188,9 @@ class Trajectory:
     research_progress: np.ndarray | None = None
     research_unlocked: np.ndarray | None = None
     machine_health: np.ndarray | None = None
+    biter_positions: np.ndarray | None = None
+    biter_health: np.ndarray | None = None
+    scent_field: np.ndarray | None = None
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None
 
