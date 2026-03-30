@@ -5,13 +5,11 @@ import jax.numpy as jnp
 
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
-    MACHINE_MINING_RATE,
     MACHINE_POWER_CONSUMPTION,
     MACHINE_SLOT_ROLES,
     MAX_MACHINE_STACK_SIZE,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
-    POWER_PER_COAL,
     TECH_GATES_RECIPE,
     Action,
     BlockType,
@@ -24,10 +22,9 @@ from factoriax.recipes import (
     ASSEMBLER_RECIPE_INPUT_ITEMS,
     ASSEMBLER_RECIPE_OUTPUTS,
     ASSEMBLER_RECIPE_TICKS,
-    MAX_ASSEMBLER_STACK_SIZE,
     NUM_ASSEMBLER_RECIPES,
 )
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
 
 # Miner slot indices (within machine_inventory_items / machine_inventory_counts).
 _MINER_FUEL_SLOT: int = 0  # INPUT — coal fuel consumed by the miner.
@@ -48,7 +45,7 @@ _PICK_ROLE_OUTPUT: int = int(SlotRole.OUTPUT)
 _PICK_ROLE_STORAGE: int = int(SlotRole.STORAGE)
 
 
-def update_all_machines(state: EnvState) -> EnvState:
+def update_all_machines(state: EnvState, params: EnvParams | None = None) -> EnvState:
     """Update all machines in parallel for one step.
 
     Processes machine updates in order:
@@ -60,32 +57,39 @@ def update_all_machines(state: EnvState) -> EnvState:
     6. Run arms to pick and deposit items
 
     Args:
-        state: Current environment state
+        state: Current environment state.
+        params: Environment parameters. If None, uses defaults.
 
     Returns:
         Updated environment state with all machines processed
     """
-    state = refuel_machines(state)
-    state = run_assemblers(state)
-    state = run_miners(state)
-    state = push_miner_output(state)
+    if params is None:
+        params = EnvParams()
+    max_asm_stack = params.max_assembler_stack_size
+    state = refuel_machines(state, params)
+    state = run_assemblers(state, params)
+    state = run_miners(state, params)
+    state = push_miner_output(state, max_asm_stack)
     state = run_conveyor_belts(state)
-    state = run_arms(state)
+    state = run_arms(state, max_asm_stack)
     return state
 
 
-def refuel_machines(state: EnvState) -> EnvState:
+def refuel_machines(state: EnvState, params: EnvParams | None = None) -> EnvState:
     """Convert coal to power for machines that need it.
 
     Machines with zero power and coal in slot 0 (the fuel/INPUT slot) will
-    consume one coal and gain POWER_PER_COAL units of power.
+    consume one coal and gain ``params.power_per_coal`` units of power.
 
     Args:
-        state: Current environment state
+        state: Current environment state.
+        params: Environment parameters. If None, uses defaults.
 
     Returns:
         Updated state with refueled machines
     """
+    if params is None:
+        params = EnvParams()
     is_miner = state.machine_types == MachineType.MINER
     needs_power = state.machine_power <= 0
     fuel_count = state.machine_inventory_counts[..., _MINER_FUEL_SLOT]
@@ -94,7 +98,7 @@ def refuel_machines(state: EnvState) -> EnvState:
     should_refuel = is_miner & needs_power & has_fuel
 
     new_fuel = fuel_count - should_refuel.astype(jnp.int16)
-    new_power = state.machine_power + (should_refuel.astype(jnp.int32) * POWER_PER_COAL)
+    new_power = state.machine_power + (should_refuel.astype(jnp.int32) * params.power_per_coal)
 
     new_inv_counts = state.machine_inventory_counts.at[..., _MINER_FUEL_SLOT].set(
         new_fuel
@@ -114,6 +118,7 @@ def _assembler_complete_crafts(
     inv_items: jax.Array,
     inv_counts: jax.Array,
     recipe_out: jax.Array,
+    max_asm_stack: int = 1000,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Complete assembler crafts where the countdown reaches 1.
 
@@ -136,7 +141,7 @@ def _assembler_complete_crafts(
 
     completing = is_asm & (power == 1)
     out_has_space = ((out_count == 0) | (out_item == recipe_out)) & (
-        out_count < MAX_ASSEMBLER_STACK_SIZE
+        out_count < max_asm_stack
     )
     can_complete = completing & out_has_space
 
@@ -160,6 +165,7 @@ def _assembler_start_crafts(
     recipe_in_counts: jax.Array,
     recipe_out: jax.Array,
     recipe_ticks: jax.Array,
+    max_asm_stack: int = 1000,
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Start new assembler crafts when idle and inputs are sufficient.
 
@@ -198,7 +204,7 @@ def _assembler_start_crafts(
     out_item = inv_items[..., _ASSEMBLER_OUTPUT_SLOT]
     out_count = inv_counts[..., _ASSEMBLER_OUTPUT_SLOT]
     out_ok = ((out_count == 0) | (out_item == recipe_out)) & (
-        out_count < MAX_ASSEMBLER_STACK_SIZE
+        out_count < max_asm_stack
     )
 
     can_start = idle & has_input0 & has_input1 & out_ok
@@ -230,7 +236,7 @@ def _assembler_start_crafts(
     return inv_items, inv_counts, power
 
 
-def run_assemblers(state: EnvState) -> EnvState:
+def run_assemblers(state: EnvState, params: EnvParams | None = None) -> EnvState:
     """Execute assembler crafting logic for all assemblers in parallel.
 
     Uses ``machine_power`` as a craft progress countdown. Three phases
@@ -242,10 +248,15 @@ def run_assemblers(state: EnvState) -> EnvState:
 
     Args:
         state: Current environment state.
+        params: Environment parameters. If None, uses defaults.
 
     Returns:
         Updated state with assembler operations applied.
     """
+    if params is None:
+        params = EnvParams()
+    max_asm_stack = params.max_assembler_stack_size
+
     is_asm = (state.machine_types == MachineType.ASSEMBLER) & (
         state.machine_health > 0
     )
@@ -262,7 +273,7 @@ def run_assemblers(state: EnvState) -> EnvState:
 
     # Phase 1: complete crafts.
     inv_items, inv_counts, power = _assembler_complete_crafts(
-        is_asm, power, inv_items, inv_counts, recipe_out
+        is_asm, power, inv_items, inv_counts, recipe_out, max_asm_stack
     )
 
     # Phase 2: progress (power > 1).
@@ -300,6 +311,7 @@ def run_assemblers(state: EnvState) -> EnvState:
         recipe_in_counts,
         recipe_out,
         recipe_ticks,
+        max_asm_stack,
     )
 
     return state.replace(
@@ -309,7 +321,7 @@ def run_assemblers(state: EnvState) -> EnvState:
     )
 
 
-def run_miners(state: EnvState) -> EnvState:
+def run_miners(state: EnvState, params: EnvParams | None = None) -> EnvState:
     """Execute miner behavior for all miners in parallel.
 
     Miners with power extract resources from the block below them and
@@ -317,11 +329,14 @@ def run_miners(state: EnvState) -> EnvState:
     consumed when actually mining.
 
     Args:
-        state: Current environment state
+        state: Current environment state.
+        params: Environment parameters. If None, uses defaults.
 
     Returns:
         Updated state with miner operations applied
     """
+    if params is None:
+        params = EnvParams()
     is_miner = (state.machine_types == MachineType.MINER) & (
         state.machine_health > 0
     )
@@ -341,7 +356,9 @@ def run_miners(state: EnvState) -> EnvState:
 
     can_mine = is_miner & has_power & has_resources & has_space
 
-    mining_rate = MACHINE_MINING_RATE[state.machine_types]
+    mining_rate = jnp.where(
+        state.machine_types == MachineType.MINER, params.miner_mining_rate, 0
+    )
     available_space = MAX_MACHINE_STACK_SIZE - output_count
     mine_amount = jnp.minimum(mining_rate, state.block_resources)
     mine_amount = jnp.minimum(mine_amount, available_space)
@@ -381,7 +398,7 @@ def run_miners(state: EnvState) -> EnvState:
     )
 
 
-def push_miner_output(state: EnvState) -> EnvState:
+def push_miner_output(state: EnvState, max_asm_stack: int = 1000) -> EnvState:
     """Push miner output into the machine the miner is facing.
 
     For each miner with items in its output slot, finds the first
@@ -390,6 +407,7 @@ def push_miner_output(state: EnvState) -> EnvState:
 
     Args:
         state: Current environment state (post-mining).
+        max_asm_stack: Maximum stack size for assembler slots.
 
     Returns:
         Updated state with miner outputs pushed forward.
@@ -429,7 +447,7 @@ def push_miner_output(state: EnvState) -> EnvState:
     slot_matches = fwd_slot_items == miner_items[:, :, None]
     miner_cap = jnp.where(
         fwd_mtype == MachineType.ASSEMBLER,
-        MAX_ASSEMBLER_STACK_SIZE,
+        max_asm_stack,
         MAX_MACHINE_STACK_SIZE,
     )
     slot_has_space = (slot_empty | slot_matches) & (
@@ -571,7 +589,7 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     )
 
 
-def run_arms(state: EnvState) -> EnvState:
+def run_arms(state: EnvState, max_asm_stack: int = 1000) -> EnvState:
     """Execute pick-and-place arm behavior for all arms in parallel.
 
     Each arm faces a direction set at placement time.  Every tick:
@@ -617,7 +635,7 @@ def run_arms(state: EnvState) -> EnvState:
     bwd_row = jnp.clip(rows - dy, 0, h - 1)
     bwd_col = jnp.clip(cols - dx, 0, w - 1)
 
-    state = _arm_deposit_phase(state, is_arm, rows, cols, fwd_row, fwd_col)
+    state = _arm_deposit_phase(state, is_arm, rows, cols, fwd_row, fwd_col, max_asm_stack)
     state = _arm_pick_phase(state, is_arm, rows, cols, bwd_row, bwd_col)
     return state
 
@@ -629,6 +647,7 @@ def _arm_deposit_phase(
     cols: jnp.ndarray,
     fwd_row: jnp.ndarray,
     fwd_col: jnp.ndarray,
+    max_asm_stack: int = 1000,
 ) -> EnvState:
     """Deposit arm buffer contents into the forward neighbour.
 
@@ -662,7 +681,7 @@ def _arm_deposit_phase(
     slot_matches = fwd_slot_items == arm_items[:, :, None]
     cap = jnp.where(
         fwd_mtype == MachineType.ASSEMBLER,
-        MAX_ASSEMBLER_STACK_SIZE,
+        max_asm_stack,
         MAX_MACHINE_STACK_SIZE,
     )
     slot_has_space = (slot_empty | slot_matches) & (fwd_slot_counts < cap[:, :, None])

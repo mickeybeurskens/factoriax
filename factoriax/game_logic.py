@@ -969,7 +969,7 @@ def factoriax_step(
     player_idx = state.selected_player
     state = _handle_player_action(state, action, player_idx)
     state = update_crafting(state)
-    state = update_all_machines(state)
+    state = update_all_machines(state, params)
     state = update_scent_field(state, params)
     state = update_biters(state, params, rng)
     return state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined, no-any-return]

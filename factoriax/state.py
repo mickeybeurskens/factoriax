@@ -109,6 +109,9 @@ class EnvParams:
     coal_probability: float = 0.12
     base_resources: int = 1000
     machine_max_health: int = 100
+    power_per_coal: int = 10
+    miner_mining_rate: int = 3
+    max_assembler_stack_size: int = 1000
     max_biters: int = 32
     biter_spawn_rate: float = 0.05
     biter_tick_interval: int = 3
