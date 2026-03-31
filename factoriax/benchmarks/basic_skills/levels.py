@@ -210,6 +210,39 @@ _LEVEL_FACTORY = BenchmarkLevel(
 )
 
 
+# ---------------------------------------------------------------------------
+# Level 7 — place_and_fuel
+# ---------------------------------------------------------------------------
+# 7x7 dirt map with a 3x3 coal patch at (2, 2). Player spawns at centre
+# (3, 3) — right on the coal. Start with 3 miners and 20 coal. Walk to
+# the edge of the patch, place miners on adjacent coal tiles, fuel each.
+# Each miner needs only 3 coal to fill its 64-item output slot (3 coal =
+# 30 power, 30 * 3 ore/tick = 90, capped at 64). The dirt border gives
+# room to navigate around placed machines. Hand-mine extra coal for the
+# second and third miners.
+# Tests: PLACE action + DEPOSIT into fuel slot + navigation around machines.
+
+_LEVEL_PLACE_AND_FUEL = BenchmarkLevel(
+    name="place_and_fuel",
+    description=(
+        "7x7 map with a coal patch. Start with 3 miners and 20 coal. "
+        "Place miners on coal tiles and fuel them. Score measures "
+        "total ore produced in miner output slots."
+    ),
+    level=(
+        LevelBuilder(7, 7)
+        .fill_rect(2, 2, 3, 3, BlockType.COAL, resources=50)
+        .set_player_position(3, 1)
+        .build("basic_place_and_fuel")
+    ),
+    env_params=_params(7, 7, 200),
+)
+_LEVEL_PLACE_AND_FUEL.level.player_inventory = [
+    (int(ItemType.MINER), 3),
+    (int(ItemType.COAL), 20),
+]
+
+
 BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_MINE,
     _LEVEL_CRAFT,
@@ -217,4 +250,5 @@ BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_CRAFT_MINERS,
     _LEVEL_DEPLOY,
     _LEVEL_FACTORY,
+    _LEVEL_PLACE_AND_FUEL,
 ]

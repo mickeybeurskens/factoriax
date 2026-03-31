@@ -437,9 +437,9 @@ class TestBasicSkillsBenchmark:
         """Should require 1 player."""
         assert BasicSkillsBenchmark().num_players == 1
 
-    def test_six_levels(self) -> None:
-        """Should have exactly six levels."""
-        assert len(BasicSkillsBenchmark().levels()) == 6
+    def test_level_count(self) -> None:
+        """Should have exactly seven levels."""
+        assert len(BasicSkillsBenchmark().levels()) == 7
 
     def test_level_names(self) -> None:
         """Level names should match expected values."""
@@ -451,4 +451,5 @@ class TestBasicSkillsBenchmark:
             "craft_miners",
             "deploy_miner",
             "mining_factory",
+            "place_and_fuel",
         ]

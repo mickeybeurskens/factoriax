@@ -37,6 +37,8 @@ MAX_CRAFT_MINERS_SCORE: float = 9.0
 MAX_DEPLOY_MINER_SCORE: float = 64.0
 # Level 6: reasonable target for combined hand + automated mining in 500 ticks.
 MAX_MINING_FACTORY_SCORE: float = 200.0
+# Level 7: 3 miners × 64 output cap = 192.
+MAX_PLACE_AND_FUEL_SCORE: float = 192.0
 
 
 def score_mine(items_mined: dict[str, int]) -> float:
@@ -157,6 +159,7 @@ def aggregate_scores(scores: dict[str, float]) -> float:
         "craft_miners": MAX_CRAFT_MINERS_SCORE,
         "deploy_miner": MAX_DEPLOY_MINER_SCORE,
         "mining_factory": MAX_MINING_FACTORY_SCORE,
+        "place_and_fuel": MAX_PLACE_AND_FUEL_SCORE,
     }
     total = 0.0
     count = 0

@@ -43,13 +43,13 @@ from jax import random
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
+    DEFAULT_MACHINE_MAX_HEALTH,
+    DEFAULT_MAX_BITERS,
     MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     MINEABLE_BLOCKS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
-    DEFAULT_MACHINE_MAX_HEALTH,
-    DEFAULT_MAX_BITERS,
     NUM_TECHNOLOGIES,
     Action,
     BlockType,
@@ -85,6 +85,9 @@ class Level:
         player_inventory: Starting items for every player, as a list of
             ``(ItemType, count)`` pairs.  Each pair fills one inventory
             slot, applied in order.  ``None`` (default) means empty.
+        player_positions: Explicit spawn positions as a list of
+            ``(x, y)`` tuples, one per player.  ``None`` (default)
+            uses the automatic centre-of-map placement.
     """
 
     name: str
@@ -98,6 +101,7 @@ class Level:
     machine_inventory_counts: np.ndarray | None = None
     machine_selected_recipe: np.ndarray | None = None
     player_inventory: list[tuple[int, int]] | None = None
+    player_positions: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
         """Validate array shapes match declared dimensions.
@@ -194,6 +198,7 @@ class LevelBuilder:
         self._machine_inv_items: np.ndarray | None = None
         self._machine_inv_counts: np.ndarray | None = None
         self._machine_selected_recipe: np.ndarray | None = None
+        self._player_positions: list[tuple[int, int]] | None = None
 
     def fill_rect(
         self,
@@ -364,6 +369,32 @@ class LevelBuilder:
         self._machine_directions[y, x] = direction
         return self
 
+    def set_player_position(self, x: int, y: int) -> LevelBuilder:
+        """Set the spawn position for the first player.
+
+        For multi-player levels, call this method once per player in
+        order.  Each call appends a position to the list.
+
+        Args:
+            x: Column (0-indexed).
+            y: Row (0-indexed).
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            IndexError: If ``(x, y)`` is outside the map.
+        """
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise IndexError(
+                f"Position ({x}, {y}) is outside the "
+                f"{self._width}x{self._height} map."
+            )
+        if self._player_positions is None:
+            self._player_positions = []
+        self._player_positions.append((x, y))
+        return self
+
     def build(self, name: str) -> Level:
         """Finalise and return the :class:`Level`.
 
@@ -404,6 +435,11 @@ class LevelBuilder:
             machine_selected_recipe=(
                 self._machine_selected_recipe.copy()
                 if self._machine_selected_recipe is not None
+                else None
+            ),
+            player_positions=(
+                list(self._player_positions)
+                if self._player_positions is not None
                 else None
             ),
         )
@@ -494,7 +530,18 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             f"match params ({params.map_width}x{params.map_height})."
         )
 
-    block_map, player_positions_np = _place_players(level.block_map, params.num_players)
+    if level.player_positions is not None:
+        block_map = level.block_map.copy()
+        player_positions_np = np.array(
+            level.player_positions, dtype=np.int32
+        )
+        # Ensure each spawn tile is walkable.
+        for px, py in level.player_positions:
+            block_map[py, px] = int(BlockType.DIRT)
+    else:
+        block_map, player_positions_np = _place_players(
+            level.block_map, params.num_players
+        )
 
     resources_np = (
         level.block_resources
@@ -897,6 +944,7 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "player_inventory": level.player_inventory,
+        "player_positions": level.player_positions,
     }
     path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
 
@@ -950,6 +998,11 @@ def load_level(path: Path) -> Level:
             np.array(raw_recipe, dtype=np.int32) if raw_recipe is not None else None
         ),
         player_inventory=payload.get("player_inventory"),
+        player_positions=(
+            [tuple(p) for p in raw_pos]
+            if (raw_pos := payload.get("player_positions")) is not None
+            else None
+        ),
     )
 
 

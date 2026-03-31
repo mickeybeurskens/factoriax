@@ -60,6 +60,7 @@ REWARD_FNS: dict[str, Callable[[EnvState, EnvState, EnvParams], jax.Array]] = {
     "craft_miners": sparse_miner_crafting_reward,
     "deploy_miner": miner_output_reward,
     "mining_factory": miner_throughput_reward,
+    "place_and_fuel": miner_output_reward,
 }
 
 
@@ -161,5 +162,7 @@ class BasicSkillsBenchmark:
                 scores["deploy_miner"] = score_deploy_miner(r.final_state)
             elif r.level_name == "mining_factory":
                 scores["mining_factory"] = score_mining_factory(r.items_mined)
+            elif r.level_name == "place_and_fuel" and r.final_state is not None:
+                scores["place_and_fuel"] = score_deploy_miner(r.final_state)
 
         return aggregate_scores(scores)
