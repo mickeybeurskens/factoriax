@@ -410,19 +410,16 @@ def dense_craft_reward(
     proximity = _ore_proximity(new_state)
     mining = _mining_delta(prev_state, new_state)
 
-    # Detect any crafting: total placeable items increased and raw
-    # materials decreased simultaneously.
+    # Detect any crafting: total placeable items increased.
     placeables = jnp.array([
         ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT,
         ItemType.ARM, ItemType.ASSEMBLER,
     ], dtype=jnp.int32)
-    prev_placed = sum(
-        _item_count(prev_state, int(p)) for p in placeables
-    )
-    new_placed = sum(
-        _item_count(new_state, int(p)) for p in placeables
-    )
-    craft_delta = jnp.maximum(new_placed - prev_placed, 0)
+    prev_is_p = jnp.isin(prev_state.inventory_items[0], placeables)
+    new_is_p = jnp.isin(new_state.inventory_items[0], placeables)
+    prev_count = jnp.sum(jnp.where(prev_is_p, prev_state.inventory_counts[0], 0))
+    new_count = jnp.sum(jnp.where(new_is_p, new_state.inventory_counts[0], 0))
+    craft_delta = jnp.maximum(new_count - prev_count, 0)
 
     return proximity + mining + 10.0 * craft_delta.astype(jnp.float32)
 
