@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from factoriax.constants import Action, MachineType
+from factoriax.constants import Direction, MachineType
 from factoriax.editor.dialogs import FileDialog, _list_level_files
 from factoriax.editor.state import (
     editor_state_from_level,
@@ -135,7 +135,7 @@ class TestEditorSaveLoadRoundTrip:
     def test_round_trip_preserves_machines(self) -> None:
         """Machines and directions survive save/load."""
         state = new_editor_state(8, 8, name="roundtrip")
-        set_machine(state, 3, 3, int(MachineType.ARM), int(Action.LEFT))
+        set_machine(state, 3, 3, int(MachineType.ARM), int(Direction.LEFT))
 
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "test.json"
@@ -145,7 +145,7 @@ class TestEditorSaveLoadRoundTrip:
 
         restored = editor_state_from_level(loaded)
         assert restored.machine_types[3, 3] == int(MachineType.ARM)
-        assert restored.machine_directions[3, 3] == int(Action.LEFT)
+        assert restored.machine_directions[3, 3] == int(Direction.LEFT)
         np.testing.assert_array_equal(
             restored.block_map, state.block_map
         )

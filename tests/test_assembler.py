@@ -1,12 +1,12 @@
 """Tests for the assembler machine system."""
 
-from jax import random
-
 import jax.numpy as jnp
+from jax import random
 
 from factoriax.constants import (
     DEFAULT_MACHINE_MAX_HEALTH,
     NUM_TECHNOLOGIES,
+    Direction,
     ItemType,
     MachineType,
 )
@@ -215,14 +215,13 @@ class TestAssemblerDepositFiltering:
 
     def test_correct_item_accepted(self) -> None:
         """Iron into slot 0 of hull recipe should succeed."""
-        from factoriax.constants import Action
         from factoriax.game_logic import deposit_to_adjacent
 
         state = _make_state_with_assembler(recipe=0)
         # Place player at (1,0) facing LEFT toward assembler at (0,0).
         state = state.replace(
             player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(Action.LEFT),
+            player_directions=state.player_directions.at[0].set(Direction.LEFT),
             inventory_items=state.inventory_items.at[0, 0].set(
                 int(ItemType.IRON)
             ),
@@ -237,13 +236,12 @@ class TestAssemblerDepositFiltering:
 
     def test_wrong_item_rejected(self) -> None:
         """Copper into slot 0 of hull recipe should be rejected."""
-        from factoriax.constants import Action
         from factoriax.game_logic import deposit_to_adjacent
 
         state = _make_state_with_assembler(recipe=0)
         state = state.replace(
             player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(Action.LEFT),
+            player_directions=state.player_directions.at[0].set(Direction.LEFT),
             inventory_items=state.inventory_items.at[0, 0].set(
                 int(ItemType.COPPER)
             ),
@@ -257,13 +255,12 @@ class TestAssemblerDepositFiltering:
 
     def test_unused_slot_rejected(self) -> None:
         """Hull recipe uses 1 input; focused slot 1 should not accept items."""
-        from factoriax.constants import Action
         from factoriax.game_logic import deposit_to_adjacent
 
         state = _make_state_with_assembler(recipe=0)
         state = state.replace(
             player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(Action.LEFT),
+            player_directions=state.player_directions.at[0].set(Direction.LEFT),
             inventory_items=state.inventory_items.at[0, 0].set(
                 int(ItemType.IRON)
             ),

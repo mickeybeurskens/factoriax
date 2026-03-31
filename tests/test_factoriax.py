@@ -6,7 +6,14 @@ import numpy as np
 import pytest
 from jax import random
 
-from factoriax import Action, BlockType, EnvParams, EnvState, make_factoriax_env
+from factoriax import (
+    Action,
+    BlockType,
+    Direction,
+    EnvParams,
+    EnvState,
+    make_factoriax_env,
+)
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     NUM_ACTIONS,
@@ -60,12 +67,14 @@ class TestConstants:
         assert int(BlockType.COAL) not in solid_set
 
     def test_action_values(self) -> None:
-        """Actions should be numbered 0-4."""
+        """Movement actions should be numbered 0-6."""
         assert Action.NOOP == 0
-        assert Action.LEFT == 1
-        assert Action.RIGHT == 2
-        assert Action.UP == 3
-        assert Action.DOWN == 4
+        assert Action.FORWARD == 1
+        assert Action.BACKWARD == 2
+        assert Action.LEFT == 3
+        assert Action.RIGHT == 4
+        assert Action.TURN_LEFT == 5
+        assert Action.TURN_RIGHT == 6
 
 
 class TestWorldGen:
@@ -179,25 +188,33 @@ class TestGameLogic:
         # Miner tile is not walkable
         assert not is_position_walkable(state, jnp.array([2, 0]))
 
-    @pytest.mark.parametrize(
-        "action, expected_pos",
-        [
-            (Action.LEFT, [0, 1]),
-            (Action.RIGHT, [2, 1]),
-            (Action.UP, [1, 0]),
-            (Action.DOWN, [1, 2]),
-        ],
-        ids=["left", "right", "up", "down"],
-    )
-    def test_move_player(
-        self, simple_state: EnvState, action: int, expected_pos: list[int]
+    def test_forward_moves_in_facing_direction(
+        self, state_factory
     ) -> None:
-        """Player should move in the given direction on dirt."""
-        new_state = move_player(simple_state, action, 0)
-        assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array(expected_pos)
+        """FORWARD should move the player in their facing direction."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.RIGHT),
         )
-        assert new_state.player_directions[0] == action
+        new_state = move_player(state, Action.FORWARD, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([2, 1])
+        )
+        assert int(new_state.player_directions[0]) == Direction.RIGHT
+
+    def test_turn_does_not_move(self, state_factory) -> None:
+        """TURN_LEFT should change facing without moving."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.UP),
+        )
+        new_state = move_player(state, Action.TURN_LEFT, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([1, 1])
+        )
+        assert int(new_state.player_directions[0]) == Direction.LEFT
 
     def test_move_player_blocked_by_water(self, state_factory) -> None:
         """Player should not move into water."""
@@ -208,26 +225,42 @@ class TestGameLogic:
             ],
             dtype=jnp.int32,
         )
-        state = state_factory(world_map=world_map, player_position=(0, 0))
-        new_state = move_player(state, Action.RIGHT, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 0]))
-        assert new_state.player_directions[0] == Action.RIGHT
-
-    def test_move_player_blocked_by_bounds(self, simple_state: EnvState) -> None:
-        """Player should not move out of bounds."""
-        state = simple_state.replace(
-            player_positions=jnp.array([[0, 0]], dtype=jnp.int32)
+        state = state_factory(
+            world_map=world_map,
+            player_position=(0, 0),
+            player_direction=int(Direction.RIGHT),
         )
-        new_state = move_player(state, Action.LEFT, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 0]))
-
-    def test_noop_does_not_change_position(self, simple_state: EnvState) -> None:
-        """NOOP should not change player position or direction."""
-        new_state = move_player(simple_state, Action.NOOP, 0)
+        new_state = move_player(state, Action.FORWARD, 0)
         assert jnp.array_equal(
-            new_state.player_positions[0], simple_state.player_positions[0]
+            new_state.player_positions[0], jnp.array([0, 0])
         )
-        assert new_state.player_directions[0] == simple_state.player_directions[0]
+
+    def test_move_player_blocked_by_bounds(self, state_factory) -> None:
+        """Player should not move out of bounds."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(0, 0),
+            player_direction=int(Direction.LEFT),
+        )
+        new_state = move_player(state, Action.FORWARD, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([0, 0])
+        )
+
+    def test_noop_does_not_change_position(
+        self, state_factory
+    ) -> None:
+        """NOOP should not change player position or direction."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.DOWN),
+        )
+        new_state = move_player(state, Action.NOOP, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], state.player_positions[0]
+        )
+        assert int(new_state.player_directions[0]) == Direction.DOWN
 
     def test_is_game_over_before_max_timesteps(self, simple_state: EnvState) -> None:
         """Game should not be over before max timesteps."""

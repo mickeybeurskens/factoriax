@@ -14,6 +14,7 @@ from factoriax.constants import (
     PLACEABLE_ITEMS,
     SOLID_BLOCKS,
     Action,
+    Direction,
     ItemType,
     MachineType,
 )
@@ -134,10 +135,10 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
         # intuitive: face a source machine, place the arm, and it
         # grabs from what you are looking at.
         opposite = jnp.int32(Action.NOOP)
-        opposite = jnp.where(direction == Action.LEFT, Action.RIGHT, opposite)
-        opposite = jnp.where(direction == Action.RIGHT, Action.LEFT, opposite)
-        opposite = jnp.where(direction == Action.UP, Action.DOWN, opposite)
-        opposite = jnp.where(direction == Action.DOWN, Action.UP, opposite)
+        opposite = jnp.where(direction == Direction.LEFT, Direction.RIGHT, opposite)
+        opposite = jnp.where(direction == Direction.RIGHT, Direction.LEFT, opposite)
+        opposite = jnp.where(direction == Direction.UP, Direction.DOWN, opposite)
+        opposite = jnp.where(direction == Direction.DOWN, Direction.UP, opposite)
         placed_dir = jnp.where(
             machine_type == MachineType.ARM, opposite, direction
         )

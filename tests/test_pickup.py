@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from factoriax import Action, BlockType, ItemType
+from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_STACK_SIZE,
@@ -61,7 +61,7 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=jnp.array(
                 [[MachineType.NONE, MachineType.CHEST]], dtype=jnp.int32
             ),
@@ -90,7 +90,7 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=jnp.array(
                 [[MachineType.NONE, MachineType.CHEST]], dtype=jnp.int32
             ),
@@ -119,7 +119,7 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
         new_state = pickup_machine(state, 0)
 
@@ -134,7 +134,7 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
         new_state = pickup_machine(state, 0)
 
@@ -151,7 +151,7 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(
@@ -188,7 +188,7 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(
@@ -210,12 +210,12 @@ class TestPickupMachine:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=jnp.array(
                 [[MachineType.NONE, MachineType.MINER]], dtype=jnp.int32
             ),
             machine_power=jnp.array([[0, 50]], dtype=jnp.int32),
-            machine_direction=jnp.array([[0, Action.DOWN]], dtype=jnp.int32),
+            machine_direction=jnp.array([[0, Direction.DOWN]], dtype=jnp.int32),
         )
         new_state = pickup_machine(state, 0)
 

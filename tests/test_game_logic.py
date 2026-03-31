@@ -7,9 +7,8 @@ Covers the private helpers ``_find_deposit_slot`` and ``_find_withdraw_slot``
 
 import jax
 import jax.numpy as jnp
-import pytest
 
-from factoriax import Action, BlockType, EnvParams, ItemType
+from factoriax import Action, BlockType, Direction, EnvParams, ItemType
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
@@ -234,26 +233,67 @@ class TestFindWithdrawSlot:
 class TestHandlePlayerAction:
     """Tests for the action dispatch function."""
 
-    @pytest.mark.parametrize(
-        "action, expected_pos",
-        [
-            (Action.LEFT, [0, 1]),
-            (Action.RIGHT, [2, 1]),
-            (Action.UP, [1, 0]),
-            (Action.DOWN, [1, 2]),
-        ],
-        ids=["left", "right", "up", "down"],
-    )
-    def test_movement_dispatches_correctly(
-        self, state_factory, action: int, expected_pos: list[int]
+    def test_forward_moves_in_facing_direction(
+        self, state_factory
     ) -> None:
-        """Movement actions should update the player's position."""
+        """FORWARD should move the player in their facing direction."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
+            player_direction=int(Direction.RIGHT),
         )
-        new_state = _handle_player_action(state, action, 0)
-        assert jnp.array_equal(new_state.player_positions[0], jnp.array(expected_pos))
+        new_state = _handle_player_action(state, Action.FORWARD, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([2, 1])
+        )
+        # Facing should not change.
+        assert int(new_state.player_directions[0]) == Direction.RIGHT
+
+    def test_backward_moves_opposite_facing(
+        self, state_factory
+    ) -> None:
+        """BACKWARD should move opposite to facing without changing it."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.RIGHT),
+        )
+        new_state = _handle_player_action(state, Action.BACKWARD, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([0, 1])
+        )
+        assert int(new_state.player_directions[0]) == Direction.RIGHT
+
+    def test_strafe_left_moves_perpendicular(
+        self, state_factory
+    ) -> None:
+        """LEFT should strafe left relative to facing."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.RIGHT),
+        )
+        # Facing RIGHT, strafe left = UP.
+        new_state = _handle_player_action(state, Action.LEFT, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([1, 0])
+        )
+        assert int(new_state.player_directions[0]) == Direction.RIGHT
+
+    def test_turn_changes_facing_without_moving(
+        self, state_factory
+    ) -> None:
+        """TURN_LEFT/TURN_RIGHT should rotate facing in place."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.UP),
+        )
+        new_state = _handle_player_action(state, Action.TURN_RIGHT, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([1, 1])
+        )
+        assert int(new_state.player_directions[0]) == Direction.RIGHT
 
     def test_mine_decrements_resources(self, state_factory) -> None:
         """MINE action should extract a resource from the block underfoot."""

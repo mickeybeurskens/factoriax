@@ -5,6 +5,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     Action,
     BlockType,
+    Direction,
     ItemType,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
@@ -25,6 +26,7 @@ from factoriax.state import EnvParams, EnvState
 __all__ = [
     "Action",
     "BlockType",
+    "Direction",
     "EnvParams",
     "EnvState",
     "FactoriaXEnv",

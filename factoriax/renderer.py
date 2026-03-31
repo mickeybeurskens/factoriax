@@ -8,8 +8,8 @@ from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
     NUM_INVENTORY_SLOTS,
-    Action,
     BlockType,
+    Direction,
     ItemType,
     MachineType,
     load_all_textures,
@@ -75,7 +75,7 @@ PLAYER_COLORS = [
 
 
 def create_player_texture(
-    direction: int = Action.DOWN,
+    direction: int = Direction.DOWN,
     player_idx: int = 0,
     is_selected: bool = True,
     size: int = BLOCK_PIXEL_SIZE,
@@ -113,13 +113,13 @@ def create_player_texture(
 
     # Build indicator triangle via vectorised row/column masks.
     rows = np.arange(indicator_size)
-    if direction == Action.UP:
+    if direction == Direction.UP:
         pys = 1 + rows
         centers_x = center
-    elif direction == Action.DOWN:
+    elif direction == Direction.DOWN:
         pys = size - 2 - rows
         centers_x = center
-    elif direction == Action.LEFT:
+    elif direction == Direction.LEFT:
         pys = center
         centers_x = 1 + rows
     else:  # RIGHT
@@ -128,7 +128,7 @@ def create_player_texture(
 
     for i in range(indicator_size):
         offsets = np.arange(-i, i + 1)
-        if direction in (Action.UP, Action.DOWN):
+        if direction in (Direction.UP, Direction.DOWN):
             py = int(pys[i])
             pxs = np.clip(centers_x + offsets, 0, size - 1)
             player[py, pxs] = [*indicator_color, 255]
@@ -338,19 +338,19 @@ def _draw_chevron(
         cy: Centre row of the chevron.
         cx: Centre column of the chevron.
         size: Half-extent of the arrow in pixels.
-        direction: Action.LEFT / RIGHT / UP / DOWN.
+        direction: Direction.LEFT / RIGHT / UP / DOWN.
     """
     h, w = image.shape[:2]
     for d in range(-size, size + 1):
         depth = size - abs(d)
         for t in range(depth + 1):
-            if direction == Action.RIGHT:
+            if direction == Direction.RIGHT:
                 py, px = cy + d, cx + t
-            elif direction == Action.LEFT:
+            elif direction == Direction.LEFT:
                 py, px = cy + d, cx - t
-            elif direction == Action.DOWN:
+            elif direction == Direction.DOWN:
                 py, px = cy + t, cx + d
-            elif direction == Action.UP:
+            elif direction == Direction.UP:
                 py, px = cy - t, cx + d
             else:
                 return
@@ -372,12 +372,12 @@ def _draw_belt_arrows(
     arrow_size = max(1, size // 8)
     mid = size // 2
 
-    if direction in (Action.LEFT, Action.RIGHT):
+    if direction in (Direction.LEFT, Direction.RIGHT):
         cy = mid
         for i in range(3):
             cx = size * (1 + 2 * i) // 6
             _draw_chevron(icon, cy, cx, arrow_size, direction)
-    elif direction in (Action.UP, Action.DOWN):
+    elif direction in (Direction.UP, Direction.DOWN):
         cx = mid
         for i in range(3):
             cy = size * (1 + 2 * i) // 6
@@ -410,7 +410,7 @@ def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
 
     # Shaft line along the facing axis, inset from edges.
     margin = max(2, size // 6)
-    if direction in (Action.LEFT, Action.RIGHT):
+    if direction in (Direction.LEFT, Direction.RIGHT):
         icon[mid - half_t : mid + half_t + 1, margin : size - margin] = (
             _ARM_LINE_COLOR
         )
@@ -421,29 +421,29 @@ def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
 
     # Arrowhead on the deposit (forward) end.
     arrow_size = max(1, size // 8)
-    if direction == Action.RIGHT:
+    if direction == Direction.RIGHT:
         _draw_arm_chevron(icon, mid, size - margin - 1, arrow_size, direction)
-    elif direction == Action.LEFT:
+    elif direction == Direction.LEFT:
         _draw_arm_chevron(icon, mid, margin, arrow_size, direction)
-    elif direction == Action.DOWN:
+    elif direction == Direction.DOWN:
         _draw_arm_chevron(icon, size - margin - 1, mid, arrow_size, direction)
-    elif direction == Action.UP:
+    elif direction == Direction.UP:
         _draw_arm_chevron(icon, margin, mid, arrow_size, direction)
 
     # Small circle on the pick (back) end.
     radius = max(1, size // 8)
-    if direction == Action.RIGHT:
+    if direction == Direction.RIGHT:
         cy, cx = mid, margin
-    elif direction == Action.LEFT:
+    elif direction == Direction.LEFT:
         cy, cx = mid, size - margin - 1
-    elif direction == Action.DOWN:
+    elif direction == Direction.DOWN:
         cy, cx = mid, margin
     else:  # UP
         cy, cx = mid, size - margin - 1
     # Swap for vertical directions — circle is at the opposite end.
-    if direction == Action.DOWN:
+    if direction == Direction.DOWN:
         cy, cx = margin, mid
-    elif direction == Action.UP:
+    elif direction == Direction.UP:
         cy, cx = size - margin - 1, mid
 
     ys, xs = np.ogrid[:size, :size]
@@ -467,19 +467,19 @@ def _draw_arm_chevron(
         cy: Centre row of the chevron.
         cx: Centre column of the chevron.
         size: Half-extent of the arrow in pixels.
-        direction: Action.LEFT / RIGHT / UP / DOWN.
+        direction: Direction.LEFT / RIGHT / UP / DOWN.
     """
     h, w = image.shape[:2]
     for d in range(-size, size + 1):
         depth = size - abs(d)
         for t in range(depth + 1):
-            if direction == Action.RIGHT:
+            if direction == Direction.RIGHT:
                 py, px = cy + d, cx + t
-            elif direction == Action.LEFT:
+            elif direction == Direction.LEFT:
                 py, px = cy + d, cx - t
-            elif direction == Action.DOWN:
+            elif direction == Direction.DOWN:
                 py, px = cy + t, cx + d
-            elif direction == Action.UP:
+            elif direction == Direction.UP:
                 py, px = cy - t, cx + d
             else:
                 return
@@ -511,11 +511,11 @@ def _draw_miner_indicator(icon: np.ndarray, direction: int) -> None:
     for t in range(arrow_len):
         spread = half_w * (arrow_len - t) // arrow_len
         for s in range(-spread, spread + 1):
-            if direction == Action.RIGHT:
+            if direction == Direction.RIGHT:
                 py, px = mid + s, size - 1 - t
-            elif direction == Action.LEFT:
+            elif direction == Direction.LEFT:
                 py, px = mid + s, t
-            elif direction == Action.DOWN:
+            elif direction == Direction.DOWN:
                 py, px = size - 1 - t, mid + s
             else:  # UP
                 py, px = t, mid + s
@@ -553,13 +553,13 @@ def render_item_icon(
     icon = np.full((size, size, 4), (*rgb, 255), dtype=np.uint8)
 
     if item_type == ItemType.CONVEYOR_BELT and size >= 6:
-        belt_dir = direction if direction is not None else int(Action.RIGHT)
+        belt_dir = direction if direction is not None else int(Direction.RIGHT)
         _draw_belt_arrows(icon, belt_dir)
     elif item_type == ItemType.ARM and size >= 6:
-        arm_dir = direction if direction is not None else int(Action.RIGHT)
+        arm_dir = direction if direction is not None else int(Direction.RIGHT)
         _draw_arm_indicator(icon, arm_dir)
     elif item_type == ItemType.MINER and size >= 6:
-        miner_dir = direction if direction is not None else int(Action.RIGHT)
+        miner_dir = direction if direction is not None else int(Direction.RIGHT)
         _draw_miner_indicator(icon, miner_dir)
 
     return icon

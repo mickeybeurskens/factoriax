@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import pytest
 
-from factoriax import Action, EnvState
+from factoriax import EnvState
 from factoriax.constants import (
     BLOCK_RESOURCE_DTYPE,
     DEFAULT_MACHINE_MAX_HEALTH,
@@ -15,6 +15,7 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
+    Direction,
     MachineType,
 )
 
@@ -123,7 +124,7 @@ def state_factory():
         elif player_direction is not None:
             directions = jnp.array([player_direction], dtype=jnp.int32)
         else:
-            directions = jnp.full(num_players, Action.DOWN, dtype=jnp.int32)
+            directions = jnp.full(num_players, Direction.DOWN, dtype=jnp.int32)
 
         inv_shape = (num_players, NUM_INVENTORY_SLOTS)
         player_shape = (num_players,)

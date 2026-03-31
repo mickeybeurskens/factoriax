@@ -11,8 +11,8 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     TECH_GATES_RECIPE,
-    Action,
     BlockType,
+    Direction,
     ItemType,
     MachineType,
     SlotRole,
@@ -419,11 +419,11 @@ def push_miner_output(state: EnvState, max_asm_stack: int = 1000) -> EnvState:
     cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
 
     direction = state.machine_direction
-    dx = jnp.where(direction == Action.LEFT, -1, 0) + jnp.where(
-        direction == Action.RIGHT, 1, 0
+    dx = jnp.where(direction == Direction.LEFT, -1, 0) + jnp.where(
+        direction == Direction.RIGHT, 1, 0
     )
-    dy = jnp.where(direction == Action.UP, -1, 0) + jnp.where(
-        direction == Action.DOWN, 1, 0
+    dy = jnp.where(direction == Direction.UP, -1, 0) + jnp.where(
+        direction == Direction.DOWN, 1, 0
     )
 
     fwd_row = jnp.clip(rows + dy, 0, h - 1)
@@ -527,11 +527,11 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     src_counts = state.machine_inventory_counts[..., _BELT_SLOT]  # int16
 
     direction = state.machine_direction
-    dx = jnp.where(direction == Action.LEFT, -1, 0) + jnp.where(
-        direction == Action.RIGHT, 1, 0
+    dx = jnp.where(direction == Direction.LEFT, -1, 0) + jnp.where(
+        direction == Direction.RIGHT, 1, 0
     )
-    dy = jnp.where(direction == Action.UP, -1, 0) + jnp.where(
-        direction == Action.DOWN, 1, 0
+    dy = jnp.where(direction == Direction.UP, -1, 0) + jnp.where(
+        direction == Direction.DOWN, 1, 0
     )
 
     rows = jnp.broadcast_to(jnp.arange(h)[:, None], (h, w))
@@ -623,11 +623,11 @@ def run_arms(state: EnvState, max_asm_stack: int = 1000) -> EnvState:
     cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
 
     direction = state.machine_direction
-    dx = jnp.where(direction == Action.LEFT, -1, 0) + jnp.where(
-        direction == Action.RIGHT, 1, 0
+    dx = jnp.where(direction == Direction.LEFT, -1, 0) + jnp.where(
+        direction == Direction.RIGHT, 1, 0
     )
-    dy = jnp.where(direction == Action.UP, -1, 0) + jnp.where(
-        direction == Action.DOWN, 1, 0
+    dy = jnp.where(direction == Direction.UP, -1, 0) + jnp.where(
+        direction == Direction.DOWN, 1, 0
     )
 
     fwd_row = jnp.clip(rows + dy, 0, h - 1)

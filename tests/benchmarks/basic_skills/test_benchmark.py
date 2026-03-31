@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax import Action, BlockType, ItemType
+from factoriax import BlockType, Direction, ItemType
 from factoriax.benchmarks.basic_skills import BasicSkillsBenchmark
 from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from factoriax.benchmarks.basic_skills.scoring import (
@@ -41,13 +41,13 @@ class TestPlaceMachine:
         """Placing a chest should set machine_types and machine_directions."""
         level = (
             LevelBuilder(5, 5)
-            .place_machine(2, 3, MachineType.CHEST, Action.RIGHT)
+            .place_machine(2, 3, MachineType.CHEST, Direction.RIGHT)
             .build("test_place")
         )
         assert level.machine_types is not None
         assert level.machine_directions is not None
         assert int(level.machine_types[3, 2]) == MachineType.CHEST
-        assert int(level.machine_directions[3, 2]) == Action.RIGHT
+        assert int(level.machine_directions[3, 2]) == Direction.RIGHT
 
     def test_place_machine_default_direction(self) -> None:
         """Default direction should be 0."""

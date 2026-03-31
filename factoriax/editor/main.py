@@ -15,8 +15,8 @@ import pygame
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    Action,
     BlockType,
+    Direction,
     MachineType,
 )
 from factoriax.editor.canvas import (
@@ -82,10 +82,10 @@ _RES_STEP = 10
 _MIN_RES = 0
 
 _DIR_CYCLE = [
-    int(Action.DOWN),
-    int(Action.RIGHT),
-    int(Action.UP),
-    int(Action.LEFT),
+    int(Direction.DOWN),
+    int(Direction.RIGHT),
+    int(Direction.UP),
+    int(Direction.LEFT),
 ]
 
 _CONVEYOR = int(MachineType.CONVEYOR_BELT)
@@ -145,7 +145,7 @@ class ToolState:
     block: int = dataclasses.field(default_factory=lambda: int(BlockType.DIRT))
     machine: int = 0
     direction: int = dataclasses.field(
-        default_factory=lambda: int(Action.DOWN),
+        default_factory=lambda: int(Direction.DOWN),
     )
     brush: ResourceBrush = dataclasses.field(default_factory=ResourceBrush)
     show_resources: bool = False
@@ -232,8 +232,8 @@ def _direction_from_delta(dx: int, dy: int) -> int | None:
     if dx == 0 and dy == 0:
         return None
     if abs(dx) >= abs(dy):
-        return int(Action.RIGHT) if dx > 0 else int(Action.LEFT)
-    return int(Action.DOWN) if dy > 0 else int(Action.UP)
+        return int(Direction.RIGHT) if dx > 0 else int(Direction.LEFT)
+    return int(Direction.DOWN) if dy > 0 else int(Direction.UP)
 
 
 def _recalc_layout(

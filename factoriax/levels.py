@@ -51,8 +51,8 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
-    Action,
     BlockType,
+    Direction,
     MachineType,
 )
 from factoriax.state import EnvParams, EnvState
@@ -343,7 +343,7 @@ class LevelBuilder:
             y: Row (0-indexed).
             machine_type: ``MachineType`` integer value.
             direction: Facing direction as an ``Action`` integer value
-                (e.g. ``Action.RIGHT``).  Defaults to 0 (no direction).
+                (e.g. ``Direction.RIGHT``).  Defaults to 0 (no direction).
 
         Returns:
             ``self`` for chaining.
@@ -595,7 +595,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     return EnvState(
         map=jnp.array(block_map, dtype=jnp.int32),
         player_positions=jnp.array(player_positions_np, dtype=jnp.int32),
-        player_directions=jnp.full(player_shape, int(Action.DOWN), dtype=jnp.int32),
+        player_directions=jnp.full(player_shape, int(Direction.DOWN), dtype=jnp.int32),
         timestep=0,
         inventory_items=jnp.array(inv_items_np, dtype=jnp.int32),
         inventory_counts=jnp.array(inv_counts_np, dtype=jnp.int32),
@@ -660,7 +660,9 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         world_map = world_map.at[py, px].set(BlockType.DIRT)
 
     player_positions_arr = jnp.array(player_positions, dtype=jnp.int32)
-    player_directions = jnp.full(params.num_players, int(Action.DOWN), dtype=jnp.int32)
+    player_directions = jnp.full(
+        params.num_players, int(Direction.DOWN), dtype=jnp.int32
+    )
 
     # Place nests on dirt tiles away from the center.
     rng_nest, _ = random.split(rng_map)

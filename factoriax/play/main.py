@@ -17,6 +17,7 @@ from factoriax.constants import (
     NUM_TECHNOLOGIES,
     PLACEABLE_ITEMS,
     Action,
+    Direction,
     MachineType,
 )
 from factoriax.envs.factoriax_env import make_factoriax_env
@@ -64,10 +65,10 @@ def _tile_in_front(state: object, player_idx: int) -> tuple[int, int]:
     pos = np.array(state.player_positions[player_idx])  # type: ignore[attr-defined]
     direction = int(state.player_directions[player_idx])  # type: ignore[attr-defined]
     offsets: dict[int, tuple[int, int]] = {
-        int(Action.LEFT): (-1, 0),
-        int(Action.RIGHT): (1, 0),
-        int(Action.UP): (0, -1),
-        int(Action.DOWN): (0, 1),
+        int(Direction.LEFT): (-1, 0),
+        int(Direction.RIGHT): (1, 0),
+        int(Direction.UP): (0, -1),
+        int(Direction.DOWN): (0, 1),
     }
     dx, dy = offsets.get(direction, (0, 0))
     return int(pos[0]) + dx, int(pos[1]) + dy
@@ -410,11 +411,7 @@ def _handle_keydown(
     elif event.key in _KEY_TO_ACTION:
         action = _KEY_TO_ACTION[event.key]
     elif event.key in _NAV_KEYS:
-        nav_to_action = {
-            "up": Action.UP, "down": Action.DOWN,
-            "left": Action.LEFT, "right": Action.RIGHT,
-        }
-        action = int(nav_to_action[_NAV_KEYS[event.key]])
+        action = _NAV_KEYS[event.key]
 
     return ps, state, rng, action, running
 
@@ -789,10 +786,12 @@ def _render_frame(
 
 # Module-level key mappings (constant, no need to rebuild per frame).
 _NAV_KEYS = {
-    pygame.K_w: "up",
-    pygame.K_s: "down",
-    pygame.K_a: "left",
-    pygame.K_d: "right",
+    pygame.K_w: Action.FORWARD,
+    pygame.K_s: Action.BACKWARD,
+    pygame.K_a: Action.LEFT,
+    pygame.K_d: Action.RIGHT,
+    pygame.K_q: Action.TURN_LEFT,
+    pygame.K_e: Action.TURN_RIGHT,
 }
 
 _KEY_TO_ACTION = {

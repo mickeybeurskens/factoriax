@@ -288,67 +288,72 @@ MACHINE_TO_ITEM_ARRAY = jnp.array(
 )
 
 
-class Action(IntEnum):
-    """Player actions."""
+class Direction(IntEnum):
+    """Compass facing directions for players and machines.
 
-    NOOP = 0
+    These are stored in ``player_directions`` and ``machine_direction``
+    state arrays. They are NOT actions. Use :class:`Action` for agent
+    inputs and :class:`Direction` for spatial orientation.
+    """
+
     LEFT = 1
     RIGHT = 2
     UP = 3
     DOWN = 4
-    MINE = 5
-    PLACE = 6
-    NEXT_SLOT = 7
-    PREV_SLOT = 8
-    PICKUP = 9
-    DEPOSIT = 10
-    WITHDRAW = 11
-    ROTATE = 12
-    NEXT_MACHINE_SLOT = 13
-    PREV_MACHINE_SLOT = 14
-    CRAFT_MINER = 15
-    CRAFT_CHEST = 16
-    CRAFT_BELT = 17
-    CRAFT_ARM = 18
-    CRAFT_ASSEMBLER = 19
-    RESEARCH = 20
-    REPAIR = 21
 
 
+class Action(IntEnum):
+    """Player actions.
+
+    Movement actions (FORWARD through TURN_RIGHT) are relative to the
+    player's current facing direction. FORWARD/BACKWARD/LEFT/RIGHT move
+    without changing facing. TURN_LEFT/TURN_RIGHT rotate facing without
+    moving.
+    """
+
+    NOOP = 0
+    FORWARD = 1
+    BACKWARD = 2
+    LEFT = 3
+    RIGHT = 4
+    TURN_LEFT = 5
+    TURN_RIGHT = 6
+    MINE = 7
+    PLACE = 8
+    NEXT_SLOT = 9
+    PREV_SLOT = 10
+    PICKUP = 11
+    DEPOSIT = 12
+    WITHDRAW = 13
+    ROTATE = 14
+    NEXT_MACHINE_SLOT = 15
+    PREV_MACHINE_SLOT = 16
+    CRAFT_MINER = 17
+    CRAFT_CHEST = 18
+    CRAFT_BELT = 19
+    CRAFT_ARM = 20
+    CRAFT_ASSEMBLER = 21
+    RESEARCH = 22
+    REPAIR = 23
+
+
+# (dx, dy) offset per compass direction, indexed by Direction value.
 DIRECTIONS = jnp.array(
     [
-        [0, 0],  # NOOP
-        [-1, 0],  # LEFT
-        [1, 0],  # RIGHT
-        [0, -1],  # UP
-        [0, 1],  # DOWN
-        [0, 0],  # MINE
-        [0, 0],  # PLACE
-        [0, 0],  # NEXT_SLOT
-        [0, 0],  # PREV_SLOT
-        [0, 0],  # PICKUP
-        [0, 0],  # DEPOSIT
-        [0, 0],  # WITHDRAW
-        [0, 0],  # ROTATE
-        [0, 0],  # NEXT_MACHINE_SLOT
-        [0, 0],  # PREV_MACHINE_SLOT
-        [0, 0],  # CRAFT_MINER
-        [0, 0],  # CRAFT_CHEST
-        [0, 0],  # CRAFT_BELT
-        [0, 0],  # CRAFT_ARM
-        [0, 0],  # CRAFT_ASSEMBLER
-        [0, 0],  # RESEARCH
-        [0, 0],  # REPAIR
+        [0, 0],   # 0: NONE / invalid
+        [-1, 0],  # 1: LEFT
+        [1, 0],   # 2: RIGHT
+        [0, -1],  # 3: UP
+        [0, 1],   # 4: DOWN
     ],
     dtype=jnp.int32,
 )
 
-DIRECTION_OFFSETS = {
-    Action.UP: (0, -1),
-    Action.DOWN: (0, 1),
-    Action.LEFT: (-1, 0),
-    Action.RIGHT: (1, 0),
-}
+# Counterclockwise turn: UP→LEFT→DOWN→RIGHT→UP
+TURN_LEFT_MAP = jnp.array([0, 4, 3, 1, 2], dtype=jnp.int32)
+
+# Clockwise turn: UP→RIGHT→DOWN→LEFT→UP
+TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
 MINEABLE_BLOCKS = jnp.array([BlockType.COAL, BlockType.IRON, BlockType.COPPER])
 

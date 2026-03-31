@@ -14,8 +14,8 @@ import pytest
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MAX_ACHIEVEMENTS,
-    Action,
     BlockType,
+    Direction,
     MachineType,
 )
 from factoriax.levels import (
@@ -276,7 +276,7 @@ class TestBuildState:
 
     def test_player_directions_default_down(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)
-        assert int(state.player_directions[0]) == int(Action.DOWN)
+        assert int(state.player_directions[0]) == int(Direction.DOWN)
 
     def test_machine_types_none_by_default(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)
@@ -290,7 +290,7 @@ class TestBuildState:
     def test_machine_directions_preserved(self) -> None:
         """Directions set in the Level must appear in the built state."""
         dirs = np.zeros((8, 8), dtype=np.int32)
-        dirs[3, 3] = int(Action.RIGHT)
+        dirs[3, 3] = int(Direction.RIGHT)
         machines = np.full((8, 8), int(MachineType.NONE), dtype=np.int32)
         machines[3, 3] = int(MachineType.CONVEYOR_BELT)
         level = Level(
@@ -302,7 +302,7 @@ class TestBuildState:
             machine_directions=dirs,
         )
         state = build_state(level, _PARAMS_1P)
-        assert int(state.machine_direction[3, 3]) == int(Action.RIGHT)
+        assert int(state.machine_direction[3, 3]) == int(Direction.RIGHT)
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +364,7 @@ class TestSerialization:
         machines = np.full((4, 4), int(MachineType.NONE), dtype=np.int32)
         machines[1, 2] = int(MachineType.ARM)
         dirs = np.zeros((4, 4), dtype=np.int32)
-        dirs[1, 2] = int(Action.LEFT)
+        dirs[1, 2] = int(Direction.LEFT)
         level = Level(
             name="dir",
             map_width=4,

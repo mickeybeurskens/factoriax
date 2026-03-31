@@ -7,11 +7,12 @@ from factoriax.constants import (
     DEFAULT_MACHINE_MAX_HEALTH,
     Action,
     BlockType,
+    Direction,
     ItemType,
     MachineType,
 )
 from factoriax.game_logic import factoriax_step, repair_machine
-from factoriax.machines import run_arms, run_assemblers, run_conveyor_belts, run_miners
+from factoriax.machines import run_assemblers, run_conveyor_belts, run_miners
 from factoriax.state import EnvParams
 
 
@@ -50,7 +51,7 @@ class TestDisabledMachines:
             [[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]],
             dtype=jnp.int32,
         )
-        md = jnp.array([[Action.RIGHT, Action.RIGHT]], dtype=jnp.int32)
+        md = jnp.array([[Direction.RIGHT, Direction.RIGHT]], dtype=jnp.int32)
         inv = jnp.zeros((1, 2, 8), dtype=jnp.int32)
         inv = inv.at[0, 0, 0].set(int(ItemType.IRON))
         cnt = jnp.zeros((1, 2, 8), dtype=jnp.int16)
@@ -103,7 +104,7 @@ class TestRepairAction:
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
+            player_direction=int(Direction.RIGHT),
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(
@@ -127,7 +128,7 @@ class TestRepairAction:
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
+            player_direction=int(Direction.RIGHT),
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(
@@ -152,7 +153,7 @@ class TestRepairAction:
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
+            player_direction=int(Direction.RIGHT),
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(
@@ -177,7 +178,7 @@ class TestRepairAction:
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
+            player_direction=int(Direction.RIGHT),
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -196,7 +197,7 @@ class TestRepairAction:
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
+            player_direction=int(Direction.RIGHT),
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(
@@ -220,7 +221,7 @@ class TestRepairAction:
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
+            player_direction=int(Direction.RIGHT),
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=jnp.array(

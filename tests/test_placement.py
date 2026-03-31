@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 import pytest
 
-from factoriax import Action, BlockType, ItemType
+from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import NUM_INVENTORY_SLOTS, MachineType
 from factoriax.placement import (
     get_tile_in_front,
@@ -19,10 +19,10 @@ class TestDirectionOffsets:
     @pytest.mark.parametrize(
         "direction, expected_x, expected_y",
         [
-            (Action.UP, 1, 0),
-            (Action.DOWN, 1, 2),
-            (Action.LEFT, 0, 1),
-            (Action.RIGHT, 2, 1),
+            (Direction.UP, 1, 0),
+            (Direction.DOWN, 1, 2),
+            (Direction.LEFT, 0, 1),
+            (Direction.RIGHT, 2, 1),
         ],
         ids=["up", "down", "left", "right"],
     )
@@ -109,7 +109,7 @@ class TestMachinePlacement:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -132,7 +132,7 @@ class TestMachinePlacement:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -154,7 +154,7 @@ class TestMachinePlacement:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -171,7 +171,7 @@ class TestMachinePlacement:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
         new_state = place_machine(state, 0)
 
@@ -190,7 +190,7 @@ class TestMachinePlacement:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -213,7 +213,7 @@ class TestMachinePlacement:
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             selected_slots=selected_slots,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax import Action, BlockType, ItemType
+from factoriax import Action, BlockType, Direction, ItemType
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
@@ -75,7 +75,7 @@ class TestDepositToChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -100,7 +100,7 @@ class TestDepositToChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -125,7 +125,7 @@ class TestDepositToChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -144,7 +144,7 @@ class TestDepositToChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -158,7 +158,7 @@ class TestDepositToChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
 
@@ -172,7 +172,7 @@ class TestDepositToChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(2, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
         )
@@ -191,7 +191,7 @@ class TestDepositToMiner:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
@@ -220,7 +220,7 @@ class TestDepositToMiner:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
@@ -244,7 +244,7 @@ class TestDepositToAssembler:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
@@ -263,7 +263,7 @@ class TestDepositToAssembler:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
@@ -283,7 +283,7 @@ class TestDepositToAssembler:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
@@ -314,7 +314,7 @@ class TestDepositSelectedSlot:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             selected_slots=jnp.array([2], dtype=jnp.int32),
@@ -349,7 +349,7 @@ class TestWithdrawFromChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
             machine_inventory_items=m_items,
             machine_inventory_counts=m_counts,
@@ -366,7 +366,7 @@ class TestWithdrawFromChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
 
@@ -379,7 +379,7 @@ class TestWithdrawFromChest:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
 
         state = withdraw_from_adjacent(state, 0)
@@ -401,7 +401,7 @@ class TestWithdrawPriority:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
             machine_inventory_items=m_items,
             machine_inventory_counts=m_counts,
@@ -426,7 +426,7 @@ class TestWithdrawPriority:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
             machine_inventory_items=m_items,
             machine_inventory_counts=m_counts,
@@ -455,7 +455,7 @@ class TestWithdrawMergesIntoInventory:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -484,7 +484,7 @@ class TestDepositWithdrawViaStep:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -514,7 +514,7 @@ class TestDepositWithdrawViaStep:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
             machine_inventory_items=m_items,
             machine_inventory_counts=m_counts,

@@ -25,7 +25,7 @@ from factoriax.constants import (
     RESEARCH_COST,
     SLOT_ROLE_COLORS,
     SLOT_ROLE_LABELS,
-    Action,
+    Direction,
     ItemType,
     MachineType,
 )
@@ -1142,10 +1142,10 @@ _HOTBAR_SLOTS: int = 8
 """Number of inventory slots visible in the hotbar at once."""
 
 _DIRECTION_LETTERS: dict[int, str] = {
-    int(Action.LEFT): "W",
-    int(Action.RIGHT): "E",
-    int(Action.UP): "N",
-    int(Action.DOWN): "S",
+    int(Direction.LEFT): "W",
+    int(Direction.RIGHT): "E",
+    int(Direction.UP): "N",
+    int(Direction.DOWN): "S",
 }
 
 # Gold border for the held-slot highlight in inventory swap mode.

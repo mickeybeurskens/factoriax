@@ -16,7 +16,6 @@ from factoriax.crafting import (
 )
 
 
-
 class TestInventoryHelpers:
     """Tests for inventory helper functions."""
 

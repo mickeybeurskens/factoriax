@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax import Action, BlockType, ItemType
+from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     MachineType,
@@ -62,12 +62,12 @@ class TestRotateAdjacent:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-            machine_direction=jnp.full((3, 3), Action.DOWN, dtype=jnp.int32),
+            machine_direction=jnp.full((3, 3), Direction.DOWN, dtype=jnp.int32),
         )
 
-        expected = [Action.RIGHT, Action.UP, Action.LEFT, Action.DOWN]
+        expected = [Direction.RIGHT, Direction.UP, Direction.LEFT, Direction.DOWN]
         for exp in expected:
             state = rotate_adjacent(state, 0)
             assert int(state.machine_direction[1, 2]) == exp
@@ -77,7 +77,7 @@ class TestRotateAdjacent:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
         original_dirs = state.machine_direction.copy()
         state = rotate_adjacent(state, 0)
@@ -88,7 +88,7 @@ class TestRotateAdjacent:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(2, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
         original_dirs = state.machine_direction.copy()
         state = rotate_adjacent(state, 0)
@@ -109,7 +109,7 @@ class TestCycleMachineSlot:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
             machine_selected_slot=jnp.zeros((3, 3), dtype=jnp.int32).at[1, 2].set(7),
         )
@@ -123,7 +123,7 @@ class TestCycleMachineSlot:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
 
@@ -135,7 +135,7 @@ class TestCycleMachineSlot:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
         )
         original = state.machine_selected_slot.copy()
         state = cycle_machine_slot(state, 0, 1)
@@ -157,7 +157,7 @@ class TestFocusedDeposit:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -185,7 +185,7 @@ class TestFocusedDeposit:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             inventory_items=inv_items,
             inventory_counts=inv_counts,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
@@ -221,7 +221,7 @@ class TestFocusedWithdraw:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
             machine_inventory_items=m_items,
             machine_inventory_counts=m_counts,
@@ -249,7 +249,7 @@ class TestFocusedWithdraw:
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
-            player_direction=Action.RIGHT,
+            player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
             machine_inventory_items=m_items,
             machine_inventory_counts=m_counts,

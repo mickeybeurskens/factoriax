@@ -8,7 +8,7 @@ from factoriax.constants import (
     DEFAULT_MACHINE_MAX_HEALTH,
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
-    Action,
+    Direction,
     ItemType,
     MachineType,
 )
@@ -110,7 +110,7 @@ class TestConveyorBelt:
     def test_noop_when_no_items(self, state_factory) -> None:
         """Belt with empty slot does nothing."""
         types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Action.RIGHT, Action.RIGHT]])
+        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
         state = _belt_state(state_factory, machine_types=types, machine_direction=dirs)
         result = run_conveyor_belts(state)
         assert int(result.machine_inventory_counts[0, 0, 0]) == 0
@@ -119,7 +119,7 @@ class TestConveyorBelt:
     def test_pushes_item_right(self, state_factory) -> None:
         """Belt facing right moves items from slot (0,0) to (0,1)."""
         types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Action.RIGHT, Action.RIGHT]])
+        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
         items = jnp.array([[int(ItemType.COAL), 0]])
         counts = jnp.array([[10, 0]])
         state = _belt_state(
@@ -139,7 +139,7 @@ class TestConveyorBelt:
         types = jnp.array(
             [[MachineType.CONVEYOR_BELT], [MachineType.CONVEYOR_BELT]]
         )
-        dirs = jnp.array([[Action.DOWN], [Action.DOWN]])
+        dirs = jnp.array([[Direction.DOWN], [Direction.DOWN]])
         items = jnp.array([[int(ItemType.IRON)], [0]])
         counts = jnp.array([[5], [0]])
         state = _belt_state(
@@ -158,7 +158,7 @@ class TestConveyorBelt:
         types = jnp.array(
             [[MachineType.CONVEYOR_BELT, MachineType.CHEST]]
         )
-        dirs = jnp.array([[Action.RIGHT, Action.RIGHT]])
+        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
         items = jnp.array([[int(ItemType.COAL), 0]])
         counts = jnp.array([[8, 0]])
         state = _belt_state(
@@ -175,7 +175,7 @@ class TestConveyorBelt:
     def test_does_not_push_to_blocked_target(self, state_factory) -> None:
         """Belt does not push when target holds a different item at full count."""
         types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Action.RIGHT, Action.RIGHT]])
+        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
         items = jnp.array([[int(ItemType.COAL), int(ItemType.IRON)]])
         counts = jnp.array([[5, MAX_MACHINE_STACK_SIZE]])
         state = _belt_state(
@@ -191,7 +191,7 @@ class TestConveyorBelt:
     def test_merges_same_item_into_target(self, state_factory) -> None:
         """Items of the same type merge into the target's existing stack."""
         types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Action.RIGHT, Action.RIGHT]])
+        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
         items = jnp.array([[int(ItemType.COAL), int(ItemType.COAL)]])
         counts = jnp.array([[3, 7]])
         state = _belt_state(
@@ -235,7 +235,7 @@ class TestArm:
         shape = (1, 2)
         types = jnp.array([[MachineType.MINER, MachineType.ARM]])
         # Arm facing RIGHT: bwd=(0,0) MINER, fwd=(0,2) clipped.
-        dirs = jnp.array([[0, int(Action.RIGHT)]])
+        dirs = jnp.array([[0, int(Direction.RIGHT)]])
         inv_items, inv_counts = _inv(
             shape,
             items_slot1=jnp.array([[int(ItemType.COAL), 0]]),
@@ -262,7 +262,7 @@ class TestArm:
         # So arm at (0,1) facing LEFT: forward=(0,0), not_self=True → deposits to chest
         shape = (1, 2)
         types = jnp.array([[MachineType.CHEST, MachineType.ARM]])
-        dirs = jnp.array([[0, int(Action.LEFT)]])
+        dirs = jnp.array([[0, int(Direction.LEFT)]])
         inv_items, inv_counts = _inv(
             shape,
             items_slot0=jnp.array([[0, int(ItemType.IRON)]]),
@@ -292,7 +292,7 @@ class TestArm:
         types = jnp.array(
             [[MachineType.CHEST, MachineType.ARM, MachineType.MINER]]
         )
-        dirs = jnp.array([[0, int(Action.LEFT), 0]])
+        dirs = jnp.array([[0, int(Direction.LEFT), 0]])
         inv_items, inv_counts = _inv(
             shape,
             # ARM buffer slot 0 has IRON
@@ -324,7 +324,7 @@ class TestArm:
         # ARM faces right into empty space (no machine forward)
         shape = (1, 2)
         types = jnp.array([[MachineType.ARM, MachineType.NONE]])
-        dirs = jnp.array([[int(Action.RIGHT), 0]])
+        dirs = jnp.array([[int(Direction.RIGHT), 0]])
         inv_items, inv_counts = _inv(
             shape,
             items_slot0=jnp.array([[int(ItemType.COAL), 0]]),
@@ -344,7 +344,7 @@ class TestArm:
         """Arm with empty buffer and empty backward neighbour does nothing."""
         shape = (1, 2)
         types = jnp.array([[MachineType.NONE, MachineType.ARM]])
-        dirs = jnp.array([[0, int(Action.RIGHT)]])  # bwd = (0,0) NONE
+        dirs = jnp.array([[0, int(Direction.RIGHT)]])  # bwd = (0,0) NONE
         inv_items = jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32)
         inv_counts = jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
         state = _arm_state(
@@ -374,7 +374,7 @@ class TestArm:
             MachineType.ARM,
             MachineType.CONVEYOR_BELT,
         ]])
-        dirs = jnp.array([[0, int(Action.RIGHT), int(Action.RIGHT)]])
+        dirs = jnp.array([[0, int(Direction.RIGHT), int(Direction.RIGHT)]])
         inv_items, inv_counts = _inv(
             shape,
             # Chest slot 0: 10 COAL.  ARM buffer: 5 COAL.  Belt: empty.
@@ -415,7 +415,7 @@ class TestArm:
         # Arm at (0,1) facing RIGHT: bwd=(0,0) MINER.
         shape = (1, 2)
         types = jnp.array([[MachineType.MINER, MachineType.ARM]])
-        dirs = jnp.array([[0, int(Action.RIGHT)]])
+        dirs = jnp.array([[0, int(Direction.RIGHT)]])
         inv_items, inv_counts = _inv(
             shape,
             # MINER fuel (slot 0, INPUT role) has COAL — should NOT be picked

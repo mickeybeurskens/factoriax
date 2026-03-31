@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
+from factoriax.biters import update_biters, update_scent_field
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
     DEFAULT_MACHINE_MAX_HEALTH,
@@ -19,13 +20,15 @@ from factoriax.constants import (
     RESEARCH_COST,
     SCIENCE_PACK_TO_TECH,
     SOLID_BLOCKS,
+    TURN_LEFT_MAP,
+    TURN_RIGHT_MAP,
     Action,
     BlockType,
+    Direction,
     ItemType,
     MachineType,
     SlotRole,
 )
-from factoriax.biters import update_biters, update_scent_field
 from factoriax.crafting import cycle_slot, start_crafting, update_crafting
 from factoriax.inventory import find_best_slot
 from factoriax.machines import update_all_machines
@@ -115,38 +118,68 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
 def move_player(
     state: EnvState, action: int | jax.Array, player_idx: int | jax.Array
 ) -> EnvState:
-    """Attempt to move a player in the specified direction.
+    """Move or turn a player based on a relative movement action.
 
-    The player will face the direction of movement regardless of whether
-    the move succeeds. Movement only succeeds if the target tile is walkable.
+    FORWARD/BACKWARD/LEFT/RIGHT move the player relative to their
+    current facing direction without changing it. TURN_LEFT/TURN_RIGHT
+    rotate the facing direction without moving. NOOP does nothing.
 
     Args:
-        state: Current environment state
-        action: Action to take (from Action enum)
-        player_idx: Index of the player to move
+        state: Current environment state.
+        action: Action to take (from Action enum).
+        player_idx: Index of the player to move.
 
     Returns:
-        Updated environment state with new player position and direction
+        Updated environment state with new player position and/or
+        direction.
     """
     current_position = state.player_positions[player_idx]
-    current_direction = state.player_directions[player_idx]
+    facing = state.player_directions[player_idx]
 
-    direction = DIRECTIONS[action]
-    new_position = current_position + direction
-    can_move = is_position_walkable(state, new_position)
-    final_position = jnp.where(can_move, new_position, current_position)
-    new_direction = lax.cond(
-        action == Action.NOOP,
-        lambda: current_direction,
-        lambda: jnp.int32(action),
+    # Resolve the absolute direction of movement from the relative
+    # action and current facing.  Turns don't move, so their offset
+    # is (0, 0).  Strafe left/right reuse the turn maps to find the
+    # perpendicular compass direction.
+    fwd = DIRECTIONS[facing]
+    is_forward = action == Action.FORWARD
+    is_backward = action == Action.BACKWARD
+    is_left = action == Action.LEFT
+    is_right = action == Action.RIGHT
+
+    strafe_left_dir = TURN_LEFT_MAP[facing]
+    strafe_right_dir = TURN_RIGHT_MAP[facing]
+    left_offset = DIRECTIONS[strafe_left_dir]
+    right_offset = DIRECTIONS[strafe_right_dir]
+
+    offset = jnp.where(is_forward, fwd,
+             jnp.where(is_backward, -fwd,
+             jnp.where(is_left, left_offset,
+             jnp.where(is_right, right_offset,
+             jnp.zeros(2, dtype=jnp.int32)))))
+
+    is_move = is_forward | is_backward | is_left | is_right
+    target = current_position + offset
+    can_move = is_position_walkable(state, target) & is_move
+    final_position = jnp.where(can_move, target, current_position)
+
+    # Only turns change facing.
+    new_facing = jnp.where(
+        action == Action.TURN_LEFT,
+        TURN_LEFT_MAP[facing],
+        jnp.where(
+            action == Action.TURN_RIGHT,
+            TURN_RIGHT_MAP[facing],
+            facing,
+        ),
     )
 
-    new_positions = state.player_positions.at[player_idx].set(final_position)
-    new_directions = state.player_directions.at[player_idx].set(new_direction)
-
     return state.replace(  # type: ignore[attr-defined, no-any-return]
-        player_positions=new_positions,
-        player_directions=new_directions,
+        player_positions=state.player_positions.at[player_idx].set(
+            final_position
+        ),
+        player_directions=state.player_directions.at[player_idx].set(
+            new_facing
+        ),
     )
 
 
@@ -233,11 +266,11 @@ _MACHINE_NUM_SLOTS_JAX = jnp.array(MACHINE_NUM_SLOTS, dtype=jnp.int32)
 
 # Clockwise direction cycle: DOWN -> RIGHT -> UP -> LEFT -> DOWN.
 # Indexed by Action value (UP=3, DOWN=4, LEFT=1, RIGHT=2); others map to DOWN.
-_NEXT_DIR = jnp.zeros(len(Action), dtype=jnp.int32)
-_NEXT_DIR = _NEXT_DIR.at[Action.DOWN].set(Action.RIGHT)
-_NEXT_DIR = _NEXT_DIR.at[Action.RIGHT].set(Action.UP)
-_NEXT_DIR = _NEXT_DIR.at[Action.UP].set(Action.LEFT)
-_NEXT_DIR = _NEXT_DIR.at[Action.LEFT].set(Action.DOWN)
+_NEXT_DIR = jnp.zeros(len(Direction) + 1, dtype=jnp.int32)
+_NEXT_DIR = _NEXT_DIR.at[Direction.DOWN].set(Direction.RIGHT)
+_NEXT_DIR = _NEXT_DIR.at[Direction.RIGHT].set(Direction.UP)
+_NEXT_DIR = _NEXT_DIR.at[Direction.UP].set(Direction.LEFT)
+_NEXT_DIR = _NEXT_DIR.at[Direction.LEFT].set(Direction.DOWN)
 
 # Slot scan order for withdraw: OUTPUT first, then STORAGE, then INPUT.
 # Built as an argsort over a priority array keyed by SlotRole.

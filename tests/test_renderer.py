@@ -11,14 +11,14 @@ import pytest
 
 from factoriax import EnvState
 from factoriax.constants import (
+    DEFAULT_MAX_BITERS,
     MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
-    DEFAULT_MAX_BITERS,
     NUM_TECHNOLOGIES,
-    Action,
     BlockType,
+    Direction,
     MachineType,
 )
 from factoriax.renderer import (
@@ -45,7 +45,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
     return EnvState(
         map=jmap,
         player_positions=jnp.array([[0, 0]], dtype=jnp.int32),
-        player_directions=jnp.array([int(Action.DOWN)], dtype=jnp.int32),
+        player_directions=jnp.array([int(Direction.DOWN)], dtype=jnp.int32),
         timestep=0,
         inventory_items=jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32),
         inventory_counts=jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32),

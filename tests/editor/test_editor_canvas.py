@@ -4,7 +4,7 @@ import numpy as np
 import pygame
 import pytest
 
-from factoriax.constants import Action, BlockType, MachineType
+from factoriax.constants import BlockType, Direction, MachineType
 from factoriax.editor.canvas import Viewport, clamp_camera, render_canvas
 from factoriax.editor.state import (
     ResourceBrush,
@@ -93,7 +93,7 @@ class TestRenderAfterResize:
 
     def test_render_with_machines_after_resize(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 2, 2, int(MachineType.MINER), int(Action.DOWN))
+        set_machine(state, 2, 2, int(MachineType.MINER), int(Direction.DOWN))
         add_column(state)
         add_row(state)
         vp = _make_vp(state)

@@ -12,8 +12,8 @@ import numpy.testing as npt
 
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
-    Action,
     BlockType,
+    Direction,
     ItemType,
     MachineType,
 )
@@ -41,8 +41,8 @@ def _make_fully_populated_level() -> Level:
     machine_types[3, 1] = int(MachineType.ASSEMBLER)
 
     machine_directions = np.zeros((h, w), dtype=np.int32)
-    machine_directions[2, 3] = int(Action.RIGHT)
-    machine_directions[3, 1] = int(Action.UP)
+    machine_directions[2, 3] = int(Direction.RIGHT)
+    machine_directions[3, 1] = int(Direction.UP)
 
     machine_inventory_items = np.zeros(
         (h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=np.int32
@@ -149,7 +149,7 @@ class TestFieldCoverage:
     # Fields that exist on Level but have no EditorState counterpart by
     # design (dimensions are stored as plain ints, block_map is always
     # present, etc.).
-    _EXCLUDED = {"name", "map_width", "map_height", "block_map"}
+    _EXCLUDED = {"name", "map_width", "map_height", "block_map", "player_positions"}
 
     def test_level_optional_fields_in_editor_state(self) -> None:
         """Every optional Level field must have a matching EditorState field.
