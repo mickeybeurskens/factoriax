@@ -299,7 +299,7 @@ def _export_mp4(
         return
     out = Path(path).stem + f"_ep{state.selected_episode}.mp4"
     try:
-        from benchmarks.single_agent_mining.analysis import save_mp4
+        from factoriax.benchmarks.single_agent_mining.analysis import save_mp4
 
         save_mp4(frames, Path(out), fps=10)
         print(f"Saved video: {out}")

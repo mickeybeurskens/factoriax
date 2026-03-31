@@ -48,7 +48,7 @@ always at the horizontal and vertical centre of the map.
 
 from __future__ import annotations
 
-from benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams

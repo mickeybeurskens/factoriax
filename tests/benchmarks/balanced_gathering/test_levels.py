@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from benchmarks.balanced_gathering.levels import BALANCED_LEVELS
+from factoriax.benchmarks.balanced_gathering.levels import BALANCED_LEVELS
 from factoriax.constants import BlockType
 from factoriax.levels import build_state
 

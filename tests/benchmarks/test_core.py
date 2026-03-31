@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from benchmarks.core import (
+from factoriax.benchmarks.core import (
     Benchmark,
     BenchmarkLevel,
     BenchmarkResult,

@@ -21,8 +21,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from benchmarks.core import BenchmarkLevel
-from benchmarks.single_agent_mining.levels import (
+from factoriax.benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.single_agent_mining.levels import (
     _LEVEL_1,
     _LEVEL_2,
     _LEVEL_3,

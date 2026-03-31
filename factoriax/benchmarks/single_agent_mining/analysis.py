@@ -26,8 +26,8 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from benchmarks.core import BenchmarkLevel, BenchmarkResult, Policy
-from benchmarks.single_agent_mining.scoring import RESOURCE_WEIGHTS
+from factoriax.benchmarks.core import BenchmarkLevel, BenchmarkResult, Policy
+from factoriax.benchmarks.single_agent_mining.scoring import RESOURCE_WEIGHTS
 from factoriax.constants import Action
 from factoriax.state import EnvParams, EnvState
 

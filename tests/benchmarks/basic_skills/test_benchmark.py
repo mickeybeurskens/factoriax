@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from benchmarks.basic_skills import BasicSkillsBenchmark
-from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
-from benchmarks.basic_skills.scoring import (
+from factoriax import Action, BlockType, ItemType
+from factoriax.benchmarks.basic_skills import BasicSkillsBenchmark
+from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+from factoriax.benchmarks.basic_skills.scoring import (
     aggregate_scores,
     score_craft,
     score_craft_miners,
@@ -19,7 +20,6 @@ from benchmarks.basic_skills.scoring import (
     score_mine,
     score_mining_factory,
 )
-from factoriax import Action, BlockType, ItemType
 from factoriax.constants import (
     MAX_MACHINE_INVENTORY_SLOTS,
     MAX_MACHINE_STACK_SIZE,
@@ -424,7 +424,7 @@ class TestBasicSkillsBenchmark:
 
     def test_protocol_compliance(self) -> None:
         """Benchmark should satisfy the Benchmark protocol."""
-        from benchmarks.core import Benchmark
+        from factoriax.benchmarks.core import Benchmark
 
         b = BasicSkillsBenchmark()
         assert isinstance(b, Benchmark)

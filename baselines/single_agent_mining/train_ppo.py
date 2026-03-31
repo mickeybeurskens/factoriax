@@ -57,14 +57,14 @@ from baselines.ppo import (
     update_running_stats,
 )
 from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
-from benchmarks.core import BenchmarkLevel
-from benchmarks.runner import BenchmarkRunner
-from benchmarks.single_agent_mining.analysis import (
+from factoriax.benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.single_agent_mining.analysis import (
     log_to_wandb,
     render_level_video,
     save_mp4,
 )
-from benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
+from factoriax.benchmarks.single_agent_mining.benchmark import SingleAgentMiningBenchmark
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import local_array

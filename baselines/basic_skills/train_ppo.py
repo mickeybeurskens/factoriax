@@ -51,12 +51,12 @@ from baselines.ppo import (
     update_running_stats,
 )
 from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
-from benchmarks.basic_skills.benchmark import (
+from factoriax.benchmarks.basic_skills.benchmark import (
     REWARD_FNS,
     BasicSkillsBenchmark,
 )
-from benchmarks.core import BenchmarkLevel
-from benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.runner import BenchmarkRunner
 from factoriax.constants import NUM_ACTIONS
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
@@ -502,7 +502,7 @@ def _train_run(
         obs_dim: Observation vector length.
         rng: PRNG key.
     """
-    from benchmarks.single_agent_mining.analysis import (
+    from factoriax.benchmarks.single_agent_mining.analysis import (
         render_level_video,
         save_mp4,
     )

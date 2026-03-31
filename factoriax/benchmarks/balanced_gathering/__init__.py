@@ -3,7 +3,7 @@
 See :mod:`~benchmarks.balanced_gathering.benchmark` for usage.
 """
 
-from benchmarks.balanced_gathering.benchmark import (
+from factoriax.benchmarks.balanced_gathering.benchmark import (
     BalancedGatheringBenchmark,
 )
 

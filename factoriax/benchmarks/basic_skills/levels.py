@@ -17,7 +17,7 @@ timestep budget by a competent agent.
 
 from __future__ import annotations
 
-from benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.constants import BlockType, ItemType, MachineType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams

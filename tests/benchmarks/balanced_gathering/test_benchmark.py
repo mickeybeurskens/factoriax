@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from benchmarks.balanced_gathering import BalancedGatheringBenchmark
-from benchmarks.balanced_gathering.scoring import (
+from factoriax.benchmarks.balanced_gathering import BalancedGatheringBenchmark
+from factoriax.benchmarks.balanced_gathering.scoring import (
     aggregate_scores,
     constraint_summary,
     score_items,
 )
-from benchmarks.core import Benchmark, LevelResult
+from factoriax.benchmarks.core import Benchmark, LevelResult
 
 
 class TestBenchmarkProtocol:

@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from benchmarks.core import (
+from factoriax.benchmarks.core import (
     Benchmark,
     BenchmarkLevel,
     BenchmarkResult,

@@ -28,9 +28,9 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from benchmarks.basic_skills.benchmark import REWARD_FNS
-from benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
-from benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.basic_skills.benchmark import REWARD_FNS
+from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.constants import NUM_ACTIONS
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state

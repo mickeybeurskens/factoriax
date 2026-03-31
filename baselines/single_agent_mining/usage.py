@@ -19,8 +19,8 @@ from pathlib import Path
 
 import jax
 
-from benchmarks.runner import BenchmarkRunner
-from benchmarks.single_agent_mining.analysis import (
+from factoriax.benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.single_agent_mining.analysis import (
     log_to_wandb,
     plot_action_distribution,
     plot_level_scores,
@@ -28,7 +28,7 @@ from benchmarks.single_agent_mining.analysis import (
     render_level_video,
     save_mp4,
 )
-from benchmarks.single_agent_mining.benchmark import (
+from factoriax.benchmarks.single_agent_mining.benchmark import (
     SingleAgentMiningBenchmark,
 )
 

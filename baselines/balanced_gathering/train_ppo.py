@@ -56,11 +56,11 @@ from baselines.ppo import (
     update_running_stats,
 )
 from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
-from benchmarks.balanced_gathering import BalancedGatheringBenchmark
-from benchmarks.balanced_gathering.scoring import constraint_summary
-from benchmarks.core import BenchmarkLevel
-from benchmarks.runner import BenchmarkRunner
-from benchmarks.single_agent_mining.analysis import (
+from factoriax.benchmarks.balanced_gathering import BalancedGatheringBenchmark
+from factoriax.benchmarks.balanced_gathering.scoring import constraint_summary
+from factoriax.benchmarks.core import BenchmarkLevel
+from factoriax.benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.single_agent_mining.analysis import (
     render_level_video,
     save_mp4,
 )

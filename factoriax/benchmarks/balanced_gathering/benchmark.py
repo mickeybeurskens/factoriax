@@ -19,8 +19,8 @@ scarce resources, and conflicting reward incentives.
 Typical usage::
 
     import functools
-    from benchmarks.balanced_gathering import BalancedGatheringBenchmark
-    from benchmarks.runner import BenchmarkRunner
+    from factoriax.benchmarks.balanced_gathering import BalancedGatheringBenchmark
+    from factoriax.benchmarks.runner import BenchmarkRunner
     from factoriax.constraints import balance_cost
 
     benchmark = BalancedGatheringBenchmark()
@@ -41,12 +41,12 @@ from collections.abc import Callable
 
 import jax
 
-from benchmarks.balanced_gathering.levels import BALANCED_LEVELS
-from benchmarks.balanced_gathering.scoring import (
+from factoriax.benchmarks.balanced_gathering.levels import BALANCED_LEVELS
+from factoriax.benchmarks.balanced_gathering.scoring import (
     aggregate_scores,
     score_items,
 )
-from benchmarks.core import BenchmarkLevel, LevelResult
+from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.rewards import sparse_mining_reward
 from factoriax.state import EnvParams, EnvState
 
