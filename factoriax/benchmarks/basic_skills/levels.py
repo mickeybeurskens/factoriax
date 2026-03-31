@@ -472,17 +472,16 @@ _LEVEL_ASSEMBLER.level.player_inventory = [
 # ---------------------------------------------------------------------------
 # Level 15 — research_tech
 # ---------------------------------------------------------------------------
-# 5x5 dirt map. Player starts with iron in slot 0 (selected) and 15
-# basic science packs in slot 5. Must cycle to slot 5, then press
-# RESEARCH 10 times to unlock Hull tech.
+# 5x5 dirt map. Player starts with 15 basic science packs in slot 0
+# (already selected). Press RESEARCH 10 times to unlock Hull tech.
 # Score = research_progress[0] (0-10, unlocks at 10).
-# Tests: NEXT_SLOT cycling + RESEARCH action.
+# Tests: RESEARCH action discovery.
 
 _LEVEL_RESEARCH = BenchmarkLevel(
     name="research_tech",
     description=(
-        "5x5 map. Start with science packs in a non-selected slot. "
-        "Cycle to the right slot and research to unlock technology. "
+        "5x5 map. Start with science packs already selected. "
+        "Press RESEARCH to unlock technology. "
         "Score measures research progress."
     ),
     level=(
@@ -492,11 +491,6 @@ _LEVEL_RESEARCH = BenchmarkLevel(
     env_params=_params(5, 5, 100),
 )
 _LEVEL_RESEARCH.level.player_inventory = [
-    (int(ItemType.IRON), 1),
-    (int(ItemType.EMPTY), 0),
-    (int(ItemType.EMPTY), 0),
-    (int(ItemType.EMPTY), 0),
-    (int(ItemType.EMPTY), 0),
     (int(ItemType.BASIC_SCIENCE_PACK), 15),
 ]
 
