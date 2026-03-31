@@ -438,8 +438,8 @@ class TestBasicSkillsBenchmark:
         assert BasicSkillsBenchmark().num_players == 1
 
     def test_level_count(self) -> None:
-        """Should have exactly eight levels."""
-        assert len(BasicSkillsBenchmark().levels()) == 8
+        """Should have exactly sixteen levels."""
+        assert len(BasicSkillsBenchmark().levels()) == 16
 
     def test_level_names(self) -> None:
         """Level names should match expected values."""
@@ -453,4 +453,12 @@ class TestBasicSkillsBenchmark:
             "mining_factory",
             "place_and_fuel",
             "withdraw_ore",
+            "deposit_into_chests",
+            "pickup_machines",
+            "belt_line",
+            "arm_bridge",
+            "fuel_and_collect",
+            "assembler_production",
+            "research_tech",
+            "repair_machine",
         ]

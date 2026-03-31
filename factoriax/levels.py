@@ -100,6 +100,7 @@ class Level:
     machine_inventory_items: np.ndarray | None = None
     machine_inventory_counts: np.ndarray | None = None
     machine_selected_recipe: np.ndarray | None = None
+    machine_health: np.ndarray | None = None
     player_inventory: list[tuple[int, int]] | None = None
     player_positions: list[tuple[int, int]] | None = None
 
@@ -153,6 +154,14 @@ class Level:
                 f"machine_selected_recipe shape "
                 f"{self.machine_selected_recipe.shape} != {expected}"
             )
+        if (
+            self.machine_health is not None
+            and self.machine_health.shape != expected
+        ):
+            raise ValueError(
+                f"machine_health shape "
+                f"{self.machine_health.shape} != {expected}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +207,7 @@ class LevelBuilder:
         self._machine_inv_items: np.ndarray | None = None
         self._machine_inv_counts: np.ndarray | None = None
         self._machine_selected_recipe: np.ndarray | None = None
+        self._machine_health: np.ndarray | None = None
         self._player_positions: list[tuple[int, int]] | None = None
 
     def fill_rect(
@@ -369,6 +379,36 @@ class LevelBuilder:
         self._machine_directions[y, x] = direction
         return self
 
+    def set_machine_health(
+        self, x: int, y: int, health: int
+    ) -> LevelBuilder:
+        """Set the health of a placed machine.
+
+        Args:
+            x: Column (0-indexed).
+            y: Row (0-indexed).
+            health: Health value (0 = disabled).
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            IndexError: If ``(x, y)`` is outside the map.
+        """
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise IndexError(
+                f"Tile ({x}, {y}) is outside the "
+                f"{self._width}x{self._height} map."
+            )
+        if self._machine_health is None:
+            self._machine_health = np.full(
+                (self._height, self._width),
+                DEFAULT_MACHINE_MAX_HEALTH,
+                dtype=np.int32,
+            )
+        self._machine_health[y, x] = health
+        return self
+
     def set_player_position(self, x: int, y: int) -> LevelBuilder:
         """Set the spawn position for the first player.
 
@@ -435,6 +475,11 @@ class LevelBuilder:
             machine_selected_recipe=(
                 self._machine_selected_recipe.copy()
                 if self._machine_selected_recipe is not None
+                else None
+            ),
+            machine_health=(
+                self._machine_health.copy()
+                if self._machine_health is not None
                 else None
             ),
             player_positions=(
@@ -615,11 +660,16 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
-        machine_health=jnp.where(
-            jnp.array(machine_types_np, dtype=jnp.int32) != int(MachineType.NONE),
-            DEFAULT_MACHINE_MAX_HEALTH,
-            0,
-        ).astype(jnp.int32),
+        machine_health=(
+            jnp.array(level.machine_health, dtype=jnp.int32)
+            if level.machine_health is not None
+            else jnp.where(
+                jnp.array(machine_types_np, dtype=jnp.int32)
+                != int(MachineType.NONE),
+                DEFAULT_MACHINE_MAX_HEALTH,
+                0,
+            ).astype(jnp.int32)
+        ),
         biter_positions=jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
         biter_health=jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
         scent_field=jnp.zeros(map_shape, dtype=jnp.float32),
@@ -945,6 +995,11 @@ def save_level(level: Level, path: Path) -> None:
             if level.machine_selected_recipe is not None
             else None
         ),
+        "machine_health": (
+            level.machine_health.tolist()
+            if level.machine_health is not None
+            else None
+        ),
         "player_inventory": level.player_inventory,
         "player_positions": level.player_positions,
     }
@@ -998,6 +1053,11 @@ def load_level(path: Path) -> Level:
         ),
         machine_selected_recipe=(
             np.array(raw_recipe, dtype=np.int32) if raw_recipe is not None else None
+        ),
+        machine_health=(
+            np.array(raw_health, dtype=np.int32)
+            if (raw_health := payload.get("machine_health")) is not None
+            else None
         ),
         player_inventory=payload.get("player_inventory"),
         player_positions=(

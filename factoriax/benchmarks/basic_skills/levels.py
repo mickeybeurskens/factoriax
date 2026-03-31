@@ -18,7 +18,7 @@ timestep budget by a competent agent.
 from __future__ import annotations
 
 from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.constants import BlockType, ItemType, MachineType
+from factoriax.constants import BlockType, Direction, ItemType, MachineType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
 
@@ -278,6 +278,267 @@ _LEVEL_WITHDRAW = BenchmarkLevel(
 )
 
 
+# ---------------------------------------------------------------------------
+# Level 9 — deposit_into_chests
+# ---------------------------------------------------------------------------
+# 7x3 map. Three pre-placed chests at (1, 0), (3, 0), (5, 0). Player at
+# (0, 1) with iron spread across 6 inventory slots (10 each = 60 total).
+# Walk to each chest, turn to face it, deposit. Multiple slots force
+# the agent to cycle through inventory, giving score gradient 0-60.
+# Tests: DEPOSIT action + NEXT_SLOT cycling + navigation.
+
+_LEVEL_DEPOSIT = BenchmarkLevel(
+    name="deposit_into_chests",
+    description=(
+        "7x3 map with 3 pre-placed chests. Start with 60 iron "
+        "spread across 6 inventory slots. Deposit into each chest. "
+        "Score measures total items stored in chests."
+    ),
+    level=(
+        LevelBuilder(7, 3)
+        .place_machine(1, 0, MachineType.CHEST)
+        .place_machine(3, 0, MachineType.CHEST)
+        .place_machine(5, 0, MachineType.CHEST)
+        .set_player_position(0, 1)
+        .build("basic_deposit_into_chests")
+    ),
+    env_params=_params(7, 3, 150),
+)
+_LEVEL_DEPOSIT.level.player_inventory = [
+    (int(ItemType.IRON), 10),
+    (int(ItemType.IRON), 10),
+    (int(ItemType.IRON), 10),
+    (int(ItemType.IRON), 10),
+    (int(ItemType.IRON), 10),
+    (int(ItemType.IRON), 10),
+]
+
+
+# ---------------------------------------------------------------------------
+# Level 10 — pickup_machines
+# ---------------------------------------------------------------------------
+# 9x3 map. Five pre-placed chests at (1,0), (3,0), (5,0), (7,0), (1,2).
+# Player at (0, 1). Pick up all chests. Score = chest items in inventory.
+# Tests: PICKUP action + navigation to multiple machines.
+
+_LEVEL_PICKUP = BenchmarkLevel(
+    name="pickup_machines",
+    description=(
+        "9x3 map with 5 pre-placed chests. Pick them all up. "
+        "Score measures number of chest items in player inventory."
+    ),
+    level=(
+        LevelBuilder(9, 3)
+        .place_machine(1, 0, MachineType.CHEST)
+        .place_machine(3, 0, MachineType.CHEST)
+        .place_machine(5, 0, MachineType.CHEST)
+        .place_machine(7, 0, MachineType.CHEST)
+        .place_machine(1, 2, MachineType.CHEST)
+        .set_player_position(0, 1)
+        .build("basic_pickup_machines")
+    ),
+    env_params=_params(9, 3, 100),
+)
+
+
+# ---------------------------------------------------------------------------
+# Level 11 — belt_line
+# ---------------------------------------------------------------------------
+# 7x3 map. Pre-placed belts at (2,1), (3,1), (4,1) facing RIGHT. Chest
+# at (5,1). Gap at (1,1). Player at (0,1) facing RIGHT with 1 belt and
+# iron in 4 slots (5 each = 20 total). Place the missing belt to
+# complete the chain, then deposit iron onto it. Items flow to the chest.
+# Tests: belt PLACE with correct orientation + DEPOSIT.
+
+_LEVEL_BELT = BenchmarkLevel(
+    name="belt_line",
+    description=(
+        "7x3 map with a belt chain missing one segment. Place the "
+        "missing belt and deposit iron. Score measures items that "
+        "reach the chest at the end of the chain."
+    ),
+    level=(
+        LevelBuilder(7, 3)
+        .place_machine(2, 1, MachineType.CONVEYOR_BELT, Direction.RIGHT)
+        .place_machine(3, 1, MachineType.CONVEYOR_BELT, Direction.RIGHT)
+        .place_machine(4, 1, MachineType.CONVEYOR_BELT, Direction.RIGHT)
+        .place_machine(5, 1, MachineType.CHEST)
+        .set_player_position(0, 1)
+        .build("basic_belt_line")
+    ),
+    env_params=_params(7, 3, 200),
+)
+_LEVEL_BELT.level.player_inventory = [
+    (int(ItemType.CONVEYOR_BELT), 1),
+    (int(ItemType.IRON), 5),
+    (int(ItemType.IRON), 5),
+    (int(ItemType.IRON), 5),
+    (int(ItemType.IRON), 5),
+]
+
+
+# ---------------------------------------------------------------------------
+# Level 12 — arm_bridge
+# ---------------------------------------------------------------------------
+# 7x3 map. Chest A at (1,1) with 20 iron. Arm at (2,1) pre-placed facing
+# LEFT (wrong direction). Chest B at (3,1) empty. Player at (2,0).
+# The arm needs to face RIGHT to pick from A and deposit into B. Agent
+# must face the arm and ROTATE it twice (LEFT -> UP -> RIGHT).
+# Tests: ROTATE action + understanding arm transfer direction.
+
+_LEVEL_ARM = BenchmarkLevel(
+    name="arm_bridge",
+    description=(
+        "7x3 map with an arm between two chests, facing the wrong "
+        "direction. Rotate the arm so items flow from the full chest "
+        "to the empty one. Score measures items in the target chest."
+    ),
+    level=(
+        LevelBuilder(7, 3)
+        .place_machine(1, 1, MachineType.CHEST)
+        .set_machine_inventory(1, 1, 0, int(ItemType.IRON), 20)
+        .place_machine(2, 1, MachineType.ARM, Direction.LEFT)
+        .place_machine(3, 1, MachineType.CHEST)
+        .set_player_position(2, 0)
+        .build("basic_arm_bridge")
+    ),
+    env_params=_params(7, 3, 100),
+)
+
+
+# ---------------------------------------------------------------------------
+# Level 13 — fuel_and_collect
+# ---------------------------------------------------------------------------
+# 7x5 map. Pre-placed miner at (3, 2) on coal with 100 ore. Player at
+# (3, 1) with 20 coal. Fuel the miner, wait for output, withdraw ore.
+# The miner produces 3 ore/tick. With 20 coal = 200 power ticks = 600
+# ore, capped at 64 per withdrawal. Agent must withdraw multiple times.
+# Score = ore in player inventory at end.
+# Tests: full DEPOSIT + wait + WITHDRAW cycle.
+
+_LEVEL_FUEL_COLLECT = BenchmarkLevel(
+    name="fuel_and_collect",
+    description=(
+        "7x5 map with a pre-placed miner on coal. Fuel it and "
+        "collect the output repeatedly. Score measures total ore "
+        "in player inventory."
+    ),
+    level=(
+        LevelBuilder(7, 5)
+        .fill_rect(2, 2, 3, 3, BlockType.COAL, resources=100)
+        .place_machine(3, 2, MachineType.MINER, Direction.DOWN)
+        .set_player_position(3, 1)
+        .build("basic_fuel_and_collect")
+    ),
+    env_params=_params(7, 5, 300),
+)
+_LEVEL_FUEL_COLLECT.level.player_inventory = [
+    (int(ItemType.COAL), 20),
+]
+
+
+# ---------------------------------------------------------------------------
+# Level 14 — assembler_production
+# ---------------------------------------------------------------------------
+# 7x5 map. Pre-placed assembler at (3, 2) set to Basic Science Pack
+# recipe (index 3: 1 iron + 1 copper -> 1 pack, 4 ticks, ungated).
+# Player at (3, 1) with 30 iron and 30 copper. Deposit inputs into
+# the assembler, wait for crafting, withdraw science packs.
+# Score = science packs in player inventory.
+# Tests: assembler DEPOSIT (multi-slot) + WITHDRAW + recipe understanding.
+
+_LEVEL_ASSEMBLER = BenchmarkLevel(
+    name="assembler_production",
+    description=(
+        "7x5 map with a pre-placed assembler set to craft science "
+        "packs. Deposit iron and copper, wait, withdraw output. "
+        "Score measures science packs in player inventory."
+    ),
+    level=(
+        LevelBuilder(7, 5)
+        .place_machine(3, 2, MachineType.ASSEMBLER)
+        .set_machine_recipe(3, 2, 3)
+        .set_player_position(3, 1)
+        .build("basic_assembler_production")
+    ),
+    env_params=_params(7, 5, 300),
+)
+_LEVEL_ASSEMBLER.level.player_inventory = [
+    (int(ItemType.IRON), 30),
+    (int(ItemType.COPPER), 30),
+]
+
+
+# ---------------------------------------------------------------------------
+# Level 15 — research_tech
+# ---------------------------------------------------------------------------
+# 5x5 dirt map. Player starts with iron in slot 0 (selected) and 15
+# basic science packs in slot 5. Must cycle to slot 5, then press
+# RESEARCH 10 times to unlock Hull tech.
+# Score = research_progress[0] (0-10, unlocks at 10).
+# Tests: NEXT_SLOT cycling + RESEARCH action.
+
+_LEVEL_RESEARCH = BenchmarkLevel(
+    name="research_tech",
+    description=(
+        "5x5 map. Start with science packs in a non-selected slot. "
+        "Cycle to the right slot and research to unlock technology. "
+        "Score measures research progress."
+    ),
+    level=(
+        LevelBuilder(5, 5)
+        .build("basic_research_tech")
+    ),
+    env_params=_params(5, 5, 100),
+)
+_LEVEL_RESEARCH.level.player_inventory = [
+    (int(ItemType.IRON), 1),
+    (int(ItemType.EMPTY), 0),
+    (int(ItemType.EMPTY), 0),
+    (int(ItemType.EMPTY), 0),
+    (int(ItemType.EMPTY), 0),
+    (int(ItemType.BASIC_SCIENCE_PACK), 15),
+]
+
+
+# ---------------------------------------------------------------------------
+# Level 16 — repair_machine
+# ---------------------------------------------------------------------------
+# 7x3 map. Three damaged miners at (1, 0), (3, 0), (5, 0) with health=1.
+# Player at (0, 1) with 15 iron + 15 copper (enough for 3 miner repairs
+# at 5 iron + 5 copper each). Walk to each, face it, press REPAIR.
+# Score = number of fully repaired machines (0-3).
+# Tests: REPAIR action + material management + navigation.
+
+_LEVEL_REPAIR = BenchmarkLevel(
+    name="repair_machine",
+    description=(
+        "7x3 map with 3 damaged miners. Start with enough materials "
+        "to repair all three. Score measures machines restored to "
+        "full health."
+    ),
+    level=(
+        LevelBuilder(7, 3)
+        .fill_rect(1, 0, 1, 1, BlockType.COAL, resources=50)
+        .fill_rect(3, 0, 1, 1, BlockType.COAL, resources=50)
+        .fill_rect(5, 0, 1, 1, BlockType.COAL, resources=50)
+        .place_machine(1, 0, MachineType.MINER)
+        .place_machine(3, 0, MachineType.MINER)
+        .place_machine(5, 0, MachineType.MINER)
+        .set_machine_health(1, 0, 1)
+        .set_machine_health(3, 0, 1)
+        .set_machine_health(5, 0, 1)
+        .set_player_position(0, 1)
+        .build("basic_repair_machine")
+    ),
+    env_params=_params(7, 3, 100),
+)
+_LEVEL_REPAIR.level.player_inventory = [
+    (int(ItemType.IRON), 15),
+    (int(ItemType.COPPER), 15),
+]
+
+
 BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_MINE,
     _LEVEL_CRAFT,
@@ -287,4 +548,12 @@ BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_FACTORY,
     _LEVEL_PLACE_AND_FUEL,
     _LEVEL_WITHDRAW,
+    _LEVEL_DEPOSIT,
+    _LEVEL_PICKUP,
+    _LEVEL_BELT,
+    _LEVEL_ARM,
+    _LEVEL_FUEL_COLLECT,
+    _LEVEL_ASSEMBLER,
+    _LEVEL_RESEARCH,
+    _LEVEL_REPAIR,
 ]

@@ -33,16 +33,25 @@ import jax
 from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from factoriax.benchmarks.basic_skills.scoring import (
     aggregate_scores,
+    score_arm,
+    score_assembler,
+    score_belt,
     score_craft,
     score_craft_miners,
     score_deploy_miner,
+    score_deposit,
     score_fill,
+    score_fuel_collect,
     score_mine,
     score_mining_factory,
+    score_pickup,
+    score_repair,
+    score_research,
     score_withdraw_ore,
 )
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.rewards import (
+    achievement_reward,
     chest_filling_reward,
     miner_output_reward,
     miner_throughput_reward,
@@ -64,6 +73,14 @@ REWARD_FNS: dict[str, Callable[[EnvState, EnvState, EnvParams], jax.Array]] = {
     "mining_factory": miner_throughput_reward,
     "place_and_fuel": miner_output_reward,
     "withdraw_ore": player_inventory_reward,
+    "deposit_into_chests": chest_filling_reward,
+    "pickup_machines": player_inventory_reward,
+    "belt_line": chest_filling_reward,
+    "arm_bridge": chest_filling_reward,
+    "fuel_and_collect": player_inventory_reward,
+    "assembler_production": player_inventory_reward,
+    "research_tech": achievement_reward,
+    "repair_machine": achievement_reward,
 }
 
 
@@ -169,5 +186,21 @@ class BasicSkillsBenchmark:
                 scores["place_and_fuel"] = score_deploy_miner(r.final_state)
             elif r.level_name == "withdraw_ore" and r.final_state is not None:
                 scores["withdraw_ore"] = score_withdraw_ore(r.final_state)
+            elif r.level_name == "deposit_into_chests" and r.final_state is not None:
+                scores["deposit_into_chests"] = score_deposit(r.final_state)
+            elif r.level_name == "pickup_machines" and r.final_state is not None:
+                scores["pickup_machines"] = score_pickup(r.final_state)
+            elif r.level_name == "belt_line" and r.final_state is not None:
+                scores["belt_line"] = score_belt(r.final_state)
+            elif r.level_name == "arm_bridge" and r.final_state is not None:
+                scores["arm_bridge"] = score_arm(r.final_state)
+            elif r.level_name == "fuel_and_collect" and r.final_state is not None:
+                scores["fuel_and_collect"] = score_fuel_collect(r.final_state)
+            elif r.level_name == "assembler_production" and r.final_state is not None:
+                scores["assembler_production"] = score_assembler(r.final_state)
+            elif r.level_name == "research_tech" and r.final_state is not None:
+                scores["research_tech"] = score_research(r.final_state)
+            elif r.level_name == "repair_machine" and r.final_state is not None:
+                scores["repair_machine"] = score_repair(r.final_state)
 
         return aggregate_scores(scores)

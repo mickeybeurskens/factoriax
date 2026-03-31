@@ -17,6 +17,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     MAX_MACHINE_STACK_SIZE,
     ItemType,
     MachineType,
@@ -24,23 +25,22 @@ from factoriax.constants import (
 from factoriax.state import EnvState
 
 # Theoretical maximums for normalisation.
-# Level 1: 9 iron tiles + 9 coal tiles, 1 resource each = 18 max.
 MAX_MINE_SCORE: float = 18.0
-# Level 2: 30 starting iron + 45 mineable = 75 iron, 15 chests at 5 iron each.
 MAX_CRAFT_SCORE: float = 15.0
-# Level 3: 8 chest slots, each fillable to 64.
 MAX_FILL_SCORE: float = 8.0
-# Level 4: 180 iron + 180 copper = 36 miners at 10 ore each, but inventory
-# caps at 10 slots * 64 stack = practical max ~9 in 300 ticks.
 MAX_CRAFT_MINERS_SCORE: float = 9.0
-# Level 5: miner output slot caps at 64 items.
 MAX_DEPLOY_MINER_SCORE: float = 64.0
-# Level 6: reasonable target for combined hand + automated mining in 500 ticks.
 MAX_MINING_FACTORY_SCORE: float = 200.0
-# Level 7: 3 miners × 64 output cap = 192.
 MAX_PLACE_AND_FUEL_SCORE: float = 192.0
-# Level 8: 10 + 20 + 30 = 60 pre-loaded ore across 3 miners.
 MAX_WITHDRAW_ORE_SCORE: float = 60.0
+MAX_DEPOSIT_SCORE: float = 60.0       # 6 slots × 10 iron each
+MAX_PICKUP_SCORE: float = 5.0         # 5 chests to pick up
+MAX_BELT_SCORE: float = 20.0          # 4 × 5 iron deposited
+MAX_ARM_SCORE: float = 20.0           # 20 iron transferred via arm
+MAX_FUEL_COLLECT_SCORE: float = 180.0  # ~3 full withdrawals of 64
+MAX_ASSEMBLER_SCORE: float = 6.0      # ~6 science packs in 300 ticks
+MAX_RESEARCH_SCORE: float = 10.0      # full unlock at 10 progress
+MAX_REPAIR_SCORE: float = 3.0         # 3 machines repaired
 
 
 def score_mine(items_mined: dict[str, int]) -> float:
@@ -157,6 +157,132 @@ def score_withdraw_ore(final_state: EnvState) -> float:
     return float(jnp.sum(final_state.inventory_counts[0]))
 
 
+def score_deposit(final_state: EnvState) -> float:
+    """Score the deposit level: total items across all chest machines.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total items stored in chests.
+    """
+    is_chest = final_state.machine_types == MachineType.CHEST
+    return float(
+        jnp.sum(
+            jnp.where(
+                is_chest[..., None],
+                final_state.machine_inventory_counts,
+                0,
+            )
+        )
+    )
+
+
+def score_pickup(final_state: EnvState) -> float:
+    """Score the pickup level: chest items in player inventory.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Number of chest items held by player 0.
+    """
+    items = final_state.inventory_items[0]
+    counts = final_state.inventory_counts[0]
+    return float(jnp.sum(jnp.where(items == ItemType.CHEST, counts, 0)))
+
+
+def score_belt(final_state: EnvState) -> float:
+    """Score the belt level: items in the target chest.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total items across all chest machine slots.
+    """
+    return score_deposit(final_state)
+
+
+def score_arm(final_state: EnvState) -> float:
+    """Score the arm level: items in the second chest (x=3).
+
+    Only counts items in the chest at column 3 (the target chest).
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total items in the target chest.
+    """
+    is_target = (
+        (final_state.machine_types == MachineType.CHEST)
+        & (jnp.arange(final_state.machine_types.shape[1])[None, :] == 3)
+    )
+    return float(
+        jnp.sum(
+            jnp.where(
+                is_target[..., None],
+                final_state.machine_inventory_counts,
+                0,
+            )
+        )
+    )
+
+
+def score_fuel_collect(final_state: EnvState) -> float:
+    """Score the fuel-and-collect level: ore in player inventory.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total item count in player 0's inventory.
+    """
+    return float(jnp.sum(final_state.inventory_counts[0]))
+
+
+def score_assembler(final_state: EnvState) -> float:
+    """Score the assembler level: science packs in player inventory.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total science pack items held by player 0.
+    """
+    items = final_state.inventory_items[0]
+    counts = final_state.inventory_counts[0]
+    is_pack = items == ItemType.BASIC_SCIENCE_PACK
+    return float(jnp.sum(jnp.where(is_pack, counts, 0)))
+
+
+def score_research(final_state: EnvState) -> float:
+    """Score the research level: progress on tech 0.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Research progress toward Hull technology (0-10).
+    """
+    return float(final_state.research_progress[0])
+
+
+def score_repair(final_state: EnvState) -> float:
+    """Score the repair level: machines restored to full health.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Number of machines at full health.
+    """
+    is_miner = final_state.machine_types == MachineType.MINER
+    is_full = final_state.machine_health == DEFAULT_MACHINE_MAX_HEALTH
+    return float(jnp.sum(is_miner & is_full))
+
+
 def aggregate_scores(scores: dict[str, float]) -> float:
     """Aggregate normalised per-level scores into one scalar.
 
@@ -178,6 +304,14 @@ def aggregate_scores(scores: dict[str, float]) -> float:
         "mining_factory": MAX_MINING_FACTORY_SCORE,
         "place_and_fuel": MAX_PLACE_AND_FUEL_SCORE,
         "withdraw_ore": MAX_WITHDRAW_ORE_SCORE,
+        "deposit_into_chests": MAX_DEPOSIT_SCORE,
+        "pickup_machines": MAX_PICKUP_SCORE,
+        "belt_line": MAX_BELT_SCORE,
+        "arm_bridge": MAX_ARM_SCORE,
+        "fuel_and_collect": MAX_FUEL_COLLECT_SCORE,
+        "assembler_production": MAX_ASSEMBLER_SCORE,
+        "research_tech": MAX_RESEARCH_SCORE,
+        "repair_machine": MAX_REPAIR_SCORE,
     }
     total = 0.0
     count = 0

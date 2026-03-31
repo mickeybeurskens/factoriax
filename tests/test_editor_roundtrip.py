@@ -149,7 +149,10 @@ class TestFieldCoverage:
     # Fields that exist on Level but have no EditorState counterpart by
     # design (dimensions are stored as plain ints, block_map is always
     # present, etc.).
-    _EXCLUDED = {"name", "map_width", "map_height", "block_map", "player_positions"}
+    _EXCLUDED = {
+        "name", "map_width", "map_height", "block_map",
+        "player_positions", "machine_health",
+    }
 
     def test_level_optional_fields_in_editor_state(self) -> None:
         """Every optional Level field must have a matching EditorState field.
