@@ -12,11 +12,43 @@ import jax.numpy as jnp
 
 from factoriax.achievements import CORE_ACHIEVEMENT_WEIGHTS
 from factoriax.constants import (
+    DEFAULT_MACHINE_MAX_HEALTH,
     MINEABLE_BLOCKS,
     ItemType,
     MachineType,
 )
 from factoriax.state import EnvParams, EnvState
+
+# ---------------------------------------------------------------------------
+# Proximity helper
+# ---------------------------------------------------------------------------
+
+
+def _proximity(state: EnvState, tile_mask: jax.Array) -> jax.Array:
+    """Inverse Manhattan distance from the selected player to the nearest
+    True tile in *tile_mask*.
+
+    Returns ``1 / (1 + d)`` where *d* is the Manhattan distance, giving
+    a value in (0, 1] when at least one tile matches and a small value
+    when no tile matches (distance clamped to map_h + map_w).
+
+    Args:
+        state: Current environment state.
+        tile_mask: Boolean array of shape ``(map_h, map_w)``.
+
+    Returns:
+        Scalar float32 proximity value.
+    """
+    pos = state.player_positions[state.selected_player]
+    px, py = pos[0], pos[1]
+    map_h, map_w = state.map.shape
+    grid_y, grid_x = jnp.meshgrid(
+        jnp.arange(map_h), jnp.arange(map_w), indexing="ij"
+    )
+    dist = jnp.abs(grid_x - px) + jnp.abs(grid_y - py)
+    large = jnp.int32(map_h + map_w)
+    min_dist = jnp.min(jnp.where(tile_mask, dist, large))
+    return 1.0 / (1.0 + min_dist.astype(jnp.float32))
 
 
 def achievement_reward(
@@ -304,3 +336,390 @@ def player_inventory_reward(
     new_total = jnp.sum(new_state.inventory_counts[p])
     reward: jax.Array = (new_total - prev_total).astype(jnp.float32)
     return reward
+
+
+# ---------------------------------------------------------------------------
+# Dense reward functions for basic_skills benchmark levels
+# ---------------------------------------------------------------------------
+
+
+def _ore_proximity(state: EnvState) -> jax.Array:
+    """Proximity to the nearest mineable ore tile."""
+    is_ore = jnp.any(
+        state.map[..., None] == MINEABLE_BLOCKS, axis=-1
+    )
+    return _proximity(state, is_ore)
+
+
+def _mining_delta(
+    prev: EnvState, new: EnvState
+) -> jax.Array:
+    """Total ore items mined this step."""
+    ore = jnp.array(
+        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+    )
+    return jnp.sum(
+        new.items_mined[ore] - prev.items_mined[ore]
+    ).astype(jnp.float32)
+
+
+def _chest_filling_delta(
+    prev: EnvState, new: EnvState
+) -> jax.Array:
+    """Total items deposited into chests this step."""
+    is_chest = new.machine_types == MachineType.CHEST
+    mask = is_chest[..., None]
+    prev_c = jnp.sum(jnp.where(mask, prev.machine_inventory_counts, 0))
+    new_c = jnp.sum(jnp.where(mask, new.machine_inventory_counts, 0))
+    return (new_c - prev_c).astype(jnp.float32)
+
+
+def _inventory_delta(prev: EnvState, new: EnvState) -> jax.Array:
+    """Net items gained in the selected player's inventory."""
+    p = new.selected_player
+    return (
+        jnp.sum(new.inventory_counts[p])
+        - jnp.sum(prev.inventory_counts[p])
+    ).astype(jnp.float32)
+
+
+def _item_count(state: EnvState, item: int) -> jax.Array:
+    """Count of a specific item type across player 0's inventory."""
+    is_item = state.inventory_items[0] == item
+    return jnp.sum(jnp.where(is_item, state.inventory_counts[0], 0))
+
+
+def dense_craft_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for crafting levels (craft_chests, craft_miners).
+
+    Combines ore proximity (guides toward materials), mining delta
+    (rewards collecting), and a large bonus per item crafted. Crafting
+    is detected by checking that a placeable item count increased while
+    raw materials decreased.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    proximity = _ore_proximity(new_state)
+    mining = _mining_delta(prev_state, new_state)
+
+    # Detect any crafting: total placeable items increased and raw
+    # materials decreased simultaneously.
+    placeables = jnp.array([
+        ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT,
+        ItemType.ARM, ItemType.ASSEMBLER,
+    ], dtype=jnp.int32)
+    prev_placed = sum(
+        _item_count(prev_state, int(p)) for p in placeables
+    )
+    new_placed = sum(
+        _item_count(new_state, int(p)) for p in placeables
+    )
+    craft_delta = jnp.maximum(new_placed - prev_placed, 0)
+
+    return proximity + mining + 10.0 * craft_delta.astype(jnp.float32)
+
+
+def dense_fill_chest_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the fill_chest level.
+
+    Combines ore proximity, chest proximity, mining delta, and chest
+    filling delta.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    ore_prox = _ore_proximity(new_state)
+    chest_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.CHEST
+    )
+    mining = _mining_delta(prev_state, new_state)
+    filling = _chest_filling_delta(prev_state, new_state)
+    return ore_prox + chest_prox + mining + 5.0 * filling
+
+
+def dense_deploy_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for deployment levels (deploy_miner, place_and_fuel,
+    mining_factory).
+
+    Combines ore proximity, mining delta, and miner output delta.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    proximity = _ore_proximity(new_state)
+    mining = _mining_delta(prev_state, new_state)
+    output = miner_output_reward(prev_state, new_state, params)
+    return proximity + mining + 5.0 * output
+
+
+def dense_withdraw_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the withdraw_ore level.
+
+    Proximity to the nearest miner that still has items in its output
+    slot, plus a bonus per item withdrawn into inventory.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    has_output = (
+        (new_state.machine_types == MachineType.MINER)
+        & (new_state.machine_inventory_counts[..., 1] > 0)
+    )
+    proximity = _proximity(new_state, has_output)
+    inv_gain = _inventory_delta(prev_state, new_state)
+    return proximity + 10.0 * jnp.maximum(inv_gain, 0.0)
+
+
+def dense_deposit_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the deposit_into_chests level.
+
+    Proximity to nearest chest plus chest filling bonus.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    chest_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.CHEST
+    )
+    filling = _chest_filling_delta(prev_state, new_state)
+    return chest_prox + 5.0 * filling
+
+
+def dense_pickup_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the pickup_machines level.
+
+    Proximity to nearest machine on the map plus bonus for picking up
+    machines (detected by machine count decrease on map).
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    has_machine = new_state.machine_types != MachineType.NONE
+    proximity = _proximity(new_state, has_machine)
+    prev_count = jnp.sum(prev_state.machine_types != MachineType.NONE)
+    new_count = jnp.sum(new_state.machine_types != MachineType.NONE)
+    picked_up = jnp.maximum(prev_count - new_count, 0)
+    return proximity + 10.0 * picked_up.astype(jnp.float32)
+
+
+def dense_belt_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the belt_line level.
+
+    Rewards belt placement and items reaching the destination chest.
+    No proximity component (gap tile not identifiable from state).
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    prev_belts = jnp.sum(
+        prev_state.machine_types == MachineType.CONVEYOR_BELT
+    )
+    new_belts = jnp.sum(
+        new_state.machine_types == MachineType.CONVEYOR_BELT
+    )
+    belt_placed = jnp.maximum(new_belts - prev_belts, 0)
+    filling = _chest_filling_delta(prev_state, new_state)
+    return 5.0 * belt_placed.astype(jnp.float32) + 5.0 * filling
+
+
+def dense_arm_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the arm_bridge level.
+
+    Proximity to the arm machine plus items arriving in any chest.
+    Once the arm is rotated correctly, items transfer every tick.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    arm_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.ARM
+    )
+    filling = _chest_filling_delta(prev_state, new_state)
+    return arm_prox + 10.0 * filling
+
+
+def dense_fuel_collect_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the fuel_and_collect level.
+
+    Proximity to the miner, bonus for fuel deposited into the miner,
+    and bonus for items withdrawn into inventory.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    miner_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.MINER
+    )
+    # Fuel deposited = miner fuel slot (0) count increase.
+    is_miner = new_state.machine_types == MachineType.MINER
+    prev_fuel = jnp.sum(jnp.where(
+        is_miner, prev_state.machine_inventory_counts[..., 0], 0
+    ))
+    new_fuel = jnp.sum(jnp.where(
+        is_miner, new_state.machine_inventory_counts[..., 0], 0
+    ))
+    fuel_delta = jnp.maximum(new_fuel - prev_fuel, 0).astype(jnp.float32)
+    inv_gain = jnp.maximum(_inventory_delta(prev_state, new_state), 0.0)
+    return miner_prox + 5.0 * fuel_delta + 10.0 * inv_gain
+
+
+def dense_assembler_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the assembler_production level.
+
+    Proximity to assembler, bonus for depositing inputs, and large
+    bonus for science packs gained in inventory.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    asm_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.ASSEMBLER
+    )
+    # Input deposited = total items in assembler input slots (0-2).
+    is_asm = new_state.machine_types == MachineType.ASSEMBLER
+    prev_inputs = jnp.sum(jnp.where(
+        is_asm[..., None],
+        prev_state.machine_inventory_counts[..., :3],
+        0,
+    ))
+    new_inputs = jnp.sum(jnp.where(
+        is_asm[..., None],
+        new_state.machine_inventory_counts[..., :3],
+        0,
+    ))
+    input_delta = jnp.maximum(
+        new_inputs - prev_inputs, 0
+    ).astype(jnp.float32)
+    # Science packs gained in player inventory.
+    prev_packs = _item_count(prev_state, ItemType.BASIC_SCIENCE_PACK)
+    new_packs = _item_count(new_state, ItemType.BASIC_SCIENCE_PACK)
+    pack_delta = jnp.maximum(
+        new_packs - prev_packs, 0
+    ).astype(jnp.float32)
+    return asm_prox + 2.0 * input_delta + 10.0 * pack_delta
+
+
+def dense_research_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the research_tech level.
+
+    Bonus proportional to research progress increase. No proximity
+    component (no spatial navigation needed).
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    delta = jnp.sum(
+        new_state.research_progress - prev_state.research_progress
+    )
+    return 10.0 * delta.astype(jnp.float32)
+
+
+def dense_repair_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Dense reward for the repair_machine level.
+
+    Proximity to the nearest damaged machine plus bonus for each
+    machine restored to full health.
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 reward.
+    """
+    is_damaged = (
+        (new_state.machine_types != MachineType.NONE)
+        & (new_state.machine_health < DEFAULT_MACHINE_MAX_HEALTH)
+    )
+    proximity = _proximity(new_state, is_damaged)
+    prev_full = jnp.sum(
+        (prev_state.machine_types != MachineType.NONE)
+        & (prev_state.machine_health >= DEFAULT_MACHINE_MAX_HEALTH)
+    )
+    new_full = jnp.sum(
+        (new_state.machine_types != MachineType.NONE)
+        & (new_state.machine_health >= DEFAULT_MACHINE_MAX_HEALTH)
+    )
+    repaired = jnp.maximum(new_full - prev_full, 0)
+    return proximity + 10.0 * repaired.astype(jnp.float32)

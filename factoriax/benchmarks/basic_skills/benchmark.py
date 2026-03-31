@@ -51,36 +51,42 @@ from factoriax.benchmarks.basic_skills.scoring import (
 )
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.rewards import (
-    achievement_reward,
-    chest_filling_reward,
-    miner_output_reward,
-    miner_throughput_reward,
-    player_inventory_reward,
-    sparse_chest_crafting_reward,
-    sparse_miner_crafting_reward,
-    sparse_mining_reward,
+    dense_arm_reward,
+    dense_assembler_reward,
+    dense_belt_reward,
+    dense_craft_reward,
+    dense_deploy_reward,
+    dense_deposit_reward,
+    dense_fill_chest_reward,
+    dense_fuel_collect_reward,
+    dense_pickup_reward,
+    dense_repair_reward,
+    dense_research_reward,
+    dense_withdraw_reward,
+    mining_reward,
 )
 from factoriax.state import EnvParams, EnvState
 
-# Map level names to their reward functions. Training scripts should select
-# the appropriate reward function per level using this mapping.
+# Map level names to their dense reward functions for training.
+# Each provides per-step signal (proximity + task bonus) to prevent
+# PPO policy collapse on sparse rewards.
 REWARD_FNS: dict[str, Callable[[EnvState, EnvState, EnvParams], jax.Array]] = {
-    "mine_resources": sparse_mining_reward,
-    "craft_chests": sparse_chest_crafting_reward,
-    "fill_chest": chest_filling_reward,
-    "craft_miners": sparse_miner_crafting_reward,
-    "deploy_miner": miner_output_reward,
-    "mining_factory": miner_throughput_reward,
-    "place_and_fuel": miner_output_reward,
-    "withdraw_ore": player_inventory_reward,
-    "deposit_into_chests": chest_filling_reward,
-    "pickup_machines": player_inventory_reward,
-    "belt_line": chest_filling_reward,
-    "arm_bridge": chest_filling_reward,
-    "fuel_and_collect": player_inventory_reward,
-    "assembler_production": player_inventory_reward,
-    "research_tech": achievement_reward,
-    "repair_machine": achievement_reward,
+    "mine_resources": mining_reward,
+    "craft_chests": dense_craft_reward,
+    "fill_chest": dense_fill_chest_reward,
+    "craft_miners": dense_craft_reward,
+    "deploy_miner": dense_deploy_reward,
+    "mining_factory": dense_deploy_reward,
+    "place_and_fuel": dense_deploy_reward,
+    "withdraw_ore": dense_withdraw_reward,
+    "deposit_into_chests": dense_deposit_reward,
+    "pickup_machines": dense_pickup_reward,
+    "belt_line": dense_belt_reward,
+    "arm_bridge": dense_arm_reward,
+    "fuel_and_collect": dense_fuel_collect_reward,
+    "assembler_production": dense_assembler_reward,
+    "research_tech": dense_research_reward,
+    "repair_machine": dense_repair_reward,
 }
 
 
@@ -113,7 +119,7 @@ class BasicSkillsBenchmark:
         Returns:
             :func:`~factoriax.rewards.sparse_mining_reward`.
         """
-        return sparse_mining_reward
+        return mining_reward
 
     @property
     def num_players(self) -> int:
