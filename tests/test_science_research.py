@@ -196,7 +196,7 @@ class TestResearchAction:
         """Consuming a basic science pack increments research progress."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.BASIC_SCIENCE_PACK))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(5)
 
         state = state_factory(
@@ -213,7 +213,7 @@ class TestResearchAction:
         """Tech should unlock when progress reaches RESEARCH_COST."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.BASIC_SCIENCE_PACK))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(RESEARCH_COST)
 
         progress = jnp.array([RESEARCH_COST - 1, 0], dtype=jnp.int32)
@@ -232,7 +232,7 @@ class TestResearchAction:
         """RESEARCH with non-science item should be a no-op."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(5)
 
         state = state_factory(
@@ -248,7 +248,7 @@ class TestResearchAction:
         """RESEARCH should not consume packs for an already-unlocked tech."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.BASIC_SCIENCE_PACK))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(5)
 
         state = state_factory(
@@ -264,7 +264,7 @@ class TestResearchAction:
         """Fuel science packs should advance tech index 1."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.FUEL_SCIENCE_PACK))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(1)
 
         state = state_factory(
@@ -280,7 +280,7 @@ class TestResearchAction:
         """RESEARCH action through factoriax_step should work."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.BASIC_SCIENCE_PACK))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(3)
 
         state = state_factory(

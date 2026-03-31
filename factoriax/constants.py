@@ -75,6 +75,12 @@ MAX_MACHINE_STACK_SIZE = 64
 MAX_MACHINE_INVENTORY_SLOTS = 8
 NUM_ITEM_TYPES = len(ItemType)
 
+# Canonical dtypes for state arrays. Use these in tests and level
+# builders to avoid int32/int16 mismatch warnings from JAX scatter ops.
+INVENTORY_COUNT_DTYPE = jnp.int32
+MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
+BLOCK_RESOURCE_DTYPE = jnp.int16
+
 # Per-slot roles for each MachineType,
 # shape (NUM_MACHINE_TYPES, MAX_MACHINE_INVENTORY_SLOTS).
 # Indexed as MACHINE_SLOT_ROLES[machine_type, slot_index].

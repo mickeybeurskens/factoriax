@@ -54,7 +54,7 @@ class TestDisabledMachines:
         inv = jnp.zeros((1, 2, 8), dtype=jnp.int32)
         inv = inv.at[0, 0, 0].set(int(ItemType.IRON))
         cnt = jnp.zeros((1, 2, 8), dtype=jnp.int16)
-        cnt = cnt.at[0, 0, 0].set(5)
+        cnt = cnt.at[0, 0, 0].set(jnp.int16(5))
         state = state_factory(
             world_map=jnp.zeros((1, 2), dtype=jnp.int32),
             machine_types=mt,
@@ -78,7 +78,7 @@ class TestDisabledMachines:
             research_unlocked=jnp.ones(NUM_TECHNOLOGIES, dtype=jnp.bool_),
         )
         inv = state.machine_inventory_items.at[0, 0, 0].set(int(ItemType.IRON))
-        cnt = state.machine_inventory_counts.at[0, 0, 0].set(10)
+        cnt = state.machine_inventory_counts.at[0, 0, 0].set(jnp.int16(10))
         state = state.replace(
             machine_inventory_items=inv,
             machine_inventory_counts=cnt,
@@ -96,7 +96,7 @@ class TestRepairAction:
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.COPPER))
         inv_items = inv_items.at[0, 1].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(10)
         inv_counts = inv_counts.at[0, 1].set(10)
 
@@ -121,7 +121,7 @@ class TestRepairAction:
         """Repair should fail if player lacks required materials."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(2)  # Not enough iron (need 5)
 
         state = state_factory(
@@ -145,7 +145,7 @@ class TestRepairAction:
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.COPPER))
         inv_items = inv_items.at[0, 1].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(10)
         inv_counts = inv_counts.at[0, 1].set(10)
 
@@ -171,7 +171,7 @@ class TestRepairAction:
         """Repair should be a no-op when facing an empty tile."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(10)
 
         state = state_factory(
@@ -189,7 +189,7 @@ class TestRepairAction:
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.COPPER))
         inv_items = inv_items.at[0, 1].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(10)
         inv_counts = inv_counts.at[0, 1].set(10)
 
@@ -214,7 +214,7 @@ class TestRepairAction:
         """Repairing a chest should consume 5 iron (chest recipe cost)."""
         inv_items = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_items = inv_items.at[0, 0].set(int(ItemType.IRON))
-        inv_counts = jnp.zeros((1, 10), dtype=jnp.int16)
+        inv_counts = jnp.zeros((1, 10), dtype=jnp.int32)
         inv_counts = inv_counts.at[0, 0].set(10)
 
         state = state_factory(

@@ -5,8 +5,11 @@ import pytest
 
 from factoriax import Action, EnvState
 from factoriax.constants import (
+    BLOCK_RESOURCE_DTYPE,
     DEFAULT_MACHINE_MAX_HEALTH,
     DEFAULT_MAX_BITERS,
+    INVENTORY_COUNT_DTYPE,
+    MACHINE_INVENTORY_COUNT_DTYPE,
     MAX_ACHIEVEMENTS,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
@@ -135,7 +138,7 @@ def state_factory():
             else jnp.zeros(inv_shape, dtype=jnp.int32),
             inventory_counts=inventory_counts
             if inventory_counts is not None
-            else jnp.zeros(inv_shape, dtype=jnp.int32),
+            else jnp.zeros(inv_shape, dtype=INVENTORY_COUNT_DTYPE),
             selected_player=selected_player,
             selected_slots=selected_slots
             if selected_slots is not None
@@ -148,7 +151,7 @@ def state_factory():
             else jnp.zeros(player_shape, dtype=jnp.int32),
             block_resources=block_resources
             if block_resources is not None
-            else jnp.zeros(shape, dtype=jnp.int16),
+            else jnp.zeros(shape, dtype=BLOCK_RESOURCE_DTYPE),
             machine_types=machine_types
             if machine_types is not None
             else jnp.full(shape, MachineType.NONE, dtype=jnp.int32),
@@ -160,7 +163,7 @@ def state_factory():
             else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32),
             machine_inventory_counts=machine_inventory_counts
             if machine_inventory_counts is not None
-            else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16),
+            else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=MACHINE_INVENTORY_COUNT_DTYPE),
             machine_selected_recipe=machine_selected_recipe
             if machine_selected_recipe is not None
             else jnp.zeros(shape, dtype=jnp.int32),
