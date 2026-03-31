@@ -13,7 +13,11 @@ from factoriax.achievements import core_game_conditions
 from factoriax.constants import NUM_ACTIONS, NUM_INVENTORY_SLOTS, NUM_TECHNOLOGIES
 from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.levels import Level, build_state, generate_state
-from factoriax.observations import NUM_PLAYER_SCALARS, global_array
+from factoriax.observations import (
+    NUM_PLAYER_SCALARS,
+    NUM_SPATIAL_CHANNELS,
+    global_array,
+)
 from factoriax.renderer import render_pixels
 from factoriax.rewards import achievement_reward
 from factoriax.state import EnvParams, EnvState
@@ -176,7 +180,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             Box observation space.
         """
         obs_size = (
-            params.map_width * params.map_height
+            NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
             + NUM_INVENTORY_SLOTS * 2
             + NUM_TECHNOLOGIES * 2  # research_unlocked + research_progress

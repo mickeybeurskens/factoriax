@@ -21,7 +21,7 @@ from factoriax.constants import (
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step, mine_block
-from factoriax.observations import NUM_PLAYER_SCALARS
+from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.recipes import MAX_ASSEMBLER_STACK_SIZE
 from factoriax.state import EnvParams, EnvState
 
@@ -287,8 +287,12 @@ class TestObservationFidelity:
         )
 
         obs = env.get_obs(state, _SMALL_PARAMS)
-        map_size = _SMALL_PARAMS.map_width * _SMALL_PARAMS.map_height
-        inv_items_start = map_size + NUM_PLAYER_SCALARS
+        spatial_size = (
+            NUM_SPATIAL_CHANNELS
+            * _SMALL_PARAMS.map_width
+            * _SMALL_PARAMS.map_height
+        )
+        inv_items_start = spatial_size + NUM_PLAYER_SCALARS
         inv_counts_start = inv_items_start + NUM_INVENTORY_SLOTS
 
         from factoriax.constants import NUM_ITEM_TYPES

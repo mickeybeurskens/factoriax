@@ -23,6 +23,7 @@ from factoriax.constants import (
 )
 from factoriax.observations import (
     NUM_PLAYER_SCALARS,
+    NUM_SPATIAL_CHANNELS,
     _player_scalars,
     global_array,
     local_array,
@@ -42,7 +43,7 @@ _DEFAULT_PARAMS = EnvParams(
 )
 
 _GLOBAL_OBS_SIZE = (
-    _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
+    NUM_SPATIAL_CHANNELS * _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
     + NUM_PLAYER_SCALARS
     + 2 * NUM_INVENTORY_SLOTS
     + 2 * NUM_TECHNOLOGIES
@@ -63,7 +64,12 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
         out = _player_scalars(state, _DEFAULT_PARAMS, 0)
-        assert out.shape == (NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES,)
+        expected = (
+            NUM_PLAYER_SCALARS
+            + 2 * NUM_INVENTORY_SLOTS
+            + 2 * NUM_TECHNOLOGIES
+        )
+        assert out.shape == (expected,)
 
     def test_values_in_range(self, state_factory) -> None:
         """All scalar values must lie in [0, 1]."""
@@ -139,14 +145,16 @@ class TestGlobalArray:
         assert out.min() >= 0.0, f"min={out.min()}"
         assert out.max() <= 1.0, f"max={out.max()}"
 
-    def test_map_segment_correct(self, state_factory) -> None:
-        """The first map_h * map_w elements must match the normalized map."""
-        world_map = jnp.array([[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32)
+    def test_block_channel_correct(self, state_factory) -> None:
+        """The first H*W elements (block channel) match the normalized map."""
+        world_map = jnp.array(
+            [[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32
+        )
         state = state_factory(world_map=world_map)
         out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
-        map_size = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
+        tiles = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
         expected_val = float(BlockType.COAL) / float(max(BlockType))
-        np.testing.assert_allclose(out[:map_size], expected_val)
+        np.testing.assert_allclose(out[:tiles], expected_val)
 
     def test_player_idx_independent(self, state_factory) -> None:
         """Two players at different positions produce different observations."""
@@ -157,10 +165,14 @@ class TestGlobalArray:
         )
         obs0 = np.array(global_array(state, _DEFAULT_PARAMS, 0))
         obs1 = np.array(global_array(state, _DEFAULT_PARAMS, 1))
-        # Map segment is identical; player scalars differ.
-        map_size = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
-        np.testing.assert_array_equal(obs0[:map_size], obs1[:map_size])
-        assert not np.allclose(obs0[map_size:], obs1[map_size:])
+        # Spatial channels are identical; player scalars differ.
+        spatial_size = (
+            NUM_SPATIAL_CHANNELS
+            * _DEFAULT_PARAMS.map_width
+            * _DEFAULT_PARAMS.map_height
+        )
+        np.testing.assert_array_equal(obs0[:spatial_size], obs1[:spatial_size])
+        assert not np.allclose(obs0[spatial_size:], obs1[spatial_size:])
 
     def test_jit_compatible(self, state_factory) -> None:
         """global_array survives jax.jit without error."""
@@ -203,7 +215,12 @@ class TestGlobalArray:
 
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
-_LOCAL_OBS_SIZE = 4 * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
+_LOCAL_OBS_SIZE = (
+    NUM_SPATIAL_CHANNELS * _WINDOW**2
+    + NUM_PLAYER_SCALARS
+    + 2 * NUM_INVENTORY_SLOTS
+    + 2 * NUM_TECHNOLOGIES
+)
 
 
 class TestLocalArray:
@@ -213,7 +230,12 @@ class TestLocalArray:
         """Output shape is correct for radius=10 (default)."""
         radius = 10
         window = 2 * radius + 1
-        expected = 4 * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES
+        expected = (
+            NUM_SPATIAL_CHANNELS * window**2
+            + NUM_PLAYER_SCALARS
+            + 2 * NUM_INVENTORY_SLOTS
+            + 2 * NUM_TECHNOLOGIES
+        )
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),

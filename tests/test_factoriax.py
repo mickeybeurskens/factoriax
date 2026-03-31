@@ -22,7 +22,7 @@ from factoriax.game_logic import (
     is_position_walkable,
     move_player,
 )
-from factoriax.observations import NUM_PLAYER_SCALARS
+from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.renderer import (
     create_default_textures,
     render_pixels,
@@ -356,7 +356,7 @@ class TestEnvironment:
         env, params = make_factoriax_env()
         obs_space = env.observation_space(params)
         expected_size = (
-            params.map_width * params.map_height
+            NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
             + NUM_INVENTORY_SLOTS * 2
             + NUM_TECHNOLOGIES * 2
