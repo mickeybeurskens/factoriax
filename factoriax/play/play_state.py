@@ -71,3 +71,11 @@ class PlayState:
 
     # Frame state
     frame_tick: int = 0
+
+    # Mouse-driven facing: last Direction the mouse pointed toward,
+    # or 0 when unknown. Used to emit FACE_* only on change.
+    mouse_facing: int = 0
+
+    # Tile the mouse is hovering over, or (-1, -1) when off the world.
+    hover_tile_x: int = -1
+    hover_tile_y: int = -1

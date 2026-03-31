@@ -307,8 +307,10 @@ class Action(IntEnum):
 
     Movement actions (UP through RIGHT) move the player in absolute map
     directions without changing facing. TURN_LEFT/TURN_RIGHT rotate
-    facing without moving. This decouples movement from orientation,
-    letting the agent face a tile independently of where it walks.
+    facing without moving. FACE_UP/DOWN/LEFT/RIGHT snap facing to the
+    given direction in one step without moving. This decouples movement
+    from orientation, letting the agent face a tile independently of
+    where it walks.
     """
 
     NOOP = 0
@@ -335,6 +337,10 @@ class Action(IntEnum):
     CRAFT_ASSEMBLER = 21
     RESEARCH = 22
     REPAIR = 23
+    FACE_UP = 24
+    FACE_DOWN = 25
+    FACE_LEFT = 26
+    FACE_RIGHT = 27
 
 
 # (dx, dy) offset per compass direction, indexed by Direction value.

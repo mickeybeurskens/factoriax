@@ -7,6 +7,7 @@ Covers the private helpers ``_find_deposit_slot`` and ``_find_withdraw_slot``
 
 import jax
 import jax.numpy as jnp
+import pytest
 
 from factoriax import Action, BlockType, Direction, EnvParams, ItemType
 from factoriax.constants import (
@@ -285,6 +286,30 @@ class TestHandlePlayerAction:
             new_state.player_positions[0], jnp.array([1, 1])
         )
         assert int(new_state.player_directions[0]) == Direction.RIGHT
+
+    @pytest.mark.parametrize(
+        "action, expected_dir",
+        [
+            (Action.FACE_UP, Direction.UP),
+            (Action.FACE_DOWN, Direction.DOWN),
+            (Action.FACE_LEFT, Direction.LEFT),
+            (Action.FACE_RIGHT, Direction.RIGHT),
+        ],
+    )
+    def test_face_action_dispatches_through_handler(
+        self, state_factory, action: Action, expected_dir: Direction
+    ) -> None:
+        """FACE_* actions should set facing via _handle_player_action."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.UP),
+        )
+        new_state = _handle_player_action(state, action, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([1, 1])
+        )
+        assert int(new_state.player_directions[0]) == expected_dir
 
     def test_mine_decrements_resources(self, state_factory) -> None:
         """MINE action should extract a resource from the block underfoot."""

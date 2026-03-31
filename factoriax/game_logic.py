@@ -139,8 +139,8 @@ def move_player(
     # Map movement actions to compass Direction for DIRECTIONS lookup.
     # Non-movement actions map to 0 (zero offset).
     _ACT_TO_DIR = jnp.array(
-        [0, Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT,
-         0, 0], dtype=jnp.int32,
+        [0, Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT],
+        dtype=jnp.int32,
     )
     safe_act = jnp.clip(action, 0, _ACT_TO_DIR.shape[0] - 1)
     offset = DIRECTIONS[_ACT_TO_DIR[safe_act]]
@@ -150,14 +150,26 @@ def move_player(
     can_move = is_position_walkable(state, target) & is_move
     final_position = jnp.where(can_move, target, current_position)
 
-    # Only turns change facing.
+    # Turns and face actions change facing.
+    # FACE_* actions map directly to a Direction constant via lookup.
+    face_to_dir = jnp.array(
+        [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT],
+        dtype=jnp.int32,
+    )
+    is_face = (action >= Action.FACE_UP) & (action <= Action.FACE_RIGHT)
+    face_idx = jnp.clip(action - Action.FACE_UP, 0, 3)
+
     new_facing = jnp.where(
-        action == Action.TURN_LEFT,
-        TURN_LEFT_MAP[facing],
+        is_face,
+        face_to_dir[face_idx],
         jnp.where(
-            action == Action.TURN_RIGHT,
-            TURN_RIGHT_MAP[facing],
-            facing,
+            action == Action.TURN_LEFT,
+            TURN_LEFT_MAP[facing],
+            jnp.where(
+                action == Action.TURN_RIGHT,
+                TURN_RIGHT_MAP[facing],
+                facing,
+            ),
         ),
     )
 

@@ -67,7 +67,7 @@ class TestConstants:
         assert int(BlockType.COAL) not in solid_set
 
     def test_action_values(self) -> None:
-        """Movement actions should be numbered 0-6."""
+        """Movement actions should be numbered 0-6, face actions 24-27."""
         assert Action.NOOP == 0
         assert Action.UP == 1
         assert Action.DOWN == 2
@@ -75,6 +75,10 @@ class TestConstants:
         assert Action.RIGHT == 4
         assert Action.TURN_LEFT == 5
         assert Action.TURN_RIGHT == 6
+        assert Action.FACE_UP == 24
+        assert Action.FACE_DOWN == 25
+        assert Action.FACE_LEFT == 26
+        assert Action.FACE_RIGHT == 27
 
 
 class TestWorldGen:
@@ -214,6 +218,30 @@ class TestGameLogic:
             new_state.player_positions[0], jnp.array([1, 1])
         )
         assert int(new_state.player_directions[0]) == Direction.LEFT
+
+    @pytest.mark.parametrize(
+        "action, expected_dir",
+        [
+            (Action.FACE_UP, Direction.UP),
+            (Action.FACE_DOWN, Direction.DOWN),
+            (Action.FACE_LEFT, Direction.LEFT),
+            (Action.FACE_RIGHT, Direction.RIGHT),
+        ],
+    )
+    def test_face_sets_direction_without_moving(
+        self, state_factory, action: Action, expected_dir: Direction
+    ) -> None:
+        """FACE_* actions should snap facing to the target direction."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(1, 1),
+            player_direction=int(Direction.UP),
+        )
+        new_state = move_player(state, action, 0)
+        assert jnp.array_equal(
+            new_state.player_positions[0], jnp.array([1, 1])
+        )
+        assert int(new_state.player_directions[0]) == expected_dir
 
     def test_move_player_blocked_by_water(self, state_factory) -> None:
         """Player should not move into water."""

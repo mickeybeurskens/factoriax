@@ -16,6 +16,7 @@ import pygame
 
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
+    BLOCK_MAX_RESOURCES,
     DEFAULT_MACHINE_MAX_HEALTH,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
@@ -25,6 +26,7 @@ from factoriax.constants import (
     RESEARCH_COST,
     SLOT_ROLE_COLORS,
     SLOT_ROLE_LABELS,
+    BlockType,
     Direction,
     ItemType,
     MachineType,
@@ -1135,8 +1137,8 @@ def render_machine_menu(
     return overlay, click_regions
 
 
-_HOTBAR_H: int = 48
-"""Height of the persistent hotbar in pixels."""
+_HOTBAR_H: int = 154
+"""Height of the persistent bottom bar (hotbar + info panel) in pixels."""
 
 _HOTBAR_SLOTS: int = 8
 """Number of inventory slots visible in the hotbar at once."""
@@ -1158,11 +1160,12 @@ def render_hotbar(
     screen_height: int,
     hotbar_page: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
-    """Render a persistent hotbar at the bottom of the game canvas.
+    """Render a persistent hotbar in the left 2/3 of the bottom bar.
 
     The bar shows a player badge on the left, a sliding window of 8
     inventory slots in the centre, and a page-toggle button on the right.
-    Page 0 shows slots 0-7, page 1 shows slots 2-9.
+    Page 0 shows slots 0-7, page 1 shows slots 2-9. Content is
+    vertically centred within the bar height.
 
     Args:
         state: Current environment state.
@@ -1177,9 +1180,13 @@ def render_hotbar(
     regions: list[ClickRegion] = []
 
     bar_y = screen_height - _HOTBAR_H
+    bar_w = screen_width * 2 // 3
+
+    # Full-width background and top border (shared with info panel).
     overlay[bar_y:, :screen_width] = (22, 22, 22, 228)
-    # Top border line
     overlay[bar_y : bar_y + 2, :screen_width] = _BORDER
+    # Vertical separator between hotbar and info panel.
+    overlay[bar_y + 2 :, bar_w : bar_w + 2] = _BORDER
 
     selected_player = int(state.selected_player)
     selected_slot = int(state.selected_slots[selected_player])
@@ -1188,13 +1195,17 @@ def render_hotbar(
     inventory_counts = np.array(state.inventory_counts[selected_player])
 
     hint_font = get_pixel_font(_FONT_HINT)
+    body_font = get_pixel_font(_FONT_BODY)
+
+    # Content is vertically centred in a 48px logical strip.
+    content_h = 48
+    content_y = bar_y + (_HOTBAR_H - content_h) // 2
 
     # --- Player badge (~60px) ---
     badge_x = 8
-    badge_cy = bar_y + _HOTBAR_H // 2
+    badge_cy = content_y + content_h // 2
     circle_r = 14
     colors = PLAYER_COLORS[selected_player % len(PLAYER_COLORS)]
-    # Draw a filled circle approximation as a square with clipped corners
     for dy in range(-circle_r, circle_r + 1):
         half_w = int((circle_r * circle_r - dy * dy) ** 0.5)
         row = badge_cy + dy
@@ -1204,7 +1215,9 @@ def render_hotbar(
             overlay[row, c0:c1, :3] = colors[0]
             overlay[row, c0:c1, 3] = 255
 
-    label = _render_text_rgba(f"P{selected_player + 1}", hint_font, (255, 255, 255))
+    label = _render_text_rgba(
+        f"P{selected_player + 1}", hint_font, (255, 255, 255),
+    )
     _blit_rgba(
         overlay,
         label,
@@ -1220,13 +1233,13 @@ def render_hotbar(
         badge_x + circle_r * 2 + 6,
     )
 
-    # --- 8 item slots ---
+    # --- 8 item slots (vertically centred) ---
     slot_start = 0 if hotbar_page == 0 else 2
     slot_area_x = 64
-    slot_area_w = screen_width - 64 - 104  # leave room for page btn + padding
+    slot_area_w = bar_w - 64 - 104
     slot_w = slot_area_w // _HOTBAR_SLOTS
-    icon_size = min(32, slot_w - 8)
-    slot_y = bar_y + 4
+    icon_size = min(40, slot_w - 8)
+    slot_y = content_y + (content_h - icon_size) // 2
 
     for i in range(_HOTBAR_SLOTS):
         slot_idx = slot_start + i
@@ -1235,20 +1248,29 @@ def render_hotbar(
 
         sx = slot_area_x + i * slot_w
         icon_x = sx + (slot_w - icon_size) // 2
-        icon_y = slot_y + 2
+        icon_y = slot_y
 
         is_selected = slot_idx == selected_slot
         bg: tuple[int, int, int, int] = (
             (90, 90, 90, 255) if is_selected else (45, 45, 45, 255)
         )
-        overlay[icon_y : icon_y + icon_size, icon_x : icon_x + icon_size] = bg
+        overlay[
+            icon_y : icon_y + icon_size,
+            icon_x : icon_x + icon_size,
+        ] = bg
 
         if is_selected:
             white = (255, 255, 255, 255)
             overlay[icon_y, icon_x : icon_x + icon_size] = white
-            overlay[icon_y + icon_size - 1, icon_x : icon_x + icon_size] = white
+            overlay[
+                icon_y + icon_size - 1,
+                icon_x : icon_x + icon_size,
+            ] = white
             overlay[icon_y : icon_y + icon_size, icon_x] = white
-            overlay[icon_y : icon_y + icon_size, icon_x + icon_size - 1] = white
+            overlay[
+                icon_y : icon_y + icon_size,
+                icon_x + icon_size - 1,
+            ] = white
 
         item_type = int(inventory_items[slot_idx])
         count = int(inventory_counts[slot_idx])
@@ -1262,9 +1284,7 @@ def render_hotbar(
                     icon_x + pad : icon_x + pad + icon_s,
                 ] = icon_arr
             count_arr = _render_text_rgba(
-                f"{count}",
-                hint_font,
-                _SLOT_COUNT_COLOR,
+                f"{count}", body_font, _SLOT_COUNT_COLOR,
             )
             count_x = icon_x + icon_size - count_arr.shape[1] - 1
             count_y = icon_y + icon_size - count_arr.shape[0]
@@ -1272,43 +1292,41 @@ def render_hotbar(
 
         regions.append(
             ClickRegion(
-                x=icon_x,
-                y=icon_y,
-                w=icon_size,
-                h=icon_size,
-                action="select_slot",
-                param=slot_idx,
+                x=icon_x, y=icon_y,
+                w=icon_size, h=icon_size,
+                action="select_slot", param=slot_idx,
             )
         )
 
     # --- Research status (compact, right of slots) ---
-    _TECH_NAMES = ["Hull", "Fuel Pk"]
-    _TECH_COLORS = [
-        (200, 50, 50),   # Basic science -> red
-        (50, 150, 50),   # Fuel science -> green
+    tech_names = ["Hull", "Fuel Pk"]
+    tech_colors = [
+        (200, 50, 50),
+        (50, 150, 50),
     ]
-    research_x = screen_width - 220
-    ry = bar_y + 6
+    research_x = bar_w - 156
+    ry = content_y + 4
     for t in range(NUM_TECHNOLOGIES):
         progress = int(state.research_progress[t])
         unlocked = bool(state.research_unlocked[t])
-        color = (110, 220, 110) if unlocked else _TECH_COLORS[t]
-        label = _TECH_NAMES[t]
-        if unlocked:
-            txt = f"{label}: OK"
-        else:
-            txt = f"{label}: {progress}/{RESEARCH_COST}"
+        color = (110, 220, 110) if unlocked else tech_colors[t]
+        name = tech_names[t]
+        txt = f"{name}: OK" if unlocked else f"{name}: {progress}/{RESEARCH_COST}"
         tech_surf = _render_text_rgba(txt, hint_font, color)
         _blit_rgba(overlay, tech_surf, ry, research_x)
         ry += tech_surf.shape[0] + 2
 
     # --- Page button ---
-    btn_x = screen_width - 96
-    btn_y = bar_y + 8
     btn_w = 36
-    btn_h = _HOTBAR_H - 16
-    overlay[btn_y : btn_y + btn_h, btn_x : btn_x + btn_w] = (55, 55, 55, 255)
-    page_label = _render_text_rgba(f"{hotbar_page + 1}/2", hint_font, (180, 175, 150))
+    btn_h = 32
+    btn_x = bar_w - 60
+    btn_y = content_y + (content_h - btn_h) // 2
+    overlay[btn_y : btn_y + btn_h, btn_x : btn_x + btn_w] = (
+        55, 55, 55, 255,
+    )
+    page_label = _render_text_rgba(
+        f"{hotbar_page + 1}/2", hint_font, (180, 175, 150),
+    )
     _blit_rgba(
         overlay,
         page_label,
@@ -1317,16 +1335,285 @@ def render_hotbar(
     )
     regions.append(
         ClickRegion(
-            x=btn_x,
-            y=btn_y,
-            w=btn_w,
-            h=btn_h,
-            action="hotbar_page",
-            param=0,
+            x=btn_x, y=btn_y,
+            w=btn_w, h=btn_h,
+            action="hotbar_page", param=0,
         )
     )
 
     return overlay, regions
+
+
+# Display names for block types shown in the info panel.
+_BLOCK_NAMES: dict[int, str] = {
+    int(BlockType.DIRT): "Dirt",
+    int(BlockType.WATER): "Water",
+    int(BlockType.IRON): "Iron Ore",
+    int(BlockType.COPPER): "Copper Ore",
+    int(BlockType.COAL): "Coal Deposit",
+    int(BlockType.NEST): "Biter Nest",
+    int(BlockType.OUT_OF_BOUNDS): "Out of Bounds",
+}
+
+# Colors for resource block names.
+_BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
+    int(BlockType.IRON): (180, 180, 200),
+    int(BlockType.COPPER): (210, 140, 60),
+    int(BlockType.COAL): (140, 140, 140),
+}
+
+# Items that correspond to mineable blocks.
+_BLOCK_TO_ITEM: dict[int, int] = {
+    int(BlockType.IRON): int(ItemType.IRON),
+    int(BlockType.COPPER): int(ItemType.COPPER),
+    int(BlockType.COAL): int(ItemType.COAL),
+}
+
+
+def render_info_panel(
+    state: EnvState,
+    screen_width: int,
+    screen_height: int,
+    hover_tx: int,
+    hover_ty: int,
+) -> np.ndarray:
+    """Render the tile info panel in the right 1/3 of the bottom bar.
+
+    Shows contextual information about the tile the mouse is hovering
+    over: machine details (name, health, inventory), resource stats, or
+    plain block type. When no tile is hovered the panel shows a hint.
+
+    Args:
+        state: Current environment state.
+        screen_width: Total render width in pixels.
+        screen_height: Total render height in pixels.
+        hover_tx: Hovered tile X coordinate, or -1 if none.
+        hover_ty: Hovered tile Y coordinate, or -1 if none.
+
+    Returns:
+        RGBA overlay array of shape (screen_height, screen_width, 4).
+    """
+    overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
+
+    bar_y = screen_height - _HOTBAR_H
+    panel_x = screen_width * 2 // 3 + 2  # after separator
+    panel_w = screen_width - panel_x
+    pad = 10
+    cx = panel_x + pad
+    cy = bar_y + pad
+    max_x = panel_x + panel_w - pad
+
+    hint_font = get_pixel_font(_FONT_HINT)
+    body_font = get_pixel_font(_FONT_BODY)
+    header_font = get_pixel_font(_FONT_HEADER)
+
+    map_h, map_w = state.map.shape[:2]
+    valid = 0 <= hover_tx < map_w and 0 <= hover_ty < map_h
+
+    if not valid:
+        # No tile hovered: show dim hint, centred.
+        hint = _render_text_rgba("Hover over the world", hint_font, (100, 95, 70))
+        _blit_rgba(
+            overlay,
+            hint,
+            bar_y + (_HOTBAR_H - hint.shape[0]) // 2,
+            panel_x + (panel_w - hint.shape[1]) // 2,
+        )
+        return overlay
+
+    block_type = int(state.map[hover_ty, hover_tx])
+    machine_type = int(state.machine_types[hover_ty, hover_tx])
+    has_machine = machine_type != int(MachineType.NONE)
+
+    if has_machine:
+        cy = _render_info_machine(
+            overlay, state, cx, cy, max_x,
+            hover_tx, hover_ty, machine_type,
+            header_font, body_font, hint_font,
+        )
+    else:
+        cy = _render_info_terrain(
+            overlay, state, cx, cy, max_x,
+            hover_tx, hover_ty, block_type,
+            header_font, body_font, hint_font,
+        )
+
+    return overlay
+
+
+def _render_info_machine(
+    overlay: np.ndarray,
+    state: EnvState,
+    cx: int,
+    cy: int,
+    max_x: int,
+    tx: int,
+    ty: int,
+    machine_type: int,
+    header_font: pygame.font.Font,
+    body_font: pygame.font.Font,
+    hint_font: pygame.font.Font,
+) -> int:
+    """Draw machine info into the info panel overlay.
+
+    Args:
+        overlay: Destination RGBA array, modified in place.
+        state: Current environment state.
+        cx: Content left X.
+        cy: Content top Y.
+        max_x: Content right edge X.
+        tx: Machine tile X.
+        ty: Machine tile Y.
+        machine_type: MachineType int value.
+        header_font: Font for the machine name header.
+        body_font: Font for body text.
+        hint_font: Font for small labels.
+
+    Returns:
+        Updated Y cursor after all content.
+    """
+    name = MACHINE_TYPE_NAMES.get(machine_type, "Unknown")
+    icon_s = 24
+    icon_arr = render_item_icon(
+        int(state.machine_inventory_items[ty, tx, 0]) or machine_type,
+        icon_s,
+    )
+
+    # Header: icon + name.
+    name_surf = _render_text_rgba(name, header_font, (220, 215, 180))
+    _blit_rgba(overlay, icon_arr, cy, cx)
+    _blit_rgba(
+        overlay, name_surf,
+        cy + (icon_s - name_surf.shape[0]) // 2,
+        cx + icon_s + 6,
+    )
+    cy += max(icon_s, name_surf.shape[0]) + 6
+
+    # Health bar.
+    hp = int(state.machine_health[ty, tx])
+    max_hp = DEFAULT_MACHINE_MAX_HEALTH
+    hp_frac = max(0.0, min(1.0, hp / max_hp)) if max_hp > 0 else 0.0
+    bar_w = min(140, max_x - cx - 50)
+    bar_h = 8
+    # Background.
+    overlay[cy : cy + bar_h, cx : cx + bar_w] = (50, 50, 50, 200)
+    # Fill: green at full, yellow at half, red at low.
+    r = int(255 * (1.0 - hp_frac))
+    g = int(200 * hp_frac)
+    fill_w = max(0, int(bar_w * hp_frac))
+    if fill_w > 0:
+        overlay[cy : cy + bar_h, cx : cx + fill_w] = (r, g, 40, 255)
+    # HP label.
+    hp_txt = _render_text_rgba(
+        f"{hp}/{max_hp}", hint_font, (220, 215, 180),
+    )
+    _blit_rgba(overlay, hp_txt, cy - 1, cx + bar_w + 4)
+    cy += bar_h + 6
+
+    # Facing direction.
+    direction = int(state.machine_direction[ty, tx])
+    dir_letter = _DIRECTION_LETTERS.get(direction, "?")
+    dir_txt = _render_text_rgba(
+        f"Facing: {dir_letter}", hint_font, (180, 175, 140),
+    )
+    _blit_rgba(overlay, dir_txt, cy, cx)
+    cy += dir_txt.shape[0] + 6
+
+    # Inventory summary: show non-empty slots as icon + count.
+    inv_items = np.array(state.machine_inventory_items[ty, tx])
+    inv_counts = np.array(state.machine_inventory_counts[ty, tx])
+    num_slots = int(MACHINE_NUM_SLOTS[machine_type])
+    ix = cx
+    slot_icon_s = 20
+    for s in range(num_slots):
+        item = int(inv_items[s])
+        count = int(inv_counts[s])
+        if item == 0 or count == 0:
+            continue
+        if ix + slot_icon_s + 30 > max_x:
+            break
+        slot_arr = render_item_icon(item, slot_icon_s)
+        _blit_rgba(overlay, slot_arr, cy, ix)
+        cnt = _render_text_rgba(
+            f"x{count}", hint_font, (220, 215, 180),
+        )
+        _blit_rgba(overlay, cnt, cy + 3, ix + slot_icon_s + 2)
+        ix += slot_icon_s + cnt.shape[1] + 8
+
+    return cy
+
+
+def _render_info_terrain(
+    overlay: np.ndarray,
+    state: EnvState,
+    cx: int,
+    cy: int,
+    max_x: int,
+    tx: int,
+    ty: int,
+    block_type: int,
+    header_font: pygame.font.Font,
+    body_font: pygame.font.Font,
+    hint_font: pygame.font.Font,
+) -> int:
+    """Draw terrain tile info into the info panel overlay.
+
+    Args:
+        overlay: Destination RGBA array, modified in place.
+        state: Current environment state.
+        cx: Content left X.
+        cy: Content top Y.
+        max_x: Content right edge X.
+        tx: Tile X.
+        ty: Tile Y.
+        block_type: BlockType int value.
+        header_font: Font for the tile name header.
+        body_font: Font for body text.
+        hint_font: Font for small labels.
+
+    Returns:
+        Updated Y cursor after all content.
+    """
+    name = _BLOCK_NAMES.get(block_type, "Unknown")
+    color = _BLOCK_COLORS.get(block_type, (220, 215, 180))
+
+    # Header: icon (if resource) + name.
+    item_type = _BLOCK_TO_ITEM.get(block_type)
+    icon_s = 24
+    if item_type is not None:
+        icon_arr = render_item_icon(item_type, icon_s)
+        _blit_rgba(overlay, icon_arr, cy, cx)
+        name_x = cx + icon_s + 6
+    else:
+        name_x = cx
+
+    name_surf = _render_text_rgba(name, header_font, color)
+    _blit_rgba(
+        overlay, name_surf,
+        cy + (icon_s - name_surf.shape[0]) // 2 if item_type else cy,
+        name_x,
+    )
+    cy += max(icon_s if item_type else name_surf.shape[0], name_surf.shape[0]) + 6
+
+    # Resource remaining (for mineable blocks).
+    if item_type is not None:
+        remaining = int(state.block_resources[ty, tx])
+        res_txt = _render_text_rgba(
+            f"Resources: {remaining} / {BLOCK_MAX_RESOURCES}",
+            body_font,
+            (180, 175, 140),
+        )
+        _blit_rgba(overlay, res_txt, cy, cx)
+        cy += res_txt.shape[0] + 4
+
+    # Position.
+    pos_txt = _render_text_rgba(
+        f"({tx}, {ty})", hint_font, (130, 125, 100),
+    )
+    _blit_rgba(overlay, pos_txt, cy, cx)
+    cy += pos_txt.shape[0] + 4
+
+    return cy
 
 
 def render_inventory_menu(

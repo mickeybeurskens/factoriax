@@ -30,6 +30,7 @@ from factoriax.play.ui import (
     render_achievement_menu,
     render_help_overlay,
     render_hotbar,
+    render_info_panel,
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
@@ -733,9 +734,35 @@ def _render_frame(
     ph, pw = pixels.shape[:2]
     ui_frame[world_oy : world_oy + ph, world_ox : world_ox + pw] = pixels
 
+    # Tile highlight: draw a bright border around the hovered tile.
+    htx, hty = ps.hover_tile_x, ps.hover_tile_y
+    if htx >= 0 and hty >= 0:
+        hx = world_ox + htx * tile_px
+        hy = world_oy + hty * tile_px
+        hx2 = hx + tile_px
+        hy2 = hy + tile_px
+        highlight = np.array([255, 255, 255], dtype=np.uint8)
+        # Blend 50% with existing pixels for semi-transparency.
+        for row in (hy, hy2 - 1):
+            if 0 <= row < ui_h:
+                c0, c1 = max(0, hx), min(ui_w, hx2)
+                ui_frame[row, c0:c1] = (
+                    ui_frame[row, c0:c1] // 2 + highlight // 2
+                )
+        for col in (hx, hx2 - 1):
+            if 0 <= col < ui_w:
+                r0, r1 = max(0, hy), min(ui_h, hy2)
+                ui_frame[r0:r1, col] = (
+                    ui_frame[r0:r1, col] // 2 + highlight // 2
+                )
+
     hotbar_overlay, hotbar_regions = render_hotbar(state, ui_w, ui_h, ps.hotbar_page)
     composite_rgba_over_rgb(ui_frame, hotbar_overlay)
     click_regions.extend(hotbar_regions)
+
+    # Info panel (right 1/3 of bottom bar).
+    info_overlay = render_info_panel(state, ui_w, ui_h, htx, hty)
+    composite_rgba_over_rgb(ui_frame, info_overlay)
 
     if ps.machine_open:
         machine_overlay, machine_regions = render_machine_menu(
@@ -792,6 +819,10 @@ _NAV_KEYS = {
     pygame.K_d: Action.RIGHT,
     pygame.K_q: Action.TURN_LEFT,
     pygame.K_e: Action.TURN_RIGHT,
+    pygame.K_UP: Action.FACE_UP,
+    pygame.K_DOWN: Action.FACE_DOWN,
+    pygame.K_LEFT: Action.FACE_LEFT,
+    pygame.K_RIGHT: Action.FACE_RIGHT,
 }
 
 _KEY_TO_ACTION = {
@@ -809,6 +840,44 @@ _KEY_TO_PLAYER = {
     pygame.K_5: 4, pygame.K_6: 5, pygame.K_7: 6, pygame.K_8: 7,
     pygame.K_9: 8,
 }
+
+
+_MOUSE_DIR_TO_FACE = {
+    Direction.UP: int(Action.FACE_UP),
+    Direction.DOWN: int(Action.FACE_DOWN),
+    Direction.LEFT: int(Action.FACE_LEFT),
+    Direction.RIGHT: int(Action.FACE_RIGHT),
+}
+
+
+def _mouse_facing_direction(
+    mx: int,
+    my: int,
+    player_screen_x: int,
+    player_screen_y: int,
+) -> int:
+    """Determine which cardinal direction the mouse points relative to player.
+
+    Picks the dominant axis (largest absolute delta) and returns the
+    corresponding Direction value. Returns 0 if the mouse is exactly
+    on the player center.
+
+    Args:
+        mx: Mouse x in UI coordinates.
+        my: Mouse y in UI coordinates.
+        player_screen_x: Player center x in UI coordinates.
+        player_screen_y: Player center y in UI coordinates.
+
+    Returns:
+        Direction enum value (1-4), or 0 if undetermined.
+    """
+    dx = mx - player_screen_x
+    dy = my - player_screen_y
+    if dx == 0 and dy == 0:
+        return 0
+    if abs(dx) >= abs(dy):
+        return Direction.RIGHT if dx > 0 else Direction.LEFT
+    return Direction.DOWN if dy > 0 else Direction.UP
 
 
 def _play_loop(
@@ -879,6 +948,38 @@ def _play_loop(
                 ps, state, rng, action, running = _handle_keydown(
                     event, ps, state, env, params, rng, level,
                 )
+
+        # Compute mouse position in UI coordinates and hovered tile.
+        wx, wy = pygame.mouse.get_pos()
+        ui_mx = (wx - win_ox) // win_scale
+        ui_my = (wy - win_oy) // win_scale
+        tile_mx = (ui_mx - world_ox) // tile_px if tile_px > 0 else -1
+        tile_my = (ui_my - world_oy) // tile_px if tile_px > 0 else -1
+        map_h = int(state.map.shape[0])  # type: ignore[union-attr]
+        map_w = int(state.map.shape[1])  # type: ignore[union-attr]
+        if 0 <= tile_mx < map_w and 0 <= tile_my < map_h:
+            ps.hover_tile_x = tile_mx
+            ps.hover_tile_y = tile_my
+        else:
+            ps.hover_tile_x = -1
+            ps.hover_tile_y = -1
+
+        # Auto-face toward mouse when no other action is pending.
+        no_menu = not (
+            ps.welcome_open or ps.victory_open or ps.pause_open
+            or ps.inventory_open or ps.research_open
+            or ps.achievement_open or ps.machine_open
+        )
+        if action == int(Action.NOOP) and no_menu:
+            sel = int(state.selected_player)  # type: ignore[union-attr]
+            px = int(state.player_positions[sel, 0])  # type: ignore[union-attr]
+            py_ = int(state.player_positions[sel, 1])  # type: ignore[union-attr]
+            pcx = world_ox + px * tile_px + tile_px // 2
+            pcy = world_oy + py_ * tile_px + tile_px // 2
+            new_dir = _mouse_facing_direction(ui_mx, ui_my, pcx, pcy)
+            if new_dir != 0 and new_dir != ps.mouse_facing:
+                ps.mouse_facing = new_dir
+                action = _MOUSE_DIR_TO_FACE[new_dir]
 
         if action != int(Action.NOOP):
             rng, step_key = random.split(rng)
