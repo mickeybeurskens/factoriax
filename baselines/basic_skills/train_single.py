@@ -29,7 +29,7 @@ import optax
 from factoriax.benchmarks.basic_skills.benchmark import REWARD_FNS
 from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.constants import NUM_ACTIONS
+from factoriax.constants import NUM_ACTIONS, Action
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import local_array
@@ -91,6 +91,7 @@ class Config:
     obs_radius: int = 7
     seed: int = 0
     log_interval: int = 10
+    action_mask: list[str] | None = None
     use_wandb: bool = False
     wandb_project: str = "factoriax-basic-skills"
     wandb_run_name: str | None = None
@@ -250,6 +251,22 @@ def train(config: Config) -> None:
         config.num_envs,
     )
 
+    # Build action mask: -1e9 on disallowed actions, 0 on allowed.
+    if config.action_mask is not None:
+        allowed = {Action[n] for n in config.action_mask}
+        logit_mask = jnp.array(
+            [0.0 if Action(i) in allowed else -1e9
+             for i in range(NUM_ACTIONS)],
+            dtype=jnp.float32,
+        )
+        logger.info(
+            "Action mask: %d/%d actions allowed (%s)",
+            len(allowed), NUM_ACTIONS,
+            ", ".join(config.action_mask),
+        )
+    else:
+        logit_mask = jnp.zeros(NUM_ACTIONS, dtype=jnp.float32)
+
     network = ActorCritic(
         hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS
     )
@@ -323,8 +340,9 @@ def train(config: Config) -> None:
             logits, values = network.apply(
                 net_params, _normalize(cur_obs)
             )
-            actions = jax.random.categorical(key_act, logits)
-            log_probs = jax.nn.log_softmax(logits)[
+            masked_logits = logits + logit_mask
+            actions = jax.random.categorical(key_act, masked_logits)
+            log_probs = jax.nn.log_softmax(masked_logits)[
                 jnp.arange(config.num_envs), actions
             ]
 
@@ -404,9 +422,10 @@ def train(config: Config) -> None:
             mb_rets: jax.Array,
         ) -> tuple[jax.Array, dict[str, jax.Array]]:
             logits, values = network.apply(p, _normalize(mb_obs))
-            lp_all = jax.nn.log_softmax(logits)
+            masked_logits = logits + logit_mask
+            lp_all = jax.nn.log_softmax(masked_logits)
             lp = lp_all[jnp.arange(mb_obs.shape[0]), mb_actions]
-            probs = jax.nn.softmax(logits)
+            probs = jax.nn.softmax(masked_logits)
             entropy = -(probs * lp_all).sum(axis=-1).mean()
             adv_n = (mb_adv - mb_adv.mean()) / (mb_adv.std() + 1e-8)
             ratio = jnp.exp(lp - mb_old_lp)
@@ -829,6 +848,14 @@ def main() -> None:
         "--wandb-run-name", type=str, default=None,
         help="W&B run name (default: single_<level>).",
     )
+    parser.add_argument(
+        "--action-mask", type=str, nargs="+", default=None,
+        metavar="ACTION",
+        help=(
+            "Allow only these actions (by name, e.g. FORWARD MINE). "
+            "All other actions are masked out."
+        ),
+    )
     args = parser.parse_args()
 
     config = Config(
@@ -837,6 +864,7 @@ def main() -> None:
         total_steps=args.total_steps,
         seed=args.seed,
         log_interval=args.log_interval,
+        action_mask=args.action_mask,
         use_wandb=args.use_wandb,
         wandb_project=args.wandb_project,
         wandb_run_name=args.wandb_run_name,

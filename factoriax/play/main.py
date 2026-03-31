@@ -786,8 +786,8 @@ def _render_frame(
 
 # Module-level key mappings (constant, no need to rebuild per frame).
 _NAV_KEYS = {
-    pygame.K_w: Action.FORWARD,
-    pygame.K_s: Action.BACKWARD,
+    pygame.K_w: Action.UP,
+    pygame.K_s: Action.DOWN,
     pygame.K_a: Action.LEFT,
     pygame.K_d: Action.RIGHT,
     pygame.K_q: Action.TURN_LEFT,

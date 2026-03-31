@@ -69,8 +69,8 @@ class TestConstants:
     def test_action_values(self) -> None:
         """Movement actions should be numbered 0-6."""
         assert Action.NOOP == 0
-        assert Action.FORWARD == 1
-        assert Action.BACKWARD == 2
+        assert Action.UP == 1
+        assert Action.DOWN == 2
         assert Action.LEFT == 3
         assert Action.RIGHT == 4
         assert Action.TURN_LEFT == 5
@@ -188,19 +188,18 @@ class TestGameLogic:
         # Miner tile is not walkable
         assert not is_position_walkable(state, jnp.array([2, 0]))
 
-    def test_forward_moves_in_facing_direction(
-        self, state_factory
-    ) -> None:
-        """FORWARD should move the player in their facing direction."""
+    def test_up_moves_north(self, state_factory) -> None:
+        """UP should move the player north (y-1) on the map."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
             player_direction=int(Direction.RIGHT),
         )
-        new_state = move_player(state, Action.FORWARD, 0)
+        new_state = move_player(state, Action.UP, 0)
         assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array([2, 1])
+            new_state.player_positions[0], jnp.array([1, 0])
         )
+        # Facing should not change.
         assert int(new_state.player_directions[0]) == Direction.RIGHT
 
     def test_turn_does_not_move(self, state_factory) -> None:
@@ -228,9 +227,9 @@ class TestGameLogic:
         state = state_factory(
             world_map=world_map,
             player_position=(0, 0),
-            player_direction=int(Direction.RIGHT),
         )
-        new_state = move_player(state, Action.FORWARD, 0)
+        # Water is at (1, 0). RIGHT moves x+1.
+        new_state = move_player(state, Action.RIGHT, 0)
         assert jnp.array_equal(
             new_state.player_positions[0], jnp.array([0, 0])
         )
@@ -240,9 +239,8 @@ class TestGameLogic:
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(0, 0),
-            player_direction=int(Direction.LEFT),
         )
-        new_state = move_player(state, Action.FORWARD, 0)
+        new_state = move_player(state, Action.LEFT, 0)
         assert jnp.array_equal(
             new_state.player_positions[0], jnp.array([0, 0])
         )

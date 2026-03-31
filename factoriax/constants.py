@@ -305,15 +305,15 @@ class Direction(IntEnum):
 class Action(IntEnum):
     """Player actions.
 
-    Movement actions (FORWARD through TURN_RIGHT) are relative to the
-    player's current facing direction. FORWARD/BACKWARD/LEFT/RIGHT move
-    without changing facing. TURN_LEFT/TURN_RIGHT rotate facing without
-    moving.
+    Movement actions (UP through RIGHT) move the player in absolute map
+    directions without changing facing. TURN_LEFT/TURN_RIGHT rotate
+    facing without moving. This decouples movement from orientation,
+    letting the agent face a tile independently of where it walks.
     """
 
     NOOP = 0
-    FORWARD = 1
-    BACKWARD = 2
+    UP = 1
+    DOWN = 2
     LEFT = 3
     RIGHT = 4
     TURN_LEFT = 5

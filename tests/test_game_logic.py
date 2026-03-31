@@ -233,52 +233,43 @@ class TestFindWithdrawSlot:
 class TestHandlePlayerAction:
     """Tests for the action dispatch function."""
 
-    def test_forward_moves_in_facing_direction(
-        self, state_factory
-    ) -> None:
-        """FORWARD should move the player in their facing direction."""
+    def test_up_moves_north_on_map(self, state_factory) -> None:
+        """UP should move the player north (y-1) regardless of facing."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
             player_direction=int(Direction.RIGHT),
         )
-        new_state = _handle_player_action(state, Action.FORWARD, 0)
+        new_state = _handle_player_action(state, Action.UP, 0)
         assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array([2, 1])
+            new_state.player_positions[0], jnp.array([1, 0])
         )
         # Facing should not change.
         assert int(new_state.player_directions[0]) == Direction.RIGHT
 
-    def test_backward_moves_opposite_facing(
-        self, state_factory
-    ) -> None:
-        """BACKWARD should move opposite to facing without changing it."""
+    def test_left_moves_west_on_map(self, state_factory) -> None:
+        """LEFT should move the player west (x-1) regardless of facing."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
-            player_direction=int(Direction.RIGHT),
+            player_direction=int(Direction.DOWN),
         )
-        new_state = _handle_player_action(state, Action.BACKWARD, 0)
+        new_state = _handle_player_action(state, Action.LEFT, 0)
         assert jnp.array_equal(
             new_state.player_positions[0], jnp.array([0, 1])
         )
-        assert int(new_state.player_directions[0]) == Direction.RIGHT
+        assert int(new_state.player_directions[0]) == Direction.DOWN
 
-    def test_strafe_left_moves_perpendicular(
-        self, state_factory
-    ) -> None:
-        """LEFT should strafe left relative to facing."""
+    def test_movement_preserves_facing(self, state_factory) -> None:
+        """All movement actions should preserve the facing direction."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
-            player_direction=int(Direction.RIGHT),
+            player_direction=int(Direction.LEFT),
         )
-        # Facing RIGHT, strafe left = UP.
-        new_state = _handle_player_action(state, Action.LEFT, 0)
-        assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array([1, 0])
-        )
-        assert int(new_state.player_directions[0]) == Direction.RIGHT
+        for action in [Action.UP, Action.DOWN, Action.LEFT, Action.RIGHT]:
+            new = _handle_player_action(state, action, 0)
+            assert int(new.player_directions[0]) == Direction.LEFT
 
     def test_turn_changes_facing_without_moving(
         self, state_factory

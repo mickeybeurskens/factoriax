@@ -118,11 +118,11 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
 def move_player(
     state: EnvState, action: int | jax.Array, player_idx: int | jax.Array
 ) -> EnvState:
-    """Move or turn a player based on a relative movement action.
+    """Move or turn a player.
 
-    FORWARD/BACKWARD/LEFT/RIGHT move the player relative to their
-    current facing direction without changing it. TURN_LEFT/TURN_RIGHT
-    rotate the facing direction without moving. NOOP does nothing.
+    UP/DOWN/LEFT/RIGHT move the player in absolute map directions
+    without changing facing. TURN_LEFT/TURN_RIGHT rotate the facing
+    direction without moving. NOOP does nothing.
 
     Args:
         state: Current environment state.
@@ -136,28 +136,16 @@ def move_player(
     current_position = state.player_positions[player_idx]
     facing = state.player_directions[player_idx]
 
-    # Resolve the absolute direction of movement from the relative
-    # action and current facing.  Turns don't move, so their offset
-    # is (0, 0).  Strafe left/right reuse the turn maps to find the
-    # perpendicular compass direction.
-    fwd = DIRECTIONS[facing]
-    is_forward = action == Action.FORWARD
-    is_backward = action == Action.BACKWARD
-    is_left = action == Action.LEFT
-    is_right = action == Action.RIGHT
+    # Map movement actions to compass Direction for DIRECTIONS lookup.
+    # Non-movement actions map to 0 (zero offset).
+    _ACT_TO_DIR = jnp.array(
+        [0, Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT,
+         0, 0], dtype=jnp.int32,
+    )
+    safe_act = jnp.clip(action, 0, _ACT_TO_DIR.shape[0] - 1)
+    offset = DIRECTIONS[_ACT_TO_DIR[safe_act]]
 
-    strafe_left_dir = TURN_LEFT_MAP[facing]
-    strafe_right_dir = TURN_RIGHT_MAP[facing]
-    left_offset = DIRECTIONS[strafe_left_dir]
-    right_offset = DIRECTIONS[strafe_right_dir]
-
-    offset = jnp.where(is_forward, fwd,
-             jnp.where(is_backward, -fwd,
-             jnp.where(is_left, left_offset,
-             jnp.where(is_right, right_offset,
-             jnp.zeros(2, dtype=jnp.int32)))))
-
-    is_move = is_forward | is_backward | is_left | is_right
+    is_move = (action >= Action.UP) & (action <= Action.RIGHT)
     target = current_position + offset
     can_move = is_position_walkable(state, target) & is_move
     final_position = jnp.where(can_move, target, current_position)
