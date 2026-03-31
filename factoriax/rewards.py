@@ -279,3 +279,28 @@ def chest_filling_reward(
     delta = jnp.sum(new_counts) - jnp.sum(prev_counts)
     reward: jax.Array = delta.astype(jnp.float32)
     return reward
+
+
+def player_inventory_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Reward for each item gained in the selected player's inventory.
+
+    Counts the total increase in item counts across all inventory slots.
+    Positive when items are added (withdraw, mine), zero or negative when
+    items are consumed (craft, deposit, place).
+
+    Args:
+        prev_state: State immediately before the step.
+        new_state: State immediately after the step.
+        params: Environment parameters (unused; present for interface
+            uniformity).
+
+    Returns:
+        Scalar float32 reward.
+    """
+    p = new_state.selected_player
+    prev_total = jnp.sum(prev_state.inventory_counts[p])
+    new_total = jnp.sum(new_state.inventory_counts[p])
+    reward: jax.Array = (new_total - prev_total).astype(jnp.float32)
+    return reward

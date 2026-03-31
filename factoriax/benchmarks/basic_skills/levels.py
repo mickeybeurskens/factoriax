@@ -243,6 +243,41 @@ _LEVEL_PLACE_AND_FUEL.level.player_inventory = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Level 8 — withdraw_ore
+# ---------------------------------------------------------------------------
+# 7x3 map. Three pre-placed miners at (1, 0), (3, 0), (5, 0) on coal
+# tiles, each with pre-loaded output slots (10, 20, 30 ore). No fuel,
+# not producing — just static storage. Player at (0, 1) walks along the
+# dirt corridor in row 1, faces UP toward each miner, and withdraws.
+# Miners block movement, so the agent cannot walk into row 0.
+# Tests: WITHDRAW action + navigation to multiple machines.
+
+_LEVEL_WITHDRAW = BenchmarkLevel(
+    name="withdraw_ore",
+    description=(
+        "7x3 corridor with 3 pre-loaded miners. Walk to each miner "
+        "and withdraw ore from its output slot. Score measures total "
+        "ore collected in player inventory."
+    ),
+    level=(
+        LevelBuilder(7, 3)
+        .fill_rect(1, 0, 1, 1, BlockType.COAL, resources=50)
+        .fill_rect(3, 0, 1, 1, BlockType.COAL, resources=50)
+        .fill_rect(5, 0, 1, 1, BlockType.COAL, resources=50)
+        .place_machine(1, 0, MachineType.MINER)
+        .place_machine(3, 0, MachineType.MINER)
+        .place_machine(5, 0, MachineType.MINER)
+        .set_machine_inventory(1, 0, 1, int(ItemType.COAL), 10)
+        .set_machine_inventory(3, 0, 1, int(ItemType.COAL), 20)
+        .set_machine_inventory(5, 0, 1, int(ItemType.COAL), 30)
+        .set_player_position(0, 1)
+        .build("basic_withdraw_ore")
+    ),
+    env_params=_params(7, 3, 100),
+)
+
+
 BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_MINE,
     _LEVEL_CRAFT,
@@ -251,4 +286,5 @@ BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_DEPLOY,
     _LEVEL_FACTORY,
     _LEVEL_PLACE_AND_FUEL,
+    _LEVEL_WITHDRAW,
 ]

@@ -39,6 +39,8 @@ MAX_DEPLOY_MINER_SCORE: float = 64.0
 MAX_MINING_FACTORY_SCORE: float = 200.0
 # Level 7: 3 miners × 64 output cap = 192.
 MAX_PLACE_AND_FUEL_SCORE: float = 192.0
+# Level 8: 10 + 20 + 30 = 60 pre-loaded ore across 3 miners.
+MAX_WITHDRAW_ORE_SCORE: float = 60.0
 
 
 def score_mine(items_mined: dict[str, int]) -> float:
@@ -140,6 +142,21 @@ def score_mining_factory(items_mined: dict[str, int]) -> float:
     )
 
 
+def score_withdraw_ore(final_state: EnvState) -> float:
+    """Score the withdraw level: total items in player inventory.
+
+    Counts the total number of items across all inventory slots for the
+    first player.
+
+    Args:
+        final_state: Environment state at episode end.
+
+    Returns:
+        Total item count in player 0's inventory.
+    """
+    return float(jnp.sum(final_state.inventory_counts[0]))
+
+
 def aggregate_scores(scores: dict[str, float]) -> float:
     """Aggregate normalised per-level scores into one scalar.
 
@@ -160,6 +177,7 @@ def aggregate_scores(scores: dict[str, float]) -> float:
         "deploy_miner": MAX_DEPLOY_MINER_SCORE,
         "mining_factory": MAX_MINING_FACTORY_SCORE,
         "place_and_fuel": MAX_PLACE_AND_FUEL_SCORE,
+        "withdraw_ore": MAX_WITHDRAW_ORE_SCORE,
     }
     total = 0.0
     count = 0

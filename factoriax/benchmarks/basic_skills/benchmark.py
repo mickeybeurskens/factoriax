@@ -39,12 +39,14 @@ from factoriax.benchmarks.basic_skills.scoring import (
     score_fill,
     score_mine,
     score_mining_factory,
+    score_withdraw_ore,
 )
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.rewards import (
     chest_filling_reward,
     miner_output_reward,
     miner_throughput_reward,
+    player_inventory_reward,
     sparse_chest_crafting_reward,
     sparse_miner_crafting_reward,
     sparse_mining_reward,
@@ -61,6 +63,7 @@ REWARD_FNS: dict[str, Callable[[EnvState, EnvState, EnvParams], jax.Array]] = {
     "deploy_miner": miner_output_reward,
     "mining_factory": miner_throughput_reward,
     "place_and_fuel": miner_output_reward,
+    "withdraw_ore": player_inventory_reward,
 }
 
 
@@ -164,5 +167,7 @@ class BasicSkillsBenchmark:
                 scores["mining_factory"] = score_mining_factory(r.items_mined)
             elif r.level_name == "place_and_fuel" and r.final_state is not None:
                 scores["place_and_fuel"] = score_deploy_miner(r.final_state)
+            elif r.level_name == "withdraw_ore" and r.final_state is not None:
+                scores["withdraw_ore"] = score_withdraw_ore(r.final_state)
 
         return aggregate_scores(scores)

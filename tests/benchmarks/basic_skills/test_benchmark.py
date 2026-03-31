@@ -438,8 +438,8 @@ class TestBasicSkillsBenchmark:
         assert BasicSkillsBenchmark().num_players == 1
 
     def test_level_count(self) -> None:
-        """Should have exactly seven levels."""
-        assert len(BasicSkillsBenchmark().levels()) == 7
+        """Should have exactly eight levels."""
+        assert len(BasicSkillsBenchmark().levels()) == 8
 
     def test_level_names(self) -> None:
         """Level names should match expected values."""
@@ -452,4 +452,5 @@ class TestBasicSkillsBenchmark:
             "deploy_miner",
             "mining_factory",
             "place_and_fuel",
+            "withdraw_ore",
         ]
