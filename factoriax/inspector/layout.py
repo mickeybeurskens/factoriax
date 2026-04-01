@@ -146,22 +146,20 @@ def render_frame(
     ih = min(info.shape[0], canvas_h)
     frame[y_off : y_off + ih, :INFO_PANEL_WIDTH] = info[:ih]
 
-    # Game world area: split into 4 quadrants.
-    # Q1 (top-left):  CPU renderer (existing player UI)
-    # Q2 (top-right): JAX renderer (GPU HUD visualization)
-    # Q3 (bot-left):  Future visualization (placeholder)
-    # Q4 (bot-right): Future visualization (placeholder)
+    # Game world area: left half + right half layout.
+    # Left column:  Q1 (top) CPU renderer, Q3 (bottom) placeholder
+    # Right column: JAX HUD renderer (full height)
     world_x = INFO_PANEL_WIDTH
     world_y = MENU_BAR_HEIGHT
     half_w = canvas_w // 2
     half_h = canvas_h // 2
 
-    # Fill all quadrants with dark background.
+    # Fill canvas with dark background.
     frame[world_y : world_y + canvas_h, world_x : world_x + canvas_w] = (
         20, 20, 25,
     )
 
-    # Q1: CPU renderer (top-left).
+    # Q1: CPU renderer (top-left quadrant).
     if frames is not None and state.current_step < len(frames):
         game_img = frames[state.current_step]
         if state.show_obs_overlay:
@@ -174,28 +172,25 @@ def render_frame(
             frame, traj, state, world_x, world_y, half_w, half_h
         )
 
-    # Q2: JAX HUD renderer (top-right).
+    # Q3: placeholder (bottom-left quadrant).
+    _draw_quadrant_label(frame, world_x, world_y + half_h, half_w, half_h, "Q3")
+
+    # Right column: JAX HUD renderer spanning full canvas height.
     jax_frames = state.jax_hud_frames
     if jax_frames is not None and state.current_step < len(jax_frames):
         _blit_game_frame(
             frame, jax_frames[state.current_step],
-            world_x + half_w, world_y, half_w, half_h,
+            world_x + half_w, world_y, half_w, canvas_h,
         )
 
-    # Q3 and Q4: placeholder labels.
-    _draw_quadrant_label(frame, world_x, world_y + half_h, half_w, half_h, "Q3")
-    _draw_quadrant_label(
-        frame, world_x + half_w, world_y + half_h, half_w, half_h, "Q4"
-    )
-
-    # Draw quadrant dividers (1px lines).
+    # Draw dividers (1px lines).
     divider_color = (60, 60, 60)
-    # Horizontal divider.
-    mid_y = world_y + half_h
-    frame[mid_y, world_x : world_x + canvas_w] = divider_color
-    # Vertical divider.
+    # Vertical divider between left and right columns.
     mid_x = world_x + half_w
     frame[world_y : world_y + canvas_h, mid_x] = divider_color
+    # Horizontal divider in left column only (between Q1 and Q3).
+    mid_y = world_y + half_h
+    frame[mid_y, world_x : world_x + half_w] = divider_color
 
     # Timeline.
     tl_y = MENU_BAR_HEIGHT + canvas_h
