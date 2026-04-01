@@ -20,21 +20,24 @@ from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
-from scripts.jax_render_benchmark import (
+from factoriax.jax_renderer import (
     INV_HEIGHT,
+    JaxRenderer,
     SLOT_BG,
     SLOT_BG_SELECTED,
     build_block_atlas,
     build_digit_atlas,
     build_item_color_atlas,
     build_machine_atlas,
-    build_player_atlas,
+    build_player_sprite,
+    render_hud,
+    render_inventory_strip,
+    render_map,
+    render_map_with_inventory,
+)
+from scripts.jax_render_benchmark import (
     extract_single_state,
     make_batched_envs,
-    render_full_hud,
-    render_inventory_strip,
-    render_jax,
-    render_jax_with_inventory,
 )
 
 # ---------------------------------------------------------------------------
@@ -73,7 +76,7 @@ def machine_atlas() -> jnp.ndarray:
 @pytest.fixture()
 def player_sprite() -> jnp.ndarray:
     """Player sprite."""
-    return build_player_atlas(TILE_PX)
+    return build_player_sprite(TILE_PX)
 
 
 @pytest.fixture()
@@ -140,7 +143,7 @@ class TestSingleRender:
         player_sprite: jnp.ndarray,
     ) -> None:
         """Output image has the expected pixel dimensions."""
-        img = render_jax(
+        img = render_map(
             single_state, block_atlas, machine_atlas, player_sprite
         )
         expected_h = MAP_SIZE * TILE_PX
@@ -155,7 +158,7 @@ class TestSingleRender:
         player_sprite: jnp.ndarray,
     ) -> None:
         """Output should be uint8 RGB."""
-        img = render_jax(
+        img = render_map(
             single_state, block_atlas, machine_atlas, player_sprite
         )
         assert img.dtype == jnp.uint8
@@ -168,7 +171,7 @@ class TestSingleRender:
         player_sprite: jnp.ndarray,
     ) -> None:
         """Rendered image should contain visible content, not all zeros."""
-        img = render_jax(
+        img = render_map(
             single_state, block_atlas, machine_atlas, player_sprite
         )
         assert jnp.any(img > 0)
@@ -181,10 +184,10 @@ class TestSingleRender:
         player_sprite: jnp.ndarray,
     ) -> None:
         """JIT-compiled render should produce identical output."""
-        img_eager = render_jax(
+        img_eager = render_map(
             single_state, block_atlas, machine_atlas, player_sprite
         )
-        img_jit = jax.jit(render_jax)(
+        img_jit = jax.jit(render_map)(
             single_state, block_atlas, machine_atlas, player_sprite
         )
         np.testing.assert_array_equal(np.array(img_eager), np.array(img_jit))
@@ -197,10 +200,10 @@ class TestSingleRender:
         player_sprite: jnp.ndarray,
     ) -> None:
         """Two calls with the same state produce identical images."""
-        img1 = render_jax(
+        img1 = render_map(
             single_state, block_atlas, machine_atlas, player_sprite
         )
-        img2 = render_jax(
+        img2 = render_map(
             single_state, block_atlas, machine_atlas, player_sprite
         )
         np.testing.assert_array_equal(np.array(img1), np.array(img2))
@@ -239,7 +242,7 @@ class TestTerrainRendering:
         matlas_4 = build_machine_atlas(TILE_PX)
 
         img = np.array(
-            render_jax(state, atlas_4, matlas_4, player_sprite)
+            render_map(state, atlas_4, matlas_4, player_sprite)
         )
 
         # The dirt color from the atlas
@@ -275,7 +278,7 @@ class TestTerrainRendering:
         state = build_state(level, p)
 
         atlas = build_block_atlas(TILE_PX)
-        img = np.array(render_jax(state, atlas, machine_atlas, player_sprite))
+        img = np.array(render_map(state, atlas, machine_atlas, player_sprite))
 
         water_color = np.array(atlas[int(BlockType.WATER), 0, 0, :])
         tile_region = img[0:TILE_PX, 0:TILE_PX, :]
@@ -318,10 +321,10 @@ class TestMachineOverlay:
         state_machine = build_state(level_machine, p)
 
         img_bare = np.array(
-            render_jax(state_bare, block_atlas, machine_atlas, player_sprite)
+            render_map(state_bare, block_atlas, machine_atlas, player_sprite)
         )
         img_machine = np.array(
-            render_jax(
+            render_map(
                 state_machine, block_atlas, machine_atlas, player_sprite
             )
         )
@@ -358,10 +361,10 @@ class TestMachineOverlay:
         state_machine = build_state(level_machine, p)
 
         img_bare = np.array(
-            render_jax(state_bare, block_atlas, machine_atlas, player_sprite)
+            render_map(state_bare, block_atlas, machine_atlas, player_sprite)
         )
         img_machine = np.array(
-            render_jax(
+            render_map(
                 state_machine, block_atlas, machine_atlas, player_sprite
             )
         )
@@ -399,7 +402,7 @@ class TestPlayerSprite:
         )
         state = build_state(level, p)
         img = np.array(
-            render_jax(state, block_atlas, machine_atlas, player_sprite)
+            render_map(state, block_atlas, machine_atlas, player_sprite)
         )
 
         # The player tile should differ from the raw terrain tile
@@ -430,10 +433,10 @@ class TestPlayerSprite:
         state_b = build_state(level_b, p)
 
         img_a = np.array(
-            render_jax(state_a, block_atlas, machine_atlas, player_sprite)
+            render_map(state_a, block_atlas, machine_atlas, player_sprite)
         )
         img_b = np.array(
-            render_jax(state_b, block_atlas, machine_atlas, player_sprite)
+            render_map(state_b, block_atlas, machine_atlas, player_sprite)
         )
 
         # Tile (1,1) should differ between the two renders
@@ -464,7 +467,7 @@ class TestVmapRender:
         n = 4
         _, states = make_batched_envs(n, params)
         vmap_render = jax.jit(
-            jax.vmap(render_jax, in_axes=(0, None, None, None))
+            jax.vmap(render_map, in_axes=(0, None, None, None))
         )
         imgs = vmap_render(states, block_atlas, machine_atlas, player_sprite)
         expected = (n, MAP_SIZE * TILE_PX, MAP_SIZE * TILE_PX, 3)
@@ -481,7 +484,7 @@ class TestVmapRender:
         n = 3
         _, states = make_batched_envs(n, params)
         vmap_render = jax.jit(
-            jax.vmap(render_jax, in_axes=(0, None, None, None))
+            jax.vmap(render_map, in_axes=(0, None, None, None))
         )
         batch_imgs = np.array(
             vmap_render(states, block_atlas, machine_atlas, player_sprite)
@@ -490,7 +493,7 @@ class TestVmapRender:
         for i in range(n):
             single = extract_single_state(states, i)
             individual = np.array(
-                jax.jit(render_jax)(
+                jax.jit(render_map)(
                     single, block_atlas, machine_atlas, player_sprite
                 )
             )
@@ -506,7 +509,7 @@ class TestVmapRender:
         """Different env states should produce different rendered frames."""
         _, states = make_batched_envs(2, params)
         vmap_render = jax.jit(
-            jax.vmap(render_jax, in_axes=(0, None, None, None))
+            jax.vmap(render_map, in_axes=(0, None, None, None))
         )
         imgs = np.array(
             vmap_render(states, block_atlas, machine_atlas, player_sprite)
@@ -636,7 +639,7 @@ class TestWithInventoryRender:
         digit_atlas: jnp.ndarray,
     ) -> None:
         """Output should be map height + INV_HEIGHT."""
-        img = render_jax_with_inventory(
+        img = render_map_with_inventory(
             single_state, block_atlas, machine_atlas, player_sprite,
             item_colors, digit_atlas,
         )
@@ -658,7 +661,7 @@ class TestWithInventoryRender:
         _, states = make_batched_envs(n, params)
         vmap_render = jax.jit(
             jax.vmap(
-                render_jax_with_inventory,
+                render_map_with_inventory,
                 in_axes=(0, None, None, None, None, None),
             )
         )
@@ -689,7 +692,7 @@ class TestFullHUD:
         digit_atlas: jnp.ndarray,
     ) -> None:
         """HUD output should be 2x map height (map + HUD panel)."""
-        img = render_full_hud(
+        img = render_hud(
             single_state, block_atlas, machine_atlas, player_sprite,
             item_colors, digit_atlas,
         )
@@ -717,7 +720,7 @@ class TestFullHUD:
         )
         state = build_state(level, p)
         img = np.array(
-            render_full_hud(
+            render_hud(
                 state, block_atlas, machine_atlas, player_sprite,
                 item_colors, digit_atlas,
             )
@@ -741,7 +744,7 @@ class TestFullHUD:
         _, states = make_batched_envs(n, params)
         vmap_render = jax.jit(
             jax.vmap(
-                render_full_hud,
+                render_hud,
                 in_axes=(0, None, None, None, None, None),
             )
         )

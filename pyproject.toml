@@ -26,6 +26,15 @@ dev = [
     "ruff>=0.2.0",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Exclude performance tests from default `pytest` runs; run them
+# explicitly with `pytest tests/performance/`.
+addopts = "--ignore=tests/performance"
+markers = [
+    "slow: marks tests as slow (e.g. CPU JIT compilation)",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"

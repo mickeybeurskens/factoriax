@@ -398,3 +398,71 @@ def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
         ``(map_h * block_pixel_size, map_w * block_pixel_size, 3)``.
     """
     return render_pixels(state, block_pixel_size=block_pixel_size)
+
+
+# ---------------------------------------------------------------------------
+# Pixel observations (JAX-native, JIT/vmap-compatible)
+#
+# These use the pure-JAX renderer from factoriax.jax_renderer and return
+# device-resident JAX arrays. Unlike ``rgb`` above, they can be used
+# inside ``jax.jit`` and ``jax.vmap`` for batched pixel observations
+# during training.
+# ---------------------------------------------------------------------------
+
+
+def pixel_map(
+    state: EnvState,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+) -> jax.Array:
+    """Render the map as a JAX pixel observation.
+
+    Returns the map image (terrain + machines + players) as a uint8
+    JAX array. JIT-compilable and vmappable.
+
+    Args:
+        state: Current environment state (single, non-batched).
+        block_atlas: Block texture atlas from JaxRenderer.
+        machine_atlas: Machine texture atlas from JaxRenderer.
+        player_sprite: Player sprite from JaxRenderer.
+
+    Returns:
+        uint8 JAX array of shape (H * tile_px, W * tile_px, 3).
+    """
+    from factoriax.jax_renderer import render_map
+
+    return render_map(state, block_atlas, machine_atlas, player_sprite)
+
+
+def pixel_hud(
+    state: EnvState,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> jax.Array:
+    """Render the map + full HUD as a JAX pixel observation.
+
+    Returns the map with a 4-quadrant HUD panel below it (inspector,
+    machine inventory, player inventory, crafting menu) as a uint8
+    JAX array. JIT-compilable and vmappable.
+
+    Args:
+        state: Current environment state (single, non-batched).
+        block_atlas: Block texture atlas from JaxRenderer.
+        machine_atlas: Machine texture atlas from JaxRenderer.
+        player_sprite: Player sprite from JaxRenderer.
+        item_colors: Item color atlas from JaxRenderer.
+        digit_atlas: Digit bitmap atlas from JaxRenderer.
+
+    Returns:
+        uint8 JAX array of shape (2 * H * tile_px, W * tile_px, 3).
+    """
+    from factoriax.jax_renderer import render_hud
+
+    return render_hud(
+        state, block_atlas, machine_atlas, player_sprite,
+        item_colors, digit_atlas,
+    )

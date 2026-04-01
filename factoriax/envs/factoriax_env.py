@@ -18,6 +18,7 @@ from factoriax.observations import (
     NUM_SPATIAL_CHANNELS,
     global_array,
 )
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.renderer import render_pixels
 from factoriax.rewards import achievement_reward
 from factoriax.state import EnvParams, EnvState
@@ -34,9 +35,14 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     milestones. Benchmarks can inject their own condition function
     to define custom one-shot reward events.
 
+    The ``tile_px`` parameter controls the pixel size for the JAX
+    renderer. A :class:`~factoriax.jax_renderer.JaxRenderer` is
+    created at init and used by :meth:`render` and :meth:`render_hud`.
+
     Args:
         achievement_fn: Achievement condition function. Defaults to
             :func:`~factoriax.achievements.core_game_conditions`.
+        tile_px: Tile side length in pixels for the JAX renderer.
     """
 
     def __init__(
@@ -44,14 +50,17 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         achievement_fn: Callable[
             [EnvState], jax.Array
         ] = core_game_conditions,
+        tile_px: int = 8,
     ) -> None:
         """Initialize the environment.
 
         Args:
             achievement_fn: Achievement condition function.
+            tile_px: Tile side length in pixels for the JAX renderer.
         """
         super().__init__()
         self._achievement_fn = achievement_fn
+        self.jax_renderer = JaxRenderer(tile_px=tile_px)
 
     @property
     def default_params(self) -> EnvParams:
@@ -193,13 +202,46 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         )
 
     def render(self, state: EnvState) -> jax.Array:
-        """Render the environment state as pixels.
+        """Render the map using the JAX renderer.
+
+        Returns a JIT-compiled, GPU-accelerated pixel render of the
+        map with terrain, machines, and players. For the full HUD
+        (including inventory, inspector, crafting), use :meth:`render_hud`.
+
+        Args:
+            state: Current environment state (single, non-batched).
+
+        Returns:
+            uint8 JAX array of shape (H * tile_px, W * tile_px, 3).
+        """
+        return self.jax_renderer.jit_render_map(state)
+
+    def render_hud(self, state: EnvState) -> jax.Array:
+        """Render the map + full HUD using the JAX renderer.
+
+        Returns a JIT-compiled, GPU-accelerated pixel render with the
+        map on top and a 4-quadrant info panel below (tile inspector,
+        machine inventory, player inventory, crafting menu).
+
+        Args:
+            state: Current environment state (single, non-batched).
+
+        Returns:
+            uint8 JAX array of shape (2 * H * tile_px, W * tile_px, 3).
+        """
+        return self.jax_renderer.jit_render_hud(state)
+
+    def render_cpu(self, state: EnvState) -> jax.Array:
+        """Render using the legacy NumPy CPU renderer.
+
+        For backward compatibility with the editor and play modes.
+        Cannot be JIT-compiled or vmapped.
 
         Args:
             state: Current environment state.
 
         Returns:
-            RGB pixel array.
+            RGB pixel array (NumPy, wrapped in JAX).
         """
         return jnp.array(render_pixels(state))
 

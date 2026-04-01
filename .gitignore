@@ -211,6 +211,9 @@ __marimo__/
 *.png
 *.npz
 
+# Performance test logs
+tests/performance/logs/
+
 # Project specific
 CLAUDE.md
 craftax/
