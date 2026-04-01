@@ -37,8 +37,12 @@ from PIL import Image
 matplotlib.use("Agg")
 
 from factoriax.constants import (
+    ITEM_COLORS,
+    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     BlockType,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
@@ -201,6 +205,62 @@ def build_player_atlas(tile_px: int) -> jnp.ndarray:
     return jnp.array(_circle_tile(255, 100, 100, (0, 0, 0), tile_px))
 
 
+# Inventory strip dimensions. These are independent of tile_px so the
+# inventory stays readable even at small tile sizes.
+INV_HEIGHT = 16  # pixels tall
+DIGIT_H = 5  # pixel rows per digit glyph
+DIGIT_W = 3  # pixel columns per digit glyph
+SLOT_BG = np.array([40, 40, 40], dtype=np.uint8)
+SLOT_BG_SELECTED = np.array([80, 80, 80], dtype=np.uint8)
+ICON_SIZE = 6  # pixels per side for the item color swatch
+COUNT_COLOR = np.array([220, 220, 220], dtype=np.uint8)
+
+
+def build_item_color_atlas() -> jnp.ndarray:
+    """Build an RGB color lookup indexed by ItemType.
+
+    Args: None.
+
+    Returns:
+        JAX uint8 array of shape (NUM_ITEM_TYPES, 3).
+    """
+    atlas = np.zeros((NUM_ITEM_TYPES, 3), dtype=np.uint8)
+    for item_id, rgb in ITEM_COLORS.items():
+        atlas[int(item_id)] = rgb
+    return jnp.array(atlas)
+
+
+def build_digit_atlas() -> jnp.ndarray:
+    """Build a 3x5 bitmap font atlas for digits 0-9.
+
+    Each digit is a binary mask of shape (DIGIT_H, DIGIT_W). A 1 means
+    the pixel is "on" (will be colored with COUNT_COLOR), 0 is transparent.
+    The glyphs are intentionally blocky at 3x5 -- just enough to be
+    readable at small sizes.
+
+    Returns:
+        JAX bool array of shape (10, DIGIT_H, DIGIT_W).
+    """
+    # Each string is 5 rows of 3 chars. '#' = on, '.' = off.
+    glyphs = {
+        0: "###" "#.#" "#.#" "#.#" "###",
+        1: ".#." "##." ".#." ".#." "###",
+        2: "###" "..#" "###" "#.." "###",
+        3: "###" "..#" "###" "..#" "###",
+        4: "#.#" "#.#" "###" "..#" "..#",
+        5: "###" "#.." "###" "..#" "###",
+        6: "###" "#.." "###" "#.#" "###",
+        7: "###" "..#" "..#" "..#" "..#",
+        8: "###" "#.#" "###" "#.#" "###",
+        9: "###" "#.#" "###" "..#" "###",
+    }
+    atlas = np.zeros((10, DIGIT_H, DIGIT_W), dtype=np.bool_)
+    for digit, chars in glyphs.items():
+        for i, ch in enumerate(chars):
+            atlas[digit, i // DIGIT_W, i % DIGIT_W] = ch == "#"
+    return jnp.array(atlas)
+
+
 # ===================================================================
 # SECTION 2: Pure-JAX Renderer
 #
@@ -324,6 +384,159 @@ def render_jax(
     image = jax.lax.fori_loop(0, num_players, _stamp_player, image)
 
     return image.astype(jnp.uint8)
+
+
+def render_inventory_strip(
+    state: EnvState,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+    img_width: int,
+) -> jnp.ndarray:
+    """Render the player-0 inventory as a horizontal strip in pure JAX.
+
+    The strip is INV_HEIGHT pixels tall and img_width pixels wide. It
+    contains NUM_INVENTORY_SLOTS evenly-spaced cells, each showing:
+      - A colored item swatch (ICON_SIZE x ICON_SIZE).
+      - A 2-digit stack count rendered from the digit atlas.
+    The selected slot gets a brighter background.
+
+    All operations are static-shape JAX primitives so this function
+    composes with jit and vmap.
+
+    Args:
+        state: Single (non-batched) EnvState.
+        item_colors: Item color atlas, shape (NUM_ITEM_TYPES, 3).
+        digit_atlas: Digit bitmap atlas, shape (10, DIGIT_H, DIGIT_W).
+        img_width: Width of the strip in pixels (must match map render).
+
+    Returns:
+        uint8 RGB array of shape (INV_HEIGHT, img_width, 3).
+    """
+    # Start with a dark background.
+    strip = jnp.full((INV_HEIGHT, img_width, 3), SLOT_BG, dtype=jnp.uint8)
+
+    slot_width = img_width // NUM_INVENTORY_SLOTS
+    items = state.inventory_items[0]   # (NUM_INVENTORY_SLOTS,)
+    counts = state.inventory_counts[0]  # (NUM_INVENTORY_SLOTS,)
+    selected = state.selected_slots[0]
+
+    def _draw_slot(slot_idx: int, img: jnp.ndarray) -> jnp.ndarray:
+        """Draw one inventory slot into the strip.
+
+        Args:
+            slot_idx: Slot index (0 to NUM_INVENTORY_SLOTS-1).
+            img: Strip image being built.
+
+        Returns:
+            Updated strip image.
+        """
+        x_start = slot_idx * slot_width
+
+        # Highlight selected slot background.
+        is_selected = slot_idx == selected
+        bg = jnp.where(is_selected, SLOT_BG_SELECTED, SLOT_BG)
+        slot_bg = jnp.broadcast_to(bg, (INV_HEIGHT, slot_width, 3))
+        img = jax.lax.dynamic_update_slice(
+            img, slot_bg.astype(jnp.uint8), (0, x_start, 0)
+        )
+
+        # Item color swatch: ICON_SIZE x ICON_SIZE, vertically centered.
+        item_type = items[slot_idx]
+        count = counts[slot_idx]
+        color = item_colors[item_type]  # (3,)
+        has_item = (item_type > 0) & (count > 0)
+
+        swatch_y = (INV_HEIGHT - ICON_SIZE) // 2
+        swatch_x = x_start + 1
+        swatch = jnp.broadcast_to(color, (ICON_SIZE, ICON_SIZE, 3))
+        # Only stamp if slot is non-empty. Multiply by has_item to zero
+        # out the swatch for empty slots (keeps the dark background).
+        swatch = swatch * has_item.astype(jnp.uint8)
+        img = jax.lax.dynamic_update_slice(
+            img, swatch, (swatch_y, swatch_x, 0)
+        )
+
+        # 2-digit count. Max stack is 64, so tens and ones suffice.
+        safe_count = jnp.clip(count, 0, 99)
+        tens = safe_count // 10
+        ones = safe_count % 10
+
+        digit_y = (INV_HEIGHT - DIGIT_H) // 2
+        digit_x = swatch_x + ICON_SIZE + 1
+
+        # Helper: read a patch from img using dynamic_slice (traced-safe),
+        # blend the digit glyph onto it, write it back.
+        def _stamp_digit(
+            img: jnp.ndarray,
+            digit_val: jnp.ndarray,
+            dx: jnp.ndarray,
+            show: jnp.ndarray,
+        ) -> jnp.ndarray:
+            """Stamp a single digit glyph onto the strip.
+
+            Args:
+                img: Strip image.
+                digit_val: Digit 0-9 to render.
+                dx: X position in the strip.
+                show: Boolean, whether to actually draw.
+
+            Returns:
+                Updated strip image.
+            """
+            mask = digit_atlas[digit_val]  # (DIGIT_H, DIGIT_W)
+            bg = jax.lax.dynamic_slice(
+                img, (digit_y, dx, 0), (DIGIT_H, DIGIT_W, 3)
+            )
+            blended = jnp.where(mask[:, :, None], COUNT_COLOR, bg)
+            result = jnp.where(show, blended, bg)
+            return jax.lax.dynamic_update_slice(
+                img, result.astype(jnp.uint8), (digit_y, dx, 0)
+            )
+
+        # Tens digit: only shown when count >= 10.
+        show_tens = has_item & (safe_count >= 10)
+        img = _stamp_digit(img, tens, digit_x, show_tens)
+
+        # Ones digit: always shown when slot is non-empty.
+        ones_x = digit_x + DIGIT_W + 1
+        img = _stamp_digit(img, ones, ones_x, has_item)
+
+        return img
+
+    strip = jax.lax.fori_loop(0, NUM_INVENTORY_SLOTS, _draw_slot, strip)
+    return strip
+
+
+def render_jax_with_inventory(
+    state: EnvState,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> jnp.ndarray:
+    """Render map + inventory strip, concatenated vertically.
+
+    Calls render_jax for the map, then render_inventory_strip, then
+    stacks them so the inventory appears below the map at the same
+    width. The output height is map_h * tile_px + INV_HEIGHT.
+
+    Args:
+        state: Single (non-batched) EnvState.
+        block_atlas: Block texture atlas.
+        machine_atlas: Machine texture atlas.
+        player_sprite: Player sprite.
+        item_colors: Item color atlas, shape (NUM_ITEM_TYPES, 3).
+        digit_atlas: Digit bitmap atlas, shape (10, DIGIT_H, DIGIT_W).
+
+    Returns:
+        uint8 RGB array of shape (map_h * tile_px + INV_HEIGHT,
+        map_w * tile_px, 3).
+    """
+    map_img = render_jax(state, block_atlas, machine_atlas, player_sprite)
+    img_width = map_img.shape[1]
+    inv_strip = render_inventory_strip(state, item_colors, digit_atlas, img_width)
+    return jnp.concatenate([map_img, inv_strip], axis=0)
 
 
 # ===================================================================
@@ -585,6 +798,109 @@ def benchmark_jax_render_inline(
     return t1 - t0
 
 
+def benchmark_jax_render_inventory_inline(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> float:
+    """Benchmark JAX map+inventory rendering with inline stepping.
+
+    Same as benchmark_jax_render_inline but uses render_jax_with_inventory
+    which appends the inventory strip below the map each frame.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+        item_colors: Item color atlas on device.
+        digit_atlas: Digit bitmap atlas on device.
+
+    Returns:
+        Wall-clock seconds for all step+render calls (excluding warmup).
+    """
+    env = FactoriaXEnv()
+    _, states = make_batched_envs(n_envs, params)
+
+    vmap_step = jax.jit(
+        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
+    )
+    vmap_render = jax.jit(
+        jax.vmap(
+            render_jax_with_inventory,
+            in_axes=(0, None, None, None, None, None),
+        )
+    )
+
+    # Warmup.
+    rng = jax.random.key(88)
+    rng, k_a, k_s = jax.random.split(rng, 3)
+    actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+    step_keys = jax.random.split(k_s, n_envs)
+    _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+    result = vmap_render(
+        states, block_atlas, machine_atlas, player_sprite,
+        item_colors, digit_atlas,
+    )
+    jax.block_until_ready(result)
+
+    t0 = time.perf_counter()
+    for _ in range(num_steps):
+        rng, k_a, k_s = jax.random.split(rng, 3)
+        actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+        step_keys = jax.random.split(k_s, n_envs)
+        _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+        result = vmap_render(
+            states, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+    jax.block_until_ready(result)
+    t1 = time.perf_counter()
+    return t1 - t0
+
+
+def try_inline_step_render_inventory(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> float | None:
+    """Try benchmark_jax_render_inventory_inline, returning None on OOM.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+        item_colors: Item color atlas on device.
+        digit_atlas: Digit bitmap atlas on device.
+
+    Returns:
+        Wall-clock seconds, or None on OOM.
+    """
+    try:
+        return benchmark_jax_render_inventory_inline(
+            n_envs, params, num_steps,
+            block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+    except (RuntimeError, jax.errors.JaxRuntimeError):
+        return None
+
+
 def benchmark_vector_step(
     n_envs: int,
     params: EnvParams,
@@ -819,20 +1135,23 @@ def save_sample_images(
     block_atlas: jnp.ndarray,
     machine_atlas: jnp.ndarray,
     player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
     output_dir: Path,
 ) -> None:
     """Save sample rendered images for visual comparison.
 
-    Produces three files:
+    Produces:
       - cpu_render.png: single env rendered by the NumPy CPU renderer.
-      - jax_batch4.png: 4 envs rendered in parallel via vmapped JAX
-        renderer, stitched into a 2x2 grid.
+      - jax_batch4.png: 4 envs with inventory, stitched 2x2 grid.
 
     Args:
         params: Environment parameters.
         block_atlas: Block texture atlas.
         machine_atlas: Machine texture atlas.
         player_sprite: Player sprite.
+        item_colors: Item color atlas.
+        digit_atlas: Digit bitmap atlas.
         output_dir: Directory to write images into.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -844,15 +1163,20 @@ def save_sample_images(
     cpu_img = render_pixels(state, block_pixel_size=tile_px)
     Image.fromarray(cpu_img[:, :, :3]).save(output_dir / "cpu_render.png")
 
-    # --- JAX render: batch of 4, stitched into a 2x2 grid ---
+    # --- JAX render with inventory: batch of 4, stitched 2x2 ---
     _, batch_states = make_batched_envs(4, params)
     vmap_render = jax.jit(
-        jax.vmap(render_jax, in_axes=(0, None, None, None))
+        jax.vmap(
+            render_jax_with_inventory,
+            in_axes=(0, None, None, None, None, None),
+        )
     )
     batch_imgs = np.array(
-        vmap_render(batch_states, block_atlas, machine_atlas, player_sprite)
+        vmap_render(
+            batch_states, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
     )
-    # Stitch: stack [0,1] on top of [2,3]
     top_row = np.concatenate([batch_imgs[0], batch_imgs[1]], axis=1)
     bot_row = np.concatenate([batch_imgs[2], batch_imgs[3]], axis=1)
     grid = np.concatenate([top_row, bot_row], axis=0)
@@ -861,163 +1185,81 @@ def save_sample_images(
     print(f"Sample images saved to {output_dir}/")
 
 
-def save_bar_chart(
+def save_throughput_chart(
     cpu_fps: float,
-    jax_render_fps: dict[int, float],
-    vector_fps: dict[int, float],
-    output_dir: Path,
-) -> None:
-    """Save a grouped bar chart comparing CPU, JAX render, and vector step.
-
-    Three series plotted as steps/second (y, log scale) vs batch size (x):
-      - CPU render (single bar, the baseline)
-      - JAX render (one bar per batch size)
-      - Vector step only (one bar per batch size, no rendering)
-
-    Args:
-        cpu_fps: CPU renderer throughput (frames/s), measured at batch=1.
-        jax_render_fps: Mapping of batch_size -> JAX render fps.
-        vector_fps: Mapping of batch_size -> vector step-only fps.
-        output_dir: Directory to write the chart into.
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Union of all batch sizes across both series, sorted.
-    all_sizes = sorted(set(jax_render_fps) | set(vector_fps))
-    x_labels = ["CPU"] + [str(n) for n in all_sizes]
-    x = np.arange(len(x_labels))
-    width = 0.35
-
-    render_vals = [cpu_fps] + [
-        jax_render_fps.get(n, 0) for n in all_sizes
-    ]
-    vector_vals = [0] + [vector_fps.get(n, 0) for n in all_sizes]
-
-    fig, ax = plt.subplots(figsize=(14, 5))
-
-    bars_render = ax.bar(
-        x - width / 2, render_vals, width,
-        label="JAX render (step+render)", color="#5f8fd4",
-        edgecolor="white", linewidth=0.5,
-    )
-    # Color the CPU bar differently.
-    bars_render[0].set_color("#d45f5f")
-    bars_render[0].set_label("CPU render")
-
-    bars_vector = ax.bar(
-        x + width / 2, vector_vals, width,
-        label="Vector step only (no render)", color="#5fbf5f",
-        edgecolor="white", linewidth=0.5,
-    )
-
-    ax.set_xlabel("Batch size", fontsize=12)
-    ax.set_ylabel("Steps per second", fontsize=12)
-    ax.set_title(
-        f"Throughput: CPU render vs JAX render vs vector step  "
-        f"({MAP_SIZE}x{MAP_SIZE} map, {TILE_PX}px tiles, {NUM_STEPS} steps)",
-        fontsize=13,
-    )
-    ax.set_yscale("log")
-    ax.set_xticks(x)
-    ax.set_xticklabels(x_labels)
-    ax.grid(axis="y", alpha=0.3)
-    ax.legend(fontsize=10)
-
-    # Value labels on top of each bar.
-    for bar_group in [bars_render, bars_vector]:
-        for bar in bar_group:
-            val = bar.get_height()
-            if val > 0:
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    val * 1.12,
-                    f"{val:,.0f}",
-                    ha="center",
-                    va="bottom",
-                    fontsize=6,
-                    rotation=45,
-                )
-
-    fig.tight_layout()
-    path = output_dir / "benchmark_chart.png"
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    print(f"Bar chart saved to {path}")
-
-
-def save_step_render_chart(
-    cpu_fps: float,
-    _cpu_fps_unused: float,
     step_render_fps: dict[int, float],
+    step_render_inv_fps: dict[int, float],
     vector_fps: dict[int, float],
     output_dir: Path,
 ) -> None:
-    """Save a stacked bar chart decomposing step vs render time.
+    """Save the throughput breakdown chart with three GPU series.
 
-    For each batch size where both step+render and step-only data exist,
-    the bar is split into two segments:
-      - Bottom (blue): step+render fps (the usable throughput).
-      - Top (green): render overhead (step_only - step_render fps).
+    For batch sizes common to all three series, shows grouped bars:
+      - Step only (green): simulation ceiling.
+      - Step + map render (blue): map-only JAX render.
+      - Step + map + inventory render (purple): full render with UI.
 
     A horizontal dashed line shows the CPU step+render baseline.
 
     Args:
         cpu_fps: CPU step+render throughput (fps), single env.
-        _cpu_fps_unused: Kept for API compat, same as cpu_fps.
-        step_render_fps: Mapping of batch_size -> step+render fps.
-        vector_fps: Mapping of batch_size -> step-only fps.
+        step_render_fps: batch_size -> step + map render fps.
+        step_render_inv_fps: batch_size -> step + map + inventory fps.
+        vector_fps: batch_size -> step-only fps.
         output_dir: Directory to write the chart into.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use batch sizes present in both series.
-    common_sizes = sorted(set(step_render_fps) & set(vector_fps))
-    if not common_sizes:
+    all_sizes = sorted(
+        set(step_render_fps) & set(vector_fps) & set(step_render_inv_fps)
+    )
+    if not all_sizes:
         return
 
-    labels = [str(n) for n in common_sizes]
+    labels = [str(n) for n in all_sizes]
     x = np.arange(len(labels))
+    width = 0.25
 
-    sr_vals = np.array([step_render_fps[n] for n in common_sizes])
-    v_vals = np.array([vector_fps[n] for n in common_sizes])
-    headroom = np.maximum(v_vals - sr_vals, 0)
+    v_vals = np.array([vector_fps[n] for n in all_sizes])
+    sr_vals = np.array([step_render_fps[n] for n in all_sizes])
+    sri_vals = np.array([step_render_inv_fps[n] for n in all_sizes])
 
-    fig, ax = plt.subplots(figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(14, 5))
 
     ax.bar(
-        x, sr_vals, color="#5f8fd4", edgecolor="white", linewidth=0.5,
-        label="Step + render (usable fps)",
+        x - width, v_vals, width, color="#5fbf5f",
+        edgecolor="white", linewidth=0.5, label="Step only",
     )
     ax.bar(
-        x, headroom, bottom=sr_vals, color="#5fbf5f",
-        edgecolor="white", linewidth=0.5,
-        label="Render overhead (fps lost to rendering)",
+        x, sr_vals, width, color="#5f8fd4",
+        edgecolor="white", linewidth=0.5, label="Step + map render",
+    )
+    ax.bar(
+        x + width, sri_vals, width, color="#8f5fd4",
+        edgecolor="white", linewidth=0.5, label="Step + map + inventory",
     )
 
-    # CPU baseline.
     ax.axhline(
         cpu_fps, color="#d45f5f", linestyle="--", linewidth=1.5,
         label=f"CPU step+render ({cpu_fps:,.0f} fps)",
     )
 
-    # Labels on bars.
-    for i, (sr, v) in enumerate(zip(sr_vals, v_vals)):
-        ax.text(
-            x[i], v * 1.05, f"{v:,.0f}",
-            ha="center", va="bottom", fontsize=7, color="#3a7a3a",
-        )
-        if sr > 100:
-            ax.text(
-                x[i], sr * 0.75, f"{sr:,.0f}",
-                ha="center", va="top", fontsize=7, color="white",
-                fontweight="bold",
-            )
+    # Value labels.
+    for i in range(len(all_sizes)):
+        for val, offset in [
+            (v_vals[i], -width), (sr_vals[i], 0), (sri_vals[i], width)
+        ]:
+            if val > 0:
+                ax.text(
+                    x[i] + offset, val * 1.05, f"{val:,.0f}",
+                    ha="center", va="bottom", fontsize=6, rotation=45,
+                )
 
     ax.set_yscale("log")
     ax.set_xlabel("Batch size (envs)", fontsize=12)
     ax.set_ylabel("Steps per second", fontsize=12)
     ax.set_title(
-        f"Throughput breakdown: step cost vs render cost  "
+        f"Throughput: step vs map render vs inventory render  "
         f"({MAP_SIZE}x{MAP_SIZE} map, {TILE_PX}px tiles, {NUM_STEPS} steps)",
         fontsize=13,
     )
@@ -1030,7 +1272,7 @@ def save_step_render_chart(
     path = output_dir / "throughput_step_render.png"
     fig.savefig(path, dpi=150)
     plt.close(fig)
-    print(f"Step+render chart saved to {path}")
+    print(f"Throughput chart saved to {path}")
 
 
 def main() -> None:
@@ -1058,6 +1300,7 @@ def main() -> None:
     log(f"Timestamp: {timestamp}")
     log(f"Map size: {MAP_SIZE}x{MAP_SIZE}, Tile pixels: {TILE_PX}px")
     log(f"Image size: {MAP_SIZE * TILE_PX}x{MAP_SIZE * TILE_PX}px")
+    log(f"Inventory strip: {INV_HEIGHT}px tall")
     log(f"Steps per run: {NUM_STEPS}")
     log(f"Max batch power: 2^{MAX_BATCH_POWER} = {1 << MAX_BATCH_POWER}")
     log(f"JAX devices: {jax.devices()}")
@@ -1076,10 +1319,13 @@ def main() -> None:
     block_atlas = build_block_atlas(TILE_PX)
     machine_atlas = build_machine_atlas(TILE_PX)
     player_sprite = build_player_atlas(TILE_PX)
+    item_colors = build_item_color_atlas()
+    digit_atlas = build_digit_atlas()
 
-    # Save sample images: CPU single env + JAX batched 4 envs.
+    # Save sample images.
     save_sample_images(
-        params, block_atlas, machine_atlas, player_sprite, output_dir
+        params, block_atlas, machine_atlas, player_sprite,
+        item_colors, digit_atlas, output_dir,
     )
 
     # ---- CPU baseline: step + render (single env, serial) ----
@@ -1089,29 +1335,40 @@ def main() -> None:
     log(f" {cpu_sr_fps:,.0f} fps ({cpu_sr_time:.3f}s)")
     log()
 
-    # ---- Auto-discover step+render scaling ----
+    # ---- Series 1: step + map render ----
     step_render_fps = discover_scaling(
         run_fn=lambda n: try_inline_step_render(
             n, params, NUM_STEPS,
             block_atlas, machine_atlas, player_sprite,
         ),
-        label="Step + JAX Render (inline, doubles until OOM)",
+        label="Step + Map Render",
         log_fn=log,
     )
     log()
 
-    # ---- Auto-discover vector step-only scaling ----
+    # ---- Series 2: step + map + inventory render ----
+    step_render_inv_fps = discover_scaling(
+        run_fn=lambda n: try_inline_step_render_inventory(
+            n, params, NUM_STEPS,
+            block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        ),
+        label="Step + Map + Inventory Render",
+        log_fn=log,
+    )
+    log()
+
+    # ---- Series 3: step only ----
     vector_fps = discover_scaling(
         run_fn=lambda n: try_vector_step(n, params, NUM_STEPS),
-        label="Vector Step Only (no render, doubles until OOM)",
+        label="Step Only (no render)",
         log_fn=log,
     )
 
     # ---- Save outputs ----
-    save_bar_chart(cpu_sr_fps, step_render_fps, vector_fps, output_dir)
-    save_step_render_chart(
-        cpu_sr_fps, cpu_sr_fps,
-        step_render_fps, vector_fps, output_dir,
+    save_throughput_chart(
+        cpu_sr_fps, step_render_fps, step_render_inv_fps,
+        vector_fps, output_dir,
     )
 
     log()

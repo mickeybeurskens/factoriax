@@ -9,18 +9,31 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import BlockType, Direction, MachineType
+from factoriax.constants import (
+    ITEM_COLORS,
+    BlockType,
+    Direction,
+    ItemType,
+    MachineType,
+)
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 from scripts.jax_render_benchmark import (
+    INV_HEIGHT,
+    SLOT_BG,
+    SLOT_BG_SELECTED,
     build_block_atlas,
+    build_digit_atlas,
+    build_item_color_atlas,
     build_machine_atlas,
     build_player_atlas,
     extract_single_state,
     make_batched_envs,
+    render_inventory_strip,
     render_jax,
+    render_jax_with_inventory,
 )
 
 # ---------------------------------------------------------------------------
@@ -499,3 +512,159 @@ class TestVmapRender:
         )
         # With different random seeds, terrain should differ
         assert not np.array_equal(imgs[0], imgs[1])
+
+
+# ---------------------------------------------------------------------------
+# Inventory rendering tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def item_colors() -> jnp.ndarray:
+    """Item color atlas."""
+    return build_item_color_atlas()
+
+
+@pytest.fixture()
+def digit_atlas() -> jnp.ndarray:
+    """Digit bitmap atlas."""
+    return build_digit_atlas()
+
+
+class TestInventoryStrip:
+    """Tests for the inventory strip renderer."""
+
+    def test_strip_shape(
+        self,
+        single_state: EnvState,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """Inventory strip should be INV_HEIGHT x map_width_px x 3."""
+        img_width = MAP_SIZE * TILE_PX
+        strip = render_inventory_strip(
+            single_state, item_colors, digit_atlas, img_width
+        )
+        assert strip.shape == (INV_HEIGHT, img_width, 3)
+        assert strip.dtype == jnp.uint8
+
+    def test_empty_slots_are_dark(
+        self,
+        single_state: EnvState,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """Empty inventory should produce a mostly dark strip."""
+        img_width = MAP_SIZE * TILE_PX
+        strip = np.array(
+            render_inventory_strip(
+                single_state, item_colors, digit_atlas, img_width
+            )
+        )
+        # Average brightness should be low (close to SLOT_BG = 40).
+        assert strip.mean() < 100
+
+    def test_nonempty_slot_has_item_color(
+        self,
+        block_atlas: jnp.ndarray,
+        machine_atlas: jnp.ndarray,
+        player_sprite: jnp.ndarray,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """A slot with items should contain the item's color."""
+        # Build a level where the player starts with iron.
+        level = (
+            LevelBuilder(MAP_SIZE, MAP_SIZE)
+            .build("with_iron")
+        )
+        level.player_inventory = [(int(ItemType.IRON), 10)]
+        p = EnvParams(
+            map_width=MAP_SIZE,
+            map_height=MAP_SIZE,
+            num_players=1,
+            max_timesteps=10,
+            max_biters=1,
+        )
+        state = build_state(level, p)
+
+        img_width = MAP_SIZE * TILE_PX
+        strip = np.array(
+            render_inventory_strip(state, item_colors, digit_atlas, img_width)
+        )
+
+        # The iron color should appear somewhere in the strip.
+        iron_color = np.array(ITEM_COLORS[int(ItemType.IRON)])
+        has_iron = np.all(strip == iron_color, axis=-1)
+        assert has_iron.any()
+
+    def test_selected_slot_brighter(
+        self,
+        single_state: EnvState,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """Selected slot background should be brighter than unselected."""
+        img_width = MAP_SIZE * TILE_PX
+        strip = np.array(
+            render_inventory_strip(
+                single_state, item_colors, digit_atlas, img_width
+            )
+        )
+        slot_width = img_width // 10
+        selected = int(single_state.selected_slots[0])
+
+        # Check that the selected slot region is brighter on average.
+        sel_region = strip[:, selected * slot_width:(selected + 1) * slot_width]
+        # Pick an unselected slot.
+        other = (selected + 1) % 10
+        other_region = strip[:, other * slot_width:(other + 1) * slot_width]
+        assert sel_region.mean() > other_region.mean()
+
+
+class TestWithInventoryRender:
+    """Tests for the combined map + inventory renderer."""
+
+    def test_output_shape(
+        self,
+        single_state: EnvState,
+        block_atlas: jnp.ndarray,
+        machine_atlas: jnp.ndarray,
+        player_sprite: jnp.ndarray,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """Output should be map height + INV_HEIGHT."""
+        img = render_jax_with_inventory(
+            single_state, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+        expected_h = MAP_SIZE * TILE_PX + INV_HEIGHT
+        expected_w = MAP_SIZE * TILE_PX
+        assert img.shape == (expected_h, expected_w, 3)
+
+    def test_vmap_with_inventory(
+        self,
+        params: EnvParams,
+        block_atlas: jnp.ndarray,
+        machine_atlas: jnp.ndarray,
+        player_sprite: jnp.ndarray,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """Vmapped inventory render should produce correct batch shape."""
+        n = 3
+        _, states = make_batched_envs(n, params)
+        vmap_render = jax.jit(
+            jax.vmap(
+                render_jax_with_inventory,
+                in_axes=(0, None, None, None, None, None),
+            )
+        )
+        imgs = vmap_render(
+            states, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+        expected_h = MAP_SIZE * TILE_PX + INV_HEIGHT
+        expected_w = MAP_SIZE * TILE_PX
+        assert imgs.shape == (n, expected_h, expected_w, 3)
