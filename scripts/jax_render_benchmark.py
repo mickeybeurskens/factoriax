@@ -37,7 +37,9 @@ from PIL import Image
 matplotlib.use("Agg")
 
 from factoriax.constants import (
+    DIRECTIONS,
     ITEM_COLORS,
+    MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     BlockType,
@@ -46,6 +48,13 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
+from factoriax.recipes import (
+    NUM_RECIPES,
+    RECIPE_INPUT_COUNTS,
+    RECIPE_INPUT_ITEMS,
+    RECIPE_OUTPUTS,
+    MAX_RECIPE_INPUTS,
+)
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
@@ -540,6 +549,516 @@ def render_jax_with_inventory(
 
 
 # ===================================================================
+# SECTION 2b: Full HUD Renderer (4-quadrant info panel)
+#
+# The HUD is a panel the same size as the map, split into 4 quadrants:
+#   Q1 (top-left):  Tile inspector -- info about the facing tile
+#   Q2 (top-right): Machine inventory -- slots of the facing machine
+#   Q3 (bot-left):  Player inventory -- 2x5 grid with items/counts
+#   Q4 (bot-right): Crafting menu -- 5 recipes with affordability
+#
+# The full frame is: map (top) + HUD (bottom), same width.
+# ===================================================================
+
+HUD_BG = jnp.array([30, 30, 30], dtype=jnp.uint8)
+HUD_BORDER = jnp.array([60, 60, 60], dtype=jnp.uint8)
+HUD_LABEL = jnp.array([160, 160, 160], dtype=jnp.uint8)
+HUD_GREEN = jnp.array([60, 200, 60], dtype=jnp.uint8)
+HUD_RED = jnp.array([200, 60, 60], dtype=jnp.uint8)
+
+
+def _get_facing_tile(state: EnvState) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Compute the tile coordinates the player is facing.
+
+    Args:
+        state: Single EnvState.
+
+    Returns:
+        Tuple (fx, fy) as scalar int32 arrays, clamped to map bounds.
+    """
+    px = state.player_positions[0, 0]
+    py = state.player_positions[0, 1]
+    d = state.player_directions[0]
+    dx = DIRECTIONS[d, 0]
+    dy = DIRECTIONS[d, 1]
+    map_h, map_w = state.map.shape
+    fx = jnp.clip(px + dx, 0, map_w - 1)
+    fy = jnp.clip(py + dy, 0, map_h - 1)
+    return fx, fy
+
+
+def _stamp_number(
+    img: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+    value: jnp.ndarray,
+    max_digits: int,
+    y: int,
+    x: jnp.ndarray,
+    color: jnp.ndarray,
+) -> jnp.ndarray:
+    """Stamp a right-aligned integer into an image.
+
+    Renders up to max_digits digits of value. Leading zeros are hidden.
+    Each digit is DIGIT_H x DIGIT_W pixels with 1px spacing.
+
+    Args:
+        img: Image to draw on.
+        digit_atlas: (10, DIGIT_H, DIGIT_W) bool atlas.
+        value: Non-negative integer to render.
+        max_digits: Maximum number of digit positions.
+        y: Top row of the number.
+        x: Left column of the first (leftmost) digit position.
+        color: RGB color for the digits.
+
+    Returns:
+        Updated image.
+    """
+    safe_val = jnp.clip(value, 0, 10**max_digits - 1)
+
+    def _stamp_one(i: int, carry: jnp.ndarray) -> jnp.ndarray:
+        """Stamp digit position i (0 = leftmost).
+
+        Args:
+            i: Digit position from left.
+            carry: Image being built.
+
+        Returns:
+            Updated image.
+        """
+        # Extract the i-th digit from the left.
+        divisor = jnp.int32(10) ** jnp.int32(max_digits - 1 - i)
+        digit_val = (safe_val // divisor) % 10
+        # Only show if there are significant digits at this position.
+        show = safe_val >= divisor
+        mask = digit_atlas[digit_val]  # (DIGIT_H, DIGIT_W)
+        dx = x + i * (DIGIT_W + 1)
+        bg = jax.lax.dynamic_slice(
+            carry, (y, dx, 0), (DIGIT_H, DIGIT_W, 3)
+        )
+        blended = jnp.where(mask[:, :, None], color, bg)
+        result = jnp.where(show, blended, bg)
+        return jax.lax.dynamic_update_slice(
+            carry, result.astype(jnp.uint8), (y, dx, 0)
+        )
+
+    return jax.lax.fori_loop(0, max_digits, _stamp_one, img)
+
+
+def render_q1_inspector(
+    state: EnvState,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+    quad_h: int,
+    quad_w: int,
+) -> jnp.ndarray:
+    """Render Q1: tile inspector showing info about the facing tile.
+
+    Shows block type (color swatch + resource count), machine info
+    (type swatch, direction arrow, health, working status), and biter
+    presence with HP.
+
+    Args:
+        state: Single EnvState.
+        block_atlas: Block texture atlas.
+        machine_atlas: Machine texture atlas.
+        item_colors: Item color atlas.
+        digit_atlas: Digit bitmap atlas.
+        quad_h: Quadrant height in pixels.
+        quad_w: Quadrant width in pixels.
+
+    Returns:
+        uint8 RGB array of shape (quad_h, quad_w, 3).
+    """
+    img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
+    fx, fy = _get_facing_tile(state)
+
+    # Row 1 (y=2): Block type swatch + resource count
+    block_type = state.map[fy, fx]
+    safe_bt = jnp.clip(block_type, 0, block_atlas.shape[0] - 1)
+    block_color = block_atlas[safe_bt, 0, 0, :]  # sample one pixel
+    swatch = jnp.broadcast_to(block_color, (ICON_SIZE, ICON_SIZE, 3))
+    img = jax.lax.dynamic_update_slice(img, swatch, (2, 2, 0))
+
+    resources = state.block_resources[fy, fx]
+    img = _stamp_number(
+        img, digit_atlas, resources, 4, 2, jnp.int32(ICON_SIZE + 4),
+        COUNT_COLOR,
+    )
+
+    # Row 2 (y=14): Machine type swatch + direction + status
+    mt = state.machine_types[fy, fx]
+    safe_mt = jnp.clip(mt, 0, machine_atlas.shape[0] - 1)
+    m_color = machine_atlas[safe_mt, 0, 0, :]
+    has_machine = mt != int(MachineType.NONE)
+    m_swatch = jnp.broadcast_to(m_color, (ICON_SIZE, ICON_SIZE, 3))
+    m_swatch = m_swatch * has_machine.astype(jnp.uint8)
+    img = jax.lax.dynamic_update_slice(img, m_swatch, (14, 2, 0))
+
+    # Direction indicator: small 3x3 colored dot offset by direction
+    m_dir = state.machine_direction[fy, fx]
+    dir_dx = DIRECTIONS[jnp.clip(m_dir, 0, 4), 0]
+    dir_dy = DIRECTIONS[jnp.clip(m_dir, 0, 4), 1]
+    arrow_dot = jnp.full((3, 3, 3), HUD_LABEL, dtype=jnp.uint8)
+    arrow_dot = arrow_dot * has_machine.astype(jnp.uint8)
+    arrow_y = 15 + dir_dy * 2
+    arrow_x = ICON_SIZE + 4 + dir_dx * 2
+    img = jax.lax.dynamic_update_slice(
+        img, arrow_dot, (arrow_y, arrow_x, 0)
+    )
+
+    # Working status dot
+    is_working = has_machine & (state.machine_power[fy, fx] > 0)
+    status_color = jnp.where(is_working, HUD_GREEN, HUD_RED)
+    status_dot = jnp.broadcast_to(status_color, (3, 3, 3))
+    status_dot = status_dot * has_machine.astype(jnp.uint8)
+    img = jax.lax.dynamic_update_slice(img, status_dot, (14, ICON_SIZE + 12, 0))
+
+    # Machine health
+    health = state.machine_health[fy, fx]
+    img = _stamp_number(
+        img, digit_atlas, health, 3, 14, jnp.int32(ICON_SIZE + 18),
+        COUNT_COLOR,
+    )
+
+    # Row 3 (y=26): Biter check -- scan for any biter at (fx, fy)
+    biter_at = (
+        (state.biter_positions[:, 0] == fx)
+        & (state.biter_positions[:, 1] == fy)
+        & (state.biter_health > 0)
+    )
+    any_biter = jnp.any(biter_at)
+    # Get the first matching biter's HP (or 0 if none)
+    biter_idx = jnp.argmax(biter_at)  # first True index
+    biter_hp = jnp.where(any_biter, state.biter_health[biter_idx], 0)
+
+    biter_dot = jnp.broadcast_to(HUD_RED, (ICON_SIZE, ICON_SIZE, 3))
+    biter_dot = biter_dot * any_biter.astype(jnp.uint8)
+    img = jax.lax.dynamic_update_slice(img, biter_dot, (26, 2, 0))
+    img = _stamp_number(
+        img, digit_atlas, biter_hp, 2, 26, jnp.int32(ICON_SIZE + 4),
+        HUD_RED,
+    )
+
+    return img
+
+
+def render_q2_machine_inv(
+    state: EnvState,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+    quad_h: int,
+    quad_w: int,
+) -> jnp.ndarray:
+    """Render Q2: machine inventory of the facing tile.
+
+    Shows up to 8 machine slots in a 4-row x 2-column grid. Each slot
+    has a colored item swatch and a 2-digit count. If no machine is
+    present, the quadrant is blank.
+
+    Args:
+        state: Single EnvState.
+        item_colors: Item color atlas.
+        digit_atlas: Digit bitmap atlas.
+        quad_h: Quadrant height in pixels.
+        quad_w: Quadrant width in pixels.
+
+    Returns:
+        uint8 RGB array of shape (quad_h, quad_w, 3).
+    """
+    img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
+    fx, fy = _get_facing_tile(state)
+    mt = state.machine_types[fy, fx]
+    has_machine = mt != int(MachineType.NONE)
+
+    inv_items = state.machine_inventory_items[fy, fx, :]   # (8,)
+    inv_counts = state.machine_inventory_counts[fy, fx, :]  # (8,)
+
+    cell_w = quad_w // 2
+    cell_h = quad_h // 4
+
+    def _draw_mslot(slot: int, img: jnp.ndarray) -> jnp.ndarray:
+        """Draw one machine inventory slot.
+
+        Args:
+            slot: Slot index 0-7.
+            img: Image being built.
+
+        Returns:
+            Updated image.
+        """
+        col = slot % 2
+        row = slot // 2
+        cx = col * cell_w + 2
+        cy = row * cell_h + 2
+
+        item = inv_items[slot]
+        count = inv_counts[slot]
+        color = item_colors[jnp.clip(item, 0, NUM_ITEM_TYPES - 1)]
+        has_item = has_machine & (item > 0) & (count > 0)
+
+        swatch = jnp.broadcast_to(color, (ICON_SIZE, ICON_SIZE, 3))
+        swatch = swatch * has_item.astype(jnp.uint8)
+        img = jax.lax.dynamic_update_slice(img, swatch, (cy, cx, 0))
+
+        img = _stamp_number(
+            img, digit_atlas,
+            jnp.where(has_item, count, 0),
+            2, cy, jnp.int32(cx + ICON_SIZE + 2), COUNT_COLOR,
+        )
+        return img
+
+    return jax.lax.fori_loop(0, MAX_MACHINE_INVENTORY_SLOTS, _draw_mslot, img)
+
+
+def render_q3_inventory(
+    state: EnvState,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+    quad_h: int,
+    quad_w: int,
+) -> jnp.ndarray:
+    """Render Q3: player inventory as a 2-row x 5-column grid.
+
+    Each cell shows a colored item swatch and a 2-digit count. The
+    selected slot has a brighter background.
+
+    Args:
+        state: Single EnvState.
+        item_colors: Item color atlas.
+        digit_atlas: Digit bitmap atlas.
+        quad_h: Quadrant height in pixels.
+        quad_w: Quadrant width in pixels.
+
+    Returns:
+        uint8 RGB array of shape (quad_h, quad_w, 3).
+    """
+    img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
+    items = state.inventory_items[0]   # (10,)
+    counts = state.inventory_counts[0]  # (10,)
+    selected = state.selected_slots[0]
+
+    cell_w = quad_w // 5
+    cell_h = quad_h // 2
+
+    def _draw_islot(slot: int, img: jnp.ndarray) -> jnp.ndarray:
+        """Draw one player inventory slot.
+
+        Args:
+            slot: Slot index 0-9.
+            img: Image being built.
+
+        Returns:
+            Updated image.
+        """
+        col = slot % 5
+        row = slot // 5
+        cx = col * cell_w
+        cy = row * cell_h
+
+        # Selected slot highlight
+        is_sel = slot == selected
+        bg_color = jnp.where(is_sel, SLOT_BG_SELECTED, SLOT_BG)
+        cell_bg = jnp.broadcast_to(
+            bg_color, (cell_h, cell_w, 3)
+        ).astype(jnp.uint8)
+        img = jax.lax.dynamic_update_slice(img, cell_bg, (cy, cx, 0))
+
+        # Item swatch
+        item = items[slot]
+        count = counts[slot]
+        color = item_colors[jnp.clip(item, 0, NUM_ITEM_TYPES - 1)]
+        has_item = (item > 0) & (count > 0)
+
+        swatch = jnp.broadcast_to(color, (ICON_SIZE, ICON_SIZE, 3))
+        swatch = swatch * has_item.astype(jnp.uint8)
+        img = jax.lax.dynamic_update_slice(
+            img, swatch, (cy + 2, cx + 1, 0)
+        )
+
+        # Count digits below the swatch
+        img = _stamp_number(
+            img, digit_atlas,
+            jnp.where(has_item, count, 0),
+            2, cy + ICON_SIZE + 4, jnp.int32(cx + 1), COUNT_COLOR,
+        )
+        return img
+
+    return jax.lax.fori_loop(0, NUM_INVENTORY_SLOTS, _draw_islot, img)
+
+
+def render_q4_crafting(
+    state: EnvState,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+    quad_h: int,
+    quad_w: int,
+) -> jnp.ndarray:
+    """Render Q4: player crafting menu.
+
+    Shows the 5 player recipes. Each row has the output item swatch,
+    input item swatches, and a green/red affordability dot. The
+    currently-crafting recipe (if any) gets a progress indicator.
+
+    Args:
+        state: Single EnvState.
+        item_colors: Item color atlas.
+        digit_atlas: Digit bitmap atlas.
+        quad_h: Quadrant height in pixels.
+        quad_w: Quadrant width in pixels.
+
+    Returns:
+        uint8 RGB array of shape (quad_h, quad_w, 3).
+    """
+    img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
+    inv_items = state.inventory_items[0]   # (10,)
+    inv_counts = state.inventory_counts[0]  # (10,)
+    craft_recipe = state.crafting_recipe[0]
+    craft_progress = state.craft_progress[0]
+
+    row_h = quad_h // NUM_RECIPES
+
+    def _draw_recipe(r: int, img: jnp.ndarray) -> jnp.ndarray:
+        """Draw one crafting recipe row.
+
+        Args:
+            r: Recipe index 0-4.
+            img: Image being built.
+
+        Returns:
+            Updated image.
+        """
+        ry = r * row_h
+
+        # Output item swatch
+        out_item = RECIPE_OUTPUTS[r]
+        out_color = item_colors[jnp.clip(out_item, 0, NUM_ITEM_TYPES - 1)]
+        out_swatch = jnp.broadcast_to(
+            out_color, (ICON_SIZE, ICON_SIZE, 3)
+        )
+        img = jax.lax.dynamic_update_slice(
+            img, out_swatch, (ry + 1, 2, 0)
+        )
+
+        # Input item swatches (up to MAX_RECIPE_INPUTS)
+        def _draw_input(j: int, img: jnp.ndarray) -> jnp.ndarray:
+            in_item = RECIPE_INPUT_ITEMS[r, j]
+            in_color = item_colors[
+                jnp.clip(in_item, 0, NUM_ITEM_TYPES - 1)
+            ]
+            has_input = in_item > 0
+            in_sw = jnp.broadcast_to(in_color, (4, 4, 3))
+            in_sw = in_sw * has_input.astype(jnp.uint8)
+            ix = ICON_SIZE + 5 + j * 6
+            img = jax.lax.dynamic_update_slice(
+                img, in_sw, (ry + 2, ix, 0)
+            )
+            return img
+
+        img = jax.lax.fori_loop(0, MAX_RECIPE_INPUTS, _draw_input, img)
+
+        # Affordability check: does the player have all inputs?
+        def _check_input(j: int, affordable: jnp.ndarray) -> jnp.ndarray:
+            needed_item = RECIPE_INPUT_ITEMS[r, j]
+            needed_count = RECIPE_INPUT_COUNTS[r, j]
+            # Find this item in inventory and sum counts.
+            has_enough = jnp.where(
+                needed_item == 0,
+                True,
+                jnp.sum(
+                    jnp.where(inv_items == needed_item, inv_counts, 0)
+                ) >= needed_count,
+            )
+            return affordable & has_enough
+
+        can_afford = jax.lax.fori_loop(
+            0, MAX_RECIPE_INPUTS, _check_input, jnp.bool_(True)
+        )
+
+        dot_color = jnp.where(can_afford, HUD_GREEN, HUD_RED)
+        dot = jnp.broadcast_to(dot_color, (3, 3, 3))
+        img = jax.lax.dynamic_update_slice(
+            img, dot.astype(jnp.uint8),
+            (ry + 2, quad_w - 6, 0),
+        )
+
+        # Crafting-in-progress highlight
+        is_crafting = (craft_progress > 0) & (craft_recipe == r)
+        bar_w = jnp.where(is_crafting, 4, 0).astype(jnp.int32)
+        bar = jnp.broadcast_to(HUD_GREEN, (2, 4, 3))
+        bar = bar * is_crafting.astype(jnp.uint8)
+        img = jax.lax.dynamic_update_slice(
+            img, bar.astype(jnp.uint8),
+            (ry + row_h - 3, 2, 0),
+        )
+
+        return img
+
+    return jax.lax.fori_loop(0, NUM_RECIPES, _draw_recipe, img)
+
+
+def render_full_hud(
+    state: EnvState,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> jnp.ndarray:
+    """Render the complete frame: map on top, 4-quadrant HUD on bottom.
+
+    The HUD is the same pixel dimensions as the map, split into four
+    equal quadrants. The total output height is 2x the map height.
+
+    Args:
+        state: Single (non-batched) EnvState.
+        block_atlas: Block texture atlas.
+        machine_atlas: Machine texture atlas.
+        player_sprite: Player sprite.
+        item_colors: Item color atlas.
+        digit_atlas: Digit bitmap atlas.
+
+    Returns:
+        uint8 RGB array of shape (2 * map_h * tile_px, map_w * tile_px, 3).
+    """
+    map_img = render_jax(state, block_atlas, machine_atlas, player_sprite)
+    map_h, map_w = map_img.shape[0], map_img.shape[1]
+    quad_h = map_h // 2
+    quad_w = map_w // 2
+
+    q1 = render_q1_inspector(
+        state, block_atlas, machine_atlas, item_colors, digit_atlas,
+        quad_h, quad_w,
+    )
+    q2 = render_q2_machine_inv(
+        state, item_colors, digit_atlas, quad_h, quad_w,
+    )
+    q3 = render_q3_inventory(
+        state, item_colors, digit_atlas, quad_h, quad_w,
+    )
+    q4 = render_q4_crafting(
+        state, item_colors, digit_atlas, quad_h, quad_w,
+    )
+
+    # Draw 1px border between quadrants.
+    border_h = jnp.full((1, map_w, 3), HUD_BORDER, dtype=jnp.uint8)
+    border_v = jnp.full((quad_h, 1, 3), HUD_BORDER, dtype=jnp.uint8)
+
+    top_row = jnp.concatenate([q1, border_v, q2], axis=1)
+    # Trim 1px overflow from the vertical border to match map_w.
+    top_row = top_row[:, :map_w, :]
+    bot_row = jnp.concatenate([q3, border_v, q4], axis=1)
+    bot_row = bot_row[:, :map_w, :]
+
+    hud = jnp.concatenate([top_row, border_h, bot_row], axis=0)
+    # Trim 1px overflow from horizontal border to match map_h.
+    hud = hud[:map_h, :, :]
+
+    return jnp.concatenate([map_img, hud], axis=0)
+
+
+# ===================================================================
 # SECTION 3: Batched Environment Setup
 #
 # FactoriaX environments are JAX pytrees (FLAX struct.dataclass).
@@ -901,6 +1420,109 @@ def try_inline_step_render_inventory(
         return None
 
 
+def benchmark_jax_render_hud_inline(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> float:
+    """Benchmark JAX full HUD rendering with inline stepping.
+
+    Same pattern as the inventory benchmark but renders the complete
+    4-quadrant HUD (inspector, machine inv, player inv, crafting).
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+        item_colors: Item color atlas on device.
+        digit_atlas: Digit bitmap atlas on device.
+
+    Returns:
+        Wall-clock seconds for all step+render calls (excluding warmup).
+    """
+    env = FactoriaXEnv()
+    _, states = make_batched_envs(n_envs, params)
+
+    vmap_step = jax.jit(
+        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
+    )
+    vmap_render = jax.jit(
+        jax.vmap(
+            render_full_hud,
+            in_axes=(0, None, None, None, None, None),
+        )
+    )
+
+    # Warmup.
+    rng = jax.random.key(66)
+    rng, k_a, k_s = jax.random.split(rng, 3)
+    actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+    step_keys = jax.random.split(k_s, n_envs)
+    _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+    result = vmap_render(
+        states, block_atlas, machine_atlas, player_sprite,
+        item_colors, digit_atlas,
+    )
+    jax.block_until_ready(result)
+
+    t0 = time.perf_counter()
+    for _ in range(num_steps):
+        rng, k_a, k_s = jax.random.split(rng, 3)
+        actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+        step_keys = jax.random.split(k_s, n_envs)
+        _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+        result = vmap_render(
+            states, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+    jax.block_until_ready(result)
+    t1 = time.perf_counter()
+    return t1 - t0
+
+
+def try_inline_step_render_hud(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    item_colors: jnp.ndarray,
+    digit_atlas: jnp.ndarray,
+) -> float | None:
+    """Try benchmark_jax_render_hud_inline, returning None on OOM.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+        item_colors: Item color atlas on device.
+        digit_atlas: Digit bitmap atlas on device.
+
+    Returns:
+        Wall-clock seconds, or None on OOM.
+    """
+    try:
+        return benchmark_jax_render_hud_inline(
+            n_envs, params, num_steps,
+            block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+    except (RuntimeError, jax.errors.JaxRuntimeError):
+        return None
+
+
 def benchmark_vector_step(
     n_envs: int,
     params: EnvParams,
@@ -1182,6 +1804,35 @@ def save_sample_images(
     grid = np.concatenate([top_row, bot_row], axis=0)
     Image.fromarray(grid).save(output_dir / "jax_batch4.png")
 
+    # --- Full HUD render: single env with items in inventory ---
+    # Give the player some items so the HUD has content to show.
+    from factoriax.levels import LevelBuilder, build_state
+
+    level = (
+        LevelBuilder(params.map_width, params.map_height)
+        .fill_rect(2, 2, 3, 3, BlockType.IRON, resources=500)
+        .fill_rect(10, 2, 3, 3, BlockType.COPPER, resources=300)
+        .fill_rect(2, 10, 3, 3, BlockType.COAL, resources=200)
+        .place_machine(6, 6, int(MachineType.MINER), int(Direction.DOWN))
+        .set_player_position(6, 5)  # facing the miner
+        .build("hud_sample")
+    )
+    level.player_inventory = [
+        (int(ItemType.IRON), 42),
+        (int(ItemType.COPPER), 7),
+        (int(ItemType.COAL), 1),
+        (int(ItemType.MINER), 3),
+        (int(ItemType.CHEST), 12),
+    ]
+    hud_state = build_state(level, params)
+    hud_img = np.array(
+        jax.jit(render_full_hud)(
+            hud_state, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+    )
+    Image.fromarray(hud_img).save(output_dir / "jax_full_hud.png")
+
     print(f"Sample images saved to {output_dir}/")
 
 
@@ -1189,15 +1840,17 @@ def save_throughput_chart(
     cpu_fps: float,
     step_render_fps: dict[int, float],
     step_render_inv_fps: dict[int, float],
+    step_render_hud_fps: dict[int, float],
     vector_fps: dict[int, float],
     output_dir: Path,
 ) -> None:
-    """Save the throughput breakdown chart with three GPU series.
+    """Save the throughput chart with four GPU series.
 
-    For batch sizes common to all three series, shows grouped bars:
+    Grouped bars per batch size:
       - Step only (green): simulation ceiling.
       - Step + map render (blue): map-only JAX render.
-      - Step + map + inventory render (purple): full render with UI.
+      - Step + map + inventory (purple): map + inventory strip.
+      - Step + full HUD (orange): map + 4-quadrant HUD.
 
     A horizontal dashed line shows the CPU step+render baseline.
 
@@ -1205,68 +1858,61 @@ def save_throughput_chart(
         cpu_fps: CPU step+render throughput (fps), single env.
         step_render_fps: batch_size -> step + map render fps.
         step_render_inv_fps: batch_size -> step + map + inventory fps.
+        step_render_hud_fps: batch_size -> step + full HUD fps.
         vector_fps: batch_size -> step-only fps.
         output_dir: Directory to write the chart into.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_sizes = sorted(
-        set(step_render_fps) & set(vector_fps) & set(step_render_inv_fps)
+        set(step_render_fps)
+        & set(vector_fps)
+        & set(step_render_inv_fps)
+        & set(step_render_hud_fps)
     )
     if not all_sizes:
         return
 
     labels = [str(n) for n in all_sizes]
     x = np.arange(len(labels))
-    width = 0.25
+    width = 0.2
 
     v_vals = np.array([vector_fps[n] for n in all_sizes])
     sr_vals = np.array([step_render_fps[n] for n in all_sizes])
     sri_vals = np.array([step_render_inv_fps[n] for n in all_sizes])
+    hud_vals = np.array([step_render_hud_fps[n] for n in all_sizes])
 
-    fig, ax = plt.subplots(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(16, 5))
 
-    ax.bar(
-        x - width, v_vals, width, color="#5fbf5f",
-        edgecolor="white", linewidth=0.5, label="Step only",
-    )
-    ax.bar(
-        x, sr_vals, width, color="#5f8fd4",
-        edgecolor="white", linewidth=0.5, label="Step + map render",
-    )
-    ax.bar(
-        x + width, sri_vals, width, color="#8f5fd4",
-        edgecolor="white", linewidth=0.5, label="Step + map + inventory",
-    )
+    series = [
+        (x - 1.5 * width, v_vals, "#5fbf5f", "Step only"),
+        (x - 0.5 * width, sr_vals, "#5f8fd4", "Step + map"),
+        (x + 0.5 * width, sri_vals, "#8f5fd4", "Step + map + inventory"),
+        (x + 1.5 * width, hud_vals, "#d4a05f", "Step + full HUD"),
+    ]
+    for pos, vals, color, label in series:
+        ax.bar(
+            pos, vals, width, color=color,
+            edgecolor="white", linewidth=0.5, label=label,
+        )
 
     ax.axhline(
         cpu_fps, color="#d45f5f", linestyle="--", linewidth=1.5,
         label=f"CPU step+render ({cpu_fps:,.0f} fps)",
     )
 
-    # Value labels.
-    for i in range(len(all_sizes)):
-        for val, offset in [
-            (v_vals[i], -width), (sr_vals[i], 0), (sri_vals[i], width)
-        ]:
-            if val > 0:
-                ax.text(
-                    x[i] + offset, val * 1.05, f"{val:,.0f}",
-                    ha="center", va="bottom", fontsize=6, rotation=45,
-                )
-
     ax.set_yscale("log")
     ax.set_xlabel("Batch size (envs)", fontsize=12)
     ax.set_ylabel("Steps per second", fontsize=12)
     ax.set_title(
-        f"Throughput: step vs map render vs inventory render  "
+        f"Throughput: step vs map vs inventory vs full HUD  "
         f"({MAP_SIZE}x{MAP_SIZE} map, {TILE_PX}px tiles, {NUM_STEPS} steps)",
         fontsize=13,
     )
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     ax.grid(axis="y", alpha=0.3)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=8, ncol=3)
 
     fig.tight_layout()
     path = output_dir / "throughput_step_render.png"
@@ -1300,7 +1946,7 @@ def main() -> None:
     log(f"Timestamp: {timestamp}")
     log(f"Map size: {MAP_SIZE}x{MAP_SIZE}, Tile pixels: {TILE_PX}px")
     log(f"Image size: {MAP_SIZE * TILE_PX}x{MAP_SIZE * TILE_PX}px")
-    log(f"Inventory strip: {INV_HEIGHT}px tall")
+    log(f"Full HUD: {MAP_SIZE * TILE_PX}x{2 * MAP_SIZE * TILE_PX}px")
     log(f"Steps per run: {NUM_STEPS}")
     log(f"Max batch power: 2^{MAX_BATCH_POWER} = {1 << MAX_BATCH_POWER}")
     log(f"JAX devices: {jax.devices()}")
@@ -1322,7 +1968,7 @@ def main() -> None:
     item_colors = build_item_color_atlas()
     digit_atlas = build_digit_atlas()
 
-    # Save sample images.
+    # Save sample images (includes HUD render with items).
     save_sample_images(
         params, block_atlas, machine_atlas, player_sprite,
         item_colors, digit_atlas, output_dir,
@@ -1358,7 +2004,19 @@ def main() -> None:
     )
     log()
 
-    # ---- Series 3: step only ----
+    # ---- Series 3: step + full HUD render ----
+    step_render_hud_fps = discover_scaling(
+        run_fn=lambda n: try_inline_step_render_hud(
+            n, params, NUM_STEPS,
+            block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        ),
+        label="Step + Full HUD Render",
+        log_fn=log,
+    )
+    log()
+
+    # ---- Series 4: step only ----
     vector_fps = discover_scaling(
         run_fn=lambda n: try_vector_step(n, params, NUM_STEPS),
         label="Step Only (no render)",
@@ -1368,7 +2026,7 @@ def main() -> None:
     # ---- Save outputs ----
     save_throughput_chart(
         cpu_sr_fps, step_render_fps, step_render_inv_fps,
-        vector_fps, output_dir,
+        step_render_hud_fps, vector_fps, output_dir,
     )
 
     log()

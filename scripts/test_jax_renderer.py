@@ -31,6 +31,7 @@ from scripts.jax_render_benchmark import (
     build_player_atlas,
     extract_single_state,
     make_batched_envs,
+    render_full_hud,
     render_inventory_strip,
     render_jax,
     render_jax_with_inventory,
@@ -668,3 +669,85 @@ class TestWithInventoryRender:
         expected_h = MAP_SIZE * TILE_PX + INV_HEIGHT
         expected_w = MAP_SIZE * TILE_PX
         assert imgs.shape == (n, expected_h, expected_w, 3)
+
+
+# ---------------------------------------------------------------------------
+# Full HUD rendering tests
+# ---------------------------------------------------------------------------
+
+
+class TestFullHUD:
+    """Tests for the 4-quadrant HUD renderer."""
+
+    def test_output_shape(
+        self,
+        single_state: EnvState,
+        block_atlas: jnp.ndarray,
+        machine_atlas: jnp.ndarray,
+        player_sprite: jnp.ndarray,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """HUD output should be 2x map height (map + HUD panel)."""
+        img = render_full_hud(
+            single_state, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+        map_px = MAP_SIZE * TILE_PX
+        assert img.shape == (2 * map_px, map_px, 3)
+        assert img.dtype == jnp.uint8
+
+    def test_hud_has_content(
+        self,
+        block_atlas: jnp.ndarray,
+        machine_atlas: jnp.ndarray,
+        player_sprite: jnp.ndarray,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """HUD panel with items should not be uniformly dark."""
+        level = LevelBuilder(MAP_SIZE, MAP_SIZE).build("hud_content")
+        level.player_inventory = [(int(ItemType.IRON), 42)]
+        p = EnvParams(
+            map_width=MAP_SIZE,
+            map_height=MAP_SIZE,
+            num_players=1,
+            max_timesteps=10,
+            max_biters=1,
+        )
+        state = build_state(level, p)
+        img = np.array(
+            render_full_hud(
+                state, block_atlas, machine_atlas, player_sprite,
+                item_colors, digit_atlas,
+            )
+        )
+        # The bottom half (HUD) should have some bright pixels.
+        map_px = MAP_SIZE * TILE_PX
+        hud_region = img[map_px:, :, :]
+        assert hud_region.max() > 50
+
+    def test_vmap_hud(
+        self,
+        params: EnvParams,
+        block_atlas: jnp.ndarray,
+        machine_atlas: jnp.ndarray,
+        player_sprite: jnp.ndarray,
+        item_colors: jnp.ndarray,
+        digit_atlas: jnp.ndarray,
+    ) -> None:
+        """Vmapped full HUD render should produce correct batch shape."""
+        n = 2
+        _, states = make_batched_envs(n, params)
+        vmap_render = jax.jit(
+            jax.vmap(
+                render_full_hud,
+                in_axes=(0, None, None, None, None, None),
+            )
+        )
+        imgs = vmap_render(
+            states, block_atlas, machine_atlas, player_sprite,
+            item_colors, digit_atlas,
+        )
+        map_px = MAP_SIZE * TILE_PX
+        assert imgs.shape == (n, 2 * map_px, map_px, 3)
