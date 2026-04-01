@@ -44,6 +44,32 @@ def _render_frames_from_states(
     return [render_pixels(s, block_pixel_size=24) for s in env_states]
 
 
+def _render_jax_hud_frames(
+    traj: Trajectory, episode: int, state: InspectorState
+) -> list[np.ndarray] | None:
+    """Render JAX HUD frames from trajectory state data.
+
+    Uses the JaxRenderer stored in inspector state to render the
+    map + 4-quadrant HUD for each timestep. Returns numpy arrays
+    for display via pygame.
+
+    Args:
+        traj: Loaded trajectory.
+        episode: Episode index.
+        state: Inspector state with jax_renderer.
+
+    Returns:
+        List of RGB frames, or None if state data or renderer missing.
+    """
+    if traj.block_map is None or state.jax_renderer is None:
+        return None
+    from factoriax.analysis.trajectory import trajectory_to_states
+
+    env_states = trajectory_to_states(traj, episode=episode)
+    renderer = state.jax_renderer
+    return [np.array(renderer.jit_render_hud(s)) for s in env_states]
+
+
 def _build_frames(
     traj: Trajectory,
     state: InspectorState,
@@ -78,9 +104,13 @@ def main(path: str, level_path: str | None = None) -> None:
     pygame.init()
 
     traj = Trajectory.load(path)
-    state = InspectorState()
+
+    from factoriax.jax_renderer import JaxRenderer
+
+    state = InspectorState(jax_renderer=JaxRenderer(tile_px=8))
 
     frames = _build_frames(traj, state, level_path)
+    state.jax_hud_frames = _render_jax_hud_frames(traj, state.selected_episode, state)
     if frames is not None:
         print(f"Rendered {len(frames)} frames.")
     elif traj.block_map is None and level_path is None:
@@ -117,6 +147,9 @@ def main(path: str, level_path: str | None = None) -> None:
         state.selected_player = 0
         state.playing = False
         frames = _build_frames(traj, state, level_path)
+        state.jax_hud_frames = _render_jax_hud_frames(
+            traj, state.selected_episode, state
+        )
         rebuild_caches(traj, state, base_w)
         _update_caption(path, traj, state)
 
@@ -124,12 +157,18 @@ def main(path: str, level_path: str | None = None) -> None:
         nonlocal frames, level_path
         level_path = new_level_path
         frames = _build_frames(traj, state, level_path)
+        state.jax_hud_frames = _render_jax_hud_frames(
+            traj, state.selected_episode, state
+        )
 
     def _on_episode_change() -> None:
         nonlocal frames
         state.current_step = 0
         state.playing = False
         frames = _build_frames(traj, state, level_path)
+        state.jax_hud_frames = _render_jax_hud_frames(
+            traj, state.selected_episode, state
+        )
         rebuild_caches(traj, state, base_w)
         _update_caption(path, traj, state)
 

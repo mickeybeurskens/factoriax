@@ -146,18 +146,56 @@ def render_frame(
     ih = min(info.shape[0], canvas_h)
     frame[y_off : y_off + ih, :INFO_PANEL_WIDTH] = info[:ih]
 
-    # Game world area.
+    # Game world area: split into 4 quadrants.
+    # Q1 (top-left):  CPU renderer (existing player UI)
+    # Q2 (top-right): JAX renderer (GPU HUD visualization)
+    # Q3 (bot-left):  Future visualization (placeholder)
+    # Q4 (bot-right): Future visualization (placeholder)
     world_x = INFO_PANEL_WIDTH
     world_y = MENU_BAR_HEIGHT
-    frame[world_y : world_y + canvas_h, world_x : world_x + canvas_w] = (20, 20, 25)
+    half_w = canvas_w // 2
+    half_h = canvas_h // 2
+
+    # Fill all quadrants with dark background.
+    frame[world_y : world_y + canvas_h, world_x : world_x + canvas_w] = (
+        20, 20, 25,
+    )
+
+    # Q1: CPU renderer (top-left).
     if frames is not None and state.current_step < len(frames):
         game_img = frames[state.current_step]
-        # Apply fog-of-war for LOCAL observations.
         if state.show_obs_overlay:
             game_img = _maybe_apply_fog(game_img, traj, state)
-        _blit_game_frame(frame, game_img, world_x, world_y, canvas_w, canvas_h)
+        _blit_game_frame(
+            frame, game_img, world_x, world_y, half_w, half_h
+        )
     elif traj.positions is not None:
-        _draw_world(frame, traj, state, world_x, world_y, canvas_w, canvas_h)
+        _draw_world(
+            frame, traj, state, world_x, world_y, half_w, half_h
+        )
+
+    # Q2: JAX HUD renderer (top-right).
+    jax_frames = state.jax_hud_frames
+    if jax_frames is not None and state.current_step < len(jax_frames):
+        _blit_game_frame(
+            frame, jax_frames[state.current_step],
+            world_x + half_w, world_y, half_w, half_h,
+        )
+
+    # Q3 and Q4: placeholder labels.
+    _draw_quadrant_label(frame, world_x, world_y + half_h, half_w, half_h, "Q3")
+    _draw_quadrant_label(
+        frame, world_x + half_w, world_y + half_h, half_w, half_h, "Q4"
+    )
+
+    # Draw quadrant dividers (1px lines).
+    divider_color = (60, 60, 60)
+    # Horizontal divider.
+    mid_y = world_y + half_h
+    frame[mid_y, world_x : world_x + canvas_w] = divider_color
+    # Vertical divider.
+    mid_x = world_x + half_w
+    frame[world_y : world_y + canvas_h, mid_x] = divider_color
 
     # Timeline.
     tl_y = MENU_BAR_HEIGHT + canvas_h
@@ -355,3 +393,44 @@ def _draw_world(
                     fy, fx = cy + dy, cx + dx
                     if 0 <= fy < frame.shape[0] and 0 <= fx < frame.shape[1]:
                         frame[fy, fx] = body_color
+
+
+def _draw_quadrant_label(
+    frame: np.ndarray,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    label: str,
+) -> None:
+    """Draw a dim label in the center of a quadrant placeholder.
+
+    Renders a simple blocky text label so empty quadrants aren't just
+    black voids. Uses raw pixel writes (no font dependency).
+
+    Args:
+        frame: RGB image to draw on.
+        x: Left edge of the quadrant.
+        y: Top edge of the quadrant.
+        w: Quadrant width.
+        h: Quadrant height.
+        label: Short label string (e.g. "Q3").
+    """
+    color = (50, 50, 55)
+    # Simple 3x5 glyphs for Q, 3, 4.
+    glyphs = {
+        "Q": [0b111, 0b101, 0b101, 0b111, 0b010],
+        "3": [0b111, 0b001, 0b111, 0b001, 0b111],
+        "4": [0b101, 0b101, 0b111, 0b001, 0b001],
+    }
+    cx = x + w // 2 - len(label) * 2
+    cy = y + h // 2 - 2
+    for ci, ch in enumerate(label):
+        rows = glyphs.get(ch, [0] * 5)
+        for row_idx, row_bits in enumerate(rows):
+            for col_idx in range(3):
+                if row_bits & (1 << (2 - col_idx)):
+                    px = cx + ci * 4 + col_idx
+                    py = cy + row_idx
+                    if 0 <= py < frame.shape[0] and 0 <= px < frame.shape[1]:
+                        frame[py, px] = color

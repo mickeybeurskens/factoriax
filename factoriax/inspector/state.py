@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from factoriax.jax_renderer import JaxRenderer
 
 
 @dataclasses.dataclass
@@ -20,6 +24,8 @@ class InspectorState:
         reward_chart_cache: Pre-rendered reward chart RGB image.
         action_strip_cache: Pre-rendered action color strip RGB image.
         timeline_dragging: Whether the user is scrubbing the timeline.
+        jax_renderer: JaxRenderer for GPU-rendered HUD frames.
+        jax_hud_frames: Pre-rendered JAX HUD frames (list of RGB arrays).
     """
 
     current_step: int = 0
@@ -34,3 +40,5 @@ class InspectorState:
     timeline_dragging: bool = False
     show_help: bool = False
     show_obs_overlay: bool = True
+    jax_renderer: JaxRenderer | None = None
+    jax_hud_frames: list[np.ndarray] | None = None
