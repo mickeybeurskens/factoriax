@@ -92,7 +92,25 @@ def render_reward_chart(
     ax.set_xlabel("Step", fontsize=8, color="#aaaaaa")
     ax.set_ylabel("Reward", fontsize=8, color="#aaaaaa")
     fig.tight_layout(pad=0.5)
-    return _fig_to_rgb(fig, width, height)
+
+    # Lock the x-axis to exactly [0, total_steps-1] so there's no extra
+    # padding beyond the data range. Then find the plot area bounds.
+    total_steps = len(traj.rewards[episode]) if traj.rewards is not None else 1
+    ax.set_xlim(0, max(1, total_steps - 1))
+    fig.canvas.draw()
+
+    # Get the plot area left/right as fractions of the figure width.
+    # Using the axis bounding box (in figure-relative coords 0..1).
+    bbox = ax.get_position()
+    # Store as uint8 values 0-255 representing 0.0-1.0 fractions.
+    frac_x0 = int(bbox.x0 * 255)
+    frac_x1 = int(bbox.x1 * 255)
+
+    img = _fig_to_rgb(fig, width, height)
+    # Embed fractional bounds in pixel (0,0) and (0,1) red channel.
+    img[0, 0, 0] = min(max(frac_x0, 1), 255)
+    img[0, 1, 0] = min(max(frac_x1, 1), 255)
+    return img
 
 
 def render_action_strip(
@@ -317,6 +335,12 @@ def draw_cursor(
 ) -> np.ndarray:
     """Draw a vertical cursor line on a chart image (returns a copy).
 
+    If the image has plot area bounds embedded in pixels (0,0) and
+    (0,1) by render_reward_chart, the cursor is mapped to the plot
+    area rather than the full image width. Otherwise falls back to
+    full-width mapping (correct for the action strip which has no
+    margins).
+
     Args:
         img: Source RGB image.
         step: Current step index.
@@ -329,7 +353,23 @@ def draw_cursor(
     result = img.copy()
     if total_steps <= 0:
         return result
-    x = int(step * (img.shape[1] - 1) / max(1, total_steps - 1))
+
+    # Check for embedded plot area bounds (fractional, stored as 0-255
+    # in the red channel of the top-left two pixels).
+    frac_x0 = int(img[0, 0, 0])
+    frac_x1 = int(img[0, 1, 0])
+    w = img.shape[1]
+    if frac_x0 > 0 and frac_x1 > frac_x0:
+        # Decode fractions to pixel positions.
+        plot_x0 = int(frac_x0 / 255.0 * w)
+        plot_x1 = int(frac_x1 / 255.0 * w)
+        x = plot_x0 + int(
+            step * (plot_x1 - plot_x0) / max(1, total_steps - 1)
+        )
+    else:
+        # No bounds embedded: assume full width (action strip etc.)
+        x = int(step * (w - 1) / max(1, total_steps - 1))
+
     x = max(0, min(x, img.shape[1] - 1))
     result[:, x] = color
     if x + 1 < img.shape[1]:
