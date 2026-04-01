@@ -55,7 +55,7 @@ NUM_STEPS = 200  # timesteps to render per benchmark run
 # Geometrically spaced batch sizes from 1 to 2048. Powers of two are natural
 # for GPU workloads because warp/wavefront sizes are powers of two, and
 # non-power-of-two batches waste partial warps.
-BATCH_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+MAX_BATCH_POWER = 13  # Try up to 2^13 = 8192 before giving up.
 
 
 # ===================================================================
@@ -526,6 +526,294 @@ def collect_states(
     return collected
 
 
+def benchmark_jax_render_inline(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+) -> float:
+    """Benchmark JAX rendering with inline stepping (no state storage).
+
+    Steps and renders one timestep at a time, keeping only the current
+    state in VRAM. This avoids OOM at large batch sizes. The step cost
+    is included in the timing, but it's small relative to the render
+    cost at large batches. Compare against the pre-collected approach
+    at overlapping batch sizes to quantify the overhead.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+
+    Returns:
+        Wall-clock seconds for all step+render calls (excluding warmup).
+    """
+    env = FactoriaXEnv()
+    _, states = make_batched_envs(n_envs, params)
+
+    vmap_step = jax.jit(
+        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
+    )
+    vmap_render = jax.jit(
+        jax.vmap(render_jax, in_axes=(0, None, None, None))
+    )
+
+    # Warmup both kernels.
+    rng = jax.random.key(99)
+    rng, k_a, k_s = jax.random.split(rng, 3)
+    actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+    step_keys = jax.random.split(k_s, n_envs)
+    _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+    result = vmap_render(states, block_atlas, machine_atlas, player_sprite)
+    jax.block_until_ready(result)
+
+    # Timed loop: step then render, discard frames immediately.
+    t0 = time.perf_counter()
+    for _ in range(num_steps):
+        rng, k_a, k_s = jax.random.split(rng, 3)
+        actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+        step_keys = jax.random.split(k_s, n_envs)
+        _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+        result = vmap_render(states, block_atlas, machine_atlas, player_sprite)
+    jax.block_until_ready(result)
+    t1 = time.perf_counter()
+    return t1 - t0
+
+
+def benchmark_vector_step(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+) -> float:
+    """Benchmark vmapped env stepping only (no rendering).
+
+    Measures the pure simulation throughput as a ceiling for what
+    rendering could achieve if it were free.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+
+    Returns:
+        Wall-clock seconds for all step calls (excluding warmup).
+    """
+    env = FactoriaXEnv()
+    _, states = make_batched_envs(n_envs, params)
+
+    vmap_step = jax.jit(
+        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
+    )
+
+    # Warmup.
+    rng = jax.random.key(77)
+    rng, k_a, k_s = jax.random.split(rng, 3)
+    actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+    step_keys = jax.random.split(k_s, n_envs)
+    _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+    jax.block_until_ready(jax.tree.leaves(states))
+
+    t0 = time.perf_counter()
+    for _ in range(num_steps):
+        rng, k_a, k_s = jax.random.split(rng, 3)
+        actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
+        step_keys = jax.random.split(k_s, n_envs)
+        _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+    jax.block_until_ready(jax.tree.leaves(states))
+    t1 = time.perf_counter()
+    return t1 - t0
+
+
+def benchmark_cpu_step(
+    params: EnvParams,
+    num_steps: int,
+) -> float:
+    """Benchmark env stepping on CPU with a single environment.
+
+    Runs step_env on the CPU JAX backend for one environment, giving
+    the serial per-step cost. This is the true CPU simulation baseline
+    to compare against GPU-batched stepping.
+
+    Args:
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+
+    Returns:
+        Wall-clock seconds for all step calls (excluding warmup).
+    """
+    cpu_device = jax.devices("cpu")[0]
+    env = FactoriaXEnv()
+
+    with jax.default_device(cpu_device):
+        key = jax.random.key(55)
+        _, state = env.reset_env(key, params)
+        step_fn = jax.jit(env.step_env, device=cpu_device)
+
+        # Warmup: JIT compile on CPU.
+        rng = jax.random.key(56)
+        rng, k_a, k_s = jax.random.split(rng, 3)
+        action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
+        _, state, _, _, _ = step_fn(k_s, state, action, params)
+        jax.block_until_ready(jax.tree.leaves(state))
+
+        t0 = time.perf_counter()
+        for _ in range(num_steps):
+            rng, k_a, k_s = jax.random.split(rng, 3)
+            action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
+            _, state, _, _, _ = step_fn(k_s, state, action, params)
+        jax.block_until_ready(jax.tree.leaves(state))
+        t1 = time.perf_counter()
+
+    return t1 - t0
+
+
+def benchmark_cpu_step_render(
+    params: EnvParams,
+    num_steps: int,
+    tile_px: int,
+) -> float:
+    """Benchmark stepping + NumPy rendering on CPU for a single env.
+
+    This is the true serial baseline: one env, CPU JAX step, then
+    NumPy render_pixels each iteration. The number you'd get if you
+    ran evaluation today without any GPU rendering.
+
+    Args:
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        tile_px: Tile pixel size for render_pixels.
+
+    Returns:
+        Wall-clock seconds for all step+render calls (excluding warmup).
+    """
+    cpu_device = jax.devices("cpu")[0]
+    env = FactoriaXEnv()
+
+    with jax.default_device(cpu_device):
+        key = jax.random.key(55)
+        _, state = env.reset_env(key, params)
+        step_fn = jax.jit(env.step_env, device=cpu_device)
+
+        # Warmup.
+        rng = jax.random.key(56)
+        rng, k_a, k_s = jax.random.split(rng, 3)
+        action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
+        _, state, _, _, _ = step_fn(k_s, state, action, params)
+        jax.block_until_ready(jax.tree.leaves(state))
+        render_pixels(state, block_pixel_size=tile_px)
+
+        t0 = time.perf_counter()
+        for _ in range(num_steps):
+            rng, k_a, k_s = jax.random.split(rng, 3)
+            action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
+            _, state, _, _, _ = step_fn(k_s, state, action, params)
+            render_pixels(state, block_pixel_size=tile_px)
+        jax.block_until_ready(jax.tree.leaves(state))
+        t1 = time.perf_counter()
+
+    return t1 - t0
+
+
+def try_inline_step_render(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+) -> float | None:
+    """Try benchmark_jax_render_inline, returning None on OOM.
+
+    Wraps the inline benchmark in a try/except so the auto-scaling
+    loop can probe increasingly large batch sizes until the GPU runs
+    out of memory. JAX raises RuntimeError or JaxRuntimeError on OOM
+    during kernel execution (not during tracing), so we catch both.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+
+    Returns:
+        Wall-clock seconds, or None if the batch size caused OOM.
+    """
+    try:
+        return benchmark_jax_render_inline(
+            n_envs, params, num_steps,
+            block_atlas, machine_atlas, player_sprite,
+        )
+    except (RuntimeError, jax.errors.JaxRuntimeError):
+        return None
+
+
+def try_vector_step(
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
+) -> float | None:
+    """Try benchmark_vector_step, returning None on OOM.
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps.
+
+    Returns:
+        Wall-clock seconds, or None if the batch size caused OOM.
+    """
+    try:
+        return benchmark_vector_step(n_envs, params, num_steps)
+    except (RuntimeError, jax.errors.JaxRuntimeError):
+        return None
+
+
+def discover_scaling(
+    run_fn: callable,
+    label: str,
+    log_fn: callable,
+) -> dict[int, float]:
+    """Double batch size until OOM, recording fps at each step.
+
+    Starts at batch=1 and doubles each iteration (1, 2, 4, 8, ...),
+    calling run_fn(n_envs) for each. If run_fn returns None (OOM),
+    stops and returns the results collected so far.
+
+    Args:
+        run_fn: Callable(n_envs) -> seconds | None.
+        label: Human label for log output (e.g. "step+render").
+        log_fn: Logging function with same signature as print.
+
+    Returns:
+        Dict mapping batch_size -> fps for all successful runs.
+    """
+    results: dict[int, float] = {}
+    header = f"{'n_envs':>8} | {'time (s)':>10} | {'fps':>12}"
+    log_fn(f"--- {label} ---")
+    log_fn(header)
+    log_fn("-" * len(header))
+
+    for power in range(MAX_BATCH_POWER + 1):
+        n = 1 << power  # 2^power
+        elapsed = run_fn(n)
+        if elapsed is None:
+            log_fn(f"{n:>8} | {'OOM':>10} |")
+            break
+        total_frames = n * NUM_STEPS
+        fps = total_frames / elapsed if elapsed > 0 else float("inf")
+        results[n] = fps
+        log_fn(f"{n:>8} | {elapsed:>10.3f} | {fps:>12,.0f}")
+
+    return results
+
+
 def save_sample_images(
     params: EnvParams,
     block_atlas: jnp.ndarray,
@@ -575,48 +863,80 @@ def save_sample_images(
 
 def save_bar_chart(
     cpu_fps: float,
-    jax_results: dict[int, float],
+    jax_render_fps: dict[int, float],
+    vector_fps: dict[int, float],
     output_dir: Path,
 ) -> None:
-    """Save a bar chart comparing CPU vs JAX render throughput.
+    """Save a grouped bar chart comparing CPU, JAX render, and vector step.
 
-    The x-axis shows "CPU" plus each JAX batch size. The y-axis shows
-    frames per second (rendered frames / wall-clock seconds).
+    Three series plotted as steps/second (y, log scale) vs batch size (x):
+      - CPU render (single bar, the baseline)
+      - JAX render (one bar per batch size)
+      - Vector step only (one bar per batch size, no rendering)
 
     Args:
         cpu_fps: CPU renderer throughput (frames/s), measured at batch=1.
-        jax_results: Mapping of batch_size -> JAX fps.
+        jax_render_fps: Mapping of batch_size -> JAX render fps.
+        vector_fps: Mapping of batch_size -> vector step-only fps.
         output_dir: Directory to write the chart into.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    labels = ["CPU"] + [str(n) for n in sorted(jax_results)]
-    values = [cpu_fps] + [jax_results[n] for n in sorted(jax_results)]
-    colors = ["#d45f5f"] + ["#5f8fd4"] * len(jax_results)
+    # Union of all batch sizes across both series, sorted.
+    all_sizes = sorted(set(jax_render_fps) | set(vector_fps))
+    x_labels = ["CPU"] + [str(n) for n in all_sizes]
+    x = np.arange(len(x_labels))
+    width = 0.35
 
-    fig, ax = plt.subplots(figsize=(12, 5))
-    bars = ax.bar(labels, values, color=colors, edgecolor="white", linewidth=0.5)
+    render_vals = [cpu_fps] + [
+        jax_render_fps.get(n, 0) for n in all_sizes
+    ]
+    vector_vals = [0] + [vector_fps.get(n, 0) for n in all_sizes]
 
-    ax.set_xlabel("Renderer (JAX batch size)", fontsize=12)
-    ax.set_ylabel("Frames per second", fontsize=12)
+    fig, ax = plt.subplots(figsize=(14, 5))
+
+    bars_render = ax.bar(
+        x - width / 2, render_vals, width,
+        label="JAX render (step+render)", color="#5f8fd4",
+        edgecolor="white", linewidth=0.5,
+    )
+    # Color the CPU bar differently.
+    bars_render[0].set_color("#d45f5f")
+    bars_render[0].set_label("CPU render")
+
+    bars_vector = ax.bar(
+        x + width / 2, vector_vals, width,
+        label="Vector step only (no render)", color="#5fbf5f",
+        edgecolor="white", linewidth=0.5,
+    )
+
+    ax.set_xlabel("Batch size", fontsize=12)
+    ax.set_ylabel("Steps per second", fontsize=12)
     ax.set_title(
-        f"Render throughput: CPU vs JAX  "
+        f"Throughput: CPU render vs JAX render vs vector step  "
         f"({MAP_SIZE}x{MAP_SIZE} map, {TILE_PX}px tiles, {NUM_STEPS} steps)",
         fontsize=13,
     )
     ax.set_yscale("log")
+    ax.set_xticks(x)
+    ax.set_xticklabels(x_labels)
     ax.grid(axis="y", alpha=0.3)
+    ax.legend(fontsize=10)
 
     # Value labels on top of each bar.
-    for bar, val in zip(bars, values):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() * 1.08,
-            f"{val:,.0f}",
-            ha="center",
-            va="bottom",
-            fontsize=8,
-        )
+    for bar_group in [bars_render, bars_vector]:
+        for bar in bar_group:
+            val = bar.get_height()
+            if val > 0:
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    val * 1.12,
+                    f"{val:,.0f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=6,
+                    rotation=45,
+                )
 
     fig.tight_layout()
     path = output_dir / "benchmark_chart.png"
@@ -625,13 +945,100 @@ def save_bar_chart(
     print(f"Bar chart saved to {path}")
 
 
+def save_step_render_chart(
+    cpu_fps: float,
+    _cpu_fps_unused: float,
+    step_render_fps: dict[int, float],
+    vector_fps: dict[int, float],
+    output_dir: Path,
+) -> None:
+    """Save a stacked bar chart decomposing step vs render time.
+
+    For each batch size where both step+render and step-only data exist,
+    the bar is split into two segments:
+      - Bottom (blue): step+render fps (the usable throughput).
+      - Top (green): render overhead (step_only - step_render fps).
+
+    A horizontal dashed line shows the CPU step+render baseline.
+
+    Args:
+        cpu_fps: CPU step+render throughput (fps), single env.
+        _cpu_fps_unused: Kept for API compat, same as cpu_fps.
+        step_render_fps: Mapping of batch_size -> step+render fps.
+        vector_fps: Mapping of batch_size -> step-only fps.
+        output_dir: Directory to write the chart into.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use batch sizes present in both series.
+    common_sizes = sorted(set(step_render_fps) & set(vector_fps))
+    if not common_sizes:
+        return
+
+    labels = [str(n) for n in common_sizes]
+    x = np.arange(len(labels))
+
+    sr_vals = np.array([step_render_fps[n] for n in common_sizes])
+    v_vals = np.array([vector_fps[n] for n in common_sizes])
+    headroom = np.maximum(v_vals - sr_vals, 0)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    ax.bar(
+        x, sr_vals, color="#5f8fd4", edgecolor="white", linewidth=0.5,
+        label="Step + render (usable fps)",
+    )
+    ax.bar(
+        x, headroom, bottom=sr_vals, color="#5fbf5f",
+        edgecolor="white", linewidth=0.5,
+        label="Render overhead (fps lost to rendering)",
+    )
+
+    # CPU baseline.
+    ax.axhline(
+        cpu_fps, color="#d45f5f", linestyle="--", linewidth=1.5,
+        label=f"CPU step+render ({cpu_fps:,.0f} fps)",
+    )
+
+    # Labels on bars.
+    for i, (sr, v) in enumerate(zip(sr_vals, v_vals)):
+        ax.text(
+            x[i], v * 1.05, f"{v:,.0f}",
+            ha="center", va="bottom", fontsize=7, color="#3a7a3a",
+        )
+        if sr > 100:
+            ax.text(
+                x[i], sr * 0.75, f"{sr:,.0f}",
+                ha="center", va="top", fontsize=7, color="white",
+                fontweight="bold",
+            )
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Batch size (envs)", fontsize=12)
+    ax.set_ylabel("Steps per second", fontsize=12)
+    ax.set_title(
+        f"Throughput breakdown: step cost vs render cost  "
+        f"({MAP_SIZE}x{MAP_SIZE} map, {TILE_PX}px tiles, {NUM_STEPS} steps)",
+        fontsize=13,
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend(fontsize=9)
+
+    fig.tight_layout()
+    path = output_dir / "throughput_step_render.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Step+render chart saved to {path}")
+
+
 def main() -> None:
     """Run the full benchmark suite."""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path("scripts/batch_results") / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Open a log file that mirrors all printed output.
     log_path = output_dir / "benchmark.log"
     log_lines: list[str] = []
 
@@ -652,7 +1059,7 @@ def main() -> None:
     log(f"Map size: {MAP_SIZE}x{MAP_SIZE}, Tile pixels: {TILE_PX}px")
     log(f"Image size: {MAP_SIZE * TILE_PX}x{MAP_SIZE * TILE_PX}px")
     log(f"Steps per run: {NUM_STEPS}")
-    log(f"Batch sizes: {BATCH_SIZES}")
+    log(f"Max batch power: 2^{MAX_BATCH_POWER} = {1 << MAX_BATCH_POWER}")
     log(f"JAX devices: {jax.devices()}")
     log(f"Output dir: {output_dir}")
     log()
@@ -662,13 +1069,10 @@ def main() -> None:
         map_height=MAP_SIZE,
         num_players=1,
         max_timesteps=NUM_STEPS,
-        # Disable biters so stepping is cheaper and we isolate render cost.
         nest_probability=0.0,
         max_biters=1,
     )
 
-    # Build texture atlases once. These are small arrays that live on device
-    # for the entire benchmark.
     block_atlas = build_block_atlas(TILE_PX)
     machine_atlas = build_machine_atlas(TILE_PX)
     player_sprite = build_player_atlas(TILE_PX)
@@ -678,52 +1082,38 @@ def main() -> None:
         params, block_atlas, machine_atlas, player_sprite, output_dir
     )
 
-    # --- Benchmark loop ---
-    # We measure CPU fps once at batch=1 (it scales linearly since it's
-    # a serial Python loop, so per-frame cost is constant).
-    log("Measuring CPU baseline (batch=1)...", end="", flush=True)
-    cpu_states = collect_states(1, params, NUM_STEPS)
-    cpu_time = benchmark_cpu_render(cpu_states, 1, TILE_PX)
-    cpu_fps = NUM_STEPS / cpu_time if cpu_time > 0 else float("inf")
-    log(f" {cpu_fps:,.0f} fps ({cpu_time:.3f}s)")
-    del cpu_states
-
-    jax_results: dict[int, float] = {}
-    jax_times: dict[int, float] = {}
-
+    # ---- CPU baseline: step + render (single env, serial) ----
+    log("Measuring CPU step+render baseline (1 env)...", end="", flush=True)
+    cpu_sr_time = benchmark_cpu_step_render(params, NUM_STEPS, TILE_PX)
+    cpu_sr_fps = NUM_STEPS / cpu_sr_time
+    log(f" {cpu_sr_fps:,.0f} fps ({cpu_sr_time:.3f}s)")
     log()
-    header = (
-        f"{'n_envs':>8} | {'JAX (s)':>10} | {'JAX fps':>12} | {'vs CPU':>8}"
+
+    # ---- Auto-discover step+render scaling ----
+    step_render_fps = discover_scaling(
+        run_fn=lambda n: try_inline_step_render(
+            n, params, NUM_STEPS,
+            block_atlas, machine_atlas, player_sprite,
+        ),
+        label="Step + JAX Render (inline, doubles until OOM)",
+        log_fn=log,
     )
-    log(header)
-    log("-" * len(header))
+    log()
 
-    for n in BATCH_SIZES:
-        log(f"  Collecting {n} x {NUM_STEPS} states...", end="", flush=True)
-        states = collect_states(n, params, NUM_STEPS)
-        log(" done.")
+    # ---- Auto-discover vector step-only scaling ----
+    vector_fps = discover_scaling(
+        run_fn=lambda n: try_vector_step(n, params, NUM_STEPS),
+        label="Vector Step Only (no render, doubles until OOM)",
+        log_fn=log,
+    )
 
-        jax_time = benchmark_jax_render(
-            states, block_atlas, machine_atlas, player_sprite
-        )
+    # ---- Save outputs ----
+    save_bar_chart(cpu_sr_fps, step_render_fps, vector_fps, output_dir)
+    save_step_render_chart(
+        cpu_sr_fps, cpu_sr_fps,
+        step_render_fps, vector_fps, output_dir,
+    )
 
-        total_frames = n * NUM_STEPS
-        jax_fps = total_frames / jax_time if jax_time > 0 else float("inf")
-        speedup = jax_fps / cpu_fps if cpu_fps > 0 else float("inf")
-        jax_results[n] = jax_fps
-        jax_times[n] = jax_time
-
-        log(
-            f"{n:>8} | {jax_time:>10.3f} | {jax_fps:>12,.0f} | "
-            f"{speedup:>7.1f}x"
-        )
-
-        del states
-
-    # --- Save bar chart ---
-    save_bar_chart(cpu_fps, jax_results, output_dir)
-
-    # --- Write log file ---
     log()
     log(f"All results saved to {output_dir}/")
     log_path.write_text("".join(log_lines))
