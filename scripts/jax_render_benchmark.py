@@ -1572,49 +1572,55 @@ def benchmark_cpu_step_render(
     params: EnvParams,
     num_steps: int,
     tile_px: int,
+    log_fn: object = None,
 ) -> float:
-    """Benchmark single-env step + NumPy render as the serial baseline.
+    """Benchmark single-env step + NumPy render on the CPU backend.
 
-    Uses vmapped step at batch=1 so the JIT compilation is shared with
-    the scaling runs (avoids a separate 20+ min non-vmapped compilation).
-    Renders with the NumPy CPU renderer each frame. This represents the
-    "current approach" throughput: one env, sequential step + CPU render.
+    Runs step_env JIT-compiled on the CPU device for one environment,
+    then renders with the NumPy renderer each frame. This is the true
+    serial CPU baseline.
+
+    The CPU XLA compilation of step_env is slow (~5-15 min depending
+    on hardware) because the function is large. Progress is printed
+    via log_fn so it's not a silent hang.
 
     Args:
         params: Environment parameters.
         num_steps: Number of timesteps.
         tile_px: Tile pixel size for render_pixels.
+        log_fn: Optional logging function for progress messages.
 
     Returns:
         Wall-clock seconds for all step+render calls (excluding warmup).
     """
+    _log = log_fn or (lambda *a, **kw: None)
+
+    cpu_device = jax.devices("cpu")[0]
     env = FactoriaXEnv()
-    _, states = make_batched_envs(1, params)
 
-    vmap_step = jax.jit(
-        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
-    )
+    with jax.default_device(cpu_device):
+        key = jax.random.key(55)
+        _, state = env.reset_env(key, params)
+        step_fn = jax.jit(env.step_env, device=cpu_device)
 
-    # Warmup.
-    rng = jax.random.key(56)
-    rng, k_a, k_s = jax.random.split(rng, 3)
-    actions = jax.random.randint(k_a, (1,), 0, params.NUM_ACTIONS)
-    step_keys = jax.random.split(k_s, 1)
-    _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
-    jax.block_until_ready(jax.tree.leaves(states))
-    state0 = extract_single_state(states, 0)
-    render_pixels(state0, block_pixel_size=tile_px)
-
-    t0 = time.perf_counter()
-    for _ in range(num_steps):
+        # Warmup: triggers CPU XLA compilation (slow).
+        _log(" compiling on CPU...", end="", flush=True)
+        rng = jax.random.key(56)
         rng, k_a, k_s = jax.random.split(rng, 3)
-        actions = jax.random.randint(k_a, (1,), 0, params.NUM_ACTIONS)
-        step_keys = jax.random.split(k_s, 1)
-        _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
-        jax.block_until_ready(jax.tree.leaves(states))
-        state0 = extract_single_state(states, 0)
-        render_pixels(state0, block_pixel_size=tile_px)
-    t1 = time.perf_counter()
+        action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
+        _, state, _, _, _ = step_fn(k_s, state, action, params)
+        jax.block_until_ready(jax.tree.leaves(state))
+        render_pixels(state, block_pixel_size=tile_px)
+        _log(" done.", end="", flush=True)
+
+        t0 = time.perf_counter()
+        for _ in range(num_steps):
+            rng, k_a, k_s = jax.random.split(rng, 3)
+            action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
+            _, state, _, _, _ = step_fn(k_s, state, action, params)
+            jax.block_until_ready(jax.tree.leaves(state))
+            render_pixels(state, block_pixel_size=tile_px)
+        t1 = time.perf_counter()
 
     return t1 - t0
 
@@ -1932,7 +1938,7 @@ def main() -> None:
 
     # ---- CPU baseline: step + render (single env, serial) ----
     log("Measuring CPU step+render baseline (1 env)...", end="", flush=True)
-    cpu_sr_time = benchmark_cpu_step_render(params, NUM_STEPS, TILE_PX)
+    cpu_sr_time = benchmark_cpu_step_render(params, NUM_STEPS, TILE_PX, log)
     cpu_sr_fps = NUM_STEPS / cpu_sr_time
     log(f" {cpu_sr_fps:,.0f} fps ({cpu_sr_time:.3f}s)")
     log()
