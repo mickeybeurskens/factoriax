@@ -1,0 +1,733 @@
+"""JAX parallel renderer benchmark for FactoriaX.
+
+This script compares two rendering approaches for FactoriaX environments:
+
+  1. CPU renderer (existing): NumPy-based `render_pixels()` called once per
+     environment in a Python loop. This is the current approach used for
+     evaluation videos and screenshots.
+
+  2. JAX renderer (new): A pure-JAX renderer that compiles to XLA and can
+     be vmapped across a batch of environment states. Every operation is a
+     JAX array op, so the entire render pipeline runs on GPU in parallel.
+
+The benchmark sweeps from 1 to 2048 parallel environments, steps each for
+200 timesteps, and renders every state. It measures wall-clock time for the
+render calls only (not the env stepping), giving a direct comparison of
+rendering throughput.
+
+The JAX renderer is intentionally simplified compared to the full
+`render_pixels()`. It renders terrain tiles, machine overlays, and player
+sprites, which covers the core compositing patterns. The goal is to prove
+the viability of the approach, not to be pixel-perfect.
+
+Usage:
+    uv run python scripts/jax_render_benchmark.py
+"""
+
+import time
+from pathlib import Path
+
+import jax
+import jax.numpy as jnp
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+
+matplotlib.use("Agg")
+
+from factoriax.constants import (
+    BlockType,
+    Direction,
+    MachineType,
+)
+from factoriax.envs.factoriax_env import FactoriaXEnv
+from factoriax.renderer import render_pixels
+from factoriax.state import EnvParams, EnvState
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+MAP_SIZE = 16  # 16x16 tile grid, small enough for fast iteration
+TILE_PX = 8  # pixels per tile side, gives 128x128 images
+NUM_STEPS = 200  # timesteps to render per benchmark run
+# Geometrically spaced batch sizes from 1 to 2048. Powers of two are natural
+# for GPU workloads because warp/wavefront sizes are powers of two, and
+# non-power-of-two batches waste partial warps.
+BATCH_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+
+
+# ===================================================================
+# SECTION 1: Texture Atlas Construction
+#
+# The key insight for a JAX renderer is that we need all visual assets
+# as JAX arrays *before* JIT compilation. NumPy renderers can call
+# Python functions, load PNGs, use dicts, etc. inside the render loop.
+# JAX cannot: everything must be a static array that XLA can trace.
+#
+# We solve this by building "texture atlases" -- 3D arrays where the
+# first axis is indexed by the enum value (BlockType, MachineType, etc.)
+# and the remaining axes are the pixel data. At render time, we just do
+# atlas[state.map] which is a pure gather operation.
+# ===================================================================
+
+
+def _solid_tile(r: int, g: int, b: int, size: int) -> np.ndarray:
+    """Create a solid-colored square tile.
+
+    Args:
+        r: Red channel (0-255).
+        g: Green channel (0-255).
+        b: Blue channel (0-255).
+        size: Tile side length in pixels.
+
+    Returns:
+        uint8 array of shape (size, size, 3).
+    """
+    tile = np.empty((size, size, 3), dtype=np.uint8)
+    tile[:, :] = (r, g, b)
+    return tile
+
+
+def _circle_tile(
+    r: int, g: int, b: int, bg: tuple[int, int, int], size: int
+) -> np.ndarray:
+    """Create a tile with a filled circle on a background color.
+
+    Used for player and biter sprites. The circle is centered and has
+    radius = size//3, matching the existing renderer's proportions.
+
+    Args:
+        r: Circle red channel.
+        g: Circle green channel.
+        b: Circle blue channel.
+        bg: Background (r, g, b) tuple. Use (0, 0, 0) for sprites that
+            will be alpha-composited (we skip alpha here and use
+            jnp.where compositing instead).
+        size: Tile side length in pixels.
+
+    Returns:
+        uint8 array of shape (size, size, 3).
+    """
+    tile = np.full((size, size, 3), bg, dtype=np.uint8)
+    center = size / 2.0
+    radius_sq = (size / 3.0) ** 2
+    ys, xs = np.mgrid[:size, :size]
+    dist_sq = (xs - center + 0.5) ** 2 + (ys - center + 0.5) ** 2
+    mask = dist_sq <= radius_sq
+    tile[mask] = (r, g, b)
+    return tile
+
+
+def build_block_atlas(tile_px: int) -> jnp.ndarray:
+    """Build a texture atlas for terrain block types.
+
+    The atlas is indexed by BlockType integer values. Each entry is a
+    (tile_px, tile_px, 3) RGB tile. Unknown/invalid block types map to
+    the dirt texture (brown).
+
+    This runs once at startup on CPU, then the result lives as a
+    device-resident JAX array for the lifetime of the benchmark.
+
+    Args:
+        tile_px: Tile side length in pixels.
+
+    Returns:
+        JAX array of shape (num_block_types, tile_px, tile_px, 3).
+    """
+    # Map each BlockType to an RGB color. These match the defaults in
+    # renderer.py's create_default_textures().
+    colors = {
+        BlockType.INVALID: (139, 90, 43),  # brown fallback
+        BlockType.OUT_OF_BOUNDS: (30, 30, 30),
+        BlockType.DIRT: (139, 90, 43),
+        BlockType.WATER: (64, 164, 223),
+        BlockType.IRON: (192, 192, 192),
+        BlockType.COPPER: (184, 115, 51),
+        BlockType.COAL: (54, 54, 54),
+        BlockType.NEST: (90, 40, 60),
+    }
+    num_types = max(colors.keys()) + 1
+    atlas = np.zeros((num_types, tile_px, tile_px, 3), dtype=np.uint8)
+    for block_id, (r, g, b) in colors.items():
+        atlas[int(block_id)] = _solid_tile(r, g, b, tile_px)
+    return jnp.array(atlas)
+
+
+def build_machine_atlas(tile_px: int) -> jnp.ndarray:
+    """Build a texture atlas for machine overlays.
+
+    Same idea as the block atlas but for machines. NONE maps to all-zeros
+    (transparent in our compositing scheme). Each machine type gets a
+    solid color square matching the ITEM_COLORS from constants.py.
+
+    Args:
+        tile_px: Tile side length in pixels.
+
+    Returns:
+        JAX array of shape (num_machine_types, tile_px, tile_px, 3).
+    """
+    colors = {
+        MachineType.NONE: (0, 0, 0),  # "transparent" -- we mask this out
+        MachineType.MINER: (0, 200, 0),
+        MachineType.CHEST: (210, 190, 50),
+        MachineType.ASSEMBLER: (160, 80, 200),
+        MachineType.CONVEYOR_BELT: (220, 180, 50),
+        MachineType.ARM: (80, 120, 200),
+        MachineType.ROCKET: (240, 240, 240),
+    }
+    num_types = max(colors.keys()) + 1
+    atlas = np.zeros((num_types, tile_px, tile_px, 3), dtype=np.uint8)
+    for machine_id, (r, g, b) in colors.items():
+        atlas[int(machine_id)] = _solid_tile(r, g, b, tile_px)
+    return jnp.array(atlas)
+
+
+def build_player_atlas(tile_px: int) -> jnp.ndarray:
+    """Build a texture atlas for player sprites.
+
+    Returns a single player sprite (red circle on black background).
+    In a full implementation you'd have (num_players, num_directions)
+    entries. For the benchmark, one sprite is enough to prove the
+    compositing works.
+
+    Args:
+        tile_px: Tile side length in pixels.
+
+    Returns:
+        JAX array of shape (tile_px, tile_px, 3).
+    """
+    return jnp.array(_circle_tile(255, 100, 100, (0, 0, 0), tile_px))
+
+
+# ===================================================================
+# SECTION 2: Pure-JAX Renderer
+#
+# The renderer is a single pure function: state in, pixels out.
+# No Python control flow, no NumPy, no side effects. This means JAX
+# can trace it, compile it to XLA, and vmap it across a batch dimension.
+#
+# The rendering happens in three compositing layers, back to front:
+#   Layer 1: Terrain tiles (gathered from block atlas via state.map)
+#   Layer 2: Machine overlays (gathered from machine atlas, masked)
+#   Layer 3: Player sprites (scatter-written at player positions)
+#
+# Each layer uses only array indexing, reshaping, and jnp.where for
+# compositing. No alpha blending with floats needed because we use
+# binary masks (machine present / not present, player here / not here).
+# ===================================================================
+
+
+def render_jax(
+    state: EnvState,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+) -> jnp.ndarray:
+    """Render an environment state to an RGB image using pure JAX ops.
+
+    This function is designed to be JIT-compiled and vmapped. Every
+    operation is a JAX primitive (gather, scatter, where, reshape),
+    so XLA can fuse them into efficient GPU kernels.
+
+    The tile pixel size is inferred from the block_atlas shape rather
+    than passed as an argument. This is important because JAX needs
+    shapes to be compile-time constants for reshape operations, and
+    atlas shapes are always static (known at trace time).
+
+    Args:
+        state: A single FactoriaX EnvState.
+        block_atlas: Pre-built block texture atlas, shape
+            (num_block_types, tile_px, tile_px, 3).
+        machine_atlas: Pre-built machine texture atlas, shape
+            (num_machine_types, tile_px, tile_px, 3).
+        player_sprite: Player sprite, shape (tile_px, tile_px, 3).
+
+    Returns:
+        RGB uint8 image of shape (H * tile_px, W * tile_px, 3).
+    """
+    # Infer tile_px from the atlas. Atlas shapes are static (concrete at
+    # trace time) because they're fixed-size arrays, not vmapped over.
+    # This avoids passing tile_px as a traced integer, which would make
+    # reshape fail since JAX needs concrete shape dimensions.
+    tile_px = block_atlas.shape[1]
+    map_h, map_w = state.map.shape
+
+    # --- Layer 1: Terrain ---
+    # state.map has shape (H, W) with integer BlockType values.
+    # block_atlas[state.map] gathers one (tile_px, tile_px, 3) texture
+    # per tile, producing shape (H, W, tile_px, tile_px, 3).
+    # We then rearrange axes to interleave the tile pixels into a
+    # contiguous image: (H, tile_px, W, tile_px, 3) -> (H*tile_px, W*tile_px, 3).
+    safe_map = jnp.clip(state.map, 0, block_atlas.shape[0] - 1)
+    tile_textures = block_atlas[safe_map]  # (H, W, tile_px, tile_px, 3)
+    image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
+        map_h * tile_px, map_w * tile_px, 3
+    )
+
+    # --- Layer 2: Machine overlays ---
+    # Same gather pattern, but we only composite where a machine exists.
+    # Machines are stored on the same (H, W) grid as terrain. We build
+    # the full machine image, then use jnp.where with a per-pixel mask
+    # to blend it onto the terrain.
+    safe_machines = jnp.clip(state.machine_types, 0, machine_atlas.shape[0] - 1)
+    machine_textures = machine_atlas[safe_machines]  # (H, W, tile_px, tile_px, 3)
+    machine_image = machine_textures.transpose(0, 2, 1, 3, 4).reshape(
+        map_h * tile_px, map_w * tile_px, 3
+    )
+    # Build the per-pixel mask: True where a machine is present.
+    # state.machine_types is (H, W). We need (H*tile_px, W*tile_px, 1)
+    # for broadcasting against the 3-channel image.
+    has_machine = (state.machine_types != int(MachineType.NONE))  # (H, W)
+    # Repeat each tile's boolean to cover its pixel extent.
+    # jnp.repeat is fine here because the shapes are static (known at
+    # trace time from map_h, map_w, tile_px).
+    mask = jnp.repeat(jnp.repeat(has_machine, tile_px, axis=0), tile_px, axis=1)
+    mask = mask[:, :, None]  # (H*tile_px, W*tile_px, 1) for broadcast
+    image = jnp.where(mask, machine_image, image)
+
+    # --- Layer 3: Player sprites ---
+    # Players are sparse (typically 1-2), not grid-aligned in the same
+    # way as tiles. We use dynamic_update_slice to "stamp" the sprite
+    # at each player's pixel position. Since the number of players is
+    # fixed at trace time, we unroll with fori_loop.
+    #
+    # fori_loop is the JAX equivalent of a for-loop that compiles to
+    # a fixed-iteration XLA while loop. It's necessary because
+    # dynamic_update_slice needs runtime indices (the player position),
+    # which rules out static array indexing.
+    num_players = state.player_positions.shape[0]
+
+    def _stamp_player(i: int, img: jnp.ndarray) -> jnp.ndarray:
+        """Composite one player sprite onto the image.
+
+        Args:
+            i: Player index.
+            img: Current image being built up.
+
+        Returns:
+            Image with the player sprite stamped at the player's position.
+        """
+        px = state.player_positions[i, 0]  # x = column
+        py = state.player_positions[i, 1]  # y = row
+        # Convert tile coords to pixel coords.
+        px_pixel = px * tile_px
+        py_pixel = py * tile_px
+        # dynamic_update_slice writes a small array into a larger one
+        # at runtime-determined offsets. It compiles to an efficient
+        # scatter on GPU.
+        return jax.lax.dynamic_update_slice(
+            img, player_sprite, (py_pixel, px_pixel, 0)
+        )
+
+    image = jax.lax.fori_loop(0, num_players, _stamp_player, image)
+
+    return image.astype(jnp.uint8)
+
+
+# ===================================================================
+# SECTION 3: Batched Environment Setup
+#
+# FactoriaX environments are JAX pytrees (FLAX struct.dataclass).
+# To run N environments in parallel, we vmap over the batch dimension.
+# Each leaf array in the state gets an extra leading axis of size N.
+#
+# We use generate_state (procedural, JIT-compatible) to create each
+# env independently from a different RNG key, then stack them into
+# a single batched pytree.
+# ===================================================================
+
+
+def make_batched_envs(
+    n: int, params: EnvParams
+) -> tuple[jnp.ndarray, EnvState]:
+    """Create N parallel environment states via vmapped reset.
+
+    Each environment gets a unique random seed, producing different
+    terrain layouts. The returned state is a pytree where every leaf
+    has shape (N, ...) -- the standard layout for vmapped operations.
+
+    Args:
+        n: Number of parallel environments.
+        params: Shared environment parameters (map size, etc.).
+
+    Returns:
+        Tuple of (rng_keys, batched_states) where rng_keys has shape
+        (N, 2) and can be used for subsequent vmapped steps.
+    """
+    env = FactoriaXEnv()
+    keys = jax.random.split(jax.random.key(42), n)
+    # vmap reset_env over the key axis, broadcasting params.
+    _, states = jax.vmap(env.reset_env, in_axes=(0, None))(keys, params)
+    return keys, states
+
+
+# ===================================================================
+# SECTION 4: Benchmark Harness
+#
+# The benchmark measures rendering throughput in two modes:
+#
+# CPU mode: For each timestep, loop over N envs in Python and call
+#   render_pixels(state_i). This is what you'd do today if you wanted
+#   frames during training.
+#
+# JAX mode: For each timestep, call vmap(render_jax)(batched_state).
+#   The entire batch is rendered in a single GPU kernel launch.
+#
+# We time only the render calls, not the env stepping, to isolate
+# rendering performance. The env stepping uses random actions so the
+# states evolve and we're not just re-rendering the same frame.
+#
+# The first call in each mode is a warmup (JIT compilation for JAX,
+# cache warmup for CPU) and is excluded from timing.
+# ===================================================================
+
+
+def extract_single_state(batched_state: EnvState, idx: int) -> EnvState:
+    """Extract a single environment state from a batched pytree.
+
+    jax.tree.map slices each leaf at index `idx` along axis 0,
+    reconstructing a single-env EnvState from the batched version.
+
+    Args:
+        batched_state: Batched state with shape (N, ...) leaves.
+        idx: Index of the environment to extract.
+
+    Returns:
+        Single-env EnvState with original (non-batched) shapes.
+    """
+    return jax.tree.map(lambda x: x[idx], batched_state)
+
+
+def benchmark_cpu_render(
+    states_over_time: list[EnvState],
+    n_envs: int,
+    block_pixel_size: int,
+) -> float:
+    """Benchmark the CPU renderer over a sequence of batched states.
+
+    For each timestep, extracts each individual env state from the batch
+    and calls the NumPy-based render_pixels(). This is the serial baseline.
+
+    Args:
+        states_over_time: List of batched EnvState, one per timestep.
+        n_envs: Number of environments in each batch.
+        block_pixel_size: Pixel size per tile for render_pixels.
+
+    Returns:
+        Wall-clock seconds for all render calls (excluding warmup).
+    """
+    # Warmup: render one frame to populate texture caches.
+    s0 = extract_single_state(states_over_time[0], 0)
+    render_pixels(s0, block_pixel_size=block_pixel_size)
+
+    t0 = time.perf_counter()
+    for batched_state in states_over_time:
+        for i in range(n_envs):
+            single = extract_single_state(batched_state, i)
+            render_pixels(single, block_pixel_size=block_pixel_size)
+    t1 = time.perf_counter()
+    return t1 - t0
+
+
+def benchmark_jax_render(
+    states_over_time: list[EnvState],
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+) -> float:
+    """Benchmark the JAX renderer over a sequence of batched states.
+
+    Calls vmap(render_jax) once per timestep. The first call triggers
+    JIT compilation and is excluded from timing. All subsequent calls
+    hit the compiled kernel directly.
+
+    After the timed loop, we call jax.block_until_ready() on the last
+    result to ensure all GPU work has actually completed. JAX dispatches
+    asynchronously by default, so without this the timer would only
+    measure kernel *launch* time, not execution time.
+
+    Args:
+        states_over_time: List of batched EnvState, one per timestep.
+        block_atlas: Block texture atlas on device.
+        machine_atlas: Machine texture atlas on device.
+        player_sprite: Player sprite on device.
+
+    Returns:
+        Wall-clock seconds for all render calls (excluding JIT warmup).
+    """
+    # Build the vmapped render function. in_axes=(0, None, None, None)
+    # means: vmap over the first arg (state batch axis), broadcast the rest.
+    vmap_render = jax.jit(
+        jax.vmap(render_jax, in_axes=(0, None, None, None))
+    )
+
+    # Warmup: trigger JIT compilation. This can take several seconds for
+    # large batch sizes, but we don't count it.
+    result = vmap_render(
+        states_over_time[0], block_atlas, machine_atlas, player_sprite
+    )
+    jax.block_until_ready(result)
+
+    t0 = time.perf_counter()
+    for batched_state in states_over_time:
+        result = vmap_render(
+            batched_state, block_atlas, machine_atlas, player_sprite
+        )
+    # Block until the GPU finishes the last batch. Without this, we'd
+    # only measure how fast Python can *enqueue* work, not how fast the
+    # GPU can *finish* it.
+    jax.block_until_ready(result)
+    t1 = time.perf_counter()
+    return t1 - t0
+
+
+def collect_states(
+    n_envs: int, params: EnvParams, num_steps: int
+) -> list[EnvState]:
+    """Step N environments for num_steps with random actions, saving states.
+
+    This pre-computes all the states we'll render so that the benchmark
+    loop only measures rendering, not env stepping. Actions are random
+    to produce varied states (machines won't appear without crafting,
+    but terrain and player positions will change).
+
+    Args:
+        n_envs: Number of parallel environments.
+        params: Environment parameters.
+        num_steps: Number of timesteps to simulate.
+
+    Returns:
+        List of batched EnvState, length num_steps.
+    """
+    env = FactoriaXEnv()
+    keys, states = make_batched_envs(n_envs, params)
+
+    # JIT-compile the vmapped step.
+    vmap_step = jax.jit(
+        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
+    )
+
+    rng = jax.random.key(0)
+    collected = [states]
+
+    for _ in range(num_steps - 1):
+        rng, key_act, key_step = jax.random.split(rng, 3)
+        actions = jax.random.randint(
+            key_act, (n_envs,), 0, params.NUM_ACTIONS
+        )
+        step_keys = jax.random.split(key_step, n_envs)
+        _, states, _, _, _ = vmap_step(step_keys, states, actions, params)
+        collected.append(states)
+
+    # Make sure all states are materialized on device before benchmarking.
+    jax.block_until_ready(jax.tree.leaves(collected[-1]))
+    return collected
+
+
+def save_sample_images(
+    params: EnvParams,
+    block_atlas: jnp.ndarray,
+    machine_atlas: jnp.ndarray,
+    player_sprite: jnp.ndarray,
+    output_dir: Path,
+) -> None:
+    """Save sample rendered images for visual comparison.
+
+    Produces three files:
+      - cpu_render.png: single env rendered by the NumPy CPU renderer.
+      - jax_batch4.png: 4 envs rendered in parallel via vmapped JAX
+        renderer, stitched into a 2x2 grid.
+
+    Args:
+        params: Environment parameters.
+        block_atlas: Block texture atlas.
+        machine_atlas: Machine texture atlas.
+        player_sprite: Player sprite.
+        output_dir: Directory to write images into.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tile_px = int(block_atlas.shape[1])
+
+    # --- CPU render: single environment ---
+    _, single_states = make_batched_envs(1, params)
+    state = extract_single_state(single_states, 0)
+    cpu_img = render_pixels(state, block_pixel_size=tile_px)
+    Image.fromarray(cpu_img[:, :, :3]).save(output_dir / "cpu_render.png")
+
+    # --- JAX render: batch of 4, stitched into a 2x2 grid ---
+    _, batch_states = make_batched_envs(4, params)
+    vmap_render = jax.jit(
+        jax.vmap(render_jax, in_axes=(0, None, None, None))
+    )
+    batch_imgs = np.array(
+        vmap_render(batch_states, block_atlas, machine_atlas, player_sprite)
+    )
+    # Stitch: stack [0,1] on top of [2,3]
+    top_row = np.concatenate([batch_imgs[0], batch_imgs[1]], axis=1)
+    bot_row = np.concatenate([batch_imgs[2], batch_imgs[3]], axis=1)
+    grid = np.concatenate([top_row, bot_row], axis=0)
+    Image.fromarray(grid).save(output_dir / "jax_batch4.png")
+
+    print(f"Sample images saved to {output_dir}/")
+
+
+def save_bar_chart(
+    cpu_fps: float,
+    jax_results: dict[int, float],
+    output_dir: Path,
+) -> None:
+    """Save a bar chart comparing CPU vs JAX render throughput.
+
+    The x-axis shows "CPU" plus each JAX batch size. The y-axis shows
+    frames per second (rendered frames / wall-clock seconds).
+
+    Args:
+        cpu_fps: CPU renderer throughput (frames/s), measured at batch=1.
+        jax_results: Mapping of batch_size -> JAX fps.
+        output_dir: Directory to write the chart into.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    labels = ["CPU"] + [str(n) for n in sorted(jax_results)]
+    values = [cpu_fps] + [jax_results[n] for n in sorted(jax_results)]
+    colors = ["#d45f5f"] + ["#5f8fd4"] * len(jax_results)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    bars = ax.bar(labels, values, color=colors, edgecolor="white", linewidth=0.5)
+
+    ax.set_xlabel("Renderer (JAX batch size)", fontsize=12)
+    ax.set_ylabel("Frames per second", fontsize=12)
+    ax.set_title(
+        f"Render throughput: CPU vs JAX  "
+        f"({MAP_SIZE}x{MAP_SIZE} map, {TILE_PX}px tiles, {NUM_STEPS} steps)",
+        fontsize=13,
+    )
+    ax.set_yscale("log")
+    ax.grid(axis="y", alpha=0.3)
+
+    # Value labels on top of each bar.
+    for bar, val in zip(bars, values):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() * 1.08,
+            f"{val:,.0f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+
+    fig.tight_layout()
+    path = output_dir / "benchmark_chart.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Bar chart saved to {path}")
+
+
+def main() -> None:
+    """Run the full benchmark suite."""
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = Path("scripts/batch_results") / timestamp
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Open a log file that mirrors all printed output.
+    log_path = output_dir / "benchmark.log"
+    log_lines: list[str] = []
+
+    def log(msg: str = "", end: str = "\n", flush: bool = False) -> None:
+        """Print to stdout and append to log buffer.
+
+        Args:
+            msg: Message to print.
+            end: Line ending.
+            flush: Whether to flush stdout.
+        """
+        print(msg, end=end, flush=flush)
+        log_lines.append(msg + end)
+
+    log("FactoriaX JAX Renderer Benchmark")
+    log("=" * 60)
+    log(f"Timestamp: {timestamp}")
+    log(f"Map size: {MAP_SIZE}x{MAP_SIZE}, Tile pixels: {TILE_PX}px")
+    log(f"Image size: {MAP_SIZE * TILE_PX}x{MAP_SIZE * TILE_PX}px")
+    log(f"Steps per run: {NUM_STEPS}")
+    log(f"Batch sizes: {BATCH_SIZES}")
+    log(f"JAX devices: {jax.devices()}")
+    log(f"Output dir: {output_dir}")
+    log()
+
+    params = EnvParams(
+        map_width=MAP_SIZE,
+        map_height=MAP_SIZE,
+        num_players=1,
+        max_timesteps=NUM_STEPS,
+        # Disable biters so stepping is cheaper and we isolate render cost.
+        nest_probability=0.0,
+        max_biters=1,
+    )
+
+    # Build texture atlases once. These are small arrays that live on device
+    # for the entire benchmark.
+    block_atlas = build_block_atlas(TILE_PX)
+    machine_atlas = build_machine_atlas(TILE_PX)
+    player_sprite = build_player_atlas(TILE_PX)
+
+    # Save sample images: CPU single env + JAX batched 4 envs.
+    save_sample_images(
+        params, block_atlas, machine_atlas, player_sprite, output_dir
+    )
+
+    # --- Benchmark loop ---
+    # We measure CPU fps once at batch=1 (it scales linearly since it's
+    # a serial Python loop, so per-frame cost is constant).
+    log("Measuring CPU baseline (batch=1)...", end="", flush=True)
+    cpu_states = collect_states(1, params, NUM_STEPS)
+    cpu_time = benchmark_cpu_render(cpu_states, 1, TILE_PX)
+    cpu_fps = NUM_STEPS / cpu_time if cpu_time > 0 else float("inf")
+    log(f" {cpu_fps:,.0f} fps ({cpu_time:.3f}s)")
+    del cpu_states
+
+    jax_results: dict[int, float] = {}
+    jax_times: dict[int, float] = {}
+
+    log()
+    header = (
+        f"{'n_envs':>8} | {'JAX (s)':>10} | {'JAX fps':>12} | {'vs CPU':>8}"
+    )
+    log(header)
+    log("-" * len(header))
+
+    for n in BATCH_SIZES:
+        log(f"  Collecting {n} x {NUM_STEPS} states...", end="", flush=True)
+        states = collect_states(n, params, NUM_STEPS)
+        log(" done.")
+
+        jax_time = benchmark_jax_render(
+            states, block_atlas, machine_atlas, player_sprite
+        )
+
+        total_frames = n * NUM_STEPS
+        jax_fps = total_frames / jax_time if jax_time > 0 else float("inf")
+        speedup = jax_fps / cpu_fps if cpu_fps > 0 else float("inf")
+        jax_results[n] = jax_fps
+        jax_times[n] = jax_time
+
+        log(
+            f"{n:>8} | {jax_time:>10.3f} | {jax_fps:>12,.0f} | "
+            f"{speedup:>7.1f}x"
+        )
+
+        del states
+
+    # --- Save bar chart ---
+    save_bar_chart(cpu_fps, jax_results, output_dir)
+
+    # --- Write log file ---
+    log()
+    log(f"All results saved to {output_dir}/")
+    log_path.write_text("".join(log_lines))
+
+
+if __name__ == "__main__":
+    main()
