@@ -10,19 +10,24 @@ from factoriax.constants import (
 )
 from factoriax.editor.state import (
     ResourceBrush,
+    add_biter,
     add_column,
     add_row,
     editor_state_from_level,
     editor_state_to_level,
     erase_block,
+    erase_entity,
     erase_machine,
     erase_tile,
     fill_rect_tiles,
     new_editor_state,
+    remove_biters_at,
     remove_column,
+    remove_player_at,
     remove_row,
     sample_resource,
     set_machine,
+    set_player_position,
     set_tile,
 )
 from factoriax.levels import Level
@@ -528,3 +533,164 @@ class TestSampleResource:
         for _ in range(50):
             val = sample_resource(brush, rng)
             assert 10 <= val <= 20
+
+
+# ---------------------------------------------------------------------------
+# Entity placement
+# ---------------------------------------------------------------------------
+
+
+class TestSetPlayerPosition:
+    """Tests for set_player_position."""
+
+    def test_place_player(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 2, 3)
+        assert state.player_positions == {0: (2, 3)}
+        assert state.dirty is True
+
+    def test_move_player(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 1, 1)
+        set_player_position(state, 0, 3, 4)
+        assert state.player_positions == {0: (3, 4)}
+
+    def test_multiple_players(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 0, 0)
+        set_player_position(state, 3, 4, 4)
+        assert state.player_positions == {0: (0, 0), 3: (4, 4)}
+
+    def test_out_of_bounds_ignored(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, -1, 0)
+        set_player_position(state, 1, 5, 0)
+        assert state.player_positions == {}
+        assert state.dirty is False
+
+
+class TestRemovePlayerAt:
+    """Tests for remove_player_at."""
+
+    def test_remove_existing(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 2, 2)
+        state.dirty = False
+        remove_player_at(state, 2, 2)
+        assert state.player_positions == {}
+        assert state.dirty is True
+
+    def test_remove_nonexistent(self) -> None:
+        state = new_editor_state(5, 5)
+        remove_player_at(state, 2, 2)
+        assert state.dirty is False
+
+
+class TestAddBiter:
+    """Tests for add_biter."""
+
+    def test_add_biter(self) -> None:
+        state = new_editor_state(5, 5)
+        add_biter(state, 1, 1)
+        assert state.biter_positions == [(1, 1)]
+        assert state.dirty is True
+
+    def test_multiple_at_same_tile(self) -> None:
+        state = new_editor_state(5, 5)
+        add_biter(state, 2, 2)
+        add_biter(state, 2, 2)
+        assert len(state.biter_positions) == 2
+
+    def test_out_of_bounds_ignored(self) -> None:
+        state = new_editor_state(5, 5)
+        add_biter(state, -1, 0)
+        add_biter(state, 5, 0)
+        assert state.biter_positions == []
+        assert state.dirty is False
+
+
+class TestRemoveBitersAt:
+    """Tests for remove_biters_at."""
+
+    def test_remove_all_at_tile(self) -> None:
+        state = new_editor_state(5, 5)
+        add_biter(state, 2, 2)
+        add_biter(state, 2, 2)
+        add_biter(state, 3, 3)
+        state.dirty = False
+        remove_biters_at(state, 2, 2)
+        assert state.biter_positions == [(3, 3)]
+        assert state.dirty is True
+
+    def test_remove_nonexistent(self) -> None:
+        state = new_editor_state(5, 5)
+        remove_biters_at(state, 2, 2)
+        assert state.dirty is False
+
+
+class TestEraseEntity:
+    """Tests for erase_entity."""
+
+    def test_erases_both(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 2, 2)
+        add_biter(state, 2, 2)
+        erase_entity(state, 2, 2)
+        assert state.player_positions == {}
+        assert state.biter_positions == []
+
+
+class TestResizeClipsEntities:
+    """Tests for entity clipping on map resize."""
+
+    def test_remove_column_clips(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 4, 0)
+        add_biter(state, 4, 2)
+        remove_column(state)
+        assert 0 not in state.player_positions
+        assert (4, 2) not in state.biter_positions
+
+    def test_remove_row_clips(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 0, 4)
+        add_biter(state, 2, 4)
+        remove_row(state)
+        assert 0 not in state.player_positions
+        assert (2, 4) not in state.biter_positions
+
+    def test_entities_inside_bounds_kept(self) -> None:
+        state = new_editor_state(5, 5)
+        set_player_position(state, 0, 0, 0)
+        add_biter(state, 1, 1)
+        remove_column(state)
+        assert state.player_positions == {0: (0, 0)}
+        assert state.biter_positions == [(1, 1)]
+
+
+class TestEntityRoundTrip:
+    """Tests for entity save/load through EditorState ↔ Level."""
+
+    def test_player_positions_round_trip(self) -> None:
+        state = new_editor_state(8, 8)
+        set_player_position(state, 0, 1, 2)
+        set_player_position(state, 2, 5, 5)
+        level = editor_state_to_level(state)
+        assert level.player_positions == [(1, 2), (5, 5)]
+        state2 = editor_state_from_level(level)
+        assert state2.player_positions == {0: (1, 2), 1: (5, 5)}
+
+    def test_biter_positions_round_trip(self) -> None:
+        state = new_editor_state(8, 8)
+        add_biter(state, 0, 0)
+        add_biter(state, 3, 4)
+        level = editor_state_to_level(state)
+        assert level.biter_positions == [(0, 0), (3, 4)]
+        state2 = editor_state_from_level(level)
+        assert state2.biter_positions == [(0, 0), (3, 4)]
+
+    def test_empty_entities_become_none(self) -> None:
+        state = new_editor_state(5, 5)
+        level = editor_state_to_level(state)
+        assert level.player_positions is None
+        assert level.biter_positions is None

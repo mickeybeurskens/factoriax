@@ -143,6 +143,41 @@ def create_player_texture(
     return player
 
 
+def create_player_start_icon(
+    player_idx: int = 0, size: int = BLOCK_PIXEL_SIZE
+) -> np.ndarray:
+    """Create a player start icon as a colored circle with a white X.
+
+    Used in the map editor to mark spawn positions. The circle colour
+    comes from ``PLAYER_COLORS[player_idx]``.
+
+    Args:
+        player_idx: Player index (determines colour).
+        size: Side length of the icon in pixels.
+
+    Returns:
+        RGBA numpy array of shape ``(size, size, 4)``.
+    """
+    icon = np.zeros((size, size, 4), dtype=np.uint8)
+    center = size // 2
+    radius = max(2, size // 3)
+    color_idx = player_idx % len(PLAYER_COLORS)
+    body_color = PLAYER_COLORS[color_idx][0]
+
+    ys, xs = np.ogrid[:size, :size]
+    dist = np.sqrt((xs - center) ** 2 + (ys - center) ** 2)
+    icon[dist <= radius] = [*body_color, 255]
+
+    # Draw a white X inside the circle.
+    arm = max(1, radius - 1)
+    for d in range(-arm, arm + 1):
+        for px, py in ((center + d, center + d), (center + d, center - d)):
+            if 0 <= px < size and 0 <= py < size and dist[py, px] <= radius:
+                icon[py, px] = [255, 255, 255, 255]
+
+    return icon
+
+
 BITER_COLOR = (180, 40, 40)
 
 

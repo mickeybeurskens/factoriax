@@ -93,6 +93,12 @@ class EditorState:
     machine_inventory_counts: np.ndarray
     machine_selected_recipe: np.ndarray
     player_inventory: list[tuple[int, int]] | None = None
+    player_positions: dict[int, tuple[int, int]] = dataclasses.field(
+        default_factory=dict,
+    )
+    biter_positions: list[tuple[int, int]] = dataclasses.field(
+        default_factory=list,
+    )
     dirty: bool = False
 
 
@@ -181,6 +187,16 @@ def editor_state_from_level(level: Level) -> EditorState:
         machine_inventory_counts=inv_counts.astype(np.int32),
         machine_selected_recipe=recipe.astype(np.int32),
         player_inventory=level.player_inventory,
+        player_positions=(
+            {i: (p[0], p[1]) for i, p in enumerate(level.player_positions)}
+            if level.player_positions
+            else {}
+        ),
+        biter_positions=(
+            [(p[0], p[1]) for p in level.biter_positions]
+            if level.biter_positions
+            else []
+        ),
     )
 
 
@@ -220,6 +236,16 @@ def editor_state_to_level(state: EditorState) -> Level:
     if np.all(recipe == 0):
         recipe = None
 
+    pp: list[tuple[int, int]] | None = None
+    if state.player_positions:
+        pp = [
+            state.player_positions[k]
+            for k in sorted(state.player_positions)
+        ]
+    bp: list[tuple[int, int]] | None = (
+        list(state.biter_positions) if state.biter_positions else None
+    )
+
     return Level(
         name=state.name,
         map_width=state.map_width,
@@ -232,6 +258,8 @@ def editor_state_to_level(state: EditorState) -> Level:
         machine_inventory_counts=inv_counts,
         machine_selected_recipe=recipe,
         player_inventory=state.player_inventory,
+        player_positions=pp,
+        biter_positions=bp,
     )
 
 
@@ -447,6 +475,7 @@ def remove_column(state: EditorState) -> None:
     state.machine_inventory_counts = state.machine_inventory_counts[:, :-1, :]
     state.machine_selected_recipe = state.machine_selected_recipe[:, :-1]
     state.map_width -= 1
+    _clip_entities(state)
     state.dirty = True
 
 
@@ -514,4 +543,102 @@ def remove_row(state: EditorState) -> None:
     state.machine_inventory_counts = state.machine_inventory_counts[:-1, :, :]
     state.machine_selected_recipe = state.machine_selected_recipe[:-1, :]
     state.map_height -= 1
+    _clip_entities(state)
     state.dirty = True
+
+
+# ---------------------------------------------------------------------------
+# Entity placement
+# ---------------------------------------------------------------------------
+
+
+def _clip_entities(state: EditorState) -> None:
+    """Remove entities that fall outside the current map bounds."""
+    state.player_positions = {
+        k: v
+        for k, v in state.player_positions.items()
+        if 0 <= v[0] < state.map_width and 0 <= v[1] < state.map_height
+    }
+    state.biter_positions = [
+        (x, y)
+        for x, y in state.biter_positions
+        if 0 <= x < state.map_width and 0 <= y < state.map_height
+    ]
+
+
+def set_player_position(
+    state: EditorState, player_idx: int, x: int, y: int
+) -> None:
+    """Place or move a player start position.
+
+    If player *player_idx* already has a position it is moved.
+
+    Args:
+        state: Editor state (mutated in place).
+        player_idx: Player index (0-7).
+        x: Tile column.
+        y: Tile row.
+    """
+    if not (0 <= x < state.map_width and 0 <= y < state.map_height):
+        return
+    state.player_positions[player_idx] = (x, y)
+    state.dirty = True
+
+
+def remove_player_at(state: EditorState, x: int, y: int) -> None:
+    """Remove any player start at the given tile.
+
+    Args:
+        state: Editor state (mutated in place).
+        x: Tile column.
+        y: Tile row.
+    """
+    to_remove = [k for k, v in state.player_positions.items() if v == (x, y)]
+    for k in to_remove:
+        del state.player_positions[k]
+    if to_remove:
+        state.dirty = True
+
+
+def add_biter(state: EditorState, x: int, y: int) -> None:
+    """Add a biter at the given tile.
+
+    Args:
+        state: Editor state (mutated in place).
+        x: Tile column.
+        y: Tile row.
+    """
+    if not (0 <= x < state.map_width and 0 <= y < state.map_height):
+        return
+    state.biter_positions.append((x, y))
+    state.dirty = True
+
+
+def remove_biters_at(state: EditorState, x: int, y: int) -> None:
+    """Remove all biters at the given tile.
+
+    Args:
+        state: Editor state (mutated in place).
+        x: Tile column.
+        y: Tile row.
+    """
+    before = len(state.biter_positions)
+    state.biter_positions = [
+        (bx, by)
+        for bx, by in state.biter_positions
+        if (bx, by) != (x, y)
+    ]
+    if len(state.biter_positions) < before:
+        state.dirty = True
+
+
+def erase_entity(state: EditorState, x: int, y: int) -> None:
+    """Remove all entities (players and biters) at the given tile.
+
+    Args:
+        state: Editor state (mutated in place).
+        x: Tile column.
+        y: Tile row.
+    """
+    remove_player_at(state, x, y)
+    remove_biters_at(state, x, y)

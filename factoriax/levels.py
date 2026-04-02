@@ -103,6 +103,7 @@ class Level:
     machine_health: np.ndarray | None = None
     player_inventory: list[tuple[int, int]] | None = None
     player_positions: list[tuple[int, int]] | None = None
+    biter_positions: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
         """Validate array shapes match declared dimensions.
@@ -209,6 +210,7 @@ class LevelBuilder:
         self._machine_selected_recipe: np.ndarray | None = None
         self._machine_health: np.ndarray | None = None
         self._player_positions: list[tuple[int, int]] | None = None
+        self._biter_positions: list[tuple[int, int]] | None = None
 
     def fill_rect(
         self,
@@ -435,6 +437,29 @@ class LevelBuilder:
         self._player_positions.append((x, y))
         return self
 
+    def add_biter(self, x: int, y: int) -> LevelBuilder:
+        """Add a biter spawn position.
+
+        Args:
+            x: Column (0-indexed).
+            y: Row (0-indexed).
+
+        Returns:
+            ``self`` for chaining.
+
+        Raises:
+            IndexError: If ``(x, y)`` is outside the map.
+        """
+        if not (0 <= x < self._width and 0 <= y < self._height):
+            raise IndexError(
+                f"Position ({x}, {y}) is outside the "
+                f"{self._width}x{self._height} map."
+            )
+        if self._biter_positions is None:
+            self._biter_positions = []
+        self._biter_positions.append((x, y))
+        return self
+
     def build(self, name: str) -> Level:
         """Finalise and return the :class:`Level`.
 
@@ -487,6 +512,11 @@ class LevelBuilder:
                 if self._player_positions is not None
                 else None
             ),
+            biter_positions=(
+                list(self._biter_positions)
+                if self._biter_positions is not None
+                else None
+            ),
         )
 
 
@@ -511,6 +541,56 @@ def default_resources(block_map: np.ndarray) -> np.ndarray:
         block_map, [int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)]
     )
     return np.where(mineable, BLOCK_MAX_RESOURCES, 0).astype(np.int32)
+
+
+def _build_biter_positions(
+    level: Level, max_biters: int
+) -> jnp.ndarray:
+    """Build the biter_positions array from level data.
+
+    Places biters from ``level.biter_positions`` into a fixed-size
+    array of shape ``(max_biters, 2)``. Excess biters are silently
+    truncated.
+
+    Args:
+        level: Level definition.
+        max_biters: Maximum number of biters the environment supports.
+
+    Returns:
+        Int32 array of shape ``(max_biters, 2)``.
+    """
+    positions = jnp.zeros((max_biters, 2), dtype=jnp.int32)
+    if level.biter_positions is not None:
+        n = min(len(level.biter_positions), max_biters)
+        if n > 0:
+            bp = np.array(level.biter_positions[:n], dtype=np.int32)
+            positions = positions.at[:n].set(bp)
+    return positions
+
+
+def _build_biter_health(
+    level: Level, max_biters: int
+) -> jnp.ndarray:
+    """Build the biter_health array from level data.
+
+    Each biter from ``level.biter_positions`` starts with 1 HP so
+    the environment treats it as active.
+
+    Args:
+        level: Level definition.
+        max_biters: Maximum number of biters the environment supports.
+
+    Returns:
+        Int32 array of shape ``(max_biters,)``.
+    """
+    health = jnp.zeros(max_biters, dtype=jnp.int32)
+    if level.biter_positions is not None:
+        n = min(len(level.biter_positions), max_biters)
+        if n > 0:
+            health = health.at[:n].set(
+                jnp.full(n, 20, dtype=jnp.int32)
+            )
+    return health
 
 
 def _place_players(
@@ -670,8 +750,8 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
                 0,
             ).astype(jnp.int32)
         ),
-        biter_positions=jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
-        biter_health=jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
+        biter_positions=_build_biter_positions(level, DEFAULT_MAX_BITERS),
+        biter_health=_build_biter_health(level, DEFAULT_MAX_BITERS),
         scent_field=jnp.zeros(map_shape, dtype=jnp.float32),
     )
 
@@ -1003,6 +1083,7 @@ def save_level(level: Level, path: Path) -> None:
         ),
         "player_inventory": level.player_inventory,
         "player_positions": level.player_positions,
+        "biter_positions": level.biter_positions,
     }
     path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
 
@@ -1064,6 +1145,11 @@ def load_level(path: Path) -> Level:
         player_positions=(
             [tuple(p) for p in raw_pos]
             if (raw_pos := payload.get("player_positions")) is not None
+            else None
+        ),
+        biter_positions=(
+            [tuple(p) for p in raw_bp]
+            if (raw_bp := payload.get("biter_positions")) is not None
             else None
         ),
     )

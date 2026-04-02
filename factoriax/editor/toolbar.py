@@ -1,8 +1,8 @@
 """Sidebar toolbar, menu bar, and status bar for the level editor.
 
 Renders all chrome around the canvas: tool palette, block selector,
-resource brush panel, machine palette, top menu bar, and bottom status
-bar.  Each render function returns an RGB or RGBA image and a list of
+resource brush panel, machine palette, entity palette, top menu bar,
+and bottom status bar.  Each render function returns an RGB or RGBA image and a list of
 :class:`~factoriax.play.ui.ClickRegion` objects for hit-testing.
 """
 
@@ -17,13 +17,19 @@ from factoriax.constants import (
     BlockType,
     MachineType,
 )
-from factoriax.renderer import get_textures, render_item_icon
+from factoriax.renderer import (
+    create_biter_texture,
+    create_player_start_icon,
+    get_textures,
+    render_item_icon,
+)
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.primitives import ClickRegion
 
 TOOLBAR_WIDTH = 120
 MENU_BAR_HEIGHT = 32
 STATUS_BAR_HEIGHT = 24
+MAX_EDITOR_PLAYERS = 8
 
 _BG = (30, 30, 30)
 _MENU_BG = (22, 22, 22)
@@ -129,6 +135,7 @@ def render_toolbar(
     resource_brush: object,
     height: int,
     show_resources: bool = False,
+    selected_entity: tuple[str, int] | None = None,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the sidebar toolbar with all palette sections.
 
@@ -140,6 +147,8 @@ def render_toolbar(
         resource_brush: :class:`~factoriax.editor.state.ResourceBrush`.
         height: Available height for the toolbar in pixels.
         show_resources: Whether the resource overlay is active.
+        selected_entity: Active entity selection as ``(kind, index)``
+            where *kind* is ``"player"`` or ``"biter"``, or ``None``.
 
     Returns:
         ``(image, regions)`` where *image* is RGB shape
@@ -150,7 +159,7 @@ def render_toolbar(
     brush: ResourceBrush = resource_brush  # type: ignore[assignment]
     # Render at full content height so small maps don't clip icons.
     # The caller slices the visible portion using a scroll offset.
-    render_h = max(height, 600)
+    render_h = max(height, 800)
     bar = np.full((render_h, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
     regions: list[ClickRegion] = []
     font = get_pixel_font(12)
@@ -308,6 +317,51 @@ def render_toolbar(
         )
         y += icon_size + 2
 
+    # -- Entities section --------------------------------------------------
+    y += 8
+    label_txt = _render_text("Entities", font, _ACCENT_COLOR)
+    _blit_rgb(bar, label_txt, y, 4)
+    y += label_txt.shape[0] + 4
+
+    for player_idx in range(MAX_EDITOR_PLAYERS):
+        icon = create_player_start_icon(player_idx, icon_size)
+        bx = 4
+        _blit_rgba(bar, icon, y, bx)
+        if selected_entity == ("player", player_idx):
+            _draw_border(bar, bx, y, icon_size, icon_size, _SELECTED_BORDER)
+        txt = _render_text(f"Player {player_idx}", font, _TEXT_COLOR)
+        _blit_rgb(bar, txt, y + (icon_size - txt.shape[0]) // 2, bx + icon_size + 4)
+        regions.append(
+            ClickRegion(
+                x=4,
+                y=y,
+                w=TOOLBAR_WIDTH - 8,
+                h=icon_size,
+                action="entity",
+                param=player_idx,
+            )
+        )
+        y += icon_size + 2
+
+    biter_icon = create_biter_texture(icon_size)
+    bx = 4
+    _blit_rgba(bar, biter_icon, y, bx)
+    if selected_entity == ("biter", 0):
+        _draw_border(bar, bx, y, icon_size, icon_size, _SELECTED_BORDER)
+    txt = _render_text("Biter", font, _TEXT_COLOR)
+    _blit_rgb(bar, txt, y + (icon_size - txt.shape[0]) // 2, bx + icon_size + 4)
+    regions.append(
+        ClickRegion(
+            x=4,
+            y=y,
+            w=TOOLBAR_WIDTH - 8,
+            h=icon_size,
+            action="entity",
+            param=MAX_EDITOR_PLAYERS,
+        )
+    )
+    y += icon_size + 2
+
     return bar, regions
 
 
@@ -331,7 +385,8 @@ def render_status_bar(
         dirty: Whether unsaved changes exist.
         resource_info: Resource brush summary (e.g. ``"Res:100"``).
         width: Full window width in pixels.
-        layer: Active editing layer (``"terrain"`` or ``"machine"``).
+        layer: Active editing layer (``"terrain"``, ``"machine"``,
+            or ``"entity"``).
 
     Returns:
         RGB uint8 array of shape ``(STATUS_BAR_HEIGHT, width, 3)``.
@@ -339,7 +394,17 @@ def render_status_bar(
     bar = np.full((STATUS_BAR_HEIGHT, width, 3), _STATUS_BG, dtype=np.uint8)
     font = get_pixel_font(12)
 
-    layer_tag = "[Terrain]" if layer == "terrain" else "[Machine]"
+    layer_tags = {
+        "terrain": "[Terrain]",
+        "machine": "[Machine]",
+        "entity": "[Entity]",
+    }
+    layer_colors = {
+        "terrain": (100, 180, 100),
+        "machine": (100, 140, 200),
+        "entity": (200, 140, 100),
+    }
+    layer_tag = layer_tags.get(layer, "[Terrain]")
     parts = [layer_tag, f"{tool.capitalize()}: {brush_name}"]
     parts.append(resource_info)
     if cursor_tile is not None:
@@ -353,7 +418,7 @@ def render_status_bar(
     _blit_rgb(bar, help_txt, y_center, x)
     x += help_txt.shape[1] + 8
 
-    layer_color = (100, 180, 100) if layer == "terrain" else (100, 140, 200)
+    layer_color = layer_colors.get(layer, (100, 180, 100))
     tag_txt = _render_text(layer_tag, font, layer_color)
     _blit_rgb(bar, tag_txt, y_center, x)
     x += tag_txt.shape[1]
@@ -420,3 +485,37 @@ def _blit_rgb(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     ch = dy1 - dy0
     cw = dx1 - dx0
     dst[dy0:dy1, dx0:dx1] = src[sy0 : sy0 + ch, sx0 : sx0 + cw]
+
+
+def _blit_rgba(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
+    """Composite an RGBA patch onto an RGB *dst* using alpha blending.
+
+    Pixels with zero alpha leave the destination unchanged. Fully opaque
+    pixels overwrite directly.
+
+    Args:
+        dst: Destination RGB array (mutated in place).
+        src: Source RGBA array.
+        y: Top row.
+        x: Left column.
+    """
+    dh, dw = dst.shape[:2]
+    sh, sw = src.shape[:2]
+    sy0 = max(0, -y)
+    sx0 = max(0, -x)
+    dy0 = max(0, y)
+    dx0 = max(0, x)
+    dy1 = min(dh, y + sh)
+    dx1 = min(dw, x + sw)
+    if dy1 <= dy0 or dx1 <= dx0:
+        return
+    ch = dy1 - dy0
+    cw = dx1 - dx0
+    patch = src[sy0 : sy0 + ch, sx0 : sx0 + cw]
+    alpha = patch[:, :, 3:4].astype(np.float32) / 255.0
+    region = dst[dy0:dy1, dx0:dx1]
+    blended = (
+        patch[:, :, :3].astype(np.float32) * alpha
+        + region.astype(np.float32) * (1.0 - alpha)
+    ).astype(np.uint8)
+    dst[dy0:dy1, dx0:dx1] = blended

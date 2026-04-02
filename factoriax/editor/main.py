@@ -37,11 +37,13 @@ from factoriax.editor.dialogs import (
 from factoriax.editor.state import (
     EditorState,
     ResourceBrush,
+    add_biter,
     add_column,
     add_row,
     editor_state_from_level,
     editor_state_to_level,
     erase_block,
+    erase_entity,
     erase_machine,
     erase_tile,
     fill_rect_tiles,
@@ -49,11 +51,13 @@ from factoriax.editor.state import (
     remove_column,
     remove_row,
     set_machine,
+    set_player_position,
     set_tile,
 )
 from factoriax.editor.toolbar import (
     BLOCK_ITEMS,
     MACHINE_ITEMS,
+    MAX_EDITOR_PLAYERS,
     MENU_BAR_HEIGHT,
     STATUS_BAR_HEIGHT,
     TOOL_ERASE,
@@ -123,6 +127,7 @@ class ToolState:
         block: Active ``BlockType`` value.
         machine: Active ``MachineType`` value, or 0 for block mode.
         direction: Global machine placement direction.
+        entity: Active entity selection as ``(kind, index)`` or ``None``.
         brush: Resource brush settings.
         show_resources: Whether the resource overlay is visible.
         show_help: Whether the help overlay is visible.
@@ -132,6 +137,7 @@ class ToolState:
         right_erasing: ``True`` while a right-click erase drag is active.
         tool_before_erase: Tool that was active before right-click erase.
         machine_before_erase: Machine that was selected before right-click erase.
+        entity_before_erase: Entity that was selected before right-click erase.
         fill_start: Start tile of a fill-rect drag, or ``None``.
         fill_rect: Current fill-rect selection, or ``None``.
         middle_dragging: ``True`` while middle-button panning is active.
@@ -144,6 +150,7 @@ class ToolState:
     direction: int = dataclasses.field(
         default_factory=lambda: int(Direction.DOWN),
     )
+    entity: tuple[str, int] | None = None
     brush: ResourceBrush = dataclasses.field(default_factory=ResourceBrush)
     show_resources: bool = False
     show_help: bool = False
@@ -153,6 +160,7 @@ class ToolState:
     right_erasing: bool = False
     tool_before_erase: str = TOOL_PAINT
     machine_before_erase: int = 0
+    entity_before_erase: tuple[str, int] | None = None
     fill_start: tuple[int, int] | None = None
     fill_rect: tuple[int, int, int, int] | None = None
     middle_dragging: bool = False
@@ -161,7 +169,9 @@ class ToolState:
 
     @property
     def layer(self) -> str:
-        """Return ``"machine"`` or ``"terrain"`` based on brush selection."""
+        """Return ``"entity"``, ``"machine"``, or ``"terrain"``."""
+        if self.entity is not None:
+            return "entity"
         return "machine" if self.machine != 0 else "terrain"
 
     @property
@@ -169,6 +179,11 @@ class ToolState:
         """Return the display name of the active brush."""
         if self.tool == TOOL_ERASE:
             return "Eraser"
+        if self.entity is not None:
+            kind, idx = self.entity
+            if kind == "player":
+                return f"Player {idx}"
+            return "Biter"
         if self.machine != 0:
             for mid, name in MACHINE_ITEMS:
                 if mid == self.machine:
@@ -302,7 +317,8 @@ def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
         screen: Pygame display surface (reused by the play session).
     """
     level = editor_state_to_level(state)
-    play_level(level, num_players=1, screen=screen)
+    num_players = len(level.player_positions) if level.player_positions else 1
+    play_level(level, num_players=num_players, screen=screen)
     pygame.display.set_caption("FactoriaX Editor")
 
 
@@ -343,12 +359,21 @@ def _handle_motion(
         if (tx, ty) != ts.last_paint_tile:
             if ts.tool == TOOL_ERASE:
                 if ts.right_erasing:
-                    if ts.machine_before_erase != 0:
+                    if ts.entity_before_erase is not None:
+                        erase_entity(editor, tx, ty)
+                    elif ts.machine_before_erase != 0:
                         erase_machine(editor, tx, ty)
                     else:
                         erase_block(editor, tx, ty)
                 else:
                     erase_tile(editor, tx, ty)
+                    erase_entity(editor, tx, ty)
+            elif ts.entity is not None:
+                kind, idx = ts.entity
+                if kind == "player":
+                    set_player_position(editor, idx, tx, ty)
+                else:
+                    add_biter(editor, tx, ty)
             elif ts.machine != 0:
                 direction = ts.direction
                 if ts.machine == _CONVEYOR and ts.last_paint_tile is not None:
@@ -391,8 +416,16 @@ def _handle_toolbar_click(
     elif hit.action == "block":
         ts.block = BLOCK_ITEMS[hit.param][0]
         ts.machine = 0
+        ts.entity = None
     elif hit.action == "machine":
         ts.machine = MACHINE_ITEMS[hit.param][0]
+        ts.entity = None
+    elif hit.action == "entity":
+        if hit.param < MAX_EDITOR_PLAYERS:
+            ts.entity = ("player", hit.param)
+        else:
+            ts.entity = ("biter", 0)
+        ts.machine = 0
     elif hit.action == "toggle_res_mode":
         ts.brush.mode = "range" if ts.brush.mode == "exact" else "exact"
     elif hit.action == "edit_res_exact":
@@ -445,6 +478,13 @@ def _handle_canvas_click(
         ts.last_paint_tile = (tx, ty)
         if ts.tool == TOOL_ERASE:
             erase_tile(editor, tx, ty)
+            erase_entity(editor, tx, ty)
+        elif ts.entity is not None:
+            kind, idx = ts.entity
+            if kind == "player":
+                set_player_position(editor, idx, tx, ty)
+            else:
+                add_biter(editor, tx, ty)
         elif ts.machine != 0:
             set_machine(editor, tx, ty, ts.machine, ts.direction)
         else:
@@ -468,8 +508,11 @@ def _handle_right_click(
     ts.right_erasing = True
     ts.tool_before_erase = ts.tool
     ts.machine_before_erase = ts.machine
+    ts.entity_before_erase = ts.entity
     ts.tool = TOOL_ERASE
-    if ts.machine != 0:
+    if ts.entity is not None:
+        erase_entity(editor, tx, ty)
+    elif ts.machine != 0:
         erase_machine(editor, tx, ty)
     else:
         erase_block(editor, tx, ty)
@@ -491,6 +534,20 @@ def _handle_fill_release(
     if ts.fill_start is None or ts.cursor_tile is None:
         return
     tx, ty = ts.cursor_tile
+    if ts.entity is not None:
+        kind, idx = ts.entity
+        if kind == "biter":
+            lx = min(ts.fill_start[0], tx)
+            ly = min(ts.fill_start[1], ty)
+            rx = max(ts.fill_start[0], tx)
+            ry = max(ts.fill_start[1], ty)
+            for fy in range(max(0, ly), min(editor.map_height, ry + 1)):
+                for fx in range(max(0, lx), min(editor.map_width, rx + 1)):
+                    add_biter(editor, fx, fy)
+        else:
+            set_player_position(editor, idx, tx, ty)
+        ts.cancel_fill()
+        return
     if ts.machine != 0:
         fill_dir = _direction_from_delta(
             tx - ts.fill_start[0],
@@ -589,8 +646,10 @@ def _handle_keydown(
     elif key in _BLOCK_KEYS:
         ts.block = BLOCK_ITEMS[_BLOCK_KEYS[key]][0]
         ts.machine = 0
+        ts.entity = None
     elif key in _MACHINE_KEYS:
         ts.machine = MACHINE_ITEMS[_MACHINE_KEYS[key]][0]
+        ts.entity = None
 
     elif key == pygame.K_r:
         _handle_rotate(ts, editor)
@@ -773,6 +832,7 @@ def _render_frame(
         ts.brush,
         vp.canvas_h,
         ts.show_resources,
+        selected_entity=ts.entity,
     )
     canvas_img = render_canvas(
         editor,
@@ -1046,6 +1106,7 @@ def main() -> None:
                             ts.brush,
                             vp.canvas_h,
                             ts.show_resources,
+                            selected_entity=ts.entity,
                         )
                         adjusted = [
                             ClickRegion(
@@ -1088,6 +1149,7 @@ def main() -> None:
                 elif event.button == 3:
                     if ts.right_erasing:
                         ts.tool = ts.tool_before_erase
+                        ts.entity = ts.entity_before_erase
                         ts.right_erasing = False
                         ts.stop_painting()
                 elif event.button == 1:

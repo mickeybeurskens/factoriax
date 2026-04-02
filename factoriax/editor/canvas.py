@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pygame
@@ -19,6 +20,9 @@ from factoriax.renderer import (
     build_texture_lookup,
     render_item_icon,
 )
+
+if TYPE_CHECKING:
+    from factoriax.editor.state import EditorState
 
 TILE_SIZES = (16, 24, 32, 48)
 _GRID_COLOR = (80, 80, 80, 100)
@@ -166,8 +170,6 @@ def render_canvas(
     Returns:
         RGBA uint8 array of shape ``(canvas_h, canvas_w, 4)``.
     """
-    from factoriax.editor.state import EditorState
-
     es: EditorState = state  # type: ignore[assignment]
     canvas = np.zeros((vp.canvas_h, vp.canvas_w, 4), dtype=np.uint8)
 
@@ -257,6 +259,8 @@ def render_canvas(
             if gy1 > gy0:
                 canvas[gy0:gy1, gx] = _GRID_COLOR
 
+    _render_entities(canvas, es, vp)
+
     if cursor_tile is not None:
         cx, cy = cursor_tile
         if 0 <= cx < es.map_width and 0 <= cy < es.map_height:
@@ -273,6 +277,44 @@ def render_canvas(
                 _highlight_tile(canvas, vp, tx, ty, _SELECT_COLOR)
 
     return canvas
+
+
+@functools.lru_cache(maxsize=72)
+def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
+    """Cached player start icon for the editor canvas."""
+    from factoriax.renderer import create_player_start_icon
+
+    return create_player_start_icon(player_idx, size)
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_biter_texture(size: int) -> np.ndarray:
+    """Cached biter texture for the editor canvas."""
+    from factoriax.renderer import create_biter_texture
+
+    return create_biter_texture(size)
+
+
+def _render_entities(
+    canvas: np.ndarray, es: EditorState, vp: Viewport
+) -> None:
+    """Draw player start markers and biters on the canvas.
+
+    Biters are drawn first so player markers appear on top when
+    they overlap.
+
+    Args:
+        canvas: RGBA canvas array (mutated in place).
+        es: Current editor state.
+        vp: Current viewport.
+    """
+    ts = vp.tile_size
+    for bx, by in es.biter_positions:
+        sx, sy = tile_to_screen(vp, bx, by)
+        _blit_alpha(canvas, _cached_biter_texture(ts), sy, sx)
+    for idx, (px, py) in es.player_positions.items():
+        sx, sy = tile_to_screen(vp, px, py)
+        _blit_alpha(canvas, _cached_player_start_icon(idx, ts), sy, sx)
 
 
 def _highlight_tile(
