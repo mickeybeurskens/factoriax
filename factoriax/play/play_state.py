@@ -8,6 +8,11 @@ and is never passed to JAX functions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from factoriax.state import EnvState
+    from factoriax.ui.primitives import ClickRegion
 
 
 @dataclass
@@ -65,9 +70,12 @@ class PlayState:
 
     # Recording
     record_enabled: bool = False
-    recorded_states: list = field(default_factory=list)
+    recorded_states: list[EnvState] = field(default_factory=list)
     recorded_actions: list[int] = field(default_factory=list)
     recorded_rewards: list[float] = field(default_factory=list)
+
+    # UI hit regions from the last rendered frame
+    click_regions: list[ClickRegion] = field(default_factory=list)
 
     # Frame state
     frame_tick: int = 0

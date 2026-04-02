@@ -17,8 +17,9 @@ from factoriax.constants import (
     BlockType,
     MachineType,
 )
-from factoriax.play.ui import ClickRegion, get_pixel_font
 from factoriax.renderer import get_textures, render_item_icon
+from factoriax.ui.fonts import get_pixel_font
+from factoriax.ui.primitives import ClickRegion
 
 TOOLBAR_WIDTH = 120
 MENU_BAR_HEIGHT = 32

@@ -41,7 +41,7 @@ def add_items_to_slots(
     """
 
     def _scan_slot(
-        carry: tuple[jax.Array, jax.Array, jax.Array], slot_idx: int
+        carry: tuple[jax.Array, jax.Array, jax.Array], slot_idx: jax.Array
     ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], None]:
         items_arr, counts_arr, remaining_amt = carry
         slot_item = items_arr[slot_idx]

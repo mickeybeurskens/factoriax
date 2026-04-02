@@ -39,9 +39,13 @@ State round-trip (requires factoriax.state):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import orjson
+
+if TYPE_CHECKING:
+    from factoriax.state import EnvState
 
 # All optional array fields in the order they are declared.
 # Used by save/load/slice/repr to avoid hardcoding the list in 6 places.
@@ -195,9 +199,9 @@ class Trajectory:
     timesteps: np.ndarray | None = None
 
     # Scheme descriptors — capture how the trajectory was produced.
-    observation_scheme: dict | None = None
-    reward_scheme: dict | None = None
-    cost_scheme: dict | None = None
+    observation_scheme: dict[str, object] | None = None
+    reward_scheme: dict[str, object] | None = None
+    cost_scheme: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         """Coerce actions to numpy and ensure batch dimension."""
@@ -220,18 +224,18 @@ class Trajectory:
     @property
     def num_episodes(self) -> int:
         """Number of episodes in the batch."""
-        return self.actions.shape[0]
+        return int(self.actions.shape[0])
 
     @property
     def episode_length(self) -> int:
         """Number of timesteps per episode."""
-        return self.actions.shape[1]
+        return int(self.actions.shape[1])
 
     @property
     def num_players(self) -> int:
         """Number of players (1 if single-player)."""
         if self.actions.ndim == 3:
-            return self.actions.shape[2]
+            return int(self.actions.shape[2])
         return 1
 
     @property
@@ -249,7 +253,7 @@ class Trajectory:
 
     def episodes(self, s: slice | np.ndarray) -> Trajectory:
         """Slice along the batch dimension."""
-        kwargs: dict = {"actions": self.actions[s]}
+        kwargs: dict[str, Any] = {"actions": self.actions[s]}
         for name in _OPTIONAL_ARRAY_FIELDS:
             val = getattr(self, name)
             if val is not None:
@@ -261,7 +265,7 @@ class Trajectory:
         """Return a single-player view (actions become (B, T))."""
         if not self.is_multi_player:
             return self
-        kwargs: dict = {"actions": self.actions[:, :, idx]}
+        kwargs: dict[str, Any] = {"actions": self.actions[:, :, idx]}
         for name in _OPTIONAL_ARRAY_FIELDS:
             val = getattr(self, name)
             if val is None:
@@ -281,7 +285,7 @@ class Trajectory:
 
     def time_slice(self, start: int, end: int) -> Trajectory:
         """Slice along the time dimension."""
-        kwargs: dict = {"actions": self.actions[:, start:end]}
+        kwargs: dict[str, Any] = {"actions": self.actions[:, start:end]}
         for name in _OPTIONAL_ARRAY_FIELDS:
             val = getattr(self, name)
             if val is not None:
@@ -298,7 +302,7 @@ class Trajectory:
         "cost_scheme",
     )
 
-    def _scheme_kwargs(self) -> dict:
+    def _scheme_kwargs(self) -> dict[str, Any]:
         """Return a dict of non-None scheme fields for forwarding."""
         return {
             name: getattr(self, name)
@@ -314,7 +318,7 @@ class Trajectory:
         Scheme dicts are serialized as JSON byte strings stored under
         keys with an underscore prefix (e.g. ``_observation_scheme``).
         """
-        arrays: dict = {"actions": self.actions}
+        arrays: dict[str, Any] = {"actions": self.actions}
         for name in _OPTIONAL_ARRAY_FIELDS:
             val = getattr(self, name)
             if val is not None:
@@ -335,7 +339,7 @@ class Trajectory:
         ``observation_scheme`` automatically.
         """
         data = np.load(path, allow_pickle=True)
-        kwargs: dict = {"actions": data["actions"]}
+        kwargs: dict[str, Any] = {"actions": data["actions"]}
         for name in _OPTIONAL_ARRAY_FIELDS:
             if name in data:
                 kwargs[name] = data[name]
@@ -347,7 +351,7 @@ class Trajectory:
         # Legacy migration: old files stored _obs_type / _obs_radius
         # as scalar int32 arrays.  Fold them into observation_scheme.
         if "_obs_type" in data and "observation_scheme" not in kwargs:
-            legacy: dict = {"type": int(data["_obs_type"])}
+            legacy: dict[str, int] = {"type": int(data["_obs_type"])}
             if "_obs_radius" in data:
                 legacy["radius"] = int(data["_obs_radius"])
             kwargs["observation_scheme"] = legacy
@@ -390,7 +394,7 @@ _STATE_TO_TRAJ: dict[str, str] = {v: k for k, v in _TRAJ_TO_STATE.items()}
 
 
 def states_to_trajectory(
-    states: list,
+    states: list[EnvState],
     actions: np.ndarray | None = None,
     rewards: np.ndarray | None = None,
 ) -> Trajectory:
@@ -424,7 +428,7 @@ def states_to_trajectory(
     else:
         act = np.zeros((1, T), dtype=np.int32)
 
-    kwargs: dict = {"actions": act}
+    kwargs: dict[str, Any] = {"actions": act}
 
     if rewards is not None:
         r = np.asarray(rewards, dtype=np.float32)
@@ -452,7 +456,7 @@ def states_to_trajectory(
 def trajectory_to_states(
     traj: Trajectory,
     episode: int = 0,
-) -> list:
+) -> list[EnvState]:
     """Reconstruct EnvState objects from a Trajectory.
 
     Only fields that are present in the trajectory are set. Missing
@@ -476,7 +480,7 @@ def trajectory_to_states(
     states = []
 
     for t in range(T):
-        state_kwargs: dict = {}
+        state_kwargs: dict[str, Any] = {}
         for traj_name in _OPTIONAL_ARRAY_FIELDS:
             if traj_name in ("rewards", "timesteps"):
                 continue

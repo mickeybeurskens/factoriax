@@ -30,7 +30,7 @@ DEFAULT_ITEM_COLORS = ["#bdbdbd", "#363636", "#c0c0c0", "#b87333", "#00c800"]
 
 
 def inventory_over_time(
-    traj,
+    traj: Trajectory,
     player: int = 0,
     num_item_types: int = 5,
 ) -> np.ndarray:
@@ -69,11 +69,11 @@ def inventory_over_time(
         mask = items == item_type
         result[:, :, item_type] = (counts * mask).sum(axis=-1)
 
-    return result.mean(axis=0)  # (T, num_item_types)
+    return np.asarray(result.mean(axis=0))  # (T, num_item_types)
 
 
 def plot_inventory(
-    traj,
+    traj: Trajectory,
     player: int = 0,
     num_item_types: int = 5,
     item_labels: list[str] | None = None,
@@ -108,7 +108,7 @@ def plot_inventory(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     start = 1 if exclude_empty else 0
     for i in range(start, num_item_types):
@@ -130,7 +130,7 @@ def plot_inventory(
 
 
 def position_heatmap(
-    traj,
+    traj: Trajectory,
     player: int = 0,
     map_width: int = 32,
     map_height: int = 32,
@@ -179,7 +179,7 @@ def position_heatmap(
 
 
 def plot_position_heatmap(
-    traj,
+    traj: Trajectory,
     player: int = 0,
     map_width: int = 32,
     map_height: int = 32,
@@ -205,7 +205,7 @@ def plot_position_heatmap(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     im = ax.imshow(hm, cmap=cmap, interpolation="nearest", origin="upper")
     fig.colorbar(im, ax=ax, label="Visit frequency")
@@ -223,7 +223,7 @@ def plot_position_heatmap(
 
 
 def plot_trajectory_trace(
-    traj,
+    traj: Trajectory,
     episode: int = 0,
     player: int = 0,
     map_width: int = 32,
@@ -259,7 +259,7 @@ def plot_trajectory_trace(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     T = pos.shape[0]
     colors = plt.cm.get_cmap(cmap)(np.linspace(0, 1, T))
@@ -269,7 +269,8 @@ def plot_trajectory_trace(
 
     # Mark start and end
     ax.scatter(
-        *pos[0],
+        pos[0, 0],
+        pos[0, 1],
         marker="o",
         s=80,
         c="green",
@@ -278,7 +279,14 @@ def plot_trajectory_trace(
         label="Start",
     )
     ax.scatter(
-        *pos[-1], marker="s", s=80, c="red", edgecolors="black", zorder=3, label="End"
+        pos[-1, 0],
+        pos[-1, 1],
+        marker="s",
+        s=80,
+        c="red",
+        edgecolors="black",
+        zorder=3,
+        label="End",
     )
 
     ax.set_xlim(-0.5, map_width - 0.5)
@@ -299,7 +307,7 @@ def plot_trajectory_trace(
 
 
 def plot_resource_depletion(
-    traj,
+    traj: Trajectory,
     ax: Axes | None = None,
     figsize: tuple[float, float] = (12, 5),
     title: str | None = None,
@@ -328,7 +336,7 @@ def plot_resource_depletion(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     T = mean.shape[0]
     ax.plot(mean, color="#d62728", linewidth=1.5)

@@ -8,6 +8,7 @@ on top of the cached image, which is extremely cheap.
 from __future__ import annotations
 
 import matplotlib
+import matplotlib.figure
 import numpy as np
 
 matplotlib.use("Agg")
@@ -18,7 +19,7 @@ from factoriax.analysis.trajectory import Trajectory
 from factoriax.constants import Action
 
 
-def _fig_to_rgb(fig: plt.Figure, width: int, height: int) -> np.ndarray:
+def _fig_to_rgb(fig: matplotlib.figure.Figure, width: int, height: int) -> np.ndarray:
     """Render a matplotlib figure to a fixed-size RGB numpy array.
 
     Args:
@@ -31,7 +32,7 @@ def _fig_to_rgb(fig: plt.Figure, width: int, height: int) -> np.ndarray:
     """
     fig.set_size_inches(width / fig.dpi, height / fig.dpi)
     fig.canvas.draw()
-    rgba = np.asarray(fig.canvas.buffer_rgba())
+    rgba = np.asarray(fig.canvas.buffer_rgba())  # type: ignore[attr-defined]
     img = rgba[:, :, :3].copy()
     plt.close(fig)
     # Resize to exact target if rounding caused a mismatch.
@@ -321,7 +322,7 @@ def render_action_sankey(
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.ax.tick_params(labelsize=5, colors="#aaaaaa")
-    cbar.outline.set_edgecolor("#555555")
+    cbar.outline.set_edgecolor("#555555")  # type: ignore[operator]
 
     fig.tight_layout(pad=0.3)
     return _fig_to_rgb(fig, width, height)

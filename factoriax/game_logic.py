@@ -112,7 +112,8 @@ def is_position_walkable(state: EnvState, position: jax.Array) -> jax.Array:
         lambda: jnp.bool_(False),
     )
 
-    return ~is_solid & ~has_blocking_machine
+    result: jax.Array = ~is_solid & ~has_blocking_machine
+    return result
 
 
 def move_player(
@@ -173,7 +174,7 @@ def move_player(
         ),
     )
 
-    return state.replace(  # type: ignore[attr-defined, no-any-return]
+    return state.replace(
         player_positions=state.player_positions.at[player_idx].set(
             final_position
         ),
@@ -252,7 +253,7 @@ def mine_block(state: EnvState, player_idx: int | jax.Array) -> EnvState:
         lambda: state.items_mined,
     )
 
-    return state.replace(  # type: ignore[attr-defined, no-any-return]
+    return state.replace(
         map=new_map,
         inventory_items=new_inventory_items,
         inventory_counts=new_inventory_counts,
@@ -365,7 +366,8 @@ def rotate_adjacent(
         new_dirs = s.machine_direction.at[target_y, target_x].set(new_dir)
         return s.replace(machine_direction=new_dirs)
 
-    return lax.cond(in_bounds & has_machine, do_rotate, lambda s: s, state)
+    result: EnvState = lax.cond(in_bounds & has_machine, do_rotate, lambda s: s, state)
+    return result
 
 
 def cycle_machine_slot(
@@ -407,9 +409,10 @@ def cycle_machine_slot(
         new_sel = s.machine_selected_slot.at[target_y, target_x].set(new_slot)
         return s.replace(machine_selected_slot=new_sel)
 
-    return lax.cond(
+    result: EnvState = lax.cond(
         in_bounds & has_slots, do_cycle, lambda s: s, state
     )
+    return result
 
 
 def _find_deposit_slot(
@@ -619,7 +622,8 @@ def deposit_to_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvStat
             inventory_counts=new_inv_counts,
         )
 
-    return lax.cond(can_deposit, do_deposit, lambda s: s, state)
+    result: EnvState = lax.cond(can_deposit, do_deposit, lambda s: s, state)
+    return result
 
 
 def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvState:
@@ -680,7 +684,8 @@ def withdraw_from_adjacent(state: EnvState, player_idx: int | jax.Array) -> EnvS
         )
         return add_item_to_inventory(s, player_idx, source_item, source_count)
 
-    return lax.cond(can_withdraw, do_withdraw, lambda s: s, state)
+    result: EnvState = lax.cond(can_withdraw, do_withdraw, lambda s: s, state)
+    return result
 
 
 def apply_research(
@@ -834,7 +839,8 @@ def repair_machine(
             ),
         )
 
-    return lax.cond(can_repair, do_repair, lambda s: s, state)
+    result: EnvState = lax.cond(can_repair, do_repair, lambda s: s, state)
+    return result
 
 
 def _handle_player_action(
@@ -1005,7 +1011,7 @@ def factoriax_step(
     state = update_all_machines(state, params)
     state = update_scent_field(state, params)
     state = update_biters(state, params, rng)
-    return state.replace(timestep=state.timestep + 1)  # type: ignore[attr-defined, no-any-return]
+    return state.replace(timestep=state.timestep + 1)
 
 
 def is_game_over(state: EnvState, params: EnvParams) -> jax.Array:

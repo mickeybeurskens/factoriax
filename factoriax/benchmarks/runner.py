@@ -229,7 +229,7 @@ class BenchmarkRunner:
             @jax.jit
             def _scan(
                 states: EnvState, rngs: jax.Array,
-            ) -> tuple[EnvState, jax.Array, jax.Array, jax.Array]:
+            ) -> tuple[EnvState, jax.Array, jax.Array]:
                 def step(
                     carry: tuple[EnvState, jax.Array, jax.Array, jax.Array],
                     _: None,
@@ -242,7 +242,7 @@ class BenchmarkRunner:
                     rn, act_keys, step_keys = _split3(rn)
                     actions = vmap_policy(obs, act_keys)
 
-                    _, next_st, _, step_done, _ = vmap_step(
+                    _obs, next_st, _rew, step_done, _info = vmap_step(
                         step_keys, st, actions, params,
                     )
 
@@ -355,7 +355,7 @@ class BenchmarkRunner:
         for _ in range(params.max_timesteps):
             prev_state = state
             for p in range(num_players):
-                state_p = state.replace(selected_player=p)  # type: ignore[attr-defined]
+                state_p = state.replace(selected_player=p)
                 obs = obs_fn(state_p, params, p)
                 action = policies[p](obs)
 

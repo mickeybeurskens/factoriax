@@ -8,8 +8,7 @@ from flax import struct
 from factoriax.constants import Action
 
 
-@struct.dataclass
-class EnvState:
+class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Immutable environment state.
 
     Attributes:
@@ -81,8 +80,7 @@ class EnvState:
     scent_field: jnp.ndarray
 
 
-@struct.dataclass
-class EnvParams:
+class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Environment parameters.
 
     Attributes:

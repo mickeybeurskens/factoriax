@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
+from typing import Any
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -139,7 +140,7 @@ def action_raster(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     ax.imshow(
         actions,
@@ -259,7 +260,7 @@ def plot_transition_matrix(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     im = ax.imshow(mat, cmap=cmap, vmin=0)
     fig.colorbar(im, ax=ax, label="Probability" if normalize else "Count")
@@ -362,7 +363,7 @@ def action_ngrams(
     player: int | None = None,
     top_k: int = 20,
     action_labels: list[str] | None = None,
-) -> list[tuple[tuple[str, ...], int]]:
+) -> list[tuple[Any, int]]:
     """Extract the most common action n-grams.
 
     Parameters
@@ -383,7 +384,7 @@ def action_ngrams(
         Sorted by count descending.
     """
     actions = _resolve_player_actions(traj, player)  # (B, T)
-    counter: Counter = Counter()
+    counter: Counter[tuple[int, ...]] = Counter()
 
     for ep in actions:
         for t in range(len(ep) - n + 1):
@@ -391,7 +392,7 @@ def action_ngrams(
             counter[gram] += 1
 
     if action_labels is not None:
-        labeled: Counter = Counter()
+        labeled: Counter[tuple[str, ...]] = Counter()
         for gram, count in counter.items():
             labeled[tuple(action_labels[a] for a in gram)] = count
         return labeled.most_common(top_k)
@@ -511,16 +512,17 @@ def plot_ngram_sweep(
 
             # Colored boxes.
             for j, a in enumerate(gram):
+                a_idx = int(a)
                 bx = col_boxes + j * (sq_size + sq_gap)
                 fig.add_artist(Rectangle(
                     (bx, y - sq_size / 2), sq_size, sq_size,
-                    facecolor=colors[min(a, len(colors) - 1)],
+                    facecolor=colors[min(a_idx, len(colors) - 1)],
                     edgecolor="white", linewidth=0.3,
                     transform=fig.transFigure, clip_on=False,
                 ))
 
             # Action name sequence.
-            label = " ".join(action_labels[a] for a in gram)
+            label = " ".join(action_labels[int(a)] for a in gram)
             fig.text(
                 col_text, y, label, fontsize=7, family="monospace",
                 va="center", ha="left",
@@ -571,7 +573,7 @@ def plot_ngrams(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     ax.barh(range(len(labels)), counts, color="#4c72b0")
     ax.set_yticks(range(len(labels)))
@@ -658,7 +660,7 @@ def plot_entropy(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     ax.plot(ent, color="#4c72b0", linewidth=1.2)
     ax.fill_between(range(len(ent)), ent, alpha=0.15, color="#4c72b0")
@@ -754,7 +756,7 @@ def plot_run_lengths(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     data = [runs.get(i, []) for i in range(num_actions)]
     present = [(i, d) for i, d in enumerate(data) if d]
@@ -841,7 +843,7 @@ def plot_action_distribution(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     ax.stackplot(
         range(T),

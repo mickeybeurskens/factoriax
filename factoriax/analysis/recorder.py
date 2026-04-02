@@ -284,7 +284,7 @@ class RolloutRecorder:
         return Trajectory(
             actions=padded_actions,
             rewards=padded_rewards,
-            **padded_states,
+            **padded_states,  # type: ignore[arg-type]
         )
 
     def reset(self) -> None:

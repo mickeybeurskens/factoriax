@@ -55,7 +55,7 @@ def can_afford_recipe(
     input_items = RECIPE_INPUT_ITEMS[recipe_idx]
     input_counts = RECIPE_INPUT_COUNTS[recipe_idx]
 
-    def check_input(carry: jax.Array, input_idx: int) -> tuple[jax.Array, None]:
+    def check_input(carry: jax.Array, input_idx: jax.Array) -> tuple[jax.Array, None]:
         can_afford = carry
         item_type = input_items[input_idx]
         required = input_counts[input_idx]
@@ -64,10 +64,11 @@ def can_afford_recipe(
         can_afford = can_afford & (jnp.where(is_valid_input, have >= required, True))
         return can_afford, None
 
-    can_afford, _ = lax.scan(
+    result: jax.Array
+    result, _ = lax.scan(
         check_input, jnp.bool_(True), jnp.arange(MAX_RECIPE_INPUTS)
     )
-    return can_afford
+    return result
 
 
 def remove_item_from_inventory(
@@ -94,7 +95,10 @@ def remove_item_from_inventory(
     counts = state.inventory_counts[player_idx]
     remaining = amount
 
-    def remove_from_slot(carry: tuple, slot_idx: int) -> tuple:
+    def remove_from_slot(
+        carry: tuple[jax.Array, jax.Array, int | jax.Array],
+        slot_idx: jax.Array,
+    ) -> tuple[tuple[jax.Array, jax.Array, int | jax.Array], None]:
         items_arr, counts_arr, remaining_amt = carry
         is_match = items_arr[slot_idx] == item_type
         slot_count = counts_arr[slot_idx]
@@ -141,7 +145,7 @@ def consume_recipe_materials(
     input_items = RECIPE_INPUT_ITEMS[recipe_idx]
     input_counts = RECIPE_INPUT_COUNTS[recipe_idx]
 
-    def consume_input(state: EnvState, input_idx: int) -> tuple[EnvState, None]:
+    def consume_input(state: EnvState, input_idx: jax.Array) -> tuple[EnvState, None]:
         item_type = input_items[input_idx]
         required = input_counts[input_idx]
         is_valid_input = item_type != ItemType.EMPTY
@@ -237,7 +241,8 @@ def start_crafting(
         )
         return s
 
-    return lax.cond(should_start, do_craft, lambda s: s, state)
+    result: EnvState = lax.cond(should_start, do_craft, lambda s: s, state)
+    return result
 
 
 def update_crafting(state: EnvState) -> EnvState:
@@ -256,7 +261,7 @@ def update_crafting(state: EnvState) -> EnvState:
     """
 
     def update_player_craft(
-        state: EnvState, player_idx: int
+        state: EnvState, player_idx: jax.Array
     ) -> tuple[EnvState, None]:
         progress = state.craft_progress[player_idx]
         is_crafting = progress > 0

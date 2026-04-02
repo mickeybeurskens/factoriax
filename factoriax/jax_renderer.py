@@ -27,6 +27,7 @@ Usage::
 from __future__ import annotations
 
 import functools
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -39,7 +40,6 @@ from factoriax.constants import (
     NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     BlockType,
-    ItemType,
     MachineType,
 )
 from factoriax.recipes import (
@@ -256,7 +256,7 @@ def _stamp_number(
     max_digits: int,
     y: int,
     x: jnp.ndarray,
-    color: jnp.ndarray,
+    color: np.ndarray | jnp.ndarray,
 ) -> jnp.ndarray:
     """Stamp a left-aligned integer into an image, hiding leading zeros.
 
@@ -289,7 +289,10 @@ def _stamp_number(
             carry, result.astype(jnp.uint8), (y, dx, 0)
         )
 
-    return jax.lax.fori_loop(0, max_digits, _stamp_one, img)
+    result: jnp.ndarray = jax.lax.fori_loop(
+        0, max_digits, _stamp_one, img
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -351,8 +354,10 @@ def render_map(
             img, player_sprite, (py * tile_px, px * tile_px, 0)
         )
 
-    image = jax.lax.fori_loop(0, num_players, _stamp_player, image)
-    return image.astype(jnp.uint8)
+    composited: jnp.ndarray = jax.lax.fori_loop(
+        0, num_players, _stamp_player, image
+    )
+    return composited.astype(jnp.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -414,8 +419,8 @@ def render_inventory_strip(
         def _stamp_digit(
             img: jnp.ndarray,
             digit_val: jnp.ndarray,
-            dx: jnp.ndarray,
-            show: jnp.ndarray,
+            dx: int | jnp.ndarray,
+            show: int | jnp.ndarray,
         ) -> jnp.ndarray:
             d_mask = digit_atlas[digit_val]
             bg_patch = jax.lax.dynamic_slice(
@@ -433,7 +438,10 @@ def render_inventory_strip(
         img = _stamp_digit(img, ones, ones_x, has_item)
         return img
 
-    return jax.lax.fori_loop(0, NUM_INVENTORY_SLOTS, _draw_slot, strip)
+    result: jnp.ndarray = jax.lax.fori_loop(
+        0, NUM_INVENTORY_SLOTS, _draw_slot, strip
+    )
+    return result
 
 
 def render_map_with_inventory(
@@ -603,7 +611,10 @@ def render_q2_machine_inv(
         )
         return img
 
-    return jax.lax.fori_loop(0, MAX_MACHINE_INVENTORY_SLOTS, _draw_mslot, img)
+    result: jnp.ndarray = jax.lax.fori_loop(
+        0, MAX_MACHINE_INVENTORY_SLOTS, _draw_mslot, img
+    )
+    return result
 
 
 def render_q3_inventory(
@@ -658,7 +669,10 @@ def render_q3_inventory(
         )
         return img
 
-    return jax.lax.fori_loop(0, NUM_INVENTORY_SLOTS, _draw_islot, img)
+    result: jnp.ndarray = jax.lax.fori_loop(
+        0, NUM_INVENTORY_SLOTS, _draw_islot, img
+    )
+    return result
 
 
 def render_q4_crafting(
@@ -740,7 +754,10 @@ def render_q4_crafting(
         )
         return img
 
-    return jax.lax.fori_loop(0, NUM_RECIPES, _draw_recipe, img)
+    result: jnp.ndarray = jax.lax.fori_loop(
+        0, NUM_RECIPES, _draw_recipe, img
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -860,24 +877,24 @@ class JaxRenderer:
         )
 
     @functools.cached_property
-    def _jit_render_map(self) -> callable:
+    def _jit_render_map(self) -> Callable[..., jnp.ndarray]:
         """JIT-compiled map renderer."""
         return jax.jit(render_map)
 
     @functools.cached_property
-    def _jit_render_hud(self) -> callable:
+    def _jit_render_hud(self) -> Callable[..., jnp.ndarray]:
         """JIT-compiled HUD renderer."""
         return jax.jit(render_hud)
 
     @functools.cached_property
-    def _vmap_render_map(self) -> callable:
+    def _vmap_render_map(self) -> Callable[..., jnp.ndarray]:
         """JIT+vmapped map renderer."""
         return jax.jit(
             jax.vmap(render_map, in_axes=(0, None, None, None))
         )
 
     @functools.cached_property
-    def _vmap_render_hud(self) -> callable:
+    def _vmap_render_hud(self) -> Callable[..., jnp.ndarray]:
         """JIT+vmapped HUD renderer."""
         return jax.jit(
             jax.vmap(render_hud, in_axes=(0, None, None, None, None, None))
@@ -892,10 +909,11 @@ class JaxRenderer:
         Returns:
             uint8 RGB image.
         """
-        return self._jit_render_map(
+        result: jnp.ndarray = self._jit_render_map(
             state, self.block_atlas, self.machine_atlas,
             self.player_sprite,
         )
+        return result
 
     def jit_render_hud(self, state: EnvState) -> jnp.ndarray:
         """JIT-compiled HUD render for a single state.
@@ -906,10 +924,11 @@ class JaxRenderer:
         Returns:
             uint8 RGB image.
         """
-        return self._jit_render_hud(
+        result: jnp.ndarray = self._jit_render_hud(
             state, self.block_atlas, self.machine_atlas,
             self.player_sprite, self.item_colors, self.digit_atlas,
         )
+        return result
 
     def vmap_render_map(self, batched_state: EnvState) -> jnp.ndarray:
         """Batched map render (jit + vmap).
@@ -920,10 +939,11 @@ class JaxRenderer:
         Returns:
             uint8 RGB images with shape (batch, H, W, 3).
         """
-        return self._vmap_render_map(
+        result: jnp.ndarray = self._vmap_render_map(
             batched_state, self.block_atlas, self.machine_atlas,
             self.player_sprite,
         )
+        return result
 
     def vmap_render_hud(self, batched_state: EnvState) -> jnp.ndarray:
         """Batched HUD render (jit + vmap).
@@ -934,7 +954,8 @@ class JaxRenderer:
         Returns:
             uint8 RGB images with shape (batch, 2*H, W, 3).
         """
-        return self._vmap_render_hud(
+        result: jnp.ndarray = self._vmap_render_hud(
             batched_state, self.block_atlas, self.machine_atlas,
             self.player_sprite, self.item_colors, self.digit_atlas,
         )
+        return result

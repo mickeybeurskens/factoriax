@@ -75,7 +75,7 @@ def plot_achievement_timing(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     # Filter to only include episodes where achievement was unlocked
     data = []
@@ -138,7 +138,7 @@ def plot_achievement_progress(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     for a in range(A):
         times = timing[:, a]
@@ -239,7 +239,7 @@ def plot_first_action_timing(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     data = []
     labels_used = []

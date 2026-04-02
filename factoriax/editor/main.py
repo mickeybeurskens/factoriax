@@ -65,13 +65,10 @@ from factoriax.editor.toolbar import (
     render_toolbar,
 )
 from factoriax.levels import load_level, save_level
-from factoriax.play.main import (
-    calculate_window_size,
-    composite_rgba_over_rgb,
-    hit_test_regions,
-    play_level,
-)
-from factoriax.play.ui import ClickRegion
+from factoriax.play.main import play_level
+from factoriax.ui.compositing import composite_rgba_over_rgb
+from factoriax.ui.primitives import ClickRegion, hit_test_regions
+from factoriax.ui.window import calculate_window_size
 
 # ---------------------------------------------------------------------------
 # Constants

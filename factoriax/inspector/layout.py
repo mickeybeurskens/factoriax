@@ -258,7 +258,8 @@ def _maybe_apply_fog(
     if obs_type != ObservationType.LOCAL:
         return game_img
 
-    radius = scheme.get("radius", 7)
+    radius_val = scheme.get("radius", 7)
+    radius = radius_val if isinstance(radius_val, int) else 7
 
     # Get player position at current step.
     if traj.positions is None:
@@ -332,6 +333,8 @@ def _draw_world(
     step = state.current_step
     num_p = traj.num_players
 
+    if traj.positions is None:
+        return
     all_pos = traj.positions[ep]
     if all_pos.ndim == 2:
         all_pos = all_pos[:, np.newaxis, :]

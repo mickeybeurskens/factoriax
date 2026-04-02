@@ -6,7 +6,12 @@ plus optional click regions.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
+
+if TYPE_CHECKING:
+    import pygame
 
 from factoriax.analysis.actions import DEFAULT_ACTION_LABELS
 from factoriax.analysis.trajectory import Trajectory
@@ -286,7 +291,7 @@ def render_help_overlay(width: int, height: int) -> np.ndarray:
 def _draw_text(
     img: np.ndarray,
     text: str,
-    font: object,
+    font: pygame.font.Font,
     color: tuple[int, int, int],
     x: int,
     y: int,

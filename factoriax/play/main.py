@@ -20,13 +20,12 @@ from factoriax.constants import (
     Direction,
     MachineType,
 )
-from factoriax.envs.factoriax_env import make_factoriax_env
+from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import Level
 from factoriax.play.play_state import PlayState
 from factoriax.play.transfer import swap_inventory_slots
 from factoriax.play.ui import (
     _HOTBAR_H,
-    ClickRegion,
     render_achievement_menu,
     render_help_overlay,
     render_hotbar,
@@ -40,17 +39,17 @@ from factoriax.play.ui import (
 )
 from factoriax.recipes import NUM_ASSEMBLER_RECIPES, NUM_RECIPES
 from factoriax.renderer import render_pixels
-from factoriax.state import EnvParams
-from factoriax.ui.compositing import composite_rgba_over_rgb  # noqa: F401
-from factoriax.ui.primitives import hit_test_regions  # noqa: F401
-from factoriax.ui.window import calculate_window_size  # noqa: F401
+from factoriax.state import EnvParams, EnvState
+from factoriax.ui.compositing import composite_rgba_over_rgb
+from factoriax.ui.primitives import ClickRegion, hit_test_regions
+from factoriax.ui.window import calculate_window_size
 
 _ROCKET_ACHIEVEMENT_IDX: int = next(
     i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
 )
 
 
-def _tile_in_front(state: object, player_idx: int) -> tuple[int, int]:
+def _tile_in_front(state: EnvState, player_idx: int) -> tuple[int, int]:
     """Return the (x, y) tile immediately in front of a player.
 
     Uses the player's current facing direction to compute a one-tile offset.
@@ -63,8 +62,8 @@ def _tile_in_front(state: object, player_idx: int) -> tuple[int, int]:
     Returns:
         ``(tx, ty)`` tile coordinates in front of the player.
     """
-    pos = np.array(state.player_positions[player_idx])  # type: ignore[attr-defined]
-    direction = int(state.player_directions[player_idx])  # type: ignore[attr-defined]
+    pos = np.array(state.player_positions[player_idx])
+    direction = int(state.player_directions[player_idx])
     offsets: dict[int, tuple[int, int]] = {
         int(Direction.LEFT): (-1, 0),
         int(Direction.RIGHT): (1, 0),
@@ -162,13 +161,13 @@ def _tile_pixel_size(map_w: int, map_h: int) -> int:
 def _handle_welcome_event(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
+    state: EnvState,
     win_ox: int,
     win_oy: int,
     win_scale: int,
     ui_w: int,
     ui_h: int,
-) -> tuple[PlayState, object]:
+) -> tuple[PlayState, EnvState]:
     """Process events while the welcome screen is showing.
 
     Args:
@@ -204,15 +203,15 @@ def _handle_welcome_event(
 def _handle_click(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
-    env: object,
+    state: EnvState,
+    env: FactoriaXEnv,
     params: EnvParams,
     rng: jax.Array,
     level: Level | None,
     win_ox: int,
     win_oy: int,
     win_scale: int,
-) -> tuple[PlayState, object, jax.Array, int, bool]:
+) -> tuple[PlayState, EnvState, jax.Array, int, bool]:
     """Process a mouse click against the current click regions.
 
     Args:
@@ -239,9 +238,9 @@ def _handle_click(
 
     if hit is not None:
         if hit.action == "select_slot":
-            selected_player = int(state.selected_player)  # type: ignore[union-attr]
-            new_slots = state.selected_slots.at[selected_player].set(hit.param)  # type: ignore[union-attr]
-            state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
+            selected_player = int(state.selected_player)
+            new_slots = state.selected_slots.at[selected_player].set(hit.param)
+            state = state.replace(selected_slots=new_slots)
             if ps.machine_open:
                 ps.machine_panel_active = False
             else:
@@ -250,24 +249,24 @@ def _handle_click(
             ps.menu_focus = "crafting"
             ps.selected_recipe = hit.param
         elif hit.action == "select_machine_slot":
-            machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])  # type: ignore[union-attr]
+            machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])
             num_slots = int(MACHINE_NUM_SLOTS[machine_type])
             if 0 <= hit.param < num_slots:
-                new_sel = state.machine_selected_slot.at[  # type: ignore[union-attr]
+                new_sel = state.machine_selected_slot.at[
                     ps.machine_ty, ps.machine_tx
                 ].set(hit.param)
-                state = state.replace(machine_selected_slot=new_sel)  # type: ignore[union-attr]
+                state = state.replace(machine_selected_slot=new_sel)
             ps.machine_panel_active = True
         elif hit.action == "toggle_held":
             if ps.held_slot is None:
                 ps.held_slot = hit.param
-                selected_player = int(state.selected_player)  # type: ignore[union-attr]
-                new_slots = state.selected_slots.at[selected_player].set(hit.param)  # type: ignore[union-attr]
-                state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
+                selected_player = int(state.selected_player)
+                new_slots = state.selected_slots.at[selected_player].set(hit.param)
+                state = state.replace(selected_slots=new_slots)
             elif ps.held_slot == hit.param:
                 ps.held_slot = None
             else:
-                selected_player = int(state.selected_player)  # type: ignore[union-attr]
+                selected_player = int(state.selected_player)
                 state = swap_inventory_slots(
                     state, selected_player, ps.held_slot, hit.param,
                 )
@@ -284,19 +283,19 @@ def _handle_click(
             elif hit.param == 1:
                 ps.pause_open = False
                 if level is not None:
-                    _, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                    _, state = env.reset_from_level(level, params)
                 else:
                     rng, reset_key = random.split(rng)
-                    _, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
+                    _, state = env.reset_env(reset_key, params)
             else:
                 running = False
     elif not (
         ps.inventory_open or ps.achievement_open or ps.research_open
         or ps.machine_open or ps.pause_open or ps.welcome_open or ps.help_open
     ):
-        selected_player = int(state.selected_player)  # type: ignore[union-attr]
-        slot_idx = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
-        item_type = int(state.inventory_items[selected_player, slot_idx])  # type: ignore[union-attr]
+        selected_player = int(state.selected_player)
+        slot_idx = int(state.selected_slots[selected_player])
+        item_type = int(state.inventory_items[selected_player, slot_idx])
         if item_type in _PLACEABLE_ITEM_SET:
             action = int(Action.PLACE)
 
@@ -306,12 +305,12 @@ def _handle_click(
 def _handle_keydown(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
-    env: object,
+    state: EnvState,
+    env: FactoriaXEnv,
     params: EnvParams,
     rng: jax.Array,
     level: Level | None,
-) -> tuple[PlayState, object, jax.Array, int, bool]:
+) -> tuple[PlayState, EnvState, jax.Array, int, bool]:
     """Dispatch a KEYDOWN event to the appropriate context handler.
 
     Args:
@@ -400,15 +399,15 @@ def _handle_keydown(
     elif ctrl_held and event.key in _KEY_TO_PLAYER:
         player_idx = _KEY_TO_PLAYER[event.key]
         if player_idx < params.num_players:
-            state = state.replace(selected_player=player_idx)  # type: ignore[union-attr]
+            state = state.replace(selected_player=player_idx)
     elif event.key in _KEY_TO_SLOT:
         slot_idx = _KEY_TO_SLOT[event.key]
         if shift_held:
             slot_idx += 8
         if slot_idx < NUM_INVENTORY_SLOTS:
-            selected_player = int(state.selected_player)  # type: ignore[union-attr]
-            new_slots = state.selected_slots.at[selected_player].set(slot_idx)  # type: ignore[union-attr]
-            state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
+            selected_player = int(state.selected_player)
+            new_slots = state.selected_slots.at[selected_player].set(slot_idx)
+            state = state.replace(selected_slots=new_slots)
     elif event.key in _KEY_TO_ACTION:
         action = _KEY_TO_ACTION[event.key]
     elif event.key in _NAV_KEYS:
@@ -420,12 +419,12 @@ def _handle_keydown(
 def _handle_pause_keys(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
-    env: object,
+    state: EnvState,
+    env: FactoriaXEnv,
     params: EnvParams,
     rng: jax.Array,
     level: Level | None,
-) -> tuple[PlayState, object, jax.Array, bool]:
+) -> tuple[PlayState, EnvState, jax.Array, bool]:
     """Handle keyboard input while the pause menu is open.
 
     Args:
@@ -451,10 +450,10 @@ def _handle_pause_keys(
         elif ps.pause_selection == 1:
             ps.pause_open = False
             if level is not None:
-                _, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                _, state = env.reset_from_level(level, params)
             else:
                 rng, reset_key = random.split(rng)
-                _, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
+                _, state = env.reset_env(reset_key, params)
         else:
             running = False
     return ps, state, rng, running
@@ -463,8 +462,8 @@ def _handle_pause_keys(
 def _handle_machine_toggle(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
-) -> tuple[PlayState, object]:
+    state: EnvState,
+) -> tuple[PlayState, EnvState]:
     """Toggle the machine inspection menu with the F key.
 
     Args:
@@ -478,13 +477,13 @@ def _handle_machine_toggle(
     if ps.machine_open:
         ps.machine_open = False
     else:
-        selected_player = int(state.selected_player)  # type: ignore[union-attr]
+        selected_player = int(state.selected_player)
         tx, ty = _tile_in_front(state, selected_player)
-        map_h, map_w = state.map.shape  # type: ignore[union-attr]
+        map_h, map_w = state.map.shape
         if (
             0 <= tx < map_w
             and 0 <= ty < map_h
-            and int(state.machine_types[ty, tx]) != int(MachineType.NONE)  # type: ignore[union-attr]
+            and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
         ):
             ps.machine_tx, ps.machine_ty = tx, ty
             ps.machine_open = True
@@ -498,8 +497,8 @@ def _handle_machine_toggle(
 def _handle_machine_keys(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
-) -> tuple[PlayState, object, int]:
+    state: EnvState,
+) -> tuple[PlayState, EnvState, int]:
     """Handle keyboard input while the machine menu is open.
 
     Args:
@@ -521,11 +520,11 @@ def _handle_machine_keys(
             )
         else:
             delta = -1 if event.key == pygame.K_a else 1
-            selected_player = int(state.selected_player)  # type: ignore[union-attr]
-            current = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
+            selected_player = int(state.selected_player)
+            current = int(state.selected_slots[selected_player])
             new_slot = (current + delta) % NUM_INVENTORY_SLOTS
-            new_slots = state.selected_slots.at[selected_player].set(new_slot)  # type: ignore[union-attr]
-            state = state.replace(selected_slots=new_slots)  # type: ignore[union-attr]
+            new_slots = state.selected_slots.at[selected_player].set(new_slot)
+            state = state.replace(selected_slots=new_slots)
     elif event.key == pygame.K_e:
         action = int(Action.WITHDRAW if ps.machine_panel_active else Action.DEPOSIT)
     return ps, state, action
@@ -533,8 +532,8 @@ def _handle_machine_keys(
 
 def _handle_assembler_recipe_or_hotbar(
     ps: PlayState,
-    state: object,
-) -> tuple[PlayState, object]:
+    state: EnvState,
+) -> tuple[PlayState, EnvState]:
     """Handle Q key: cycle assembler recipe or toggle hotbar page.
 
     Args:
@@ -544,21 +543,21 @@ def _handle_assembler_recipe_or_hotbar(
     Returns:
         Updated play state and environment state.
     """
-    machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])  # type: ignore[union-attr]
-    is_idle = int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0  # type: ignore[union-attr]
-    mc = state.machine_inventory_counts  # type: ignore[union-attr]
+    machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])
+    is_idle = int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0
+    mc = state.machine_inventory_counts
     has_inputs = (
         int(mc[ps.machine_ty, ps.machine_tx, 0]) > 0
         or int(mc[ps.machine_ty, ps.machine_tx, 1]) > 0
         or int(mc[ps.machine_ty, ps.machine_tx, 2]) > 0
     )
     if machine_type == int(MachineType.ASSEMBLER) and is_idle and not has_inputs:
-        cur_recipe = int(state.machine_selected_recipe[ps.machine_ty, ps.machine_tx])  # type: ignore[union-attr]
+        cur_recipe = int(state.machine_selected_recipe[ps.machine_ty, ps.machine_tx])
         new_recipe = (cur_recipe + 1) % NUM_ASSEMBLER_RECIPES
-        new_sel = state.machine_selected_recipe.at[  # type: ignore[union-attr]
+        new_sel = state.machine_selected_recipe.at[
             ps.machine_ty, ps.machine_tx
         ].set(new_recipe)
-        state = state.replace(machine_selected_recipe=new_sel)  # type: ignore[union-attr]
+        state = state.replace(machine_selected_recipe=new_sel)
     elif machine_type != int(MachineType.ASSEMBLER):
         ps.hotbar_page = 1 - ps.hotbar_page
     return ps, state
@@ -624,8 +623,8 @@ def _handle_research_keys(
 def _handle_inventory_nav(
     event: pygame.event.Event,
     ps: PlayState,
-    state: object,
-) -> tuple[PlayState, object, int]:
+    state: EnvState,
+) -> tuple[PlayState, EnvState, int]:
     """Handle keyboard navigation in the inventory panel.
 
     Args:
@@ -637,8 +636,8 @@ def _handle_inventory_nav(
         Tuple of (play_state, env_state, action).
     """
     action = int(Action.NOOP)
-    selected_player = int(state.selected_player)  # type: ignore[union-attr]
-    current = int(state.selected_slots[selected_player])  # type: ignore[union-attr]
+    selected_player = int(state.selected_player)
+    current = int(state.selected_slots[selected_player])
     col = current % 5
     if event.key == pygame.K_a:
         if col > 0:
@@ -650,12 +649,12 @@ def _handle_inventory_nav(
             action = int(Action.NEXT_SLOT)
     elif event.key == pygame.K_w:
         if current >= 5:
-            new_sel = state.selected_slots.at[selected_player].set(current - 5)  # type: ignore[union-attr]
-            state = state.replace(selected_slots=new_sel)  # type: ignore[union-attr]
+            new_sel = state.selected_slots.at[selected_player].set(current - 5)
+            state = state.replace(selected_slots=new_sel)
     elif event.key == pygame.K_s:
         if current < 5:
-            new_sel = state.selected_slots.at[selected_player].set(current + 5)  # type: ignore[union-attr]
-            state = state.replace(selected_slots=new_sel)  # type: ignore[union-attr]
+            new_sel = state.selected_slots.at[selected_player].set(current + 5)
+            state = state.replace(selected_slots=new_sel)
     return ps, state, action
 
 
@@ -684,7 +683,7 @@ def _handle_crafting_nav(
     return ps, action
 
 
-def _handle_world_interact(state: object) -> int:
+def _handle_world_interact(state: EnvState) -> int:
     """Determine action for E key in the world (pickup or place).
 
     Args:
@@ -693,19 +692,19 @@ def _handle_world_interact(state: object) -> int:
     Returns:
         Action integer (PICKUP or PLACE).
     """
-    selected_player = int(state.selected_player)  # type: ignore[union-attr]
+    selected_player = int(state.selected_player)
     tx, ty = _tile_in_front(state, selected_player)
-    map_h, map_w = state.map.shape  # type: ignore[union-attr]
+    map_h, map_w = state.map.shape
     has_machine = (
         0 <= tx < map_w
         and 0 <= ty < map_h
-        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)  # type: ignore[union-attr]
+        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
     )
     return int(Action.PICKUP if has_machine else Action.PLACE)
 
 
 def _render_frame(
-    state: object,
+    state: EnvState,
     ps: PlayState,
     ui_w: int,
     ui_h: int,
@@ -842,11 +841,11 @@ _KEY_TO_PLAYER = {
 }
 
 
-_MOUSE_DIR_TO_FACE = {
-    Direction.UP: int(Action.FACE_UP),
-    Direction.DOWN: int(Action.FACE_DOWN),
-    Direction.LEFT: int(Action.FACE_LEFT),
-    Direction.RIGHT: int(Action.FACE_RIGHT),
+_MOUSE_DIR_TO_FACE: dict[int, int] = {
+    int(Direction.UP): int(Action.FACE_UP),
+    int(Direction.DOWN): int(Action.FACE_DOWN),
+    int(Direction.LEFT): int(Action.FACE_LEFT),
+    int(Direction.RIGHT): int(Action.FACE_RIGHT),
 }
 
 
@@ -881,8 +880,8 @@ def _mouse_facing_direction(
 
 
 def _play_loop(
-    env: object,
-    state: object,
+    env: FactoriaXEnv,
+    state: EnvState,
     params: EnvParams,
     level: Level | None,
     screen: pygame.Surface,
@@ -904,7 +903,7 @@ def _play_loop(
         rng: JAX random key.
     """
     window_width, window_height = screen.get_size()
-    step_fn = jax.jit(env.step_env)  # type: ignore[union-attr]
+    step_fn = jax.jit(env.step_env)
     clock = pygame.time.Clock()
 
     ui_w = _UI_SIZE
@@ -955,8 +954,8 @@ def _play_loop(
         ui_my = (wy - win_oy) // win_scale
         tile_mx = (ui_mx - world_ox) // tile_px if tile_px > 0 else -1
         tile_my = (ui_my - world_oy) // tile_px if tile_px > 0 else -1
-        map_h = int(state.map.shape[0])  # type: ignore[union-attr]
-        map_w = int(state.map.shape[1])  # type: ignore[union-attr]
+        map_h = int(state.map.shape[0])
+        map_w = int(state.map.shape[1])
         if 0 <= tile_mx < map_w and 0 <= tile_my < map_h:
             ps.hover_tile_x = tile_mx
             ps.hover_tile_y = tile_my
@@ -971,9 +970,9 @@ def _play_loop(
             or ps.achievement_open or ps.machine_open
         )
         if action == int(Action.NOOP) and no_menu:
-            sel = int(state.selected_player)  # type: ignore[union-attr]
-            px = int(state.player_positions[sel, 0])  # type: ignore[union-attr]
-            py_ = int(state.player_positions[sel, 1])  # type: ignore[union-attr]
+            sel = int(state.selected_player)
+            px = int(state.player_positions[sel, 0])
+            py_ = int(state.player_positions[sel, 1])
             pcx = world_ox + px * tile_px + tile_px // 2
             pcy = world_oy + py_ * tile_px + tile_px // 2
             new_dir = _mouse_facing_direction(ui_mx, ui_my, pcx, pcy)
@@ -992,14 +991,14 @@ def _play_loop(
                 ps.recorded_states.append(state)
             if done:
                 if level is not None:
-                    _, state = env.reset_from_level(level, params)  # type: ignore[union-attr]
+                    _, state = env.reset_from_level(level, params)
                 else:
                     rng, reset_key = random.split(rng)
-                    _, state = env.reset_env(reset_key, params)  # type: ignore[union-attr]
+                    _, state = env.reset_env(reset_key, params)
 
             if not ps.victory_shown:
                 rocket_unlocked = bool(
-                    state.achievements_unlocked[_ROCKET_ACHIEVEMENT_IDX]  # type: ignore[union-attr]
+                    state.achievements_unlocked[_ROCKET_ACHIEVEMENT_IDX]
                 )
                 if rocket_unlocked:
                     ps.victory_open = True
@@ -1028,7 +1027,7 @@ def _play_loop(
 
 
 def _save_recorded_trajectory(
-    states: list,
+    states: list[EnvState],
     actions: list[int],
     rewards: list[float],
 ) -> None:

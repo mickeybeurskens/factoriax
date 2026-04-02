@@ -21,11 +21,11 @@ Submodules
 
 from factoriax.play.main import main
 from factoriax.play.ui import (
-    ClickRegion,
     render_achievement_menu,
     render_inventory_menu,
     render_pause_menu,
 )
+from factoriax.ui.primitives import ClickRegion
 
 __all__ = [
     "main",

@@ -567,9 +567,23 @@ def train(config: Config) -> None:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
             mean_ret = float(np.mean(list(ep_returns))) if ep_returns else 0.0
+
+            # Diagnostics: action distribution and reward stats.
+            actions_np = np.array(traj.action).ravel()
+            act_counts = np.bincount(actions_np, minlength=NUM_ACTIONS)
+            top3 = np.argsort(act_counts)[::-1][:3]
+            act_str = " ".join(
+                f"{Action(a).name}={act_counts[a]/len(actions_np)*100:.0f}%"
+                for a in top3
+            )
+            total_reward_batch = float(np.sum(rewards_np))
+            nonzero_reward_steps = int(np.sum(rewards_np > 0))
+
             logger.info(
                 "iter=%d/%d  step=%dk  sps=%.0f"
-                "  ret=%.2f  loss=%.4f  ent=%.4f",
+                "  ret=%.2f  loss=%.4f  ent=%.4f"
+                "  | r_batch=%.0f r_steps=%d"
+                "  | %s",
                 it + 1,
                 num_iters,
                 current_step // 1000,
@@ -577,6 +591,9 @@ def train(config: Config) -> None:
                 mean_ret,
                 float(metrics["loss"]),
                 float(metrics["ent"]),
+                total_reward_batch,
+                nonzero_reward_steps,
+                act_str,
             )
             if wandb_run is not None:
                 wandb_run.log(

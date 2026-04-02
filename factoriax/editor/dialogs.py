@@ -26,9 +26,9 @@ from factoriax.constants import (
     MachineType,
     SlotRole,
 )
-from factoriax.play.ui import get_pixel_font
 from factoriax.recipes import ASSEMBLER_RECIPE_NAMES, NUM_ASSEMBLER_RECIPES
 from factoriax.renderer import render_item_icon
+from factoriax.ui.fonts import get_pixel_font
 
 _BG = (22, 22, 22, 228)
 _BORDER = (190, 165, 55, 255)

@@ -20,15 +20,26 @@ the rocket itself.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 import jax.numpy as jnp
 
 from factoriax.constants import ItemType
+
+
+class _Recipe(TypedDict):
+    """Recipe dictionary with output item, input list, and tick count."""
+
+    output: int
+    inputs: list[tuple[int, int]]
+    ticks: int
+
 
 # ---------------------------------------------------------------------------
 # Player-craftable recipes
 # ---------------------------------------------------------------------------
 
-RECIPES: list[dict] = [
+RECIPES: list[_Recipe] = [
     {
         "output": ItemType.MINER,
         "inputs": [(ItemType.COPPER, 5), (ItemType.IRON, 5)],
@@ -91,7 +102,7 @@ RECIPE_INPUT_COUNTS: jnp.ndarray = jnp.array(
 
 MAX_ASSEMBLER_STACK_SIZE: int = 1000
 
-ASSEMBLER_RECIPES: list[dict] = [
+ASSEMBLER_RECIPES: list[_Recipe] = [
     {
         "output": ItemType.HULL,
         "inputs": [(ItemType.IRON, 5)],

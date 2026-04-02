@@ -160,7 +160,8 @@ def place_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
         )
         return s
 
-    return lax.cond(should_place, do_place, lambda s: s, state)
+    result: EnvState = lax.cond(should_place, do_place, lambda s: s, state)
+    return result
 
 
 def can_fit_in_inventory(
@@ -218,7 +219,8 @@ def can_fit_in_inventory(
         (player_items, player_counts, jnp.bool_(True)),
         jnp.arange(num_items),
     )
-    return all_fit
+    result: jax.Array = all_fit
+    return result
 
 
 def pickup_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
@@ -314,4 +316,5 @@ def pickup_machine(state: EnvState, player_idx: int | jax.Array) -> EnvState:
         )
         return s
 
-    return lax.cond(should_pickup, do_pickup, lambda s: s, state)
+    result: EnvState = lax.cond(should_pickup, do_pickup, lambda s: s, state)
+    return result

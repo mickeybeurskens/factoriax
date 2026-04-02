@@ -889,7 +889,8 @@ def _smooth_noise(
     lo_val = jnp.min(hi)
     hi_val = jnp.max(hi)
     span = jnp.maximum(hi_val - lo_val, 1e-6)
-    return (hi - lo_val) / span
+    result: jax.Array = (hi - lo_val) / span
+    return result
 
 
 def _generate_terrain_patched(

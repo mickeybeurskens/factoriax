@@ -21,6 +21,7 @@ from typing import Any
 
 import jax
 import matplotlib
+import matplotlib.figure
 import numpy as np
 
 matplotlib.use("Agg")
@@ -41,7 +42,7 @@ _RESOURCE_COLORS: dict[str, str] = {
 _ACTION_LABELS: list[str] = [a.name for a in Action]
 
 
-def plot_level_scores(result: BenchmarkResult) -> plt.Figure:
+def plot_level_scores(result: BenchmarkResult) -> matplotlib.figure.Figure:
     """Bar chart comparing per-level scores.
 
     Args:
@@ -72,7 +73,7 @@ def plot_level_scores(result: BenchmarkResult) -> plt.Figure:
     return fig
 
 
-def plot_resource_breakdown(result: BenchmarkResult) -> plt.Figure:
+def plot_resource_breakdown(result: BenchmarkResult) -> matplotlib.figure.Figure:
     """Stacked bar chart of resources collected per level.
 
     Each bar shows the contribution of coal, iron, and copper to the total
@@ -119,7 +120,7 @@ def plot_resource_breakdown(result: BenchmarkResult) -> plt.Figure:
     return fig
 
 
-def plot_action_distribution(result: BenchmarkResult) -> plt.Figure:
+def plot_action_distribution(result: BenchmarkResult) -> matplotlib.figure.Figure:
     """Grouped bar chart of action frequencies per level.
 
     Shows how often each action was taken across the episode. Useful for
@@ -273,7 +274,7 @@ def log_to_wandb(
         return
 
     try:
-        import wandb  # type: ignore[import-untyped]
+        import wandb
     except ImportError:
         return
 

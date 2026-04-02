@@ -294,7 +294,7 @@ def plot_spatial_overlap(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     for d in distance_thresholds:
         overlap = spatial_overlap(traj, d)
@@ -390,7 +390,7 @@ def plot_joint_actions(
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore[assignment]
 
     im = ax.imshow(mat, cmap="Blues")
     fig.colorbar(im, ax=ax, label="Joint probability")

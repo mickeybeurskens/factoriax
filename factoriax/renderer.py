@@ -33,7 +33,8 @@ def _resize_texture(texture: np.ndarray, size: int) -> np.ndarray:
     if src_size == size:
         return texture
     idx = np.round(np.linspace(0, src_size - 1, size)).astype(int)
-    return texture[np.ix_(idx, idx)]
+    resized: np.ndarray = texture[np.ix_(idx, idx)]
+    return resized
 
 
 def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
@@ -113,6 +114,8 @@ def create_player_texture(
 
     # Build indicator triangle via vectorised row/column masks.
     rows = np.arange(indicator_size)
+    pys: int | np.ndarray
+    centers_x: int | np.ndarray
     if direction == Direction.UP:
         pys = 1 + rows
         centers_x = center
@@ -129,11 +132,11 @@ def create_player_texture(
     for i in range(indicator_size):
         offsets = np.arange(-i, i + 1)
         if direction in (Direction.UP, Direction.DOWN):
-            py = int(pys[i])
+            py = int(pys[i])  # type: ignore[index]
             pxs = np.clip(centers_x + offsets, 0, size - 1)
             player[py, pxs] = [*indicator_color, 255]
         else:
-            px = int(centers_x[i])
+            px = int(centers_x[i])  # type: ignore[index]
             pys_clipped = np.clip(pys + offsets, 0, size - 1)
             player[pys_clipped, px] = [*indicator_color, 255]
 
@@ -603,9 +606,9 @@ def render_machine_overlays(
 
         if frame_tick > 0:
             if machine_type == int(MachineType.MINER):
-                active = is_miner_active(state, y, x)
+                active = is_miner_active(state, int(y), int(x))
             elif machine_type == int(MachineType.ARM):
-                active = is_arm_active(state, y, x)
+                active = is_arm_active(state, int(y), int(x))
             elif machine_type == int(MachineType.ASSEMBLER):
                 active = int(state.machine_power[y, x]) > 0
             else:

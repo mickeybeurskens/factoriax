@@ -292,4 +292,5 @@ def update_biters(
         s = attack_machines(s, params)
         return s
 
-    return jax.lax.cond(is_biter_tick, do_update, lambda s: s, state)
+    result: EnvState = jax.lax.cond(is_biter_tick, do_update, lambda s: s, state)
+    return result

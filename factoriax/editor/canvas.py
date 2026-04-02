@@ -216,7 +216,9 @@ def render_canvas(
     inv_items = es.machine_inventory_items[row0:row1, col0:col1]
     has_inv = np.any(inv_items != 0, axis=2)
     iys, ixs = np.nonzero(has_inv)
-    for iy, ix in zip(iys, ixs):
+    for iy_np, ix_np in zip(iys, ixs):
+        iy = int(iy_np)
+        ix = int(ix_np)
         dot_y = py0 + iy * ts + 2
         dot_x = px0 + ix * ts + ts - 6
         dot_sz = max(2, ts // 8)
@@ -343,7 +345,7 @@ def _get_resource_font(tile_size: int) -> pygame.font.Font:
     Returns:
         A pygame font instance.
     """
-    from factoriax.play.ui import get_pixel_font
+    from factoriax.ui.fonts import get_pixel_font
 
     font_size = max(8, tile_size * 2 // 5)
     return get_pixel_font(font_size)
