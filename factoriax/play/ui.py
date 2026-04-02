@@ -946,7 +946,8 @@ def render_machine_menu(
             overlay[bar_y : bar_y + bar_h, bar_x : bar_x + fill_w] = bar_color
         hp_text = f"HP: {health}/{max_hp}"
         hp_arr = _render_text_rgba(hp_text, body_font, (180, 175, 150))
-        _blit_rgba(overlay, hp_arr, bar_y + bar_h + 2, bar_x + (bar_w - hp_arr.shape[1]) // 2)
+        hp_x = bar_x + (bar_w - hp_arr.shape[1]) // 2
+        _blit_rgba(overlay, hp_arr, bar_y + bar_h + 2, hp_x)
         content_y = bar_y + bar_h + hp_arr.shape[0] + 8
 
     # --- Assembler recipe subtitle ---

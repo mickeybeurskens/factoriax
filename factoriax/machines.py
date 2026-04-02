@@ -98,7 +98,8 @@ def refuel_machines(state: EnvState, params: EnvParams | None = None) -> EnvStat
     should_refuel = is_miner & needs_power & has_fuel
 
     new_fuel = fuel_count - should_refuel.astype(jnp.int16)
-    new_power = state.machine_power + (should_refuel.astype(jnp.int32) * params.power_per_coal)
+    refuel_power = should_refuel.astype(jnp.int32) * params.power_per_coal
+    new_power = state.machine_power + refuel_power
 
     new_inv_counts = state.machine_inventory_counts.at[..., _MINER_FUEL_SLOT].set(
         new_fuel
@@ -635,7 +636,9 @@ def run_arms(state: EnvState, max_asm_stack: int = 1000) -> EnvState:
     bwd_row = jnp.clip(rows - dy, 0, h - 1)
     bwd_col = jnp.clip(cols - dx, 0, w - 1)
 
-    state = _arm_deposit_phase(state, is_arm, rows, cols, fwd_row, fwd_col, max_asm_stack)
+    state = _arm_deposit_phase(
+        state, is_arm, rows, cols, fwd_row, fwd_col, max_asm_stack,
+    )
     state = _arm_pick_phase(state, is_arm, rows, cols, bwd_row, bwd_col)
     return state
 

@@ -188,7 +188,7 @@ NUM_TECHNOLOGIES: int = 2
 RESEARCH_COST: int = 10  # science packs per unlock
 
 # Maps science pack item type -> technology index.
-# BASIC_SCIENCE_PACK unlocks tech 0 (Hull), FUEL_SCIENCE_PACK unlocks tech 1 (Fuel Pack).
+# BASIC_SCIENCE_PACK unlocks tech 0, FUEL_SCIENCE_PACK unlocks tech 1.
 SCIENCE_PACK_TO_TECH = jnp.zeros(len(ItemType), dtype=jnp.int32).at[
     ItemType.BASIC_SCIENCE_PACK
 ].set(0).at[

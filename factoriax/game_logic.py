@@ -139,12 +139,12 @@ def move_player(
 
     # Map movement actions to compass Direction for DIRECTIONS lookup.
     # Non-movement actions map to 0 (zero offset).
-    _ACT_TO_DIR = jnp.array(
+    act_to_dir = jnp.array(
         [0, Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT],
         dtype=jnp.int32,
     )
-    safe_act = jnp.clip(action, 0, _ACT_TO_DIR.shape[0] - 1)
-    offset = DIRECTIONS[_ACT_TO_DIR[safe_act]]
+    safe_act = jnp.clip(action, 0, act_to_dir.shape[0] - 1)
+    offset = DIRECTIONS[act_to_dir[safe_act]]
 
     is_move = (action >= Action.UP) & (action <= Action.RIGHT)
     target = current_position + offset
