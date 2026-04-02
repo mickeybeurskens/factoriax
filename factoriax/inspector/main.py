@@ -338,9 +338,24 @@ def _export_mp4(
         return
     out = Path(path).stem + f"_ep{state.selected_episode}.mp4"
     try:
-        from factoriax.benchmarks.single_agent_mining.analysis import save_mp4
+        import warnings
 
-        save_mp4(frames, Path(out), fps=10)
+        import imageio.v3 as iio
+
+        out_path = Path(out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", category=RuntimeWarning, message="os.fork()",
+            )
+            iio.imwrite(
+                str(out_path),
+                np.stack([f.astype(np.uint8) for f in frames]),
+                plugin="FFMPEG",
+                fps=10,
+                codec="libx264",
+                pixelformat="yuv420p",
+            )
         print(f"Saved video: {out}")
     except ImportError:
         print("imageio[ffmpeg] required for MP4 export.")
