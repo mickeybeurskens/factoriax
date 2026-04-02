@@ -470,6 +470,11 @@ def _handle_keydown(
             state = state.replace(selected_slots=new_slots)
     elif event.key in _KEY_TO_ACTION:
         action = _KEY_TO_ACTION[event.key]
+    elif event.key in _DIR_KEYS:
+        want_dir, move_act, face_act = _DIR_KEYS[event.key]
+        sel = int(state.selected_player)
+        facing = int(state.player_directions[sel])
+        action = move_act if facing == want_dir else face_act
     elif event.key in _NAV_KEYS:
         action = _NAV_KEYS[event.key]
 
@@ -871,17 +876,23 @@ def _render_frame(
 
 
 # Module-level key mappings (constant, no need to rebuild per frame).
-_NAV_KEYS = {
-    pygame.K_w: Action.UP,
-    pygame.K_s: Action.DOWN,
-    pygame.K_a: Action.LEFT,
-    pygame.K_d: Action.RIGHT,
-    pygame.K_q: Action.TURN_LEFT,
-    pygame.K_e: Action.TURN_RIGHT,
-    pygame.K_UP: Action.FACE_UP,
-    pygame.K_DOWN: Action.FACE_DOWN,
-    pygame.K_LEFT: Action.FACE_LEFT,
-    pygame.K_RIGHT: Action.FACE_RIGHT,
+# Maps direction keys to (Direction, move_Action, face_Action).
+# If the player already faces that direction, emit the move action.
+# Otherwise emit the face action to turn first.
+_DIR_KEYS: dict[int, tuple[int, int, int]] = {
+    pygame.K_w: (Direction.UP, int(Action.UP), int(Action.FACE_UP)),
+    pygame.K_s: (Direction.DOWN, int(Action.DOWN), int(Action.FACE_DOWN)),
+    pygame.K_a: (Direction.LEFT, int(Action.LEFT), int(Action.FACE_LEFT)),
+    pygame.K_d: (Direction.RIGHT, int(Action.RIGHT), int(Action.FACE_RIGHT)),
+    pygame.K_UP: (Direction.UP, int(Action.UP), int(Action.FACE_UP)),
+    pygame.K_DOWN: (Direction.DOWN, int(Action.DOWN), int(Action.FACE_DOWN)),
+    pygame.K_LEFT: (Direction.LEFT, int(Action.LEFT), int(Action.FACE_LEFT)),
+    pygame.K_RIGHT: (Direction.RIGHT, int(Action.RIGHT), int(Action.FACE_RIGHT)),
+}
+
+_NAV_KEYS: dict[int, int] = {
+    pygame.K_q: int(Action.TURN_LEFT),
+    pygame.K_e: int(Action.TURN_RIGHT),
 }
 
 _KEY_TO_ACTION = {
@@ -1008,37 +1019,16 @@ def _play_loop(
                     event, ps, state, env, params, rng, level,
                 )
 
-        # Compute mouse position in UI coordinates and hovered tile.
-        wx, wy = pygame.mouse.get_pos()
-        ui_mx = (wx - win_ox) // win_scale
-        ui_my = (wy - win_oy) // win_scale
-        tile_mx = (ui_mx - world_ox) // tile_px if tile_px > 0 else -1
-        tile_my = (ui_my - world_oy) // tile_px if tile_px > 0 else -1
+        # Highlight the tile the player is facing.
+        ftx, fty = _tile_in_front(state, int(state.selected_player))
         map_h = int(state.map.shape[0])
         map_w = int(state.map.shape[1])
-        if 0 <= tile_mx < map_w and 0 <= tile_my < map_h:
-            ps.hover_tile_x = tile_mx
-            ps.hover_tile_y = tile_my
+        if 0 <= ftx < map_w and 0 <= fty < map_h:
+            ps.hover_tile_x = ftx
+            ps.hover_tile_y = fty
         else:
             ps.hover_tile_x = -1
             ps.hover_tile_y = -1
-
-        # Auto-face toward mouse when no other action is pending.
-        no_menu = not (
-            ps.welcome_open or ps.victory_open or ps.pause_open
-            or ps.inventory_open or ps.research_open
-            or ps.achievement_open or ps.machine_open
-        )
-        if action == int(Action.NOOP) and no_menu:
-            sel = int(state.selected_player)
-            px = int(state.player_positions[sel, 0])
-            py_ = int(state.player_positions[sel, 1])
-            pcx = world_ox + px * tile_px + tile_px // 2
-            pcy = world_oy + py_ * tile_px + tile_px // 2
-            new_dir = _mouse_facing_direction(ui_mx, ui_my, pcx, pcy)
-            if new_dir != 0 and new_dir != ps.mouse_facing:
-                ps.mouse_facing = new_dir
-                action = _MOUSE_DIR_TO_FACE[new_dir]
 
         if action != int(Action.NOOP):
             rng, step_key = random.split(rng)
