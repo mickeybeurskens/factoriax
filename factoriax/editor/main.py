@@ -17,6 +17,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BlockType,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.editor.canvas import (
@@ -34,12 +35,15 @@ from factoriax.editor.dialogs import (
     NumberInputDialog,
     render_help_overlay,
 )
+from factoriax.editor.inventory_panel import render_inventory_panel
 from factoriax.editor.state import (
     EditorState,
+    InvTarget,
     ResourceBrush,
     add_biter,
     add_column,
     add_row,
+    clear_inventory_slot,
     editor_state_from_level,
     editor_state_to_level,
     erase_block,
@@ -47,9 +51,12 @@ from factoriax.editor.state import (
     erase_machine,
     erase_tile,
     fill_rect_tiles,
+    get_inventory_slots,
+    get_num_slots,
     new_editor_state,
     remove_column,
     remove_row,
+    set_inventory_slot,
     set_machine,
     set_player_position,
     set_tile,
@@ -64,6 +71,9 @@ from factoriax.editor.toolbar import (
     TOOL_FILL,
     TOOL_PAINT,
     TOOLBAR_WIDTH,
+    get_palette_items_for_machine_slot,
+    get_palette_items_for_player,
+    render_item_palette,
     render_menu_bar,
     render_status_bar,
     render_toolbar,
@@ -166,10 +176,22 @@ class ToolState:
     middle_dragging: bool = False
     middle_last: tuple[int, int] = (0, 0)
     toolbar_scroll: int = 0
+    inventory_mode: bool = False
+    inv_target: InvTarget | None = None
+    inv_focused_slot: int = 0
+    inv_dragging: bool = False
+    inv_drag_slot: int = -1
 
     @property
     def layer(self) -> str:
-        """Return ``"entity"``, ``"machine"``, or ``"terrain"``."""
+        """Return the active editing layer name.
+
+        Returns:
+            ``"inventory"``, ``"entity"``, ``"machine"``, or
+            ``"terrain"``.
+        """
+        if self.inventory_mode:
+            return "inventory"
         if self.entity is not None:
             return "entity"
         return "machine" if self.machine != 0 else "terrain"
@@ -177,6 +199,13 @@ class ToolState:
     @property
     def brush_name(self) -> str:
         """Return the display name of the active brush."""
+        if self.inventory_mode:
+            if self.inv_target is not None:
+                kind = self.inv_target[0]
+                if kind == "player":
+                    return f"Player {self.inv_target[1]}"
+                return f"Machine ({self.inv_target[1]},{self.inv_target[2]})"
+            return "Select target"
         if self.tool == TOOL_ERASE:
             return "Eraser"
         if self.entity is not None:
@@ -214,6 +243,29 @@ class ToolState:
 # ---------------------------------------------------------------------------
 # Small helpers
 # ---------------------------------------------------------------------------
+
+
+def _get_palette_items(ts: ToolState, editor: EditorState) -> list[tuple[int, str]]:
+    """Return the item palette list appropriate for the current target.
+
+    For player targets every non-empty item is offered. For machine
+    targets the list is filtered by slot role. When no target is
+    selected an empty list is returned.
+
+    Args:
+        ts: Tool state (read for target and focused slot).
+        editor: Editor state (read for machine types).
+
+    Returns:
+        ``(ItemType_int, display_name)`` pairs for the palette.
+    """
+    target = ts.inv_target
+    if target is None:
+        return []
+    if target[0] == "player":
+        return get_palette_items_for_player()
+    mt = int(editor.machine_types[target[2], target[1]])
+    return get_palette_items_for_machine_slot(mt, ts.inv_focused_slot)
 
 
 def _next_direction(current: int) -> int:
@@ -349,12 +401,22 @@ def _handle_motion(
     my = event.pos[1] // scale
     cx = mx - TOOLBAR_WIDTH
     cy = my - MENU_BAR_HEIGHT
-    if cx >= 0 and cy >= 0 and cy < vp.canvas_h:
+
+    if ts.inventory_mode:
+        half_w = vp.canvas_w // 2
+        if cx >= 0 and cx < half_w and cy >= 0 and cy < vp.canvas_h:
+            saved_w = vp.canvas_w
+            vp.canvas_w = half_w
+            ts.cursor_tile = screen_to_tile(vp, cx, cy)
+            vp.canvas_w = saved_w
+        else:
+            ts.cursor_tile = None
+    elif cx >= 0 and cy >= 0 and cy < vp.canvas_h:
         ts.cursor_tile = screen_to_tile(vp, cx, cy)
     else:
         ts.cursor_tile = None
 
-    if ts.painting and ts.cursor_tile is not None:
+    if not ts.inventory_mode and ts.painting and ts.cursor_tile is not None:
         tx, ty = ts.cursor_tile
         if (tx, ty) != ts.last_paint_tile:
             if ts.tool == TOOL_ERASE:
@@ -452,6 +514,94 @@ def _handle_toolbar_click(
     elif hit.action == "toggle_show_res":
         ts.show_resources = not ts.show_resources
     return None
+
+
+def _handle_inv_canvas_click(
+    tx: int,
+    ty: int,
+    ts: ToolState,
+    editor: EditorState,
+) -> None:
+    """Select a player or machine on the canvas during inventory mode.
+
+    If the clicked tile contains a player start, the player becomes
+    the inventory target. If it contains a machine, the machine
+    becomes the target. Otherwise the target is cleared.
+
+    Args:
+        tx: Tile x coordinate.
+        ty: Tile y coordinate.
+        ts: Tool state (mutated in place).
+        editor: Editor state (read only).
+    """
+    if not (0 <= tx < editor.map_width and 0 <= ty < editor.map_height):
+        ts.inv_target = None
+        return
+    for idx, (px, py) in editor.player_positions.items():
+        if px == tx and py == ty:
+            ts.inv_target = ("player", idx, 0)
+            ts.inv_focused_slot = 0
+            return
+    mt = int(editor.machine_types[ty, tx])
+    if mt != int(MachineType.NONE):
+        ts.inv_target = ("machine", tx, ty)
+        ts.inv_focused_slot = 0
+        return
+    ts.inv_target = None
+
+
+def _handle_inv_panel_click(
+    hit: ClickRegion,
+    ts: ToolState,
+    editor: EditorState,
+    shift: bool,
+) -> None:
+    """Handle a click on a slot inside the inventory panel.
+
+    Focusing the clicked slot is the default. Shift-click clears
+    the slot instead.
+
+    Args:
+        hit: Matched click region (action ``"inv_slot"``).
+        ts: Tool state (mutated in place).
+        editor: Editor state (mutated in place on shift-clear).
+        shift: Whether the shift modifier is held.
+    """
+    if hit.action != "inv_slot" or ts.inv_target is None:
+        return
+    slot = hit.param
+    if shift:
+        clear_inventory_slot(editor, ts.inv_target, slot)
+    else:
+        ts.inv_focused_slot = slot
+
+
+def _handle_inv_palette_click(
+    hit: ClickRegion,
+    ts: ToolState,
+    editor: EditorState,
+) -> None:
+    """Handle a click on an item in the sidebar palette.
+
+    Places the item in the focused slot with count 1, or increments
+    the count if the slot already contains the same item type.
+
+    Args:
+        hit: Matched click region (action ``"inv_item"``).
+        ts: Tool state (read for target and focused slot).
+        editor: Editor state (mutated in place).
+    """
+    if hit.action != "inv_item" or ts.inv_target is None:
+        return
+    item_type = hit.param
+    slots = get_inventory_slots(editor, ts.inv_target)
+    slot = ts.inv_focused_slot
+    current_item, current_count = slots[slot]
+    if current_item == item_type:
+        new_count = min(current_count + 1, 64)
+        set_inventory_slot(editor, ts.inv_target, slot, item_type, new_count)
+    else:
+        set_inventory_slot(editor, ts.inv_target, slot, item_type, 1)
 
 
 def _handle_canvas_click(
@@ -578,6 +728,52 @@ def _handle_fill_release(
     ts.cancel_fill()
 
 
+def _handle_inv_keydown(
+    key: int,
+    ts: ToolState,
+    editor: EditorState,
+) -> None:
+    """Handle keyboard input while inventory mode has a target selected.
+
+    Arrow keys navigate the focused slot. Delete/Backspace clears
+    the focused slot. Plus/Minus adjust the stack count.
+
+    Args:
+        key: Pygame key constant.
+        ts: Tool state (mutated in place).
+        editor: Editor state (mutated in place for count changes).
+    """
+    target = ts.inv_target
+    if target is None:
+        return
+    num_slots = get_num_slots(editor, target)
+    if num_slots == 0:
+        return
+
+    if key in (pygame.K_RIGHT, pygame.K_DOWN):
+        ts.inv_focused_slot = min(ts.inv_focused_slot + 1, num_slots - 1)
+    elif key in (pygame.K_LEFT, pygame.K_UP):
+        ts.inv_focused_slot = max(ts.inv_focused_slot - 1, 0)
+    elif key in (pygame.K_DELETE, pygame.K_BACKSPACE):
+        clear_inventory_slot(editor, target, ts.inv_focused_slot)
+    elif key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+        slots = get_inventory_slots(editor, target)
+        item_type, count = slots[ts.inv_focused_slot]
+        if item_type != int(ItemType.EMPTY) and count < 64:
+            set_inventory_slot(
+                editor, target, ts.inv_focused_slot, item_type, count + 1
+            )
+    elif key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+        slots = get_inventory_slots(editor, target)
+        item_type, count = slots[ts.inv_focused_slot]
+        if item_type != int(ItemType.EMPTY) and count > 1:
+            set_inventory_slot(
+                editor, target, ts.inv_focused_slot, item_type, count - 1
+            )
+        elif count <= 1:
+            clear_inventory_slot(editor, target, ts.inv_focused_slot)
+
+
 def _handle_keydown(
     event: pygame.event.Event,
     ts: ToolState,
@@ -624,6 +820,12 @@ def _handle_keydown(
     if key == pygame.K_ESCAPE:
         if ts.fill_start is not None:
             ts.cancel_fill()
+        elif ts.inventory_mode:
+            if ts.inv_target is not None:
+                ts.inv_target = None
+                ts.inv_focused_slot = 0
+            else:
+                ts.inventory_mode = False
         else:
             running = False
 
@@ -662,9 +864,15 @@ def _handle_keydown(
     elif key == pygame.K_t:
         ts.brush.mode = "range" if ts.brush.mode == "exact" else "exact"
     elif key == pygame.K_v:
-        ts.show_resources = not ts.show_resources
+        ts.inventory_mode = not ts.inventory_mode
+        if not ts.inventory_mode:
+            ts.inv_target = None
+            ts.inv_focused_slot = 0
     elif key == pygame.K_QUESTION or (key == pygame.K_SLASH and shift):
         ts.show_help = True
+
+    elif ts.inventory_mode and ts.inv_target is not None and not ctrl:
+        _handle_inv_keydown(key, ts, editor)
 
     elif key == pygame.K_RIGHTBRACKET:
         _adjust_resource(ts.brush, +_RES_STEP, shift)
@@ -796,6 +1004,62 @@ def _handle_resize(
 # ---------------------------------------------------------------------------
 
 
+def _validate_inv_target(ts: ToolState, editor: EditorState) -> None:
+    """Clear ``inv_target`` if it refers to a deleted player or machine.
+
+    Args:
+        ts: Tool state (mutated in place).
+        editor: Editor state (read only).
+    """
+    target = ts.inv_target
+    if target is None:
+        return
+    if target[0] == "player":
+        if target[1] not in editor.player_positions:
+            ts.inv_target = None
+            ts.inv_focused_slot = 0
+    else:
+        tx, ty = target[1], target[2]
+        if (
+            tx < 0
+            or ty < 0
+            or tx >= editor.map_width
+            or ty >= editor.map_height
+            or int(editor.machine_types[ty, tx]) == int(MachineType.NONE)
+        ):
+            ts.inv_target = None
+            ts.inv_focused_slot = 0
+
+
+def _blit_canvas_rgba(
+    frame: np.ndarray,
+    canvas_img: np.ndarray,
+    frame_y: int,
+    frame_x: int,
+    h: int,
+    w: int,
+) -> None:
+    """Alpha-composite an RGBA canvas image onto an RGB frame region.
+
+    Args:
+        frame: Destination RGB array (mutated in place).
+        canvas_img: Source RGBA canvas image.
+        frame_y: Top row in the frame.
+        frame_x: Left column in the frame.
+        h: Maximum height to composite.
+        w: Maximum width to composite.
+    """
+    canvas_rgb = canvas_img[:, :, :3]
+    alpha = canvas_img[:, :, 3:4].astype(np.float32) / 255.0
+    bg = frame[frame_y : frame_y + h, frame_x : frame_x + w]
+    ch = min(canvas_rgb.shape[0], bg.shape[0])
+    cw = min(canvas_rgb.shape[1], bg.shape[1])
+    bg[:ch, :cw] = (
+        canvas_rgb[:ch, :cw].astype(np.float32) * alpha[:ch, :cw]
+        + bg[:ch, :cw].astype(np.float32) * (1.0 - alpha[:ch, :cw])
+    ).astype(np.uint8)
+
+
 def _render_frame(
     editor: EditorState,
     vp: Viewport,
@@ -808,6 +1072,10 @@ def _render_frame(
     inspector_dialog: MachineInspectorDialog | None = None,
 ) -> np.ndarray:
     """Compose the full editor frame from all UI layers.
+
+    When inventory mode is active the canvas area is split: the left
+    half shows the map, the right half shows the inventory panel for
+    the selected target.  The toolbar is replaced with an item palette.
 
     Args:
         editor: Current editor state.
@@ -823,24 +1091,13 @@ def _render_frame(
     Returns:
         RGB uint8 array of shape ``(base_h, base_w, 3)``.
     """
+    if ts.inventory_mode:
+        _validate_inv_target(ts, editor)
+
     menu_bar, _ = render_menu_bar(base_w)
-    toolbar, _ = render_toolbar(
-        ts.tool,
-        ts.block,
-        ts.machine,
-        ts.direction,
-        ts.brush,
-        vp.canvas_h,
-        ts.show_resources,
-        selected_entity=ts.entity,
-    )
-    canvas_img = render_canvas(
-        editor,
-        vp,
-        ts.cursor_tile,
-        ts.fill_rect,
-        ts.show_resources,
-    )
+    canvas_h = vp.canvas_h
+    canvas_w = vp.canvas_w
+
     status_bar = render_status_bar(
         ts.tool,
         ts.brush_name,
@@ -854,26 +1111,78 @@ def _render_frame(
 
     frame = np.full((base_h, base_w, 3), (30, 30, 30), dtype=np.uint8)
     frame[:MENU_BAR_HEIGHT, :] = menu_bar
-    tb_visible_h = min(toolbar.shape[0], vp.canvas_h)
-    scroll = min(ts.toolbar_scroll, max(0, toolbar.shape[0] - tb_visible_h))
-    ts.toolbar_scroll = scroll
-    tb_slice = toolbar[scroll : scroll + tb_visible_h]
-    frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_slice.shape[0], :TOOLBAR_WIDTH] = (
-        tb_slice
-    )
 
-    canvas_rgb = canvas_img[:, :, :3]
-    alpha = canvas_img[:, :, 3:4].astype(np.float32) / 255.0
-    bg = frame[
-        MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + vp.canvas_h,
-        TOOLBAR_WIDTH : TOOLBAR_WIDTH + vp.canvas_w,
-    ]
-    ch = min(canvas_rgb.shape[0], bg.shape[0])
-    cw = min(canvas_rgb.shape[1], bg.shape[1])
-    bg[:ch, :cw] = (
-        canvas_rgb[:ch, :cw].astype(np.float32) * alpha[:ch, :cw]
-        + bg[:ch, :cw].astype(np.float32) * (1.0 - alpha[:ch, :cw])
-    ).astype(np.uint8)
+    if ts.inventory_mode:
+        # Sidebar: item palette instead of normal toolbar.
+        palette_items = _get_palette_items(ts, editor)
+        palette_img, _ = render_item_palette(palette_items, canvas_h, ts.toolbar_scroll)
+        tb_h = min(palette_img.shape[0], canvas_h)
+        frame[MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_h, :TOOLBAR_WIDTH] = palette_img[
+            :tb_h
+        ]
+
+        # Canvas at half width.
+        half_w = canvas_w // 2
+        saved_w = vp.canvas_w
+        vp.canvas_w = half_w
+        canvas_img = render_canvas(
+            editor, vp, ts.cursor_tile, ts.fill_rect, ts.show_resources
+        )
+        vp.canvas_w = saved_w
+        _blit_canvas_rgba(
+            frame, canvas_img, MENU_BAR_HEIGHT, TOOLBAR_WIDTH, canvas_h, half_w
+        )
+
+        # Inventory panel on the right half.
+        if ts.inv_target is not None:
+            inv_w = canvas_w - half_w
+            inv_img, _ = render_inventory_panel(
+                editor, ts.inv_target, ts.inv_focused_slot, inv_w, canvas_h
+            )
+            inv_rgb = inv_img[:, :, :3]
+            inv_alpha = inv_img[:, :, 3:4].astype(np.float32) / 255.0
+            dest = frame[
+                MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + canvas_h,
+                TOOLBAR_WIDTH + half_w : TOOLBAR_WIDTH + half_w + inv_w,
+            ]
+            dh = min(inv_rgb.shape[0], dest.shape[0])
+            dw = min(inv_rgb.shape[1], dest.shape[1])
+            dest[:dh, :dw] = (
+                inv_rgb[:dh, :dw].astype(np.float32) * inv_alpha[:dh, :dw]
+                + dest[:dh, :dw].astype(np.float32) * (1.0 - inv_alpha[:dh, :dw])
+            ).astype(np.uint8)
+    else:
+        # Normal rendering.
+        toolbar, _ = render_toolbar(
+            ts.tool,
+            ts.block,
+            ts.machine,
+            ts.direction,
+            ts.brush,
+            canvas_h,
+            ts.show_resources,
+            selected_entity=ts.entity,
+        )
+        tb_visible_h = min(toolbar.shape[0], canvas_h)
+        scroll = min(ts.toolbar_scroll, max(0, toolbar.shape[0] - tb_visible_h))
+        ts.toolbar_scroll = scroll
+        tb_slice = toolbar[scroll : scroll + tb_visible_h]
+        frame[
+            MENU_BAR_HEIGHT : MENU_BAR_HEIGHT + tb_slice.shape[0],
+            :TOOLBAR_WIDTH,
+        ] = tb_slice
+
+        canvas_img = render_canvas(
+            editor, vp, ts.cursor_tile, ts.fill_rect, ts.show_resources
+        )
+        _blit_canvas_rgba(
+            frame,
+            canvas_img,
+            MENU_BAR_HEIGHT,
+            TOOLBAR_WIDTH,
+            canvas_h,
+            canvas_w,
+        )
 
     frame[base_h - STATUS_BAR_HEIGHT :, :] = status_bar
 
@@ -1098,45 +1407,90 @@ def main() -> None:
                         continue
 
                     if mx < TOOLBAR_WIDTH:
-                        _, tb_regions = render_toolbar(
-                            ts.tool,
-                            ts.block,
-                            ts.machine,
-                            ts.direction,
-                            ts.brush,
-                            vp.canvas_h,
-                            ts.show_resources,
-                            selected_entity=ts.entity,
-                        )
-                        adjusted = [
-                            ClickRegion(
-                                r.x,
-                                r.y + MENU_BAR_HEIGHT - ts.toolbar_scroll,
-                                r.w,
-                                r.h,
-                                r.action,
-                                r.param,
+                        if ts.inventory_mode:
+                            palette_items = _get_palette_items(ts, editor)
+                            _, p_regions = render_item_palette(
+                                palette_items,
+                                vp.canvas_h,
+                                ts.toolbar_scroll,
                             )
-                            for r in tb_regions
-                        ]
-                        hit = hit_test_regions(adjusted, mx, my)
-                        if hit is not None:
-                            nd = _handle_toolbar_click(hit, ts)
-                            if nd is not None:
-                                number_dialog = nd
-                                number_dialog_target = hit.action.replace(
-                                    "edit_res_",
-                                    "",
+                            adjusted = [
+                                ClickRegion(
+                                    r.x,
+                                    r.y + MENU_BAR_HEIGHT,
+                                    r.w,
+                                    r.h,
+                                    r.action,
+                                    r.param,
                                 )
+                                for r in p_regions
+                            ]
+                            hit = hit_test_regions(adjusted, mx, my)
+                            if hit is not None:
+                                _handle_inv_palette_click(hit, ts, editor)
+                        else:
+                            _, tb_regions = render_toolbar(
+                                ts.tool,
+                                ts.block,
+                                ts.machine,
+                                ts.direction,
+                                ts.brush,
+                                vp.canvas_h,
+                                ts.show_resources,
+                                selected_entity=ts.entity,
+                            )
+                            adjusted = [
+                                ClickRegion(
+                                    r.x,
+                                    r.y + MENU_BAR_HEIGHT - ts.toolbar_scroll,
+                                    r.w,
+                                    r.h,
+                                    r.action,
+                                    r.param,
+                                )
+                                for r in tb_regions
+                            ]
+                            hit = hit_test_regions(adjusted, mx, my)
+                            if hit is not None:
+                                nd = _handle_toolbar_click(hit, ts)
+                                if nd is not None:
+                                    number_dialog = nd
+                                    number_dialog_target = hit.action.replace(
+                                        "edit_res_", ""
+                                    )
                         continue
 
                     cx = mx - TOOLBAR_WIDTH
                     cy = my - MENU_BAR_HEIGHT
                     if cx >= 0 and cy >= 0 and cy < vp.canvas_h:
-                        tx, ty = screen_to_tile(vp, cx, cy)
-                        _handle_canvas_click(tx, ty, ts, editor, rng)
+                        if ts.inventory_mode:
+                            half_w = vp.canvas_w // 2
+                            if cx < half_w:
+                                saved_w = vp.canvas_w
+                                vp.canvas_w = half_w
+                                tx, ty = screen_to_tile(vp, cx, cy)
+                                vp.canvas_w = saved_w
+                                _handle_inv_canvas_click(tx, ty, ts, editor)
+                            elif ts.inv_target is not None:
+                                inv_x = cx - half_w
+                                inv_w = vp.canvas_w - half_w
+                                _, inv_regions = render_inventory_panel(
+                                    editor,
+                                    ts.inv_target,
+                                    ts.inv_focused_slot,
+                                    inv_w,
+                                    vp.canvas_h,
+                                )
+                                mods = pygame.key.get_mods()
+                                shift = bool(mods & pygame.KMOD_SHIFT)
+                                hit = hit_test_regions(inv_regions, inv_x, cy)
+                                if hit is not None:
+                                    _handle_inv_panel_click(hit, ts, editor, shift)
+                        else:
+                            tx, ty = screen_to_tile(vp, cx, cy)
+                            _handle_canvas_click(tx, ty, ts, editor, rng)
 
-                elif event.button == 3:
+                elif event.button == 3 and not ts.inventory_mode:
                     cx = mx - TOOLBAR_WIDTH
                     cy = my - MENU_BAR_HEIGHT
                     if cx >= 0 and cy >= 0 and cy < vp.canvas_h:

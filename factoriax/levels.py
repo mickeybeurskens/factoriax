@@ -85,6 +85,10 @@ class Level:
         player_inventory: Starting items for every player, as a list of
             ``(ItemType, count)`` pairs.  Each pair fills one inventory
             slot, applied in order.  ``None`` (default) means empty.
+        player_inventories: Per-player inventory overrides.  Maps player
+            index to a list of ``(ItemType, count)`` pairs.  Applied
+            after ``player_inventory``, so specific players can have
+            different loadouts.  ``None`` (default) means no overrides.
         player_positions: Explicit spawn positions as a list of
             ``(x, y)`` tuples, one per player.  ``None`` (default)
             uses the automatic centre-of-map placement.
@@ -102,6 +106,7 @@ class Level:
     machine_selected_recipe: np.ndarray | None = None
     machine_health: np.ndarray | None = None
     player_inventory: list[tuple[int, int]] | None = None
+    player_inventories: dict[int, list[tuple[int, int]]] | None = None
     player_positions: list[tuple[int, int]] | None = None
     biter_positions: list[tuple[int, int]] | None = None
 
@@ -716,6 +721,17 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             for p in range(params.num_players):
                 inv_items_np[p, slot_idx] = item_type
                 inv_counts_np[p, slot_idx] = count
+    if level.player_inventories is not None:
+        for p_idx, slots in level.player_inventories.items():
+            if p_idx >= params.num_players:
+                continue
+            inv_items_np[p_idx] = 0
+            inv_counts_np[p_idx] = 0
+            for slot_idx, (item_type, count) in enumerate(slots):
+                if slot_idx >= NUM_INVENTORY_SLOTS:
+                    break
+                inv_items_np[p_idx, slot_idx] = item_type
+                inv_counts_np[p_idx, slot_idx] = count
 
     return EnvState(
         map=jnp.array(block_map, dtype=jnp.int32),
@@ -1082,6 +1098,11 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "player_inventory": level.player_inventory,
+        "player_inventories": (
+            {str(k): v for k, v in level.player_inventories.items()}
+            if level.player_inventories
+            else None
+        ),
         "player_positions": level.player_positions,
         "biter_positions": level.biter_positions,
     }
@@ -1142,6 +1163,11 @@ def load_level(path: Path) -> Level:
             else None
         ),
         player_inventory=payload.get("player_inventory"),
+        player_inventories=(
+            {int(k): [tuple(p) for p in v] for k, v in raw_pi.items()}
+            if (raw_pi := payload.get("player_inventories")) is not None
+            else None
+        ),
         player_positions=(
             [tuple(p) for p in raw_pos]
             if (raw_pos := payload.get("player_positions")) is not None

@@ -14,10 +14,16 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MAX_MACHINE_INVENTORY_SLOTS,
+    NUM_INVENTORY_SLOTS,
     BlockType,
+    ItemType,
     MachineType,
 )
 from factoriax.levels import Level, default_resources
+
+#: Target type for inventory operations.
+#: ``("player", player_idx, 0)`` or ``("machine", tile_x, tile_y)``.
+InvTarget = tuple[str, int, int]
 
 
 @dataclasses.dataclass
@@ -93,6 +99,9 @@ class EditorState:
     machine_inventory_counts: np.ndarray
     machine_selected_recipe: np.ndarray
     player_inventory: list[tuple[int, int]] | None = None
+    player_inventories: dict[int, list[tuple[int, int]]] = dataclasses.field(
+        default_factory=dict,
+    )
     player_positions: dict[int, tuple[int, int]] = dataclasses.field(
         default_factory=dict,
     )
@@ -187,6 +196,11 @@ def editor_state_from_level(level: Level) -> EditorState:
         machine_inventory_counts=inv_counts.astype(np.int32),
         machine_selected_recipe=recipe.astype(np.int32),
         player_inventory=level.player_inventory,
+        player_inventories=(
+            {k: list(v) for k, v in level.player_inventories.items()}
+            if level.player_inventories
+            else {}
+        ),
         player_positions=(
             {i: (p[0], p[1]) for i, p in enumerate(level.player_positions)}
             if level.player_positions
@@ -258,6 +272,9 @@ def editor_state_to_level(state: EditorState) -> Level:
         machine_inventory_counts=inv_counts,
         machine_selected_recipe=recipe,
         player_inventory=state.player_inventory,
+        player_inventories=(
+            dict(state.player_inventories) if state.player_inventories else None
+        ),
         player_positions=pp,
         biter_positions=bp,
     )
@@ -642,3 +659,118 @@ def erase_entity(state: EditorState, x: int, y: int) -> None:
     """
     remove_player_at(state, x, y)
     remove_biters_at(state, x, y)
+
+
+# ---------------------------------------------------------------------------
+# Inventory helpers
+# ---------------------------------------------------------------------------
+
+
+def get_inventory_slots(
+    state: EditorState, target: InvTarget
+) -> list[tuple[int, int]]:
+    """Return the inventory as a list of ``(ItemType, count)`` pairs.
+
+    Args:
+        state: Editor state.
+        target: ``("player", player_idx, 0)`` or
+            ``("machine", tile_x, tile_y)``.
+
+    Returns:
+        List of ``(item_type, count)`` per slot, padded to the
+        slot count with ``(EMPTY, 0)``.
+    """
+    kind = target[0]
+    if kind == "player":
+        player_idx = target[1]
+        slots = state.player_inventories.get(player_idx, [])
+        padded = list(slots) + [
+            (int(ItemType.EMPTY), 0)
+        ] * (NUM_INVENTORY_SLOTS - len(slots))
+        return padded[:NUM_INVENTORY_SLOTS]
+    x, y = target[1], target[2]
+    items = state.machine_inventory_items[y, x]
+    counts = state.machine_inventory_counts[y, x]
+    return [(int(items[s]), int(counts[s])) for s in range(MAX_MACHINE_INVENTORY_SLOTS)]
+
+
+def get_num_slots(state: EditorState, target: InvTarget) -> int:
+    """Return the number of active slots for a target.
+
+    Args:
+        state: Editor state.
+        target: Inventory target.
+
+    Returns:
+        Slot count (10 for players, machine-type-dependent for machines).
+    """
+    from factoriax.constants import MACHINE_NUM_SLOTS
+
+    if target[0] == "player":
+        return NUM_INVENTORY_SLOTS
+    mt = int(state.machine_types[target[2], target[1]])
+    return int(MACHINE_NUM_SLOTS[mt])
+
+
+def set_inventory_slot(
+    state: EditorState,
+    target: InvTarget,
+    slot: int,
+    item_type: int,
+    count: int,
+) -> None:
+    """Set an inventory slot to a specific item and count.
+
+    Args:
+        state: Editor state (mutated in place).
+        target: Inventory target.
+        slot: Slot index.
+        item_type: ``ItemType`` integer.
+        count: Stack count.
+    """
+    kind = target[0]
+    if kind == "player":
+        player_idx = target[1]
+        slots = list(
+            state.player_inventories.get(player_idx, [])
+        )
+        while len(slots) < NUM_INVENTORY_SLOTS:
+            slots.append((int(ItemType.EMPTY), 0))
+        slots[slot] = (item_type, count)
+        state.player_inventories[player_idx] = slots
+    else:
+        x, y = target[1], target[2]
+        state.machine_inventory_items[y, x, slot] = item_type
+        state.machine_inventory_counts[y, x, slot] = count
+    state.dirty = True
+
+
+def clear_inventory_slot(
+    state: EditorState, target: InvTarget, slot: int
+) -> None:
+    """Clear an inventory slot to empty.
+
+    Args:
+        state: Editor state (mutated in place).
+        target: Inventory target.
+        slot: Slot index.
+    """
+    set_inventory_slot(state, target, slot, int(ItemType.EMPTY), 0)
+
+
+def swap_inventory_slots(
+    state: EditorState, target: InvTarget, slot_a: int, slot_b: int
+) -> None:
+    """Swap two inventory slots.
+
+    Args:
+        state: Editor state (mutated in place).
+        target: Inventory target.
+        slot_a: First slot index.
+        slot_b: Second slot index.
+    """
+    slots = get_inventory_slots(state, target)
+    a_item, a_count = slots[slot_a]
+    b_item, b_count = slots[slot_b]
+    set_inventory_slot(state, target, slot_a, b_item, b_count)
+    set_inventory_slot(state, target, slot_b, a_item, a_count)

@@ -13,9 +13,12 @@ import pygame
 
 from factoriax.constants import (
     ITEM_TO_MACHINE,
+    MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
     BlockType,
+    ItemType,
     MachineType,
+    SlotRole,
 )
 from factoriax.renderer import (
     create_biter_texture,
@@ -398,11 +401,13 @@ def render_status_bar(
         "terrain": "[Terrain]",
         "machine": "[Machine]",
         "entity": "[Entity]",
+        "inventory": "[Inventory]",
     }
     layer_colors = {
         "terrain": (100, 180, 100),
         "machine": (100, 140, 200),
         "entity": (200, 140, 100),
+        "inventory": (180, 120, 200),
     }
     layer_tag = layer_tags.get(layer, "[Terrain]")
     parts = [layer_tag, f"{tool.capitalize()}: {brush_name}"]
@@ -519,3 +524,152 @@ def _blit_rgba(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
         + region.astype(np.float32) * (1.0 - alpha)
     ).astype(np.uint8)
     dst[dy0:dy1, dx0:dx1] = blended
+
+
+# Human-readable display names derived from the ItemType enum so every
+# item is covered automatically, even newly added ones.
+_ITEM_DISPLAY_NAMES: dict[int, str] = {
+    int(it): it.name.replace("_", " ").title() for it in ItemType
+}
+
+_PALETTE_ROW_H = 22
+_PALETTE_ICON_SIZE = 18
+_PALETTE_BG = (35, 35, 40)
+
+
+def get_palette_items_for_player() -> list[tuple[int, str]]:
+    """Return all non-empty items for the player inventory palette.
+
+    Returns:
+        List of ``(item_type_int, display_name)`` pairs, one per
+        ``ItemType`` member excluding ``EMPTY``.
+    """
+    return [
+        (int(it), _ITEM_DISPLAY_NAMES[int(it)])
+        for it in ItemType
+        if it != ItemType.EMPTY
+    ]
+
+
+def get_palette_items_for_machine_slot(
+    machine_type: int,
+    slot_idx: int,
+) -> list[tuple[int, str]]:
+    """Return items valid for a specific machine slot role.
+
+    If the slot has role ``NONE`` the list is empty, meaning no items
+    can be placed there.  All other roles (INPUT, OUTPUT, STORAGE)
+    allow every non-empty item type so the editor can pre-fill any
+    value.
+
+    Args:
+        machine_type: ``MachineType`` integer value.
+        slot_idx: Zero-based slot index within the machine.
+
+    Returns:
+        List of ``(item_type_int, display_name)`` pairs.  Empty list
+        when the slot role is ``NONE``.
+    """
+    role = int(MACHINE_SLOT_ROLES[machine_type, slot_idx])
+    if role == int(SlotRole.NONE):
+        return []
+    return [
+        (int(it), _ITEM_DISPLAY_NAMES[int(it)])
+        for it in ItemType
+        if it != ItemType.EMPTY
+    ]
+
+
+def render_item_palette(
+    items: list[tuple[int, str]],
+    height: int,
+    scroll_offset: int = 0,
+) -> tuple[np.ndarray, list[ClickRegion]]:
+    """Render an item palette sidebar for the inventory view mode.
+
+    Each item is drawn as a 22px-tall row with an 18x18 icon on the
+    left and a text label beside it.  A small "Items" header in the
+    accent colour appears above the list.  Rows that fall outside the
+    visible area (after applying *scroll_offset*) are clipped.
+
+    Args:
+        items: ``(ItemType_int, display_name)`` pairs to show.
+        height: Available pixel height for the palette (same as the
+            toolbar content area).
+        scroll_offset: Pixel offset for vertical scrolling when the
+            item list is taller than *height*.
+
+    Returns:
+        ``(image, regions)`` where *image* is an RGB array of shape
+        ``(height, TOOLBAR_WIDTH, 3)`` and *regions* lists one
+        :class:`ClickRegion` per visible item row with
+        ``action="inv_item"`` and ``param=item_type_int``.
+    """
+    content_h = max(height, _estimate_content_height(len(items)))
+    bar = np.full((content_h, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
+    regions: list[ClickRegion] = []
+    font = get_pixel_font(12)
+
+    y = 4
+    header = _render_text("Items", font, _ACCENT_COLOR)
+    _blit_rgb(bar, header, y, 4)
+    y += header.shape[0] + 4
+
+    for item_type, name in items:
+        bar[y : y + _PALETTE_ROW_H, 0:TOOLBAR_WIDTH] = _PALETTE_BG
+
+        icon = render_item_icon(item_type, _PALETTE_ICON_SIZE)
+        _blit_rgba(bar, icon, y + (_PALETTE_ROW_H - _PALETTE_ICON_SIZE) // 2, 4)
+
+        txt = _render_text(name, font, _TEXT_COLOR)
+        _blit_rgb(
+            bar,
+            txt,
+            y + (_PALETTE_ROW_H - txt.shape[0]) // 2,
+            26,
+        )
+
+        regions.append(
+            ClickRegion(
+                x=0,
+                y=y,
+                w=TOOLBAR_WIDTH,
+                h=_PALETTE_ROW_H,
+                action="inv_item",
+                param=item_type,
+            )
+        )
+        y += _PALETTE_ROW_H
+
+    # Apply scroll and crop to the requested height.
+    scroll_offset = max(0, min(scroll_offset, content_h - height))
+    visible = bar[scroll_offset : scroll_offset + height]
+
+    # Shift region y-coordinates by the scroll offset so hit-testing
+    # matches the visible output.
+    shifted: list[ClickRegion] = [
+        ClickRegion(
+            x=r.x,
+            y=r.y - scroll_offset,
+            w=r.w,
+            h=r.h,
+            action=r.action,
+            param=r.param,
+        )
+        for r in regions
+        if r.y + r.h > scroll_offset and r.y < scroll_offset + height
+    ]
+    return visible, shifted
+
+
+def _estimate_content_height(num_items: int) -> int:
+    """Estimate the total content height for the item palette.
+
+    Args:
+        num_items: Number of items in the list.
+
+    Returns:
+        Pixel height needed to render the header plus all rows.
+    """
+    # header (~12px text + 4+4 padding) + rows
+    return 20 + num_items * _PALETTE_ROW_H
