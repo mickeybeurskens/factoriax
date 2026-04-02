@@ -121,12 +121,12 @@ class TestMiningReward:
     """Tests for mining_reward."""
 
     def test_proximity_when_standing_on_ore(self, state_factory, params) -> None:
-        """Proximity component should be 1.0 when player is on an ore tile."""
+        """Proximity component should be 0.05 when player is on an ore tile."""
         world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
         state = state_factory(world_map=world_map, player_position=(0, 0))
         reward = mining_reward(state, state, params)
-        # At dist=0: proximity=1/(1+0)=1.0, no mining delta -> reward=1.0
-        assert float(reward) == pytest.approx(1.0)
+        # At dist=0: proximity=0.05/(1+0)=0.05, no mining delta
+        assert float(reward) == pytest.approx(0.05)
 
     def test_proximity_decreases_with_distance(self, state_factory, params) -> None:
         """Proximity should decrease as player moves away from ore."""
@@ -150,18 +150,18 @@ class TestMiningReward:
             jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
         )
         new_state = state_factory(world_map=world_map, items_mined=items_mined)
-        # 1x1 DIRT map: sentinel = map_h + map_w = 2, proximity = 1/(1+2) = 1/3
-        # mining_bonus = 5.0 * 1 = 5.0; total = 5.0 + 1/3
+        # 1x1 DIRT map: sentinel = map_h + map_w = 2, proximity = 0.05/(1+2)
+        # mining_bonus = 20.0 * 1 = 20.0; total = 20.0 + 0.05/3
         reward = float(mining_reward(prev_state, new_state, params))
-        assert reward == pytest.approx(5.0 + 1.0 / 3.0, abs=0.01)
+        assert reward == pytest.approx(20.0 + 0.05 / 3.0, abs=0.01)
 
     def test_no_bonus_when_no_ore_mined(self, state_factory, params) -> None:
         """Mining bonus should be zero when items_mined is unchanged."""
         world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
         state = state_factory(world_map=world_map, player_position=(0, 0))
         reward = float(mining_reward(state, state, params))
-        # proximity only: 1/(1+0)=1.0
-        assert reward == pytest.approx(1.0)
+        # proximity only: 0.05/(1+0)=0.05
+        assert reward == pytest.approx(0.05)
 
     def test_zero_proximity_no_ore_on_map(self, state_factory, params) -> None:
         """Proximity component near-zero when no ore exists on the map."""
@@ -179,7 +179,7 @@ class TestMiningReward:
         )
         jit_fn = jax.jit(mining_reward)
         reward = jit_fn(state, state, params)
-        assert float(reward) == pytest.approx(1.0)
+        assert float(reward) == pytest.approx(0.05)
 
     def test_vmap_compatible(self, state_factory, params) -> None:
         """mining_reward should be vmappable over batched states."""
@@ -188,7 +188,7 @@ class TestMiningReward:
         batch = jax.tree_util.tree_map(lambda x: jnp.stack([x, x]), state)
         rewards = jax.vmap(mining_reward, in_axes=(0, 0, None))(batch, batch, params)
         assert rewards.shape == (2,)
-        assert jnp.all(rewards == pytest.approx(1.0))
+        assert jnp.all(rewards == pytest.approx(0.05))
 
     def test_multiple_ore_types_mined_bonus(self, state_factory, params) -> None:
         """Mining bonus accumulates across coal, iron, and copper items."""
@@ -198,10 +198,10 @@ class TestMiningReward:
         items_mined = items_mined.at[ItemType.COAL].set(1)
         items_mined = items_mined.at[ItemType.IRON].set(2)
         new_state = state_factory(world_map=world_map, items_mined=items_mined)
-        # 1x1 DIRT map: sentinel = 2, proximity = 1/3
-        # mining_bonus = 5 * (1 + 2) = 15; total = 15.0 + 1/3
+        # 1x1 DIRT map: sentinel = 2, proximity = 0.05/3
+        # mining_bonus = 20 * (1 + 2) = 60; total = 60.0 + 0.05/3
         reward = float(mining_reward(prev_state, new_state, params))
-        assert reward == pytest.approx(15.0 + 1.0 / 3.0, abs=0.01)
+        assert reward == pytest.approx(60.0 + 0.05 / 3.0, abs=0.01)
 
 
 class TestSparseMiningReward:

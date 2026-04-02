@@ -26,11 +26,13 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from baselines.ppo.network import VisionActorCritic
 from factoriax.benchmarks.basic_skills.benchmark import REWARD_FNS
 from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
 from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.constants import NUM_ACTIONS, Action
+from factoriax.constants import NUM_ACTIONS, Action, ItemType
 from factoriax.envs import FactoriaXEnv
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.levels import build_state
 from factoriax.observations import local_array
 from factoriax.state import EnvState
@@ -70,11 +72,13 @@ class Config:
         num_minibatches: Minibatches per epoch.
         max_grad_norm: Gradient clipping norm.
         obs_radius: Local observation window half-width.
+        obs_type: Observation type, "vector" or "vision".
+        tile_px: Pixel size per tile for vision observations.
         seed: Random seed.
         log_interval: Iterations between log lines.
     """
 
-    level_name: str = "mine_resources"
+    level_name: str = "mine_ores"
     hidden_dims: tuple[int, ...] = (256, 256)
     num_envs: int = 64
     rollout_steps: int = 128
@@ -91,6 +95,8 @@ class Config:
     obs_radius: int = 7
     seed: int = 0
     log_interval: int = 10
+    obs_type: str = "vector"
+    tile_px: int = 8
     action_mask: list[str] | None = None
     use_wandb: bool = False
     wandb_project: str = "factoriax-basic-skills"
@@ -206,8 +212,7 @@ def train(config: Config) -> None:
     level_map = {bl.name: bl for bl in BASIC_SKILLS_LEVELS}
     if config.level_name not in level_map:
         raise ValueError(
-            f"Unknown level {config.level_name!r}. "
-            f"Choose from: {LEVEL_NAMES}"
+            f"Unknown level {config.level_name!r}. Choose from: {LEVEL_NAMES}"
         )
     bench_level: BenchmarkLevel = level_map[config.level_name]
     reward_fn = REWARD_FNS[config.level_name]
@@ -219,9 +224,7 @@ def train(config: Config) -> None:
         try:
             import wandb  # type: ignore[import-untyped]
 
-            run_name = (
-                config.wandb_run_name or f"single_{config.level_name}"
-            )
+            run_name = config.wandb_run_name or f"single_{config.level_name}"
             wandb_run = wandb.init(
                 project=config.wandb_project,
                 name=run_name,
@@ -230,23 +233,47 @@ def train(config: Config) -> None:
                     "basic_skills",
                     "single",
                     config.level_name,
-                    f"obs_local_r{config.obs_radius}",
+                    config.obs_type,
+                    (
+                        f"obs_local_r{config.obs_radius}"
+                        if config.obs_type == "vector"
+                        else f"tile_px{config.tile_px}"
+                    ),
                 ],
             )
         except ImportError:
             logger.error("wandb not found. Install with: uv add wandb")
 
     # Build env and network.
-    env = FactoriaXEnv()
-    level_state = build_state(bench_level.level, env_params)
-
-    obs_dim = int(
-        local_array(level_state, env_params, 0, config.obs_radius).shape[0]
+    env = FactoriaXEnv(
+        achievement_fn=bench_level.achievement_fn
+        if bench_level.achievement_fn is not None
+        else None,
     )
+    level_state = build_state(bench_level.level, env_params)
+    use_vision = config.obs_type == "vision"
+
+    # Create renderer for vision mode (None for vector).
+    renderer: JaxRenderer | None = None
+    if use_vision:
+        renderer = JaxRenderer(tile_px=config.tile_px)
+        dummy_obs = renderer.jit_render_map(level_state)
+        obs_shape: tuple[int, ...] = dummy_obs.shape
+        network: ActorCritic | VisionActorCritic = VisionActorCritic(
+            num_actions=NUM_ACTIONS,
+        )
+    else:
+        obs_dim = int(
+            local_array(level_state, env_params, 0, config.obs_radius).shape[0]
+        )
+        obs_shape = (obs_dim,)
+        network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS)
+
     logger.info(
-        "Level: %s  obs_dim=%d  num_actions=%d  num_envs=%d",
+        "Level: %s  obs_type=%s  obs_shape=%s  num_actions=%d  num_envs=%d",
         config.level_name,
-        obs_dim,
+        config.obs_type,
+        obs_shape,
         NUM_ACTIONS,
         config.num_envs,
     )
@@ -255,39 +282,46 @@ def train(config: Config) -> None:
     if config.action_mask is not None:
         allowed = {Action[n] for n in config.action_mask}
         logit_mask = jnp.array(
-            [0.0 if Action(i) in allowed else -1e9
-             for i in range(NUM_ACTIONS)],
+            [0.0 if Action(i) in allowed else -1e9 for i in range(NUM_ACTIONS)],
             dtype=jnp.float32,
         )
         logger.info(
             "Action mask: %d/%d actions allowed (%s)",
-            len(allowed), NUM_ACTIONS,
+            len(allowed),
+            NUM_ACTIONS,
             ", ".join(config.action_mask),
         )
     else:
         logit_mask = jnp.zeros(NUM_ACTIONS, dtype=jnp.float32)
 
-    network = ActorCritic(
-        hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS
-    )
     rng = jax.random.PRNGKey(config.seed)
     rng, key_init = jax.random.split(rng)
-    params = network.init(key_init, jnp.zeros(obs_dim))
+    params = network.init(key_init, jnp.zeros(obs_shape))
     optimizer = optax.chain(
         optax.clip_by_global_norm(config.max_grad_norm),
         optax.adam(config.learning_rate),
     )
     opt_state = optimizer.init(params)
 
-    # Running observation stats for normalization.
-    obs_mean = jnp.zeros(obs_dim, dtype=jnp.float32)
-    obs_var = jnp.ones(obs_dim, dtype=jnp.float32)
+    # Running observation stats for normalization (vector only).
+    obs_mean = jnp.zeros(obs_shape, dtype=jnp.float32)
+    obs_var = jnp.ones(obs_shape, dtype=jnp.float32)
     obs_count = jnp.array(0, dtype=jnp.int32)
 
-    def _normalize(obs: jax.Array) -> jax.Array:
-        return jnp.clip(
-            (obs - obs_mean) / jnp.sqrt(obs_var + 1e-8), -10.0, 10.0
-        )
+    if use_vision:
+
+        def _normalize(obs: jax.Array) -> jax.Array:
+            """Identity for vision; the CNN normalizes internally."""
+            return obs
+    else:
+
+        def _normalize(obs: jax.Array) -> jax.Array:
+            """Welford running-stats normalization for vector obs."""
+            return jnp.clip(
+                (obs - obs_mean) / jnp.sqrt(obs_var + 1e-8),
+                -10.0,
+                10.0,
+            )
 
     # Broadcast initial state to num_envs copies.
     def _broadcast(x: jax.Array) -> jax.Array:
@@ -300,12 +334,20 @@ def train(config: Config) -> None:
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_reward = jax.vmap(reward_fn, in_axes=(0, 0, None))
 
-    def _obs(state: EnvState) -> jax.Array:
-        return local_array(
-            state, env_params, state.selected_player, config.obs_radius
-        )
+    if use_vision:
+        assert renderer is not None
+        vmap_obs = renderer.vmap_render_map
+    else:
 
-    vmap_obs = jax.vmap(_obs)
+        def _obs(state: EnvState) -> jax.Array:
+            return local_array(
+                state,
+                env_params,
+                state.selected_player,
+                config.obs_radius,
+            )
+
+        vmap_obs = jax.vmap(_obs)
 
     # JIT-compiled collection.
     @jax.jit
@@ -331,15 +373,11 @@ def train(config: Config) -> None:
         def rollout_step(
             carry: tuple[EnvState, jax.Array, jax.Array],
             _: None,
-        ) -> tuple[
-            tuple[EnvState, jax.Array, jax.Array], Transition
-        ]:
+        ) -> tuple[tuple[EnvState, jax.Array, jax.Array], Transition]:
             states, cur_obs, rng = carry
             rng, key_act, key_step = jax.random.split(rng, 3)
 
-            logits, values = network.apply(
-                net_params, _normalize(cur_obs)
-            )
+            logits, values = network.apply(net_params, _normalize(cur_obs))
             masked_logits = logits + logit_mask
             actions = jax.random.categorical(key_act, masked_logits)
             log_probs = jax.nn.log_softmax(masked_logits)[
@@ -358,9 +396,7 @@ def train(config: Config) -> None:
                 pad = dones.reshape((-1,) + (1,) * (s.ndim - 1))
                 return jnp.where(pad, r, s)
 
-            next_states = jax.tree_util.tree_map(
-                _where, fixed_states, next_states
-            )
+            next_states = jax.tree_util.tree_map(_where, fixed_states, next_states)
             next_obs = vmap_obs(next_states)
 
             return (next_states, next_obs, rng), Transition(
@@ -378,9 +414,7 @@ def train(config: Config) -> None:
             None,
             length=config.rollout_steps,
         )
-        _, last_values = network.apply(
-            net_params, _normalize(next_obs)
-        )
+        _, last_values = network.apply(net_params, _normalize(next_obs))
         return trajectories, next_states, next_obs, last_values, rng
 
     # JIT-compiled PPO update.
@@ -439,11 +473,7 @@ def train(config: Config) -> None:
                 * adv_n,
             ).mean()
             v_loss = 0.5 * ((values - mb_rets) ** 2).mean()
-            total = (
-                pg_loss
-                + config.value_coef * v_loss
-                - config.entropy_coef * entropy
-            )
+            total = pg_loss + config.value_coef * v_loss - config.entropy_coef * entropy
             return total, {
                 "loss": total,
                 "pg": pg_loss,
@@ -456,9 +486,7 @@ def train(config: Config) -> None:
             mb: tuple,
         ) -> tuple[tuple[Any, optax.OptState], dict]:
             p, o = carry
-            (_, m), grads = jax.value_and_grad(_loss, has_aux=True)(
-                p, *mb
-            )
+            (_, m), grads = jax.value_and_grad(_loss, has_aux=True)(p, *mb)
             updates, new_o = optimizer.update(grads, o, p)
             return (optax.apply_updates(p, updates), new_o), m
 
@@ -471,9 +499,7 @@ def train(config: Config) -> None:
             perm = jax.random.permutation(key_perm, batch_size)
 
             def _reshape(x: jax.Array) -> jax.Array:
-                return x[perm].reshape(
-                    (config.num_minibatches, mb_size) + x.shape[1:]
-                )
+                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
 
             mbs = (
                 _reshape(flat_obs),
@@ -527,20 +553,20 @@ def train(config: Config) -> None:
             config.gae_lambda,
         )
 
-        flat_obs = traj.obs.reshape(-1, obs_dim)
+        flat_obs = traj.obs.reshape((-1,) + obs_shape)
 
-        # Update running obs stats (Welford).
-        n = flat_obs.shape[0]
-        batch_mean = flat_obs.mean(axis=0)
-        batch_var = flat_obs.var(axis=0)
-        total = obs_count + n
-        delta = batch_mean - obs_mean
-        obs_mean = obs_mean + delta * (n / total)
-        obs_var = (
-            obs_var * obs_count + batch_var * n
-            + delta**2 * obs_count * n / total
-        ) / total
-        obs_count = total
+        # Update running obs stats (Welford, vector only).
+        if not use_vision:
+            n = flat_obs.shape[0]
+            batch_mean = flat_obs.mean(axis=0)
+            batch_var = flat_obs.var(axis=0)
+            total = obs_count + n
+            delta = batch_mean - obs_mean
+            obs_mean = obs_mean + delta * (n / total)
+            obs_var = (
+                obs_var * obs_count + batch_var * n + delta**2 * obs_count * n / total
+            ) / total
+            obs_count = total
 
         params, opt_state, metrics, _ = update(
             params,
@@ -573,7 +599,7 @@ def train(config: Config) -> None:
             act_counts = np.bincount(actions_np, minlength=NUM_ACTIONS)
             top3 = np.argsort(act_counts)[::-1][:3]
             act_str = " ".join(
-                f"{Action(a).name}={act_counts[a]/len(actions_np)*100:.0f}%"
+                f"{Action(a).name}={act_counts[a] / len(actions_np) * 100:.0f}%"
                 for a in top3
             )
             total_reward_batch = float(np.sum(rewards_np))
@@ -601,10 +627,7 @@ def train(config: Config) -> None:
                         "train/step": float(current_step),
                         "train/sps": sps,
                         "train/mean_ep_return": mean_ret,
-                        **{
-                            f"train/{k}": float(v)
-                            for k, v in metrics.items()
-                        },
+                        **{f"train/{k}": float(v) for k, v in metrics.items()},
                     },
                     step=current_step,
                 )
@@ -612,8 +635,7 @@ def train(config: Config) -> None:
     elapsed = time.time() - t_start
     mean_ret = float(np.mean(list(ep_returns))) if ep_returns else 0.0
     logger.info(
-        "Training done. %dk steps in %.1fs (%.0f sps). "
-        "Final mean return: %.2f",
+        "Training done. %dk steps in %.1fs (%.0f sps). Final mean return: %.2f",
         current_step // 1000,
         elapsed,
         current_step / elapsed,
@@ -624,8 +646,15 @@ def train(config: Config) -> None:
     # Post-training evaluation: trajectory, video, diagnostic plots
     # ------------------------------------------------------------------
     _evaluate(
-        config, bench_level, reward_fn, network, params,
-        obs_mean, obs_var, wandb_run,
+        config,
+        bench_level,
+        reward_fn,
+        network,
+        params,
+        obs_mean,
+        obs_var,
+        wandb_run,
+        renderer,
     )
 
     if wandb_run is not None:
@@ -641,11 +670,12 @@ def _evaluate(
     config: Config,
     bench_level: BenchmarkLevel,
     reward_fn: Any,
-    network: ActorCritic,
+    network: ActorCritic | VisionActorCritic,
     params: Any,
     obs_mean: jax.Array,
     obs_var: jax.Array,
     wandb_run: Any | None,
+    renderer: JaxRenderer | None = None,
 ) -> None:
     """Run the trained policy, save trajectory, render video, plot diagnostics.
 
@@ -658,18 +688,16 @@ def _evaluate(
         obs_mean: Running observation mean for normalization.
         obs_var: Running observation variance for normalization.
         wandb_run: Live wandb run or None.
+        renderer: JaxRenderer instance for vision mode, None for vector.
     """
     from dataclasses import replace as dc_replace
     from pathlib import Path
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from factoriax.benchmarks.single_agent_mining.analysis import (
-        render_level_video,
-        save_mp4,
-    )
     from factoriax.analysis.actions import action_raster, plot_ngram_sweep
     from factoriax.analysis.state import plot_episode_rewards
     from factoriax.analysis.trajectory import (
@@ -678,36 +706,60 @@ def _evaluate(
     )
 
     env_params = bench_level.env_params
+    use_vision = config.obs_type == "vision"
     out_dir = Path("runs") / f"single_{config.level_name}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     jit_apply = jax.jit(network.apply)
     _mean, _var = obs_mean, obs_var
 
-    def _normalize(obs: jax.Array) -> jax.Array:
-        return jnp.clip(
-            (obs - _mean) / jnp.sqrt(_var + 1e-8), -10.0, 10.0
-        )
+    if use_vision:
+
+        def _normalize(obs: jax.Array) -> jax.Array:
+            """Identity for vision; the CNN normalizes internally."""
+            return obs
+    else:
+
+        def _normalize(obs: jax.Array) -> jax.Array:
+            """Welford running-stats normalization for vector obs."""
+            return jnp.clip((obs - _mean) / jnp.sqrt(_var + 1e-8), -10.0, 10.0)
 
     def _make_policy(seed: int):
         """Build a stochastic policy with its own PRNG."""
         state_holder = {"rng": jax.random.PRNGKey(seed + 1000)}
 
         def policy(obs: jax.Array) -> jax.Array:
-            state_holder["rng"], key = jax.random.split(
-                state_holder["rng"]
-            )
+            state_holder["rng"], key = jax.random.split(state_holder["rng"])
             logits, _ = jit_apply(params, _normalize(obs))
             return jax.random.categorical(key, logits)
 
         return policy
 
-    def _obs_fn(state, ep, player_idx):
-        return local_array(state, ep, player_idx, config.obs_radius)
+    if use_vision:
+        assert renderer is not None
+
+        def _obs_fn(
+            state: EnvState,
+            ep: Any,
+            player_idx: int,
+        ) -> jax.Array:
+            return renderer.jit_render_map(state)
+    else:
+
+        def _obs_fn(
+            state: EnvState,
+            ep: Any,
+            player_idx: int,
+        ) -> jax.Array:
+            return local_array(state, ep, player_idx, config.obs_radius)
 
     # 1. Save trajectory.
     logger.info("Running evaluation rollout...")
-    env = FactoriaXEnv()
+    env = FactoriaXEnv(
+        achievement_fn=bench_level.achievement_fn
+        if bench_level.achievement_fn is not None
+        else None,
+    )
     jit_step = jax.jit(env.step_env)
     state = build_state(bench_level.level, env_params)
     rng_eval = jax.random.PRNGKey(config.seed)
@@ -722,9 +774,7 @@ def _evaluate(
         action = policy(obs)
         rng_eval, subkey = jax.random.split(rng_eval)
         prev_state = state
-        _, state, _, done, _ = jit_step(
-            subkey, state, action, env_params
-        )
+        _, state, _, done, _ = jit_step(subkey, state, action, env_params)
         reward = float(reward_fn(prev_state, state, env_params))
         actions_log.append(int(action))
         rewards_log.append(reward)
@@ -741,10 +791,12 @@ def _evaluate(
         dtype=np.float32,
     )
     traj = states_to_trajectory(states_log, actions=act_arr, rewards=rew_arr)
-    traj = dc_replace(
-        traj,
-        observation_scheme={"type": 2, "radius": config.obs_radius},
+    obs_scheme: dict[str, object] = (
+        {"type": "vision", "tile_px": config.tile_px}
+        if use_vision
+        else {"type": 2, "radius": config.obs_radius}
     )
+    traj = dc_replace(traj, observation_scheme=obs_scheme)
     traj_path = out_dir / f"{config.level_name}_trajectory.npz"
     traj.save(str(traj_path))
     logger.info(
@@ -754,14 +806,35 @@ def _evaluate(
         sum(rewards_log),
     )
 
-    # 2. Render video.
+    # 2. Render video from saved states.
     logger.info("Rendering video...")
-    frames = render_level_video(
-        bench_level, _make_policy(0), seed=config.seed, obs_fn=_obs_fn,
-    )
+    from factoriax.renderer import render_pixels
+
+    frames = [render_pixels(s, block_pixel_size=16) for s in states_log]
     mp4_path = out_dir / f"{config.level_name}.mp4"
-    save_mp4(frames, mp4_path)
-    logger.info("Saved video: %s (%d frames)", mp4_path, len(frames))
+    try:
+        import warnings
+
+        import imageio.v3 as iio
+
+        mp4_path.parent.mkdir(parents=True, exist_ok=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=RuntimeWarning,
+                message="os.fork()",
+            )
+            iio.imwrite(
+                str(mp4_path),
+                np.stack([f.astype(np.uint8) for f in frames]),
+                plugin="FFMPEG",
+                fps=10,
+                codec="libx264",
+                pixelformat="yuv420p",
+            )
+        logger.info("Saved video: %s (%d frames)", mp4_path, len(frames))
+    except ImportError:
+        logger.info("imageio[ffmpeg] not available, skipping video.")
 
     # 3. Diagnostic plots.
     traj = Trajectory.load(str(traj_path))
@@ -776,7 +849,8 @@ def _evaluate(
         figs["rewards"] = fig_r
 
     fig_ar, _ = action_raster(
-        traj, title=f"{config.level_name} -- action raster",
+        traj,
+        title=f"{config.level_name} -- action raster",
     )
     figs["action_raster"] = fig_ar
 
@@ -787,6 +861,35 @@ def _evaluate(
         title=f"{config.level_name} -- top 5 n-grams (n=2..5)",
     )
     figs["ngram_sweep"] = fig_ng
+
+    # 3b. Inventory over time — total count per item type at each step.
+    item_names = {
+        int(it): it.name.replace("_", " ").title()
+        for it in ItemType
+        if it != ItemType.EMPTY
+    }
+    num_steps = len(states_log)
+    totals: dict[int, np.ndarray] = {
+        it: np.zeros(num_steps, dtype=np.int32) for it in item_names
+    }
+    for t, s in enumerate(states_log):
+        items_arr = np.array(s.inventory_items[0])
+        counts_arr = np.array(s.inventory_counts[0])
+        for it_id in item_names:
+            mask = items_arr == it_id
+            totals[it_id][t] = int(np.sum(counts_arr[mask]))
+
+    # Only plot items that appear at least once.
+    active = {it: vals for it, vals in totals.items() if np.any(vals > 0)}
+    if active:
+        fig_inv, ax_inv = plt.subplots(figsize=(10, 4))
+        for it_id, vals in active.items():
+            ax_inv.plot(vals, label=item_names[it_id])
+        ax_inv.set_xlabel("Step")
+        ax_inv.set_ylabel("Count")
+        ax_inv.set_title(f"{config.level_name} -- player inventory")
+        ax_inv.legend(loc="upper left", fontsize=8)
+        figs["inventory"] = fig_inv
 
     for plot_name, fig in figs.items():
         fig_path = out_dir / f"{config.level_name}_{plot_name}.png"
@@ -803,7 +906,9 @@ def _evaluate(
                 "eval/episode_length": len(actions_log),
             }
             log_data[f"videos/{config.level_name}"] = wandb.Video(
-                str(mp4_path), fps=10, format="mp4",
+                str(mp4_path),
+                fps=10,
+                format="mp4",
             )
             for plot_name, fig in figs.items():
                 log_data[f"plots/{plot_name}"] = wandb.Image(fig)
@@ -838,40 +943,70 @@ def main() -> None:
         help="Level to train on.",
     )
     parser.add_argument(
-        "--num-envs", type=int, default=64,
+        "--num-envs",
+        type=int,
+        default=64,
         help="Parallel environments (default: 64).",
     )
     parser.add_argument(
-        "--total-steps", type=int, default=5_000_000,
+        "--total-steps",
+        type=int,
+        default=5_000_000,
         help="Total env steps (default: 5M).",
     )
     parser.add_argument(
-        "--seed", type=int, default=0,
+        "--seed",
+        type=int,
+        default=0,
         help="Random seed (default: 0).",
     )
     parser.add_argument(
-        "--log-interval", type=int, default=10,
+        "--log-interval",
+        type=int,
+        default=10,
         help="Iterations between log lines (default: 10).",
     )
     parser.add_argument(
-        "--use-wandb", action="store_true",
+        "--use-wandb",
+        action="store_true",
         help="Log to Weights and Biases.",
     )
     parser.add_argument(
-        "--wandb-project", type=str, default="factoriax-basic-skills",
+        "--wandb-project",
+        type=str,
+        default="factoriax-basic-skills",
         help="W&B project name.",
     )
     parser.add_argument(
-        "--wandb-run-name", type=str, default=None,
+        "--wandb-run-name",
+        type=str,
+        default=None,
         help="W&B run name (default: single_<level>).",
     )
     parser.add_argument(
-        "--action-mask", type=str, nargs="+", default=None,
+        "--action-mask",
+        type=str,
+        nargs="+",
+        default=None,
         metavar="ACTION",
         help=(
             "Allow only these actions (by name, e.g. FORWARD MINE). "
             "All other actions are masked out."
         ),
+    )
+    parser.add_argument(
+        "--obs-type",
+        type=str,
+        choices=["vector", "vision"],
+        default="vector",
+        help="Observation type: 'vector' (local_array) or 'vision' "
+        "(pixel render). Default: vector.",
+    )
+    parser.add_argument(
+        "--tile-px",
+        type=int,
+        default=8,
+        help="Tile pixel size for vision observations (default: 8).",
     )
     args = parser.parse_args()
 
@@ -882,6 +1017,8 @@ def main() -> None:
         seed=args.seed,
         log_interval=args.log_interval,
         action_mask=args.action_mask,
+        obs_type=args.obs_type,
+        tile_px=args.tile_px,
         use_wandb=args.use_wandb,
         wandb_project=args.wandb_project,
         wandb_run_name=args.wandb_run_name,

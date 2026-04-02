@@ -33,6 +33,12 @@ from factoriax.state import EnvParams, EnvState
 
 logger = logging.getLogger(__name__)
 
+# Type for a JIT-compiled step function.
+_StepFn = Callable[
+    [jax.Array, EnvState, int | jax.Array, EnvParams],
+    tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, jax.Array]],
+]
+
 
 def _split3(
     keys: jax.Array,
@@ -75,9 +81,33 @@ class BenchmarkRunner:
                 re-seeded from this value at the start of every ``run()``
                 call, not shared across calls.
         """
-        self._env = FactoriaXEnv()
-        self._jit_step = jax.jit(self._env.step_env)
+        self._default_env = FactoriaXEnv()
+        self._default_jit_step = jax.jit(self._default_env.step_env)
+        self._env_cache: dict[int, tuple[FactoriaXEnv, _StepFn]] = {}
         self.seed = seed
+
+    def _get_env_and_step(
+        self,
+        bench_level: BenchmarkLevel,
+    ) -> tuple[FactoriaXEnv, _StepFn]:
+        """Return the env and JIT-compiled step for a level.
+
+        Uses the default env when no custom achievement function is set.
+        Caches envs by achievement function identity to avoid re-JITing.
+
+        Args:
+            bench_level: Level that may carry a custom achievement_fn.
+
+        Returns:
+            ``(env, jit_step)`` pair.
+        """
+        if bench_level.achievement_fn is None:
+            return self._default_env, self._default_jit_step
+        fn_id = id(bench_level.achievement_fn)
+        if fn_id not in self._env_cache:
+            env = FactoriaXEnv(achievement_fn=bench_level.achievement_fn)
+            self._env_cache[fn_id] = (env, jax.jit(env.step_env))
+        return self._env_cache[fn_id]
 
     def run(
         self,
@@ -216,8 +246,9 @@ class BenchmarkRunner:
 
             rngs = jax.vmap(jax.random.PRNGKey)(jnp.array(seeds))
 
+            level_env, _ = self._get_env_and_step(bench_level)
             vmap_step = jax.vmap(
-                self._env.step_env, in_axes=(0, 0, 0, None),
+                level_env.step_env, in_axes=(0, 0, 0, None),
             )
 
             def _obs_single(s: EnvState) -> jax.Array:
@@ -347,6 +378,7 @@ class BenchmarkRunner:
         params = bench_level.env_params
         state = build_state(bench_level.level, params)
         num_players = params.num_players
+        _, jit_step = self._get_env_and_step(bench_level)
 
         actions_log: list[int] = []
         costs_log: list[np.ndarray] = []
@@ -360,7 +392,7 @@ class BenchmarkRunner:
                 action = policies[p](obs)
 
                 rng, subkey = jax.random.split(rng)
-                _, state, _, done, _ = self._jit_step(
+                _, state, _, done, _ = jit_step(
                     subkey,
                     state_p,
                     action,

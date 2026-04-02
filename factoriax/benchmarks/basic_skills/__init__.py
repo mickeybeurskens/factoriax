@@ -1,8 +1,9 @@
 """Basic skills benchmark.
 
-Three levels testing foundational agent abilities: mining resources,
-crafting items, and depositing items into machines. Each level isolates
-a core skill so that performance can be attributed to specific capabilities.
+Five levels testing foundational agent abilities: mining resources,
+crafting items, fueling miners, deploying automated mining, and
+producing science packs. Each level defines custom achievement
+milestones so that scoring reflects actual game-state progress.
 """
 
 from factoriax.benchmarks.basic_skills.benchmark import (

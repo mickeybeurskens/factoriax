@@ -1,17 +1,17 @@
-"""BasicSkillsBenchmark: six levels from basic mining to automated factories.
+"""BasicSkillsBenchmark: five levels from raw mining to science production.
 
-The benchmark evaluates six progressively harder RL skills:
+The benchmark evaluates five progressively harder RL skills:
 
-1. **mine_resources** — navigate and extract ore (sparse mining reward).
-2. **craft_chests** — select a recipe and craft items (sparse crafting reward).
-3. **fill_chest** — mine, navigate, and deposit into a machine (chest filling
-   reward).
-4. **craft_miners** — mine two resource types and craft miner machines.
-5. **deploy_miner** — place a miner on ore and fuel it with coal.
-6. **mining_factory** — full automation loop: mine, craft, place, fuel, collect.
+1. **mine_ores** -- navigate and extract ore from three patch types.
+2. **craft_all** -- mine two resources and craft all five recipe types.
+3. **fuel_miner** -- mine coal and fuel a pre-placed miner.
+4. **deploy_miners** -- full deployment loop: mine, craft, place, fuel.
+5. **assembler_science** -- feed an assembler to produce science packs.
 
-The aggregate score normalises each level to [0, 1] before averaging, so no
-single skill dominates the overall number.
+Scoring is achievement-based: each level defines custom milestones and
+the score is the fraction of milestones unlocked at episode end. The
+aggregate score is the mean across all five levels, giving a single
+number in [0, 1].
 
 Typical usage::
 
@@ -30,72 +30,34 @@ from collections.abc import Callable
 
 import jax
 
-from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+from factoriax.benchmarks.basic_skills.levels import (
+    ACHIEVEMENT_WEIGHTS,
+    BASIC_SKILLS_LEVELS,
+)
 from factoriax.benchmarks.basic_skills.scoring import (
-    aggregate_scores,
-    score_arm,
-    score_assembler,
-    score_belt,
-    score_craft,
-    score_craft_miners,
-    score_deploy_miner,
-    score_deposit,
-    score_fill,
-    score_fuel_collect,
-    score_mine,
-    score_mining_factory,
-    score_pickup,
-    score_repair,
-    score_research,
-    score_withdraw_ore,
+    aggregate_score,
+    score_level_items,
 )
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
-from factoriax.rewards import (
-    dense_arm_reward,
-    dense_assembler_reward,
-    dense_belt_reward,
-    dense_craft_reward,
-    dense_deploy_reward,
-    dense_deposit_reward,
-    dense_fill_chest_reward,
-    dense_fuel_collect_reward,
-    dense_pickup_reward,
-    dense_repair_reward,
-    dense_research_reward,
-    dense_withdraw_reward,
-    mining_reward,
-)
+from factoriax.observations import global_array
+from factoriax.rewards import mining_reward
 from factoriax.state import EnvParams, EnvState
 
-# Map level names to their dense reward functions for training.
-# Each provides per-step signal (proximity + task bonus) to prevent
-# PPO policy collapse on sparse rewards.
-REWARD_FNS: dict[str, Callable[[EnvState, EnvState, EnvParams], jax.Array]] = {
-    "mine_resources": mining_reward,
-    "craft_chests": dense_craft_reward,
-    "fill_chest": dense_fill_chest_reward,
-    "craft_miners": dense_craft_reward,
-    "deploy_miner": dense_deploy_reward,
-    "mining_factory": dense_deploy_reward,
-    "place_and_fuel": dense_deploy_reward,
-    "withdraw_ore": dense_withdraw_reward,
-    "deposit_into_chests": dense_deposit_reward,
-    "pickup_machines": dense_pickup_reward,
-    "belt_line": dense_belt_reward,
-    "arm_bridge": dense_arm_reward,
-    "fuel_and_collect": dense_fuel_collect_reward,
-    "assembler_production": dense_assembler_reward,
-    "research_tech": dense_research_reward,
-    "repair_machine": dense_repair_reward,
-}
+# Per-level reward functions: dense shaping only.
+# mining_reward gives proximity-to-ore + 5.0 per ore mined per step,
+# providing continuous signal at every timestep.
+REWARD_FNS: dict[
+    str, Callable[[EnvState, EnvState, EnvParams], jax.Array]
+] = {name: mining_reward for name in ACHIEVEMENT_WEIGHTS}
 
 
 class BasicSkillsBenchmark:
-    """Six-level benchmark from basic mining to automated factories.
+    """Five-level benchmark from basic mining to science production.
 
-    Each level targets a specific skill. The aggregate score normalises
-    per-level metrics to [0, 1] before averaging, ensuring equal weight
-    across all skills.
+    Each level targets a specific skill progression. Scoring uses custom
+    per-level achievements evaluated on the final game state, making it
+    robust against reward hacking. The aggregate score normalises each
+    level to [0, 1] before averaging.
     """
 
     @property
@@ -106,20 +68,6 @@ class BasicSkillsBenchmark:
             ``"basic_skills"``.
         """
         return "basic_skills"
-
-    @property
-    def reward_fn(
-        self,
-    ) -> Callable[[EnvState, EnvState, EnvParams], jax.Array]:
-        """Default reward function for training.
-
-        Returns the sparse mining reward as a sensible default. For
-        per-level reward functions, use :data:`REWARD_FNS`.
-
-        Returns:
-            :func:`~factoriax.rewards.sparse_mining_reward`.
-        """
-        return mining_reward
 
     @property
     def num_players(self) -> int:
@@ -134,7 +82,7 @@ class BasicSkillsBenchmark:
         """Return all skill levels in order of increasing difficulty.
 
         Returns:
-            List of ``BenchmarkLevel`` objects.
+            List of five ``BenchmarkLevel`` objects.
         """
         return list(BASIC_SKILLS_LEVELS)
 
@@ -143,70 +91,54 @@ class BasicSkillsBenchmark:
         bench_level: BenchmarkLevel,
         items_mined: dict[str, int],
     ) -> float:
-        """Compute the score for a single completed level.
+        """Compute a rough score from items_mined for one level.
 
-        For levels scored by ``items_mined`` the score is returned
-        directly. For levels that require the final state (crafting,
-        filling, deploying), this returns 0.0 because accurate scoring
-        happens in :meth:`score` via ``LevelResult.final_state``.
+        This is called by the runner before ``final_state`` is
+        available. It returns total ore mined as a simple progress
+        indicator. The true achievement-based score is computed in
+        :meth:`score` using the full ``final_state``.
 
         Args:
             bench_level: The level that was evaluated.
             items_mined: Resources collected, keyed by item name.
 
         Returns:
-            Level score or 0.0 when final state is needed.
+            Total ore mined.
         """
-        if bench_level.name in ("mine_resources", "mining_factory"):
-            return score_mine(items_mined)
-        return 0.0
+        return score_level_items(bench_level, items_mined)
 
     def score(self, level_results: list[LevelResult]) -> float:
-        """Compute the aggregate benchmark score using final states.
+        """Compute the aggregate score from all level results.
 
-        Rescores levels that need the final environment state rather
-        than relying solely on ``items_mined``.
+        Uses ``final_state.achievements_unlocked`` on each result to
+        compute the fraction of level-specific achievements unlocked,
+        then averages across all levels.
 
         Args:
             level_results: Per-level results from the runner.
 
         Returns:
-            Mean of normalised per-level scores on [0, 1].
+            Mean achievement fraction in [0.0, 1.0].
         """
-        scores: dict[str, float] = {}
+        return aggregate_score(level_results)
 
-        for r in level_results:
-            if r.level_name == "mine_resources":
-                scores["mine_resources"] = score_mine(r.items_mined)
-            elif r.level_name == "craft_chests" and r.final_state is not None:
-                scores["craft_chests"] = score_craft(r.final_state)
-            elif r.level_name == "fill_chest" and r.final_state is not None:
-                scores["fill_chest"] = score_fill(r.final_state)
-            elif r.level_name == "craft_miners" and r.final_state is not None:
-                scores["craft_miners"] = score_craft_miners(r.final_state)
-            elif r.level_name == "deploy_miner" and r.final_state is not None:
-                scores["deploy_miner"] = score_deploy_miner(r.final_state)
-            elif r.level_name == "mining_factory":
-                scores["mining_factory"] = score_mining_factory(r.items_mined)
-            elif r.level_name == "place_and_fuel" and r.final_state is not None:
-                scores["place_and_fuel"] = score_deploy_miner(r.final_state)
-            elif r.level_name == "withdraw_ore" and r.final_state is not None:
-                scores["withdraw_ore"] = score_withdraw_ore(r.final_state)
-            elif r.level_name == "deposit_into_chests" and r.final_state is not None:
-                scores["deposit_into_chests"] = score_deposit(r.final_state)
-            elif r.level_name == "pickup_machines" and r.final_state is not None:
-                scores["pickup_machines"] = score_pickup(r.final_state)
-            elif r.level_name == "belt_line" and r.final_state is not None:
-                scores["belt_line"] = score_belt(r.final_state)
-            elif r.level_name == "arm_bridge" and r.final_state is not None:
-                scores["arm_bridge"] = score_arm(r.final_state)
-            elif r.level_name == "fuel_and_collect" and r.final_state is not None:
-                scores["fuel_and_collect"] = score_fuel_collect(r.final_state)
-            elif r.level_name == "assembler_production" and r.final_state is not None:
-                scores["assembler_production"] = score_assembler(r.final_state)
-            elif r.level_name == "research_tech" and r.final_state is not None:
-                scores["research_tech"] = score_research(r.final_state)
-            elif r.level_name == "repair_machine" and r.final_state is not None:
-                scores["repair_machine"] = score_repair(r.final_state)
+    @staticmethod
+    def vector_obs_fn(
+        state: EnvState,
+        params: EnvParams,
+        player_idx: int | jax.Array,
+    ) -> jax.Array:
+        """Full-map vector observation for one player.
 
-        return aggregate_scores(scores)
+        Wraps :func:`~factoriax.observations.global_array` for
+        convenient use with the benchmark runner.
+
+        Args:
+            state: Current environment state.
+            params: Environment parameters.
+            player_idx: Index of the observing player.
+
+        Returns:
+            Flat float32 observation array.
+        """
+        return global_array(state, params, player_idx)

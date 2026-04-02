@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC
 
 import jax
@@ -47,6 +48,57 @@ from factoriax.ui.window import calculate_window_size
 _ROCKET_ACHIEVEMENT_IDX: int = next(
     i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
 )
+
+
+def _run_with_loading_screen(
+    screen: pygame.Surface,
+    message: str,
+    fn: Callable[[], object],
+) -> object:
+    """Run *fn* on a background thread while showing a loading message.
+
+    Keeps the pygame event loop alive so the OS does not flag the
+    window as unresponsive during long JAX compilations.
+
+    Args:
+        screen: Pygame display surface.
+        message: Text to show while waiting.
+        fn: Blocking callable to run in the background.
+
+    Returns:
+        Whatever *fn* returned.
+    """
+    import threading
+
+    result: list[object] = []
+
+    def _worker() -> None:
+        result.append(fn())
+
+    thread = threading.Thread(target=_worker)
+    thread.start()
+
+    font = pygame.font.SysFont(None, 28)
+    clock = pygame.time.Clock()
+    dots = 0
+
+    while thread.is_alive():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                thread.join()
+                raise SystemExit
+        dots = (dots + 1) % 4
+        label = message + "." * dots
+        screen.fill((20, 20, 25))
+        text = font.render(label, True, (180, 180, 180))
+        cx = (screen.get_width() - text.get_width()) // 2
+        cy = (screen.get_height() - text.get_height()) // 2
+        screen.blit(text, (cx, cy))
+        pygame.display.flip()
+        clock.tick(8)
+
+    thread.join()
+    return result[0] if result else None
 
 
 def _tile_in_front(state: EnvState, player_idx: int) -> tuple[int, int]:
@@ -115,17 +167,25 @@ def play_level(
 
     pygame.display.set_caption(f"FactoriaX - {level.name}")
 
-    obs, state = env.reset_from_level(level, params)
+    reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]
+        screen, "Building world",
+        lambda: env.reset_from_level(level, params),
+    )
+    _, state = reset_result
     rng = random.PRNGKey(42)
 
     step_fn = jax.jit(env.step_env)
     rng, warmup_key = random.split(rng)
-    step_fn(
-        warmup_key,
-        state,
-        jnp.int32(Action.NOOP),
-        params,
-    )[0].block_until_ready()
+    _warmup_key = warmup_key
+
+    def _warmup() -> None:
+        step_fn(
+            _warmup_key, state, jnp.int32(Action.NOOP), params,
+        )[0].block_until_ready()
+
+    _run_with_loading_screen(
+        screen, "Compiling JAX (first run only)", _warmup,
+    )
 
     _play_loop(env, state, params, level, screen, rng)
 
@@ -1074,8 +1134,6 @@ def main() -> None:
     """
     pygame.init()
 
-    env, params = make_factoriax_env()
-
     window_width, window_height = calculate_window_size(
         _UI_SIZE,
         _UI_SIZE,
@@ -1083,18 +1141,34 @@ def main() -> None:
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
 
+    env_result = _run_with_loading_screen(
+        screen, "Initialising environment",
+        make_factoriax_env,
+    )
+    env: FactoriaXEnv = env_result[0]  # type: ignore[index]
+    params: EnvParams = env_result[1]  # type: ignore[index]
+
     rng = random.PRNGKey(42)
     rng, reset_key = random.split(rng)
-    obs, state = env.reset_env(reset_key, params)
+    _reset_key = reset_key
+    reset_result = _run_with_loading_screen(
+        screen, "Generating world",
+        lambda: env.reset_env(_reset_key, params),
+    )
+    state: EnvState = reset_result[1]  # type: ignore[index]
 
     step_fn = jax.jit(env.step_env)
     rng, warmup_key = random.split(rng)
-    step_fn(
-        warmup_key,
-        state,
-        jnp.int32(Action.NOOP),
-        params,
-    )[0].block_until_ready()
+    _warmup_key2 = warmup_key
+
+    def _warmup_main() -> None:
+        step_fn(
+            _warmup_key2, state, jnp.int32(Action.NOOP), params,
+        )[0].block_until_ready()
+
+    _run_with_loading_screen(
+        screen, "Compiling JAX (first run only)", _warmup_main,
+    )
 
     _play_loop(env, state, params, None, screen, rng)
 

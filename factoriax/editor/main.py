@@ -1222,13 +1222,19 @@ def _export_benchmark_levels() -> None:
             save_level(bl.level, path)
 
 
-def main() -> None:
+def main(screen: pygame.Surface | None = None) -> None:
     """Run the FactoriaX level editor.
+
+    Args:
+        screen: Existing pygame display surface to reuse.  When
+            ``None`` (the default) a new window is created.
 
     Press ``?`` for a full list of controls.
     """
     _export_benchmark_levels()
-    pygame.init()
+    owns_pygame = screen is None
+    if owns_pygame:
+        pygame.init()
 
     editor = new_editor_state(15, 15)
     rng = np.random.default_rng(42)
@@ -1560,4 +1566,5 @@ def main() -> None:
         pygame.display.flip()
         clock.tick(30)
 
-    pygame.quit()
+    if owns_pygame:
+        pygame.quit()

@@ -1,28 +1,58 @@
 """Level definitions for the basic skills benchmark.
 
-Six levels testing progressively harder agent skills:
+Five levels testing progressively harder agent skills:
 
-1. **mine_resources** — Mine as much ore as possible from two patches.
-2. **craft_chests** — Craft chests from iron (pre-stocked + mineable).
-3. **fill_chest** — Mine ore, navigate to a pre-placed chest, and deposit
-   full stacks into it.
-4. **craft_miners** — Mine iron and copper, then craft miner machines.
-5. **deploy_miner** — Place a miner on ore and fuel it with coal.
-6. **mining_factory** — Full loop: mine, craft a miner, place, fuel, and
-   maximise total ore output.
+1. **mine_ores** -- Mine ore from three patches spread across the map.
+2. **craft_all** -- Mine iron and copper, then craft all five recipe types.
+3. **fuel_miner** -- Mine coal, deposit it into a pre-placed miner, let it
+   produce ore.
+4. **deploy_miners** -- Full deployment loop: mine resources, craft miners,
+   place them on ore, fuel them.
+5. **assembler_science** -- Feed a pre-placed assembler to produce science
+   packs.
 
-All levels use one player and are sized to be completable within their
-timestep budget by a competent agent.
+Each level defines a custom achievement function that returns a boolean
+array of shape ``(MAX_ACHIEVEMENTS,)`` padded with zeros beyond the
+level's own milestones. These drive both reward (via
+``achievement_reward``) and scoring (fraction of achievements unlocked).
 """
 
 from __future__ import annotations
 
+import jax
+import jax.numpy as jnp
+
+from factoriax.achievements import (
+    _ASSEMBLER_OUTPUT_SLOT,
+    _MINER_FUEL_SLOT,
+    _MINER_OUTPUT_SLOT,
+    count_total_items,
+)
 from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.constants import BlockType, Direction, ItemType, MachineType
+from factoriax.constants import (
+    MAX_ACHIEVEMENTS,
+    BlockType,
+    Direction,
+    ItemType,
+    MachineType,
+)
 from factoriax.levels import LevelBuilder
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
 
 _NUM_PLAYERS: int = 1
+
+# Number of custom achievements per level, used by scoring.
+ACHIEVEMENT_COUNTS: dict[str, int] = {
+    "mine_ores": 5,
+    "craft_all": 10,
+    "fuel_miner": 5,
+    "deploy_miners": 7,
+    "assembler_science": 7,
+}
+
+# Per-level reward weights for achievement_reward. Later (harder)
+# milestones receive higher weight to encourage full completion.
+ACHIEVEMENT_WEIGHTS: dict[str, jax.Array] = {}
 
 
 def _params(width: int, height: int, max_timesteps: int) -> EnvParams:
@@ -44,510 +74,408 @@ def _params(width: int, height: int, max_timesteps: int) -> EnvParams:
     )
 
 
+def _pad_conditions(conditions: jax.Array) -> jax.Array:
+    """Pad a boolean condition array to ``MAX_ACHIEVEMENTS``.
+
+    Args:
+        conditions: Boolean array of shape ``(N,)`` where N <= MAX_ACHIEVEMENTS.
+
+    Returns:
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    n = conditions.shape[0]
+    return jnp.concatenate(
+        [conditions, jnp.zeros(MAX_ACHIEVEMENTS - n, dtype=jnp.bool_)]
+    )
+
+
+def _pad_weights(weights: list[float]) -> jax.Array:
+    """Build a padded weight vector from a list of per-achievement weights.
+
+    Args:
+        weights: Reward weight per achievement.
+
+    Returns:
+        Float32 array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    padded = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
+    return padded.at[: len(weights)].set(jnp.array(weights, dtype=jnp.float32))
+
+
 # ---------------------------------------------------------------------------
-# Level 1 — mine_resources
+# Level 1 -- mine_ores
 # ---------------------------------------------------------------------------
-# 10x10 dirt map. A 3x3 iron patch at (2, 2) and a 3x3 coal patch at (6, 2).
-# Player spawns at centre (5, 5). 200 ticks to mine as much as possible.
-# Each ore tile has 1 resource so the agent must navigate between tiles.
-# Tests: movement + mine action.
+# 10x10 dirt map. Iron 3x3 at (2,1), copper 2x2 at (6,2), coal 2x2 at
+# (7,7). Player spawns at (4,4). 100 resources per ore tile.
+# Achievements: mined >= 1, 10, 25, 50, 100.
+
+
+def _mine_ores_achievements(state: EnvState) -> jax.Array:
+    """Achievement conditions for the mine_ores level.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    total_mined = (
+        state.items_mined[ItemType.IRON]
+        + state.items_mined[ItemType.COPPER]
+        + state.items_mined[ItemType.COAL]
+    )
+    conditions = jnp.array(
+        [
+            total_mined >= 1,
+            total_mined >= 5,
+            total_mined >= 15,
+            total_mined >= 30,
+            total_mined >= 45,
+        ],
+        dtype=jnp.bool_,
+    )
+    return _pad_conditions(conditions)
+
 
 _LEVEL_MINE = BenchmarkLevel(
-    name="mine_resources",
+    name="mine_ores",
     description=(
-        "10x10 map with iron and coal patches. Mine as many resources "
-        "as possible in 200 ticks. Tests basic movement and mining."
+        "10x10 map with iron, copper, and coal patches. Mine as many "
+        "resources as possible in 200 ticks. Tests movement and mining "
+        "across multiple ore types."
     ),
     level=(
         LevelBuilder(10, 10)
-        .fill_rect(2, 2, 3, 3, BlockType.IRON, resources=1)
-        .fill_rect(6, 2, 3, 3, BlockType.COAL, resources=1)
-        .build("basic_mine_resources")
+        .fill_rect(2, 1, 3, 3, BlockType.IRON, resources=3)
+        .fill_rect(6, 2, 2, 2, BlockType.COPPER, resources=3)
+        .fill_rect(7, 7, 2, 2, BlockType.COAL, resources=3)
+        .set_player_position(4, 4)
+        .build("basic_mine_ores")
     ),
     env_params=_params(10, 10, 200),
+    achievement_fn=_mine_ores_achievements,
 )
 
+ACHIEVEMENT_WEIGHTS["mine_ores"] = _pad_weights([1.0, 1.0, 2.0, 3.0, 5.0])
+
 
 # ---------------------------------------------------------------------------
-# Level 2 — craft_chests
+# Level 2 -- craft_all
 # ---------------------------------------------------------------------------
-# 7x7 dirt map. A 3x3 iron patch at (0, 0) with 20 ore per tile (180 total).
-# Player starts with 30 iron in inventory, enough for 6 chests outright.
-# Each chest costs 5 iron (instant craft). Mining more iron from the map
-# allows additional chests. 200 ticks gives plenty of time.
-# Tests: crafting action, optional mining for more materials.
+# 12x12 dirt map. Iron 4x4 at (1,1) with 200 resources, copper 4x4 at
+# (7,1) with 200 resources. Player at (6,5).
+# Achievements: crafted 1 of each type (5), hold 5 of each type (5).
+
+
+def _craft_all_achievements(state: EnvState) -> jax.Array:
+    """Achievement conditions for the craft_all level.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    miner_count = count_total_items(state, ItemType.MINER)
+    chest_count = count_total_items(state, ItemType.CHEST)
+    belt_count = count_total_items(state, ItemType.CONVEYOR_BELT)
+    arm_count = count_total_items(state, ItemType.ARM)
+    assembler_count = count_total_items(state, ItemType.ASSEMBLER)
+
+    conditions = jnp.array(
+        [
+            # Crafted at least 1 of each
+            miner_count >= 1,
+            chest_count >= 1,
+            belt_count >= 1,
+            arm_count >= 1,
+            assembler_count >= 1,
+            # Hold 5 of each
+            miner_count >= 5,
+            chest_count >= 5,
+            belt_count >= 5,
+            arm_count >= 5,
+            assembler_count >= 5,
+        ],
+        dtype=jnp.bool_,
+    )
+    return _pad_conditions(conditions)
+
 
 _LEVEL_CRAFT = BenchmarkLevel(
-    name="craft_chests",
+    name="craft_all",
     description=(
-        "7x7 map with starting iron inventory and an iron patch. "
-        "Craft as many chests as possible. Tests recipe selection "
-        "and crafting, with optional mining for extra materials."
+        "12x12 map with large iron and copper patches. Craft all five "
+        "recipe types: miner, chest, belt, arm, assembler. Tests recipe "
+        "selection, resource gathering, and inventory management across "
+        "500 ticks."
     ),
     level=(
-        LevelBuilder(7, 7)
-        .fill_rect(0, 0, 3, 3, BlockType.IRON, resources=20)
-        .build("basic_craft_chests")
+        LevelBuilder(12, 12)
+        .fill_rect(1, 1, 4, 4, BlockType.IRON, resources=200)
+        .fill_rect(7, 1, 4, 4, BlockType.COPPER, resources=200)
+        .set_player_position(6, 5)
+        .build("basic_craft_all")
     ),
-    env_params=_params(7, 7, 200),
+    env_params=_params(12, 12, 500),
+    achievement_fn=_craft_all_achievements,
 )
-_LEVEL_CRAFT.level.player_inventory = [(int(ItemType.IRON), 30)]
 
-
-# ---------------------------------------------------------------------------
-# Level 3 — fill_chest
-# ---------------------------------------------------------------------------
-# 7x7 dirt map. A 3x3 iron patch at (1, 1) with 100 ore per tile (900 total).
-# One chest pre-placed at (5, 3). Player must mine iron, walk to the chest,
-# and deposit. Scoring rewards full stacks (64 items per slot, 8 slots).
-# 300 ticks is tight but allows filling several slots if the agent is
-# efficient about its mine-walk-deposit loop.
-# Tests: mining + navigation + deposit action.
-
-_LEVEL_FILL = BenchmarkLevel(
-    name="fill_chest",
-    description=(
-        "7x7 map with an iron patch and a pre-placed chest. "
-        "Mine iron, walk to the chest, and deposit full stacks. "
-        "Tests mining, navigation, and the deposit action."
-    ),
-    level=(
-        LevelBuilder(7, 7)
-        .fill_rect(1, 1, 3, 3, BlockType.IRON, resources=100)
-        .place_machine(5, 3, MachineType.CHEST)
-        .build("basic_fill_chest")
-    ),
-    env_params=_params(7, 7, 300),
+ACHIEVEMENT_WEIGHTS["craft_all"] = _pad_weights(
+    [1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 )
 
 
 # ---------------------------------------------------------------------------
-# Level 4 — craft_miners
+# Level 3 -- fuel_miner
 # ---------------------------------------------------------------------------
-# 9x9 dirt map. A 3x3 iron patch at (1, 1) and a 3x3 copper patch at (5, 1),
-# each with 20 ore per tile. Player spawns at (4, 6). Miner recipe requires
-# 5 iron + 5 copper, so the agent must navigate between two ore types and
-# select the correct recipe (index 0). 300 ticks.
-# Tests: dual-resource mining + recipe selection.
+# 8x8 dirt map. Iron 3x3 at (2,2) with 100 resources, coal 3x2 at (1,6)
+# with 50 resources. Pre-placed MINER at (3,3) on iron, facing DOWN.
+# Player at (5,7).
+# Achievements: mined coal, coal in miner fuel, miner produced ore,
+#               miner output >= 10, miner output >= 30.
 
-_LEVEL_CRAFT_MINERS = BenchmarkLevel(
-    name="craft_miners",
+
+def _fuel_miner_achievements(state: EnvState) -> jax.Array:
+    """Achievement conditions for the fuel_miner level.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    mined_coal = state.items_mined[ItemType.COAL] >= 1
+
+    # Any miner has coal in its fuel slot.
+    is_miner = state.machine_types == MachineType.MINER
+    has_fuel = (
+        state.machine_inventory_items[..., _MINER_FUEL_SLOT] == ItemType.COAL
+    ) & (state.machine_inventory_counts[..., _MINER_FUEL_SLOT] > 0)
+    coal_in_miner = jnp.any(is_miner & has_fuel)
+
+    # Any miner has produced ore (output slot non-empty).
+    output_counts = state.machine_inventory_counts[..., _MINER_OUTPUT_SLOT]
+    has_output = output_counts > 0
+    miner_produced = jnp.any(is_miner & has_output)
+
+    # Total miner output across all miners.
+    total_output = jnp.sum(jnp.where(is_miner, output_counts, 0))
+
+    conditions = jnp.array(
+        [
+            mined_coal,
+            coal_in_miner,
+            miner_produced,
+            total_output >= 10,
+            total_output >= 30,
+        ],
+        dtype=jnp.bool_,
+    )
+    return _pad_conditions(conditions)
+
+
+_LEVEL_FUEL = BenchmarkLevel(
+    name="fuel_miner",
     description=(
-        "9x9 map with iron and copper patches. Start with enough "
-        "materials for two miners. Craft as many miners as possible. "
-        "Tests mining two resource types and recipe selection for a "
-        "multi-input recipe."
+        "8x8 map with a pre-placed miner on iron and a nearby coal "
+        "patch. Mine coal, deposit it into the miner's fuel slot, and "
+        "let the miner produce ore. Tests fuel mechanics and machine "
+        "interaction."
     ),
     level=(
-        LevelBuilder(9, 9)
-        .fill_rect(1, 1, 3, 3, BlockType.IRON, resources=20)
-        .fill_rect(5, 1, 3, 3, BlockType.COPPER, resources=20)
-        .build("basic_craft_miners")
+        LevelBuilder(8, 8)
+        .fill_rect(2, 2, 3, 3, BlockType.IRON, resources=100)
+        .fill_rect(1, 6, 3, 2, BlockType.COAL, resources=50)
+        .place_machine(3, 3, MachineType.MINER, Direction.DOWN)
+        .set_player_position(5, 7)
+        .build("basic_fuel_miner")
     ),
-    env_params=_params(9, 9, 300),
+    env_params=_params(8, 8, 200),
+    achievement_fn=_fuel_miner_achievements,
 )
-_LEVEL_CRAFT_MINERS.level.player_inventory = [
-    (int(ItemType.IRON), 10),
-    (int(ItemType.COPPER), 10),
-]
+
+ACHIEVEMENT_WEIGHTS["fuel_miner"] = _pad_weights([1.0, 2.0, 3.0, 4.0, 5.0])
 
 
 # ---------------------------------------------------------------------------
-# Level 5 — deploy_miner
+# Level 4 -- deploy_miners
 # ---------------------------------------------------------------------------
-# 7x7 dirt map. A 3x3 coal patch at (1, 1) with 50 ore per tile. Player
-# starts with 1 miner and 10 coal in inventory. Place the miner on a coal
-# tile, deposit coal into its fuel slot (slot 0), and let it run. A miner
-# consumes 1 power/tick and mines 3 ore/tick. 10 coal = 100 power = 100
-# ticks of mining, but the output slot caps at 64 items. 200 ticks.
-# Tests: PLACE action + DEPOSIT into machine fuel slot.
+# 12x12 dirt map. Iron 3x4 at (1,1), copper 3x4 at (8,1), coal 4x3 at
+# (3,6). All 100 resources per tile. Player at (5,5).
+# Achievements: crafted miner, placed miner on ore, fueled a miner,
+#               miner produced ore, 2 miners on map, both miners fueled,
+#               total automated ore >= 20.
+
+
+def _deploy_miners_achievements(state: EnvState) -> jax.Array:
+    """Achievement conditions for the deploy_miners level.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    # Count miners held in inventory (evidence of crafting).
+    miners_held = count_total_items(state, ItemType.MINER)
+
+    # Count placed miners and their properties.
+    is_miner = state.machine_types == MachineType.MINER
+    num_miners = jnp.sum(is_miner)
+
+    # A miner is "on ore" if the block beneath it is a mineable type.
+    is_ore = (
+        (state.map == BlockType.IRON)
+        | (state.map == BlockType.COPPER)
+        | (state.map == BlockType.COAL)
+    )
+    miner_on_ore = jnp.any(is_miner & is_ore)
+
+    # Any miner has fuel.
+    has_fuel = (
+        state.machine_inventory_items[..., _MINER_FUEL_SLOT] == ItemType.COAL
+    ) & (state.machine_inventory_counts[..., _MINER_FUEL_SLOT] > 0)
+    any_fueled = jnp.any(is_miner & has_fuel)
+
+    # Any miner produced ore.
+    output_counts = state.machine_inventory_counts[..., _MINER_OUTPUT_SLOT]
+    any_output = jnp.any(is_miner & (output_counts > 0))
+
+    # Count fueled miners (miners with power > 0 or fuel in slot).
+    num_fueled = jnp.sum(is_miner & has_fuel)
+
+    # Total automated ore output.
+    total_output = jnp.sum(jnp.where(is_miner, output_counts, 0))
+
+    # "Crafted a miner" detected by having held or placed one.
+    crafted_miner = (miners_held >= 1) | (num_miners >= 1)
+
+    conditions = jnp.array(
+        [
+            crafted_miner,
+            miner_on_ore,
+            any_fueled,
+            any_output,
+            num_miners >= 2,
+            num_fueled >= 2,
+            total_output >= 20,
+        ],
+        dtype=jnp.bool_,
+    )
+    return _pad_conditions(conditions)
+
 
 _LEVEL_DEPLOY = BenchmarkLevel(
-    name="deploy_miner",
+    name="deploy_miners",
     description=(
-        "7x7 map with a coal patch. Start with a miner and coal. "
-        "Place the miner on ore, fuel it, and let it produce. "
-        "Tests machine placement and fuel deposit."
+        "12x12 map with iron, copper, and coal patches. Start from "
+        "nothing: mine resources, craft miners, place them on ore, "
+        "fuel them with coal. Tests the full deployment loop over "
+        "500 ticks."
     ),
     level=(
-        LevelBuilder(7, 7)
-        .fill_rect(1, 1, 3, 3, BlockType.COAL, resources=50)
-        .build("basic_deploy_miner")
+        LevelBuilder(12, 12)
+        .fill_rect(1, 1, 3, 4, BlockType.IRON, resources=100)
+        .fill_rect(8, 1, 3, 4, BlockType.COPPER, resources=100)
+        .fill_rect(3, 6, 4, 3, BlockType.COAL, resources=100)
+        .set_player_position(5, 5)
+        .build("basic_deploy_miners")
     ),
-    env_params=_params(7, 7, 200),
-)
-_LEVEL_DEPLOY.level.player_inventory = [
-    (int(ItemType.MINER), 5),
-    (int(ItemType.COAL), 10),
-]
-
-
-# ---------------------------------------------------------------------------
-# Level 6 — mining_factory
-# ---------------------------------------------------------------------------
-# 11x11 dirt map. Iron 3x3 at (1, 1), copper 3x3 at (7, 1), coal 3x3 at
-# (4, 5), all with 100 ore per tile. Player spawns at (5, 9) with nothing.
-# The agent must mine iron + copper to craft a miner, place it on ore, mine
-# coal to fuel it, and maximise total ore output. 500 ticks.
-# Tests: full automation loop (the capstone skill).
-
-_LEVEL_FACTORY = BenchmarkLevel(
-    name="mining_factory",
-    description=(
-        "11x11 map with iron, copper, and coal patches. Start from "
-        "nothing: mine, craft a miner, place it, fuel it, and "
-        "maximise total ore output. Capstone level testing the "
-        "full factory-building loop."
-    ),
-    level=(
-        LevelBuilder(11, 11)
-        .fill_rect(1, 1, 3, 3, BlockType.IRON, resources=100)
-        .fill_rect(7, 1, 3, 3, BlockType.COPPER, resources=100)
-        .fill_rect(4, 5, 3, 3, BlockType.COAL, resources=100)
-        .build("basic_mining_factory")
-    ),
-    env_params=_params(11, 11, 500),
+    env_params=_params(12, 12, 500),
+    achievement_fn=_deploy_miners_achievements,
 )
 
-
-# ---------------------------------------------------------------------------
-# Level 7 — place_and_fuel
-# ---------------------------------------------------------------------------
-# 7x7 dirt map with a 3x3 coal patch at (2, 2). Player spawns at centre
-# (3, 3) — right on the coal. Start with 3 miners and 20 coal. Walk to
-# the edge of the patch, place miners on adjacent coal tiles, fuel each.
-# Each miner needs only 3 coal to fill its 64-item output slot (3 coal =
-# 30 power, 30 * 3 ore/tick = 90, capped at 64). The dirt border gives
-# room to navigate around placed machines. Hand-mine extra coal for the
-# second and third miners.
-# Tests: PLACE action + DEPOSIT into fuel slot + navigation around machines.
-
-_LEVEL_PLACE_AND_FUEL = BenchmarkLevel(
-    name="place_and_fuel",
-    description=(
-        "7x7 map with a coal patch. Start with 3 miners and 20 coal. "
-        "Place miners on coal tiles and fuel them. Score measures "
-        "total ore produced in miner output slots."
-    ),
-    level=(
-        LevelBuilder(7, 7)
-        .fill_rect(2, 2, 3, 3, BlockType.COAL, resources=50)
-        .set_player_position(3, 1)
-        .build("basic_place_and_fuel")
-    ),
-    env_params=_params(7, 7, 200),
-)
-_LEVEL_PLACE_AND_FUEL.level.player_inventory = [
-    (int(ItemType.MINER), 3),
-    (int(ItemType.COAL), 20),
-]
+ACHIEVEMENT_WEIGHTS["deploy_miners"] = _pad_weights([1.0, 2.0, 3.0, 4.0, 3.0, 5.0, 6.0])
 
 
 # ---------------------------------------------------------------------------
-# Level 8 — withdraw_ore
+# Level 5 -- assembler_science
 # ---------------------------------------------------------------------------
-# 7x3 map. Three pre-placed miners at (1, 0), (3, 0), (5, 0) on coal
-# tiles, each with pre-loaded output slots (10, 20, 30 ore). No fuel,
-# not producing — just static storage. Player at (0, 1) walks along the
-# dirt corridor in row 1, faces UP toward each miner, and withdraws.
-# Miners block movement, so the agent cannot walk into row 0.
-# Tests: WITHDRAW action + navigation to multiple machines.
-
-_LEVEL_WITHDRAW = BenchmarkLevel(
-    name="withdraw_ore",
-    description=(
-        "7x3 corridor with 3 pre-loaded miners. Walk to each miner "
-        "and withdraw ore from its output slot. Score measures total "
-        "ore collected in player inventory."
-    ),
-    level=(
-        LevelBuilder(7, 3)
-        .fill_rect(1, 0, 1, 1, BlockType.COAL, resources=50)
-        .fill_rect(3, 0, 1, 1, BlockType.COAL, resources=50)
-        .fill_rect(5, 0, 1, 1, BlockType.COAL, resources=50)
-        .place_machine(1, 0, MachineType.MINER)
-        .place_machine(3, 0, MachineType.MINER)
-        .place_machine(5, 0, MachineType.MINER)
-        .set_machine_inventory(1, 0, 1, int(ItemType.COAL), 10)
-        .set_machine_inventory(3, 0, 1, int(ItemType.COAL), 20)
-        .set_machine_inventory(5, 0, 1, int(ItemType.COAL), 30)
-        .set_player_position(0, 1)
-        .build("basic_withdraw_ore")
-    ),
-    env_params=_params(7, 3, 100),
-)
+# 10x10 dirt map. Iron 3x3 at (1,1), copper 3x3 at (6,2). Pre-placed
+# ASSEMBLER at (5,4), recipe set to Basic Science Pack (index 3).
+# Player at (4,5).
+# Achievements: mined iron, mined copper, deposited into assembler,
+#               assembler produced, hold 1 science pack, hold 5, hold 10.
 
 
-# ---------------------------------------------------------------------------
-# Level 9 — deposit_into_chests
-# ---------------------------------------------------------------------------
-# 7x3 map. Three pre-placed chests at (1, 0), (3, 0), (5, 0). Player at
-# (0, 1) with iron spread across 6 inventory slots (10 each = 60 total).
-# Walk to each chest, turn to face it, deposit. Multiple slots force
-# the agent to cycle through inventory, giving score gradient 0-60.
-# Tests: DEPOSIT action + NEXT_SLOT cycling + navigation.
+def _assembler_science_achievements(state: EnvState) -> jax.Array:
+    """Achievement conditions for the assembler_science level.
 
-_LEVEL_DEPOSIT = BenchmarkLevel(
-    name="deposit_into_chests",
-    description=(
-        "7x3 map with 3 pre-placed chests. Start with 60 iron "
-        "spread across 6 inventory slots. Deposit into each chest. "
-        "Score measures total items stored in chests."
-    ),
-    level=(
-        LevelBuilder(7, 3)
-        .place_machine(1, 0, MachineType.CHEST)
-        .place_machine(3, 0, MachineType.CHEST)
-        .place_machine(5, 0, MachineType.CHEST)
-        .set_player_position(0, 1)
-        .build("basic_deposit_into_chests")
-    ),
-    env_params=_params(7, 3, 150),
-)
-_LEVEL_DEPOSIT.level.player_inventory = [
-    (int(ItemType.IRON), 10),
-    (int(ItemType.IRON), 10),
-    (int(ItemType.IRON), 10),
-    (int(ItemType.IRON), 10),
-    (int(ItemType.IRON), 10),
-    (int(ItemType.IRON), 10),
-]
+    Args:
+        state: Current environment state.
 
+    Returns:
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    """
+    mined_iron = state.items_mined[ItemType.IRON] >= 1
+    mined_copper = state.items_mined[ItemType.COPPER] >= 1
 
-# ---------------------------------------------------------------------------
-# Level 10 — pickup_machines
-# ---------------------------------------------------------------------------
-# 9x3 map. Five pre-placed chests at (1,0), (3,0), (5,0), (7,0), (1,2).
-# Player at (0, 1). Pick up all chests. Score = chest items in inventory.
-# Tests: PICKUP action + navigation to multiple machines.
+    # Any assembler has items in an input slot (evidence of deposit).
+    is_asm = state.machine_types == MachineType.ASSEMBLER
+    input_total = (
+        state.machine_inventory_counts[..., 0]
+        + state.machine_inventory_counts[..., 1]
+        + state.machine_inventory_counts[..., 2]
+    )
+    deposited = jnp.any(is_asm & (input_total > 0))
 
-_LEVEL_PICKUP = BenchmarkLevel(
-    name="pickup_machines",
-    description=(
-        "9x3 map with 5 pre-placed chests. Pick them all up. "
-        "Score measures number of chest items in player inventory."
-    ),
-    level=(
-        LevelBuilder(9, 3)
-        .place_machine(1, 0, MachineType.CHEST)
-        .place_machine(3, 0, MachineType.CHEST)
-        .place_machine(5, 0, MachineType.CHEST)
-        .place_machine(7, 0, MachineType.CHEST)
-        .place_machine(1, 2, MachineType.CHEST)
-        .set_player_position(0, 1)
-        .build("basic_pickup_machines")
-    ),
-    env_params=_params(9, 3, 100),
-)
+    # Assembler produced output.
+    has_output = state.machine_inventory_counts[..., _ASSEMBLER_OUTPUT_SLOT] > 0
+    produced = jnp.any(is_asm & has_output)
 
+    # Science packs held by player.
+    packs_held = count_total_items(state, ItemType.BASIC_SCIENCE_PACK)
 
-# ---------------------------------------------------------------------------
-# Level 11 — belt_line
-# ---------------------------------------------------------------------------
-# 7x3 map. Pre-placed belts at (2,1), (3,1), (4,1) facing RIGHT. Chest
-# at (5,1). Gap at (1,1). Player at (0,1) facing RIGHT with 1 belt and
-# iron in 4 slots (5 each = 20 total). Place the missing belt to
-# complete the chain, then deposit iron onto it. Items flow to the chest.
-# Tests: belt PLACE with correct orientation + DEPOSIT.
+    conditions = jnp.array(
+        [
+            mined_iron,
+            mined_copper,
+            deposited,
+            produced,
+            packs_held >= 1,
+            packs_held >= 5,
+            packs_held >= 10,
+        ],
+        dtype=jnp.bool_,
+    )
+    return _pad_conditions(conditions)
 
-_LEVEL_BELT = BenchmarkLevel(
-    name="belt_line",
-    description=(
-        "7x3 map with a belt chain missing one segment. Place the "
-        "missing belt and deposit iron. Score measures items that "
-        "reach the chest at the end of the chain."
-    ),
-    level=(
-        LevelBuilder(7, 3)
-        .place_machine(2, 1, MachineType.CONVEYOR_BELT, Direction.RIGHT)
-        .place_machine(3, 1, MachineType.CONVEYOR_BELT, Direction.RIGHT)
-        .place_machine(4, 1, MachineType.CONVEYOR_BELT, Direction.RIGHT)
-        .place_machine(5, 1, MachineType.CHEST)
-        .set_player_position(0, 1)
-        .build("basic_belt_line")
-    ),
-    env_params=_params(7, 3, 200),
-)
-_LEVEL_BELT.level.player_inventory = [
-    (int(ItemType.CONVEYOR_BELT), 1),
-    (int(ItemType.IRON), 5),
-    (int(ItemType.IRON), 5),
-    (int(ItemType.IRON), 5),
-    (int(ItemType.IRON), 5),
-]
-
-
-# ---------------------------------------------------------------------------
-# Level 12 — arm_bridge
-# ---------------------------------------------------------------------------
-# 7x3 map. Chest A at (1,1) with 20 iron. Arm at (2,1) pre-placed facing
-# LEFT (wrong direction). Chest B at (3,1) empty. Player at (2,0).
-# The arm needs to face RIGHT to pick from A and deposit into B. Agent
-# must face the arm and ROTATE it twice (LEFT -> UP -> RIGHT).
-# Tests: ROTATE action + understanding arm transfer direction.
-
-_LEVEL_ARM = BenchmarkLevel(
-    name="arm_bridge",
-    description=(
-        "7x3 map with an arm between two chests, facing the wrong "
-        "direction. Rotate the arm so items flow from the full chest "
-        "to the empty one. Score measures items in the target chest."
-    ),
-    level=(
-        LevelBuilder(7, 3)
-        .place_machine(1, 1, MachineType.CHEST)
-        .set_machine_inventory(1, 1, 0, int(ItemType.IRON), 20)
-        .place_machine(2, 1, MachineType.ARM, Direction.LEFT)
-        .place_machine(3, 1, MachineType.CHEST)
-        .set_player_position(2, 0)
-        .build("basic_arm_bridge")
-    ),
-    env_params=_params(7, 3, 100),
-)
-
-
-# ---------------------------------------------------------------------------
-# Level 13 — fuel_and_collect
-# ---------------------------------------------------------------------------
-# 7x5 map. Pre-placed miner at (3, 2) on coal with 100 ore. Player at
-# (3, 1) with 20 coal. Fuel the miner, wait for output, withdraw ore.
-# The miner produces 3 ore/tick. With 20 coal = 200 power ticks = 600
-# ore, capped at 64 per withdrawal. Agent must withdraw multiple times.
-# Score = ore in player inventory at end.
-# Tests: full DEPOSIT + wait + WITHDRAW cycle.
-
-_LEVEL_FUEL_COLLECT = BenchmarkLevel(
-    name="fuel_and_collect",
-    description=(
-        "7x5 map with a pre-placed miner on coal. Fuel it and "
-        "collect the output repeatedly. Score measures total ore "
-        "in player inventory."
-    ),
-    level=(
-        LevelBuilder(7, 5)
-        .fill_rect(2, 2, 3, 3, BlockType.COAL, resources=100)
-        .place_machine(3, 2, MachineType.MINER, Direction.DOWN)
-        .set_player_position(3, 1)
-        .build("basic_fuel_and_collect")
-    ),
-    env_params=_params(7, 5, 300),
-)
-_LEVEL_FUEL_COLLECT.level.player_inventory = [
-    (int(ItemType.COAL), 20),
-]
-
-
-# ---------------------------------------------------------------------------
-# Level 14 — assembler_production
-# ---------------------------------------------------------------------------
-# 7x5 map. Pre-placed assembler at (3, 2) set to Basic Science Pack
-# recipe (index 3: 1 iron + 1 copper -> 1 pack, 4 ticks, ungated).
-# Player at (3, 1) with 30 iron and 30 copper. Deposit inputs into
-# the assembler, wait for crafting, withdraw science packs.
-# Score = science packs in player inventory.
-# Tests: assembler DEPOSIT (multi-slot) + WITHDRAW + recipe understanding.
 
 _LEVEL_ASSEMBLER = BenchmarkLevel(
-    name="assembler_production",
+    name="assembler_science",
     description=(
-        "7x5 map with a pre-placed assembler set to craft science "
-        "packs. Deposit iron and copper, wait, withdraw output. "
-        "Score measures science packs in player inventory."
+        "10x10 map with iron and copper patches and a pre-placed "
+        "assembler set to craft Basic Science Packs. Mine resources, "
+        "deposit into the assembler, and collect science packs. Tests "
+        "multi-slot machine interaction over 300 ticks."
     ),
     level=(
-        LevelBuilder(7, 5)
-        .place_machine(3, 2, MachineType.ASSEMBLER)
-        .set_machine_recipe(3, 2, 3)
-        .set_player_position(3, 1)
-        .build("basic_assembler_production")
+        LevelBuilder(10, 10)
+        .fill_rect(1, 1, 3, 3, BlockType.IRON, resources=100)
+        .fill_rect(6, 2, 3, 3, BlockType.COPPER, resources=100)
+        .place_machine(5, 4, MachineType.ASSEMBLER)
+        .set_machine_recipe(5, 4, 3)
+        .set_player_position(4, 5)
+        .build("basic_assembler_science")
     ),
-    env_params=_params(7, 5, 300),
+    env_params=_params(10, 10, 300),
+    achievement_fn=_assembler_science_achievements,
 )
-_LEVEL_ASSEMBLER.level.player_inventory = [
-    (int(ItemType.IRON), 30),
-    (int(ItemType.COPPER), 30),
-]
 
-
-# ---------------------------------------------------------------------------
-# Level 15 — research_tech
-# ---------------------------------------------------------------------------
-# 5x5 dirt map. Player starts with 15 basic science packs in slot 0
-# (already selected). Press RESEARCH 10 times to unlock Hull tech.
-# Score = research_progress[0] (0-10, unlocks at 10).
-# Tests: RESEARCH action discovery.
-
-_LEVEL_RESEARCH = BenchmarkLevel(
-    name="research_tech",
-    description=(
-        "5x5 map. Start with science packs already selected. "
-        "Press RESEARCH to unlock technology. "
-        "Score measures research progress."
-    ),
-    level=(
-        LevelBuilder(5, 5)
-        .build("basic_research_tech")
-    ),
-    env_params=_params(5, 5, 100),
+ACHIEVEMENT_WEIGHTS["assembler_science"] = _pad_weights(
+    [1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 )
-_LEVEL_RESEARCH.level.player_inventory = [
-    (int(ItemType.BASIC_SCIENCE_PACK), 15),
-]
 
 
 # ---------------------------------------------------------------------------
-# Level 16 — repair_machine
+# Exported level list
 # ---------------------------------------------------------------------------
-# 7x3 map. Three damaged miners at (1, 0), (3, 0), (5, 0) with health=1.
-# Player at (0, 1) with 15 iron + 15 copper (enough for 3 miner repairs
-# at 5 iron + 5 copper each). Walk to each, face it, press REPAIR.
-# Score = number of fully repaired machines (0-3).
-# Tests: REPAIR action + material management + navigation.
-
-_LEVEL_REPAIR = BenchmarkLevel(
-    name="repair_machine",
-    description=(
-        "7x3 map with 3 damaged miners. Start with enough materials "
-        "to repair all three. Score measures machines restored to "
-        "full health."
-    ),
-    level=(
-        LevelBuilder(7, 3)
-        .fill_rect(1, 0, 1, 1, BlockType.COAL, resources=50)
-        .fill_rect(3, 0, 1, 1, BlockType.COAL, resources=50)
-        .fill_rect(5, 0, 1, 1, BlockType.COAL, resources=50)
-        .place_machine(1, 0, MachineType.MINER)
-        .place_machine(3, 0, MachineType.MINER)
-        .place_machine(5, 0, MachineType.MINER)
-        .set_machine_health(1, 0, 1)
-        .set_machine_health(3, 0, 1)
-        .set_machine_health(5, 0, 1)
-        .set_player_position(0, 1)
-        .build("basic_repair_machine")
-    ),
-    env_params=_params(7, 3, 100),
-)
-_LEVEL_REPAIR.level.player_inventory = [
-    (int(ItemType.IRON), 15),
-    (int(ItemType.COPPER), 15),
-]
-
 
 BASIC_SKILLS_LEVELS: list[BenchmarkLevel] = [
     _LEVEL_MINE,
     _LEVEL_CRAFT,
-    _LEVEL_FILL,
-    _LEVEL_CRAFT_MINERS,
+    _LEVEL_FUEL,
     _LEVEL_DEPLOY,
-    _LEVEL_FACTORY,
-    _LEVEL_PLACE_AND_FUEL,
-    _LEVEL_WITHDRAW,
-    _LEVEL_DEPOSIT,
-    _LEVEL_PICKUP,
-    _LEVEL_BELT,
-    _LEVEL_ARM,
-    _LEVEL_FUEL_COLLECT,
     _LEVEL_ASSEMBLER,
-    _LEVEL_RESEARCH,
-    _LEVEL_REPAIR,
 ]
