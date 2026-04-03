@@ -215,6 +215,7 @@ __marimo__/
 tests/performance/logs/
 
 # Project specific
+player_config.json
 CLAUDE.md
 craftax/
 tmp_baselines/

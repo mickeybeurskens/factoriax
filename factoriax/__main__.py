@@ -1,25 +1,35 @@
 """Entry point for ``python -m factoriax``.
 
-Shows the main menu, then launches Play (with settings) or Editor
-based on the user's choice. The menu loop repeats until the user
-quits.
+Shows the main menu, then launches Play (with settings), Editor, or
+Settings based on the user's choice. Player configuration is loaded
+once at startup and persisted on play.
 """
 
 from __future__ import annotations
 
 import pygame
 
+from factoriax.config import (
+    PlayerConfig,
+    build_key_lookup,
+    config_to_env_params,
+    env_params_to_dict,
+    load_config,
+    save_config,
+)
 from factoriax.ui.window import calculate_window_size
 
 _UI_SIZE = 1024
 
 
 def _run() -> None:
-    """Main menu loop: show menu, dispatch to play or editor, repeat."""
+    """Main menu loop: show menu, dispatch to play, editor, or settings."""
     pygame.init()
     w, h = calculate_window_size(_UI_SIZE, _UI_SIZE)
     screen = pygame.display.set_mode((w, h))
     pygame.display.set_caption("FactoriaX")
+
+    config = load_config()
 
     from factoriax.menu.main_menu import run_main_menu
 
@@ -30,21 +40,26 @@ def _run() -> None:
             break
 
         if choice == "play":
-            _handle_play(screen)
-
+            _handle_play(screen, config)
         elif choice == "editor":
             _handle_editor(screen)
+        elif choice == "settings":
+            _handle_settings(screen, config)
 
     pygame.quit()
 
 
-def _handle_play(screen: pygame.Surface) -> None:
-    """Show settings, then launch the game with chosen parameters."""
+def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
+    """Show play settings, then launch the game with chosen parameters."""
     from factoriax.menu.settings_menu import run_settings_menu
 
-    params = run_settings_menu(screen)
+    initial_params = config_to_env_params(config)
+    params = run_settings_menu(screen, initial_params=initial_params)
     if params is None:
         return
+
+    config.env_params = env_params_to_dict(params)
+    save_config(config)
 
     import jax
     import jax.numpy as jnp
@@ -74,15 +89,21 @@ def _handle_play(screen: pygame.Surface) -> None:
 
     def _warmup() -> None:
         step_fn(
-            _warmup_key, state, jnp.int32(Action.NOOP), params,
+            _warmup_key,
+            state,
+            jnp.int32(Action.NOOP),
+            params,
         )[0].block_until_ready()
 
     _run_with_loading_screen(
-        screen, "Compiling JAX (first run only)", _warmup,
+        screen,
+        "Compiling JAX",
+        _warmup,
     )
 
+    kb_lookup = build_key_lookup(config.keyboard)
     pygame.display.set_caption("FactoriaX")
-    _play_loop(env, state, params, None, screen, rng)
+    _play_loop(env, state, params, None, screen, rng, kb_lookup=kb_lookup)
 
 
 def _handle_editor(screen: pygame.Surface) -> None:
@@ -91,6 +112,13 @@ def _handle_editor(screen: pygame.Surface) -> None:
 
     editor_main(screen=screen)
     pygame.display.set_caption("FactoriaX")
+
+
+def _handle_settings(screen: pygame.Surface, _config: PlayerConfig) -> None:
+    """Open the controls overview screen."""
+    from factoriax.menu.settings_menu import run_controls_menu
+
+    run_controls_menu(screen)
 
 
 if __name__ == "__main__":

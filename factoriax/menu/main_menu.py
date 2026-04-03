@@ -170,18 +170,27 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
     # Vertical positions (fractions of screen height).
     title_y = int(sh * 0.25) - title_h // 2
     deco_y = title_y + title_h + 8
-    btn_block_h = _BTN_H * 2 + _BTN_GAP
+    num_btns = 4
+    btn_block_h = _BTN_H * num_btns + _BTN_GAP * (num_btns - 1)
     btn_top = int(sh * 0.50) - btn_block_h // 2
     btn_x = (sw - _BTN_W) // 2
 
     # Click regions for hit testing.
+    labels = ["Play", "Editor", "Settings", "Quit"]
+    actions = ["play", "editor", "settings", None]
     regions = [
-        ClickRegion(btn_x, btn_top, _BTN_W, _BTN_H, "play", 0),
-        ClickRegion(btn_x, btn_top + _BTN_H + _BTN_GAP, _BTN_W, _BTN_H, "editor", 1),
+        ClickRegion(
+            btn_x,
+            btn_top + i * (_BTN_H + _BTN_GAP),
+            _BTN_W,
+            _BTN_H,
+            actions[i],
+            i,
+        )
+        for i in range(num_btns)
     ]
-    labels = ["Play", "Editor"]
 
-    focus_idx = 0  # keyboard focus: 0 = Play, 1 = Editor
+    focus_idx = 0
 
     while True:
         # -- Events ----------------------------------------------------------
