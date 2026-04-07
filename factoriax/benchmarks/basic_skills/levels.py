@@ -23,9 +23,6 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.achievements import (
-    _ASSEMBLER_OUTPUT_SLOT,
-    _MINER_FUEL_SLOT,
-    _MINER_OUTPUT_SLOT,
     count_total_items,
 )
 from factoriax.benchmarks.core import BenchmarkLevel
@@ -247,19 +244,19 @@ def _fuel_miner_achievements(state: EnvState) -> jax.Array:
     """
     mined_coal = state.items_mined[ItemType.COAL] >= 1
 
-    # Any miner has coal in its fuel slot.
+    # Any miner has coal in its pouch (fuel).
     is_miner = state.machine_types == MachineType.MINER
-    has_fuel = (
-        state.machine_inventory_items[..., _MINER_FUEL_SLOT] == ItemType.COAL
-    ) & (state.machine_inventory_counts[..., _MINER_FUEL_SLOT] > 0)
-    coal_in_miner = jnp.any(is_miner & has_fuel)
+    coal_counts = state.machine_inventory[..., ItemType.COAL]
+    coal_in_miner = jnp.any(is_miner & (coal_counts > 0))
 
-    # Any miner has produced ore (output slot non-empty).
-    output_counts = state.machine_inventory_counts[..., _MINER_OUTPUT_SLOT]
+    # Miner output: sum of all non-coal items in the pouch.
+    # Coal is fuel; everything else is mined ore.
+    all_items = jnp.sum(state.machine_inventory, axis=-1)
+    output_counts = all_items - coal_counts
     has_output = output_counts > 0
     miner_produced = jnp.any(is_miner & has_output)
 
-    # Total miner output across all miners.
+    # Total miner output across all miners (non-coal items).
     total_output = jnp.sum(jnp.where(is_miner, output_counts, 0))
 
     conditions = jnp.array(
@@ -332,17 +329,17 @@ def _deploy_miners_achievements(state: EnvState) -> jax.Array:
     )
     miner_on_ore = jnp.any(is_miner & is_ore)
 
-    # Any miner has fuel.
-    has_fuel = (
-        state.machine_inventory_items[..., _MINER_FUEL_SLOT] == ItemType.COAL
-    ) & (state.machine_inventory_counts[..., _MINER_FUEL_SLOT] > 0)
+    # Any miner has coal (fuel) in its pouch.
+    coal_counts = state.machine_inventory[..., ItemType.COAL]
+    has_fuel = coal_counts > 0
     any_fueled = jnp.any(is_miner & has_fuel)
 
-    # Any miner produced ore.
-    output_counts = state.machine_inventory_counts[..., _MINER_OUTPUT_SLOT]
+    # Any miner produced ore (non-coal items in pouch).
+    all_items = jnp.sum(state.machine_inventory, axis=-1)
+    output_counts = all_items - coal_counts
     any_output = jnp.any(is_miner & (output_counts > 0))
 
-    # Count fueled miners (miners with power > 0 or fuel in slot).
+    # Count fueled miners.
     num_fueled = jnp.sum(is_miner & has_fuel)
 
     # Total automated ore output.
@@ -411,17 +408,15 @@ def _assembler_science_achievements(state: EnvState) -> jax.Array:
     mined_iron = state.items_mined[ItemType.IRON] >= 1
     mined_copper = state.items_mined[ItemType.COPPER] >= 1
 
-    # Any assembler has items in an input slot (evidence of deposit).
+    # Any assembler has items in its pouch (evidence of deposit).
     is_asm = state.machine_types == MachineType.ASSEMBLER
-    input_total = (
-        state.machine_inventory_counts[..., 0]
-        + state.machine_inventory_counts[..., 1]
-        + state.machine_inventory_counts[..., 2]
-    )
-    deposited = jnp.any(is_asm & (input_total > 0))
+    inv_total = jnp.sum(state.machine_inventory, axis=-1)
+    deposited = jnp.any(is_asm & (inv_total > 0))
 
-    # Assembler produced output.
-    has_output = state.machine_inventory_counts[..., _ASSEMBLER_OUTPUT_SLOT] > 0
+    # Assembler produced output (science packs in pouch).
+    has_output = (
+        state.machine_inventory[..., ItemType.BASIC_SCIENCE_PACK] > 0
+    )
     produced = jnp.any(is_asm & has_output)
 
     # Science packs held by player.
