@@ -1,55 +1,11 @@
-"""Tests for factoriax.play.transfer — inventory slot swapping."""
+"""Tests for factoriax.play.transfer -- inventory type swap."""
 
 from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import (
-    MAX_STACK_SIZE,
-    ItemType,
-    MachineType,
-)
+from factoriax.constants import NUM_ITEM_TYPES, ItemType
 from factoriax.play.transfer import swap_inventory_slots
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _state_with_machine(
-    state_factory,
-    machine_type: MachineType,
-    *,
-    p_items: list[int] | None = None,
-    p_counts: list[int] | None = None,
-):
-    """Build a 4x4 state with a machine at every tile (for test convenience)."""
-    from factoriax.constants import MAX_MACHINE_INVENTORY_SLOTS
-
-    shape = (4, 4)
-    machine_types = jnp.full(shape, int(machine_type), dtype=jnp.int32)
-
-    inv_items = jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32)
-    inv_counts = jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-
-    num_slots = 10
-    pi = [0] * num_slots
-    pc = [0] * num_slots
-    if p_items:
-        for i, v in enumerate(p_items):
-            pi[i] = v
-    if p_counts:
-        for i, v in enumerate(p_counts):
-            pc[i] = v
-
-    return state_factory(
-        world_map=jnp.zeros(shape, dtype=jnp.int32),
-        machine_types=machine_types,
-        machine_inventory_items=inv_items,
-        machine_inventory_counts=inv_counts,
-        inventory_items=jnp.array([pi], dtype=jnp.int32),
-        inventory_counts=jnp.array([pc], dtype=jnp.int32),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -58,91 +14,95 @@ def _state_with_machine(
 
 
 class TestSwapInventorySlots:
-    """Tests for the swap_inventory_slots helper."""
+    """Tests for the swap_inventory_slots helper (pouch model)."""
 
-    def test_swap_two_occupied_slots(self, state_factory) -> None:
-        """Swapping two slots exchanges their items and counts."""
-        state = _state_with_machine(
-            state_factory,
-            MachineType.CHEST,
-            p_items=[int(ItemType.COAL), int(ItemType.IRON)],
-            p_counts=[5, 10],
+    def test_swap_two_occupied_types(self, state_factory) -> None:
+        """Swapping two item types exchanges their counts."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COAL)].set(5)
+        inv = inv.at[0, int(ItemType.IRON)].set(10)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, 0, 1)
-        assert int(result.inventory_items[0, 0]) == int(ItemType.IRON)
-        assert int(result.inventory_counts[0, 0]) == 10
-        assert int(result.inventory_items[0, 1]) == int(ItemType.COAL)
-        assert int(result.inventory_counts[0, 1]) == 5
+        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.IRON))
+        assert int(result.player_inventory[0, int(ItemType.COAL)]) == 10
+        assert int(result.player_inventory[0, int(ItemType.IRON)]) == 5
 
     def test_swap_occupied_with_empty(self, state_factory) -> None:
-        """Swapping an occupied slot with an empty one moves the item."""
-        state = _state_with_machine(
-            state_factory,
-            MachineType.CHEST,
-            p_items=[int(ItemType.COPPER)],
-            p_counts=[3],
+        """Swapping an occupied type with an empty one moves the count."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COPPER)].set(3)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, 0, 4)
-        assert int(result.inventory_items[0, 0]) == 0
-        assert int(result.inventory_counts[0, 0]) == 0
-        assert int(result.inventory_items[0, 4]) == int(ItemType.COPPER)
-        assert int(result.inventory_counts[0, 4]) == 3
+        result = swap_inventory_slots(
+            state, 0, int(ItemType.COPPER), int(ItemType.MINER),
+        )
+        assert int(result.player_inventory[0, int(ItemType.COPPER)]) == 0
+        assert int(result.player_inventory[0, int(ItemType.MINER)]) == 3
 
-    def test_same_slot_is_noop(self, state_factory) -> None:
-        """Swapping a slot with itself returns the same state object."""
-        state = _state_with_machine(
-            state_factory,
-            MachineType.CHEST,
-            p_items=[int(ItemType.COAL)],
-            p_counts=[5],
+    def test_same_type_is_noop(self, state_factory) -> None:
+        """Swapping a type with itself returns the same state object."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COAL)].set(5)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, 0, 0)
+        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.COAL))
         assert result is state
 
-    def test_swap_two_empty_slots(self, state_factory) -> None:
-        """Swapping two empty slots leaves both empty."""
-        state = _state_with_machine(
-            state_factory, MachineType.CHEST,
+    def test_swap_two_empty_types(self, state_factory) -> None:
+        """Swapping two zero-count types leaves both at zero."""
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
-        result = swap_inventory_slots(state, 0, 2, 7)
-        assert int(result.inventory_items[0, 2]) == 0
-        assert int(result.inventory_items[0, 7]) == 0
+        result = swap_inventory_slots(
+            state, 0, int(ItemType.HULL), int(ItemType.ROCKET),
+        )
+        assert int(result.player_inventory[0, int(ItemType.HULL)]) == 0
+        assert int(result.player_inventory[0, int(ItemType.ROCKET)]) == 0
 
-    def test_merge_same_item_type(self, state_factory) -> None:
-        """Moving onto the same item type merges stacks."""
-        state = _state_with_machine(
-            state_factory,
-            MachineType.CHEST,
-            p_items=[int(ItemType.COAL), int(ItemType.COAL)],
-            p_counts=[10, 20],
+    def test_swap_preserves_total(self, state_factory) -> None:
+        """Swapping two types preserves the total inventory count."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COAL)].set(10)
+        inv = inv.at[0, int(ItemType.IRON)].set(20)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, 0, 1)
-        assert int(result.inventory_items[0, 1]) == int(ItemType.COAL)
-        assert int(result.inventory_counts[0, 1]) == 30
-        assert int(result.inventory_items[0, 0]) == 0
-        assert int(result.inventory_counts[0, 0]) == 0
+        total_before = int(jnp.sum(state.player_inventory))
+        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.IRON))
+        total_after = int(jnp.sum(result.player_inventory))
+        assert total_before == total_after
 
-    def test_merge_overflow_stays_in_source(self, state_factory) -> None:
-        """When the destination is nearly full, overflow stays in source."""
-        state = _state_with_machine(
-            state_factory,
-            MachineType.CHEST,
-            p_items=[int(ItemType.IRON), int(ItemType.IRON)],
-            p_counts=[30, MAX_STACK_SIZE - 10],
+    def test_swap_nonadjacent_types(self, state_factory) -> None:
+        """Swapping non-adjacent item types works correctly."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.MINER)].set(7)
+        inv = inv.at[0, int(ItemType.ASSEMBLER)].set(15)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, 0, 1)
-        assert int(result.inventory_counts[0, 1]) == MAX_STACK_SIZE
-        assert int(result.inventory_items[0, 0]) == int(ItemType.IRON)
-        assert int(result.inventory_counts[0, 0]) == 20
+        result = swap_inventory_slots(
+            state, 0, int(ItemType.MINER), int(ItemType.ASSEMBLER),
+        )
+        assert int(result.player_inventory[0, int(ItemType.MINER)]) == 15
+        assert int(result.player_inventory[0, int(ItemType.ASSEMBLER)]) == 7
 
-    def test_merge_destination_already_full(self, state_factory) -> None:
-        """Merging onto a full stack transfers nothing."""
-        state = _state_with_machine(
-            state_factory,
-            MachineType.CHEST,
-            p_items=[int(ItemType.COAL), int(ItemType.COAL)],
-            p_counts=[5, MAX_STACK_SIZE],
+    def test_swap_does_not_affect_other_types(self, state_factory) -> None:
+        """Swapping two types does not modify any other type counts."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COAL)].set(5)
+        inv = inv.at[0, int(ItemType.IRON)].set(10)
+        inv = inv.at[0, int(ItemType.COPPER)].set(99)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, 0, 1)
-        assert int(result.inventory_counts[0, 0]) == 5
-        assert int(result.inventory_counts[0, 1]) == MAX_STACK_SIZE
+        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.IRON))
+        assert int(result.player_inventory[0, int(ItemType.COPPER)]) == 99

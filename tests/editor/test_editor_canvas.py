@@ -18,9 +18,9 @@ from factoriax.editor.state import (
 )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def _init_pygame() -> None:
-    """Ensure pygame is initialised for font rendering."""
+    """Initialise pygame once per module to avoid invalidating font caches."""
     pygame.init()
     yield  # type: ignore[misc]
     pygame.quit()

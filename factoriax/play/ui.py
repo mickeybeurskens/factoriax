@@ -18,14 +18,10 @@ from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     DEFAULT_MACHINE_MAX_HEALTH,
-    MACHINE_NUM_SLOTS,
-    MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     RESEARCH_COST,
-    SLOT_ROLE_COLORS,
-    SLOT_ROLE_LABELS,
     BlockType,
     Direction,
     ItemType,
@@ -820,18 +816,18 @@ def render_machine_menu(
     tx: int,
     ty: int,
     machine_panel_active: bool = True,
+    selected_item: int = 0,
+    focused_machine_item: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the machine inventory inspection menu as an RGBA overlay.
 
-    Displays all active slots for the machine at tile ``(tx, ty)`` in a grid
-    of up to four columns.  Each slot shows a colour-coded role badge (IN /
-    OUT / STORE), a filled colour swatch when the slot is occupied, a stack
-    count, and the item name.  Empty slots show a dim placeholder.
+    Displays non-empty item types held by the machine at tile ``(tx, ty)``
+    in a grid of up to four columns.  Each cell shows an item icon, stack
+    count, and name.  Empty machines show a placeholder message.
 
-    The focused slot in the *active* panel is highlighted with a bright white
-    border; the focused slot in the *inactive* panel uses a dim gray border
-    so the player can see both positions at a glance.  Press Tab to toggle
-    which panel is active; press E to transfer between the two focused slots.
+    The focused item in the *active* panel is highlighted with a bright white
+    border; the focused item in the *inactive* panel uses a dim gray border
+    so the player can see both positions at a glance.
 
     Args:
         state: Current environment state.
@@ -841,28 +837,26 @@ def render_machine_menu(
         ty: Y tile coordinate of the machine to inspect.
         machine_panel_active: Whether the machine slot grid has active focus
             (``True``) or the player inventory strip does (``False``).
+        selected_item: Currently selected player inventory item type.
+        focused_machine_item: Currently focused machine item type.
 
     Returns:
         Tuple of (RGBA overlay array of shape ``(screen_height, screen_width,
         4)``, list of click regions).  Machine slot regions carry
-        ``action="select_machine_slot"`` with ``param=slot_index``.  Player
+        ``action="select_machine_slot"`` with ``param=item_type``.  Player
         inventory regions carry ``action="select_slot"`` with
-        ``param=slot_index``.
+        ``param=item_type``.
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     click_regions: list[ClickRegion] = []
 
     machine_type = int(state.machine_types[ty, tx])
-    num_slots = int(MACHINE_NUM_SLOTS[machine_type])
-    slot_roles = MACHINE_SLOT_ROLES[machine_type]
-    inv_items = np.array(state.machine_inventory_items[ty, tx])
-    inv_counts = np.array(state.machine_inventory_counts[ty, tx])
-    focused_slot = int(state.machine_selected_slot[ty, tx])
+    machine_inv = np.array(state.machine_inventory[ty, tx])
+    active_types = [i for i in range(1, NUM_ITEM_TYPES) if machine_inv[i] > 0]
+    num_slots = len(active_types)
 
     selected_player = int(state.selected_player)
-    focused_player_slot = int(state.selected_slots[selected_player])
-    player_items = np.array(state.inventory_items[selected_player])
-    player_counts = np.array(state.inventory_counts[selected_player])
+    player_inv = np.array(state.player_inventory[selected_player])
 
     header_font = get_pixel_font(_FONT_HEADER)
     body_font = get_pixel_font(_FONT_BODY)
@@ -969,16 +963,13 @@ def render_machine_menu(
     )
     grid_x = menu_x + padding
 
-    for slot_idx in range(num_slots):
+    for slot_idx, item_type in enumerate(active_types):
         row = slot_idx // slot_cols
         col = slot_idx % slot_cols
         cell_x = grid_x + col * (cell_w + cell_gap)
         cell_y = content_y + padding // 2 + row * (cell_h + cell_gap)
 
-        role = int(slot_roles[slot_idx])
-        role_label = SLOT_ROLE_LABELS.get(role, "")
-        role_color = SLOT_ROLE_COLORS.get(role, (60, 60, 60))
-        is_focused = slot_idx == focused_slot
+        is_focused = item_type == focused_machine_item
 
         # Cell background + selection border
         cell_bg: tuple[int, int, int, int] = (
@@ -1001,63 +992,40 @@ def render_machine_menu(
                 w=cell_w,
                 h=cell_h,
                 action="select_machine_slot",
-                param=slot_idx,
+                param=item_type,
             )
         )
 
-        # Role badge strip across the top of the cell
-        overlay[cell_y : cell_y + badge_h, cell_x : cell_x + cell_w] = (
-            *role_color,
-            220,
-        )
-        if role_label:
-            badge_arr = _render_text_rgba(role_label, hint_font, (230, 230, 230))
-            badge_x = cell_x + (cell_w - badge_arr.shape[1]) // 2
-            badge_y = cell_y + (badge_h - badge_arr.shape[0]) // 2
-            _blit_rgba(overlay, badge_arr, badge_y, badge_x)
-
-        # Item swatch, count, and name
-        item_type = int(inv_items[slot_idx])
-        count = int(inv_counts[slot_idx])
+        count = int(machine_inv[item_type])
         icon_x = cell_x + (cell_w - icon_size) // 2
         icon_y = cell_y + badge_h + 4
 
-        if item_type != 0 and count > 0:
-            pad = 6
-            icon_s = icon_size - 2 * pad
-            if icon_s > 0:
-                icon = render_item_icon(item_type, icon_s)
-                overlay[
-                    icon_y + pad : icon_y + pad + icon_s,
-                    icon_x + pad : icon_x + pad + icon_s,
-                ] = icon
-
-            count_arr = _render_text_rgba(
-                f"x{count}",
-                body_font,
-                _SLOT_COUNT_COLOR,
-            )
-            count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
-            count_y = icon_y + icon_size + 4
-            _blit_rgba(overlay, count_arr, count_y, count_x)
-
-            name = _ITEM_NAMES.get(item_type, "")
-            if name:
-                name_color: tuple[int, int, int] = (
-                    (235, 228, 185) if is_focused else (160, 155, 130)
-                )
-                name_arr = _render_text_rgba(name, body_font, name_color)
-                name_x = cell_x + (cell_w - name_arr.shape[1]) // 2
-                _blit_rgba(overlay, name_arr, count_y + line_h + 2, name_x)
-        else:
-            pad = 6
+        pad = 6
+        icon_s = icon_size - 2 * pad
+        if icon_s > 0:
+            icon = render_item_icon(item_type, icon_s)
             overlay[
-                icon_y + pad : icon_y + icon_size - pad,
-                icon_x + pad : icon_x + icon_size - pad,
-            ] = (45, 45, 45, 255)
-            empty_arr = _render_text_rgba("empty", body_font, (70, 70, 70))
-            empty_x = cell_x + (cell_w - empty_arr.shape[1]) // 2
-            _blit_rgba(overlay, empty_arr, icon_y + icon_size + 4, empty_x)
+                icon_y + pad : icon_y + pad + icon_s,
+                icon_x + pad : icon_x + pad + icon_s,
+            ] = icon
+
+        count_arr = _render_text_rgba(
+            f"x{count}",
+            body_font,
+            _SLOT_COUNT_COLOR,
+        )
+        count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
+        count_y = icon_y + icon_size + 4
+        _blit_rgba(overlay, count_arr, count_y, count_x)
+
+        name = _ITEM_NAMES.get(item_type, "")
+        if name:
+            name_color: tuple[int, int, int] = (
+                (235, 228, 185) if is_focused else (160, 155, 130)
+            )
+            name_arr = _render_text_rgba(name, body_font, name_color)
+            name_x = cell_x + (cell_w - name_arr.shape[1]) // 2
+            _blit_rgba(overlay, name_arr, count_y + line_h + 2, name_x)
 
     # --- Player inventory strip ---
     slot_area_bottom = content_y + padding // 2 + slot_area_h
@@ -1073,12 +1041,13 @@ def render_machine_menu(
 
     strip_y = label_y + line_h + 6
     strip_x = menu_x + padding
-    strip_cell_w = (menu_w - 2 * padding) // NUM_INVENTORY_SLOTS
+    num_player_types = NUM_ITEM_TYPES - 1
+    strip_cell_w = (menu_w - 2 * padding) // num_player_types
 
-    for slot_idx in range(NUM_INVENTORY_SLOTS):
-        icon_x = strip_x + slot_idx * strip_cell_w
+    for idx, item_type in enumerate(range(1, NUM_ITEM_TYPES)):
+        icon_x = strip_x + idx * strip_cell_w
         icon_w = strip_cell_w - 4
-        is_focused_player = slot_idx == focused_player_slot
+        is_focused_player = item_type == selected_item
         overlay[strip_y : strip_y + player_icon, icon_x : icon_x + icon_w] = (
             55,
             55,
@@ -1092,7 +1061,7 @@ def render_machine_menu(
                 w=icon_w,
                 h=player_icon,
                 action="select_slot",
-                param=slot_idx,
+                param=item_type,
             )
         )
 
@@ -1107,14 +1076,13 @@ def render_machine_menu(
             overlay[strip_y : strip_y + player_icon, icon_x] = psel
             overlay[strip_y : strip_y + player_icon, icon_x + icon_w - 1] = psel
 
-        p_item = int(player_items[slot_idx])
-        p_count = int(player_counts[slot_idx])
-        if p_item != 0 and p_count > 0:
+        p_count = int(player_inv[item_type])
+        if p_count > 0:
             pad = 3
             icon_h = player_icon - 2 * pad
             icon_w_inner = icon_w - 2 * pad
             icon_s = min(icon_h, icon_w_inner)
-            icon = render_item_icon(p_item, icon_s)
+            icon = render_item_icon(item_type, icon_s)
             iy = strip_y + pad + (icon_h - icon_s) // 2
             ix = icon_x + pad + (icon_w_inner - icon_s) // 2
             overlay[iy : iy + icon_s, ix : ix + icon_s] = icon
@@ -1160,19 +1128,21 @@ def render_hotbar(
     screen_width: int,
     screen_height: int,
     hotbar_page: int = 0,
+    selected_item: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render a persistent hotbar in the left 2/3 of the bottom bar.
 
     The bar shows a player badge on the left, a sliding window of 8
-    inventory slots in the centre, and a page-toggle button on the right.
-    Page 0 shows slots 0-7, page 1 shows slots 2-9. Content is
+    item types in the centre, and a page-toggle button on the right.
+    Page 0 shows item types 1-8, page 1 shows 7-14. Content is
     vertically centred within the bar height.
 
     Args:
         state: Current environment state.
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
-        hotbar_page: Which page of slots to display (0 or 1).
+        hotbar_page: Which page of item types to display (0 or 1).
+        selected_item: Currently selected item type for highlighting.
 
     Returns:
         Tuple of (RGBA overlay, list of click regions).
@@ -1190,10 +1160,9 @@ def render_hotbar(
     overlay[bar_y + 2 :, bar_w : bar_w + 2] = _BORDER
 
     selected_player = int(state.selected_player)
-    selected_slot = int(state.selected_slots[selected_player])
+    selected_slot = selected_item
     direction = int(state.player_directions[selected_player])
-    inventory_items = np.array(state.inventory_items[selected_player])
-    inventory_counts = np.array(state.inventory_counts[selected_player])
+    player_inv = np.array(state.player_inventory[selected_player])
 
     hint_font = get_pixel_font(_FONT_HINT)
     body_font = get_pixel_font(_FONT_BODY)
@@ -1234,8 +1203,9 @@ def render_hotbar(
         badge_x + circle_r * 2 + 6,
     )
 
-    # --- 8 item slots (vertically centred) ---
-    slot_start = 0 if hotbar_page == 0 else 2
+    # --- 8 item type slots (vertically centred) ---
+    # Page 0 shows item types 1-8, page 1 shows 7-14.
+    type_start = 1 if hotbar_page == 0 else 7
     slot_area_x = 64
     slot_area_w = bar_w - 64 - 104
     slot_w = slot_area_w // _HOTBAR_SLOTS
@@ -1243,15 +1213,15 @@ def render_hotbar(
     slot_y = content_y + (content_h - icon_size) // 2
 
     for i in range(_HOTBAR_SLOTS):
-        slot_idx = slot_start + i
-        if slot_idx >= NUM_INVENTORY_SLOTS:
+        item_type_idx = type_start + i
+        if item_type_idx >= NUM_ITEM_TYPES:
             break
 
         sx = slot_area_x + i * slot_w
         icon_x = sx + (slot_w - icon_size) // 2
         icon_y = slot_y
 
-        is_selected = slot_idx == selected_slot
+        is_selected = item_type_idx == selected_slot
         bg: tuple[int, int, int, int] = (
             (90, 90, 90, 255) if is_selected else (45, 45, 45, 255)
         )
@@ -1273,13 +1243,12 @@ def render_hotbar(
                 icon_x + icon_size - 1,
             ] = white
 
-        item_type = int(inventory_items[slot_idx])
-        count = int(inventory_counts[slot_idx])
-        if item_type != 0 and count > 0:
+        count = int(player_inv[item_type_idx])
+        if count > 0:
             pad = 4
             icon_s = icon_size - 2 * pad
             if icon_s > 0:
-                icon_arr = render_item_icon(item_type, icon_s)
+                icon_arr = render_item_icon(item_type_idx, icon_s)
                 overlay[
                     icon_y + pad : icon_y + pad + icon_s,
                     icon_x + pad : icon_x + pad + icon_s,
@@ -1295,7 +1264,7 @@ def render_hotbar(
             ClickRegion(
                 x=icon_x, y=icon_y,
                 w=icon_size, h=icon_size,
-                action="select_slot", param=slot_idx,
+                action="select_slot", param=item_type_idx,
             )
         )
 
@@ -1475,10 +1444,12 @@ def _render_info_machine(
     """
     name = MACHINE_TYPE_NAMES.get(machine_type, "Unknown")
     icon_s = 24
-    icon_arr = render_item_icon(
-        int(state.machine_inventory_items[ty, tx, 0]) or machine_type,
-        icon_s,
+    machine_inv = np.array(state.machine_inventory[ty, tx])
+    first_item = next(
+        (i for i in range(1, NUM_ITEM_TYPES) if machine_inv[i] > 0),
+        machine_type,
     )
+    icon_arr = render_item_icon(first_item, icon_s)
 
     # Header: icon + name.
     name_surf = _render_text_rgba(name, header_font, (220, 215, 180))
@@ -1520,20 +1491,16 @@ def _render_info_machine(
     _blit_rgba(overlay, dir_txt, cy, cx)
     cy += dir_txt.shape[0] + 6
 
-    # Inventory summary: show non-empty slots as icon + count.
-    inv_items = np.array(state.machine_inventory_items[ty, tx])
-    inv_counts = np.array(state.machine_inventory_counts[ty, tx])
-    num_slots = int(MACHINE_NUM_SLOTS[machine_type])
+    # Inventory summary: show non-empty item types as icon + count.
     ix = cx
     slot_icon_s = 20
-    for s in range(num_slots):
-        item = int(inv_items[s])
-        count = int(inv_counts[s])
-        if item == 0 or count == 0:
+    for item_t in range(1, NUM_ITEM_TYPES):
+        count = int(machine_inv[item_t])
+        if count == 0:
             continue
         if ix + slot_icon_s + 30 > max_x:
             break
-        slot_arr = render_item_icon(item, slot_icon_s)
+        slot_arr = render_item_icon(item_t, slot_icon_s)
         _blit_rgba(overlay, slot_arr, cy, ix)
         cnt = _render_text_rgba(
             f"x{count}", hint_font, (220, 215, 180),
@@ -1624,12 +1591,13 @@ def render_inventory_menu(
     menu_focus: str = "inventory",
     held_slot: int | None = None,
     selected_recipe: int = 0,
+    selected_item: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the inventory and crafting menu as an RGBA overlay.
 
-    Left section: 2x5 inventory grid with item icon, count, and name per
-    slot.  Right section: recipe list showing output, name, and per-
-    ingredient have/need counts coloured by affordability.
+    Left section: 2x7 inventory grid showing each item type with its icon,
+    count, and name.  Right section: recipe list showing output, name, and
+    per-ingredient have/need counts coloured by affordability.
 
     When *held_slot* is not ``None`` the corresponding inventory cell is
     drawn with a gold border to indicate a pending swap operation.
@@ -1639,7 +1607,9 @@ def render_inventory_menu(
         screen_width: Total screen width in pixels.
         screen_height: Total screen height in pixels.
         menu_focus: Focused section — "inventory" or "crafting".
-        held_slot: Inventory slot currently "held" for swapping, or None.
+        held_slot: Item type currently "held" for swapping, or None.
+        selected_recipe: Currently focused recipe index.
+        selected_item: Currently selected item type for highlighting.
 
     Returns:
         Tuple of (RGBA overlay array, list of click regions).
@@ -1706,15 +1676,14 @@ def render_inventory_menu(
     )
 
     selected_player = int(state.selected_player)
-    selected_slot = int(state.selected_slots[selected_player])
+    selected_slot = selected_item
     craft_progress = int(state.craft_progress[selected_player])
-    inventory_items = np.array(state.inventory_items[selected_player])
-    inventory_counts = np.array(state.inventory_counts[selected_player])
+    player_inv = np.array(state.player_inventory[selected_player])
 
     # ------------------------------------------------------------------
-    # Inventory grid — 2 rows × 5 columns
+    # Inventory grid — 2 rows x 7 columns (14 item types, skip EMPTY)
     # ------------------------------------------------------------------
-    cols = 5
+    cols = 7
     rows = 2
     padding = 20
     grid_x = menu_x + padding
@@ -1730,16 +1699,18 @@ def render_inventory_menu(
     row_gap = max(8, (grid_available_h - rows * cell_h) // (rows + 1))
     grid_y = inv_content_y + row_gap
 
-    for slot_idx in range(NUM_INVENTORY_SLOTS):
-        row = slot_idx // cols
-        col = slot_idx % cols
+    for grid_idx, item_type_idx in enumerate(range(1, NUM_ITEM_TYPES)):
+        row = grid_idx // cols
+        col = grid_idx % cols
 
         cell_x = grid_x + col * cell_w
         cell_y = grid_y + row * (cell_h + row_gap)
         icon_x = cell_x + (cell_w - icon_size) // 2
 
-        is_selected = (slot_idx == selected_slot) and (menu_focus == "inventory")
-        is_held = slot_idx == held_slot
+        is_selected = (item_type_idx == selected_slot) and (
+            menu_focus == "inventory"
+        )
+        is_held = item_type_idx == held_slot
         slot_bg: tuple[int, int, int, int] = (
             (90, 90, 90, 255) if is_selected else (55, 55, 55, 255)
         )
@@ -1771,14 +1742,14 @@ def render_inventory_menu(
                 w=icon_size,
                 h=cell_h,
                 action="toggle_held",
-                param=slot_idx,
+                param=item_type_idx,
             )
         )
 
-        item_type = int(inventory_items[slot_idx])
-        count = int(inventory_counts[slot_idx])
+        item_type = item_type_idx
+        count = int(player_inv[item_type_idx])
 
-        if item_type != 0 and count > 0:
+        if count > 0:
             pad = 8
             icon_s = icon_size - 2 * pad
             if icon_s > 0:

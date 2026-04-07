@@ -76,19 +76,16 @@ class TestRenderInventoryMenu:
         assert result.shape == (_SH, _SW, 4)
 
     def test_populated_inventory(self, state_factory) -> None:
-        """Should not crash when inventory slots contain items."""
-        inv_items = jnp.array(
-            [[ItemType.COAL, ItemType.IRON, ItemType.COPPER, 0, 0, 0, 0, 0, 0, 0]],
-            dtype=jnp.int32,
-        )
-        inv_counts = jnp.array(
-            [[5, 3, 12, 0, 0, 0, 0, 0, 0, 0]],
-            dtype=jnp.int32,
-        )
+        """Should not crash when inventory contains items."""
+        from factoriax.constants import NUM_ITEM_TYPES
+
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COAL)].set(5)
+        inv = inv.at[0, int(ItemType.IRON)].set(3)
+        inv = inv.at[0, int(ItemType.COPPER)].set(12)
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=inv,
         )
         result, _ = render_inventory_menu(state, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
