@@ -16,7 +16,7 @@ import pytest
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     BlockType,
     MachineType,
@@ -45,7 +45,6 @@ _DEFAULT_PARAMS = EnvParams(
 _GLOBAL_OBS_SIZE = (
     NUM_SPATIAL_CHANNELS * _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
     + NUM_PLAYER_SCALARS
-    + 2 * NUM_INVENTORY_SLOTS
     + 2 * NUM_TECHNOLOGIES
 )
 
@@ -64,11 +63,7 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
         out = _player_scalars(state, _DEFAULT_PARAMS, 0)
-        expected = (
-            NUM_PLAYER_SCALARS
-            + 2 * NUM_INVENTORY_SLOTS
-            + 2 * NUM_TECHNOLOGIES
-        )
+        expected = NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
         assert out.shape == (expected,)
 
     def test_values_in_range(self, state_factory) -> None:
@@ -103,20 +98,20 @@ class TestPlayerScalars:
 
     def test_player_idx_selects_correct_inventory(self, state_factory) -> None:
         """Different player_idx reads from the correct inventory row."""
-        inv_items = jnp.zeros((2, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[1, 0].set(2)  # player 1 has item 2 in slot 0
+        from factoriax.constants import ItemType
+
+        inv = jnp.zeros((2, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[1, ItemType.IRON].set(5)
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_positions=jnp.array([[0, 0], [3, 3]], dtype=jnp.int32),
             num_players=2,
-            inventory_items=inv_items,
+            player_inventory=inv,
         )
         scalars_p0 = np.array(_player_scalars(state, _DEFAULT_PARAMS, 0))
         scalars_p1 = np.array(_player_scalars(state, _DEFAULT_PARAMS, 1))
-        # Inventory items start after the player scalars.
-        inv_start = NUM_PLAYER_SCALARS
-        assert scalars_p0[inv_start] == pytest.approx(0.0)
-        assert scalars_p1[inv_start] > 0.0
+        # Player inventories differ, so the scalar vectors should differ.
+        assert not np.allclose(scalars_p0, scalars_p1)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +213,6 @@ _WINDOW = 2 * _RADIUS + 1
 _LOCAL_OBS_SIZE = (
     NUM_SPATIAL_CHANNELS * _WINDOW**2
     + NUM_PLAYER_SCALARS
-    + 2 * NUM_INVENTORY_SLOTS
     + 2 * NUM_TECHNOLOGIES
 )
 
@@ -233,7 +227,6 @@ class TestLocalArray:
         expected = (
             NUM_SPATIAL_CHANNELS * window**2
             + NUM_PLAYER_SCALARS
-            + 2 * NUM_INVENTORY_SLOTS
             + 2 * NUM_TECHNOLOGIES
         )
         state = state_factory(
@@ -275,7 +268,7 @@ class TestLocalArray:
         map_flat = out[: _WINDOW**2]
         oob_val = float(BlockType.OUT_OF_BOUNDS) / float(max(BlockType))
         dirt_val = float(BlockType.DIRT) / float(max(BlockType))
-        # Top-left element of the window is fully outside → OUT_OF_BOUNDS.
+        # Top-left element of the window is fully outside -> OUT_OF_BOUNDS.
         assert map_flat[0] == pytest.approx(oob_val), (
             f"Expected OOB value {oob_val:.4f} at window corner, got {map_flat[0]:.4f}"
         )

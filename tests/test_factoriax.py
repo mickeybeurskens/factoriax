@@ -17,7 +17,6 @@ from factoriax import (
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     NUM_ACTIONS,
-    NUM_INVENTORY_SLOTS,
     NUM_TECHNOLOGIES,
     SOLID_BLOCKS,
     MachineType,
@@ -67,7 +66,7 @@ class TestConstants:
         assert int(BlockType.COAL) not in solid_set
 
     def test_action_values(self) -> None:
-        """Movement actions should be numbered 0-6, face actions 24-27."""
+        """Movement actions should be numbered 0-6, face actions 7-10."""
         assert Action.NOOP == 0
         assert Action.UP == 1
         assert Action.DOWN == 2
@@ -75,10 +74,10 @@ class TestConstants:
         assert Action.RIGHT == 4
         assert Action.TURN_LEFT == 5
         assert Action.TURN_RIGHT == 6
-        assert Action.FACE_UP == 24
-        assert Action.FACE_DOWN == 25
-        assert Action.FACE_LEFT == 26
-        assert Action.FACE_RIGHT == 27
+        assert Action.FACE_UP == 7
+        assert Action.FACE_DOWN == 8
+        assert Action.FACE_LEFT == 9
+        assert Action.FACE_RIGHT == 10
 
 
 class TestWorldGen:
@@ -147,32 +146,52 @@ class TestGameLogic:
         assert not is_position_in_bounds(jnp.array([0, -1]), 3, 3)
         assert not is_position_in_bounds(jnp.array([0, 3]), 3, 3)
 
-    def test_get_block_at_returns_correct_block(self, simple_state: EnvState) -> None:
+    def test_get_block_at_returns_correct_block(
+        self, simple_state: EnvState,
+    ) -> None:
         """Should return correct block type at position."""
         assert get_block_at(simple_state, jnp.array([0, 0])) == BlockType.DIRT
-        assert get_block_at(simple_state, jnp.array([2, 0])) == BlockType.WATER
+        assert (
+            get_block_at(simple_state, jnp.array([2, 0])) == BlockType.WATER
+        )
 
-    def test_get_block_at_out_of_bounds(self, simple_state: EnvState) -> None:
+    def test_get_block_at_out_of_bounds(
+        self, simple_state: EnvState,
+    ) -> None:
         """Out of bounds positions should return OUT_OF_BOUNDS."""
-        assert get_block_at(simple_state, jnp.array([-1, 0])) == BlockType.OUT_OF_BOUNDS
-        assert get_block_at(simple_state, jnp.array([0, 5])) == BlockType.OUT_OF_BOUNDS
+        assert (
+            get_block_at(simple_state, jnp.array([-1, 0]))
+            == BlockType.OUT_OF_BOUNDS
+        )
+        assert (
+            get_block_at(simple_state, jnp.array([0, 5]))
+            == BlockType.OUT_OF_BOUNDS
+        )
 
-    def test_is_position_walkable_dirt(self, simple_state: EnvState) -> None:
+    def test_is_position_walkable_dirt(
+        self, simple_state: EnvState,
+    ) -> None:
         """Dirt should be walkable."""
         assert is_position_walkable(simple_state, jnp.array([0, 0]))
         assert is_position_walkable(simple_state, jnp.array([1, 1]))
 
-    def test_is_position_walkable_water(self, simple_state: EnvState) -> None:
+    def test_is_position_walkable_water(
+        self, simple_state: EnvState,
+    ) -> None:
         """Water should not be walkable."""
         assert not is_position_walkable(simple_state, jnp.array([2, 0]))
         assert not is_position_walkable(simple_state, jnp.array([0, 2]))
 
-    def test_is_position_walkable_out_of_bounds(self, simple_state: EnvState) -> None:
+    def test_is_position_walkable_out_of_bounds(
+        self, simple_state: EnvState,
+    ) -> None:
         """Out of bounds should not be walkable."""
         assert not is_position_walkable(simple_state, jnp.array([-1, 0]))
         assert not is_position_walkable(simple_state, jnp.array([5, 5]))
 
-    def test_is_position_walkable_conveyor_belt(self, state_factory) -> None:
+    def test_is_position_walkable_conveyor_belt(
+        self, state_factory,
+    ) -> None:
         """Conveyor belts should be walkable despite being machines."""
         world_map = jnp.array(
             [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
@@ -288,12 +307,16 @@ class TestGameLogic:
         )
         assert int(new_state.player_directions[0]) == Direction.DOWN
 
-    def test_is_game_over_before_max_timesteps(self, simple_state: EnvState) -> None:
+    def test_is_game_over_before_max_timesteps(
+        self, simple_state: EnvState,
+    ) -> None:
         """Game should not be over before max timesteps."""
         params = EnvParams(max_timesteps=1000)
         assert not is_game_over(simple_state, params)
 
-    def test_is_game_over_at_max_timesteps(self, simple_state: EnvState) -> None:
+    def test_is_game_over_at_max_timesteps(
+        self, simple_state: EnvState,
+    ) -> None:
         """Game should be over at max timesteps."""
         params = EnvParams(max_timesteps=100)
         state = simple_state.replace(timestep=100)
@@ -401,7 +424,9 @@ class TestEnvironment:
         rng, reset_key, step_key = random.split(rng, 3)
         _, state = env.reset_env(reset_key, params)
 
-        _, new_state, _, _, _ = env.step_env(step_key, state, Action.NOOP, params)
+        _, new_state, _, _, _ = env.step_env(
+            step_key, state, Action.NOOP, params,
+        )
         assert new_state.timestep == state.timestep + 1
 
     def test_action_space(self) -> None:
@@ -417,7 +442,6 @@ class TestEnvironment:
         expected_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
-            + NUM_INVENTORY_SLOTS * 2
             + NUM_TECHNOLOGIES * 2
         )
         assert obs_space.shape == (expected_size,)

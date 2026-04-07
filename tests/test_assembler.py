@@ -1,15 +1,21 @@
-"""Tests for the assembler machine system."""
+"""Tests for the assembler machine system.
+
+Uses the pouch inventory model where machine_inventory has shape
+(H, W, NUM_ITEM_TYPES) and items are indexed by ItemType.
+"""
 
 import jax.numpy as jnp
 from jax import random
 
 from factoriax.constants import (
     DEFAULT_MACHINE_MAX_HEALTH,
+    MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_TECHNOLOGIES,
     Direction,
     ItemType,
     MachineType,
 )
+from factoriax.game_logic import deposit_to_adjacent
 from factoriax.machines import run_assemblers
 from factoriax.recipes import MAX_ASSEMBLER_STACK_SIZE
 from factoriax.state import EnvParams
@@ -18,12 +24,7 @@ from factoriax.world_gen import generate_world
 
 def _make_state_with_assembler(
     recipe: int = 0,
-    slot0_item: int = 0,
-    slot0_count: int = 0,
-    slot1_item: int = 0,
-    slot1_count: int = 0,
-    slot3_item: int = 0,
-    slot3_count: int = 0,
+    inv_entries: dict[int, int] | None = None,
     power: int = 0,
     research_unlocked: jnp.ndarray | None = None,
 ) -> object:
@@ -31,12 +32,8 @@ def _make_state_with_assembler(
 
     Args:
         recipe: Assembler recipe index.
-        slot0_item: Item type in input slot 0.
-        slot0_count: Stack count in input slot 0.
-        slot1_item: Item type in input slot 1.
-        slot1_count: Stack count in input slot 1.
-        slot3_item: Item type in output slot 3.
-        slot3_count: Stack count in output slot 3.
+        inv_entries: Mapping of item_type -> count for the assembler
+            at (0, 0).
         power: Initial machine_power value.
         research_unlocked: Boolean array of unlocked technologies.
             Defaults to all True so existing tests pass without modification.
@@ -53,25 +50,21 @@ def _make_state_with_assembler(
 
     state = state.replace(
         machine_types=state.machine_types.at[0, 0].set(MachineType.ASSEMBLER),
-        machine_selected_recipe=state.machine_selected_recipe.at[0, 0].set(recipe),
+        machine_selected_recipe=state.machine_selected_recipe.at[0, 0].set(
+            recipe,
+        ),
         machine_power=state.machine_power.at[0, 0].set(power),
-        machine_health=state.machine_health.at[0, 0].set(DEFAULT_MACHINE_MAX_HEALTH),
+        machine_health=state.machine_health.at[0, 0].set(
+            DEFAULT_MACHINE_MAX_HEALTH,
+        ),
         research_unlocked=research_unlocked,
     )
 
-    inv_items = state.machine_inventory_items
-    inv_counts = state.machine_inventory_counts
-
-    inv_items = inv_items.at[0, 0, 0].set(slot0_item)
-    inv_counts = inv_counts.at[0, 0, 0].set(slot0_count)
-    inv_items = inv_items.at[0, 0, 1].set(slot1_item)
-    inv_counts = inv_counts.at[0, 0, 1].set(slot1_count)
-    inv_items = inv_items.at[0, 0, 3].set(slot3_item)
-    inv_counts = inv_counts.at[0, 0, 3].set(slot3_count)
-
+    inv = state.machine_inventory.astype(jnp.int32)
+    for item_type, count in (inv_entries or {}).items():
+        inv = inv.at[0, 0, item_type].set(count)
     state = state.replace(
-        machine_inventory_items=inv_items,
-        machine_inventory_counts=inv_counts,
+        machine_inventory=inv.astype(MACHINE_INVENTORY_COUNT_DTYPE),
     )
     return state
 
@@ -83,25 +76,23 @@ class TestAssemblerStartsCraft:
         """Hull recipe: 5 iron -> power set, iron consumed."""
         state = _make_state_with_assembler(
             recipe=0,
-            slot0_item=int(ItemType.IRON),
-            slot0_count=10,
+            inv_entries={int(ItemType.IRON): 10},
         )
         new_state = run_assemblers(state)
 
-        assert int(new_state.machine_power[0, 0]) == 4  # ASSEMBLER_RECIPE_TICKS[0]
-        assert int(new_state.machine_inventory_counts[0, 0, 0]) == 5  # 10 - 5
+        assert int(new_state.machine_power[0, 0]) == 4
+        assert int(new_state.machine_inventory[0, 0, ItemType.IRON]) == 5
 
     def test_no_start_without_inputs(self) -> None:
         """Assembler with insufficient inputs should remain idle."""
         state = _make_state_with_assembler(
             recipe=0,
-            slot0_item=int(ItemType.IRON),
-            slot0_count=3,
+            inv_entries={int(ItemType.IRON): 3},
         )
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 0
-        assert int(new_state.machine_inventory_counts[0, 0, 0]) == 3
+        assert int(new_state.machine_inventory[0, 0, ItemType.IRON]) == 3
 
 
 class TestAssemblerCompletesCraft:
@@ -109,29 +100,22 @@ class TestAssemblerCompletesCraft:
 
     def test_hull_output_produced(self) -> None:
         """Power == 1 with space in output produces 1 hull."""
-        state = _make_state_with_assembler(
-            recipe=0,
-            power=1,
-        )
+        state = _make_state_with_assembler(recipe=0, power=1)
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 0
-        assert int(new_state.machine_inventory_items[0, 0, 3]) == int(
-            ItemType.HULL
-        )
-        assert int(new_state.machine_inventory_counts[0, 0, 3]) == 1
+        assert int(new_state.machine_inventory[0, 0, ItemType.HULL]) == 1
 
     def test_output_stacks(self) -> None:
         """Completing a craft adds to existing output stack."""
         state = _make_state_with_assembler(
             recipe=0,
             power=1,
-            slot3_item=int(ItemType.HULL),
-            slot3_count=5,
+            inv_entries={int(ItemType.HULL): 5},
         )
         new_state = run_assemblers(state)
 
-        assert int(new_state.machine_inventory_counts[0, 0, 3]) == 6
+        assert int(new_state.machine_inventory[0, 0, ItemType.HULL]) == 6
 
 
 class TestAssemblerStallsOutputFull:
@@ -142,14 +126,13 @@ class TestAssemblerStallsOutputFull:
         state = _make_state_with_assembler(
             recipe=0,
             power=1,
-            slot3_item=int(ItemType.HULL),
-            slot3_count=MAX_ASSEMBLER_STACK_SIZE,
+            inv_entries={int(ItemType.HULL): MAX_ASSEMBLER_STACK_SIZE},
         )
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 1
         assert (
-            int(new_state.machine_inventory_counts[0, 0, 3])
+            int(new_state.machine_inventory[0, 0, ItemType.HULL])
             == MAX_ASSEMBLER_STACK_SIZE
         )
 
@@ -161,23 +144,22 @@ class TestAssemblerTwoInputRecipe:
         """Fuel pack: 3 copper + 2 coal -> power set, inputs consumed."""
         state = _make_state_with_assembler(
             recipe=1,
-            slot0_item=int(ItemType.COPPER),
-            slot0_count=5,
-            slot1_item=int(ItemType.COAL),
-            slot1_count=4,
+            inv_entries={
+                int(ItemType.COPPER): 5,
+                int(ItemType.COAL): 4,
+            },
         )
         new_state = run_assemblers(state)
 
-        assert int(new_state.machine_power[0, 0]) == 6  # ASSEMBLER_RECIPE_TICKS[1]
-        assert int(new_state.machine_inventory_counts[0, 0, 0]) == 2  # 5 - 3
-        assert int(new_state.machine_inventory_counts[0, 0, 1]) == 2  # 4 - 2
+        assert int(new_state.machine_power[0, 0]) == 6
+        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER]) == 2
+        assert int(new_state.machine_inventory[0, 0, ItemType.COAL]) == 2
 
     def test_fuel_pack_missing_second_input(self) -> None:
         """Missing coal should prevent craft start."""
         state = _make_state_with_assembler(
             recipe=1,
-            slot0_item=int(ItemType.COPPER),
-            slot0_count=5,
+            inv_entries={int(ItemType.COPPER): 5},
         )
         new_state = run_assemblers(state)
 
@@ -194,19 +176,14 @@ class TestAssemblerRecipeChangeBlocked:
         is_idle = int(state.machine_power[0, 0]) == 0
         assert not is_idle
 
-    def test_items_in_slots_block_recipe_change(self) -> None:
-        """Items in input slots should prevent recipe switching."""
+    def test_items_in_inventory_block_recipe_change(self) -> None:
+        """Items in input types should prevent recipe switching."""
         state = _make_state_with_assembler(
             recipe=0,
-            slot0_item=int(ItemType.IRON),
-            slot0_count=5,
+            inv_entries={int(ItemType.IRON): 5},
         )
 
-        has_inputs = (
-            int(state.machine_inventory_counts[0, 0, 0]) > 0
-            or int(state.machine_inventory_counts[0, 0, 1]) > 0
-            or int(state.machine_inventory_counts[0, 0, 2]) > 0
-        )
+        has_inputs = int(state.machine_inventory[0, 0, ItemType.IRON]) > 0
         assert has_inputs
 
 
@@ -214,63 +191,36 @@ class TestAssemblerDepositFiltering:
     """Only recipe-correct items should be depositable into assembler inputs."""
 
     def test_correct_item_accepted(self) -> None:
-        """Iron into slot 0 of hull recipe should succeed."""
-        from factoriax.game_logic import deposit_to_adjacent
-
+        """Iron into hull recipe assembler should succeed."""
         state = _make_state_with_assembler(recipe=0)
-        # Place player at (1,0) facing LEFT toward assembler at (0,0).
         state = state.replace(
             player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(Direction.LEFT),
-            inventory_items=state.inventory_items.at[0, 0].set(
-                int(ItemType.IRON)
+            player_directions=state.player_directions.at[0].set(
+                Direction.LEFT,
             ),
-            inventory_counts=state.inventory_counts.at[0, 0].set(10),
-            selected_slots=state.selected_slots.at[0].set(0),
+            player_inventory=state.player_inventory.at[0, ItemType.IRON].set(10),
         )
-        new_state = deposit_to_adjacent(state, 0)
-        assert int(new_state.machine_inventory_items[0, 0, 0]) == int(
-            ItemType.IRON
+        new_state = deposit_to_adjacent(state, 0, ItemType.IRON)
+        assert (
+            int(
+                new_state.machine_inventory[0, 0, ItemType.IRON],
+            )
+            == 10
         )
-        assert int(new_state.machine_inventory_counts[0, 0, 0]) == 10
 
     def test_wrong_item_rejected(self) -> None:
-        """Copper into slot 0 of hull recipe should be rejected."""
-        from factoriax.game_logic import deposit_to_adjacent
-
+        """Copper into hull recipe assembler should be rejected."""
         state = _make_state_with_assembler(recipe=0)
         state = state.replace(
             player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(Direction.LEFT),
-            inventory_items=state.inventory_items.at[0, 0].set(
-                int(ItemType.COPPER)
+            player_directions=state.player_directions.at[0].set(
+                Direction.LEFT,
             ),
-            inventory_counts=state.inventory_counts.at[0, 0].set(10),
-            selected_slots=state.selected_slots.at[0].set(0),
+            player_inventory=state.player_inventory.at[0, ItemType.COPPER].set(10),
         )
-        new_state = deposit_to_adjacent(state, 0)
-        # Copper should stay in player inventory, assembler slot unchanged.
-        assert int(new_state.machine_inventory_counts[0, 0, 0]) == 0
-        assert int(new_state.inventory_counts[0, 0]) == 10
-
-    def test_unused_slot_rejected(self) -> None:
-        """Hull recipe uses 1 input; focused slot 1 should not accept items."""
-        from factoriax.game_logic import deposit_to_adjacent
-
-        state = _make_state_with_assembler(recipe=0)
-        state = state.replace(
-            player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(Direction.LEFT),
-            inventory_items=state.inventory_items.at[0, 0].set(
-                int(ItemType.IRON)
-            ),
-            inventory_counts=state.inventory_counts.at[0, 0].set(10),
-            selected_slots=state.selected_slots.at[0].set(0),
-            # Focus machine slot 1 — hull recipe has 0 count for second input.
-            machine_selected_slot=state.machine_selected_slot.at[0, 0].set(1),
-        )
-        new_state = deposit_to_adjacent(state, 0)
-        assert int(new_state.machine_inventory_counts[0, 0, 1]) == 0
+        new_state = deposit_to_adjacent(state, 0, ItemType.COPPER)
+        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER]) == 0
+        assert int(new_state.player_inventory[0, ItemType.COPPER]) == 10
 
 
 class TestAssemblerPlacementAndPickup:

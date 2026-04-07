@@ -1,7 +1,9 @@
-"""Tests for the DEPOSIT and WITHDRAW RL actions.
+"""Tests for the DEPOSIT and WITHDRAW compound actions.
 
-Covers deposit into chests, miners (fuel slot), and assemblers (recipe-filtered
-inputs), as well as withdraw with OUTPUT > STORAGE > INPUT priority ordering.
+Covers deposit into chests, miners (fuel), and assemblers (recipe-filtered
+inputs), as well as withdraw from various machine types. Uses the pouch
+inventory model where player_inventory has shape (P, NUM_ITEM_TYPES) and
+machine_inventory has shape (H, W, NUM_ITEM_TYPES).
 """
 
 from __future__ import annotations
@@ -10,9 +12,9 @@ import jax.numpy as jnp
 
 from factoriax import Action, BlockType, Direction, ItemType
 from factoriax.constants import (
-    MAX_MACHINE_INVENTORY_SLOTS,
+    MACHINE_INVENTORY_COUNT_DTYPE,
     MAX_MACHINE_STACK_SIZE,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     MachineType,
 )
 from factoriax.game_logic import deposit_to_adjacent, withdraw_from_adjacent
@@ -33,32 +35,54 @@ def _machine_types(w: int, h: int, placements: dict[tuple[int, int], int]):
 
 
 def _machine_inv(
-    w: int,
     h: int,
-    items: dict[tuple[int, int, int], int] | None = None,
-    counts: dict[tuple[int, int, int], int] | None = None,
-):
-    """Build machine inventory arrays. Keys are (x, y, slot)."""
-    item_arr = jnp.zeros((h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32)
-    count_arr = jnp.zeros((h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-    for (x, y, slot), val in (items or {}).items():
-        item_arr = item_arr.at[y, x, slot].set(val)
-    for (x, y, slot), val in (counts or {}).items():
-        count_arr = count_arr.at[y, x, slot].set(val)
-    return item_arr, count_arr
+    w: int,
+    **items: dict[tuple[int, int], int],
+) -> jnp.ndarray:
+    """Build a machine inventory pouch.
 
-
-def _player_inv(slot_data: dict[int, tuple[int, int]]):
-    """Build player inventory arrays from {slot: (item_type, count)}.
-
-    Returns (items, counts) each of shape (1, NUM_INVENTORY_SLOTS).
+    Each keyword maps a (y, x) tuple to item-type counts.
+    The keyword format is not used here; instead use the
+    positional helper below.
     """
-    items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-    counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-    for slot, (item, count) in slot_data.items():
-        items = items.at[0, slot].set(item)
-        counts = counts.at[0, slot].set(count)
-    return items, counts
+    return jnp.zeros((h, w, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE)
+
+
+def _set_machine_inv(
+    h: int,
+    w: int,
+    entries: dict[tuple[int, int, int], int],
+) -> jnp.ndarray:
+    """Build a machine inventory pouch with specific item counts.
+
+    Args:
+        h: Grid height.
+        w: Grid width.
+        entries: Mapping of (y, x, item_type) -> count.
+
+    Returns:
+        Machine inventory array of shape (h, w, NUM_ITEM_TYPES).
+    """
+    inv = jnp.zeros((h, w, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE)
+    for (y, x, item_type), count in entries.items():
+        inv = inv.at[y, x, item_type].set(count)
+    return inv
+
+
+def _player_inv(num_players: int, entries: dict[int, int]) -> jnp.ndarray:
+    """Build a player inventory pouch.
+
+    Args:
+        num_players: Number of players.
+        entries: Mapping of item_type -> count for player 0.
+
+    Returns:
+        Player inventory of shape (num_players, NUM_ITEM_TYPES).
+    """
+    inv = jnp.zeros((num_players, NUM_ITEM_TYPES), dtype=jnp.int32)
+    for item_type, count in entries.items():
+        inv = inv.at[0, item_type].set(count)
+    return inv
 
 
 # ===========================================================================
@@ -70,91 +94,79 @@ class TestDepositToChest:
     """Deposit items from player inventory into a chest."""
 
     def test_deposit_coal_into_empty_chest(self, state_factory) -> None:
-        """Full coal stack should transfer into the first chest slot."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 10)})
+        """Coal should transfer into the chest's pouch."""
+        p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.inventory_counts[0, 0]) == 0
-        assert int(state.inventory_items[0, 0]) == ItemType.EMPTY
-        assert int(state.machine_inventory_items[1, 2, 0]) == ItemType.COAL
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 10
+        assert int(state.player_inventory[0, ItemType.COAL]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 10
 
-    def test_deposit_stacks_into_matching_slot(self, state_factory) -> None:
-        """Depositing coal should merge with an existing coal stack."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 5)})
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.COAL},
-            counts={(2, 1, 0): 10},
-        )
+    def test_deposit_stacks_into_matching_type(self, state_factory) -> None:
+        """Depositing coal should merge with existing coal in the chest."""
+        p_inv = _player_inv(1, {ItemType.COAL: 5})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.COAL): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.inventory_counts[0, 0]) == 0
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 15
+        assert int(state.player_inventory[0, ItemType.COAL]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 15
 
     def test_deposit_respects_stack_cap(self, state_factory) -> None:
         """Deposit should cap at MAX_MACHINE_STACK_SIZE, leaving remainder."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 20)})
-        m_items, m_counts = _machine_inv(
+        p_inv = _player_inv(1, {ItemType.COAL: 20})
+        m_inv = _set_machine_inv(
             3,
             3,
-            items={(2, 1, 0): ItemType.COAL},
-            counts={(2, 1, 0): MAX_MACHINE_STACK_SIZE - 5},
+            {(1, 2, ItemType.COAL): MAX_MACHINE_STACK_SIZE - 5},
         )
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.machine_inventory_counts[1, 2, 0]) == (MAX_MACHINE_STACK_SIZE)
-        assert int(state.inventory_counts[0, 0]) == 15
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == (
+            MAX_MACHINE_STACK_SIZE
+        )
+        assert int(state.player_inventory[0, ItemType.COAL]) == 15
 
     def test_deposit_noop_no_machine(self, state_factory) -> None:
         """Deposit into empty tile should be a no-op."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 10)})
+        p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.inventory_counts[0, 0]) == 10
+        assert int(state.player_inventory[0, ItemType.COAL]) == 10
 
-    def test_deposit_noop_empty_slot(self, state_factory) -> None:
-        """Deposit with empty selected slot should be a no-op."""
+    def test_deposit_noop_empty_type(self, state_factory) -> None:
+        """Deposit with zero count of the item type should be a no-op."""
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -162,172 +174,120 @@ class TestDepositToChest:
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 0
 
     def test_deposit_noop_out_of_bounds(self, state_factory) -> None:
         """Deposit facing out of bounds should be a no-op."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 10)})
+        p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(2, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.inventory_counts[0, 0]) == 10
+        assert int(state.player_inventory[0, ItemType.COAL]) == 10
 
 
 class TestDepositToMiner:
-    """Deposit coal into a miner's fuel slot (INPUT, slot 0)."""
+    """Deposit coal into a miner as fuel."""
 
     def test_deposit_coal_as_fuel(self, state_factory) -> None:
-        """Coal deposited into a miner should go to slot 0 (fuel INPUT)."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 5)})
+        """Coal deposited into a miner should be accepted."""
+        p_inv = _player_inv(1, {ItemType.COAL: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.machine_inventory_items[1, 2, 0]) == ItemType.COAL
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 5
-        assert int(state.inventory_counts[0, 0]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 5
+        assert int(state.player_inventory[0, ItemType.COAL]) == 0
 
-    def test_deposit_cannot_go_to_output_slot(self, state_factory) -> None:
-        """Iron deposited into a miner should not go to slot 1 (OUTPUT).
-
-        The miner only has slot 0 (INPUT) and slot 1 (OUTPUT). Depositing
-        iron makes no sense (it's not fuel), but even if slot 0 is full,
-        the deposit must not route to the OUTPUT slot.
-        """
-        inv_items, inv_counts = _player_inv({0: (ItemType.IRON, 5)})
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.COAL},
-            counts={(2, 1, 0): MAX_MACHINE_STACK_SIZE},
-        )
+    def test_deposit_non_fuel_rejected_by_miner(self, state_factory) -> None:
+        """Iron deposited into a miner should be rejected (not fuel)."""
+        p_inv = _player_inv(1, {ItemType.IRON: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.IRON)
 
-        # Iron stays in player inventory, miner output slot untouched.
-        assert int(state.inventory_counts[0, 0]) == 5
-        assert int(state.machine_inventory_counts[1, 2, 1]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON]) == 5
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
 
 
 class TestDepositToAssembler:
     """Deposit items into an assembler with recipe filtering."""
 
     def test_deposit_iron_into_hull_assembler(self, state_factory) -> None:
-        """Iron should go into slot 0 (Hull recipe needs 5 iron)."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.IRON, 10)})
+        """Iron should be accepted by a hull assembler (recipe 0 needs iron)."""
+        p_inv = _player_inv(1, {ItemType.IRON: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
             machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.IRON)
 
-        assert int(state.machine_inventory_items[1, 2, 0]) == ItemType.IRON
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 10
-        assert int(state.inventory_counts[0, 0]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 10
+        assert int(state.player_inventory[0, ItemType.IRON]) == 0
 
     def test_deposit_wrong_item_rejected(self, state_factory) -> None:
-        """Copper should be rejected by a Hull assembler (needs only iron)."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.COPPER, 10)})
+        """Copper should be rejected by a hull assembler (needs only iron)."""
+        p_inv = _player_inv(1, {ItemType.COPPER: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
             machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = deposit_to_adjacent(state, 0)
+        state = deposit_to_adjacent(state, 0, ItemType.COPPER)
 
-        assert int(state.inventory_counts[0, 0]) == 10
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 0
+        assert int(state.player_inventory[0, ItemType.COPPER]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.COPPER]) == 0
 
     def test_deposit_fuel_pack_recipe_both_inputs(self, state_factory) -> None:
-        """Fuel Pack recipe needs copper (slot 0) and coal (slot 1)."""
+        """Fuel pack recipe needs copper and coal; both should deposit."""
         # Deposit copper first.
-        inv_items, inv_counts = _player_inv({0: (ItemType.COPPER, 3)})
+        p_inv = _player_inv(1, {ItemType.COPPER: 3})
         recipe = jnp.zeros((3, 3), dtype=jnp.int32).at[1, 2].set(1)
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
             machine_selected_recipe=recipe,
         )
-        state = deposit_to_adjacent(state, 0)
-        assert int(state.machine_inventory_items[1, 2, 0]) == ItemType.COPPER
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 3
+        state = deposit_to_adjacent(state, 0, ItemType.COPPER)
+        assert int(state.machine_inventory[1, 2, ItemType.COPPER]) == 3
 
-        # Now deposit coal (should go to slot 1).
+        # Now deposit coal.
         state = state.replace(
-            inventory_items=state.inventory_items.at[0, 0].set(ItemType.COAL),
-            inventory_counts=state.inventory_counts.at[0, 0].set(2),
+            player_inventory=state.player_inventory.at[0, ItemType.COAL].set(2),
         )
-        state = deposit_to_adjacent(state, 0)
-        assert int(state.machine_inventory_items[1, 2, 1]) == ItemType.COAL
-        assert int(state.machine_inventory_counts[1, 2, 1]) == 2
-
-
-class TestDepositSelectedSlot:
-    """Deposit uses the player's currently selected inventory slot."""
-
-    def test_deposit_from_non_zero_slot(self, state_factory) -> None:
-        """Selecting slot 2 should deposit from slot 2, not slot 0."""
-        inv_items, inv_counts = _player_inv(
-            {0: (ItemType.IRON, 5), 2: (ItemType.COAL, 8)}
-        )
-        state = state_factory(
-            world_map=_DIRT_3X3,
-            player_position=(1, 1),
-            player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
-            selected_slots=jnp.array([2], dtype=jnp.int32),
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-        )
-
-        state = deposit_to_adjacent(state, 0)
-
-        # Slot 2 (coal) should be deposited, slot 0 (iron) untouched.
-        assert int(state.inventory_counts[0, 0]) == 5
-        assert int(state.inventory_counts[0, 2]) == 0
-        assert int(state.machine_inventory_items[1, 2, 0]) == ItemType.COAL
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 8
+        state = deposit_to_adjacent(state, 0, ItemType.COAL)
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 2
 
 
 # ===========================================================================
@@ -338,28 +298,21 @@ class TestDepositSelectedSlot:
 class TestWithdrawFromChest:
     """Withdraw items from a chest into player inventory."""
 
-    def test_withdraw_from_chest(self, state_factory) -> None:
-        """Should take items from the first occupied chest slot."""
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.IRON},
-            counts={(2, 1, 0): 10},
-        )
+    def test_withdraw_iron_from_chest(self, state_factory) -> None:
+        """Should take the specified item type from the chest."""
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
         )
 
-        state = withdraw_from_adjacent(state, 0)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
 
-        assert int(state.inventory_items[0, 0]) == ItemType.IRON
-        assert int(state.inventory_counts[0, 0]) == 10
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
 
     def test_withdraw_noop_empty_machine(self, state_factory) -> None:
         """Withdraw from empty chest should be a no-op."""
@@ -370,9 +323,9 @@ class TestWithdrawFromChest:
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
 
-        state = withdraw_from_adjacent(state, 0)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
 
-        assert int(state.inventory_items[0, 0]) == ItemType.EMPTY
+        assert int(state.player_inventory[0, ItemType.IRON]) == 0
 
     def test_withdraw_noop_no_machine(self, state_factory) -> None:
         """Withdraw with no machine in front should be a no-op."""
@@ -382,148 +335,136 @@ class TestWithdrawFromChest:
             player_direction=Direction.RIGHT,
         )
 
-        state = withdraw_from_adjacent(state, 0)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
 
-        assert int(state.inventory_items[0, 0]) == ItemType.EMPTY
+        assert int(state.player_inventory[0, ItemType.IRON]) == 0
 
 
-class TestWithdrawPriority:
-    """Withdraw scans OUTPUT before STORAGE before INPUT."""
+class TestWithdrawFromMiner:
+    """Withdraw from miners."""
 
-    def test_miner_output_before_fuel(self, state_factory) -> None:
-        """Miner slot 1 (OUTPUT) should be taken before slot 0 (INPUT)."""
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.COAL, (2, 1, 1): ItemType.IRON},
-            counts={(2, 1, 0): 5, (2, 1, 1): 3},
-        )
+    def test_withdraw_ore_from_miner(self, state_factory) -> None:
+        """Should be able to withdraw mined ore from a miner."""
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
         )
 
-        state = withdraw_from_adjacent(state, 0)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
 
-        # Should take iron (OUTPUT slot 1), not coal (INPUT slot 0).
-        assert int(state.inventory_items[0, 0]) == ItemType.IRON
-        assert int(state.inventory_counts[0, 0]) == 3
-        # Coal in fuel slot should be untouched.
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 5
+        assert int(state.player_inventory[0, ItemType.IRON]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
 
-    def test_assembler_output_before_input(self, state_factory) -> None:
-        """Assembler slot 3 (OUTPUT) should be taken before slots 0-2 (INPUT)."""
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.IRON, (2, 1, 3): ItemType.HULL},
-            counts={(2, 1, 0): 5, (2, 1, 3): 2},
-        )
+
+class TestWithdrawFromAssembler:
+    """Withdraw from assemblers respects recipe output filtering."""
+
+    def test_withdraw_output_from_assembler(self, state_factory) -> None:
+        """Withdrawing the recipe output (hull) should work."""
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.HULL): 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
+            machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = withdraw_from_adjacent(state, 0)
+        state = withdraw_from_adjacent(state, 0, ItemType.HULL)
 
-        # Should take hulls (OUTPUT slot 3), not iron (INPUT slot 0).
-        assert int(state.inventory_items[0, 0]) == ItemType.HULL
-        assert int(state.inventory_counts[0, 0]) == 2
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 5
+        assert int(state.player_inventory[0, ItemType.HULL]) == 5
+        assert int(state.machine_inventory[1, 2, ItemType.HULL]) == 0
+
+    def test_withdraw_input_from_assembler_rejected(self, state_factory) -> None:
+        """Withdrawing a recipe input (iron) should be rejected."""
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 5})
+        state = state_factory(
+            world_map=_DIRT_3X3,
+            player_position=(1, 1),
+            player_direction=Direction.RIGHT,
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
+            machine_inventory=m_inv,
+            machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
+        )
+
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+
+        assert int(state.player_inventory[0, ItemType.IRON]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 5
 
 
 class TestWithdrawMergesIntoInventory:
     """Withdrawn items should merge with existing player stacks."""
 
     def test_withdraw_merges_with_existing_stack(self, state_factory) -> None:
-        """Items withdrawn should stack with matching items in inventory."""
-        inv_items, inv_counts = _player_inv({0: (ItemType.IRON, 3)})
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.IRON},
-            counts={(2, 1, 0): 7},
-        )
+        """Items withdrawn should add to existing count in player pouch."""
+        p_inv = _player_inv(1, {ItemType.IRON: 3})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 7})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
         )
 
-        state = withdraw_from_adjacent(state, 0)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
 
-        assert int(state.inventory_items[0, 0]) == ItemType.IRON
-        assert int(state.inventory_counts[0, 0]) == 10
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
 
 
 class TestDepositWithdrawViaStep:
     """End-to-end tests dispatched through factoriax_step."""
 
     def test_deposit_via_step(self, state_factory) -> None:
-        """DEPOSIT action through the full step pipeline."""
+        """DEPOSIT_COAL action through the full step pipeline."""
         import jax
 
         from factoriax.game_logic import factoriax_step
         from factoriax.state import EnvParams
 
-        inv_items, inv_counts = _player_inv({0: (ItemType.COAL, 5)})
+        p_inv = _player_inv(1, {ItemType.COAL: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         rng = jax.random.PRNGKey(0)
 
-        state = factoriax_step(rng, state, Action.DEPOSIT, params)
+        state = factoriax_step(rng, state, Action.DEPOSIT_COAL, params)
 
-        assert int(state.machine_inventory_items[1, 2, 0]) == ItemType.COAL
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 5
-        assert int(state.inventory_counts[0, 0]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 5
+        assert int(state.player_inventory[0, ItemType.COAL]) == 0
 
     def test_withdraw_via_step(self, state_factory) -> None:
-        """WITHDRAW action through the full step pipeline."""
+        """WITHDRAW_IRON action through the full step pipeline."""
         import jax
 
         from factoriax.game_logic import factoriax_step
         from factoriax.state import EnvParams
 
-        m_items, m_counts = _machine_inv(
-            3,
-            3,
-            items={(2, 1, 0): ItemType.IRON},
-            counts={(2, 1, 0): 10},
-        )
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
-            machine_inventory_items=m_items,
-            machine_inventory_counts=m_counts,
+            machine_inventory=m_inv,
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         rng = jax.random.PRNGKey(0)
 
-        state = factoriax_step(rng, state, Action.WITHDRAW, params)
+        state = factoriax_step(rng, state, Action.WITHDRAW_IRON, params)
 
-        assert int(state.inventory_items[0, 0]) == ItemType.IRON
-        assert int(state.inventory_counts[0, 0]) == 10
-        assert int(state.machine_inventory_counts[1, 2, 0]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0

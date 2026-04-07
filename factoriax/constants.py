@@ -54,26 +54,48 @@ class MachineType(IntEnum):
     ROCKET = 6
 
 
-class SlotRole(IntEnum):
-    """Role of a machine inventory slot, describing automated item flow direction.
-
-    Roles determine which agents (machine logic vs player) may read or write
-    a slot.  The player may withdraw from *any* role; the player may only
-    *deposit* into INPUT or STORAGE — never into OUTPUT.  Machine logic may
-    only write to OUTPUT and read from INPUT.
-    """
-
-    NONE = 0  # Unused / padding slot — no automated flow, no player access.
-    INPUT = 1  # Machine consumes from here; player may deposit and withdraw.
-    OUTPUT = 2  # Machine produces here; player may only withdraw.
-    STORAGE = 3  # No automated flow; player may deposit and withdraw freely.
-
-
-NUM_INVENTORY_SLOTS = 10
+NUM_ITEM_TYPES = len(ItemType)
 MAX_STACK_SIZE = 64
 MAX_MACHINE_STACK_SIZE = 64
-MAX_MACHINE_INVENTORY_SLOTS = 8
-NUM_ITEM_TYPES = len(ItemType)
+
+# Backward-compat aliases for Phase 2 modules (renderer, editor, play).
+# These will be removed when the UI is updated for pouches.
+NUM_INVENTORY_SLOTS = 10  # deprecated
+MAX_MACHINE_INVENTORY_SLOTS = 8  # deprecated
+MACHINE_NUM_SLOTS = np.array(  # deprecated
+    [0, 2, 8, 4, 1, 1, 0], dtype=np.int32,
+)
+
+
+class SlotRole(IntEnum):  # deprecated — Phase 2 UI still references this
+    """Deprecated slot role enum. Kept for Phase 2 UI compat."""
+
+    NONE = 0
+    INPUT = 1
+    OUTPUT = 2
+    STORAGE = 3
+
+
+MACHINE_SLOT_ROLES: np.ndarray = np.array(  # deprecated
+    [
+        [SlotRole.NONE] * 8,
+        [SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
+        [SlotRole.STORAGE] * 8,
+        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
+        + [SlotRole.NONE] * 4,
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
+        [SlotRole.NONE] * 8,
+    ],
+    dtype=np.int32,
+)
+SLOT_ROLE_LABELS: dict[int, str] = {  # deprecated
+    0: "", 1: "IN", 2: "OUT", 3: "STORE",
+}
+SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {  # deprecated
+    0: (40, 40, 40), 1: (190, 120, 40),
+    2: (40, 170, 140), 3: (80, 115, 175),
+}
 
 # Canonical dtypes for state arrays. Use these in tests and level
 # builders to avoid int32/int16 mismatch warnings from JAX scatter ops.
@@ -81,32 +103,43 @@ INVENTORY_COUNT_DTYPE = jnp.int32
 MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
 BLOCK_RESOURCE_DTYPE = jnp.int16
 
-# Per-slot roles for each MachineType,
-# shape (NUM_MACHINE_TYPES, MAX_MACHINE_INVENTORY_SLOTS).
-# Indexed as MACHINE_SLOT_ROLES[machine_type, slot_index].
-MACHINE_SLOT_ROLES: np.ndarray = np.array(
-    [
-        # NONE — no slots active
-        [SlotRole.NONE] * 8,
-        # MINER — slot 0: fuel input, slot 1: ore output
-        [SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
-        # CHEST — all 8 slots are general storage
-        [SlotRole.STORAGE] * 8,
-        # ASSEMBLER — slots 0-2: ingredient inputs, slot 3: product output
-        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
-        + [SlotRole.NONE] * 4,
-        # CONVEYOR_BELT — slot 0: single storage buffer
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
-        # ARM — slot 0: single storage buffer (pick/deposit working buffer)
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
-        # ROCKET — no slots
-        [SlotRole.NONE] * 8,
-    ],
-    dtype=np.int32,
+# Max distinct item types a machine can hold simultaneously.
+# Belt/Arm hold one type at a time; Chest holds up to 8 types.
+MACHINE_MAX_TYPES = jnp.array(
+    [0, 2, 8, 4, 1, 1, 0],
+    # NONE, MINER, CHEST, ASSEMBLER, BELT, ARM, ROCKET
+    dtype=jnp.int32,
 )
 
-# Number of active (non-NONE) slots per machine type.
-MACHINE_NUM_SLOTS: np.ndarray = np.array([0, 2, 8, 4, 1, 1, 0], dtype=np.int32)
+# Max stack count per item type per machine type.
+MACHINE_MAX_STACK = jnp.array(
+    [0, MAX_MACHINE_STACK_SIZE, MAX_MACHINE_STACK_SIZE, 1000,
+     MAX_MACHINE_STACK_SIZE, MAX_MACHINE_STACK_SIZE, 0],
+    # NONE, MINER, CHEST, ASSEMBLER, BELT, ARM, ROCKET
+    dtype=jnp.int32,
+)
+
+# Max stack count per item type for the player inventory.
+PLAYER_MAX_STACK = jnp.array(
+    [
+        0,   # EMPTY
+        64,  # COAL
+        64,  # IRON
+        64,  # COPPER
+        10,  # MINER
+        10,  # CHEST
+        10,  # CONVEYOR_BELT
+        10,  # ARM
+        10,  # ASSEMBLER
+        64,  # HULL
+        64,  # FUEL_PACK
+        10,  # ROCKET
+        64,  # BASIC_SCIENCE_PACK
+        64,  # FUEL_SCIENCE_PACK
+        64,  # ADVANCED_SCIENCE_PACK
+    ],
+    dtype=jnp.int32,
+)
 
 BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
     BlockType.COAL: ItemType.COAL,
@@ -140,22 +173,6 @@ MACHINE_TYPE_NAMES: dict[int, str] = {
     int(MachineType.CONVEYOR_BELT): "Conveyor Belt",
     int(MachineType.ARM): "Arm",
     int(MachineType.ROCKET): "Rocket",
-}
-
-# Short badge labels for each SlotRole, rendered inside the slot cell header.
-SLOT_ROLE_LABELS: dict[int, str] = {
-    int(SlotRole.NONE): "",
-    int(SlotRole.INPUT): "IN",
-    int(SlotRole.OUTPUT): "OUT",
-    int(SlotRole.STORAGE): "STORE",
-}
-
-# Badge background colours per SlotRole: amber=INPUT, teal=OUTPUT, steel=STORAGE.
-SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {
-    int(SlotRole.NONE): (40, 40, 40),
-    int(SlotRole.INPUT): (190, 120, 40),
-    int(SlotRole.OUTPUT): (40, 170, 140),
-    int(SlotRole.STORAGE): (80, 115, 175),
 }
 
 # Recipes are defined in factoriax.recipes (single source of truth).
@@ -303,16 +320,15 @@ class Direction(IntEnum):
 
 
 class Action(IntEnum):
-    """Player actions.
+    """Player actions using compound action design.
 
-    Movement actions (UP through RIGHT) move the player in absolute map
-    directions without changing facing. TURN_LEFT/TURN_RIGHT rotate
-    facing without moving. FACE_UP/DOWN/LEFT/RIGHT snap facing to the
-    given direction in one step without moving. This decouples movement
-    from orientation, letting the agent face a tile independently of
-    where it walks.
+    Every action is self-contained: placement, deposit, and withdraw
+    actions name the specific item type so no slot cursor is needed.
+    Movement actions move in absolute map directions without changing
+    facing. FACE_* snaps facing without moving.
     """
 
+    # Movement (11)
     NOOP = 0
     UP = 1
     DOWN = 2
@@ -320,27 +336,99 @@ class Action(IntEnum):
     RIGHT = 4
     TURN_LEFT = 5
     TURN_RIGHT = 6
-    MINE = 7
-    PLACE = 8
-    NEXT_SLOT = 9
-    PREV_SLOT = 10
-    PICKUP = 11
-    DEPOSIT = 12
-    WITHDRAW = 13
-    ROTATE = 14
-    NEXT_MACHINE_SLOT = 15
-    PREV_MACHINE_SLOT = 16
-    CRAFT_MINER = 17
-    CRAFT_CHEST = 18
-    CRAFT_BELT = 19
-    CRAFT_ARM = 20
-    CRAFT_ASSEMBLER = 21
-    RESEARCH = 22
-    REPAIR = 23
-    FACE_UP = 24
-    FACE_DOWN = 25
-    FACE_LEFT = 26
-    FACE_RIGHT = 27
+    FACE_UP = 7
+    FACE_DOWN = 8
+    FACE_LEFT = 9
+    FACE_RIGHT = 10
+
+    # World (4)
+    MINE = 11
+    PICKUP = 12
+    ROTATE = 13
+    REPAIR = 14
+
+    # Placement — one per placeable machine type (6)
+    PLACE_MINER = 15
+    PLACE_CHEST = 16
+    PLACE_BELT = 17
+    PLACE_ARM = 18
+    PLACE_ASSEMBLER = 19
+    PLACE_ROCKET = 20
+
+    # Crafting — one per player recipe (5)
+    CRAFT_MINER = 21
+    CRAFT_CHEST = 22
+    CRAFT_BELT = 23
+    CRAFT_ARM = 24
+    CRAFT_ASSEMBLER = 25
+
+    # Research — one per science pack type (3)
+    RESEARCH_BASIC = 26
+    RESEARCH_FUEL = 27
+    RESEARCH_ADVANCED = 28
+
+    # Deposit — one per item type (14)
+    DEPOSIT_COAL = 29
+    DEPOSIT_IRON = 30
+    DEPOSIT_COPPER = 31
+    DEPOSIT_MINER = 32
+    DEPOSIT_CHEST = 33
+    DEPOSIT_BELT = 34
+    DEPOSIT_ARM = 35
+    DEPOSIT_ASSEMBLER = 36
+    DEPOSIT_HULL = 37
+    DEPOSIT_FUEL_PACK = 38
+    DEPOSIT_ROCKET = 39
+    DEPOSIT_BASIC_SCIENCE = 40
+    DEPOSIT_FUEL_SCIENCE = 41
+    DEPOSIT_ADVANCED_SCIENCE = 42
+
+    # Withdraw — one per item type (14)
+    WITHDRAW_COAL = 43
+    WITHDRAW_IRON = 44
+    WITHDRAW_COPPER = 45
+    WITHDRAW_MINER = 46
+    WITHDRAW_CHEST = 47
+    WITHDRAW_BELT = 48
+    WITHDRAW_ARM = 49
+    WITHDRAW_ASSEMBLER = 50
+    WITHDRAW_HULL = 51
+    WITHDRAW_FUEL_PACK = 52
+    WITHDRAW_ROCKET = 53
+    WITHDRAW_BASIC_SCIENCE = 54
+    WITHDRAW_FUEL_SCIENCE = 55
+    WITHDRAW_ADVANCED_SCIENCE = 56
+
+
+# Base offsets for arithmetic dispatch of compound actions.
+# item_type = action - DEPOSIT_BASE + ItemType.COAL
+PLACE_BASE: int = Action.PLACE_MINER
+CRAFT_BASE: int = Action.CRAFT_MINER
+DEPOSIT_BASE: int = Action.DEPOSIT_COAL
+WITHDRAW_BASE: int = Action.WITHDRAW_COAL
+
+# Maps PLACE_* action offset (0..5) to the ItemType of the machine placed.
+PLACE_ACTION_TO_ITEM = jnp.array(
+    [
+        ItemType.MINER,          # PLACE_MINER - PLACE_BASE = 0
+        ItemType.CHEST,          # 1
+        ItemType.CONVEYOR_BELT,  # 2
+        ItemType.ARM,            # 3
+        ItemType.ASSEMBLER,      # 4
+        ItemType.ROCKET,         # 5
+    ],
+    dtype=jnp.int32,
+)
+
+# Maps RESEARCH_* action offset (0..2) to the science pack item type.
+RESEARCH_ACTION_TO_PACK = jnp.array(
+    [
+        ItemType.BASIC_SCIENCE_PACK,     # RESEARCH_BASIC
+        ItemType.FUEL_SCIENCE_PACK,      # RESEARCH_FUEL
+        ItemType.ADVANCED_SCIENCE_PACK,  # RESEARCH_ADVANCED
+    ],
+    dtype=jnp.int32,
+)
 
 
 # (dx, dy) offset per compass direction, indexed by Direction value.

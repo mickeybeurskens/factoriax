@@ -169,16 +169,23 @@ def editor_state_from_level(level: Level) -> EditorState:
         else np.zeros((level.map_height, level.map_width), dtype=np.int32)
     )
     inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
-    inv_items = (
-        level.machine_inventory_items.copy()
-        if level.machine_inventory_items is not None
-        else np.zeros(inv_shape, dtype=np.int32)
-    )
-    inv_counts = (
-        level.machine_inventory_counts.copy()
-        if level.machine_inventory_counts is not None
-        else np.zeros(inv_shape, dtype=np.int32)
-    )
+    if level.machine_inventory is not None:
+        # Convert pouch (H, W, NUM_ITEM_TYPES) to slot-based for editor.
+        from factoriax.constants import NUM_ITEM_TYPES as _NIT
+        pouch = level.machine_inventory
+        inv_items = np.zeros(inv_shape, dtype=np.int32)
+        inv_counts = np.zeros(inv_shape, dtype=np.int32)
+        for y in range(level.map_height):
+            for x in range(level.map_width):
+                slot = 0
+                for it in range(1, _NIT):
+                    if pouch[y, x, it] > 0 and slot < MAX_MACHINE_INVENTORY_SLOTS:
+                        inv_items[y, x, slot] = it
+                        inv_counts[y, x, slot] = int(pouch[y, x, it])
+                        slot += 1
+    else:
+        inv_items = np.zeros(inv_shape, dtype=np.int32)
+        inv_counts = np.zeros(inv_shape, dtype=np.int32)
     recipe = (
         level.machine_selected_recipe.copy()
         if level.machine_selected_recipe is not None
@@ -238,13 +245,23 @@ def editor_state_to_level(state: EditorState) -> Level:
     if np.all(directions == 0):
         directions = None
 
-    inv_items: np.ndarray | None = state.machine_inventory_items.copy()
-    if np.all(inv_items == 0):
-        inv_items = None
-
-    inv_counts: np.ndarray | None = state.machine_inventory_counts.copy()
-    if np.all(inv_counts == 0):
-        inv_counts = None
+    # Convert slot-based editor inventory back to pouch for Level.
+    from factoriax.constants import NUM_ITEM_TYPES as _NIT
+    machine_inv: np.ndarray | None = None
+    if not (
+        np.all(state.machine_inventory_items == 0)
+        and np.all(state.machine_inventory_counts == 0)
+    ):
+        h, w = state.map_height, state.map_width
+        pouch = np.zeros((h, w, _NIT), dtype=np.int32)
+        for y in range(h):
+            for x in range(w):
+                for s in range(MAX_MACHINE_INVENTORY_SLOTS):
+                    it = int(state.machine_inventory_items[y, x, s])
+                    ct = int(state.machine_inventory_counts[y, x, s])
+                    if it > 0 and ct > 0:
+                        pouch[y, x, it] += ct
+        machine_inv = pouch
 
     recipe: np.ndarray | None = state.machine_selected_recipe.copy()
     if np.all(recipe == 0):
@@ -268,8 +285,7 @@ def editor_state_to_level(state: EditorState) -> Level:
         block_resources=resources,
         machine_types=machines,
         machine_directions=directions,
-        machine_inventory_items=inv_items,
-        machine_inventory_counts=inv_counts,
+        machine_inventory=machine_inv,
         machine_selected_recipe=recipe,
         player_inventory=state.player_inventory,
         player_inventories=(

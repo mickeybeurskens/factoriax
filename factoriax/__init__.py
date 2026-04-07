@@ -2,7 +2,7 @@
 
 from factoriax.constants import (
     MAX_STACK_SIZE,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     Action,
     BlockType,
     Direction,
@@ -35,7 +35,7 @@ __all__ = [
     "Level",
     "LevelBuilder",
     "MAX_STACK_SIZE",
-    "NUM_INVENTORY_SLOTS",
+    "NUM_ITEM_TYPES",
     "achievement_reward",
     "build_state",
     "generate_state",

@@ -53,6 +53,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     # Player fields — shape (B, T, P, ...).
     "positions",
     "player_directions",
+    "player_inventory",
     "inventory_items",
     "inventory_counts",
     "selected_slots",
@@ -63,6 +64,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "block_resources",
     "machine_types",
     "machine_power",
+    "machine_inventory",
     "machine_inventory_items",
     "machine_inventory_counts",
     "machine_selected_recipe",
@@ -87,6 +89,7 @@ _PLAYER_FIELDS: frozenset[str] = frozenset(
     {
         "positions",
         "player_directions",
+        "player_inventory",
         "inventory_items",
         "inventory_counts",
         "selected_slots",
@@ -168,9 +171,10 @@ class Trajectory:
     # Player fields — (B, T, P, ...).
     positions: np.ndarray | None = None
     player_directions: np.ndarray | None = None
-    inventory_items: np.ndarray | None = None
-    inventory_counts: np.ndarray | None = None
-    selected_slots: np.ndarray | None = None
+    player_inventory: np.ndarray | None = None
+    inventory_items: np.ndarray | None = None  # deprecated (slot model)
+    inventory_counts: np.ndarray | None = None  # deprecated (slot model)
+    selected_slots: np.ndarray | None = None  # deprecated (slot model)
     crafting_recipe: np.ndarray | None = None
     craft_progress: np.ndarray | None = None
 
@@ -179,8 +183,9 @@ class Trajectory:
     block_resources: np.ndarray | None = None
     machine_types: np.ndarray | None = None
     machine_power: np.ndarray | None = None
-    machine_inventory_items: np.ndarray | None = None
-    machine_inventory_counts: np.ndarray | None = None
+    machine_inventory: np.ndarray | None = None
+    machine_inventory_items: np.ndarray | None = None  # deprecated
+    machine_inventory_counts: np.ndarray | None = None  # deprecated
     machine_selected_recipe: np.ndarray | None = None
     machine_selected_slot: np.ndarray | None = None
     machine_direction: np.ndarray | None = None
@@ -389,6 +394,17 @@ _TRAJ_TO_STATE: dict[str, str] = {
     "achievements": "achievements_unlocked",
 }
 
+# Deprecated trajectory fields that no longer exist on EnvState.
+# These are silently skipped during reconstruction.
+_DEPRECATED_TRAJ_FIELDS: frozenset[str] = frozenset({
+    "inventory_items",
+    "inventory_counts",
+    "selected_slots",
+    "machine_inventory_items",
+    "machine_inventory_counts",
+    "machine_selected_slot",
+})
+
 # Inverse mapping.
 _STATE_TO_TRAJ: dict[str, str] = {v: k for k, v in _TRAJ_TO_STATE.items()}
 
@@ -483,6 +499,8 @@ def trajectory_to_states(
         state_kwargs: dict[str, Any] = {}
         for traj_name in _OPTIONAL_ARRAY_FIELDS:
             if traj_name in ("rewards", "timesteps"):
+                continue
+            if traj_name in _DEPRECATED_TRAJ_FIELDS:
                 continue
             val = getattr(traj, traj_name)
             if val is None:

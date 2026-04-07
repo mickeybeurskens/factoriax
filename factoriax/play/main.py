@@ -1,4 +1,10 @@
-"""Interactive play script for FactoriaX using pygame."""
+"""Interactive play script for FactoriaX using pygame.
+
+Uses :class:`~factoriax.play.game_ui.GameUI` for all menu rendering
+and input dispatch. This module handles the pygame window, environment
+stepping, trajectory recording, and play-specific screens (welcome,
+victory).
+"""
 
 from __future__ import annotations
 
@@ -11,45 +17,21 @@ import numpy as np
 import pygame
 from jax import random
 
-from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
+from factoriax.achievements import ACHIEVEMENT_INFO
 from factoriax.config import (
     KeyLookup,
-    PlayerAction,
     build_key_lookup,
     default_keyboard,
-    resolve_key,
 )
-from factoriax.constants import (
-    MACHINE_NUM_SLOTS,
-    NUM_INVENTORY_SLOTS,
-    NUM_TECHNOLOGIES,
-    PLACEABLE_ITEMS,
-    Action,
-    Direction,
-    MachineType,
-)
+from factoriax.constants import Action, Direction
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import Level
+from factoriax.play.game_ui import _HOTBAR_H, GameUI
 from factoriax.play.play_state import PlayState
-from factoriax.play.transfer import swap_inventory_slots
-from factoriax.play.ui import (
-    _HOTBAR_H,
-    render_achievement_menu,
-    render_help_overlay,
-    render_hotbar,
-    render_info_panel,
-    render_inventory_menu,
-    render_machine_menu,
-    render_pause_menu,
-    render_research_menu,
-    render_victory_screen,
-    render_welcome_screen,
-)
-from factoriax.recipes import NUM_ASSEMBLER_RECIPES, NUM_RECIPES
-from factoriax.renderer import render_pixels
+from factoriax.play.ui import render_welcome_screen
 from factoriax.state import EnvParams, EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb
-from factoriax.ui.primitives import ClickRegion, hit_test_regions
+from factoriax.ui.primitives import hit_test_regions
 from factoriax.ui.window import calculate_window_size
 
 _ROCKET_ACHIEVEMENT_IDX: int = next(
@@ -106,31 +88,6 @@ def _run_with_loading_screen(
 
     thread.join()
     return result[0] if result else None
-
-
-def _tile_in_front(state: EnvState, player_idx: int) -> tuple[int, int]:
-    """Return the (x, y) tile immediately in front of a player.
-
-    Uses the player's current facing direction to compute a one-tile offset.
-    The result may be out of map bounds — callers must validate before use.
-
-    Args:
-        state: Current environment state.
-        player_idx: Index of the player.
-
-    Returns:
-        ``(tx, ty)`` tile coordinates in front of the player.
-    """
-    pos = np.array(state.player_positions[player_idx])
-    direction = int(state.player_directions[player_idx])
-    offsets: dict[int, tuple[int, int]] = {
-        int(Direction.LEFT): (-1, 0),
-        int(Direction.RIGHT): (1, 0),
-        int(Direction.UP): (0, -1),
-        int(Direction.DOWN): (0, 1),
-    }
-    dx, dy = offsets.get(direction, (0, 0))
-    return int(pos[0]) + dx, int(pos[1]) + dy
 
 
 def play_level(
@@ -210,15 +167,16 @@ def play_level(
 
 _UI_SIZE = 1024
 
-_PLACEABLE_ITEM_SET: frozenset[int] = frozenset(int(x) for x in PLACEABLE_ITEMS)
+_MOUSE_DIR_TO_FACE: dict[int, int] = {
+    int(Direction.UP): int(Action.FACE_UP),
+    int(Direction.DOWN): int(Action.FACE_DOWN),
+    int(Direction.LEFT): int(Action.FACE_LEFT),
+    int(Direction.RIGHT): int(Action.FACE_RIGHT),
+}
 
 
 def _tile_pixel_size(map_w: int, map_h: int) -> int:
     """Choose a tile pixel size so the map fits within the UI canvas.
-
-    Picks the largest size that keeps the full map visible above the
-    hotbar, with a minimum of 8 pixels per tile so blocks remain
-    distinguishable.
 
     Args:
         map_w: Map width in tiles.
@@ -229,6 +187,32 @@ def _tile_pixel_size(map_w: int, map_h: int) -> int:
     """
     world_h = _UI_SIZE - _HOTBAR_H
     return max(8, min(_UI_SIZE // map_w, world_h // map_h))
+
+
+def _mouse_facing_direction(
+    mx: int,
+    my: int,
+    player_screen_x: int,
+    player_screen_y: int,
+) -> int:
+    """Determine which cardinal direction the mouse points relative to player.
+
+    Args:
+        mx: Mouse x in UI coordinates.
+        my: Mouse y in UI coordinates.
+        player_screen_x: Player center x in UI coordinates.
+        player_screen_y: Player center y in UI coordinates.
+
+    Returns:
+        Direction enum value (1-4), or 0 if undetermined.
+    """
+    dx = mx - player_screen_x
+    dy = my - player_screen_y
+    if dx == 0 and dy == 0:
+        return 0
+    if abs(dx) >= abs(dy):
+        return Direction.RIGHT if dx > 0 else Direction.LEFT
+    return Direction.DOWN if dy > 0 else Direction.UP
 
 
 def _handle_welcome_event(
@@ -273,779 +257,6 @@ def _handle_welcome_event(
     return ps, state
 
 
-def _handle_click(
-    event: pygame.event.Event,
-    ps: PlayState,
-    state: EnvState,
-    env: FactoriaXEnv,
-    params: EnvParams,
-    rng: jax.Array,
-    level: Level | None,
-    win_ox: int,
-    win_oy: int,
-    win_scale: int,
-) -> tuple[PlayState, EnvState, jax.Array, int, bool]:
-    """Process a mouse click against the current click regions.
-
-    Args:
-        event: Pygame MOUSEBUTTONDOWN event.
-        ps: Current play state.
-        state: Current environment state.
-        env: FactoriaX environment instance.
-        params: Environment parameters.
-        rng: JAX random key.
-        level: Source level for reset.
-        win_ox: Window X offset for coordinate transform.
-        win_oy: Window Y offset for coordinate transform.
-        win_scale: Window scale factor.
-
-    Returns:
-        Tuple of (play_state, env_state, rng, action, running).
-    """
-    action = int(Action.NOOP)
-    running = True
-
-    base_x = (event.pos[0] - win_ox) // win_scale
-    base_y = (event.pos[1] - win_oy) // win_scale
-    hit = hit_test_regions(ps.click_regions, base_x, base_y)
-
-    if hit is not None:
-        if hit.action == "select_slot":
-            selected_player = int(state.selected_player)
-            new_slots = state.selected_slots.at[selected_player].set(hit.param)
-            state = state.replace(selected_slots=new_slots)
-            if ps.machine_open:
-                ps.machine_panel_active = False
-            else:
-                ps.menu_focus = "inventory"
-        elif hit.action == "select_recipe":
-            ps.menu_focus = "crafting"
-            ps.selected_recipe = hit.param
-        elif hit.action == "select_machine_slot":
-            machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])
-            num_slots = int(MACHINE_NUM_SLOTS[machine_type])
-            if 0 <= hit.param < num_slots:
-                new_sel = state.machine_selected_slot.at[
-                    ps.machine_ty, ps.machine_tx
-                ].set(hit.param)
-                state = state.replace(machine_selected_slot=new_sel)
-            ps.machine_panel_active = True
-        elif hit.action == "toggle_held":
-            if ps.held_slot is None:
-                ps.held_slot = hit.param
-                selected_player = int(state.selected_player)
-                new_slots = state.selected_slots.at[selected_player].set(hit.param)
-                state = state.replace(selected_slots=new_slots)
-            elif ps.held_slot == hit.param:
-                ps.held_slot = None
-            else:
-                selected_player = int(state.selected_player)
-                state = swap_inventory_slots(
-                    state,
-                    selected_player,
-                    ps.held_slot,
-                    hit.param,
-                )
-                ps.held_slot = None
-        elif hit.action == "hotbar_page":
-            ps.hotbar_page = 1 - ps.hotbar_page
-        elif hit.action == "focus_inventory":
-            ps.menu_focus = "inventory"
-        elif hit.action == "focus_crafting":
-            ps.menu_focus = "crafting"
-        elif hit.action == "pause_option":
-            if hit.param == 0:
-                ps.pause_open = False
-            elif hit.param == 1:
-                ps.pause_open = False
-                if level is not None:
-                    _, state = env.reset_from_level(level, params)
-                else:
-                    rng, reset_key = random.split(rng)
-                    _, state = env.reset_env(reset_key, params)
-            else:
-                running = False
-    elif not (
-        ps.inventory_open
-        or ps.achievement_open
-        or ps.research_open
-        or ps.machine_open
-        or ps.pause_open
-        or ps.welcome_open
-        or ps.help_open
-    ):
-        selected_player = int(state.selected_player)
-        slot_idx = int(state.selected_slots[selected_player])
-        item_type = int(state.inventory_items[selected_player, slot_idx])
-        if item_type in _PLACEABLE_ITEM_SET:
-            action = int(Action.PLACE)
-
-    return ps, state, rng, action, running
-
-
-def _handle_keydown(
-    event: pygame.event.Event,
-    ps: PlayState,
-    state: EnvState,
-    env: FactoriaXEnv,
-    params: EnvParams,
-    rng: jax.Array,
-    level: Level | None,
-    kb_lookup: KeyLookup,
-) -> tuple[PlayState, EnvState, jax.Array, int, bool]:
-    """Dispatch a KEYDOWN event to the appropriate context handler.
-
-    Uses the key lookup table from :mod:`factoriax.config` to resolve
-    physical keys to :class:`~factoriax.config.PlayerAction` names,
-    then dispatches based on the current UI context.
-
-    Args:
-        event: Pygame KEYDOWN event.
-        ps: Current play state.
-        state: Current environment state.
-        env: FactoriaX environment instance.
-        params: Environment parameters.
-        rng: JAX random key.
-        level: Source level for reset.
-        kb_lookup: Reverse key lookup from :func:`build_key_lookup`.
-
-    Returns:
-        Tuple of (play_state, env_state, rng, action, running).
-    """
-    action = int(Action.NOOP)
-    running = True
-
-    if ps.help_open:
-        ps.help_open = False
-        return ps, state, rng, action, running
-
-    # Escape is hardcoded: universal back / open pause.
-    if event.key == pygame.K_ESCAPE:
-        if ps.pause_open:
-            ps.pause_open = False
-        elif ps.inventory_open:
-            ps.inventory_open = False
-            ps.held_slot = None
-        elif ps.achievement_open:
-            ps.achievement_open = False
-        elif ps.research_open:
-            ps.research_open = False
-        elif ps.machine_open:
-            ps.machine_open = False
-        else:
-            ps.pause_open = True
-            ps.pause_selection = 0
-        return ps, state, rng, action, running
-
-    mods = pygame.key.get_mods()
-    actions = resolve_key(kb_lookup, event.key, mods)
-    if not actions:
-        return ps, state, rng, action, running
-
-    # Pause menu takes full priority.
-    if ps.pause_open:
-        ps, state, rng, running = _handle_pause_keys(
-            actions,
-            ps,
-            state,
-            env,
-            params,
-            rng,
-            level,
-        )
-    # Toggle keys work from most contexts.
-    elif PlayerAction.OPEN_MACHINE in actions:
-        ps, state = _handle_machine_toggle(ps, state)
-    elif ps.machine_open:
-        ps, state, action = _handle_machine_keys(actions, ps, state)
-    elif PlayerAction.TOGGLE_HOTBAR in actions:
-        ps, state = _handle_assembler_recipe_or_hotbar(ps, state)
-    elif PlayerAction.OPEN_INVENTORY in actions:
-        ps.inventory_open = not ps.inventory_open
-        if ps.inventory_open:
-            ps.achievement_open = False
-            ps.machine_open = False
-        else:
-            ps.held_slot = None
-    elif PlayerAction.OPEN_ACHIEVEMENTS in actions:
-        ps.achievement_open = not ps.achievement_open
-        if ps.achievement_open:
-            ps.inventory_open = False
-            ps.achievement_scroll = 0
-            ps.achievement_selection = 0
-    elif ps.achievement_open:
-        ps = _handle_achievement_keys(actions, ps)
-    elif PlayerAction.OPEN_RESEARCH in actions and not ps.inventory_open:
-        ps.research_open = not ps.research_open
-        if ps.research_open:
-            ps.inventory_open = False
-            ps.achievement_open = False
-            ps.research_selection = 0
-    elif ps.research_open:
-        ps, action = _handle_research_keys(actions, ps)
-    elif PlayerAction.OPEN_HELP in actions:
-        ps.help_open = True
-    elif ps.inventory_open and ps.menu_focus == "inventory":
-        ps, state, action = _handle_inventory_nav(actions, ps, state)
-    elif ps.inventory_open and ps.menu_focus == "crafting":
-        ps, action = _handle_crafting_nav(actions, ps)
-    else:
-        # World context: gameplay actions.
-        ps, state, action = _handle_world_keys(actions, ps, state, params)
-
-    return ps, state, rng, action, running
-
-
-def _handle_world_keys(
-    actions: frozenset[str],
-    ps: PlayState,
-    state: EnvState,
-    params: EnvParams,
-) -> tuple[PlayState, EnvState, int]:
-    """Handle resolved actions in the world (no menu open).
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-        state: Current environment state.
-        params: Environment parameters.
-
-    Returns:
-        Tuple of (play_state, env_state, action).
-    """
-    action = int(Action.NOOP)
-
-    if PlayerAction.INTERACT in actions:
-        action = _handle_world_interact(state)
-    elif PlayerAction.ROTATE in actions:
-        action = int(Action.ROTATE)
-    elif PlayerAction.MINE in actions:
-        action = int(Action.MINE)
-    elif PlayerAction.REPAIR in actions:
-        action = int(Action.REPAIR)
-    else:
-        # Check player selection.
-        player_match = actions & _PLAYER_ACTIONS.keys()
-        if player_match:
-            player_name = next(iter(player_match))
-            player_idx = _PLAYER_ACTIONS[player_name]
-            if player_idx < params.num_players:
-                state = state.replace(selected_player=player_idx)
-            return ps, state, action
-
-        # Check slot selection.
-        slot_match = actions & _SLOT_ACTIONS.keys()
-        if slot_match:
-            slot_name = next(iter(slot_match))
-            slot_idx = _SLOT_ACTIONS[slot_name]
-            if slot_idx < NUM_INVENTORY_SLOTS:
-                selected_player = int(state.selected_player)
-                new_slots = state.selected_slots.at[selected_player].set(slot_idx)
-                state = state.replace(selected_slots=new_slots)
-            return ps, state, action
-
-        # Check movement (face-then-move).
-        for move_action, (want_dir, move_act, face_act) in _MOVE_TO_DIR.items():
-            if move_action in actions:
-                sel = int(state.selected_player)
-                facing = int(state.player_directions[sel])
-                action = move_act if facing == want_dir else face_act
-                break
-        else:
-            # Check turn actions.
-            if PlayerAction.TURN_LEFT in actions:
-                action = int(Action.TURN_LEFT)
-            elif PlayerAction.TURN_RIGHT in actions:
-                action = int(Action.TURN_RIGHT)
-
-    return ps, state, action
-
-
-def _handle_pause_keys(
-    actions: frozenset[str],
-    ps: PlayState,
-    state: EnvState,
-    env: FactoriaXEnv,
-    params: EnvParams,
-    rng: jax.Array,
-    level: Level | None,
-) -> tuple[PlayState, EnvState, jax.Array, bool]:
-    """Handle resolved actions while the pause menu is open.
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-        state: Current environment state.
-        env: FactoriaX environment instance.
-        params: Environment parameters.
-        rng: JAX random key.
-        level: Source level for reset.
-
-    Returns:
-        Tuple of (play_state, env_state, rng, running).
-    """
-    running = True
-    if PlayerAction.NAV_UP in actions:
-        ps.pause_selection = max(0, ps.pause_selection - 1)
-    elif PlayerAction.NAV_DOWN in actions:
-        ps.pause_selection = min(2, ps.pause_selection + 1)
-    elif PlayerAction.CONFIRM in actions:
-        if ps.pause_selection == 0:
-            ps.pause_open = False
-        elif ps.pause_selection == 1:
-            ps.pause_open = False
-            if level is not None:
-                _, state = env.reset_from_level(level, params)
-            else:
-                rng, reset_key = random.split(rng)
-                _, state = env.reset_env(reset_key, params)
-        else:
-            running = False
-    return ps, state, rng, running
-
-
-def _handle_machine_toggle(
-    ps: PlayState,
-    state: EnvState,
-) -> tuple[PlayState, EnvState]:
-    """Toggle the machine inspection menu.
-
-    Args:
-        ps: Current play state.
-        state: Current environment state.
-
-    Returns:
-        Updated play state and environment state.
-    """
-    if ps.machine_open:
-        ps.machine_open = False
-    else:
-        selected_player = int(state.selected_player)
-        tx, ty = _tile_in_front(state, selected_player)
-        map_h, map_w = state.map.shape
-        if (
-            0 <= tx < map_w
-            and 0 <= ty < map_h
-            and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
-        ):
-            ps.machine_tx, ps.machine_ty = tx, ty
-            ps.machine_open = True
-            ps.machine_panel_active = True
-            ps.inventory_open = False
-            ps.achievement_open = False
-            ps.pause_open = False
-    return ps, state
-
-
-def _handle_machine_keys(
-    actions: frozenset[str],
-    ps: PlayState,
-    state: EnvState,
-) -> tuple[PlayState, EnvState, int]:
-    """Handle resolved actions while the machine menu is open.
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-        state: Current environment state.
-
-    Returns:
-        Tuple of (play_state, env_state, action).
-    """
-    action = int(Action.NOOP)
-    if PlayerAction.NAV_UP in actions or PlayerAction.NAV_DOWN in actions:
-        ps.machine_panel_active = not ps.machine_panel_active
-    elif PlayerAction.NAV_LEFT in actions or PlayerAction.NAV_RIGHT in actions:
-        is_left = PlayerAction.NAV_LEFT in actions
-        if ps.machine_panel_active:
-            action = int(
-                Action.PREV_MACHINE_SLOT if is_left else Action.NEXT_MACHINE_SLOT
-            )
-        else:
-            delta = -1 if is_left else 1
-            selected_player = int(state.selected_player)
-            current = int(state.selected_slots[selected_player])
-            new_slot = (current + delta) % NUM_INVENTORY_SLOTS
-            new_slots = state.selected_slots.at[selected_player].set(new_slot)
-            state = state.replace(selected_slots=new_slots)
-    elif PlayerAction.CONFIRM in actions:
-        action = int(Action.WITHDRAW if ps.machine_panel_active else Action.DEPOSIT)
-    elif PlayerAction.CYCLE_RECIPE in actions:
-        ps, state = _handle_assembler_recipe_or_hotbar(ps, state)
-    return ps, state, action
-
-
-def _handle_assembler_recipe_or_hotbar(
-    ps: PlayState,
-    state: EnvState,
-) -> tuple[PlayState, EnvState]:
-    """Handle Q key: cycle assembler recipe or toggle hotbar page.
-
-    Args:
-        ps: Current play state.
-        state: Current environment state.
-
-    Returns:
-        Updated play state and environment state.
-    """
-    machine_type = int(state.machine_types[ps.machine_ty, ps.machine_tx])
-    is_idle = int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0
-    mc = state.machine_inventory_counts
-    has_inputs = (
-        int(mc[ps.machine_ty, ps.machine_tx, 0]) > 0
-        or int(mc[ps.machine_ty, ps.machine_tx, 1]) > 0
-        or int(mc[ps.machine_ty, ps.machine_tx, 2]) > 0
-    )
-    if machine_type == int(MachineType.ASSEMBLER) and is_idle and not has_inputs:
-        cur_recipe = int(state.machine_selected_recipe[ps.machine_ty, ps.machine_tx])
-        new_recipe = (cur_recipe + 1) % NUM_ASSEMBLER_RECIPES
-        new_sel = state.machine_selected_recipe.at[ps.machine_ty, ps.machine_tx].set(
-            new_recipe
-        )
-        state = state.replace(machine_selected_recipe=new_sel)
-    elif machine_type != int(MachineType.ASSEMBLER):
-        ps.hotbar_page = 1 - ps.hotbar_page
-    return ps, state
-
-
-def _handle_achievement_keys(
-    actions: frozenset[str],
-    ps: PlayState,
-) -> PlayState:
-    """Handle resolved actions in the achievement menu.
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-
-    Returns:
-        Updated play state.
-    """
-    row_h = 36
-    if PlayerAction.NAV_UP in actions:
-        ps.achievement_selection = max(0, ps.achievement_selection - 1)
-    elif PlayerAction.NAV_DOWN in actions:
-        ps.achievement_selection = min(
-            NUM_ACHIEVEMENTS - 1, ps.achievement_selection + 1
-        )
-    sel_top = ps.achievement_selection * row_h
-    sel_bot = sel_top + row_h
-    if sel_top < ps.achievement_scroll:
-        ps.achievement_scroll = sel_top
-    elif sel_bot > ps.achievement_scroll + 8 * row_h:
-        ps.achievement_scroll = sel_bot - 8 * row_h
-    return ps
-
-
-def _handle_research_keys(
-    actions: frozenset[str],
-    ps: PlayState,
-) -> tuple[PlayState, int]:
-    """Handle resolved actions in the research menu.
-
-    NAV_UP/NAV_DOWN navigate between technologies, CONFIRM spends a
-    science pack (triggers RESEARCH action).
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-
-    Returns:
-        Tuple of (updated play state, action to execute).
-    """
-    action = int(Action.NOOP)
-    if PlayerAction.NAV_UP in actions:
-        ps.research_selection = max(0, ps.research_selection - 1)
-    elif PlayerAction.NAV_DOWN in actions:
-        ps.research_selection = min(NUM_TECHNOLOGIES - 1, ps.research_selection + 1)
-    elif PlayerAction.CONFIRM in actions:
-        action = int(Action.RESEARCH)
-    return ps, action
-
-
-def _handle_inventory_nav(
-    actions: frozenset[str],
-    ps: PlayState,
-    state: EnvState,
-) -> tuple[PlayState, EnvState, int]:
-    """Handle resolved actions in the inventory panel.
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-        state: Current environment state.
-
-    Returns:
-        Tuple of (play_state, env_state, action).
-    """
-    action = int(Action.NOOP)
-    selected_player = int(state.selected_player)
-    current = int(state.selected_slots[selected_player])
-    col = current % 5
-    if PlayerAction.NAV_LEFT in actions:
-        if col > 0:
-            action = int(Action.PREV_SLOT)
-    elif PlayerAction.NAV_RIGHT in actions:
-        if col == 4:
-            ps.menu_focus = "crafting"
-        else:
-            action = int(Action.NEXT_SLOT)
-    elif PlayerAction.NAV_UP in actions:
-        if current >= 5:
-            new_sel = state.selected_slots.at[selected_player].set(current - 5)
-            state = state.replace(selected_slots=new_sel)
-    elif PlayerAction.NAV_DOWN in actions:
-        if current < 5:
-            new_sel = state.selected_slots.at[selected_player].set(current + 5)
-            state = state.replace(selected_slots=new_sel)
-    return ps, state, action
-
-
-def _handle_crafting_nav(
-    actions: frozenset[str],
-    ps: PlayState,
-) -> tuple[PlayState, int]:
-    """Handle resolved actions in the crafting panel.
-
-    Args:
-        actions: Set of matched PlayerAction names.
-        ps: Current play state.
-
-    Returns:
-        Tuple of (play_state, action).
-    """
-    action = int(Action.NOOP)
-    if PlayerAction.NAV_UP in actions:
-        ps.selected_recipe = (ps.selected_recipe - 1) % NUM_RECIPES
-    elif PlayerAction.NAV_DOWN in actions:
-        ps.selected_recipe = (ps.selected_recipe + 1) % NUM_RECIPES
-    elif PlayerAction.NAV_LEFT in actions:
-        ps.menu_focus = "inventory"
-    elif PlayerAction.CONFIRM in actions:
-        action = int(Action.CRAFT_MINER) + ps.selected_recipe
-    return ps, action
-
-
-def _handle_world_interact(state: EnvState) -> int:
-    """Determine action for E key in the world (pickup or place).
-
-    Args:
-        state: Current environment state.
-
-    Returns:
-        Action integer (PICKUP or PLACE).
-    """
-    selected_player = int(state.selected_player)
-    tx, ty = _tile_in_front(state, selected_player)
-    map_h, map_w = state.map.shape
-    has_machine = (
-        0 <= tx < map_w
-        and 0 <= ty < map_h
-        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
-    )
-    return int(Action.PICKUP if has_machine else Action.PLACE)
-
-
-def _render_frame(
-    state: EnvState,
-    ps: PlayState,
-    ui_w: int,
-    ui_h: int,
-    tile_px: int,
-    world_ox: int,
-    world_oy: int,
-) -> tuple[np.ndarray, list[ClickRegion]]:
-    """Build one UI frame with all active overlays.
-
-    Args:
-        state: Current environment state.
-        ps: Current play state.
-        ui_w: UI canvas width.
-        ui_h: UI canvas height.
-        tile_px: Tile pixel size.
-        world_ox: World X offset within canvas.
-        world_oy: World Y offset within canvas.
-
-    Returns:
-        Tuple of (rgb frame array, click regions for this frame).
-    """
-    pixels = render_pixels(state, block_pixel_size=tile_px, frame_tick=ps.frame_tick)
-    click_regions: list[ClickRegion] = []
-
-    ui_frame = np.zeros((ui_h, ui_w, 3), dtype=np.uint8)
-    ph, pw = pixels.shape[:2]
-    ui_frame[world_oy : world_oy + ph, world_ox : world_ox + pw] = pixels
-
-    # Tile highlight: draw a bright border around the hovered tile.
-    htx, hty = ps.hover_tile_x, ps.hover_tile_y
-    if htx >= 0 and hty >= 0:
-        hx = world_ox + htx * tile_px
-        hy = world_oy + hty * tile_px
-        hx2 = hx + tile_px
-        hy2 = hy + tile_px
-        highlight = np.array([255, 255, 255], dtype=np.uint8)
-        # Blend 50% with existing pixels for semi-transparency.
-        for row in (hy, hy2 - 1):
-            if 0 <= row < ui_h:
-                c0, c1 = max(0, hx), min(ui_w, hx2)
-                ui_frame[row, c0:c1] = ui_frame[row, c0:c1] // 2 + highlight // 2
-        for col in (hx, hx2 - 1):
-            if 0 <= col < ui_w:
-                r0, r1 = max(0, hy), min(ui_h, hy2)
-                ui_frame[r0:r1, col] = ui_frame[r0:r1, col] // 2 + highlight // 2
-
-    hotbar_overlay, hotbar_regions = render_hotbar(state, ui_w, ui_h, ps.hotbar_page)
-    composite_rgba_over_rgb(ui_frame, hotbar_overlay)
-    click_regions.extend(hotbar_regions)
-
-    # Info panel (right 1/3 of bottom bar).
-    info_overlay = render_info_panel(state, ui_w, ui_h, htx, hty)
-    composite_rgba_over_rgb(ui_frame, info_overlay)
-
-    if ps.machine_open:
-        machine_overlay, machine_regions = render_machine_menu(
-            state,
-            ui_w,
-            ui_h,
-            ps.machine_tx,
-            ps.machine_ty,
-            ps.machine_panel_active,
-        )
-        composite_rgba_over_rgb(ui_frame, machine_overlay)
-        click_regions.extend(machine_regions)
-
-    if ps.inventory_open:
-        menu_overlay, inv_regions = render_inventory_menu(
-            state,
-            ui_w,
-            ui_h,
-            ps.menu_focus,
-            ps.held_slot,
-            ps.selected_recipe,
-        )
-        composite_rgba_over_rgb(ui_frame, menu_overlay)
-        click_regions.extend(inv_regions)
-
-    if ps.achievement_open:
-        ach_overlay = render_achievement_menu(
-            state,
-            ui_w,
-            ui_h,
-            ps.achievement_scroll,
-            ps.achievement_selection,
-        )
-        composite_rgba_over_rgb(ui_frame, ach_overlay)
-
-    if ps.research_open:
-        research_overlay = render_research_menu(
-            state,
-            ui_w,
-            ui_h,
-            ps.research_selection,
-        )
-        composite_rgba_over_rgb(ui_frame, research_overlay)
-
-    if ps.pause_open:
-        pause_overlay, pause_regions = render_pause_menu(
-            ui_w,
-            ui_h,
-            ps.pause_selection,
-        )
-        composite_rgba_over_rgb(ui_frame, pause_overlay)
-        click_regions.extend(pause_regions)
-
-    if ps.help_open:
-        composite_rgba_over_rgb(ui_frame, render_help_overlay(ui_w, ui_h))
-
-    if ps.victory_open:
-        composite_rgba_over_rgb(ui_frame, render_victory_screen(ui_w, ui_h))
-
-    if ps.welcome_open:
-        welcome_overlay, _ = render_welcome_screen(ui_w, ui_h, ps.record_enabled)
-        composite_rgba_over_rgb(ui_frame, welcome_overlay)
-
-    return ui_frame, click_regions
-
-
-# Maps PlayerAction movement names to (Direction, move_Action, face_Action).
-# Used by the world handler: if the player already faces that direction,
-# emit the move action; otherwise emit the face action to turn first.
-_MOVE_TO_DIR: dict[str, tuple[int, int, int]] = {
-    PlayerAction.MOVE_UP: (Direction.UP, int(Action.UP), int(Action.FACE_UP)),
-    PlayerAction.MOVE_DOWN: (Direction.DOWN, int(Action.DOWN), int(Action.FACE_DOWN)),
-    PlayerAction.MOVE_LEFT: (Direction.LEFT, int(Action.LEFT), int(Action.FACE_LEFT)),
-    PlayerAction.MOVE_RIGHT: (
-        Direction.RIGHT,
-        int(Action.RIGHT),
-        int(Action.FACE_RIGHT),
-    ),
-}
-
-# Maps slot action names to 0-based slot indices.
-_SLOT_ACTIONS: dict[str, int] = {
-    PlayerAction.SLOT_1: 0,
-    PlayerAction.SLOT_2: 1,
-    PlayerAction.SLOT_3: 2,
-    PlayerAction.SLOT_4: 3,
-    PlayerAction.SLOT_5: 4,
-    PlayerAction.SLOT_6: 5,
-    PlayerAction.SLOT_7: 6,
-    PlayerAction.SLOT_8: 7,
-    PlayerAction.SLOT_9: 8,
-    PlayerAction.SLOT_10: 9,
-}
-
-# Maps player selection action names to 0-based player indices.
-_PLAYER_ACTIONS: dict[str, int] = {
-    PlayerAction.SELECT_PLAYER_1: 0,
-    PlayerAction.SELECT_PLAYER_2: 1,
-    PlayerAction.SELECT_PLAYER_3: 2,
-    PlayerAction.SELECT_PLAYER_4: 3,
-    PlayerAction.SELECT_PLAYER_5: 4,
-    PlayerAction.SELECT_PLAYER_6: 5,
-    PlayerAction.SELECT_PLAYER_7: 6,
-    PlayerAction.SELECT_PLAYER_8: 7,
-    PlayerAction.SELECT_PLAYER_9: 8,
-}
-
-_MOUSE_DIR_TO_FACE: dict[int, int] = {
-    int(Direction.UP): int(Action.FACE_UP),
-    int(Direction.DOWN): int(Action.FACE_DOWN),
-    int(Direction.LEFT): int(Action.FACE_LEFT),
-    int(Direction.RIGHT): int(Action.FACE_RIGHT),
-}
-
-
-def _mouse_facing_direction(
-    mx: int,
-    my: int,
-    player_screen_x: int,
-    player_screen_y: int,
-) -> int:
-    """Determine which cardinal direction the mouse points relative to player.
-
-    Picks the dominant axis (largest absolute delta) and returns the
-    corresponding Direction value. Returns 0 if the mouse is exactly
-    on the player center.
-
-    Args:
-        mx: Mouse x in UI coordinates.
-        my: Mouse y in UI coordinates.
-        player_screen_x: Player center x in UI coordinates.
-        player_screen_y: Player center y in UI coordinates.
-
-    Returns:
-        Direction enum value (1-4), or 0 if undetermined.
-    """
-    dx = mx - player_screen_x
-    dy = my - player_screen_y
-    if dx == 0 and dy == 0:
-        return 0
-    if abs(dx) >= abs(dy):
-        return Direction.RIGHT if dx > 0 else Direction.LEFT
-    return Direction.DOWN if dy > 0 else Direction.UP
-
-
 def _play_loop(
     env: FactoriaXEnv,
     state: EnvState,
@@ -1056,11 +267,6 @@ def _play_loop(
     kb_lookup: KeyLookup | None = None,
 ) -> None:
     """Run the full interactive game loop with all menus and controls.
-
-    The game world is rendered at a tile size chosen so the full map
-    fits within the fixed ``_UI_SIZE x _UI_SIZE`` canvas.  Menus
-    always render at the same canvas resolution, so their proportions
-    are independent of map dimensions.
 
     Args:
         env: FactoriaX environment instance.
@@ -1090,7 +296,8 @@ def _play_loop(
     win_ox = (window_width - ui_w * win_scale) // 2
     win_oy = (window_height - ui_h * win_scale) // 2
 
-    ps = PlayState()
+    ui = GameUI(params, kb_lookup, welcome_open=True)
+    ps = ui.play_state
     running = True
 
     while running:
@@ -1101,14 +308,8 @@ def _play_loop(
                 running = False
             elif ps.welcome_open:
                 ps, state = _handle_welcome_event(
-                    event,
-                    ps,
-                    state,
-                    win_ox,
-                    win_oy,
-                    win_scale,
-                    ui_w,
-                    ui_h,
+                    event, ps, state,
+                    win_ox, win_oy, win_scale, ui_w, ui_h,
                 )
                 continue
             elif ps.victory_open:
@@ -1119,49 +320,30 @@ def _play_loop(
                 ):
                     ps.victory_open = False
                 continue
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                ps, state, rng, action, running = _handle_click(
-                    event,
-                    ps,
-                    state,
-                    env,
-                    params,
-                    rng,
-                    level,
-                    win_ox,
-                    win_oy,
-                    win_scale,
-                )
-            elif event.type == pygame.KEYDOWN:
-                ps, state, rng, action, running = _handle_keydown(
-                    event,
-                    ps,
-                    state,
-                    env,
-                    params,
-                    rng,
-                    level,
-                    kb_lookup,
-                )
+            elif event.type in (
+                pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN,
+            ):
+                result = ui.handle_event(event, state)
+                if result.state is not None:
+                    state = result.state
+                if result.action is not None:
+                    action = result.action
+                if result.quit:
+                    running = False
+                if result.reset:
+                    if level is not None:
+                        _, state = env.reset_from_level(level, params)
+                    else:
+                        rng, reset_key = random.split(rng)
+                        _, state = env.reset_env(reset_key, params)
 
         # Highlight the tile the player is facing.
-        ftx, fty = _tile_in_front(state, int(state.selected_player))
-        map_h = int(state.map.shape[0])
-        map_w = int(state.map.shape[1])
-        if 0 <= ftx < map_w and 0 <= fty < map_h:
-            ps.hover_tile_x = ftx
-            ps.hover_tile_y = fty
-        else:
-            ps.hover_tile_x = -1
-            ps.hover_tile_y = -1
+        ui.update_hover(state)
 
         if action != int(Action.NOOP):
             rng, step_key = random.split(rng)
             obs, state, reward, done, info = step_fn(
-                step_key,
-                state,
-                action,
-                params,
+                step_key, state, action, params,
             )
             if ps.record_enabled:
                 ps.recorded_actions.append(int(action))
@@ -1182,22 +364,22 @@ def _play_loop(
                     ps.victory_open = True
                     ps.victory_shown = True
 
-        ui_frame, ps.click_regions = _render_frame(
-            state,
-            ps,
-            ui_w,
-            ui_h,
-            tile_px,
-            world_ox,
-            world_oy,
+        ui_frame, ps.click_regions = ui.render_frame(
+            state, ui_w, ui_h, tile_px, world_ox, world_oy,
         )
+
+        # Welcome screen overlay (managed outside GameUI).
+        if ps.welcome_open:
+            welcome_overlay, _ = render_welcome_screen(
+                ui_w, ui_h, ps.record_enabled,
+            )
+            composite_rgba_over_rgb(ui_frame, welcome_overlay)
 
         final_surface = pygame.surfarray.make_surface(
             np.transpose(ui_frame, (1, 0, 2)),
         )
         scaled_surface = pygame.transform.scale(
-            final_surface,
-            (ui_w * win_scale, ui_h * win_scale),
+            final_surface, (ui_w * win_scale, ui_h * win_scale),
         )
         screen.fill((0, 0, 0))
         screen.blit(scaled_surface, (win_ox, win_oy))
@@ -1278,36 +460,27 @@ def main() -> None:
 
     rng = random.PRNGKey(42)
     rng, reset_key = random.split(rng)
-    _reset_key = reset_key
-    reset_result = _run_with_loading_screen(
+
+    reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]
         screen,
         "Generating world",
-        lambda: env.reset_env(_reset_key, params),
+        lambda: env.reset_env(reset_key, params),
     )
-    state: EnvState = reset_result[1]  # type: ignore[index]
+    _, state = reset_result
 
     step_fn = jax.jit(env.step_env)
     rng, warmup_key = random.split(rng)
-    _warmup_key2 = warmup_key
+    _warmup_key = warmup_key
 
-    def _warmup_main() -> None:
+    def _warmup() -> None:
         step_fn(
-            _warmup_key2,
+            _warmup_key,
             state,
             jnp.int32(Action.NOOP),
             params,
         )[0].block_until_ready()
 
-    _run_with_loading_screen(
-        screen,
-        "Compiling JAX",
-        _warmup_main,
-    )
+    _run_with_loading_screen(screen, "Compiling JAX", _warmup)
 
     _play_loop(env, state, params, None, screen, rng)
-
     pygame.quit()
-
-
-if __name__ == "__main__":
-    main()

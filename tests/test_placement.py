@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax import BlockType, Direction, ItemType
-from factoriax.constants import NUM_INVENTORY_SLOTS, MachineType
+from factoriax.constants import NUM_ITEM_TYPES, MachineType
 from factoriax.placement import (
     get_tile_in_front,
     is_placeable_item,
@@ -98,127 +98,94 @@ class TestMachinePlacement:
 
     def test_place_machine_from_inventory(self, state_factory) -> None:
         """Should place machine and remove from inventory."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.MINER)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(1)
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT],
+                 [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=inv,
         )
-        new_state = place_machine(state, 0)
+        new_state = place_machine(state, 0, int(ItemType.MINER))
 
         assert new_state.machine_types[0, 1] == MachineType.MINER
-        assert new_state.inventory_counts[0, 0] == 0
-        assert new_state.inventory_items[0, 0] == ItemType.EMPTY
+        assert new_state.player_inventory[0, ItemType.MINER] == 0
 
     def test_place_machine_decrements_stack(self, state_factory) -> None:
         """Should decrement stack count when placing."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.MINER)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(3)
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(3)
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT],
+                 [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=inv,
         )
-        new_state = place_machine(state, 0)
+        new_state = place_machine(state, 0, int(ItemType.MINER))
 
-        assert new_state.inventory_counts[0, 0] == 2
-        assert new_state.inventory_items[0, 0] == ItemType.MINER
+        assert new_state.player_inventory[0, ItemType.MINER] == 2
 
     def test_cannot_place_on_water(self, state_factory) -> None:
         """Should not place machine on water."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.MINER)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(1)
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(1)
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.WATER], [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.WATER],
+                 [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=inv,
         )
-        new_state = place_machine(state, 0)
+        new_state = place_machine(state, 0, int(ItemType.MINER))
 
         assert new_state.machine_types[0, 1] == MachineType.NONE
-        assert new_state.inventory_counts[0, 0] == 1
+        assert new_state.player_inventory[0, ItemType.MINER] == 1
 
     def test_cannot_place_without_item(self, state_factory) -> None:
         """Should not place machine without item in inventory."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT],
+                 [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
             player_direction=Direction.RIGHT,
         )
-        new_state = place_machine(state, 0)
+        new_state = place_machine(state, 0, int(ItemType.MINER))
 
         assert new_state.machine_types[0, 1] == MachineType.NONE
 
     def test_cannot_place_non_placeable_item(self, state_factory) -> None:
         """Should not place non-placeable items."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 0].set(ItemType.COAL)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 0].set(5)
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.COAL].set(5)
 
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                [[BlockType.DIRT, BlockType.DIRT],
+                 [BlockType.DIRT, BlockType.DIRT]],
                 dtype=jnp.int32,
             ),
             player_position=(0, 0),
             player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
+            player_inventory=inv,
         )
-        new_state = place_machine(state, 0)
+        new_state = place_machine(state, 0, int(ItemType.COAL))
 
         assert new_state.machine_types[0, 1] == MachineType.NONE
-        assert new_state.inventory_counts[0, 0] == 5
-
-    def test_uses_selected_slot(self, state_factory) -> None:
-        """Should use the selected inventory slot."""
-        inv_items = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_items = inv_items.at[0, 2].set(ItemType.MINER)
-        inv_counts = jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32)
-        inv_counts = inv_counts.at[0, 2].set(1)
-        selected_slots = jnp.array([2], dtype=jnp.int32)
-
-        state = state_factory(
-            world_map=jnp.array(
-                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
-                dtype=jnp.int32,
-            ),
-            player_position=(0, 0),
-            player_direction=Direction.RIGHT,
-            inventory_items=inv_items,
-            inventory_counts=inv_counts,
-            selected_slots=selected_slots,
-        )
-        new_state = place_machine(state, 0)
-
-        assert new_state.machine_types[0, 1] == MachineType.MINER
-        assert new_state.inventory_counts[0, 2] == 0
+        assert new_state.player_inventory[0, ItemType.COAL] == 5

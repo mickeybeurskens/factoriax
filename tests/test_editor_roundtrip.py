@@ -11,7 +11,7 @@ import numpy as np
 import numpy.testing as npt
 
 from factoriax.constants import (
-    MAX_MACHINE_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     BlockType,
     Direction,
     ItemType,
@@ -44,15 +44,8 @@ def _make_fully_populated_level() -> Level:
     machine_directions[2, 3] = int(Direction.RIGHT)
     machine_directions[3, 1] = int(Direction.UP)
 
-    machine_inventory_items = np.zeros(
-        (h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=np.int32
-    )
-    machine_inventory_items[2, 3, 0] = int(ItemType.IRON)
-
-    machine_inventory_counts = np.zeros(
-        (h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=np.int32
-    )
-    machine_inventory_counts[2, 3, 0] = 42
+    machine_inventory = np.zeros((h, w, NUM_ITEM_TYPES), dtype=np.int32)
+    machine_inventory[2, 3, int(ItemType.IRON)] = 42
 
     machine_selected_recipe = np.zeros((h, w), dtype=np.int32)
     machine_selected_recipe[3, 1] = 1
@@ -70,8 +63,7 @@ def _make_fully_populated_level() -> Level:
         block_resources=block_resources,
         machine_types=machine_types,
         machine_directions=machine_directions,
-        machine_inventory_items=machine_inventory_items,
-        machine_inventory_counts=machine_inventory_counts,
+        machine_inventory=machine_inventory,
         machine_selected_recipe=machine_selected_recipe,
         player_inventory=player_inventory,
     )
@@ -93,24 +85,23 @@ class TestEditorRoundTrip:
         npt.assert_array_equal(restored.block_map, original.block_map)
 
         assert restored.block_resources is not None
-        npt.assert_array_equal(restored.block_resources, original.block_resources)
-
-        assert restored.machine_types is not None
-        npt.assert_array_equal(restored.machine_types, original.machine_types)
-
-        assert restored.machine_directions is not None
-        npt.assert_array_equal(restored.machine_directions, original.machine_directions)
-
-        assert restored.machine_inventory_items is not None
         npt.assert_array_equal(
-            restored.machine_inventory_items,
-            original.machine_inventory_items,
+            restored.block_resources, original.block_resources,
         )
 
-        assert restored.machine_inventory_counts is not None
+        assert restored.machine_types is not None
         npt.assert_array_equal(
-            restored.machine_inventory_counts,
-            original.machine_inventory_counts,
+            restored.machine_types, original.machine_types,
+        )
+
+        assert restored.machine_directions is not None
+        npt.assert_array_equal(
+            restored.machine_directions, original.machine_directions,
+        )
+
+        assert restored.machine_inventory is not None
+        npt.assert_array_equal(
+            restored.machine_inventory, original.machine_inventory,
         )
 
         assert restored.machine_selected_recipe is not None
@@ -137,8 +128,7 @@ class TestEditorRoundTrip:
         # converts all-zero arrays back to None for compactness.
         assert restored.machine_types is None
         assert restored.machine_directions is None
-        assert restored.machine_inventory_items is None
-        assert restored.machine_inventory_counts is None
+        assert restored.machine_inventory is None
         assert restored.machine_selected_recipe is None
         assert restored.player_inventory is None
 
@@ -152,6 +142,8 @@ class TestFieldCoverage:
     _EXCLUDED = {
         "name", "map_width", "map_height", "block_map",
         "player_positions", "machine_health",
+        # machine_inventory is converted to slot-based on the editor side
+        "machine_inventory",
     }
 
     def test_level_optional_fields_in_editor_state(self) -> None:
@@ -166,7 +158,9 @@ class TestFieldCoverage:
         from factoriax.editor.state import EditorState
 
         level_fields = {
-            f.name for f in dataclasses.fields(Level) if f.name not in self._EXCLUDED
+            f.name
+            for f in dataclasses.fields(Level)
+            if f.name not in self._EXCLUDED
         }
         editor_fields = {f.name for f in dataclasses.fields(EditorState)}
 

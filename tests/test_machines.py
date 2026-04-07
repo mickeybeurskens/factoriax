@@ -1,13 +1,13 @@
 """Tests for the machine system."""
 
 import jax.numpy as jnp
-import pytest
 from jax import random
 
 from factoriax import BlockType, EnvParams, ItemType
 from factoriax.constants import (
-    MAX_MACHINE_INVENTORY_SLOTS,
+    MACHINE_INVENTORY_COUNT_DTYPE,
     MAX_MACHINE_STACK_SIZE,
+    NUM_ITEM_TYPES,
     POWER_PER_COAL,
     MachineType,
 )
@@ -15,29 +15,27 @@ from factoriax.machines import refuel_machines, run_miners, update_all_machines
 from factoriax.world_gen import generate_world
 
 
-def _fuel_counts(counts: jnp.ndarray, h: int, w: int) -> jnp.ndarray:
-    """Build a machine_inventory_counts array with fuel in slot 0."""
-    inv = jnp.zeros((h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-    return inv.at[..., 0].set(counts)
+def _machine_inv(h: int, w: int, **tile_items: dict) -> jnp.ndarray:
+    """Build a machine_inventory pouch array.
 
+    Args:
+        h: Map height.
+        w: Map width.
+        **tile_items: Mapping of ``"y_x_ItemName"`` to count, e.g.
+            ``y0_x0_COAL=5`` sets ``inv[0, 0, ItemType.COAL] = 5``.
 
-def _output_counts(counts: jnp.ndarray, h: int, w: int) -> jnp.ndarray:
-    """Build a machine_inventory_counts array with output in slot 1."""
-    inv = jnp.zeros((h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16)
-    return inv.at[..., 1].set(counts)
-
-
-def _output_items(items: jnp.ndarray, h: int, w: int) -> jnp.ndarray:
-    """Build a machine_inventory_items array with output item in slot 1."""
-    inv = jnp.zeros((h, w, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32)
-    return inv.at[..., 1].set(items)
-
-
-def _output_inv(
-    items: jnp.ndarray, counts: jnp.ndarray, h: int, w: int
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Build both inventory arrays with output data in slot 1."""
-    return _output_items(items, h, w), _output_counts(counts, h, w)
+    Returns:
+        Machine inventory array of shape ``(h, w, NUM_ITEM_TYPES)``.
+    """
+    inv = jnp.zeros((h, w, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE)
+    name_to_type = {m.name: int(m) for m in ItemType}
+    for key, count in tile_items.items():
+        parts = key.split("_")
+        y = int(parts[0].lstrip("y"))
+        x = int(parts[1].lstrip("x"))
+        item_name = "_".join(parts[2:])
+        inv = inv.at[y, x, name_to_type[item_name]].set(count)
+    return inv
 
 
 class TestMachineInitialization:
@@ -51,7 +49,7 @@ class TestMachineInitialization:
 
         assert jnp.all(state.machine_types == MachineType.NONE)
         assert jnp.all(state.machine_power == 0)
-        assert jnp.all(state.machine_inventory_counts == 0)
+        assert jnp.all(state.machine_inventory == 0)
 
     def test_machine_arrays_match_map_shape(self) -> None:
         """Machine state arrays should have the expected shapes."""
@@ -61,16 +59,7 @@ class TestMachineInitialization:
 
         assert state.machine_types.shape == state.map.shape
         assert state.machine_power.shape == state.map.shape
-        assert state.machine_inventory_items.shape == (
-            24,
-            16,
-            MAX_MACHINE_INVENTORY_SLOTS,
-        )
-        assert state.machine_inventory_counts.shape == (
-            24,
-            16,
-            MAX_MACHINE_INVENTORY_SLOTS,
-        )
+        assert state.machine_inventory.shape == (24, 16, NUM_ITEM_TYPES)
 
 
 class TestMachineRefueling:
@@ -83,14 +72,12 @@ class TestMachineRefueling:
             block_resources=jnp.array([[10]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[0]], dtype=jnp.int32),
-            machine_inventory_counts=_fuel_counts(
-                jnp.array([[5]], dtype=jnp.int16), 1, 1
-            ),
+            machine_inventory=_machine_inv(1, 1, y0_x0_COAL=5),
         )
 
         new_state = refuel_machines(state)
 
-        assert new_state.machine_inventory_counts[0, 0, 0] == 4
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 4
         assert new_state.machine_power[0, 0] == POWER_PER_COAL
 
     def test_machine_does_not_refuel_with_power(self, state_factory) -> None:
@@ -100,14 +87,12 @@ class TestMachineRefueling:
             block_resources=jnp.array([[10]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[5]], dtype=jnp.int32),
-            machine_inventory_counts=_fuel_counts(
-                jnp.array([[5]], dtype=jnp.int16), 1, 1
-            ),
+            machine_inventory=_machine_inv(1, 1, y0_x0_COAL=5),
         )
 
         new_state = refuel_machines(state)
 
-        assert new_state.machine_inventory_counts[0, 0, 0] == 5
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 5
         assert new_state.machine_power[0, 0] == 5
 
     def test_machine_does_not_refuel_without_coal(self, state_factory) -> None:
@@ -121,7 +106,7 @@ class TestMachineRefueling:
 
         new_state = refuel_machines(state)
 
-        assert new_state.machine_inventory_counts[0, 0, 0] == 0
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 0
         assert new_state.machine_power[0, 0] == 0
 
     def test_one_coal_gives_10_power(self) -> None:
@@ -144,8 +129,7 @@ class TestMinerOperation:
         new_state = run_miners(state)
 
         assert new_state.block_resources[0, 0] == 47  # 50 - 3 (mining rate)
-        assert new_state.machine_inventory_counts[0, 0, 1] == 3
-        assert new_state.machine_inventory_items[0, 0, 1] == ItemType.COAL
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 3
 
     def test_miner_consumes_power_when_mining(self, state_factory) -> None:
         """Miner should consume 1 power per step when mining."""
@@ -184,29 +168,27 @@ class TestMinerOperation:
         new_state = run_miners(state)
 
         assert new_state.block_resources[0, 0] == 50
-        assert new_state.machine_inventory_counts[0, 0, 1] == 0
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 0
 
     def test_miner_stops_when_output_full(self, state_factory) -> None:
-        """Miner should stop when output slot is full."""
-        inv_items, inv_counts = _output_inv(
-            jnp.array([[ItemType.COAL]], dtype=jnp.int32),
-            jnp.array([[MAX_MACHINE_STACK_SIZE]], dtype=jnp.int16),
-            1,
-            1,
-        )
+        """Miner should stop when output type is at max stack."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[10]], dtype=jnp.int32),
-            machine_inventory_items=inv_items,
-            machine_inventory_counts=inv_counts,
+            machine_inventory=_machine_inv(
+                1, 1, y0_x0_COAL=MAX_MACHINE_STACK_SIZE,
+            ),
         )
 
         new_state = run_miners(state)
 
         assert new_state.block_resources[0, 0] == 50
-        assert new_state.machine_inventory_counts[0, 0, 1] == MAX_MACHINE_STACK_SIZE
+        assert (
+            new_state.machine_inventory[0, 0, ItemType.COAL]
+            == MAX_MACHINE_STACK_SIZE
+        )
         assert new_state.machine_power[0, 0] == 10  # No power consumed
 
     def test_miner_stops_when_no_resources(self, state_factory) -> None:
@@ -220,7 +202,7 @@ class TestMinerOperation:
 
         new_state = run_miners(state)
 
-        assert new_state.machine_inventory_counts[0, 0, 1] == 0
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 0
         assert new_state.machine_power[0, 0] == 10
 
     def test_miner_depletes_block_to_dirt(self, state_factory) -> None:
@@ -236,9 +218,11 @@ class TestMinerOperation:
 
         assert new_state.map[0, 0] == BlockType.DIRT
         assert new_state.block_resources[0, 0] == 0
-        assert new_state.machine_inventory_counts[0, 0, 1] == 2
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 2
 
-    def test_miner_mines_partial_when_limited_by_resources(self, state_factory) -> None:
+    def test_miner_mines_partial_when_limited_by_resources(
+        self, state_factory,
+    ) -> None:
         """Miner should extract only available resources when less than rate."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
@@ -250,33 +234,30 @@ class TestMinerOperation:
         new_state = run_miners(state)
 
         assert new_state.block_resources[0, 0] == 0
-        assert new_state.machine_inventory_counts[0, 0, 1] == 1
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 1
 
-    def test_miner_mines_partial_when_limited_by_space(self, state_factory) -> None:
-        """Miner should extract only what fits in output slot."""
-        inv_items, inv_counts = _output_inv(
-            jnp.array([[ItemType.COAL]], dtype=jnp.int32),
-            jnp.array([[62]], dtype=jnp.int16),
-            1,
-            1,
-        )
+    def test_miner_mines_partial_when_limited_by_space(
+        self, state_factory,
+    ) -> None:
+        """Miner should extract only what fits in output stack."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[10]], dtype=jnp.int32),
-            machine_inventory_items=inv_items,
-            machine_inventory_counts=inv_counts,
+            machine_inventory=_machine_inv(1, 1, y0_x0_COAL=62),
         )
 
         new_state = run_miners(state)
 
-        assert new_state.machine_inventory_counts[0, 0, 1] == 64  # 62 + 2 (capped)
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 64
         assert new_state.block_resources[0, 0] == 48  # 50 - 2
 
 
 class TestMinerDifferentOres:
     """Tests for miners on different ore types."""
+
+    import pytest
 
     @pytest.mark.parametrize(
         "block_type, item_type",
@@ -297,8 +278,7 @@ class TestMinerDifferentOres:
 
         new_state = run_miners(state)
 
-        assert new_state.machine_inventory_items[0, 0, 1] == item_type
-        assert new_state.machine_inventory_counts[0, 0, 1] == 3
+        assert new_state.machine_inventory[0, 0, item_type] == 3
 
 
 class TestMultipleMiners:
@@ -308,7 +288,10 @@ class TestMultipleMiners:
         """Multiple miners should all update in a single step."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL, BlockType.IRON], [BlockType.COPPER, BlockType.DIRT]],
+                [
+                    [BlockType.COAL, BlockType.IRON],
+                    [BlockType.COPPER, BlockType.DIRT],
+                ],
                 dtype=jnp.int32,
             ),
             block_resources=jnp.array([[50, 50], [50, 0]], dtype=jnp.int16),
@@ -329,9 +312,9 @@ class TestMultipleMiners:
         assert new_state.block_resources[1, 0] == 47
         assert new_state.block_resources[1, 1] == 0
 
-        assert new_state.machine_inventory_items[0, 0, 1] == ItemType.COAL
-        assert new_state.machine_inventory_items[0, 1, 1] == ItemType.IRON
-        assert new_state.machine_inventory_items[1, 0, 1] == ItemType.COPPER
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 3
+        assert new_state.machine_inventory[0, 1, ItemType.IRON] == 3
+        assert new_state.machine_inventory[1, 0, ItemType.COPPER] == 3
 
 
 class TestUpdateAllMachines:
@@ -344,14 +327,12 @@ class TestUpdateAllMachines:
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             machine_power=jnp.array([[0]], dtype=jnp.int32),
-            machine_inventory_counts=_fuel_counts(
-                jnp.array([[5]], dtype=jnp.int16), 1, 1
-            ),
+            machine_inventory=_machine_inv(1, 1, y0_x0_COAL=5),
         )
 
         new_state = update_all_machines(state)
 
-        assert new_state.machine_inventory_counts[0, 0, 0] == 4
+        # Refuel: 5 coal - 1 = 4 coal, but miner also mines 3 coal back
+        assert new_state.machine_inventory[0, 0, ItemType.COAL] == 4 + 3
         assert new_state.machine_power[0, 0] == POWER_PER_COAL - 1
-        assert new_state.machine_inventory_counts[0, 0, 1] == 3
         assert new_state.block_resources[0, 0] == 47

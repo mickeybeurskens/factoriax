@@ -32,27 +32,26 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     DEFAULT_MACHINE_MAX_HEALTH,
-    MAX_MACHINE_INVENTORY_SLOTS,
-    MAX_STACK_SIZE,
-    NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
+    PLAYER_MAX_STACK,
     RESEARCH_COST,
     BlockType,
     MachineType,
 )
 from factoriax.crafting import can_afford_recipe
 from factoriax.placement import get_tile_in_front
-from factoriax.recipes import MAX_ASSEMBLER_STACK_SIZE, NUM_RECIPES, RECIPES
+from factoriax.recipes import NUM_RECIPES, RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
 _MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(MachineType))
-_INV_ITEM_NORM: float = float(NUM_ITEM_TYPES)
 _MAX_CRAFT_TICKS: float = max(1.0, float(max(r["ticks"] for r in RECIPES)))
 _DIR_NORM: float = 4.0  # max directional Action value (LEFT=1..DOWN=4)
 _HEALTH_NORM: float = float(DEFAULT_MACHINE_MAX_HEALTH)
-_MACHINE_INV_COUNT_NORM: float = float(MAX_ASSEMBLER_STACK_SIZE)
+_PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
+    PLAYER_MAX_STACK.astype(jnp.float32), 1.0,
+)
 
 # Spatial channels shared by global_array and local_array.
 # Add new channels here; NUM_SPATIAL_CHANNELS updates automatically.
@@ -67,14 +66,12 @@ _SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
 NUM_SPATIAL_CHANNELS: int = len(_SPATIAL_CHANNEL_NAMES)
 
 
-# Scalar fields prepended before inventory in every observation vector.
-# Update this list when adding new per-player scalars.
+# Scalar fields in every observation vector.
 _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "pos_x",
     "pos_y",
     "direction",
     "timestep",
-    "selected_slot",
     "craft_progress",
     "afford_miner",
     "afford_chest",
@@ -83,8 +80,8 @@ _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "afford_assembler",
     "facing_machine_type",
     "facing_machine_health",
-    *(f"facing_inv_item_{i}" for i in range(MAX_MACHINE_INVENTORY_SLOTS)),
-    *(f"facing_inv_count_{i}" for i in range(MAX_MACHINE_INVENTORY_SLOTS)),
+    *(f"facing_inv_{i}" for i in range(NUM_ITEM_TYPES)),
+    *(f"player_inv_{i}" for i in range(NUM_ITEM_TYPES)),
 )
 NUM_PLAYER_SCALARS: int = len(_PLAYER_SCALAR_FIELDS)
 
@@ -97,7 +94,8 @@ def _player_scalars(
     """Build the per-player scalar vector shared by all observation types.
 
     Includes position, direction, timestep, crafting state, recipe
-    affordability, facing-machine state, inventory, and research.
+    affordability, facing-machine inventory, player inventory, and
+    research.
 
     Args:
         state: Current environment state.
@@ -106,14 +104,13 @@ def _player_scalars(
 
     Returns:
         Float32 array of shape ``(NUM_PLAYER_SCALARS
-        + 2 * NUM_INVENTORY_SLOTS + 2 * NUM_TECHNOLOGIES,)``.
+        + 2 * NUM_TECHNOLOGIES,)``.
     """
     pos = state.player_positions[player_idx]
-    # Per-recipe affordability: 1.0 if the player can afford it, else 0.0.
     afford = jax.vmap(
         lambda r: can_afford_recipe(state, player_idx, r).astype(
-            jnp.float32
-        )
+            jnp.float32,
+        ),
     )(jnp.arange(NUM_RECIPES))
 
     scalars = jnp.array(
@@ -122,15 +119,13 @@ def _player_scalars(
             pos[1] / params.map_height,
             state.player_directions[player_idx] / _DIR_NORM,
             state.timestep / params.max_timesteps,
-            state.selected_slots[player_idx] / NUM_INVENTORY_SLOTS,
             state.craft_progress[player_idx] / _MAX_CRAFT_TICKS,
         ],
         dtype=jnp.float32,
     )
     scalars = jnp.concatenate([scalars, afford])
 
-    # Facing-machine state: type, health, and full inventory of the
-    # machine on the tile directly in front of the player.
+    # Facing-machine: type, health, and typed inventory.
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
@@ -146,40 +141,28 @@ def _player_scalars(
         state.machine_health[sy, sx].astype(jnp.float32) * mask
         / _HEALTH_NORM
     )
-    facing_inv_items = (
-        state.machine_inventory_items[sy, sx].astype(jnp.float32) * mask
-        / _INV_ITEM_NORM
-    )
-    facing_inv_counts = (
-        state.machine_inventory_counts[sy, sx].astype(jnp.float32) * mask
-        / _MACHINE_INV_COUNT_NORM
+    facing_inv = (
+        state.machine_inventory[sy, sx].astype(jnp.float32) * mask
+        / _PLAYER_MAX_STACK_F
     )
     facing = jnp.concatenate(
-        [
-            facing_type[None],
-            facing_health[None],
-            facing_inv_items,
-            facing_inv_counts,
-        ]
+        [facing_type[None], facing_health[None], facing_inv],
     )
     scalars = jnp.concatenate([scalars, facing])
 
-    # Player inventory.
-    inv_items = (
-        state.inventory_items[player_idx].astype(jnp.float32)
-        / _INV_ITEM_NORM
+    # Player pouch inventory: counts normalized per type.
+    player_inv = (
+        state.player_inventory[player_idx].astype(jnp.float32)
+        / _PLAYER_MAX_STACK_F
     )
-    inv_counts = (
-        state.inventory_counts[player_idx].astype(jnp.float32)
-        / MAX_STACK_SIZE
-    )
-    # Research state: per-technology [unlocked, progress/cost].
+
+    # Research state.
     research_unlocked = state.research_unlocked.astype(jnp.float32)
     research_progress = (
         state.research_progress.astype(jnp.float32) / RESEARCH_COST
     )
     return jnp.concatenate(
-        [scalars, inv_items, inv_counts, research_unlocked, research_progress]
+        [scalars, player_inv, research_unlocked, research_progress],
     )
 
 

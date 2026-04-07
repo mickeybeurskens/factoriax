@@ -237,8 +237,7 @@ class TestBuildState:
 
     def test_inventory_zero_initialised(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)
-        assert jnp.all(state.inventory_items == 0)
-        assert jnp.all(state.inventory_counts == 0)
+        assert jnp.all(state.player_inventory == 0)
 
     def test_timestep_zero(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)

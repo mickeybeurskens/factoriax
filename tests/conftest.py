@@ -8,11 +8,8 @@ from factoriax.constants import (
     BLOCK_RESOURCE_DTYPE,
     DEFAULT_MACHINE_MAX_HEALTH,
     DEFAULT_MAX_BITERS,
-    INVENTORY_COUNT_DTYPE,
     MACHINE_INVENTORY_COUNT_DTYPE,
     MAX_ACHIEVEMENTS,
-    MAX_MACHINE_INVENTORY_SLOTS,
-    NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     Direction,
@@ -25,11 +22,11 @@ def state_factory():
     """Factory for creating test states with sensible defaults.
 
     Returns a function that creates EnvState objects. Only the world_map is
-    required; all other fields have sensible defaults. This reduces boilerplate
-    in tests that don't need to specify every field.
+    required; all other fields have sensible defaults.
 
-    For single-player tests, pass player_position as a tuple. For multiplayer,
-    pass player_positions as an array of shape (num_players, 2).
+    Player inventory is now a pouch: shape ``(num_players, NUM_ITEM_TYPES)``
+    with counts per item type. Machine inventory is also a pouch:
+    shape ``(H, W, NUM_ITEM_TYPES)``.
 
     Example:
         def test_something(state_factory):
@@ -46,20 +43,16 @@ def state_factory():
         player_direction: int | None = None,
         player_directions: jnp.ndarray | None = None,
         timestep: int = 0,
-        inventory_items: jnp.ndarray | None = None,
-        inventory_counts: jnp.ndarray | None = None,
+        player_inventory: jnp.ndarray | None = None,
         selected_player: int = 0,
-        selected_slots: jnp.ndarray | None = None,
         crafting_recipe: jnp.ndarray | None = None,
         craft_progress: jnp.ndarray | None = None,
         num_players: int = 1,
         block_resources: jnp.ndarray | None = None,
         machine_types: jnp.ndarray | None = None,
         machine_power: jnp.ndarray | None = None,
-        machine_inventory_items: jnp.ndarray | None = None,
-        machine_inventory_counts: jnp.ndarray | None = None,
+        machine_inventory: jnp.ndarray | None = None,
         machine_selected_recipe: jnp.ndarray | None = None,
-        machine_selected_slot: jnp.ndarray | None = None,
         machine_direction: jnp.ndarray | None = None,
         achievements_unlocked: jnp.ndarray | None = None,
         items_mined: jnp.ndarray | None = None,
@@ -73,36 +66,36 @@ def state_factory():
         """Create a test state with defaults for unspecified fields.
 
         Args:
-            world_map: Block types array (required)
-            player_position: Single player (x, y) position (convenience for 1 player)
-            player_positions: All player positions, shape (num_players, 2)
-            player_direction: Single player direction (convenience for 1 player)
-            player_directions: All player directions, shape (num_players,)
-            timestep: Current timestep, defaults to 0
-            inventory_items: Inventory items, shape (num_players, NUM_INVENTORY_SLOTS)
-            inventory_counts: Inventory counts, shape (num_players, NUM_INVENTORY_SLOTS)
-            selected_player: Currently selected player index, defaults to 0
-            selected_slots: Selected inventory slot per player, defaults to zeros
-            crafting_recipe: Recipe in progress per player, defaults to zeros
-            craft_progress: Crafting progress per player, defaults to zeros
-            num_players: Number of players (used for defaults), defaults to 1
-            block_resources: Resources per tile, defaults to zeros
-            machine_types: Machine type per tile, defaults to NONE
-            machine_power: Power per machine, defaults to zeros
-            machine_inventory_items: Item type per slot per tile, shape
-                (H, W, MAX_MACHINE_INVENTORY_SLOTS), defaults to zeros
-            machine_inventory_counts: Stack count per slot per tile, shape
-                (H, W, MAX_MACHINE_INVENTORY_SLOTS), defaults to zeros
-            machine_selected_recipe: Active recipe index per tile, defaults to zeros
-            machine_selected_slot: UI-focused slot index per tile, defaults to zeros
-            machine_direction: Facing direction per tile (Action enum),
-                defaults to zeros
-            achievements_unlocked: Boolean array of unlocked achievements,
-                defaults to all False
-            items_mined: Lifetime mined count per item type, defaults to zeros
+            world_map: Block types array (required).
+            player_position: Single player (x, y) position.
+            player_positions: All player positions, shape (num_players, 2).
+            player_direction: Single player direction.
+            player_directions: All player directions, shape (num_players,).
+            timestep: Current timestep.
+            player_inventory: Pouch inventory, shape
+                (num_players, NUM_ITEM_TYPES). Defaults to zeros.
+            selected_player: Currently selected player index.
+            crafting_recipe: Recipe in progress per player.
+            craft_progress: Crafting progress per player.
+            num_players: Number of players (used for defaults).
+            block_resources: Resources per tile.
+            machine_types: Machine type per tile.
+            machine_power: Power per machine.
+            machine_inventory: Machine pouch inventory, shape
+                (H, W, NUM_ITEM_TYPES). Defaults to zeros.
+            machine_selected_recipe: Active recipe per tile.
+            machine_direction: Machine direction per tile.
+            achievements_unlocked: Boolean array of achievements.
+            items_mined: Lifetime mined count per item type.
+            research_progress: Per-technology progress.
+            research_unlocked: Boolean per-technology.
+            machine_health: Health per tile.
+            biter_positions: Biter positions.
+            biter_health: Biter health.
+            scent_field: Scent per tile.
 
         Returns:
-            Configured EnvState for testing
+            Configured EnvState for testing.
         """
         shape = world_map.shape
 
@@ -111,7 +104,9 @@ def state_factory():
             num_players = positions.shape[0]
         elif player_position is not None:
             if isinstance(player_position, tuple):
-                positions = jnp.array([player_position], dtype=jnp.int32)
+                positions = jnp.array(
+                    [player_position], dtype=jnp.int32,
+                )
             else:
                 positions = player_position.reshape(1, 2)
             num_players = 1
@@ -122,90 +117,134 @@ def state_factory():
         if player_directions is not None:
             directions = player_directions
         elif player_direction is not None:
-            directions = jnp.array([player_direction], dtype=jnp.int32)
+            directions = jnp.array(
+                [player_direction], dtype=jnp.int32,
+            )
         else:
-            directions = jnp.full(num_players, Direction.DOWN, dtype=jnp.int32)
+            directions = jnp.full(
+                num_players, Direction.DOWN, dtype=jnp.int32,
+            )
 
-        inv_shape = (num_players, NUM_INVENTORY_SLOTS)
+        inv_shape = (num_players, NUM_ITEM_TYPES)
         player_shape = (num_players,)
+        machine_inv_shape = (*shape, NUM_ITEM_TYPES)
 
         return EnvState(
             map=world_map,
             player_positions=positions,
             player_directions=directions,
             timestep=timestep,
-            inventory_items=inventory_items
-            if inventory_items is not None
-            else jnp.zeros(inv_shape, dtype=jnp.int32),
-            inventory_counts=inventory_counts
-            if inventory_counts is not None
-            else jnp.zeros(inv_shape, dtype=INVENTORY_COUNT_DTYPE),
+            player_inventory=(
+                player_inventory
+                if player_inventory is not None
+                else jnp.zeros(inv_shape, dtype=jnp.int32)
+            ),
             selected_player=selected_player,
-            selected_slots=selected_slots
-            if selected_slots is not None
-            else jnp.zeros(player_shape, dtype=jnp.int32),
-            crafting_recipe=crafting_recipe
-            if crafting_recipe is not None
-            else jnp.zeros(player_shape, dtype=jnp.int32),
-            craft_progress=craft_progress
-            if craft_progress is not None
-            else jnp.zeros(player_shape, dtype=jnp.int32),
-            block_resources=block_resources
-            if block_resources is not None
-            else jnp.zeros(shape, dtype=BLOCK_RESOURCE_DTYPE),
-            machine_types=machine_types
-            if machine_types is not None
-            else jnp.full(shape, MachineType.NONE, dtype=jnp.int32),
-            machine_power=machine_power
-            if machine_power is not None
-            else jnp.zeros(shape, dtype=jnp.int32),
-            machine_inventory_items=machine_inventory_items
-            if machine_inventory_items is not None
-            else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32),
-            machine_inventory_counts=machine_inventory_counts
-            if machine_inventory_counts is not None
-            else jnp.zeros((*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=MACHINE_INVENTORY_COUNT_DTYPE),
-            machine_selected_recipe=machine_selected_recipe
-            if machine_selected_recipe is not None
-            else jnp.zeros(shape, dtype=jnp.int32),
-            machine_selected_slot=machine_selected_slot
-            if machine_selected_slot is not None
-            else jnp.zeros(shape, dtype=jnp.int32),
-            machine_direction=machine_direction
-            if machine_direction is not None
-            else jnp.zeros(shape, dtype=jnp.int32),
-            achievements_unlocked=achievements_unlocked
-            if achievements_unlocked is not None
-            else jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-            items_mined=items_mined
-            if items_mined is not None
-            else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
-            research_progress=research_progress
-            if research_progress is not None
-            else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
-            research_unlocked=research_unlocked
-            if research_unlocked is not None
-            else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
-            machine_health=machine_health
-            if machine_health is not None
-            else (
-                jnp.where(
-                    (machine_types if machine_types is not None
-                     else jnp.full(shape, MachineType.NONE, dtype=jnp.int32))
+            crafting_recipe=(
+                crafting_recipe
+                if crafting_recipe is not None
+                else jnp.zeros(player_shape, dtype=jnp.int32)
+            ),
+            craft_progress=(
+                craft_progress
+                if craft_progress is not None
+                else jnp.zeros(player_shape, dtype=jnp.int32)
+            ),
+            block_resources=(
+                block_resources
+                if block_resources is not None
+                else jnp.zeros(shape, dtype=BLOCK_RESOURCE_DTYPE)
+            ),
+            machine_types=(
+                machine_types
+                if machine_types is not None
+                else jnp.full(
+                    shape, MachineType.NONE, dtype=jnp.int32,
+                )
+            ),
+            machine_power=(
+                machine_power
+                if machine_power is not None
+                else jnp.zeros(shape, dtype=jnp.int32)
+            ),
+            machine_inventory=(
+                machine_inventory
+                if machine_inventory is not None
+                else jnp.zeros(
+                    machine_inv_shape,
+                    dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+                )
+            ),
+            machine_selected_recipe=(
+                machine_selected_recipe
+                if machine_selected_recipe is not None
+                else jnp.zeros(shape, dtype=jnp.int32)
+            ),
+            machine_direction=(
+                machine_direction
+                if machine_direction is not None
+                else jnp.zeros(shape, dtype=jnp.int32)
+            ),
+            achievements_unlocked=(
+                achievements_unlocked
+                if achievements_unlocked is not None
+                else jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
+            ),
+            items_mined=(
+                items_mined
+                if items_mined is not None
+                else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+            ),
+            research_progress=(
+                research_progress
+                if research_progress is not None
+                else jnp.zeros(
+                    NUM_TECHNOLOGIES, dtype=jnp.int32,
+                )
+            ),
+            research_unlocked=(
+                research_unlocked
+                if research_unlocked is not None
+                else jnp.zeros(
+                    NUM_TECHNOLOGIES, dtype=jnp.bool_,
+                )
+            ),
+            machine_health=(
+                machine_health
+                if machine_health is not None
+                else jnp.where(
+                    (
+                        machine_types
+                        if machine_types is not None
+                        else jnp.full(
+                            shape, MachineType.NONE,
+                            dtype=jnp.int32,
+                        )
+                    )
                     != int(MachineType.NONE),
                     DEFAULT_MACHINE_MAX_HEALTH,
                     0,
                 ).astype(jnp.int32)
             ),
-            biter_positions=biter_positions
-            if biter_positions is not None
-            else jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
-            biter_health=biter_health
-            if biter_health is not None
-            else jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
-            scent_field=scent_field
-            if scent_field is not None
-            else jnp.zeros(shape, dtype=jnp.float32),
+            biter_positions=(
+                biter_positions
+                if biter_positions is not None
+                else jnp.zeros(
+                    (DEFAULT_MAX_BITERS, 2), dtype=jnp.int32,
+                )
+            ),
+            biter_health=(
+                biter_health
+                if biter_health is not None
+                else jnp.zeros(
+                    DEFAULT_MAX_BITERS, dtype=jnp.int32,
+                )
+            ),
+            scent_field=(
+                scent_field
+                if scent_field is not None
+                else jnp.zeros(shape, dtype=jnp.float32)
+            ),
         )
 
     return _create

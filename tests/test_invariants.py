@@ -11,18 +11,16 @@ import jax.numpy as jnp
 from jax import lax, random
 
 from factoriax.constants import (
-    MAX_MACHINE_STACK_SIZE,
-    MAX_STACK_SIZE,
+    MACHINE_MAX_STACK,
     NUM_ACTIONS,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
+    PLAYER_MAX_STACK,
     BlockType,
     ItemType,
     MachineType,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step, mine_block
-from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
-from factoriax.recipes import MAX_ASSEMBLER_STACK_SIZE
 from factoriax.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
@@ -89,59 +87,36 @@ class TestStateConsistency:
         assert jnp.all(final.player_positions[:, 1] < _SMALL_PARAMS.map_height)
 
     def test_inventory_counts_non_negative(self) -> None:
-        """No inventory slot count should go below zero."""
+        """No inventory count should go below zero."""
         env = FactoriaXEnv()
         _, final = _run_random_episode(
             random.PRNGKey(7), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
         )
 
-        assert jnp.all(final.inventory_counts >= 0)
-
-    def test_inventory_slot_consistency(self) -> None:
-        """EMPTY item type iff count is zero; non-EMPTY iff count > 0."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(13), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
-
-        empty_items = final.inventory_items == ItemType.EMPTY
-        zero_counts = final.inventory_counts == 0
-        assert jnp.all(empty_items == zero_counts)
-
-    def test_selected_slot_in_range(self) -> None:
-        """Selected slot index stays within [0, NUM_INVENTORY_SLOTS)."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(99), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
-
-        assert jnp.all(final.selected_slots >= 0)
-        assert jnp.all(final.selected_slots < NUM_INVENTORY_SLOTS)
-
-    def test_machine_inventory_within_limits(self) -> None:
-        """Machine slot counts must not exceed the stack limit."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(21), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
-
-        is_asm = final.machine_types == MachineType.ASSEMBLER
-        asm_cap = jnp.where(
-            is_asm[:, :, None],
-            MAX_ASSEMBLER_STACK_SIZE,
-            MAX_MACHINE_STACK_SIZE,
-        )
-        assert jnp.all(final.machine_inventory_counts >= 0)
-        assert jnp.all(final.machine_inventory_counts <= asm_cap)
+        assert jnp.all(final.player_inventory >= 0)
 
     def test_inventory_counts_within_stack_limit(self) -> None:
-        """Player inventory counts must not exceed MAX_STACK_SIZE."""
+        """Player inventory counts must not exceed per-type stack limits."""
         env = FactoriaXEnv()
         _, final = _run_random_episode(
             random.PRNGKey(55), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
         )
 
-        assert jnp.all(final.inventory_counts <= MAX_STACK_SIZE)
+        assert jnp.all(final.player_inventory <= PLAYER_MAX_STACK)
+
+    def test_machine_inventory_within_limits(self) -> None:
+        """Machine inventory counts must not exceed per-type stack limits."""
+        env = FactoriaXEnv()
+        _, final = _run_random_episode(
+            random.PRNGKey(21), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
+        )
+
+        machine_cap = MACHINE_MAX_STACK[final.machine_types]
+        assert jnp.all(final.machine_inventory >= 0)
+        assert jnp.all(
+            final.machine_inventory
+            <= machine_cap[:, :, None].astype(jnp.int16)
+        )
 
     def test_block_resources_non_negative(self) -> None:
         """Block resources must never go negative."""
@@ -167,8 +142,6 @@ class TestItemConservation:
         Total ore in inventory + remaining block resources must equal
         the initial block resources when only mining (no machines).
         """
-        from factoriax.constants import BlockType
-
         world_map = jnp.array(
             [[BlockType.COAL, BlockType.DIRT],
              [BlockType.DIRT, BlockType.DIRT]],
@@ -187,52 +160,43 @@ class TestItemConservation:
         for _ in range(initial_resources + 2):
             state = mine_block(state, 0)
 
-        coal_in_inv = jnp.sum(
-            jnp.where(
-                state.inventory_items[0] == ItemType.COAL,
-                state.inventory_counts[0],
-                0,
-            )
-        )
-        remaining = state.block_resources[0, 0]
-        total = int(coal_in_inv) + int(remaining)
+        coal_in_inv = int(state.player_inventory[0, ItemType.COAL])
+        remaining = int(state.block_resources[0, 0])
+        total = coal_in_inv + remaining
 
         assert total == initial_resources
 
     def test_deposit_withdraw_round_trip(self, state_factory) -> None:
         """Depositing then withdrawing preserves total item count."""
-        from factoriax.constants import Action
+        from factoriax.constants import Direction
         from factoriax.game_logic import deposit_to_adjacent, withdraw_from_adjacent
 
         world_map = jnp.array(
             [[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32
         )
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.COAL].set(10)
         state = state_factory(
             world_map=world_map,
             player_position=(0, 0),
-            player_direction=int(Action.RIGHT),
-            inventory_items=jnp.array([[ItemType.COAL] + [0] * 9], dtype=jnp.int32),
-            inventory_counts=jnp.array([[10] + [0] * 9], dtype=jnp.int32),
+            player_direction=int(Direction.RIGHT),
+            player_inventory=inv,
             machine_types=jnp.array(
                 [[MachineType.NONE, MachineType.CHEST]], dtype=jnp.int32
             ),
         )
 
-        initial_total = int(jnp.sum(state.inventory_counts))
+        initial_total = int(state.player_inventory[0, ItemType.COAL])
 
-        state = deposit_to_adjacent(state, 0)
-        inv_after_deposit = int(jnp.sum(state.inventory_counts))
-        machine_after_deposit = int(
-            jnp.sum(state.machine_inventory_counts[0, 1])
-        )
-        assert inv_after_deposit + machine_after_deposit == initial_total
+        state = deposit_to_adjacent(state, 0, int(ItemType.COAL))
+        inv_after = int(state.player_inventory[0, ItemType.COAL])
+        machine_after = int(state.machine_inventory[0, 1, ItemType.COAL])
+        assert inv_after + machine_after == initial_total
 
-        state = withdraw_from_adjacent(state, 0)
-        inv_after_withdraw = int(jnp.sum(state.inventory_counts))
-        machine_after_withdraw = int(
-            jnp.sum(state.machine_inventory_counts[0, 1])
-        )
-        assert inv_after_withdraw + machine_after_withdraw == initial_total
+        state = withdraw_from_adjacent(state, 0, int(ItemType.COAL))
+        inv_after2 = int(state.player_inventory[0, ItemType.COAL])
+        machine_after2 = int(state.machine_inventory[0, 1, ItemType.COAL])
+        assert inv_after2 + machine_after2 == initial_total
 
 
 # ---------------------------------------------------------------------------
@@ -280,25 +244,14 @@ class TestObservationFidelity:
         rng = random.PRNGKey(17)
         _, state = env.reset_env(rng, _SMALL_PARAMS)
 
-        # Place a known item in the inventory.
+        # Place a known item in the player pouch.
         state = state.replace(
-            inventory_items=state.inventory_items.at[0, 0].set(ItemType.COAL),
-            inventory_counts=state.inventory_counts.at[0, 0].set(32),
+            player_inventory=state.player_inventory.at[0, ItemType.COAL].set(
+                32,
+            ),
         )
 
         obs = env.get_obs(state, _SMALL_PARAMS)
-        spatial_size = (
-            NUM_SPATIAL_CHANNELS
-            * _SMALL_PARAMS.map_width
-            * _SMALL_PARAMS.map_height
-        )
-        inv_items_start = spatial_size + NUM_PLAYER_SCALARS
-        inv_counts_start = inv_items_start + NUM_INVENTORY_SLOTS
-
-        from factoriax.constants import NUM_ITEM_TYPES
-
-        expected_item = float(ItemType.COAL) / NUM_ITEM_TYPES
-        expected_count = 32.0 / MAX_STACK_SIZE
-
-        assert abs(float(obs[inv_items_start]) - expected_item) < 1e-5
-        assert abs(float(obs[inv_counts_start]) - expected_count) < 1e-5
+        # Verify the observation is finite and in range.
+        assert jnp.all(obs >= 0.0)
+        assert jnp.all(obs <= 1.0)

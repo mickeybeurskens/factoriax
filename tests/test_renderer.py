@@ -12,9 +12,8 @@ import pytest
 from factoriax import EnvState
 from factoriax.constants import (
     DEFAULT_MAX_BITERS,
+    MACHINE_INVENTORY_COUNT_DTYPE,
     MAX_ACHIEVEMENTS,
-    MAX_MACHINE_INVENTORY_SLOTS,
-    NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     BlockType,
@@ -45,33 +44,44 @@ def _make_state(world_map: np.ndarray) -> EnvState:
     return EnvState(
         map=jmap,
         player_positions=jnp.array([[0, 0]], dtype=jnp.int32),
-        player_directions=jnp.array([int(Direction.DOWN)], dtype=jnp.int32),
+        player_directions=jnp.array(
+            [int(Direction.DOWN)], dtype=jnp.int32,
+        ),
         timestep=0,
-        inventory_items=jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32),
-        inventory_counts=jnp.zeros((1, NUM_INVENTORY_SLOTS), dtype=jnp.int32),
+        player_inventory=jnp.zeros(
+            (1, NUM_ITEM_TYPES), dtype=jnp.int32,
+        ),
         selected_player=0,
-        selected_slots=jnp.zeros((1,), dtype=jnp.int32),
         crafting_recipe=jnp.zeros((1,), dtype=jnp.int32),
         craft_progress=jnp.zeros((1,), dtype=jnp.int32),
         block_resources=jnp.zeros(shape, dtype=jnp.int16),
-        machine_types=jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32),
-        machine_power=jnp.zeros(shape, dtype=jnp.int32),
-        machine_inventory_items=jnp.zeros(
-            (*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int32
+        machine_types=jnp.full(
+            shape, int(MachineType.NONE), dtype=jnp.int32,
         ),
-        machine_inventory_counts=jnp.zeros(
-            (*shape, MAX_MACHINE_INVENTORY_SLOTS), dtype=jnp.int16
+        machine_power=jnp.zeros(shape, dtype=jnp.int32),
+        machine_inventory=jnp.zeros(
+            (*shape, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         ),
         machine_selected_recipe=jnp.zeros(shape, dtype=jnp.int32),
-        machine_selected_slot=jnp.zeros(shape, dtype=jnp.int32),
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
+        achievements_unlocked=jnp.zeros(
+            MAX_ACHIEVEMENTS, dtype=jnp.bool_,
+        ),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         machine_direction=jnp.zeros(shape, dtype=jnp.int32),
-        research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int32),
-        research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+        research_progress=jnp.zeros(
+            NUM_TECHNOLOGIES, dtype=jnp.int32,
+        ),
+        research_unlocked=jnp.zeros(
+            NUM_TECHNOLOGIES, dtype=jnp.bool_,
+        ),
         machine_health=jnp.zeros(shape, dtype=jnp.int32),
-        biter_positions=jnp.zeros((DEFAULT_MAX_BITERS, 2), dtype=jnp.int32),
-        biter_health=jnp.zeros(DEFAULT_MAX_BITERS, dtype=jnp.int32),
+        biter_positions=jnp.zeros(
+            (DEFAULT_MAX_BITERS, 2), dtype=jnp.int32,
+        ),
+        biter_health=jnp.zeros(
+            DEFAULT_MAX_BITERS, dtype=jnp.int32,
+        ),
         scent_field=jnp.zeros(shape, dtype=jnp.float32),
     )
 
@@ -100,7 +110,9 @@ def _render_tiles_reference(
     for y in range(h):
         for x in range(w):
             block_id = int(np.clip(map_array[y, x], 0, max_id))
-            image[y * s : (y + 1) * s, x * s : (x + 1) * s] = texture_lookup[block_id]
+            image[y * s : (y + 1) * s, x * s : (x + 1) * s] = (
+                texture_lookup[block_id]
+            )
     return image
 
 
@@ -128,14 +140,16 @@ def test_tile_rendering_matches_reference(block_pixel_size: int) -> None:
         int(BlockType.COPPER),
         int(BlockType.COAL),
     ]
-    # 4×4 grid cycling through block types
+    # 4x4 grid cycling through block types
     flat = [block_types[i % len(block_types)] for i in range(16)]
     map_array = np.array(flat, dtype=np.int32).reshape(4, 4)
 
     texture_lookup = build_texture_lookup(block_pixel_size)
 
     # Reference: Python loop
-    expected = _render_tiles_reference(map_array, texture_lookup, block_pixel_size)
+    expected = _render_tiles_reference(
+        map_array, texture_lookup, block_pixel_size,
+    )
 
     # Vectorised path (extracted to match exactly what render_pixels does)
     max_id = texture_lookup.shape[0] - 1
@@ -143,14 +157,17 @@ def test_tile_rendering_matches_reference(block_pixel_size: int) -> None:
     tile_textures = texture_lookup[safe_map]
     h, w = map_array.shape
     s = block_pixel_size
-    actual = tile_textures.transpose(0, 2, 1, 3, 4).reshape(h * s, w * s, 4)
+    actual = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
+        h * s, w * s, 4,
+    )
 
     np.testing.assert_array_equal(
         actual,
         expected,
         err_msg=(
             f"Tile rendering mismatch at block_pixel_size={block_pixel_size}. "
-            "The transpose/reshape path produces different pixels than the reference."
+            "The transpose/reshape path produces different pixels than the "
+            "reference."
         ),
     )
 
@@ -166,16 +183,20 @@ def test_render_pixels_shape_and_dtype() -> None:
     assert image.dtype == np.uint8, f"Expected uint8, got {image.dtype}"
     assert image.ndim == 3, f"Expected 3-D array, got shape {image.shape}"
     assert image.shape[2] == 3, "Expected RGB (3 channels)"
-    assert image.shape == (4 * block_pixel_size, 4 * block_pixel_size, 3)
+    assert image.shape == (
+        4 * block_pixel_size, 4 * block_pixel_size, 3,
+    )
 
 
 def test_render_pixels_distinct_blocks_produce_distinct_colours() -> None:
     """Different block types must produce visually distinct tile colours.
 
-    Uses a 1×2 grid: one DIRT tile and one WATER tile.  After rendering,
+    Uses a 1x2 grid: one DIRT tile and one WATER tile.  After rendering,
     the left half and right half of the image must not be identical.
     """
-    map_array = np.array([[int(BlockType.DIRT), int(BlockType.WATER)]], dtype=np.int32)
+    map_array = np.array(
+        [[int(BlockType.DIRT), int(BlockType.WATER)]], dtype=np.int32,
+    )
     state = _make_state(map_array)
 
     s = 16
@@ -186,7 +207,8 @@ def test_render_pixels_distinct_blocks_produce_distinct_colours() -> None:
 
     # The mean RGB across the tile should differ
     assert not np.array_equal(left, right), (
-        "DIRT and WATER tiles rendered identically — texture lookup may be broken."
+        "DIRT and WATER tiles rendered identically -- texture lookup "
+        "may be broken."
     )
 
 
@@ -206,7 +228,9 @@ def test_tile_rendering_uniform_map(block_pixel_size: int) -> None:
 
     safe_map = np.clip(map_array, 0, texture_lookup.shape[0] - 1)
     tile_textures = texture_lookup[safe_map]
-    image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(h * s, w * s, 4)
+    image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
+        h * s, w * s, 4,
+    )
 
     for y in range(h):
         for x in range(w):
@@ -214,5 +238,8 @@ def test_tile_rendering_uniform_map(block_pixel_size: int) -> None:
             np.testing.assert_array_equal(
                 cell,
                 expected_tile,
-                err_msg=f"Tile ({y},{x}) differs from expected texture at size={s}.",
+                err_msg=(
+                    f"Tile ({y},{x}) differs from expected texture "
+                    f"at size={s}."
+                ),
             )

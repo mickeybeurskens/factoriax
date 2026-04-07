@@ -12,63 +12,53 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Immutable environment state.
 
     Attributes:
-        map: 2D grid of block types with shape (height, width)
-        player_positions: (x, y) coordinates per player with shape (num_players, 2)
-        player_directions: Direction each player is facing with shape (num_players,)
-        timestep: Current timestep in the episode
-        inventory_items: Item type IDs with shape (num_players, NUM_INVENTORY_SLOTS)
-        inventory_counts: Stack counts with shape (num_players, NUM_INVENTORY_SLOTS)
-        selected_player: Index of the currently selected player for UI/input
-        selected_slots: Currently selected inventory slot per player
-            with shape (num_players,)
-        crafting_recipe: Recipe index of the craft in progress per player
-            with shape (num_players,). Only meaningful when craft_progress > 0.
-        craft_progress: Ticks remaining in current craft per player
-            with shape (num_players,). Zero means no craft is active.
-        block_resources: Remaining resources for each tile with shape (height, width)
-        machine_types: Machine type at each tile with shape (height, width)
-        machine_power: Remaining power for each machine with shape (height, width)
-        machine_inventory_items: Item type in each slot per tile with shape
-            (height, width, MAX_MACHINE_INVENTORY_SLOTS)
-        machine_inventory_counts: Stack count in each slot per tile with shape
-            (height, width, MAX_MACHINE_INVENTORY_SLOTS)
-        machine_selected_recipe: Active recipe index per tile with shape (height, width)
-        machine_selected_slot: UI-focused slot index per tile with shape (height, width)
-        machine_direction: Facing direction of each machine (Action enum value) with
-            shape (height, width). Used by conveyor belts and arms to determine
-            the push/pick direction.
-        achievements_unlocked: Boolean array tracking unlocked achievements
-            with shape (NUM_ACHIEVEMENTS,)
-        items_mined: Lifetime mined count per item type with shape (NUM_ITEM_TYPES,)
-        research_progress: Science packs consumed per technology
-            with shape (NUM_TECHNOLOGIES,)
-        research_unlocked: Boolean array of unlocked technologies
-            with shape (NUM_TECHNOLOGIES,)
-        machine_health: Current health per tile with shape (height, width).
+        map: 2D grid of block types with shape (height, width).
+        player_positions: (x, y) coordinates per player, shape (num_players, 2).
+        player_directions: Facing direction per player, shape (num_players,).
+        timestep: Current timestep in the episode.
+        player_inventory: Item counts per type per player,
+            shape (num_players, NUM_ITEM_TYPES). Indexed by ItemType.
+        selected_player: Index of the currently selected player for UI/input.
+        crafting_recipe: Recipe index of the craft in progress per player,
+            shape (num_players,). Only meaningful when craft_progress > 0.
+        craft_progress: Ticks remaining in current craft per player,
+            shape (num_players,). Zero means no craft is active.
+        block_resources: Remaining resources per tile, shape (height, width).
+        machine_types: Machine type at each tile, shape (height, width).
+        machine_power: Remaining power per machine, shape (height, width).
+        machine_inventory: Item counts per type per tile,
+            shape (height, width, NUM_ITEM_TYPES). Indexed by ItemType.
+        machine_selected_recipe: Active assembler recipe per tile,
+            shape (height, width).
+        machine_direction: Facing direction per machine, shape (height, width).
+            Used by conveyor belts and arms for push/pick direction.
+        achievements_unlocked: Boolean array of unlocked achievements,
+            shape (NUM_ACHIEVEMENTS,).
+        items_mined: Lifetime mined count per item type, shape (NUM_ITEM_TYPES,).
+        research_progress: Science packs consumed per technology,
+            shape (NUM_TECHNOLOGIES,).
+        research_unlocked: Boolean array of unlocked technologies,
+            shape (NUM_TECHNOLOGIES,).
+        machine_health: Current health per tile, shape (height, width).
             Zero means disabled (machine present but non-operational).
-        biter_positions: (x, y) coordinates per biter with shape (max_biters, 2).
-        biter_health: HP per biter with shape (max_biters,). Zero means inactive.
-        scent_field: Machine scent intensity per tile with shape (height, width).
-            Used for biter navigation. Not included in agent observations.
+        biter_positions: (x, y) coordinates per biter, shape (max_biters, 2).
+        biter_health: HP per biter, shape (max_biters,). Zero means inactive.
+        scent_field: Machine scent intensity per tile, shape (height, width).
     """
 
     map: jnp.ndarray
     player_positions: jnp.ndarray
     player_directions: jnp.ndarray
     timestep: int
-    inventory_items: jnp.ndarray
-    inventory_counts: jnp.ndarray
+    player_inventory: jnp.ndarray
     selected_player: int
-    selected_slots: jnp.ndarray
     crafting_recipe: jnp.ndarray
     craft_progress: jnp.ndarray
     block_resources: jnp.ndarray
     machine_types: jnp.ndarray
     machine_power: jnp.ndarray
-    machine_inventory_items: jnp.ndarray
-    machine_inventory_counts: jnp.ndarray
+    machine_inventory: jnp.ndarray
     machine_selected_recipe: jnp.ndarray
-    machine_selected_slot: jnp.ndarray
     machine_direction: jnp.ndarray
     achievements_unlocked: jnp.ndarray
     items_mined: jnp.ndarray

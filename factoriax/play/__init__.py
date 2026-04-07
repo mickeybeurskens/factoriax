@@ -16,9 +16,11 @@ Or import directly:
 Submodules
 ----------
 - ``main`` — Game loop and entry point
+- ``game_ui`` — Reusable GameUI component for menus and input dispatch
 - ``ui`` — Menu rendering (inventory, achievements, pause)
 """
 
+from factoriax.play.game_ui import GameUI, GameUIResult
 from factoriax.play.main import main
 from factoriax.play.ui import (
     render_achievement_menu,
@@ -28,6 +30,8 @@ from factoriax.play.ui import (
 from factoriax.ui.primitives import ClickRegion
 
 __all__ = [
+    "GameUI",
+    "GameUIResult",
     "main",
     "ClickRegion",
     "render_achievement_menu",
