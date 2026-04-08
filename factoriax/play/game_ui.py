@@ -24,9 +24,11 @@ from factoriax.config import (
     resolve_key,
 )
 from factoriax.constants import (
+    DEPOSIT_BASE,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     PLACEABLE_ITEMS,
+    WITHDRAW_BASE,
     Action,
     Direction,
     ItemType,
@@ -595,22 +597,35 @@ class GameUI:
         ):
             is_left = PlayerAction.NAV_LEFT in actions
             if ps.machine_panel_active:
-                action = int(
-                    Action.PREV_MACHINE_SLOT
-                    if is_left
-                    else Action.NEXT_MACHINE_SLOT
-                )
+                # Cycle focused_machine_item through non-empty types
+                # in the machine's inventory.
+                machine_inv = state.machine_inventory[
+                    ps.machine_ty, ps.machine_tx
+                ]
+                active = [
+                    i for i in range(1, NUM_ITEM_TYPES)
+                    if int(machine_inv[i]) > 0
+                ]
+                if active and ps.focused_machine_item in active:
+                    idx = active.index(ps.focused_machine_item)
+                    idx = (idx + (-1 if is_left else 1)) % len(active)
+                    ps.focused_machine_item = active[idx]
+                elif active:
+                    ps.focused_machine_item = active[0]
             else:
                 delta = -1 if is_left else 1
                 current = ps.selected_item
                 new_item = ((current - 1 + delta) % (NUM_ITEM_TYPES - 1)) + 1
                 ps.selected_item = new_item
         elif PlayerAction.CONFIRM in actions:
-            action = int(
-                Action.WITHDRAW
-                if ps.machine_panel_active
-                else Action.DEPOSIT
-            )
+            if ps.machine_panel_active:
+                item = ps.focused_machine_item
+                if int(ItemType.COAL) <= item <= int(ItemType.ADVANCED_SCIENCE_PACK):
+                    action = WITHDRAW_BASE + item - int(ItemType.COAL)
+            else:
+                item = ps.selected_item
+                if int(ItemType.COAL) <= item <= int(ItemType.ADVANCED_SCIENCE_PACK):
+                    action = DEPOSIT_BASE + item - int(ItemType.COAL)
         elif PlayerAction.CYCLE_RECIPE in actions:
             state = self._handle_assembler_recipe_or_hotbar(state)
         return state, action
@@ -678,7 +693,7 @@ class GameUI:
                 NUM_TECHNOLOGIES - 1, ps.research_selection + 1,
             )
         elif PlayerAction.CONFIRM in actions:
-            return int(Action.RESEARCH)
+            return int(Action.RESEARCH_BASIC) + ps.research_selection
         return None
 
     def _handle_inventory_nav(
