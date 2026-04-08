@@ -176,9 +176,9 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
     )
 
     # Iron ore icon for the belt animation (half-size, centered on slots).
-    iron_size = max(8, icon_size // 2)
-    iron_rgba = render_item_icon(ItemType.IRON, iron_size)
-    iron_surf = _rgba_to_surface(iron_rgba)
+    ore_size = max(8, icon_size // 2)
+    ore_rgba = render_item_icon(ItemType.COAL, ore_size)
+    ore_surf = _rgba_to_surface(ore_rgba)
     # Animation target: slot indices where the iron travels.
     # Row is: [0]player [1]miner [2]belt [3]belt [4]belt [5]belt [6]arm [7]chest
     # Steps 0-3: iron on belts (indices 2-5), step 4: iron on arm (index 6).
@@ -237,12 +237,11 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
         surf = canvas.surface
         surf.fill(_BG_COLOR)
 
-        # Title (centered, with minimum margin from edges).
-        title_x = max(32 * s, (sw - title_w) // 2)
-        surf.blit(title_surf, (title_x, title_y))
+        # Title (centered horizontally).
+        surf.blit(title_surf, ((sw - title_w) // 2, title_y))
 
         # Decoration row (centered horizontally).
-        deco_start_x = max(32 * s, (sw - deco_total_w) // 2)
+        deco_start_x = (sw - deco_total_w) // 2
         slot_positions: list[int] = []
         dx = deco_start_x
         for deco in deco_surfs:
@@ -255,9 +254,9 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
         if anim_step < len(_ANIM_SLOT_TARGETS):
             target_idx = _ANIM_SLOT_TARGETS[anim_step]
             if target_idx < len(slot_positions):
-                iron_x = slot_positions[target_idx] + (icon_size - iron_size) // 2
-                iron_y = deco_y + (icon_size - iron_size) // 2
-                surf.blit(iron_surf, (iron_x, iron_y))
+                ore_x = slot_positions[target_idx] + (icon_size - ore_size) // 2
+                ore_y = deco_y + (icon_size - ore_size) // 2
+                surf.blit(ore_surf, (ore_x, ore_y))
 
         # Buttons.
         mx, my = canvas.to_canvas(*pygame.mouse.get_pos())

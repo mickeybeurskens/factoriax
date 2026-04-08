@@ -860,19 +860,22 @@ def run_settings_menu(
 def run_controls_menu(
     screen: pygame.Surface,
     fullscreen: bool = False,
-) -> bool:
+    ui_scale: int = 0,
+) -> tuple[bool, int]:
     """Show a read-only overview of current key bindings.
 
-    Displays all mapped player actions and their keyboard keys plus a
-    fullscreen toggle checkbox. The only interactions are scrolling,
-    toggling fullscreen, and pressing Back (or Escape) to return.
+    Displays all mapped player actions and their keyboard keys plus
+    display settings (fullscreen toggle, UI scale selector). The only
+    interactions are scrolling, toggling options, and pressing Back
+    (or Escape) to return.
 
     Args:
         screen: Pygame display surface.
         fullscreen: Current fullscreen state (shown as a checkbox).
+        ui_scale: Current UI scale (0=auto, 1/2/3=fixed).
 
     Returns:
-        The (possibly toggled) fullscreen flag.
+        Tuple of (fullscreen, ui_scale) with possibly updated values.
     """
     s = _theme.UI_SCALE
     canvas = ScaledCanvas(1024, s, screen)
@@ -917,9 +920,9 @@ def run_controls_menu(
     content_h += section_header_h + section_rule_h + section_gap
     content_h += len(controls_lines) * (row_h + row_gap)
     content_h += section_pad_top
-    # Display section (fullscreen checkbox).
+    # Display section (fullscreen checkbox + UI scale selector).
     content_h += section_header_h + section_rule_h + section_gap
-    content_h += row_h + row_gap
+    content_h += 2 * (row_h + row_gap)  # fullscreen + ui_scale rows
     content_h += section_pad_top
 
     while True:
@@ -929,7 +932,7 @@ def run_controls_menu(
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return fullscreen
+                return fullscreen, ui_scale
 
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
@@ -941,7 +944,7 @@ def run_controls_menu(
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
                 if back_rect.collidepoint(mx, my):
-                    return fullscreen
+                    return fullscreen, ui_scale
 
                 # Hit-test the fullscreen checkbox.
                 # Recompute its position to match the draw pass.
@@ -964,8 +967,25 @@ def run_controls_menu(
                 if cb_hit.collidepoint(mx, my):
                     fullscreen = not fullscreen
 
+                # Hit-test UI scale buttons (row below fullscreen).
+                scale_row_cy = fs_cy + row_h + row_gap
+                scale_label_surf = font_label.render(
+                    "UI Scale", False, _LABEL_COLOR,
+                )
+                sbtn_w = 60 * s
+                sbtn_h = row_h - 4 * s
+                sbtn_x0 = side_pad + scale_label_surf.get_width() + 16 * s
+                sbtn_y = scale_row_cy + (row_h - sbtn_h) // 2
+                for si in range(4):
+                    bx = sbtn_x0 + si * (sbtn_w + 4 * s)
+                    if pygame.Rect(bx, sbtn_y, sbtn_w, sbtn_h).collidepoint(
+                        mx, my,
+                    ):
+                        ui_scale = si
+                        break
+
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return fullscreen
+                return fullscreen, ui_scale
 
         # -- Drawing ------------------------------------------------------
         surf = canvas.surface
@@ -1034,6 +1054,36 @@ def run_controls_menu(
         lbl_x = cb_x + checkbox_size + 8
         lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
         surf.blit(lbl_surf, (lbl_x, lbl_y))
+        cy += row_h + row_gap
+
+        # UI Scale selector row.
+        scale_labels = ["Auto", "1x", "2x", "3x"]
+        scale_label = font_label.render("UI Scale", False, _LABEL_COLOR)
+        surf.blit(
+            scale_label,
+            (side_pad, cy + (row_h - scale_label.get_height()) // 2),
+        )
+        scale_btn_w = 60 * s
+        scale_btn_h = row_h - 4 * s
+        scale_btn_x = side_pad + scale_label.get_width() + 16 * s
+        scale_btn_y = cy + (row_h - scale_btn_h) // 2
+        for si, sl in enumerate(scale_labels):
+            bx = scale_btn_x + si * (scale_btn_w + 4 * s)
+            is_active = si == ui_scale
+            bg = (80, 75, 50) if is_active else (40, 40, 45)
+            pygame.draw.rect(surf, bg, (bx, scale_btn_y, scale_btn_w, scale_btn_h))
+            border_c = _GOLD if is_active else (70, 70, 70)
+            pygame.draw.rect(
+                surf, border_c, (bx, scale_btn_y, scale_btn_w, scale_btn_h), 2,
+            )
+            st = font_label.render(sl, False, _LABEL_COLOR)
+            surf.blit(
+                st,
+                (
+                    bx + (scale_btn_w - st.get_width()) // 2,
+                    scale_btn_y + (scale_btn_h - st.get_height()) // 2,
+                ),
+            )
         cy += row_h + row_gap
         cy += section_pad_top
 

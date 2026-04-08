@@ -444,6 +444,8 @@ def load_config(path: Path = CONFIG_PATH) -> PlayerConfig:
             env_params=defaults_env,
             keyboard=defaults_kb,
             controller=defaults_ctrl,
+            fullscreen=False,
+            ui_scale=0,
         )
 
     try:
@@ -454,6 +456,8 @@ def load_config(path: Path = CONFIG_PATH) -> PlayerConfig:
             env_params=defaults_env,
             keyboard=defaults_kb,
             controller=defaults_ctrl,
+            fullscreen=False,
+            ui_scale=0,
         )
 
     env = dict(defaults_env)
@@ -462,7 +466,17 @@ def load_config(path: Path = CONFIG_PATH) -> PlayerConfig:
     keyboard = _merge_bindings(raw.get("keyboard", {}), defaults_kb)
     controller = _merge_bindings(raw.get("controller", {}), defaults_ctrl)
 
-    return PlayerConfig(env_params=env, keyboard=keyboard, controller=controller)
+    display = raw.get("display", {})
+    fullscreen = bool(display.get("fullscreen", False))
+    ui_scale = int(display.get("ui_scale", 0))
+
+    return PlayerConfig(
+        env_params=env,
+        keyboard=keyboard,
+        controller=controller,
+        fullscreen=fullscreen,
+        ui_scale=ui_scale,
+    )
 
 
 def _stringify_bindings(bindings: Bindings) -> dict[str, list[str]]:
@@ -488,6 +502,10 @@ def save_config(config: PlayerConfig, path: Path = CONFIG_PATH) -> None:
         "env_params": config.env_params,
         "keyboard": _stringify_bindings(config.keyboard),
         "controller": _stringify_bindings(config.controller),
+        "display": {
+            "fullscreen": config.fullscreen,
+            "ui_scale": config.ui_scale,
+        },
     }
     try:
         path.write_bytes(

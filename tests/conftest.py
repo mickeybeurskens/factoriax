@@ -1,5 +1,9 @@
 """Shared test fixtures and utilities."""
 
+import os
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
 import jax.numpy as jnp
 import pytest
 
