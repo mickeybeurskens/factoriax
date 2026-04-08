@@ -21,6 +21,7 @@ from factoriax.state import EnvParams
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.scaling import ScaledCanvas
+from factoriax.ui.window import auto_ui_scale
 
 logger = logging.getLogger(__name__)
 
@@ -857,6 +858,136 @@ def run_settings_menu(
         clock.tick(_FPS)
 
 
+_CONFIRM_TIMEOUT_MS: int = 10_000
+
+
+def _confirm_scale_change(
+    screen: pygame.Surface,
+    new_scale_value: int,
+) -> bool:
+    """Apply a new UI scale and wait for user confirmation.
+
+    Shows a centered dialog with a countdown timer. The new scale is
+    applied immediately so the user can see the result. If the user
+    presses Enter or clicks "Keep", the change is confirmed. If the
+    timer expires or Escape is pressed, the change is reverted.
+
+    Args:
+        screen: Pygame display surface.
+        new_scale_value: The ``ui_scale`` config value to try (0-3).
+
+    Returns:
+        ``True`` if the user confirmed the new scale, ``False`` if
+        reverted.
+    """
+    new_s = new_scale_value if new_scale_value > 0 else auto_ui_scale()
+    _theme.apply_scale(new_s)
+    canvas = ScaledCanvas(1024, new_s, screen)
+    clock = pygame.time.Clock()
+    deadline = pygame.time.get_ticks() + _CONFIRM_TIMEOUT_MS
+
+    font = get_pixel_font(28 * new_s)
+    sw, sh = canvas.width, canvas.height
+    box_w = 500 * new_s
+    box_h = 140 * new_s
+    box_x = (sw - box_w) // 2
+    box_y = (sh - box_h) // 2
+    btn_w = 140 * new_s
+    btn_h = 50 * new_s
+    btn_gap = 24 * new_s
+    keep_x = box_x + (box_w - 2 * btn_w - btn_gap) // 2
+    revert_x = keep_x + btn_w + btn_gap
+    btn_y = box_y + box_h - btn_h - 16 * new_s
+
+    while True:
+        remaining = max(0, deadline - pygame.time.get_ticks())
+        if remaining == 0:
+            return False
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+            if event.type == pygame.VIDEORESIZE:
+                canvas.handle_resize(event.w, event.h)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return True
+                if event.key == pygame.K_ESCAPE:
+                    return False
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = canvas.to_canvas(*event.pos)
+                if pygame.Rect(keep_x, btn_y, btn_w, btn_h).collidepoint(
+                    mx, my,
+                ):
+                    return True
+                if pygame.Rect(
+                    revert_x, btn_y, btn_w, btn_h,
+                ).collidepoint(mx, my):
+                    return False
+
+        surf = canvas.surface
+        surf.fill((15, 15, 20))
+
+        # Dialog box.
+        pygame.draw.rect(
+            surf, (30, 30, 35), (box_x, box_y, box_w, box_h),
+        )
+        pygame.draw.rect(
+            surf, _GOLD, (box_x, box_y, box_w, box_h), 3,
+        )
+
+        secs = (remaining + 999) // 1000
+        msg = font.render(
+            f"Keep this scale? Reverting in {secs}s...",
+            False,
+            _LABEL_COLOR,
+        )
+        surf.blit(
+            msg,
+            (box_x + (box_w - msg.get_width()) // 2, box_y + 20 * new_s),
+        )
+
+        # Keep button.
+        mouse_pos = canvas.to_canvas(*pygame.mouse.get_pos())
+        keep_rect = pygame.Rect(keep_x, btn_y, btn_w, btn_h)
+        keep_hover = keep_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(
+            surf,
+            (55, 55, 60) if keep_hover else (35, 35, 40),
+            keep_rect,
+        )
+        pygame.draw.rect(surf, _GOLD, keep_rect, 2)
+        kt = font.render("Keep", False, _LABEL_COLOR)
+        surf.blit(
+            kt,
+            (
+                keep_x + (btn_w - kt.get_width()) // 2,
+                btn_y + (btn_h - kt.get_height()) // 2,
+            ),
+        )
+
+        # Revert button.
+        rev_rect = pygame.Rect(revert_x, btn_y, btn_w, btn_h)
+        rev_hover = rev_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(
+            surf,
+            (55, 55, 60) if rev_hover else (35, 35, 40),
+            rev_rect,
+        )
+        pygame.draw.rect(surf, (120, 60, 60), rev_rect, 2)
+        rt = font.render("Revert", False, _LABEL_COLOR)
+        surf.blit(
+            rt,
+            (
+                revert_x + (btn_w - rt.get_width()) // 2,
+                btn_y + (btn_h - rt.get_height()) // 2,
+            ),
+        )
+
+        canvas.present(screen)
+        clock.tick(30)
+
+
 def run_controls_menu(
     screen: pygame.Surface,
     fullscreen: bool = False,
@@ -908,6 +1039,7 @@ def run_controls_menu(
     controls_lines = _build_controls_lines()
 
     scroll_offset = 0
+
     font_header = get_pixel_font(32 * s)
     font_label = get_pixel_font(28 * s)
     font_input = get_pixel_font(28 * s)
@@ -974,14 +1106,34 @@ def run_controls_menu(
                 )
                 sbtn_w = 60 * s
                 sbtn_h = row_h - 4 * s
-                sbtn_x0 = side_pad + scale_label_surf.get_width() + 16 * s
+                sbtn_x0 = (
+                    side_pad + scale_label_surf.get_width() + 16 * s
+                )
                 sbtn_y = scale_row_cy + (row_h - sbtn_h) // 2
                 for si in range(4):
                     bx = sbtn_x0 + si * (sbtn_w + 4 * s)
-                    if pygame.Rect(bx, sbtn_y, sbtn_w, sbtn_h).collidepoint(
-                        mx, my,
-                    ):
-                        ui_scale = si
+                    if pygame.Rect(
+                        bx, sbtn_y, sbtn_w, sbtn_h,
+                    ).collidepoint(mx, my):
+                        if si != ui_scale:
+                            confirmed = _confirm_scale_change(
+                                screen, si,
+                            )
+                            if confirmed:
+                                ui_scale = si
+                            # Restore current menu's scale either way
+                            # since _confirm_scale_change resets on
+                            # revert but the caller re-enters this
+                            # function on next launch.
+                            cur_s = (
+                                ui_scale
+                                if ui_scale > 0
+                                else auto_ui_scale()
+                            )
+                            _theme.apply_scale(cur_s)
+                            # Fully re-enter: return so __main__
+                            # can rebuild the window if needed.
+                            return fullscreen, ui_scale
                         break
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
