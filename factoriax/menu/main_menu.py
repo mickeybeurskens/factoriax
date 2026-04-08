@@ -11,10 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pygame
 
-from factoriax.constants import BlockType, Direction, ItemType
+from factoriax.constants import Direction, ItemType
 from factoriax.renderer import (
     create_player_texture,
-    get_textures,
     render_item_icon,
 )
 from factoriax.ui import theme as _theme
@@ -34,10 +33,12 @@ _BASE_BTN_W: int = 400
 _BASE_BTN_H: int = 80
 _BASE_BTN_GAP: int = 30
 _BASE_ICON_SIZE: int = 32
-_BASE_ICON_GAP: int = 4
+_BASE_ICON_GAP: int = 8
 _BASE_TITLE_FONT: int = 192
 _BASE_BTN_FONT: int = 44
 _FPS: int = 30
+_ANIM_STEP_MS: int = 700
+_ANIM_CYCLE_LEN: int = 6
 
 
 # -- Helpers -----------------------------------------------------------------
@@ -67,7 +68,7 @@ def _build_decoration_surfaces(icon_size: int) -> list[pygame.Surface]:
         icon_size: Pixel size for each decoration icon.
 
     Returns:
-        Ordered surfaces: player, miner, coal block, 4x belt, arm, chest.
+        Ordered surfaces: player, miner, 4x belt, arm, chest.
     """
     surfaces: list[pygame.Surface] = []
 
@@ -81,10 +82,6 @@ def _build_decoration_surfaces(icon_size: int) -> list[pygame.Surface]:
 
     miner = render_item_icon(ItemType.MINER, icon_size)
     surfaces.append(_rgba_to_surface(miner))
-
-    textures = get_textures(icon_size)
-    coal = textures[int(BlockType.COAL)]
-    surfaces.append(_rgba_to_surface(coal))
 
     belt = render_item_icon(ItemType.CONVEYOR_BELT, icon_size)
     belt_surf = _rgba_to_surface(belt)
@@ -178,6 +175,15 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
         len(deco_surfs) - 1
     )
 
+    # Iron ore icon for the belt animation (half-size, centered on slots).
+    iron_size = max(8, icon_size // 2)
+    iron_rgba = render_item_icon(ItemType.IRON, iron_size)
+    iron_surf = _rgba_to_surface(iron_rgba)
+    # Animation target: slot indices where the iron travels.
+    # Row is: [0]player [1]miner [2]belt [3]belt [4]belt [5]belt [6]arm [7]chest
+    # Steps 0-3: iron on belts (indices 2-5), step 4: iron on arm (index 6).
+    _ANIM_SLOT_TARGETS = [2, 3, 4, 5, 6]
+
     # Vertical positions: title at 25%, buttons at 50%, with overlap guard.
     title_y = int(sh * 0.25) - title_h // 2
     deco_y = title_y + title_h + 8 * s
@@ -231,14 +237,27 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
         surf = canvas.surface
         surf.fill(_BG_COLOR)
 
-        # Title (centered horizontally).
-        surf.blit(title_surf, ((sw - title_w) // 2, title_y))
+        # Title (centered, with minimum margin from edges).
+        title_x = max(32 * s, (sw - title_w) // 2)
+        surf.blit(title_surf, (title_x, title_y))
 
         # Decoration row (centered horizontally).
-        dx = (sw - deco_total_w) // 2
+        deco_start_x = max(32 * s, (sw - deco_total_w) // 2)
+        slot_positions: list[int] = []
+        dx = deco_start_x
         for deco in deco_surfs:
+            slot_positions.append(dx)
             surf.blit(deco, (dx, deco_y))
             dx += deco.get_width() + icon_gap
+
+        # Iron ore animation: travels from miner across belts to arm.
+        anim_step = (pygame.time.get_ticks() // _ANIM_STEP_MS) % _ANIM_CYCLE_LEN
+        if anim_step < len(_ANIM_SLOT_TARGETS):
+            target_idx = _ANIM_SLOT_TARGETS[anim_step]
+            if target_idx < len(slot_positions):
+                iron_x = slot_positions[target_idx] + (icon_size - iron_size) // 2
+                iron_y = deco_y + (icon_size - iron_size) // 2
+                surf.blit(iron_surf, (iron_x, iron_y))
 
         # Buttons.
         mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
