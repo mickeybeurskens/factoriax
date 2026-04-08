@@ -29,6 +29,7 @@ from factoriax.constants import (
     PLACEABLE_ITEMS,
     Action,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.play.play_state import PlayState
@@ -52,6 +53,15 @@ from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import ClickRegion, hit_test_regions
 
 _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(int(x) for x in PLACEABLE_ITEMS)
+
+_ITEM_TO_PLACE_ACTION: dict[int, int] = {
+    int(ItemType.MINER): int(Action.PLACE_MINER),
+    int(ItemType.CHEST): int(Action.PLACE_CHEST),
+    int(ItemType.CONVEYOR_BELT): int(Action.PLACE_BELT),
+    int(ItemType.ARM): int(Action.PLACE_ARM),
+    int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
+    int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
+}
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).
 _MOVE_TO_DIR: dict[str, tuple[int, int, int]] = {
@@ -421,8 +431,9 @@ class GameUI:
                 else:
                     quit_flag = True
         elif not self.has_menu_open() and not ps.welcome_open:
-            if ps.selected_item in _PLACEABLE_ITEM_SET:
-                action = int(Action.PLACE)
+            place_action = _ITEM_TO_PLACE_ACTION.get(ps.selected_item)
+            if place_action is not None:
+                action = place_action
 
         return GameUIResult(
             action=action, state=state, quit=quit_flag, reset=reset_flag,
@@ -799,4 +810,4 @@ def _handle_world_interact(state: EnvState) -> int:
         and 0 <= ty < map_h
         and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
     )
-    return int(Action.PICKUP if has_machine else Action.PLACE)
+    return int(Action.PICKUP)
