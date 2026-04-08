@@ -16,9 +16,9 @@ UI_SCALE: int = 1
 # ---------------------------------------------------------------------------
 
 _BASE_BORDER_PX: int = 4
-_BASE_FONT_HEADER: int = 26
-_BASE_FONT_BODY: int = 20
-_BASE_FONT_HINT: int = 14
+_BASE_FONT_HEADER: int = 24
+_BASE_FONT_BODY: int = 18
+_BASE_FONT_HINT: int = 12
 _BASE_HEADER_H: int = 44
 _BASE_SEP_H: int = 4
 _BASE_HINT_HEIGHT: int = 24

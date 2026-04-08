@@ -53,8 +53,34 @@ def _run() -> None:
             _handle_editor(screen)
         elif choice == "settings":
             _handle_settings(screen, config)
+            # Rebuild window in case scale or fullscreen changed.
+            screen = _apply_display_config(config)
 
     pygame.quit()
+
+
+def _apply_display_config(config: PlayerConfig) -> pygame.Surface:
+    """Apply display settings from config and return the new screen.
+
+    Reapplies the theme scale and recreates the pygame display at the
+    correct size and mode.
+
+    Args:
+        config: Player configuration with display settings.
+
+    Returns:
+        The new pygame display surface.
+    """
+    ui_scale = config.ui_scale if config.ui_scale > 0 else auto_ui_scale()
+    _theme.apply_scale(ui_scale)
+    canvas_size = _BASE_SIZE * ui_scale
+    if config.fullscreen:
+        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    else:
+        w, h = calculate_window_size(canvas_size, canvas_size)
+        screen = pygame.display.set_mode((w, h))
+    pygame.display.set_caption("FactoriaX")
+    return screen
 
 
 def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:

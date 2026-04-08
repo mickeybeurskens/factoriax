@@ -27,13 +27,6 @@ from factoriax.play.game_ui import GameUI
 from factoriax.state import EnvParams
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _init_pygame_display() -> None:
-    """Initialise pygame display for key.get_mods()."""
-    pygame.display.init()
-    yield  # type: ignore[misc]
-    pygame.display.quit()
-
 
 @pytest.fixture
 def params() -> EnvParams:

@@ -20,8 +20,6 @@ from factoriax.state import EnvParams
 def pygame_font_session() -> None:
     """Initialise pygame font subsystem once per session."""
     pygame.font.init()
-    yield
-    pygame.font.quit()
 
 
 @pytest.fixture(scope="module")

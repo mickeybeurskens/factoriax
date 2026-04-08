@@ -21,7 +21,7 @@ from factoriax.state import EnvParams
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.scaling import ScaledCanvas
-from factoriax.ui.window import auto_ui_scale
+from factoriax.ui.window import auto_ui_scale, calculate_window_size
 
 logger = logging.getLogger(__name__)
 
@@ -882,6 +882,9 @@ def _confirm_scale_change(
     """
     new_s = new_scale_value if new_scale_value > 0 else auto_ui_scale()
     _theme.apply_scale(new_s)
+    canvas_size = 1024 * new_s
+    w, h = calculate_window_size(canvas_size, canvas_size)
+    screen = pygame.display.set_mode((w, h))
     canvas = ScaledCanvas(1024, new_s, screen)
     clock = pygame.time.Clock()
     deadline = pygame.time.get_ticks() + _CONFIRM_TIMEOUT_MS
@@ -1098,6 +1101,15 @@ def run_controls_menu(
                 )
                 if cb_hit.collidepoint(mx, my):
                     fullscreen = not fullscreen
+                    if fullscreen:
+                        screen = pygame.display.set_mode(
+                            (0, 0), pygame.FULLSCREEN,
+                        )
+                    else:
+                        canvas_px = 1024 * s
+                        w, h = calculate_window_size(canvas_px, canvas_px)
+                        screen = pygame.display.set_mode((w, h))
+                    canvas.handle_resize(*screen.get_size())
 
                 # Hit-test UI scale buttons (row below fullscreen).
                 scale_row_cy = fs_cy + row_h + row_gap

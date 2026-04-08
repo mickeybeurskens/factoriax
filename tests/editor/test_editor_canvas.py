@@ -18,12 +18,10 @@ from factoriax.editor.state import (
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _init_pygame() -> None:
-    """Initialise pygame once per module to avoid invalidating font caches."""
+    """Initialise pygame once per session to avoid invalidating font caches."""
     pygame.init()
-    yield  # type: ignore[misc]
-    pygame.quit()
 
 
 def _make_vp(state: object) -> Viewport:

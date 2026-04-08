@@ -6,6 +6,7 @@ without requiring a live pygame display.
 
 from __future__ import annotations
 
+
 from unittest.mock import MagicMock, patch
 
 import pygame
@@ -34,17 +35,17 @@ class TestApplyScale:
         """Scale factor 1 leaves constants at base values."""
         theme.apply_scale(1)
         assert theme.UI_SCALE == 1
-        assert theme.FONT_HEADER == 26
-        assert theme.FONT_BODY == 20
+        assert theme.FONT_HEADER == 24
+        assert theme.FONT_BODY == 18
         assert theme.BORDER_PX == 4
 
     def test_scale_2_doubles_sizes(self) -> None:
         """Scale factor 2 doubles all size constants."""
         theme.apply_scale(2)
         assert theme.UI_SCALE == 2
-        assert theme.FONT_HEADER == 52
-        assert theme.FONT_BODY == 40
-        assert theme.FONT_HINT == 28
+        assert theme.FONT_HEADER == 48
+        assert theme.FONT_BODY == 36
+        assert theme.FONT_HINT == 24
         assert theme.HEADER_H == 88
         assert theme.BORDER_PX == 8
         assert theme.SCROLLBAR_W == 16
@@ -53,8 +54,8 @@ class TestApplyScale:
         """Scale factor 3 triples all size constants."""
         theme.apply_scale(3)
         assert theme.UI_SCALE == 3
-        assert theme.FONT_HEADER == 78
-        assert theme.FONT_BODY == 60
+        assert theme.FONT_HEADER == 72
+        assert theme.FONT_BODY == 54
 
     def test_colors_unchanged(self) -> None:
         """Color constants are not affected by scaling."""
@@ -70,13 +71,11 @@ class TestApplyScale:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _init_pygame() -> None:
     """Initialise pygame display for surface creation."""
     pygame.display.init()
     pygame.display.set_mode((800, 600))
-    yield  # type: ignore[misc]
-    pygame.display.quit()
 
 
 class TestScaledCanvasInit:

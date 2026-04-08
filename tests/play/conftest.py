@@ -11,7 +11,6 @@ import pytest
 
 @pytest.fixture(scope="session", autouse=True)
 def pygame_font_session() -> None:
-    """Initialise the pygame font subsystem once per test session."""
+    """Initialise pygame font and display subsystems once per session."""
+    pygame.display.init()
     pygame.font.init()
-    yield
-    pygame.font.quit()
