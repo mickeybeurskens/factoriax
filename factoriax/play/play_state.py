@@ -36,7 +36,9 @@ class PlayState:
         machine_ty: Y tile coordinate of the inspected machine.
         machine_panel_active: Whether the machine panel (vs player panel) has focus.
         hotbar_page: Hotbar page (0 shows slots 0-7, 1 shows slots 2-9).
-        held_slot: Inventory slot currently held for swapping, or None.
+        held_item: Item type currently held for swapping, or None.
+        selected_item: Currently selected item type for UI highlighting.
+        focused_machine_item: Currently focused machine item type.
         record_enabled: Whether trajectory recording is active.
         recorded_states: Captured EnvState snapshots for trajectory.
         recorded_actions: Captured action integers per step.
@@ -65,7 +67,9 @@ class PlayState:
     machine_ty: int = 0
     machine_panel_active: bool = True
     hotbar_page: int = 0
-    held_slot: int | None = None
+    held_item: int | None = None
+    selected_item: int = 1
+    focused_machine_item: int = 0
     selected_recipe: int = 0
 
     # Recording

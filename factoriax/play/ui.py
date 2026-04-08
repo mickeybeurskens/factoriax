@@ -1589,7 +1589,7 @@ def render_inventory_menu(
     screen_width: int,
     screen_height: int,
     menu_focus: str = "inventory",
-    held_slot: int | None = None,
+    held_item: int | None = None,
     selected_recipe: int = 0,
     selected_item: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
@@ -1599,7 +1599,7 @@ def render_inventory_menu(
     count, and name.  Right section: recipe list showing output, name, and
     per-ingredient have/need counts coloured by affordability.
 
-    When *held_slot* is not ``None`` the corresponding inventory cell is
+    When *held_item* is not ``None`` the corresponding inventory cell is
     drawn with a gold border to indicate a pending swap operation.
 
     Args:
@@ -1607,7 +1607,7 @@ def render_inventory_menu(
         screen_width: Total screen width in pixels.
         screen_height: Total screen height in pixels.
         menu_focus: Focused section — "inventory" or "crafting".
-        held_slot: Item type currently "held" for swapping, or None.
+        held_item: Item type currently "held" for swapping, or None.
         selected_recipe: Currently focused recipe index.
         selected_item: Currently selected item type for highlighting.
 
@@ -1710,7 +1710,7 @@ def render_inventory_menu(
         is_selected = (item_type_idx == selected_slot) and (
             menu_focus == "inventory"
         )
-        is_held = item_type_idx == held_slot
+        is_held = item_type_idx == held_item
         slot_bg: tuple[int, int, int, int] = (
             (90, 90, 90, 255) if is_selected else (55, 55, 55, 255)
         )

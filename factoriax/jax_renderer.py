@@ -36,8 +36,6 @@ import numpy as np
 from factoriax.constants import (
     DIRECTIONS,
     ITEM_COLORS,
-    MAX_MACHINE_INVENTORY_SLOTS,
-    NUM_INVENTORY_SLOTS,
     NUM_ITEM_TYPES,
     BlockType,
     MachineType,
@@ -65,7 +63,6 @@ ICON_SIZE: int = 6
 
 # Colors (as JAX arrays for use inside traced functions)
 SLOT_BG = np.array([40, 40, 40], dtype=np.uint8)
-SLOT_BG_SELECTED = np.array([80, 80, 80], dtype=np.uint8)
 COUNT_COLOR = np.array([220, 220, 220], dtype=np.uint8)
 HUD_BG = jnp.array([30, 30, 30], dtype=jnp.uint8)
 HUD_BORDER = jnp.array([60, 60, 60], dtype=jnp.uint8)
@@ -383,22 +380,20 @@ def render_inventory_strip(
         uint8 RGB array of shape (INV_HEIGHT, img_width, 3).
     """
     strip = jnp.full((INV_HEIGHT, img_width, 3), SLOT_BG, dtype=jnp.uint8)
-    slot_width = img_width // NUM_INVENTORY_SLOTS
-    items = state.inventory_items[0]
-    counts = state.inventory_counts[0]
-    selected = state.selected_slots[0]
+    slot_width = img_width // NUM_ITEM_TYPES
+    inv = state.player_inventory[0]
 
     def _draw_slot(slot_idx: int, img: jnp.ndarray) -> jnp.ndarray:
         x_start = slot_idx * slot_width
-        is_selected = slot_idx == selected
-        bg = jnp.where(is_selected, SLOT_BG_SELECTED, SLOT_BG)
-        slot_bg = jnp.broadcast_to(bg, (INV_HEIGHT, slot_width, 3))
+        slot_bg = jnp.broadcast_to(
+            SLOT_BG, (INV_HEIGHT, slot_width, 3)
+        ).astype(jnp.uint8)
         img = jax.lax.dynamic_update_slice(
-            img, slot_bg.astype(jnp.uint8), (0, x_start, 0)
+            img, slot_bg, (0, x_start, 0)
         )
 
-        item_type = items[slot_idx]
-        count = counts[slot_idx]
+        item_type = slot_idx
+        count = inv[slot_idx]
         color = item_colors[item_type]
         has_item = (item_type > 0) & (count > 0)
 
@@ -439,7 +434,7 @@ def render_inventory_strip(
         return img
 
     result: jnp.ndarray = jax.lax.fori_loop(
-        0, NUM_INVENTORY_SLOTS, _draw_slot, strip
+        0, NUM_ITEM_TYPES, _draw_slot, strip
     )
     return result
 
@@ -572,7 +567,7 @@ def render_q2_machine_inv(
     quad_h: int,
     quad_w: int,
 ) -> jnp.ndarray:
-    """Q2: machine inventory -- 4x2 grid of machine slots.
+    """Q2: machine inventory -- grid of item type counts.
 
     Args:
         state: Single EnvState.
@@ -588,20 +583,20 @@ def render_q2_machine_inv(
     fx, fy = _get_facing_tile(state)
     mt = state.machine_types[fy, fx]
     has_machine = mt != int(MachineType.NONE)
-    inv_items = state.machine_inventory_items[fy, fx, :]
-    inv_counts = state.machine_inventory_counts[fy, fx, :]
-    cell_w = quad_w // 2
-    cell_h = quad_h // 4
+    inv = state.machine_inventory[fy, fx, :]
+    cols = 5
+    cell_w = quad_w // cols
+    rows = (NUM_ITEM_TYPES + cols - 1) // cols
+    cell_h = quad_h // rows
 
     def _draw_mslot(slot: int, img: jnp.ndarray) -> jnp.ndarray:
-        col = slot % 2
-        row = slot // 2
+        col = slot % cols
+        row = slot // cols
         cx = col * cell_w + 2
         cy = row * cell_h + 2
-        item = inv_items[slot]
-        count = inv_counts[slot]
-        color = item_colors[jnp.clip(item, 0, NUM_ITEM_TYPES - 1)]
-        has_item = has_machine & (item > 0) & (count > 0)
+        count = inv[slot]
+        color = item_colors[slot]
+        has_item = has_machine & (slot > 0) & (count > 0)
         swatch = jnp.broadcast_to(color, (ICON_SIZE, ICON_SIZE, 3))
         swatch = swatch * has_item.astype(jnp.uint8)
         img = jax.lax.dynamic_update_slice(img, swatch, (cy, cx, 0))
@@ -612,7 +607,7 @@ def render_q2_machine_inv(
         return img
 
     result: jnp.ndarray = jax.lax.fori_loop(
-        0, MAX_MACHINE_INVENTORY_SLOTS, _draw_mslot, img
+        0, NUM_ITEM_TYPES, _draw_mslot, img
     )
     return result
 
@@ -624,7 +619,7 @@ def render_q3_inventory(
     quad_h: int,
     quad_w: int,
 ) -> jnp.ndarray:
-    """Q3: player inventory -- 2x5 grid.
+    """Q3: player inventory -- grid of item type counts.
 
     Args:
         state: Single EnvState.
@@ -637,27 +632,24 @@ def render_q3_inventory(
         uint8 RGB array of shape (quad_h, quad_w, 3).
     """
     img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
-    items = state.inventory_items[0]
-    counts = state.inventory_counts[0]
-    selected = state.selected_slots[0]
-    cell_w = quad_w // 5
-    cell_h = quad_h // 2
+    inv = state.player_inventory[0]
+    cols = 5
+    cell_w = quad_w // cols
+    rows = (NUM_ITEM_TYPES + cols - 1) // cols
+    cell_h = quad_h // rows
 
     def _draw_islot(slot: int, img: jnp.ndarray) -> jnp.ndarray:
-        col = slot % 5
-        row = slot // 5
+        col = slot % cols
+        row = slot // cols
         cx = col * cell_w
         cy = row * cell_h
-        is_sel = slot == selected
-        bg_color = jnp.where(is_sel, SLOT_BG_SELECTED, SLOT_BG)
         cell_bg = jnp.broadcast_to(
-            bg_color, (cell_h, cell_w, 3)
+            SLOT_BG, (cell_h, cell_w, 3)
         ).astype(jnp.uint8)
         img = jax.lax.dynamic_update_slice(img, cell_bg, (cy, cx, 0))
-        item = items[slot]
-        count = counts[slot]
-        color = item_colors[jnp.clip(item, 0, NUM_ITEM_TYPES - 1)]
-        has_item = (item > 0) & (count > 0)
+        count = inv[slot]
+        color = item_colors[slot]
+        has_item = (slot > 0) & (count > 0)
         swatch = jnp.broadcast_to(color, (ICON_SIZE, ICON_SIZE, 3))
         swatch = swatch * has_item.astype(jnp.uint8)
         img = jax.lax.dynamic_update_slice(
@@ -670,7 +662,7 @@ def render_q3_inventory(
         return img
 
     result: jnp.ndarray = jax.lax.fori_loop(
-        0, NUM_INVENTORY_SLOTS, _draw_islot, img
+        0, NUM_ITEM_TYPES, _draw_islot, img
     )
     return result
 
@@ -695,8 +687,7 @@ def render_q4_crafting(
         uint8 RGB array of shape (quad_h, quad_w, 3).
     """
     img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
-    inv_items = state.inventory_items[0]
-    inv_counts = state.inventory_counts[0]
+    inv = state.player_inventory[0]
     craft_recipe = state.crafting_recipe[0]
     craft_progress = state.craft_progress[0]
     row_h = quad_h // NUM_RECIPES
@@ -731,9 +722,7 @@ def render_q4_crafting(
             has_enough = jnp.where(
                 needed_item == 0,
                 True,
-                jnp.sum(
-                    jnp.where(inv_items == needed_item, inv_counts, 0)
-                ) >= needed_count,
+                inv[needed_item] >= needed_count,
             )
             return affordable & has_enough
 

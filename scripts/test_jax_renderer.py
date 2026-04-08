@@ -24,7 +24,6 @@ from factoriax.jax_renderer import (
     INV_HEIGHT,
     JaxRenderer,
     SLOT_BG,
-    SLOT_BG_SELECTED,
     build_block_atlas,
     build_digit_atlas,
     build_item_color_atlas,
@@ -602,28 +601,25 @@ class TestInventoryStrip:
         has_iron = np.all(strip == iron_color, axis=-1)
         assert has_iron.any()
 
-    def test_selected_slot_brighter(
+    def test_all_empty_slots_uniform(
         self,
         single_state: EnvState,
         item_colors: jnp.ndarray,
         digit_atlas: jnp.ndarray,
     ) -> None:
-        """Selected slot background should be brighter than unselected."""
+        """Empty slots should all have the same background brightness."""
+        from factoriax.constants import NUM_ITEM_TYPES
         img_width = MAP_SIZE * TILE_PX
         strip = np.array(
             render_inventory_strip(
                 single_state, item_colors, digit_atlas, img_width
             )
         )
-        slot_width = img_width // 10
-        selected = int(single_state.selected_slots[0])
-
-        # Check that the selected slot region is brighter on average.
-        sel_region = strip[:, selected * slot_width:(selected + 1) * slot_width]
-        # Pick an unselected slot.
-        other = (selected + 1) % 10
-        other_region = strip[:, other * slot_width:(other + 1) * slot_width]
-        assert sel_region.mean() > other_region.mean()
+        slot_width = img_width // NUM_ITEM_TYPES
+        # Two empty slots (skip index 0 which is ItemType.NONE)
+        region_a = strip[:, 1 * slot_width:2 * slot_width]
+        region_b = strip[:, 2 * slot_width:3 * slot_width]
+        np.testing.assert_array_equal(region_a, region_b)
 
 
 class TestWithInventoryRender:

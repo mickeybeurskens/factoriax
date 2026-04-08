@@ -24,8 +24,7 @@ from factoriax.config import (
     resolve_key,
 )
 from factoriax.constants import (
-    MACHINE_NUM_SLOTS,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     PLACEABLE_ITEMS,
     Action,
@@ -75,16 +74,16 @@ _MOVE_TO_DIR: dict[str, tuple[int, int, int]] = {
 }
 
 _SLOT_ACTIONS: dict[str, int] = {
-    PlayerAction.SLOT_1: 0,
-    PlayerAction.SLOT_2: 1,
-    PlayerAction.SLOT_3: 2,
-    PlayerAction.SLOT_4: 3,
-    PlayerAction.SLOT_5: 4,
-    PlayerAction.SLOT_6: 5,
-    PlayerAction.SLOT_7: 6,
-    PlayerAction.SLOT_8: 7,
-    PlayerAction.SLOT_9: 8,
-    PlayerAction.SLOT_10: 9,
+    PlayerAction.SLOT_1: 1,
+    PlayerAction.SLOT_2: 2,
+    PlayerAction.SLOT_3: 3,
+    PlayerAction.SLOT_4: 4,
+    PlayerAction.SLOT_5: 5,
+    PlayerAction.SLOT_6: 6,
+    PlayerAction.SLOT_7: 7,
+    PlayerAction.SLOT_8: 8,
+    PlayerAction.SLOT_9: 9,
+    PlayerAction.SLOT_10: 10,
 }
 
 _PLAYER_ACTIONS: dict[str, int] = {
@@ -313,6 +312,7 @@ class GameUI:
             machine_overlay, machine_regions = render_machine_menu(
                 state, ui_w, ui_h,
                 ps.machine_tx, ps.machine_ty, ps.machine_panel_active,
+                ps.selected_item, ps.focused_machine_item,
             )
             composite_rgba_over_rgb(ui_frame, machine_overlay)
             click_regions.extend(machine_regions)
@@ -320,7 +320,8 @@ class GameUI:
         if ps.inventory_open:
             menu_overlay, inv_regions = render_inventory_menu(
                 state, ui_w, ui_h,
-                ps.menu_focus, ps.held_slot, ps.selected_recipe,
+                ps.menu_focus, ps.held_item, ps.selected_recipe,
+                ps.selected_item,
             )
             composite_rgba_over_rgb(ui_frame, menu_overlay)
             click_regions.extend(inv_regions)
@@ -382,11 +383,7 @@ class GameUI:
 
         if hit is not None:
             if hit.action == "select_slot":
-                selected_player = int(state.selected_player)
-                new_slots = state.selected_slots.at[selected_player].set(
-                    hit.param,
-                )
-                state = state.replace(selected_slots=new_slots)
+                ps.selected_item = hit.param
                 if ps.machine_open:
                     ps.machine_panel_active = False
                 else:
@@ -395,30 +392,20 @@ class GameUI:
                 ps.menu_focus = "crafting"
                 ps.selected_recipe = hit.param
             elif hit.action == "select_machine_slot":
-                mt = int(state.machine_types[ps.machine_ty, ps.machine_tx])
-                num_slots = int(MACHINE_NUM_SLOTS[mt])
-                if 0 <= hit.param < num_slots:
-                    new_sel = state.machine_selected_slot.at[
-                        ps.machine_ty, ps.machine_tx
-                    ].set(hit.param)
-                    state = state.replace(machine_selected_slot=new_sel)
+                ps.focused_machine_item = hit.param
                 ps.machine_panel_active = True
             elif hit.action == "toggle_held":
-                if ps.held_slot is None:
-                    ps.held_slot = hit.param
-                    selected_player = int(state.selected_player)
-                    new_slots = state.selected_slots.at[selected_player].set(
-                        hit.param,
-                    )
-                    state = state.replace(selected_slots=new_slots)
-                elif ps.held_slot == hit.param:
-                    ps.held_slot = None
+                if ps.held_item is None:
+                    ps.held_item = hit.param
+                    ps.selected_item = hit.param
+                elif ps.held_item == hit.param:
+                    ps.held_item = None
                 else:
                     selected_player = int(state.selected_player)
                     state = swap_inventory_slots(
-                        state, selected_player, ps.held_slot, hit.param,
+                        state, selected_player, ps.held_item, hit.param,
                     )
-                    ps.held_slot = None
+                    ps.held_item = None
             elif hit.action == "hotbar_page":
                 ps.hotbar_page = 1 - ps.hotbar_page
             elif hit.action == "focus_inventory":
@@ -434,10 +421,7 @@ class GameUI:
                 else:
                     quit_flag = True
         elif not self.has_menu_open() and not ps.welcome_open:
-            selected_player = int(state.selected_player)
-            slot_idx = int(state.selected_slots[selected_player])
-            item_type = int(state.inventory_items[selected_player, slot_idx])
-            if item_type in _PLACEABLE_ITEM_SET:
+            if ps.selected_item in _PLACEABLE_ITEM_SET:
                 action = int(Action.PLACE)
 
         return GameUIResult(
@@ -465,7 +449,7 @@ class GameUI:
                 ps.pause_open = False
             elif ps.inventory_open:
                 ps.inventory_open = False
-                ps.held_slot = None
+                ps.held_item = None
             elif ps.achievement_open:
                 ps.achievement_open = False
             elif ps.research_open:
@@ -498,7 +482,7 @@ class GameUI:
                 ps.achievement_open = False
                 ps.machine_open = False
             else:
-                ps.held_slot = None
+                ps.held_item = None
         elif PlayerAction.OPEN_ACHIEVEMENTS in actions:
             ps.achievement_open = not ps.achievement_open
             if ps.achievement_open:
@@ -607,13 +591,9 @@ class GameUI:
                 )
             else:
                 delta = -1 if is_left else 1
-                selected_player = int(state.selected_player)
-                current = int(state.selected_slots[selected_player])
-                new_slot = (current + delta) % NUM_INVENTORY_SLOTS
-                new_slots = state.selected_slots.at[selected_player].set(
-                    new_slot,
-                )
-                state = state.replace(selected_slots=new_slots)
+                current = ps.selected_item
+                new_item = ((current - 1 + delta) % (NUM_ITEM_TYPES - 1)) + 1
+                ps.selected_item = new_item
         elif PlayerAction.CONFIRM in actions:
             action = int(
                 Action.WITHDRAW
@@ -633,12 +613,8 @@ class GameUI:
         is_idle = (
             int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0
         )
-        mc = state.machine_inventory_counts
-        has_inputs = (
-            int(mc[ps.machine_ty, ps.machine_tx, 0]) > 0
-            or int(mc[ps.machine_ty, ps.machine_tx, 1]) > 0
-            or int(mc[ps.machine_ty, ps.machine_tx, 2]) > 0
-        )
+        mi = state.machine_inventory[ps.machine_ty, ps.machine_tx]
+        has_inputs = bool(int(mi.sum()) > 0)
         if (
             mt == int(MachineType.ASSEMBLER)
             and is_idle
@@ -706,29 +682,27 @@ class GameUI:
         """
         ps = self._ps
         action: int | None = None
-        selected_player = int(state.selected_player)
-        current = int(state.selected_slots[selected_player])
-        col = current % 5
+        # Navigate a 2x7 grid of item types (1..14).
+        current = ps.selected_item
+        grid_idx = current - 1  # 0-based index into 14 cells
+        cols = 7
+        col = grid_idx % cols
         if PlayerAction.NAV_LEFT in actions:
             if col > 0:
-                action = int(Action.PREV_SLOT)
+                ps.selected_item = current - 1
         elif PlayerAction.NAV_RIGHT in actions:
-            if col == 4:
+            if col == cols - 1:
                 ps.menu_focus = "crafting"
             else:
-                action = int(Action.NEXT_SLOT)
+                new_item = current + 1
+                if new_item < NUM_ITEM_TYPES:
+                    ps.selected_item = new_item
         elif PlayerAction.NAV_UP in actions:
-            if current >= 5:
-                new_sel = state.selected_slots.at[selected_player].set(
-                    current - 5,
-                )
-                state = state.replace(selected_slots=new_sel)
+            if grid_idx >= cols:
+                ps.selected_item = current - cols
         elif PlayerAction.NAV_DOWN in actions:
-            if current < 5:
-                new_sel = state.selected_slots.at[selected_player].set(
-                    current + 5,
-                )
-                state = state.replace(selected_slots=new_sel)
+            if grid_idx + cols < NUM_ITEM_TYPES - 1:
+                ps.selected_item = current + cols
         return state, action
 
     def _handle_crafting_nav(
@@ -781,17 +755,13 @@ class GameUI:
                     state = state.replace(selected_player=player_idx)
                 return state, action
 
-            # Slot selection.
+            # Item type selection via number keys.
             slot_match = actions & _SLOT_ACTIONS.keys()
             if slot_match:
                 slot_name = next(iter(slot_match))
-                slot_idx = _SLOT_ACTIONS[slot_name]
-                if slot_idx < NUM_INVENTORY_SLOTS:
-                    selected_player = int(state.selected_player)
-                    new_slots = state.selected_slots.at[
-                        selected_player
-                    ].set(slot_idx)
-                    state = state.replace(selected_slots=new_slots)
+                item_type = _SLOT_ACTIONS[slot_name]
+                if item_type < NUM_ITEM_TYPES:
+                    self._ps.selected_item = item_type
                 return state, action
 
             # Movement (face-then-move).

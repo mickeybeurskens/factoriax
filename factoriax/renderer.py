@@ -7,7 +7,7 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
-    NUM_INVENTORY_SLOTS,
+    NUM_ITEM_TYPES,
     BlockType,
     Direction,
     ItemType,
@@ -280,59 +280,69 @@ def build_texture_lookup(size: int) -> np.ndarray:
     return lookup
 
 
-def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
+def render_inventory_bar(
+    state: EnvState,
+    width: int,
+    selected_item: int = 0,
+) -> np.ndarray:
     """Render inventory bar showing the selected player's inventory.
 
-    The currently selected slot is highlighted with a white border.
-    If the player is crafting, a progress indicator is shown.
+    Each slot corresponds to an ``ItemType`` index. The slot matching
+    *selected_item* is highlighted with a white border. If the player
+    is crafting, a progress indicator is shown.
 
     Args:
-        state: Current environment state containing inventory data
-        width: Width of the bar in pixels (should match map render width)
+        state: Current environment state containing inventory data.
+        width: Width of the bar in pixels (should match map render width).
+        selected_item: ``ItemType`` index of the currently selected item.
 
     Returns:
-        RGB numpy array of shape (INVENTORY_BAR_HEIGHT, width, 3)
+        RGB numpy array of shape (INVENTORY_BAR_HEIGHT, width, 3).
     """
-    bar = np.full((INVENTORY_BAR_HEIGHT, width, 3), (40, 40, 40), dtype=np.uint8)
+    bar = np.full(
+        (INVENTORY_BAR_HEIGHT, width, 3), (40, 40, 40), dtype=np.uint8,
+    )
 
-    slot_width = width // NUM_INVENTORY_SLOTS
+    slot_width = width // NUM_ITEM_TYPES
     slot_size = min(slot_width - 4, INVENTORY_BAR_HEIGHT - 4)
 
     selected_player = int(state.selected_player)
-    selected_slot = int(state.selected_slots[selected_player])
-    inventory_items = np.array(state.inventory_items[selected_player])
-    inventory_counts = np.array(state.inventory_counts[selected_player])
+    inventory = np.array(state.player_inventory[selected_player])
     craft_progress = int(state.craft_progress[selected_player])
 
-    for slot_idx in range(NUM_INVENTORY_SLOTS):
-        x_center = slot_idx * slot_width + slot_width // 2
+    for item_idx in range(NUM_ITEM_TYPES):
+        x_center = item_idx * slot_width + slot_width // 2
         x_start = x_center - slot_size // 2
         y_start = (INVENTORY_BAR_HEIGHT - slot_size) // 2
 
-        is_selected_slot = slot_idx == selected_slot
+        is_selected_slot = item_idx == selected_item
         slot_bg = (100, 100, 100) if is_selected_slot else (60, 60, 60)
-        bar[y_start : y_start + slot_size, x_start : x_start + slot_size] = slot_bg
+        bar[
+            y_start : y_start + slot_size,
+            x_start : x_start + slot_size,
+        ] = slot_bg
 
         if is_selected_slot:
-            bar[y_start, x_start : x_start + slot_size] = (255, 255, 255)
-            bar[y_start + slot_size - 1, x_start : x_start + slot_size] = (
-                255,
-                255,
-                255,
+            bar[y_start, x_start : x_start + slot_size] = (
+                255, 255, 255,
             )
-            bar[y_start : y_start + slot_size, x_start] = (255, 255, 255)
-            bar[y_start : y_start + slot_size, x_start + slot_size - 1] = (
-                255,
-                255,
-                255,
+            bar[
+                y_start + slot_size - 1,
+                x_start : x_start + slot_size,
+            ] = (255, 255, 255)
+            bar[y_start : y_start + slot_size, x_start] = (
+                255, 255, 255,
             )
+            bar[
+                y_start : y_start + slot_size,
+                x_start + slot_size - 1,
+            ] = (255, 255, 255)
 
-        item_type = int(inventory_items[slot_idx])
-        count = int(inventory_counts[slot_idx])
+        count = int(inventory[item_idx])
 
-        if item_type != 0 and count > 0:
+        if item_idx != 0 and count > 0:
             pad = 2
-            color = ITEM_COLORS.get(item_type, (128, 128, 128))
+            color = ITEM_COLORS.get(item_idx, (128, 128, 128))
             bar[
                 y_start + pad : y_start + slot_size - pad,
                 x_start + pad : x_start + slot_size - pad,
@@ -341,7 +351,9 @@ def render_inventory_bar(state: EnvState, width: int) -> np.ndarray:
     if craft_progress > 0:
         indicator_width = 20
         indicator_x = width - indicator_width - 4
-        bar[2:6, indicator_x : indicator_x + indicator_width] = (100, 200, 100)
+        bar[2:6, indicator_x : indicator_x + indicator_width] = (
+            100, 200, 100,
+        )
 
     return bar
 
@@ -803,8 +815,6 @@ _WAVE_STRIPE_WIDTH: int = 2  # px thickness of each stripe
 _WAVE_PERIOD: int = 60  # frames for stripes to scroll one full cycle
 _WAVE_SPACING: int = 5  # px between stripe centers
 
-# Miner output slot index (mirrors machines.py).
-_ANIM_MINER_OUTPUT_SLOT: int = 1
 
 
 def animate_water(
@@ -912,8 +922,7 @@ def draw_belt_cargo(
     if belt_ys.size == 0:
         return
 
-    inv_items = np.array(state.machine_inventory_items)
-    inv_counts = np.array(state.machine_inventory_counts)
+    inv = np.array(state.machine_inventory)
 
     dot_size = max(4, block_pixel_size // 4)
     border = max(2, dot_size // 3)
@@ -923,10 +932,12 @@ def draw_belt_cargo(
 
     for idx in range(belt_ys.size):
         y, x = int(belt_ys[idx]), int(belt_xs[idx])
-        if int(inv_counts[y, x, 0]) <= 0:
+        tile_inv = inv[y, x]
+        nonzero = np.nonzero(tile_inv)[0]
+        if nonzero.size == 0:
             continue
 
-        item_type = int(inv_items[y, x, 0])
+        item_type = int(nonzero[0])
         color = ITEM_COLORS.get(item_type, (128, 128, 128))
 
         py0 = y * block_pixel_size + mid - half_outer
@@ -956,7 +967,8 @@ def is_miner_active(state: EnvState, y: int, x: int) -> bool:
     """Check whether the miner at ``(y, x)`` is actively mining.
 
     A miner is active when it has power, the tile below still holds
-    resources, and the output slot is not completely full.
+    resources, and the inventory is not completely full. Fullness is
+    checked by summing all item counts in the machine's pouch.
 
     Args:
         state: Current environment state.
@@ -968,18 +980,16 @@ def is_miner_active(state: EnvState, y: int, x: int) -> bool:
     """
     has_power = int(state.machine_power[y, x]) > 0
     has_resources = int(state.block_resources[y, x]) > 0
-    output_count = int(
-        state.machine_inventory_counts[y, x, _ANIM_MINER_OUTPUT_SLOT]
-    )
     from factoriax.constants import MAX_MACHINE_STACK_SIZE
-    has_space = output_count < MAX_MACHINE_STACK_SIZE
+    total_count = int(np.array(state.machine_inventory[y, x]).sum())
+    has_space = total_count < MAX_MACHINE_STACK_SIZE
     return has_power and has_resources and has_space
 
 
 def is_arm_active(state: EnvState, y: int, x: int) -> bool:
     """Check whether the arm at ``(y, x)`` is doing work.
 
-    An arm is considered active if its buffer slot holds items
+    An arm is considered active if its inventory holds any items
     (mid-transfer).
 
     Args:
@@ -988,6 +998,6 @@ def is_arm_active(state: EnvState, y: int, x: int) -> bool:
         x: Column of the arm tile.
 
     Returns:
-        True if the arm buffer is non-empty.
+        True if the arm inventory is non-empty.
     """
-    return int(state.machine_inventory_counts[y, x, 0]) > 0
+    return int(np.array(state.machine_inventory[y, x]).sum()) > 0

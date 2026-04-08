@@ -178,15 +178,14 @@ def sparse_chest_crafting_reward(
         Scalar float32 reward.
     """
 
-    def _count_item(state: EnvState, item: int) -> jax.Array:
-        is_item = state.inventory_items == item
-        return jnp.sum(jnp.where(is_item, state.inventory_counts, 0))
-
-    chest_delta = _count_item(new_state, ItemType.CHEST) - _count_item(
-        prev_state, ItemType.CHEST
+    p = new_state.selected_player
+    chest_delta = (
+        new_state.player_inventory[p, ItemType.CHEST]
+        - prev_state.player_inventory[p, ItemType.CHEST]
     )
-    iron_delta = _count_item(new_state, ItemType.IRON) - _count_item(
-        prev_state, ItemType.IRON
+    iron_delta = (
+        new_state.player_inventory[p, ItemType.IRON]
+        - prev_state.player_inventory[p, ItemType.IRON]
     )
 
     # Crafting consumes iron and produces chests in the same step.
@@ -215,18 +214,18 @@ def sparse_miner_crafting_reward(
         Scalar float32 reward.
     """
 
-    def _count_item(state: EnvState, item: int) -> jax.Array:
-        is_item = state.inventory_items == item
-        return jnp.sum(jnp.where(is_item, state.inventory_counts, 0))
-
-    miner_delta = _count_item(new_state, ItemType.MINER) - _count_item(
-        prev_state, ItemType.MINER
+    p = new_state.selected_player
+    miner_delta = (
+        new_state.player_inventory[p, ItemType.MINER]
+        - prev_state.player_inventory[p, ItemType.MINER]
     )
-    iron_delta = _count_item(new_state, ItemType.IRON) - _count_item(
-        prev_state, ItemType.IRON
+    iron_delta = (
+        new_state.player_inventory[p, ItemType.IRON]
+        - prev_state.player_inventory[p, ItemType.IRON]
     )
-    copper_delta = _count_item(new_state, ItemType.COPPER) - _count_item(
-        prev_state, ItemType.COPPER
+    copper_delta = (
+        new_state.player_inventory[p, ItemType.COPPER]
+        - prev_state.player_inventory[p, ItemType.COPPER]
     )
 
     is_craft = (miner_delta > 0) & (iron_delta < 0) & (copper_delta < 0)
@@ -239,8 +238,8 @@ def miner_output_reward(
 ) -> jax.Array:
     """Reward for each ore item produced by placed miners.
 
-    Counts the total increase in item counts across the output slots
-    (slot index 1) of all miner-type machines. This gives a dense
+    Counts the total increase in ore item counts (coal, iron, copper)
+    across all miner-type machine inventories. This gives a dense
     signal that fires every tick a fueled miner extracts ore.
 
     Args:
@@ -253,9 +252,19 @@ def miner_output_reward(
         Scalar float32 reward.
     """
     is_miner = new_state.machine_types == MachineType.MINER
-    # Miner output is slot 1.
-    prev_output = jnp.where(is_miner, prev_state.machine_inventory_counts[..., 1], 0)
-    new_output = jnp.where(is_miner, new_state.machine_inventory_counts[..., 1], 0)
+    ore_types = jnp.array(
+        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+    )
+    prev_output = jnp.where(
+        is_miner[..., None],
+        prev_state.machine_inventory[..., ore_types],
+        0,
+    )
+    new_output = jnp.where(
+        is_miner[..., None],
+        new_state.machine_inventory[..., ore_types],
+        0,
+    )
     delta = jnp.sum(new_output) - jnp.sum(prev_output)
     reward: jax.Array = delta.astype(jnp.float32)
     return reward
@@ -307,8 +316,8 @@ def chest_filling_reward(
     """
     is_chest = new_state.machine_types == MachineType.CHEST
     chest_mask = is_chest[..., None]
-    prev_counts = jnp.where(chest_mask, prev_state.machine_inventory_counts, 0)
-    new_counts = jnp.where(chest_mask, new_state.machine_inventory_counts, 0)
+    prev_counts = jnp.where(chest_mask, prev_state.machine_inventory, 0)
+    new_counts = jnp.where(chest_mask, new_state.machine_inventory, 0)
     delta = jnp.sum(new_counts) - jnp.sum(prev_counts)
     reward: jax.Array = delta.astype(jnp.float32)
     return reward
@@ -333,8 +342,8 @@ def player_inventory_reward(
         Scalar float32 reward.
     """
     p = new_state.selected_player
-    prev_total = jnp.sum(prev_state.inventory_counts[p])
-    new_total = jnp.sum(new_state.inventory_counts[p])
+    prev_total = jnp.sum(prev_state.player_inventory[p])
+    new_total = jnp.sum(new_state.player_inventory[p])
     reward: jax.Array = (new_total - prev_total).astype(jnp.float32)
     return reward
 
@@ -370,8 +379,8 @@ def _chest_filling_delta(
     """Total items deposited into chests this step."""
     is_chest = new.machine_types == MachineType.CHEST
     mask = is_chest[..., None]
-    prev_c = jnp.sum(jnp.where(mask, prev.machine_inventory_counts, 0))
-    new_c = jnp.sum(jnp.where(mask, new.machine_inventory_counts, 0))
+    prev_c = jnp.sum(jnp.where(mask, prev.machine_inventory, 0))
+    new_c = jnp.sum(jnp.where(mask, new.machine_inventory, 0))
     return (new_c - prev_c).astype(jnp.float32)
 
 
@@ -379,15 +388,14 @@ def _inventory_delta(prev: EnvState, new: EnvState) -> jax.Array:
     """Net items gained in the selected player's inventory."""
     p = new.selected_player
     return (
-        jnp.sum(new.inventory_counts[p])
-        - jnp.sum(prev.inventory_counts[p])
+        jnp.sum(new.player_inventory[p])
+        - jnp.sum(prev.player_inventory[p])
     ).astype(jnp.float32)
 
 
 def _item_count(state: EnvState, item: int) -> jax.Array:
-    """Count of a specific item type across player 0's inventory."""
-    is_item = state.inventory_items[0] == item
-    return jnp.sum(jnp.where(is_item, state.inventory_counts[0], 0))
+    """Count of a specific item type in player 0's inventory."""
+    return state.player_inventory[0, item]
 
 
 def dense_craft_reward(
@@ -416,10 +424,8 @@ def dense_craft_reward(
         ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT,
         ItemType.ARM, ItemType.ASSEMBLER,
     ], dtype=jnp.int32)
-    prev_is_p = jnp.isin(prev_state.inventory_items[0], placeables)
-    new_is_p = jnp.isin(new_state.inventory_items[0], placeables)
-    prev_count = jnp.sum(jnp.where(prev_is_p, prev_state.inventory_counts[0], 0))
-    new_count = jnp.sum(jnp.where(new_is_p, new_state.inventory_counts[0], 0))
+    prev_count = jnp.sum(prev_state.player_inventory[0, placeables])
+    new_count = jnp.sum(new_state.player_inventory[0, placeables])
     craft_delta = jnp.maximum(new_count - prev_count, 0)
 
     return proximity + mining + 10.0 * craft_delta.astype(jnp.float32)
@@ -488,9 +494,12 @@ def dense_withdraw_reward(
     Returns:
         Scalar float32 reward.
     """
+    ore_types = jnp.array(
+        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+    )
     has_output = (
         (new_state.machine_types == MachineType.MINER)
-        & (new_state.machine_inventory_counts[..., 1] > 0)
+        & (jnp.sum(new_state.machine_inventory[..., ore_types], axis=-1) > 0)
     )
     proximity = _proximity(new_state, has_output)
     inv_gain = _inventory_delta(prev_state, new_state)
@@ -612,13 +621,13 @@ def dense_fuel_collect_reward(
     miner_prox = _proximity(
         new_state, new_state.machine_types == MachineType.MINER
     )
-    # Fuel deposited = miner fuel slot (0) count increase.
+    # Fuel deposited = coal count increase in miner inventories.
     is_miner = new_state.machine_types == MachineType.MINER
     prev_fuel = jnp.sum(jnp.where(
-        is_miner, prev_state.machine_inventory_counts[..., 0], 0
+        is_miner, prev_state.machine_inventory[..., ItemType.COAL], 0
     ))
     new_fuel = jnp.sum(jnp.where(
-        is_miner, new_state.machine_inventory_counts[..., 0], 0
+        is_miner, new_state.machine_inventory[..., ItemType.COAL], 0
     ))
     fuel_delta = jnp.maximum(new_fuel - prev_fuel, 0).astype(jnp.float32)
     inv_gain = jnp.maximum(_inventory_delta(prev_state, new_state), 0.0)
@@ -644,16 +653,16 @@ def dense_assembler_reward(
     asm_prox = _proximity(
         new_state, new_state.machine_types == MachineType.ASSEMBLER
     )
-    # Input deposited = total items in assembler input slots (0-2).
+    # Input deposited = total items in assembler inventories.
     is_asm = new_state.machine_types == MachineType.ASSEMBLER
     prev_inputs = jnp.sum(jnp.where(
         is_asm[..., None],
-        prev_state.machine_inventory_counts[..., :3],
+        prev_state.machine_inventory,
         0,
     ))
     new_inputs = jnp.sum(jnp.where(
         is_asm[..., None],
-        new_state.machine_inventory_counts[..., :3],
+        new_state.machine_inventory,
         0,
     ))
     input_delta = jnp.maximum(
