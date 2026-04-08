@@ -17,19 +17,27 @@ from factoriax.config import (
     load_config,
     save_config,
 )
-from factoriax.ui.window import calculate_window_size
+from factoriax.ui import theme as _theme
+from factoriax.ui.window import auto_ui_scale, calculate_window_size
 
-_UI_SIZE = 1024
+_BASE_SIZE = 1024
 
 
 def _run() -> None:
     """Main menu loop: show menu, dispatch to play, editor, or settings."""
     pygame.init()
-    w, h = calculate_window_size(_UI_SIZE, _UI_SIZE)
-    screen = pygame.display.set_mode((w, h))
-    pygame.display.set_caption("FactoriaX")
 
     config = load_config()
+    ui_scale = config.ui_scale if config.ui_scale > 0 else auto_ui_scale()
+    _theme.apply_scale(ui_scale)
+
+    canvas_size = _BASE_SIZE * ui_scale
+    if config.fullscreen:
+        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    else:
+        w, h = calculate_window_size(canvas_size, canvas_size)
+        screen = pygame.display.set_mode((w, h))
+    pygame.display.set_caption("FactoriaX")
 
     from factoriax.menu.main_menu import run_main_menu
 
@@ -114,11 +122,14 @@ def _handle_editor(screen: pygame.Surface) -> None:
     pygame.display.set_caption("FactoriaX")
 
 
-def _handle_settings(screen: pygame.Surface, _config: PlayerConfig) -> None:
-    """Open the controls overview screen."""
+def _handle_settings(screen: pygame.Surface, config: PlayerConfig) -> None:
+    """Open the controls overview screen and persist fullscreen changes."""
     from factoriax.menu.settings_menu import run_controls_menu
 
-    run_controls_menu(screen)
+    new_fullscreen = run_controls_menu(screen, fullscreen=config.fullscreen)
+    if new_fullscreen != config.fullscreen:
+        config.fullscreen = new_fullscreen
+        save_config(config)
 
 
 if __name__ == "__main__":

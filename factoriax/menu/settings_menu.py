@@ -4,6 +4,10 @@ Presents all EnvParams fields organized in labeled sections with editable
 input boxes. The user clicks a field to focus it, types a new value, and
 presses Enter to confirm or Escape to revert. Back returns None, Play
 returns the configured EnvParams.
+
+All drawing happens on a fixed-size :class:`ScaledCanvas` that is
+integer-scaled to the window, giving pixel-perfect layout at any window
+size.
 """
 
 from __future__ import annotations
@@ -14,7 +18,9 @@ from dataclasses import dataclass, field
 import pygame
 
 from factoriax.state import EnvParams
+from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
+from factoriax.ui.scaling import ScaledCanvas
 
 logger = logging.getLogger(__name__)
 
@@ -33,21 +39,22 @@ _BTN_HOVER: tuple[int, int, int] = (45, 45, 50)
 _BTN_TEXT: tuple[int, int, int] = (220, 215, 180)
 _ERROR_BORDER: tuple[int, int, int] = (200, 50, 50)
 
-# -- Layout constants -----------------------------------------------------
-_TOP_BAR_H: int = 80
-_SECTION_PAD_TOP: int = 24
-_SECTION_HEADER_H: int = 44
-_SECTION_RULE_H: int = 2
-_SECTION_GAP: int = 16
-_ROW_H: int = 48
-_ROW_GAP: int = 8
-_COL_GAP: int = 24
-_SIDE_PAD: int = 32
-_INPUT_W: int = 140
-_INPUT_H: int = 40
-_CHECKBOX_SIZE: int = 30
-_BTN_W: int = 160
-_BTN_H: int = 56
+# -- Base layout constants (multiplied by UI_SCALE at runtime) ------------
+_BASE_TOP_BAR_H: int = 80
+_BASE_SECTION_PAD_TOP: int = 24
+_BASE_SECTION_HEADER_H: int = 44
+_BASE_SECTION_RULE_H: int = 2
+_BASE_SECTION_GAP: int = 16
+_BASE_ROW_H: int = 48
+_BASE_ROW_GAP: int = 8
+_BASE_COL_GAP: int = 24
+_BASE_SIDE_PAD: int = 32
+_BASE_INPUT_W: int = 140
+_BASE_INPUT_H: int = 40
+_BASE_CHECKBOX_SIZE: int = 30
+_BASE_BTN_W: int = 160
+_BASE_BTN_H: int = 56
+_BASE_SCROLL_STEP: int = 24
 _FPS: int = 30
 _ERROR_FLASH_FRAMES: int = 15
 
@@ -336,6 +343,7 @@ def _draw_checkbox(
     surface: pygame.Surface,
     x: int,
     y: int,
+    size: int,
     checked: bool,
     hovered: bool,
 ) -> pygame.Rect:
@@ -345,18 +353,19 @@ def _draw_checkbox(
         surface: Destination surface.
         x: Left edge in pixels.
         y: Top edge in pixels.
+        size: Side length of the checkbox in pixels.
         checked: Whether the box is checked.
         hovered: Whether the mouse is over the checkbox area.
 
     Returns:
         The bounding rectangle of the checkbox.
     """
-    rect = pygame.Rect(x, y, _CHECKBOX_SIZE, _CHECKBOX_SIZE)
+    rect = pygame.Rect(x, y, size, size)
     bg = _BTN_HOVER if hovered else _INPUT_BG
     pygame.draw.rect(surface, bg, rect)
     pygame.draw.rect(surface, _GOLD, rect, 1)
     if checked:
-        font = get_pixel_font(24)
+        font = get_pixel_font(24 * _theme.UI_SCALE)
         x_surf = font.render("X", False, _GOLD)
         cx = rect.x + (rect.width - x_surf.get_width()) // 2
         cy = rect.y + (rect.height - x_surf.get_height()) // 2
@@ -402,49 +411,64 @@ def _build_controls_lines() -> list[tuple[str, str]]:
 
 
 def _draw_controls_section(
-    screen: pygame.Surface,
+    surface: pygame.Surface,
     lines: list[tuple[str, str]],
     cy: int,
     label_w: int,
     font_section: pygame.font.Font,
     font_label: pygame.font.Font,
     font_value: pygame.font.Font,
+    side_pad: int,
+    section_header_h: int,
+    section_rule_h: int,
+    section_gap: int,
+    row_h: int,
+    row_gap: int,
+    section_pad_top: int,
+    sw: int,
 ) -> int:
     """Draw the read-only controls section and return updated y cursor.
 
     Args:
-        screen: Target surface.
+        surface: Target surface.
         lines: (label, key_names) pairs from :func:`_build_controls_lines`.
         cy: Current y position.
         label_w: Width allocated for the label column.
         font_section: Font for the section header.
         font_label: Font for row labels.
         font_value: Font for key name values.
+        side_pad: Horizontal padding from edges.
+        section_header_h: Height of section header text area.
+        section_rule_h: Thickness of the horizontal rule.
+        section_gap: Gap below the rule before content rows.
+        row_h: Height of each content row.
+        row_gap: Vertical gap between rows.
+        section_pad_top: Padding after all rows in the section.
+        sw: Total surface width (for rule endpoint).
 
     Returns:
         Updated y cursor after the section.
     """
-    sw = screen.get_width()
     sec_surf = font_section.render("Controls", False, _GOLD)
-    screen.blit(sec_surf, (_SIDE_PAD, cy))
-    cy += _SECTION_HEADER_H
+    surface.blit(sec_surf, (side_pad, cy))
+    cy += section_header_h
     pygame.draw.line(
-        screen,
+        surface,
         _SECTION_RULE,
-        (_SIDE_PAD, cy),
-        (sw - _SIDE_PAD, cy),
+        (side_pad, cy),
+        (sw - side_pad, cy),
     )
-    cy += _SECTION_RULE_H + _SECTION_GAP
+    cy += section_rule_h + section_gap
     for label, keys in lines:
         lbl_surf = font_label.render(label, False, _LABEL_COLOR)
-        lbl_y = cy + (_ROW_H - lbl_surf.get_height()) // 2
-        screen.blit(lbl_surf, (_SIDE_PAD, lbl_y))
+        lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
+        surface.blit(lbl_surf, (side_pad, lbl_y))
         val_surf = font_value.render(keys, False, _INPUT_TEXT)
-        val_x = _SIDE_PAD + label_w + 8
-        val_y = cy + (_ROW_H - val_surf.get_height()) // 2
-        screen.blit(val_surf, (val_x, val_y))
-        cy += _ROW_H + _ROW_GAP
-    cy += _SECTION_PAD_TOP
+        val_x = side_pad + label_w + 8
+        val_y = cy + (row_h - val_surf.get_height()) // 2
+        surface.blit(val_surf, (val_x, val_y))
+        cy += row_h + row_gap
+    cy += section_pad_top
     return cy
 
 
@@ -452,33 +476,35 @@ def _draw_controls_section(
 
 
 def _draw_scrollbar(
-    screen: pygame.Surface,
+    surface: pygame.Surface,
     scroll_offset: int,
     max_scroll: int,
     content_h: int,
+    top_bar_h: int,
 ) -> None:
     """Draw a vertical scrollbar on the right edge when content overflows.
 
     Args:
-        screen: Target surface.
+        surface: Target surface.
         scroll_offset: Current scroll position.
         max_scroll: Maximum scroll offset.
         content_h: Total content height.
+        top_bar_h: Height of the top bar (scrollbar starts below it).
     """
     if max_scroll <= 0:
         return
-    sh = screen.get_height()
-    bar_area_h = sh - _TOP_BAR_H
+    sh = surface.get_height()
+    bar_area_h = sh - top_bar_h
     thumb_h = max(20, int(bar_area_h * bar_area_h / content_h))
-    thumb_y = _TOP_BAR_H + int(scroll_offset / max_scroll * (bar_area_h - thumb_h))
-    bar_x = screen.get_width() - 8
+    thumb_y = top_bar_h + int(scroll_offset / max_scroll * (bar_area_h - thumb_h))
+    bar_x = surface.get_width() - 8
     pygame.draw.rect(
-        screen,
+        surface,
         (40, 40, 40),
-        pygame.Rect(bar_x, _TOP_BAR_H, 8, bar_area_h),
+        pygame.Rect(bar_x, top_bar_h, 8, bar_area_h),
     )
     pygame.draw.rect(
-        screen,
+        surface,
         (140, 130, 80),
         pygame.Rect(bar_x, thumb_y, 8, thumb_h),
     )
@@ -507,6 +533,35 @@ def run_settings_menu(
         EnvParams with user's choices if Play was clicked,
         None if Back was clicked or window closed.
     """
+    s = _theme.UI_SCALE
+    canvas = ScaledCanvas(1024, s, screen)
+    sw, sh = canvas.width, canvas.height
+
+    # Scaled layout constants.
+    top_bar_h = _BASE_TOP_BAR_H * s
+    section_pad_top = _BASE_SECTION_PAD_TOP * s
+    section_header_h = _BASE_SECTION_HEADER_H * s
+    section_rule_h = _BASE_SECTION_RULE_H * s
+    section_gap = _BASE_SECTION_GAP * s
+    row_h = _BASE_ROW_H * s
+    row_gap = _BASE_ROW_GAP * s
+    col_gap = _BASE_COL_GAP * s
+    side_pad = _BASE_SIDE_PAD * s
+    input_w = _BASE_INPUT_W * s
+    input_h = _BASE_INPUT_H * s
+    checkbox_size = _BASE_CHECKBOX_SIZE * s
+    btn_w = _BASE_BTN_W * s
+    btn_h = _BASE_BTN_H * s
+    scroll_step = _BASE_SCROLL_STEP * s
+
+    # Derived layout (constant because canvas size is fixed).
+    content_w = sw - 2 * side_pad
+    col_w = (content_w - col_gap) // 2
+    label_w = col_w - input_w - 8
+
+    back_rect = pygame.Rect(side_pad, 8 * s, btn_w, btn_h)
+    play_rect = pygame.Rect(sw - side_pad - btn_w, 8 * s, btn_w, btn_h)
+
     clock = pygame.time.Clock()
     params = initial_params if initial_params is not None else EnvParams()
     sections = _build_sections(params)
@@ -514,29 +569,24 @@ def run_settings_menu(
     stored_spawn_rate = _format_value(params.biter_spawn_rate, "float")
 
     scroll_offset = 0
-    font_header = get_pixel_font(32)
-    font_label = get_pixel_font(28)
-    font_input = get_pixel_font(28)
-    font_btn = get_pixel_font(28)
-    font_section = get_pixel_font(32)
+    font_header = get_pixel_font(32 * s)
+    font_label = get_pixel_font(28 * s)
+    font_input = get_pixel_font(28 * s)
+    font_btn = get_pixel_font(28 * s)
+    font_section = get_pixel_font(32 * s)
+
+    # Measure total content height (constant).
+    content_h = section_pad_top
+    for sec in sections:
+        content_h += section_header_h + section_rule_h + section_gap
+        if sec.title == "Biters":
+            content_h += row_h + row_gap
+        num_rows = (len(sec.fields) + 1) // 2
+        content_h += num_rows * (row_h + row_gap)
+        content_h += section_pad_top
 
     while True:
-        sw, sh = screen.get_size()
-        content_w = sw - 2 * _SIDE_PAD
-        col_w = (content_w - _COL_GAP) // 2
-        label_w = col_w - _INPUT_W - 8
-
-        # Measure total content height.
-        content_h = _SECTION_PAD_TOP
-        for sec in sections:
-            content_h += _SECTION_HEADER_H + _SECTION_RULE_H + _SECTION_GAP
-            if sec.title == "Biters":
-                content_h += _ROW_H + _ROW_GAP
-            num_rows = (len(sec.fields) + 1) // 2
-            content_h += num_rows * (_ROW_H + _ROW_GAP)
-            content_h += _SECTION_PAD_TOP
-
-        scrollable_area = sh - _TOP_BAR_H
+        scrollable_area = sh - top_bar_h
         max_scroll = max(0, content_h - scrollable_area)
         scroll_offset = max(0, min(scroll_offset, max_scroll))
 
@@ -546,25 +596,15 @@ def run_settings_menu(
                 return None
 
             if event.type == pygame.VIDEORESIZE:
-                screen = pygame.display.set_mode(
-                    (event.w, event.h),
-                    pygame.RESIZABLE,
-                )
+                canvas.handle_resize(event.w, event.h)
 
             if event.type == pygame.MOUSEWHEEL:
-                scroll_offset -= event.y * 24
+                scroll_offset -= event.y * scroll_step
                 scroll_offset = max(0, min(scroll_offset, max_scroll))
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mx, my = event.pos
+                mx, my = canvas.to_canvas(*event.pos)
 
-                back_rect = pygame.Rect(_SIDE_PAD, 8, _BTN_W, _BTN_H)
-                play_rect = pygame.Rect(
-                    sw - _SIDE_PAD - _BTN_W,
-                    8,
-                    _BTN_W,
-                    _BTN_H,
-                )
                 if back_rect.collidepoint(mx, my):
                     return None
                 if play_rect.collidepoint(mx, my):
@@ -574,15 +614,15 @@ def run_settings_menu(
                     return _build_params(sections, biters_enabled)
 
                 # Content area clicks (adjusted for scroll).
-                cy = _TOP_BAR_H + _SECTION_PAD_TOP - scroll_offset
+                cy = top_bar_h + section_pad_top - scroll_offset
                 clicked_field: FieldState | None = None
 
                 for sec in sections:
-                    cy += _SECTION_HEADER_H + _SECTION_RULE_H + _SECTION_GAP
+                    cy += section_header_h + section_rule_h + section_gap
 
                     if sec.title == "Biters":
-                        cb_x = _SIDE_PAD
-                        cb_y = cy + (_ROW_H - _CHECKBOX_SIZE) // 2
+                        cb_x = side_pad
+                        cb_y = cy + (row_h - checkbox_size) // 2
                         cb_label = font_label.render(
                             "Enable Biters",
                             False,
@@ -591,8 +631,8 @@ def run_settings_menu(
                         cb_hit = pygame.Rect(
                             cb_x,
                             cb_y,
-                            _CHECKBOX_SIZE + 8 + cb_label.get_width(),
-                            _CHECKBOX_SIZE,
+                            checkbox_size + 8 + cb_label.get_width(),
+                            checkbox_size,
                         )
                         if cb_hit.collidepoint(mx, my):
                             biters_enabled = not biters_enabled
@@ -607,7 +647,7 @@ def run_settings_menu(
                                 )
                                 if spawn_fs is not None and spawn_fs.value == "0.00":
                                     spawn_fs.value = stored_spawn_rate
-                        cy += _ROW_H + _ROW_GAP
+                        cy += row_h + row_gap
 
                     is_biter_section = sec.title == "Biters"
                     for i in range(0, len(sec.fields), 2):
@@ -617,14 +657,14 @@ def run_settings_menu(
                                 break
                             if is_biter_section and not biters_enabled:
                                 continue
-                            fx = _SIDE_PAD + col_idx * (col_w + _COL_GAP) + label_w + 8
-                            fy = cy + (_ROW_H - _INPUT_H) // 2
-                            input_rect = pygame.Rect(fx, fy, _INPUT_W, _INPUT_H)
-                            if input_rect.collidepoint(mx, my):
+                            fx = side_pad + col_idx * (col_w + col_gap) + label_w + 8
+                            fy = cy + (row_h - input_h) // 2
+                            hit = pygame.Rect(fx, fy, input_w, input_h)
+                            if hit.collidepoint(mx, my):
                                 clicked_field = sec.fields[fi]
-                        cy += _ROW_H + _ROW_GAP
+                        cy += row_h + row_gap
 
-                    cy += _SECTION_PAD_TOP
+                    cy += section_pad_top
 
                 if clicked_field is not None:
                     for fs in _flat_fields(sections):
@@ -678,21 +718,20 @@ def run_settings_menu(
                             _focus_field(sections, flat[0])
 
         # -- Drawing ------------------------------------------------------
-        mouse_pos = pygame.mouse.get_pos()
-        screen.fill(_BG)
+        surf = canvas.surface
+        mouse_pos = canvas.to_canvas(*pygame.mouse.get_pos())
+        surf.fill(_BG)
 
         # Top bar.
-        back_rect = pygame.Rect(_SIDE_PAD, 8, _BTN_W, _BTN_H)
-        play_rect = pygame.Rect(sw - _SIDE_PAD - _BTN_W, 8, _BTN_W, _BTN_H)
         _draw_button(
-            screen,
+            surf,
             back_rect,
             "< Back",
             font_btn,
             back_rect.collidepoint(mouse_pos),
         )
         _draw_button(
-            screen,
+            surf,
             play_rect,
             "> Play",
             font_btn,
@@ -702,42 +741,43 @@ def run_settings_menu(
         # Title.
         title_surf = font_header.render("Play Settings", False, _GOLD)
         title_x = (sw - title_surf.get_width()) // 2
-        title_y = 8 + (_BTN_H - title_surf.get_height()) // 2
-        screen.blit(title_surf, (title_x, title_y))
+        title_y = 8 * s + (btn_h - title_surf.get_height()) // 2
+        surf.blit(title_surf, (title_x, title_y))
 
         # Clip content area below top bar.
-        content_clip = pygame.Rect(0, _TOP_BAR_H, sw, sh - _TOP_BAR_H)
-        screen.set_clip(content_clip)
+        content_clip = pygame.Rect(0, top_bar_h, sw, sh - top_bar_h)
+        surf.set_clip(content_clip)
 
-        cy = _TOP_BAR_H + _SECTION_PAD_TOP - scroll_offset
+        cy = top_bar_h + section_pad_top - scroll_offset
 
         for sec in sections:
             is_biter_section = sec.title == "Biters"
 
             sec_surf = font_section.render(sec.title, False, _GOLD)
-            screen.blit(sec_surf, (_SIDE_PAD, cy))
-            cy += _SECTION_HEADER_H
+            surf.blit(sec_surf, (side_pad, cy))
+            cy += section_header_h
             pygame.draw.line(
-                screen,
+                surf,
                 _SECTION_RULE,
-                (_SIDE_PAD, cy),
-                (sw - _SIDE_PAD, cy),
+                (side_pad, cy),
+                (sw - side_pad, cy),
             )
-            cy += _SECTION_RULE_H + _SECTION_GAP
+            cy += section_rule_h + section_gap
 
             if is_biter_section:
-                cb_x = _SIDE_PAD
-                cb_y = cy + (_ROW_H - _CHECKBOX_SIZE) // 2
+                cb_x = side_pad
+                cb_y = cy + (row_h - checkbox_size) // 2
                 cb_rect = pygame.Rect(
                     cb_x,
                     cb_y,
-                    _CHECKBOX_SIZE,
-                    _CHECKBOX_SIZE,
+                    checkbox_size,
+                    checkbox_size,
                 )
                 _draw_checkbox(
-                    screen,
+                    surf,
                     cb_x,
                     cb_y,
+                    checkbox_size,
                     biters_enabled,
                     cb_rect.collidepoint(mouse_pos),
                 )
@@ -746,10 +786,10 @@ def run_settings_menu(
                     False,
                     _LABEL_COLOR,
                 )
-                lbl_x = cb_x + _CHECKBOX_SIZE + 8
-                lbl_y = cy + (_ROW_H - lbl_surf.get_height()) // 2
-                screen.blit(lbl_surf, (lbl_x, lbl_y))
-                cy += _ROW_H + _ROW_GAP
+                lbl_x = cb_x + checkbox_size + 8
+                lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
+                surf.blit(lbl_surf, (lbl_x, lbl_y))
+                cy += row_h + row_gap
 
             for i in range(0, len(sec.fields), 2):
                 for col_idx in range(2):
@@ -759,17 +799,17 @@ def run_settings_menu(
 
                     fs = sec.fields[fi]
                     disabled = is_biter_section and not biters_enabled
-                    col_x = _SIDE_PAD + col_idx * (col_w + _COL_GAP)
+                    col_x = side_pad + col_idx * (col_w + col_gap)
 
                     lbl_color = _LABEL_DISABLED if disabled else _LABEL_COLOR
                     lbl_surf = font_label.render(fs.label, False, lbl_color)
-                    lbl_y = cy + (_ROW_H - lbl_surf.get_height()) // 2
-                    screen.blit(lbl_surf, (col_x, lbl_y))
+                    lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
+                    surf.blit(lbl_surf, (col_x, lbl_y))
 
                     fx = col_x + label_w + 8
-                    fy = cy + (_ROW_H - _INPUT_H) // 2
-                    input_rect = pygame.Rect(fx, fy, _INPUT_W, _INPUT_H)
-                    pygame.draw.rect(screen, _INPUT_BG, input_rect)
+                    fy = cy + (row_h - input_h) // 2
+                    input_rect = pygame.Rect(fx, fy, input_w, input_h)
+                    pygame.draw.rect(surf, _INPUT_BG, input_rect)
 
                     if fs.error_timer > 0:
                         border_color = _ERROR_BORDER
@@ -782,7 +822,7 @@ def run_settings_menu(
                     if disabled:
                         border_color = _INPUT_BORDER
 
-                    pygame.draw.rect(screen, border_color, input_rect, 1)
+                    pygame.draw.rect(surf, border_color, input_rect, 1)
 
                     if fs.editing and not disabled:
                         display_text = fs.edit_buffer + "_"
@@ -790,7 +830,7 @@ def run_settings_menu(
                         display_text = fs.value
                     txt_color = _INPUT_TEXT_DISABLED if disabled else _INPUT_TEXT
                     txt_surf = font_input.render(display_text, False, txt_color)
-                    max_txt_w = _INPUT_W - 8
+                    max_txt_w = input_w - 8
                     if txt_surf.get_width() > max_txt_w:
                         txt_surf = txt_surf.subsurface(
                             txt_surf.get_width() - max_txt_w,
@@ -798,86 +838,142 @@ def run_settings_menu(
                             max_txt_w,
                             txt_surf.get_height(),
                         )
-                    screen.blit(
+                    surf.blit(
                         txt_surf,
-                        (fx + 4, fy + (_INPUT_H - txt_surf.get_height()) // 2),
+                        (
+                            fx + 4,
+                            fy + (input_h - txt_surf.get_height()) // 2,
+                        ),
                     )
 
-                cy += _ROW_H + _ROW_GAP
+                cy += row_h + row_gap
 
-            cy += _SECTION_PAD_TOP
+            cy += section_pad_top
 
-        screen.set_clip(None)
-        _draw_scrollbar(screen, scroll_offset, max_scroll, content_h)
+        surf.set_clip(None)
+        _draw_scrollbar(surf, scroll_offset, max_scroll, content_h, top_bar_h)
 
-        pygame.display.flip()
+        canvas.present(screen)
         clock.tick(_FPS)
 
 
-def run_controls_menu(screen: pygame.Surface) -> None:
+def run_controls_menu(
+    screen: pygame.Surface,
+    fullscreen: bool = False,
+) -> bool:
     """Show a read-only overview of current key bindings.
 
-    Displays all mapped player actions and their keyboard keys. The
-    only interaction is scrolling and pressing Back (or Escape) to
-    return to the main menu.
+    Displays all mapped player actions and their keyboard keys plus a
+    fullscreen toggle checkbox. The only interactions are scrolling,
+    toggling fullscreen, and pressing Back (or Escape) to return.
 
     Args:
         screen: Pygame display surface.
+        fullscreen: Current fullscreen state (shown as a checkbox).
+
+    Returns:
+        The (possibly toggled) fullscreen flag.
     """
+    s = _theme.UI_SCALE
+    canvas = ScaledCanvas(1024, s, screen)
+    sw, sh = canvas.width, canvas.height
+
+    # Scaled layout constants.
+    top_bar_h = _BASE_TOP_BAR_H * s
+    section_pad_top = _BASE_SECTION_PAD_TOP * s
+    section_header_h = _BASE_SECTION_HEADER_H * s
+    section_rule_h = _BASE_SECTION_RULE_H * s
+    section_gap = _BASE_SECTION_GAP * s
+    row_h = _BASE_ROW_H * s
+    row_gap = _BASE_ROW_GAP * s
+    col_gap = _BASE_COL_GAP * s
+    side_pad = _BASE_SIDE_PAD * s
+    input_w = _BASE_INPUT_W * s
+    checkbox_size = _BASE_CHECKBOX_SIZE * s
+    btn_w = _BASE_BTN_W * s
+    btn_h = _BASE_BTN_H * s
+    scroll_step = _BASE_SCROLL_STEP * s
+
+    # Derived layout (constant because canvas size is fixed).
+    content_w = sw - 2 * side_pad
+    col_w = (content_w - col_gap) // 2
+    label_w = col_w - input_w - 8
+
+    back_rect = pygame.Rect(side_pad, 8 * s, btn_w, btn_h)
+
     clock = pygame.time.Clock()
     controls_lines = _build_controls_lines()
 
     scroll_offset = 0
-    font_header = get_pixel_font(32)
-    font_label = get_pixel_font(28)
-    font_input = get_pixel_font(28)
-    font_btn = get_pixel_font(28)
-    font_section = get_pixel_font(32)
+    font_header = get_pixel_font(32 * s)
+    font_label = get_pixel_font(28 * s)
+    font_input = get_pixel_font(28 * s)
+    font_btn = get_pixel_font(28 * s)
+    font_section = get_pixel_font(32 * s)
+
+    # Measure total content height (constant).
+    content_h = section_pad_top
+    # Controls section.
+    content_h += section_header_h + section_rule_h + section_gap
+    content_h += len(controls_lines) * (row_h + row_gap)
+    content_h += section_pad_top
+    # Display section (fullscreen checkbox).
+    content_h += section_header_h + section_rule_h + section_gap
+    content_h += row_h + row_gap
+    content_h += section_pad_top
 
     while True:
-        sw, sh = screen.get_size()
-        content_w = sw - 2 * _SIDE_PAD
-        col_w = (content_w - _COL_GAP) // 2
-        label_w = col_w - _INPUT_W - 8
-
-        content_h = _SECTION_PAD_TOP
-        content_h += _SECTION_HEADER_H + _SECTION_RULE_H + _SECTION_GAP
-        content_h += len(controls_lines) * (_ROW_H + _ROW_GAP)
-        content_h += _SECTION_PAD_TOP
-
-        scrollable_area = sh - _TOP_BAR_H
+        scrollable_area = sh - top_bar_h
         max_scroll = max(0, content_h - scrollable_area)
         scroll_offset = max(0, min(scroll_offset, max_scroll))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return
+                return fullscreen
 
             if event.type == pygame.VIDEORESIZE:
-                screen = pygame.display.set_mode(
-                    (event.w, event.h),
-                    pygame.RESIZABLE,
-                )
+                canvas.handle_resize(event.w, event.h)
 
             if event.type == pygame.MOUSEWHEEL:
-                scroll_offset -= event.y * 24
+                scroll_offset -= event.y * scroll_step
                 scroll_offset = max(0, min(scroll_offset, max_scroll))
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                back_rect = pygame.Rect(_SIDE_PAD, 8, _BTN_W, _BTN_H)
-                if back_rect.collidepoint(event.pos):
-                    return
+                mx, my = canvas.to_canvas(*event.pos)
+                if back_rect.collidepoint(mx, my):
+                    return fullscreen
+
+                # Hit-test the fullscreen checkbox.
+                # Recompute its position to match the draw pass.
+                fs_cy = top_bar_h + section_pad_top - scroll_offset
+                # Skip controls section.
+                fs_cy += section_header_h + section_rule_h + section_gap
+                fs_cy += len(controls_lines) * (row_h + row_gap)
+                fs_cy += section_pad_top
+                # Display section header.
+                fs_cy += section_header_h + section_rule_h + section_gap
+                cb_x = side_pad
+                cb_y = fs_cy + (row_h - checkbox_size) // 2
+                cb_label_surf = font_label.render("Fullscreen", False, _LABEL_COLOR)
+                cb_hit = pygame.Rect(
+                    cb_x,
+                    cb_y,
+                    checkbox_size + 8 + cb_label_surf.get_width(),
+                    checkbox_size,
+                )
+                if cb_hit.collidepoint(mx, my):
+                    fullscreen = not fullscreen
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return
+                return fullscreen
 
         # -- Drawing ------------------------------------------------------
-        mouse_pos = pygame.mouse.get_pos()
-        screen.fill(_BG)
+        surf = canvas.surface
+        mouse_pos = canvas.to_canvas(*pygame.mouse.get_pos())
+        surf.fill(_BG)
 
-        back_rect = pygame.Rect(_SIDE_PAD, 8, _BTN_W, _BTN_H)
         _draw_button(
-            screen,
+            surf,
             back_rect,
             "< Back",
             font_btn,
@@ -886,25 +982,63 @@ def run_controls_menu(screen: pygame.Surface) -> None:
 
         title_surf = font_header.render("Controls", False, _GOLD)
         title_x = (sw - title_surf.get_width()) // 2
-        title_y = 8 + (_BTN_H - title_surf.get_height()) // 2
-        screen.blit(title_surf, (title_x, title_y))
+        title_y = 8 * s + (btn_h - title_surf.get_height()) // 2
+        surf.blit(title_surf, (title_x, title_y))
 
-        content_clip = pygame.Rect(0, _TOP_BAR_H, sw, sh - _TOP_BAR_H)
-        screen.set_clip(content_clip)
+        content_clip = pygame.Rect(0, top_bar_h, sw, sh - top_bar_h)
+        surf.set_clip(content_clip)
 
-        cy = _TOP_BAR_H + _SECTION_PAD_TOP - scroll_offset
+        cy = top_bar_h + section_pad_top - scroll_offset
         cy = _draw_controls_section(
-            screen,
+            surf,
             controls_lines,
             cy,
             label_w,
             font_section,
             font_label,
             font_input,
+            side_pad,
+            section_header_h,
+            section_rule_h,
+            section_gap,
+            row_h,
+            row_gap,
+            section_pad_top,
+            sw,
         )
 
-        screen.set_clip(None)
-        _draw_scrollbar(screen, scroll_offset, max_scroll, content_h)
+        # -- Display section with fullscreen checkbox ---------------------
+        sec_surf = font_section.render("Display", False, _GOLD)
+        surf.blit(sec_surf, (side_pad, cy))
+        cy += section_header_h
+        pygame.draw.line(
+            surf,
+            _SECTION_RULE,
+            (side_pad, cy),
+            (sw - side_pad, cy),
+        )
+        cy += section_rule_h + section_gap
 
-        pygame.display.flip()
+        cb_x = side_pad
+        cb_y = cy + (row_h - checkbox_size) // 2
+        cb_rect = pygame.Rect(cb_x, cb_y, checkbox_size, checkbox_size)
+        _draw_checkbox(
+            surf,
+            cb_x,
+            cb_y,
+            checkbox_size,
+            fullscreen,
+            cb_rect.collidepoint(mouse_pos),
+        )
+        lbl_surf = font_label.render("Fullscreen", False, _LABEL_COLOR)
+        lbl_x = cb_x + checkbox_size + 8
+        lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
+        surf.blit(lbl_surf, (lbl_x, lbl_y))
+        cy += row_h + row_gap
+        cy += section_pad_top
+
+        surf.set_clip(None)
+        _draw_scrollbar(surf, scroll_offset, max_scroll, content_h, top_bar_h)
+
+        canvas.present(screen)
         clock.tick(_FPS)

@@ -123,11 +123,15 @@ class PlayerConfig:
         env_params: EnvParams fields as a plain dict for JSON storage.
         keyboard: Keyboard binding map (action name -> key names).
         controller: Controller binding map (action name -> button names).
+        fullscreen: Whether to launch in fullscreen mode.
+        ui_scale: UI resolution multiplier (0 = auto-detect, 1/2/3 = fixed).
     """
 
     env_params: dict[str, int | float] = field(default_factory=dict)
     keyboard: Bindings = field(default_factory=dict)
     controller: Bindings = field(default_factory=dict)
+    fullscreen: bool = False
+    ui_scale: int = 0
 
 
 # ---------------------------------------------------------------------------

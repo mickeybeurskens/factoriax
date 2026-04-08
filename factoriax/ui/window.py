@@ -50,3 +50,24 @@ def calculate_window_size(
     scale = max(1, min(max_scale_w, max_scale_h))
 
     return base_width * scale, base_height * scale
+
+
+def auto_ui_scale(base_size: int = 1024) -> int:
+    """Pick the highest UI scale where the canvas fits the monitor.
+
+    Returns the largest integer ``s`` in ``{3, 2, 1}`` such that
+    ``base_size * s`` fits within 80% of the monitor on both axes.
+
+    Args:
+        base_size: Logical base resolution (default 1024).
+
+    Returns:
+        Integer scale factor (1, 2, or 3).
+    """
+    monitor_w, monitor_h = _get_monitor_size()
+    limit_w = int(monitor_w * 0.8)
+    limit_h = int(monitor_h * 0.8)
+    for scale in (3, 2, 1):
+        if base_size * scale <= limit_w and base_size * scale <= limit_h:
+            return scale
+    return 1

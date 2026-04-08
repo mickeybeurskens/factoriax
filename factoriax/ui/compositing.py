@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.ui.theme import SCROLLBAR_BG, SCROLLBAR_THUMB, SCROLLBAR_W
+from factoriax.ui import theme as _theme
 
 
 def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> None:
@@ -114,17 +114,17 @@ def blit_scroll_view(
     """
     content_h = content.shape[0]
     needs_bar = content_h > vp_h
-    render_w = vp_w - (SCROLLBAR_W if needs_bar else 0)
+    render_w = vp_w - (_theme.SCROLLBAR_W if needs_bar else 0)
 
     visible = content[scroll_offset : scroll_offset + vp_h, :render_w]
     blit_rgba(overlay, visible, vp_y, vp_x)
 
     if needs_bar:
-        bar_x = vp_x + vp_w - SCROLLBAR_W
-        overlay[vp_y : vp_y + vp_h, bar_x : bar_x + SCROLLBAR_W] = SCROLLBAR_BG
+        bar_x = vp_x + vp_w - _theme.SCROLLBAR_W
+        overlay[vp_y : vp_y + vp_h, bar_x : bar_x + _theme.SCROLLBAR_W] = _theme.SCROLLBAR_BG
         thumb_h = max(12, vp_h * vp_h // content_h)
         max_scroll = content_h - vp_h
         thumb_y = vp_y + int((vp_h - thumb_h) * scroll_offset / max(1, max_scroll))
-        overlay[thumb_y : thumb_y + thumb_h, bar_x : bar_x + SCROLLBAR_W] = (
-            SCROLLBAR_THUMB
+        overlay[thumb_y : thumb_y + thumb_h, bar_x : bar_x + _theme.SCROLLBAR_W] = (
+            _theme.SCROLLBAR_THUMB
         )

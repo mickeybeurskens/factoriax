@@ -26,7 +26,8 @@ from factoriax.config import (
 from factoriax.constants import Action, Direction
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import Level
-from factoriax.play.game_ui import _HOTBAR_H, GameUI
+from factoriax.play.game_ui import GameUI
+from factoriax.play.ui import _hotbar_h
 from factoriax.play.play_state import PlayState
 from factoriax.play.ui import render_welcome_screen
 from factoriax.state import EnvParams, EnvState
@@ -120,7 +121,7 @@ def play_level(
     )
 
     prev_size = screen.get_size() if screen is not None else None
-    game_win_w, game_win_h = calculate_window_size(_UI_SIZE, _UI_SIZE)
+    game_win_w, game_win_h = calculate_window_size(_BASE_UI_SIZE * _play_theme.UI_SCALE, _BASE_UI_SIZE * _play_theme.UI_SCALE)
     if screen is None:
         screen = pygame.display.set_mode((game_win_w, game_win_h))
     else:
@@ -165,7 +166,9 @@ def play_level(
         pygame.display.set_mode(prev_size, pygame.RESIZABLE)
 
 
-_UI_SIZE = 1024
+from factoriax.ui import theme as _play_theme
+
+_BASE_UI_SIZE = 1024
 
 _MOUSE_DIR_TO_FACE: dict[int, int] = {
     int(Direction.UP): int(Action.FACE_UP),
@@ -185,8 +188,8 @@ def _tile_pixel_size(map_w: int, map_h: int) -> int:
     Returns:
         Tile side length in pixels.
     """
-    world_h = _UI_SIZE - _HOTBAR_H
-    return max(8, min(_UI_SIZE // map_w, world_h // map_h))
+    world_h = _BASE_UI_SIZE * _play_theme.UI_SCALE - _hotbar_h()
+    return max(8, min(_BASE_UI_SIZE * _play_theme.UI_SCALE // map_w, world_h // map_h))
 
 
 def _mouse_facing_direction(
@@ -284,9 +287,9 @@ def _play_loop(
     step_fn = jax.jit(env.step_env)
     clock = pygame.time.Clock()
 
-    ui_w = _UI_SIZE
-    ui_h = _UI_SIZE
-    world_area_h = ui_h - _HOTBAR_H
+    ui_w = _BASE_UI_SIZE * _play_theme.UI_SCALE
+    ui_h = _BASE_UI_SIZE * _play_theme.UI_SCALE
+    world_area_h = ui_h - _hotbar_h()
     tile_px = _tile_pixel_size(params.map_width, params.map_height)
     world_pw = params.map_width * tile_px
     world_ph = params.map_height * tile_px
@@ -444,8 +447,8 @@ def main() -> None:
     pygame.init()
 
     window_width, window_height = calculate_window_size(
-        _UI_SIZE,
-        _UI_SIZE,
+        _BASE_UI_SIZE * _play_theme.UI_SCALE,
+        _BASE_UI_SIZE * _play_theme.UI_SCALE,
     )
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")

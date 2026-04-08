@@ -35,7 +35,7 @@ from factoriax.constants import (
 from factoriax.play.play_state import PlayState
 from factoriax.play.transfer import swap_inventory_slots
 from factoriax.play.ui import (
-    _HOTBAR_H,  # noqa: F401 — re-export
+    _hotbar_h,  # noqa: F401 — re-export
     render_achievement_menu,
     render_help_overlay,
     render_hotbar,

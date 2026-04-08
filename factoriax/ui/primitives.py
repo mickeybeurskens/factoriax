@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from factoriax.ui.theme import BORDER, BORDER_PX, PANEL_BG
+from factoriax.ui import theme as _theme
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,9 +56,9 @@ def draw_panel(
     w: int,
     h: int,
     *,
-    bg: tuple[int, int, int, int] = PANEL_BG,
-    border: tuple[int, int, int, int] = BORDER,
-    border_px: int = BORDER_PX,
+    bg: tuple[int, int, int, int] | None = None,
+    border: tuple[int, int, int, int] | None = None,
+    border_px: int | None = None,
 ) -> None:
     """Draw a rectangular panel: solid background with a uniform border.
 
@@ -74,6 +74,12 @@ def draw_panel(
         border: Border RGBA colour.
         border_px: Border thickness in pixels.
     """
+    if bg is None:
+        bg = _theme.PANEL_BG
+    if border is None:
+        border = _theme.BORDER
+    if border_px is None:
+        border_px = _theme.BORDER_PX
     overlay[y : y + h, x : x + w] = bg
     for i in range(border_px):
         overlay[y + i, x : x + w] = border

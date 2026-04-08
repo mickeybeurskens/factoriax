@@ -34,6 +34,7 @@ from factoriax.state import EnvState
 
 # Re-export shared primitives so existing ``from factoriax.play.ui import``
 # statements keep working.
+from factoriax.ui import theme as _theme
 from factoriax.ui.compositing import blit_rgba as _blit_rgba  # noqa: F401
 from factoriax.ui.compositing import (
     blit_scroll_view,  # noqa: F401
@@ -45,20 +46,9 @@ from factoriax.ui.primitives import (
     ClickRegion,  # noqa: F401
     draw_panel,  # noqa: F401
 )
-from factoriax.ui.theme import BORDER as _BORDER
-from factoriax.ui.theme import BORDER_PX as _BORDER_PX
-from factoriax.ui.theme import FONT_BODY as _FONT_BODY
-from factoriax.ui.theme import FONT_HEADER as _FONT_HEADER
-from factoriax.ui.theme import FONT_HINT as _FONT_HINT
-from factoriax.ui.theme import HEADER_H as _HEADER_H
-from factoriax.ui.theme import HINT_COLOR as _HINT_COLOR
-from factoriax.ui.theme import HINT_HEIGHT as _HINT_HEIGHT
-from factoriax.ui.theme import SCROLL_STEP  # noqa: F401
-from factoriax.ui.theme import SCROLLBAR_BG as _SCROLLBAR_BG  # noqa: F401
-from factoriax.ui.theme import SCROLLBAR_THUMB as _SCROLLBAR_THUMB  # noqa: F401
-from factoriax.ui.theme import SCROLLBAR_W as _SCROLLBAR_W  # noqa: F401
-from factoriax.ui.theme import SEP_H as _SEP_H
-from factoriax.ui.theme import SLOT_COUNT_COLOR as _SLOT_COUNT_COLOR
+
+# Re-export for backward compatibility.
+SCROLL_STEP = _theme.SCROLL_STEP  # noqa: F401
 
 # Play-specific style constants not shared with other apps.
 _PAUSE_OPTION_NORMAL: tuple[int, int, int, int] = (45, 45, 45, 255)
@@ -119,25 +109,25 @@ def _draw_section_header(
     Returns:
         Y coordinate of the first content pixel below the header.
     """
-    content_y = y + _BORDER_PX
+    content_y = y + _theme.BORDER_PX
 
     if is_focused:
         overlay[
-            content_y : content_y + _BORDER_PX,
-            x + _BORDER_PX : x + w - _BORDER_PX,
+            content_y : content_y + _theme.BORDER_PX,
+            x + _theme.BORDER_PX : x + w - _theme.BORDER_PX,
         ] = _FOCUS_STRIP
-        content_y += _BORDER_PX
+        content_y += _theme.BORDER_PX
 
     label = _render_text_rgba(text, font, (215, 195, 65))
     label_x = x + (w - label.shape[1]) // 2
-    label_y = content_y + (_HEADER_H - label.shape[0]) // 2
+    label_y = content_y + (_theme.HEADER_H - label.shape[0]) // 2
     _blit_rgba(overlay, label, label_y, label_x)
 
-    sep_y = content_y + _HEADER_H
-    overlay[sep_y : sep_y + _SEP_H, x + _BORDER_PX + 4 : x + w - _BORDER_PX - 4] = (
-        _BORDER
+    sep_y = content_y + _theme.HEADER_H
+    overlay[sep_y : sep_y + _theme.SEP_H, x + _theme.BORDER_PX + 4 : x + w - _theme.BORDER_PX - 4] = (
+        _theme.BORDER
     )
-    return sep_y + _SEP_H + 8
+    return sep_y + _theme.SEP_H + 8
 
 
 def _render_control_hints(
@@ -156,10 +146,10 @@ def _render_control_hints(
         y: Top edge of the hint region.
         w: Width of the hint region.
     """
-    font = get_pixel_font(_FONT_HINT)
-    hint_arr = _render_text_rgba(hints, font, _HINT_COLOR)
+    font = get_pixel_font(_theme.FONT_HINT)
+    hint_arr = _render_text_rgba(hints, font, _theme.HINT_COLOR)
     hint_x = x + (w - hint_arr.shape[1]) // 2
-    hint_y = y + (_HINT_HEIGHT - hint_arr.shape[0]) // 2
+    hint_y = y + (_theme.HINT_HEIGHT - hint_arr.shape[0]) // 2
     _blit_rgba(overlay, hint_arr, hint_y, hint_x)
 
 
@@ -252,28 +242,28 @@ def render_achievement_menu(
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
     title_font = get_pixel_font(32)
-    body_font = get_pixel_font(_FONT_BODY)
+    body_font = get_pixel_font(_theme.FONT_BODY)
 
     title_arr = _render_text_rgba("ACHIEVEMENTS", title_font, (215, 195, 65))
     title_x = menu_x + (menu_w - title_arr.shape[1]) // 2
-    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 16, title_x)
+    _blit_rgba(overlay, title_arr, menu_y + _theme.BORDER_PX + 16, title_x)
 
-    sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
-    overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
+    sep_y = menu_y + _theme.BORDER_PX + 16 + title_arr.shape[0] + 12
+    overlay[sep_y : sep_y + _theme.SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _theme.BORDER
 
     unlocked = np.array(state.achievements_unlocked)
     n_unlocked = int(np.sum(unlocked))
 
-    hint_font = get_pixel_font(_FONT_HINT)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
 
     # Fixed-height rows make the scroll math simple and the list readable.
     row_h = 36
     hint_text_h = hint_font.get_height() + 12
-    footer_reserve = _HINT_HEIGHT + _BORDER_PX + 40 + hint_text_h
+    footer_reserve = _theme.HINT_HEIGHT + _theme.BORDER_PX + 40 + hint_text_h
 
-    vp_x = menu_x + _BORDER_PX
-    vp_y = sep_y + _SEP_H + 8
-    vp_w = menu_w - 2 * _BORDER_PX
+    vp_x = menu_x + _theme.BORDER_PX
+    vp_y = sep_y + _theme.SEP_H + 8
+    vp_w = menu_w - 2 * _theme.BORDER_PX
     vp_h = menu_y + menu_h - footer_reserve - vp_y
 
     content_h = NUM_ACHIEVEMENTS * row_h
@@ -290,11 +280,11 @@ def render_achievement_menu(
 
         if i == selected_index:
             sel_t = 2
-            content[row_y : row_y + sel_t, 8 : vp_w - 8] = _BORDER
+            content[row_y : row_y + sel_t, 8 : vp_w - 8] = _theme.BORDER
             bot = row_y + row_h - 4
-            content[bot - sel_t : bot, 8 : vp_w - 8] = _BORDER
-            content[row_y : row_y + row_h - 4, 8 : 8 + sel_t] = _BORDER
-            content[row_y : row_y + row_h - 4, vp_w - 8 - sel_t : vp_w - 8] = _BORDER
+            content[bot - sel_t : bot, 8 : vp_w - 8] = _theme.BORDER
+            content[row_y : row_y + row_h - 4, 8 : 8 + sel_t] = _theme.BORDER
+            content[row_y : row_y + row_h - 4, vp_w - 8 - sel_t : vp_w - 8] = _theme.BORDER
 
         icon_x = 24
         icon_y = row_y + (row_h - icon_size) // 2
@@ -314,9 +304,9 @@ def render_achievement_menu(
 
     # Achievement hint for the selected row.
     sel_hint = ACHIEVEMENT_INFO[selected_index].hint
-    hint_arr = _render_text_rgba(sel_hint, hint_font, _HINT_COLOR)
+    hint_arr = _render_text_rgba(sel_hint, hint_font, _theme.HINT_COLOR)
     hx = menu_x + (menu_w - hint_arr.shape[1]) // 2
-    hy = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX - 40 - hint_text_h + 4
+    hy = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX - 40 - hint_text_h + 4
     _blit_rgba(overlay, hint_arr, hy, hx)
 
     footer_arr = _render_text_rgba(
@@ -329,13 +319,13 @@ def render_achievement_menu(
     _blit_rgba(overlay, footer_arr, fy, fx)
     overlay[fy - 4 : fy - 2, menu_x + 20 : menu_x + menu_w - 20] = (80, 75, 40, 255)
 
-    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
     _render_control_hints(
         overlay,
         "[W/S] Select  [ESC] Close",
-        menu_x + _BORDER_PX,
+        menu_x + _theme.BORDER_PX,
         hint_y,
-        menu_w - 2 * _BORDER_PX,
+        menu_w - 2 * _theme.BORDER_PX,
     )
 
     return overlay
@@ -393,21 +383,21 @@ def render_research_menu(
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
     title_font = get_pixel_font(32)
-    body_font = get_pixel_font(_FONT_BODY)
-    hint_font = get_pixel_font(_FONT_HINT)
+    body_font = get_pixel_font(_theme.FONT_BODY)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
 
     title_arr = _render_text_rgba("RESEARCH", title_font, (215, 195, 65))
     title_x = menu_x + (menu_w - title_arr.shape[1]) // 2
-    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 16, title_x)
+    _blit_rgba(overlay, title_arr, menu_y + _theme.BORDER_PX + 16, title_x)
 
-    sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
-    overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = (
-        _BORDER
+    sep_y = menu_y + _theme.BORDER_PX + 16 + title_arr.shape[0] + 12
+    overlay[sep_y : sep_y + _theme.SEP_H, menu_x + 20 : menu_x + menu_w - 20] = (
+        _theme.BORDER
     )
 
-    cy = sep_y + _SEP_H + 12
-    card_w = menu_w - 2 * _BORDER_PX - 20
-    card_x = menu_x + _BORDER_PX + 10
+    cy = sep_y + _theme.SEP_H + 12
+    card_w = menu_w - 2 * _theme.BORDER_PX - 20
+    card_x = menu_x + _theme.BORDER_PX + 10
 
     for i, tech in enumerate(_TECH_DESCRIPTIONS):
         progress = int(state.research_progress[i])
@@ -424,14 +414,14 @@ def render_research_menu(
 
         if is_selected:
             t = 2
-            overlay[cy : cy + t, card_x : card_x + card_w] = _BORDER
+            overlay[cy : cy + t, card_x : card_x + card_w] = _theme.BORDER
             overlay[cy + card_h - t : cy + card_h, card_x : card_x + card_w] = (
-                _BORDER
+                _theme.BORDER
             )
-            overlay[cy : cy + card_h, card_x : card_x + t] = _BORDER
+            overlay[cy : cy + card_h, card_x : card_x + t] = _theme.BORDER
             overlay[
                 cy : cy + card_h, card_x + card_w - t : card_x + card_w
-            ] = _BORDER
+            ] = _theme.BORDER
 
         # Status badge
         badge_w = 12
@@ -493,10 +483,10 @@ def render_research_menu(
         cy += card_h + 8
 
     # Hints
-    hint_y = menu_y + menu_h - _BORDER_PX - _HINT_HEIGHT
+    hint_y = menu_y + menu_h - _theme.BORDER_PX - _theme.HINT_HEIGHT
     hints = "[W/S] Select | [E] Spend science pack | [ESC] Close"
     _render_control_hints(
-        overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
+        overlay, hints, menu_x + _theme.BORDER_PX, hint_y, menu_w - 2 * _theme.BORDER_PX
     )
 
     return overlay
@@ -532,18 +522,18 @@ def render_pause_menu(
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
     title_font = get_pixel_font(28)
-    body_font = get_pixel_font(_FONT_BODY)
+    body_font = get_pixel_font(_theme.FONT_BODY)
 
     title_arr = _render_text_rgba("PAUSED", title_font, (215, 195, 65))
     title_x = menu_x + (menu_w - title_arr.shape[1]) // 2
-    _blit_rgba(overlay, title_arr, menu_y + _BORDER_PX + 16, title_x)
+    _blit_rgba(overlay, title_arr, menu_y + _theme.BORDER_PX + 16, title_x)
 
-    sep_y = menu_y + _BORDER_PX + 16 + title_arr.shape[0] + 12
-    overlay[sep_y : sep_y + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
+    sep_y = menu_y + _theme.BORDER_PX + 16 + title_arr.shape[0] + 12
+    overlay[sep_y : sep_y + _theme.SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _theme.BORDER
 
     options = ["Resume", "Reset", "Quit Game"]
     option_h = 40
-    options_start_y = sep_y + _SEP_H + 24
+    options_start_y = sep_y + _theme.SEP_H + 24
 
     for i, option_text in enumerate(options):
         option_y = options_start_y + i * (option_h + 12)
@@ -582,13 +572,13 @@ def render_pause_menu(
         text_y = option_y + (option_h - text_arr.shape[0]) // 2
         _blit_rgba(overlay, text_arr, text_y, text_x)
 
-    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
     _render_control_hints(
         overlay,
         "[W/S] Select | [ENTER/E] Confirm | [ESC] Back",
-        menu_x + _BORDER_PX,
+        menu_x + _theme.BORDER_PX,
         hint_y,
-        menu_w - 2 * _BORDER_PX,
+        menu_w - 2 * _theme.BORDER_PX,
     )
 
     return overlay, click_regions
@@ -621,8 +611,8 @@ def render_welcome_screen(
     menu_x = (screen_width - menu_w) // 2
 
     title_font = get_pixel_font(28)
-    body_font = get_pixel_font(_FONT_BODY)
-    hint_font = get_pixel_font(_FONT_HINT)
+    body_font = get_pixel_font(_theme.FONT_BODY)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
     line_h = body_font.get_height()
     hint_h = hint_font.get_height()
 
@@ -644,26 +634,26 @@ def render_welcome_screen(
 
     inner_h = (
         48  # title
-        + _SEP_H
+        + _theme.SEP_H
         + 8  # separator
         + line_h
         + 6  # story line
         + line_h
         + 16  # goal line
-        + _SEP_H
+        + _theme.SEP_H
         + 8  # separator
         + controls_h  # control rows
         + 16  # gap before record toggle
         + control_row_h  # record checkbox row
         + 16  # gap before hint
-        + _HINT_HEIGHT
+        + _theme.HINT_HEIGHT
     )
-    menu_h = min(inner_h + 2 * (_BORDER_PX + 16), screen_height - 4)
+    menu_h = min(inner_h + 2 * (_theme.BORDER_PX + 16), screen_height - 4)
     menu_y = (screen_height - menu_h) // 2
 
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h, bg=(22, 22, 22, 255))
 
-    cy = menu_y + _BORDER_PX + 16
+    cy = menu_y + _theme.BORDER_PX + 16
 
     # Title
     title_arr = _render_text_rgba("CRASH LANDED", title_font, (215, 195, 65))
@@ -671,8 +661,8 @@ def render_welcome_screen(
     cy += title_arr.shape[0] + 8
 
     # Separator
-    overlay[cy : cy + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
-    cy += _SEP_H + 8
+    overlay[cy : cy + _theme.SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _theme.BORDER
+    cy += _theme.SEP_H + 8
 
     # Story lines
     for text in (story, goal):
@@ -682,8 +672,8 @@ def render_welcome_screen(
     cy += 10
 
     # Separator
-    overlay[cy : cy + _SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _BORDER
-    cy += _SEP_H + 8
+    overlay[cy : cy + _theme.SEP_H, menu_x + 20 : menu_x + menu_w - 20] = _theme.BORDER
+    cy += _theme.SEP_H + 8
 
     # Controls
     controls_x = menu_x + (menu_w - key_col_w - 16 - 120) // 2
@@ -735,7 +725,7 @@ def render_welcome_screen(
 
     # Dismiss hint.
     cy += 16
-    hint_arr = _render_text_rgba("[SPACE / ENTER]  Start", hint_font, _HINT_COLOR)
+    hint_arr = _render_text_rgba("[SPACE / ENTER]  Start", hint_font, _theme.HINT_COLOR)
     _blit_rgba(overlay, hint_arr, cy, menu_x + (menu_w - hint_arr.shape[1]) // 2)
 
     return overlay, regions
@@ -765,22 +755,22 @@ def render_victory_screen(
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
     title_font = get_pixel_font(28)
-    body_font = get_pixel_font(_FONT_BODY)
-    hint_font = get_pixel_font(_FONT_HINT)
+    body_font = get_pixel_font(_theme.FONT_BODY)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
 
     title = _render_text_rgba("ROCKET LAUNCHED", title_font, (215, 195, 65))
     _blit_rgba(
         overlay,
         title,
-        menu_y + _BORDER_PX + 16,
+        menu_y + _theme.BORDER_PX + 16,
         menu_x + (menu_w - title.shape[1]) // 2,
     )
 
-    sep_y = menu_y + _BORDER_PX + 16 + title.shape[0] + 12
+    sep_y = menu_y + _theme.BORDER_PX + 16 + title.shape[0] + 12
     overlay[
-        sep_y : sep_y + _SEP_H,
+        sep_y : sep_y + _theme.SEP_H,
         menu_x + 20 : menu_x + menu_w - 20,
-    ] = _BORDER
+    ] = _theme.BORDER
 
     msg = _render_text_rgba(
         "You escaped the planet.",
@@ -790,19 +780,19 @@ def render_victory_screen(
     _blit_rgba(
         overlay,
         msg,
-        sep_y + _SEP_H + 16,
+        sep_y + _theme.SEP_H + 16,
         menu_x + (menu_w - msg.shape[1]) // 2,
     )
 
     hint = _render_text_rgba(
         "[SPACE / ENTER]  Continue",
         hint_font,
-        _HINT_COLOR,
+        _theme.HINT_COLOR,
     )
     _blit_rgba(
         overlay,
         hint,
-        menu_y + menu_h - _BORDER_PX - hint.shape[0] - 8,
+        menu_y + menu_h - _theme.BORDER_PX - hint.shape[0] - 8,
         menu_x + (menu_w - hint.shape[1]) // 2,
     )
 
@@ -858,9 +848,9 @@ def render_machine_menu(
     selected_player = int(state.selected_player)
     player_inv = np.array(state.player_inventory[selected_player])
 
-    header_font = get_pixel_font(_FONT_HEADER)
-    body_font = get_pixel_font(_FONT_BODY)
-    hint_font = get_pixel_font(_FONT_HINT)
+    header_font = get_pixel_font(_theme.FONT_HEADER)
+    body_font = get_pixel_font(_theme.FONT_BODY)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
     line_h = body_font.get_height()
 
     # --- Layout constants ---
@@ -873,10 +863,10 @@ def render_machine_menu(
     player_icon = 26
 
     # separator + gap + strip label + gap + icon row
-    player_strip_h = _SEP_H + 8 + line_h + 6 + player_icon
+    player_strip_h = _theme.SEP_H + 8 + line_h + 6 + player_icon
 
-    # _BORDER_PX + _HEADER_H + _SEP_H + 8 — matches _draw_section_header offset
-    header_offset = _BORDER_PX + _HEADER_H + _SEP_H + 8
+    # _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8 — matches _draw_section_header offset
+    header_offset = _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8
 
     # Fixed overhead: everything except the slot grid itself.
     health_bar_h = 32  # bar (10) + text (~14) + spacing (8)
@@ -887,8 +877,8 @@ def render_machine_menu(
         + (padding if slot_rows > 0 else 0)
         + player_strip_h
         + padding // 2
-        + _HINT_HEIGHT
-        + _BORDER_PX
+        + _theme.HINT_HEIGHT
+        + _theme.BORDER_PX
     )
 
     # Ideal cell height; shrink to fit if the screen is small.
@@ -1012,7 +1002,7 @@ def render_machine_menu(
         count_arr = _render_text_rgba(
             f"x{count}",
             body_font,
-            _SLOT_COUNT_COLOR,
+            _theme.SLOT_COUNT_COLOR,
         )
         count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
         count_y = icon_y + icon_size + 4
@@ -1031,11 +1021,11 @@ def render_machine_menu(
     slot_area_bottom = content_y + padding // 2 + slot_area_h
     sep_y = slot_area_bottom + (padding if slot_area_h > 0 else 0)
     overlay[
-        sep_y : sep_y + _SEP_H,
-        menu_x + _BORDER_PX + 4 : menu_x + menu_w - _BORDER_PX - 4,
-    ] = _BORDER
+        sep_y : sep_y + _theme.SEP_H,
+        menu_x + _theme.BORDER_PX + 4 : menu_x + menu_w - _theme.BORDER_PX - 4,
+    ] = _theme.BORDER
 
-    label_y = sep_y + _SEP_H + 8
+    label_y = sep_y + _theme.SEP_H + 8
     label_arr = _render_text_rgba("Player Inventory", body_font, (148, 140, 98))
     _blit_rgba(overlay, label_arr, label_y, menu_x + padding)
 
@@ -1091,23 +1081,28 @@ def render_machine_menu(
             _blit_rgba(overlay, cnt_arr, cnt_y, icon_x)
 
     # --- Hint bar ---
-    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
     hints = "[E] Transfer  [W/S] Switch panel  [A/D] Select  [ESC] Close"
     if machine_type == int(MachineType.ASSEMBLER):
         hints = "[Q] Recipe  " + hints
     _render_control_hints(
         overlay,
         hints,
-        menu_x + _BORDER_PX,
+        menu_x + _theme.BORDER_PX,
         hint_y,
-        menu_w - 2 * _BORDER_PX,
+        menu_w - 2 * _theme.BORDER_PX,
     )
 
     return overlay, click_regions
 
 
-_HOTBAR_H: int = 154
-"""Height of the persistent bottom bar (hotbar + info panel) in pixels."""
+_BASE_HOTBAR_H: int = 154
+"""Base height of the persistent bottom bar at 1x scale."""
+
+
+def _hotbar_h() -> int:
+    """Return the hotbar height for the current UI scale."""
+    return _BASE_HOTBAR_H * _theme.UI_SCALE
 
 _HOTBAR_SLOTS: int = 8
 """Number of inventory slots visible in the hotbar at once."""
@@ -1150,26 +1145,26 @@ def render_hotbar(
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     regions: list[ClickRegion] = []
 
-    bar_y = screen_height - _HOTBAR_H
+    bar_y = screen_height - _hotbar_h()
     bar_w = screen_width * 2 // 3
 
     # Full-width background and top border (shared with info panel).
     overlay[bar_y:, :screen_width] = (22, 22, 22, 228)
-    overlay[bar_y : bar_y + 2, :screen_width] = _BORDER
+    overlay[bar_y : bar_y + 2, :screen_width] = _theme.BORDER
     # Vertical separator between hotbar and info panel.
-    overlay[bar_y + 2 :, bar_w : bar_w + 2] = _BORDER
+    overlay[bar_y + 2 :, bar_w : bar_w + 2] = _theme.BORDER
 
     selected_player = int(state.selected_player)
     selected_slot = selected_item
     direction = int(state.player_directions[selected_player])
     player_inv = np.array(state.player_inventory[selected_player])
 
-    hint_font = get_pixel_font(_FONT_HINT)
-    body_font = get_pixel_font(_FONT_BODY)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
+    body_font = get_pixel_font(_theme.FONT_BODY)
 
     # Content is vertically centred in a 48px logical strip.
     content_h = 48
-    content_y = bar_y + (_HOTBAR_H - content_h) // 2
+    content_y = bar_y + (_hotbar_h() - content_h) // 2
 
     # --- Player badge (~60px) ---
     badge_x = 8
@@ -1254,7 +1249,7 @@ def render_hotbar(
                     icon_x + pad : icon_x + pad + icon_s,
                 ] = icon_arr
             count_arr = _render_text_rgba(
-                f"{count}", body_font, _SLOT_COUNT_COLOR,
+                f"{count}", body_font, _theme.SLOT_COUNT_COLOR,
             )
             count_x = icon_x + icon_size - count_arr.shape[1] - 1
             count_y = icon_y + icon_size - count_arr.shape[0]
@@ -1365,7 +1360,7 @@ def render_info_panel(
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
 
-    bar_y = screen_height - _HOTBAR_H
+    bar_y = screen_height - _hotbar_h()
     panel_x = screen_width * 2 // 3 + 2  # after separator
     panel_w = screen_width - panel_x
     pad = 10
@@ -1373,9 +1368,9 @@ def render_info_panel(
     cy = bar_y + pad
     max_x = panel_x + panel_w - pad
 
-    hint_font = get_pixel_font(_FONT_HINT)
-    body_font = get_pixel_font(_FONT_BODY)
-    header_font = get_pixel_font(_FONT_HEADER)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
+    body_font = get_pixel_font(_theme.FONT_BODY)
+    header_font = get_pixel_font(_theme.FONT_HEADER)
 
     map_h, map_w = state.map.shape[:2]
     valid = 0 <= hover_tx < map_w and 0 <= hover_ty < map_h
@@ -1386,7 +1381,7 @@ def render_info_panel(
         _blit_rgba(
             overlay,
             hint,
-            bar_y + (_HOTBAR_H - hint.shape[0]) // 2,
+            bar_y + (_hotbar_h() - hint.shape[0]) // 2,
             panel_x + (panel_w - hint.shape[1]) // 2,
         )
         return overlay
@@ -1629,11 +1624,11 @@ def render_inventory_menu(
     div_x = menu_x + inv_w
 
     # Gold vertical divider between sections.
-    for i in range(_BORDER_PX):
-        overlay[menu_y : menu_y + menu_h, div_x + i] = _BORDER
+    for i in range(_theme.BORDER_PX):
+        overlay[menu_y : menu_y + menu_h, div_x + i] = _theme.BORDER
 
-    header_font = get_pixel_font(_FONT_HEADER)
-    body_font = get_pixel_font(_FONT_BODY)
+    header_font = get_pixel_font(_theme.FONT_HEADER)
+    body_font = get_pixel_font(_theme.FONT_BODY)
 
     inv_content_y = _draw_section_header(
         overlay,
@@ -1762,7 +1757,7 @@ def render_inventory_menu(
             count_arr = _render_text_rgba(
                 f"x{count}",
                 body_font,
-                _SLOT_COUNT_COLOR,
+                _theme.SLOT_COUNT_COLOR,
             )
             count_y = cell_y + icon_size + 4
             count_x = cell_x + (cell_w - count_arr.shape[1]) // 2
@@ -1781,11 +1776,11 @@ def render_inventory_menu(
     # ------------------------------------------------------------------
     # Crafting recipes list — rendered into a scroll view
     # ------------------------------------------------------------------
-    hint_y = menu_y + menu_h - _HINT_HEIGHT - _BORDER_PX
+    hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
 
-    vp_x_craft = div_x + _BORDER_PX
+    vp_x_craft = div_x + _theme.BORDER_PX
     vp_y_craft = craft_content_y
-    vp_w_craft = craft_w - _BORDER_PX
+    vp_w_craft = craft_w - _theme.BORDER_PX
     vp_h_craft = hint_y - craft_content_y
 
     recipe_h = 80
@@ -1900,7 +1895,7 @@ def render_inventory_menu(
     else:
         hints = "[A/D] Select | [W/S] Row | [E] Place | [ESC] Close"
     _render_control_hints(
-        overlay, hints, menu_x + _BORDER_PX, hint_y, menu_w - 2 * _BORDER_PX
+        overlay, hints, menu_x + _theme.BORDER_PX, hint_y, menu_w - 2 * _theme.BORDER_PX
     )
 
     return overlay, click_regions
@@ -1970,8 +1965,8 @@ def render_help_overlay(
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     overlay[:, :] = (0, 0, 0, 180)
 
-    font = get_pixel_font(_FONT_HINT)
-    title_font = get_pixel_font(_FONT_HEADER)
+    font = get_pixel_font(_theme.FONT_HINT)
+    title_font = get_pixel_font(_theme.FONT_HEADER)
     line_h = font.get_height() + 4
 
     total_h = len(_HELP_LINES) * line_h + 48
@@ -1986,13 +1981,13 @@ def render_help_overlay(
     _blit_rgba(
         overlay,
         title,
-        py + _BORDER_PX + 6,
+        py + _theme.BORDER_PX + 6,
         px + (panel_w - title.shape[1]) // 2,
     )
 
-    cy = py + _BORDER_PX + 6 + title.shape[0] + 8
-    overlay[cy : cy + _SEP_H, px + 16 : px + panel_w - 16] = _BORDER
-    cy += _SEP_H + 6
+    cy = py + _theme.BORDER_PX + 6 + title.shape[0] + 8
+    overlay[cy : cy + _theme.SEP_H, px + 16 : px + panel_w - 16] = _theme.BORDER
+    cy += _theme.SEP_H + 6
 
     for line in _HELP_LINES:
         if not line:
@@ -2005,11 +2000,11 @@ def render_help_overlay(
         _blit_rgba(overlay, arr, cy, px + 16)
         cy += line_h
 
-    dismiss = _render_text_rgba("Press any key to close", font, _HINT_COLOR)
+    dismiss = _render_text_rgba("Press any key to close", font, _theme.HINT_COLOR)
     _blit_rgba(
         overlay,
         dismiss,
-        py + panel_h - _BORDER_PX - dismiss.shape[0] - 4,
+        py + panel_h - _theme.BORDER_PX - dismiss.shape[0] - 4,
         px + (panel_w - dismiss.shape[1]) // 2,
     )
 

@@ -32,9 +32,12 @@ from factoriax.ui.theme import (
     SLOT_COUNT_COLOR,
     TEXT_COLOR,
 )
-from factoriax.ui.window import calculate_window_size
+from factoriax.ui.scaling import ScaledCanvas
+from factoriax.ui.window import auto_ui_scale, calculate_window_size
 
 __all__ = [
+    "ScaledCanvas",
+    "auto_ui_scale",
     "ClickRegion",
     "blit_rgba",
     "blit_scroll_view",
