@@ -65,20 +65,28 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.IRON, 10), (ItemType.COPPER, 5)],
         "ticks": 0,
     },
+    {
+        "output": ItemType.UNDERGROUND_BELT,
+        "inputs": [(ItemType.IRON, 2), (ItemType.CONVEYOR_BELT, 1)],
+        "ticks": 0,
+    },
 ]
 
 NUM_RECIPES: int = len(RECIPES)
 MAX_RECIPE_INPUTS: int = max(len(r["inputs"]) for r in RECIPES)
 
-RECIPE_NAMES: list[str] = ["Miner", "Pallet", "Conveyor Belt", "Arm", "Assembler"]
+RECIPE_NAMES: list[str] = [
+    "Miner",
+    "Pallet",
+    "Conveyor Belt",
+    "Arm",
+    "Assembler",
+    "Tunnel Belt",
+]
 
 # Derived JAX arrays — single source of truth from the dicts above.
-RECIPE_OUTPUTS: jnp.ndarray = jnp.array(
-    [r["output"] for r in RECIPES], dtype=jnp.int32
-)
-RECIPE_TICKS: jnp.ndarray = jnp.array(
-    [r["ticks"] for r in RECIPES], dtype=jnp.int32
-)
+RECIPE_OUTPUTS: jnp.ndarray = jnp.array([r["output"] for r in RECIPES], dtype=jnp.int32)
+RECIPE_TICKS: jnp.ndarray = jnp.array([r["ticks"] for r in RECIPES], dtype=jnp.int32)
 RECIPE_INPUT_ITEMS: jnp.ndarray = jnp.array(
     [
         [item for item, _ in r["inputs"]]
@@ -136,9 +144,7 @@ ASSEMBLER_RECIPES: list[_Recipe] = [
 ]
 
 NUM_ASSEMBLER_RECIPES: int = len(ASSEMBLER_RECIPES)
-MAX_ASSEMBLER_RECIPE_INPUTS: int = max(
-    len(r["inputs"]) for r in ASSEMBLER_RECIPES
-)
+MAX_ASSEMBLER_RECIPE_INPUTS: int = max(len(r["inputs"]) for r in ASSEMBLER_RECIPES)
 
 ASSEMBLER_RECIPE_NAMES: list[str] = [
     "Hull",

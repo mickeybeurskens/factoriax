@@ -14,6 +14,7 @@ from factoriax.constants import (
     MACHINE_MAX_TYPES,
     MACHINE_POWER_CONSUMPTION,
     MAX_MACHINE_STACK_SIZE,
+    MAX_UNDERGROUND_RANGE,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     TECH_GATES_RECIPE,
@@ -43,13 +44,11 @@ def _direction_offsets(
     direction: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Convert Direction arrays to (dx, dy) offsets."""
-    dx = (
-        jnp.where(direction == Direction.LEFT, -1, 0)
-        + jnp.where(direction == Direction.RIGHT, 1, 0)
+    dx = jnp.where(direction == Direction.LEFT, -1, 0) + jnp.where(
+        direction == Direction.RIGHT, 1, 0
     )
-    dy = (
-        jnp.where(direction == Direction.UP, -1, 0)
-        + jnp.where(direction == Direction.DOWN, 1, 0)
+    dy = jnp.where(direction == Direction.UP, -1, 0) + jnp.where(
+        direction == Direction.DOWN, 1, 0
     )
     return dx, dy
 
@@ -72,7 +71,8 @@ def _buffer_item_type(inv: jnp.ndarray) -> jnp.ndarray:
 
 
 def _buffer_count(
-    inv: jnp.ndarray, item_type: jnp.ndarray,
+    inv: jnp.ndarray,
+    item_type: jnp.ndarray,
 ) -> jnp.ndarray:
     """Read the count for a specific item type per tile.
 
@@ -101,7 +101,8 @@ def _distinct_types(inv: jnp.ndarray) -> jnp.ndarray:
 
 
 def update_all_machines(
-    state: EnvState, params: EnvParams | None = None,
+    state: EnvState,
+    params: EnvParams | None = None,
 ) -> EnvState:
     """Update all machines in parallel for one step.
 
@@ -125,7 +126,8 @@ def update_all_machines(
 
 
 def refuel_machines(
-    state: EnvState, params: EnvParams | None = None,
+    state: EnvState,
+    params: EnvParams | None = None,
 ) -> EnvState:
     """Convert coal to power for miners that need it.
 
@@ -159,7 +161,8 @@ def refuel_machines(
 
 
 def run_assemblers(
-    state: EnvState, params: EnvParams | None = None,
+    state: EnvState,
+    params: EnvParams | None = None,
 ) -> EnvState:
     """Execute assembler crafting logic for all assemblers.
 
@@ -179,9 +182,7 @@ def run_assemblers(
     h, w = state.machine_types.shape
     rows, cols = _grid_indices(h, w)
 
-    is_asm = (state.machine_types == MachineType.ASSEMBLER) & (
-        state.machine_health > 0
-    )
+    is_asm = (state.machine_types == MachineType.ASSEMBLER) & (state.machine_health > 0)
 
     recipe = state.machine_selected_recipe
     recipe_out = ASSEMBLER_RECIPE_OUTPUTS[recipe]
@@ -214,12 +215,11 @@ def run_assemblers(
         axis=0,
     )
     _tech_for_recipe = jnp.zeros(
-        NUM_ASSEMBLER_RECIPES, dtype=jnp.int32,
+        NUM_ASSEMBLER_RECIPES,
+        dtype=jnp.int32,
     )
     for t in range(NUM_TECHNOLOGIES):
-        _tech_for_recipe = _tech_for_recipe.at[
-            TECH_GATES_RECIPE[t]
-        ].set(t)
+        _tech_for_recipe = _tech_for_recipe.at[TECH_GATES_RECIPE[t]].set(t)
     recipe_tech_unlocked = state.research_unlocked[_tech_for_recipe]
     recipe_available = ~recipe_gated | recipe_tech_unlocked
     tile_recipe_allowed = recipe_available[recipe]
@@ -262,7 +262,8 @@ def run_assemblers(
 
 
 def run_miners(
-    state: EnvState, params: EnvParams | None = None,
+    state: EnvState,
+    params: EnvParams | None = None,
 ) -> EnvState:
     """Execute miner behavior for all miners in parallel.
 
@@ -282,9 +283,7 @@ def run_miners(
     h, w = state.machine_types.shape
     rows, cols = _grid_indices(h, w)
 
-    is_miner = (state.machine_types == MachineType.MINER) & (
-        state.machine_health > 0
-    )
+    is_miner = (state.machine_types == MachineType.MINER) & (state.machine_health > 0)
     has_power = state.machine_power > 0
     has_resources = state.block_resources > 0
 
@@ -298,7 +297,8 @@ def run_miners(
 
     mining_rate = jnp.where(
         state.machine_types == MachineType.MINER,
-        params.miner_mining_rate, 0,
+        params.miner_mining_rate,
+        0,
     )
     available_space = MAX_MACHINE_STACK_SIZE - output_count
     mine_amount = jnp.minimum(mining_rate, state.block_resources)
@@ -312,9 +312,7 @@ def run_miners(
     )
 
     actually_mined = mine_amount > 0
-    power_cost = (
-        MACHINE_POWER_CONSUMPTION[state.machine_types] * actually_mined
-    )
+    power_cost = MACHINE_POWER_CONSUMPTION[state.machine_types] * actually_mined
     new_power = state.machine_power - power_cost
 
     is_depleted = (new_resources <= 0) & (state.block_resources > 0)
@@ -336,7 +334,8 @@ def run_miners(
 
 
 def push_miner_output(
-    state: EnvState, max_asm_stack: int = 1000,
+    state: EnvState,
+    max_asm_stack: int = 1000,
 ) -> EnvState:
     """Push miner output into the machine the miner is facing.
 
@@ -373,7 +372,9 @@ def push_miner_output(
     fwd_item_count = fwd_inv[rows, cols, block_item]
     fwd_max_stack = MACHINE_MAX_STACK[fwd_mtype]
     fwd_cap = jnp.where(
-        fwd_mtype == MachineType.ASSEMBLER, max_asm_stack, fwd_max_stack,
+        fwd_mtype == MachineType.ASSEMBLER,
+        max_asm_stack,
+        fwd_max_stack,
     )
     fwd_has_space = fwd_item_count < fwd_cap
 
@@ -392,16 +393,19 @@ def push_miner_output(
     exp_in1 = ASSEMBLER_RECIPE_INPUT_ITEMS[fwd_recipe, 1]
     need0 = ASSEMBLER_RECIPE_INPUT_COUNTS[fwd_recipe, 0]
     need1 = ASSEMBLER_RECIPE_INPUT_COUNTS[fwd_recipe, 1]
-    item_matches_recipe = (
-        ((block_item == exp_in0) & (need0 > 0))
-        | ((block_item == exp_in1) & (need1 > 0))
+    item_matches_recipe = ((block_item == exp_in0) & (need0 > 0)) | (
+        (block_item == exp_in1) & (need1 > 0)
     )
     asm_filter = jnp.where(is_asm_fwd, item_matches_recipe, True)
 
     can_push = (
-        is_miner & (miner_ore_count > 0)
-        & fwd_not_none & fwd_not_self
-        & fwd_has_space & fwd_type_ok & asm_filter
+        is_miner
+        & (miner_ore_count > 0)
+        & fwd_not_none
+        & fwd_not_self
+        & fwd_has_space
+        & fwd_type_ok
+        & asm_filter
     )
 
     transfer = jnp.where(
@@ -424,10 +428,16 @@ def push_miner_output(
 
 
 def run_conveyor_belts(state: EnvState) -> EnvState:
-    """Move items along all conveyor belts in parallel.
+    """Move items along conveyor belts and underground tunnels.
 
-    Each belt pushes its single item type to the adjacent belt in
-    the belt's facing direction. Items flow only between belt tiles.
+    Regular belts and underground exits push to the adjacent tile in
+    the facing direction. Underground entries push to their paired
+    exit (the nearest ``UNDERGROUND_EXIT`` facing the same direction
+    within ``MAX_UNDERGROUND_RANGE`` tiles).
+
+    Surface targets (regular belts and underground entries) accept
+    items from adjacent tiles. Underground exits only accept from
+    paired entries, not from surface neighbors.
 
     Args:
         state: Current environment state.
@@ -437,22 +447,57 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     """
     h, w = state.machine_types.shape
     rows, cols = _grid_indices(h, w)
-    is_belt = (state.machine_types == MachineType.CONVEYOR_BELT) & (
-        state.machine_health > 0
-    )
+    mt = state.machine_types
+    alive = state.machine_health > 0
+
+    is_belt = (mt == MachineType.CONVEYOR_BELT) & alive
+    is_entry = (mt == MachineType.UNDERGROUND_ENTRY) & alive
+    is_exit = (mt == MachineType.UNDERGROUND_EXIT) & alive
+    is_belt_like = is_belt | is_entry | is_exit
 
     inv = state.machine_inventory  # (H, W, NUM_ITEM_TYPES) int16
-    src_item = _buffer_item_type(inv)  # (H, W)
-    src_count = _buffer_count(inv, src_item)  # (H, W) int16
+    src_item = _buffer_item_type(inv)
+    src_count = _buffer_count(inv, src_item)
 
     dx, dy = _direction_offsets(state.machine_direction)
-    tgt_row = jnp.clip(rows + dy, 0, h - 1)
-    tgt_col = jnp.clip(cols + dx, 0, w - 1)
 
-    tgt_is_belt = (
-        state.machine_types[tgt_row, tgt_col]
-        == MachineType.CONVEYOR_BELT
+    # --- Compute targets ---
+    # Adjacent tile (for regular belts and exits).
+    adj_row = jnp.clip(rows + dy, 0, h - 1)
+    adj_col = jnp.clip(cols + dx, 0, w - 1)
+
+    # Paired exit (for entries): scan forward up to MAX_UNDERGROUND_RANGE.
+    paired_row = rows
+    paired_col = cols
+    found_pair = jnp.zeros((h, w), dtype=jnp.bool_)
+    dirs = state.machine_direction
+
+    for offset in range(1, MAX_UNDERGROUND_RANGE + 1):
+        cr = jnp.clip(rows + dy * offset, 0, h - 1)
+        cc = jnp.clip(cols + dx * offset, 0, w - 1)
+        is_match = (mt[cr, cc] == MachineType.UNDERGROUND_EXIT) & (
+            dirs[cr, cc] == dirs[rows, cols]
+        )
+        first = is_match & ~found_pair
+        paired_row = jnp.where(first, cr, paired_row)
+        paired_col = jnp.where(first, cc, paired_col)
+        found_pair = found_pair | first
+
+    # Entries push to paired exit; belts and exits push to adjacent.
+    use_paired = is_entry & found_pair
+    tgt_row = jnp.where(use_paired, paired_row, adj_row)
+    tgt_col = jnp.where(use_paired, paired_col, adj_col)
+
+    # --- Target validation ---
+    tgt_mt = mt[tgt_row, tgt_col]
+    # Surface targets: regular belts and entries accept from surface.
+    surface_ok = (tgt_mt == MachineType.CONVEYOR_BELT) | (
+        tgt_mt == MachineType.UNDERGROUND_ENTRY
     )
+    # Underground targets: exits accept only from paired entries.
+    underground_ok = use_paired & (tgt_mt == MachineType.UNDERGROUND_EXIT)
+    tgt_accepts = surface_ok | underground_ok
+
     tgt_item = _buffer_item_type(inv[tgt_row, tgt_col])
     tgt_count = _buffer_count(inv[tgt_row, tgt_col], tgt_item)
     tgt_compatible = (tgt_count == 0) | (tgt_item == src_item)
@@ -460,21 +505,24 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
     not_self = (tgt_row != rows) | (tgt_col != cols)
     can_push = (
-        is_belt & (src_count > 0) & tgt_is_belt
-        & tgt_compatible & tgt_has_space & not_self
+        is_belt_like
+        & (src_count > 0)
+        & tgt_accepts
+        & tgt_compatible
+        & tgt_has_space
+        & not_self
     )
 
     push_count = jnp.where(can_push, src_count, jnp.int16(0))
     push_item = jnp.where(can_push, src_item, 0)
 
-    # Clear source belt items.
+    # Clear source items.
     cleared_inv = inv.astype(jnp.int32)
-    # Zero out the source item type for belts that push.
     cleared_inv = cleared_inv.at[rows, cols, src_item].set(
         jnp.where(can_push, 0, cleared_inv[rows, cols, src_item]),
     )
 
-    # Scatter add to target belts.
+    # Scatter add to targets.
     flat_idx = (tgt_row * w + tgt_col).ravel()
     flat_item = push_item.ravel()
     flat_count = push_count.ravel().astype(jnp.int32)
@@ -483,13 +531,11 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     flat_inv = flat_inv.at[flat_idx, flat_item].add(flat_count)
 
     new_inv = flat_inv.reshape(h, w, NUM_ITEM_TYPES)
-
-    # Clamp to max stack.
     new_inv = jnp.minimum(new_inv, MAX_MACHINE_STACK_SIZE)
 
-    # Only modify belt tiles.
+    # Only modify belt-like tiles.
     final_inv = jnp.where(
-        is_belt[..., None],
+        is_belt_like[..., None],
         new_inv,
         state.machine_inventory.astype(jnp.int32),
     )
@@ -500,7 +546,8 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
 
 def run_arms(
-    state: EnvState, max_asm_stack: int = 1000,
+    state: EnvState,
+    max_asm_stack: int = 1000,
 ) -> EnvState:
     """Execute pick-and-place arm behavior for all arms.
 
@@ -518,9 +565,7 @@ def run_arms(
     """
     h, w = state.machine_types.shape
     rows, cols = _grid_indices(h, w)
-    is_arm = (state.machine_types == MachineType.ARM) & (
-        state.machine_health > 0
-    )
+    is_arm = (state.machine_types == MachineType.ARM) & (state.machine_health > 0)
 
     dx, dy = _direction_offsets(state.machine_direction)
     fwd_row = jnp.clip(rows + dy, 0, h - 1)
@@ -529,10 +574,21 @@ def run_arms(
     bwd_col = jnp.clip(cols - dx, 0, w - 1)
 
     state = _arm_deposit_phase(
-        state, is_arm, rows, cols, fwd_row, fwd_col, max_asm_stack,
+        state,
+        is_arm,
+        rows,
+        cols,
+        fwd_row,
+        fwd_col,
+        max_asm_stack,
     )
     state = _arm_pick_phase(
-        state, is_arm, rows, cols, bwd_row, bwd_col,
+        state,
+        is_arm,
+        rows,
+        cols,
+        bwd_row,
+        bwd_col,
     )
     return state
 
@@ -559,7 +615,9 @@ def _arm_deposit_phase(
     fwd_item_count = fwd_inv[rows, cols, arm_item]
     fwd_max_stack = MACHINE_MAX_STACK[fwd_mtype]
     fwd_cap = jnp.where(
-        fwd_mtype == MachineType.ASSEMBLER, max_asm_stack, fwd_max_stack,
+        fwd_mtype == MachineType.ASSEMBLER,
+        max_asm_stack,
+        fwd_max_stack,
     )
     fwd_has_space = fwd_item_count < fwd_cap
 
@@ -576,19 +634,25 @@ def _arm_deposit_phase(
     exp_in1 = ASSEMBLER_RECIPE_INPUT_ITEMS[fwd_recipe, 1]
     need0 = ASSEMBLER_RECIPE_INPUT_COUNTS[fwd_recipe, 0]
     need1 = ASSEMBLER_RECIPE_INPUT_COUNTS[fwd_recipe, 1]
-    item_matches = (
-        ((arm_item == exp_in0) & (need0 > 0))
-        | ((arm_item == exp_in1) & (need1 > 0))
+    item_matches = ((arm_item == exp_in0) & (need0 > 0)) | (
+        (arm_item == exp_in1) & (need1 > 0)
     )
     asm_filter = jnp.where(is_asm_fwd, item_matches, True)
 
     can_deposit = (
-        is_arm & (arm_count > 0) & fwd_not_none
-        & fwd_not_self & fwd_has_space & fwd_type_ok & asm_filter
+        is_arm
+        & (arm_count > 0)
+        & fwd_not_none
+        & fwd_not_self
+        & fwd_has_space
+        & fwd_type_ok
+        & asm_filter
     )
 
     transfer = jnp.where(
-        can_deposit, arm_count.astype(jnp.int32), 0,
+        can_deposit,
+        arm_count.astype(jnp.int32),
+        0,
     )
 
     int_inv = inv.astype(jnp.int32)
@@ -639,10 +703,7 @@ def _arm_pick_phase(
     pick_item = jnp.where(is_asm_bwd, asm_output, generic_item)
     pick_count = jnp.where(is_asm_bwd, asm_count, generic_count)
 
-    can_pick = (
-        is_arm & arm_empty & bwd_not_none & bwd_not_self
-        & (pick_count > 0)
-    )
+    can_pick = is_arm & arm_empty & bwd_not_none & bwd_not_self & (pick_count > 0)
 
     transfer = jnp.where(can_pick, pick_count, 0).astype(jnp.int32)
 

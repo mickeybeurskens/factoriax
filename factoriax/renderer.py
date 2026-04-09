@@ -300,7 +300,9 @@ def render_inventory_bar(
         RGB numpy array of shape (INVENTORY_BAR_HEIGHT, width, 3).
     """
     bar = np.full(
-        (INVENTORY_BAR_HEIGHT, width, 3), (40, 40, 40), dtype=np.uint8,
+        (INVENTORY_BAR_HEIGHT, width, 3),
+        (40, 40, 40),
+        dtype=np.uint8,
     )
 
     slot_width = width // NUM_ITEM_TYPES
@@ -324,14 +326,18 @@ def render_inventory_bar(
 
         if is_selected_slot:
             bar[y_start, x_start : x_start + slot_size] = (
-                255, 255, 255,
+                255,
+                255,
+                255,
             )
             bar[
                 y_start + slot_size - 1,
                 x_start : x_start + slot_size,
             ] = (255, 255, 255)
             bar[y_start : y_start + slot_size, x_start] = (
-                255, 255, 255,
+                255,
+                255,
+                255,
             )
             bar[
                 y_start : y_start + slot_size,
@@ -352,7 +358,9 @@ def render_inventory_bar(
         indicator_width = 20
         indicator_x = width - indicator_width - 4
         bar[2:6, indicator_x : indicator_x + indicator_width] = (
-            100, 200, 100,
+            100,
+            200,
+            100,
         )
 
     return bar
@@ -365,6 +373,8 @@ MACHINE_TO_ITEM: dict[int, int] = {
     int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
     int(MachineType.ARM): int(ItemType.ARM),
     int(MachineType.ROCKET): int(ItemType.ROCKET),
+    int(MachineType.UNDERGROUND_ENTRY): int(ItemType.UNDERGROUND_BELT),
+    int(MachineType.UNDERGROUND_EXIT): int(ItemType.UNDERGROUND_BELT),
 }
 
 # Dark arrow colour drawn on top of the gold conveyor belt square.
@@ -461,13 +471,9 @@ def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
     # Shaft line along the facing axis, inset from edges.
     margin = max(2, size // 6)
     if direction in (Direction.LEFT, Direction.RIGHT):
-        icon[mid - half_t : mid + half_t + 1, margin : size - margin] = (
-            _ARM_LINE_COLOR
-        )
+        icon[mid - half_t : mid + half_t + 1, margin : size - margin] = _ARM_LINE_COLOR
     else:
-        icon[margin : size - margin, mid - half_t : mid + half_t + 1] = (
-            _ARM_LINE_COLOR
-        )
+        icon[margin : size - margin, mid - half_t : mid + half_t + 1] = _ARM_LINE_COLOR
 
     # Arrowhead on the deposit (forward) end.
     arrow_size = max(1, size // 8)
@@ -672,7 +678,6 @@ def render_machine_overlays(
     draw_belt_cargo(image, state, block_pixel_size)
 
 
-
 def render_pixels(
     state: EnvState,
     block_pixel_size: int = BLOCK_PIXEL_SIZE,
@@ -816,7 +821,6 @@ _WAVE_PERIOD: int = 60  # frames for stripes to scroll one full cycle
 _WAVE_SPACING: int = 5  # px between stripe centers
 
 
-
 def animate_water(
     image: np.ndarray,
     map_array: np.ndarray,
@@ -887,16 +891,16 @@ def apply_activity_tint(
     result = icon.copy()
     if active:
         phase = _TWO_PI * frame_tick / _PULSE_PERIOD
-        boost = int(_PULSE_MIN + (_PULSE_MAX - _PULSE_MIN) * (
-            0.5 + 0.5 * np.sin(phase)
-        ))
+        boost = int(
+            _PULSE_MIN + (_PULSE_MAX - _PULSE_MIN) * (0.5 + 0.5 * np.sin(phase))
+        )
         rgb = result[:, :, :3].astype(np.int16) + boost
         np.clip(rgb, 0, 255, out=rgb)
         result[:, :, :3] = rgb.astype(np.uint8)
     else:
-        result[:, :, :3] = (
-            result[:, :, :3].astype(np.float32) * _IDLE_DIM
-        ).astype(np.uint8)
+        result[:, :, :3] = (result[:, :, :3].astype(np.float32) * _IDLE_DIM).astype(
+            np.uint8
+        )
     return result
 
 
@@ -981,6 +985,7 @@ def is_miner_active(state: EnvState, y: int, x: int) -> bool:
     has_power = int(state.machine_power[y, x]) > 0
     has_resources = int(state.block_resources[y, x]) > 0
     from factoriax.constants import MAX_MACHINE_STACK_SIZE
+
     total_count = int(np.array(state.machine_inventory[y, x]).sum())
     has_space = total_count < MAX_MACHINE_STACK_SIZE
     return has_power and has_resources and has_space

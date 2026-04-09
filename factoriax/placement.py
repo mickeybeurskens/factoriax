@@ -14,18 +14,21 @@ from factoriax.constants import (
     DIRECTIONS,
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_TO_ITEM_ARRAY,
+    MAX_UNDERGROUND_RANGE,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEMS,
     PLAYER_MAX_STACK,
     SOLID_BLOCKS,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.state import EnvState
 
 
 def get_tile_in_front(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> tuple[jax.Array, jax.Array]:
     """Get the coordinates of the tile in front of a player.
 
@@ -44,7 +47,9 @@ def get_tile_in_front(
 
 
 def is_valid_placement_tile(
-    state: EnvState, x: int | jax.Array, y: int | jax.Array,
+    state: EnvState,
+    x: int | jax.Array,
+    y: int | jax.Array,
 ) -> jax.Array:
     """Check if a tile is valid for machine placement.
 
@@ -80,6 +85,56 @@ def is_placeable_item(item_type: int | jax.Array) -> jax.Array:
     return jnp.isin(item_type, PLACEABLE_ITEMS)
 
 
+def _determine_underground_role(
+    state: EnvState,
+    tx: int | jax.Array,
+    ty: int | jax.Array,
+    direction: int | jax.Array,
+) -> jax.Array:
+    """Determine whether to place an entry or exit underground belt.
+
+    Scans backward (opposite to *direction*) up to
+    :data:`MAX_UNDERGROUND_RANGE` tiles looking for an unpaired
+    :data:`UNDERGROUND_ENTRY` facing the same direction. "Unpaired"
+    means no :data:`UNDERGROUND_EXIT` exists between the entry and
+    the current tile.
+
+    Args:
+        state: Current environment state.
+        tx: Target tile x.
+        ty: Target tile y.
+        direction: Facing direction of the placed belt.
+
+    Returns:
+        :data:`MachineType.UNDERGROUND_EXIT` if an unpaired entry was
+        found, otherwise :data:`MachineType.UNDERGROUND_ENTRY`.
+    """
+    h, w = state.machine_types.shape
+    dx = DIRECTIONS[direction, 0]
+    dy = DIRECTIONS[direction, 1]
+
+    found_entry = jnp.bool_(False)
+
+    for offset in range(1, MAX_UNDERGROUND_RANGE + 1):
+        bx = jnp.clip(jnp.int32(tx) - dx * offset, 0, w - 1)
+        by = jnp.clip(jnp.int32(ty) - dy * offset, 0, h - 1)
+
+        is_entry = state.machine_types[by, bx] == MachineType.UNDERGROUND_ENTRY
+        same_dir = state.machine_direction[by, bx] == direction
+        is_exit = state.machine_types[by, bx] == MachineType.UNDERGROUND_EXIT
+
+        # If we hit an exit first, no unpaired entry behind it.
+        found_entry = found_entry & ~is_exit
+        # If we hit an entry with matching direction, mark as found.
+        found_entry = found_entry | (is_entry & same_dir)
+
+    return jnp.where(
+        found_entry,
+        jnp.int32(MachineType.UNDERGROUND_EXIT),
+        jnp.int32(MachineType.UNDERGROUND_ENTRY),
+    )
+
+
 def place_machine(
     state: EnvState,
     player_idx: int | jax.Array,
@@ -110,27 +165,44 @@ def place_machine(
 
     should_place = has_item & can_place_item & valid_tile
 
-    machine_type = ITEM_TO_MACHINE_ARRAY[item_type]
+    default_machine_type = ITEM_TO_MACHINE_ARRAY[item_type]
 
     def do_place(s: EnvState) -> EnvState:
         direction = s.player_directions[player_idx]
 
+        # Underground belts: determine entry vs exit from context.
+        mt = jnp.where(
+            item_type == int(ItemType.UNDERGROUND_BELT),
+            _determine_underground_role(s, target_x, target_y, direction),
+            default_machine_type,
+        )
+
         # Arms face opposite to player for intuitive interaction.
         opposite = jnp.int32(0)
         opposite = jnp.where(
-            direction == Direction.LEFT, Direction.RIGHT, opposite,
+            direction == Direction.LEFT,
+            Direction.RIGHT,
+            opposite,
         )
         opposite = jnp.where(
-            direction == Direction.RIGHT, Direction.LEFT, opposite,
+            direction == Direction.RIGHT,
+            Direction.LEFT,
+            opposite,
         )
         opposite = jnp.where(
-            direction == Direction.UP, Direction.DOWN, opposite,
+            direction == Direction.UP,
+            Direction.DOWN,
+            opposite,
         )
         opposite = jnp.where(
-            direction == Direction.DOWN, Direction.UP, opposite,
+            direction == Direction.DOWN,
+            Direction.UP,
+            opposite,
         )
         placed_dir = jnp.where(
-            machine_type == MachineType.ARM, opposite, direction,
+            mt == MachineType.ARM,
+            opposite,
+            direction,
         )
 
         new_inv = s.player_inventory.at[player_idx, item_type].set(
@@ -139,12 +211,10 @@ def place_machine(
 
         return s.replace(
             player_inventory=new_inv,
-            machine_types=s.machine_types.at[target_y, target_x].set(
-                machine_type,
+            machine_types=s.machine_types.at[target_y, target_x].set(mt),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(
+                placed_dir
             ),
-            machine_direction=s.machine_direction.at[
-                target_y, target_x
-            ].set(placed_dir),
             machine_health=s.machine_health.at[target_y, target_x].set(
                 DEFAULT_MACHINE_MAX_HEALTH,
             ),
@@ -175,7 +245,8 @@ def can_fit_in_player(
 
 
 def pickup_machine(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> EnvState:
     """Pick up a machine from the tile in front of the player.
 
@@ -232,21 +303,15 @@ def pickup_machine(
             machine_types=s.machine_types.at[target_y, target_x].set(
                 MachineType.NONE,
             ),
-            machine_health=s.machine_health.at[
-                target_y, target_x
-            ].set(0),
-            machine_power=s.machine_power.at[
-                target_y, target_x
-            ].set(0),
-            machine_inventory=s.machine_inventory.at[
-                target_y, target_x
-            ].set(jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int16)),
+            machine_health=s.machine_health.at[target_y, target_x].set(0),
+            machine_power=s.machine_power.at[target_y, target_x].set(0),
+            machine_inventory=s.machine_inventory.at[target_y, target_x].set(
+                jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int16)
+            ),
             machine_selected_recipe=s.machine_selected_recipe.at[
                 target_y, target_x
             ].set(0),
-            machine_direction=s.machine_direction.at[
-                target_y, target_x
-            ].set(0),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(0),
         )
         return s
 

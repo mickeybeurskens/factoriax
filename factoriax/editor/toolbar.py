@@ -13,6 +13,7 @@ import pygame
 
 from factoriax.constants import (
     ITEM_TO_MACHINE,
+    MACHINE_TO_ITEM_ARRAY,
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
     BlockType,
@@ -63,7 +64,9 @@ MACHINE_ITEMS: list[tuple[int, str]] = [
 ]
 
 MACHINE_TO_ITEM_MAP: dict[int, int] = {
-    int(machine): int(item) for item, machine in ITEM_TO_MACHINE.items()
+    int(mt): int(MACHINE_TO_ITEM_ARRAY[int(mt)])
+    for mt in MachineType
+    if mt != MachineType.NONE
 }
 
 

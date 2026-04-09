@@ -65,6 +65,7 @@ _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.ARM): int(Action.PLACE_ARM),
     int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
     int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
+    int(ItemType.UNDERGROUND_BELT): int(Action.PLACE_UNDERGROUND_BELT),
 }
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).
@@ -94,6 +95,7 @@ _SLOT_ACTIONS: dict[str, int] = {
     PlayerAction.SLOT_4: int(ItemType.ARM),
     PlayerAction.SLOT_5: int(ItemType.ASSEMBLER),
     PlayerAction.SLOT_6: int(ItemType.ROCKET),
+    PlayerAction.SLOT_7: int(ItemType.UNDERGROUND_BELT),
 }
 
 _PLAYER_ACTIONS: dict[str, int] = {

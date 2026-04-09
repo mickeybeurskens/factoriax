@@ -82,6 +82,7 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.BASIC_SCIENCE_PACK: "Basic Sci",
     ItemType.FUEL_SCIENCE_PACK: "Fuel Sci",
     ItemType.ADVANCED_SCIENCE_PACK: "Adv Sci",
+    ItemType.UNDERGROUND_BELT: "Tunnel",
 }
 
 # ---------------------------------------------------------------------------
@@ -1431,7 +1432,7 @@ def _hotbar_h() -> int:
     return _BASE_HOTBAR_H * _theme.UI_SCALE
 
 
-_HOTBAR_SLOTS: int = 6
+_HOTBAR_SLOTS: int = 7
 """Number of machine pockets in the hotbar tool belt."""
 
 _DIRECTION_LETTERS: dict[int, str] = {

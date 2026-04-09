@@ -50,7 +50,8 @@ _MAX_CRAFT_TICKS: float = max(1.0, float(max(r["ticks"] for r in RECIPES)))
 _DIR_NORM: float = 4.0  # max directional Action value (LEFT=1..DOWN=4)
 _HEALTH_NORM: float = float(DEFAULT_MACHINE_MAX_HEALTH)
 _PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
-    PLAYER_MAX_STACK.astype(jnp.float32), 1.0,
+    PLAYER_MAX_STACK.astype(jnp.float32),
+    1.0,
 )
 
 # Spatial channels shared by global_array and local_array.
@@ -78,6 +79,7 @@ _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "afford_belt",
     "afford_arm",
     "afford_assembler",
+    "afford_tunnel",
     "facing_machine_type",
     "facing_machine_health",
     *(f"facing_inv_{i}" for i in range(NUM_ITEM_TYPES)),
@@ -133,17 +135,12 @@ def _player_scalars(
     sy = jnp.clip(ty, 0, map_h - 1)
     mask = in_bounds.astype(jnp.float32)
 
-    facing_type = (
-        state.machine_types[sy, sx].astype(jnp.float32) * mask
-        / _MACHINE_NORM
-    )
+    facing_type = state.machine_types[sy, sx].astype(jnp.float32) * mask / _MACHINE_NORM
     facing_health = (
-        state.machine_health[sy, sx].astype(jnp.float32) * mask
-        / _HEALTH_NORM
+        state.machine_health[sy, sx].astype(jnp.float32) * mask / _HEALTH_NORM
     )
     facing_inv = (
-        state.machine_inventory[sy, sx].astype(jnp.float32) * mask
-        / _PLAYER_MAX_STACK_F
+        state.machine_inventory[sy, sx].astype(jnp.float32) * mask / _PLAYER_MAX_STACK_F
     )
     facing = jnp.concatenate(
         [facing_type[None], facing_health[None], facing_inv],
@@ -152,15 +149,12 @@ def _player_scalars(
 
     # Player pouch inventory: counts normalized per type.
     player_inv = (
-        state.player_inventory[player_idx].astype(jnp.float32)
-        / _PLAYER_MAX_STACK_F
+        state.player_inventory[player_idx].astype(jnp.float32) / _PLAYER_MAX_STACK_F
     )
 
     # Research state.
     research_unlocked = state.research_unlocked.astype(jnp.float32)
-    research_progress = (
-        state.research_progress.astype(jnp.float32) / RESEARCH_COST
-    )
+    research_progress = state.research_progress.astype(jnp.float32) / RESEARCH_COST
     return jnp.concatenate(
         [scalars, player_inv, research_unlocked, research_progress],
     )
@@ -207,20 +201,13 @@ def global_array(
         + 2 * NUM_TECHNOLOGIES,)``.
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
-    flat_machines = (
-        state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
-    )
-    flat_resources = (
-        state.block_resources.flatten().astype(jnp.float32)
-        / float(BLOCK_MAX_RESOURCES)
+    flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
+    flat_resources = state.block_resources.flatten().astype(jnp.float32) / float(
+        BLOCK_MAX_RESOURCES
     )
     flat_biters = _biter_grid(state).ravel()
-    flat_directions = (
-        state.machine_direction.flatten().astype(jnp.float32) / _DIR_NORM
-    )
-    flat_health = (
-        state.machine_health.flatten().astype(jnp.float32) / _HEALTH_NORM
-    )
+    flat_directions = state.machine_direction.flatten().astype(jnp.float32) / _DIR_NORM
+    flat_health = state.machine_health.flatten().astype(jnp.float32) / _HEALTH_NORM
     spatial = jnp.concatenate(
         [
             flat_blocks,
@@ -231,9 +218,7 @@ def global_array(
             flat_health,
         ]
     )
-    return jnp.concatenate(
-        [spatial, _player_scalars(state, params, player_idx)]
-    )
+    return jnp.concatenate([spatial, _player_scalars(state, params, player_idx)])
 
 
 def local_array(
@@ -292,15 +277,12 @@ def local_array(
         ).astype(jnp.float32)
         / _MACHINE_NORM
     )
-    padded_resources = (
-        jnp.pad(
-            state.block_resources,
-            pw,
-            mode="constant",
-            constant_values=0,
-        ).astype(jnp.float32)
-        / float(BLOCK_MAX_RESOURCES)
-    )
+    padded_resources = jnp.pad(
+        state.block_resources,
+        pw,
+        mode="constant",
+        constant_values=0,
+    ).astype(jnp.float32) / float(BLOCK_MAX_RESOURCES)
     padded_biters = jnp.pad(
         _biter_grid(state),
         pw,
@@ -333,21 +315,11 @@ def local_array(
     slice_shape = (size, size)
 
     window_map = jax.lax.dynamic_slice(padded_map, start, slice_shape)
-    window_machines = jax.lax.dynamic_slice(
-        padded_machines, start, slice_shape
-    )
-    window_resources = jax.lax.dynamic_slice(
-        padded_resources, start, slice_shape
-    )
-    window_biters = jax.lax.dynamic_slice(
-        padded_biters, start, slice_shape
-    )
-    window_directions = jax.lax.dynamic_slice(
-        padded_directions, start, slice_shape
-    )
-    window_health = jax.lax.dynamic_slice(
-        padded_health, start, slice_shape
-    )
+    window_machines = jax.lax.dynamic_slice(padded_machines, start, slice_shape)
+    window_resources = jax.lax.dynamic_slice(padded_resources, start, slice_shape)
+    window_biters = jax.lax.dynamic_slice(padded_biters, start, slice_shape)
+    window_directions = jax.lax.dynamic_slice(padded_directions, start, slice_shape)
+    window_health = jax.lax.dynamic_slice(padded_health, start, slice_shape)
 
     spatial = jnp.concatenate(
         [
@@ -359,9 +331,7 @@ def local_array(
             window_health.ravel(),
         ]
     )
-    return jnp.concatenate(
-        [spatial, _player_scalars(state, params, player_idx)]
-    )
+    return jnp.concatenate([spatial, _player_scalars(state, params, player_idx)])
 
 
 def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
@@ -446,6 +416,10 @@ def pixel_hud(
     from factoriax.jax_renderer import render_hud
 
     return render_hud(
-        state, block_atlas, machine_atlas, player_sprite,
-        item_colors, digit_atlas,
+        state,
+        block_atlas,
+        machine_atlas,
+        player_sprite,
+        item_colors,
+        digit_atlas,
     )

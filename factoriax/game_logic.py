@@ -52,6 +52,7 @@ from factoriax.recipes import (
     ASSEMBLER_RECIPE_INPUT_ITEMS,
     ASSEMBLER_RECIPE_OUTPUTS,
     MAX_RECIPE_INPUTS,
+    NUM_RECIPES,
     RECIPE_INPUT_COUNTS,
     RECIPE_INPUT_ITEMS,
 )
@@ -59,7 +60,9 @@ from factoriax.state import EnvParams, EnvState
 
 
 def is_position_in_bounds(
-    position: jax.Array, map_width: int, map_height: int,
+    position: jax.Array,
+    map_width: int,
+    map_height: int,
 ) -> jax.Array:
     """Check if a position is within map boundaries.
 
@@ -96,7 +99,8 @@ def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
 
 
 def is_position_walkable(
-    state: EnvState, position: jax.Array,
+    state: EnvState,
+    position: jax.Array,
 ) -> jax.Array:
     """Check if a position can be walked on.
 
@@ -115,10 +119,11 @@ def is_position_walkable(
     has_blocking_machine = lax.cond(
         in_bounds,
         lambda: (
-            (state.machine_types[position[1], position[0]]
-             != MachineType.NONE)
-            & (state.machine_types[position[1], position[0]]
-               != MachineType.CONVEYOR_BELT)
+            (state.machine_types[position[1], position[0]] != MachineType.NONE)
+            & (
+                state.machine_types[position[1], position[0]]
+                != MachineType.CONVEYOR_BELT
+            )
         ),
         lambda: jnp.bool_(False),
     )
@@ -188,7 +193,8 @@ def move_player(
 
 
 def mine_block(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> EnvState:
     """Attempt to mine the block at a player's current position.
 
@@ -262,7 +268,8 @@ _NEXT_DIR = _NEXT_DIR.at[Direction.LEFT].set(Direction.DOWN)
 
 
 def rotate_adjacent(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> EnvState:
     """Rotate the machine in front of the player one step clockwise.
 
@@ -276,7 +283,9 @@ def rotate_adjacent(
     target_x, target_y = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = is_position_in_bounds(
-        jnp.array([target_x, target_y]), map_w, map_h,
+        jnp.array([target_x, target_y]),
+        map_w,
+        map_h,
     )
 
     machine_type = jnp.where(
@@ -295,13 +304,14 @@ def rotate_adjacent(
 
     def do_rotate(s: EnvState) -> EnvState:
         return s.replace(
-            machine_direction=s.machine_direction.at[
-                target_y, target_x
-            ].set(new_dir),
+            machine_direction=s.machine_direction.at[target_y, target_x].set(new_dir),
         )
 
     return lax.cond(
-        in_bounds & has_machine, do_rotate, lambda s: s, state,
+        in_bounds & has_machine,
+        do_rotate,
+        lambda s: s,
+        state,
     )
 
 
@@ -393,7 +403,9 @@ def deposit_to_adjacent(
     target_x, target_y = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = is_position_in_bounds(
-        jnp.array([target_x, target_y]), map_w, map_h,
+        jnp.array([target_x, target_y]),
+        map_w,
+        map_h,
     )
 
     machine_type = jnp.where(
@@ -424,12 +436,14 @@ def deposit_to_adjacent(
     max_stack = MACHINE_MAX_STACK[machine_type]
 
     can_add = can_add_to_machine(
-        machine_inv, item_type, jnp.int32(1), max_types, max_stack,
+        machine_inv,
+        item_type,
+        jnp.int32(1),
+        max_types,
+        max_stack,
     )
 
-    can_deposit = (
-        in_bounds & has_machine & has_item & valid_item & can_add
-    )
+    can_deposit = in_bounds & has_machine & has_item & valid_item & can_add
 
     def do_deposit(s: EnvState) -> EnvState:
         m_inv = s.machine_inventory[target_y, target_x].astype(
@@ -443,12 +457,12 @@ def deposit_to_adjacent(
         new_p_count = player_count - transfer
 
         return s.replace(
-            machine_inventory=s.machine_inventory.at[
-                target_y, target_x
-            ].set(new_m_inv.astype(jnp.int16)),
-            player_inventory=s.player_inventory.at[
-                player_idx, item_type
-            ].set(new_p_count),
+            machine_inventory=s.machine_inventory.at[target_y, target_x].set(
+                new_m_inv.astype(jnp.int16)
+            ),
+            player_inventory=s.player_inventory.at[player_idx, item_type].set(
+                new_p_count
+            ),
         )
 
     return lax.cond(can_deposit, do_deposit, lambda s: s, state)
@@ -476,7 +490,9 @@ def withdraw_from_adjacent(
     target_x, target_y = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = is_position_in_bounds(
-        jnp.array([target_x, target_y]), map_w, map_h,
+        jnp.array([target_x, target_y]),
+        map_w,
+        map_h,
     )
 
     machine_type = jnp.where(
@@ -500,16 +516,16 @@ def withdraw_from_adjacent(
         jnp.int32(0),
     )
     valid_item = _is_valid_withdraw_item(
-        machine_type, item_type, recipe,
+        machine_type,
+        item_type,
+        recipe,
     )
 
     player_count = state.player_inventory[player_idx, item_type]
     player_max = PLAYER_MAX_STACK[item_type]
     has_space = player_count < player_max
 
-    can_withdraw = (
-        in_bounds & has_machine & has_items & valid_item & has_space
-    )
+    can_withdraw = in_bounds & has_machine & has_items & valid_item & has_space
 
     def do_withdraw(s: EnvState) -> EnvState:
         space = player_max - player_count
@@ -522,12 +538,12 @@ def withdraw_from_adjacent(
         new_m_inv = new_m_inv.at[item_type].set(new_m_count)
 
         return s.replace(
-            machine_inventory=s.machine_inventory.at[
-                target_y, target_x
-            ].set(new_m_inv.astype(jnp.int16)),
-            player_inventory=s.player_inventory.at[
-                player_idx, item_type
-            ].set(player_count + transfer),
+            machine_inventory=s.machine_inventory.at[target_y, target_x].set(
+                new_m_inv.astype(jnp.int16)
+            ),
+            player_inventory=s.player_inventory.at[player_idx, item_type].set(
+                player_count + transfer
+            ),
         )
 
     return lax.cond(can_withdraw, do_withdraw, lambda s: s, state)
@@ -567,8 +583,7 @@ def apply_research(
         jnp.where(can_research, 1, 0),
     )
     new_unlocked = state.research_unlocked.at[tech_idx].set(
-        state.research_unlocked[tech_idx]
-        | (new_progress[tech_idx] >= RESEARCH_COST),
+        state.research_unlocked[tech_idx] | (new_progress[tech_idx] >= RESEARCH_COST),
     )
 
     return state.replace(
@@ -579,7 +594,8 @@ def apply_research(
 
 
 def repair_machine(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> EnvState:
     """Repair the machine on the tile in front of the player.
 
@@ -598,16 +614,22 @@ def repair_machine(
     in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
 
     machine_type = jnp.where(
-        in_bounds, state.machine_types[ty, tx], MachineType.NONE,
+        in_bounds,
+        state.machine_types[ty, tx],
+        MachineType.NONE,
     )
     has_machine = machine_type != MachineType.NONE
     current_health = jnp.where(
-        in_bounds, state.machine_health[ty, tx], 0,
+        in_bounds,
+        state.machine_health[ty, tx],
+        0,
     )
     needs_repair = current_health < DEFAULT_MACHINE_MAX_HEALTH
 
     recipe_idx = jnp.clip(
-        MACHINE_TO_RECIPE[machine_type], 0, MAX_RECIPE_INPUTS,
+        MACHINE_TO_RECIPE[machine_type],
+        0,
+        MAX_RECIPE_INPUTS,
     )
     is_repairable = MACHINE_TO_RECIPE[machine_type] >= 0
 
@@ -618,9 +640,7 @@ def repair_machine(
     def _has_ingredient(idx: jax.Array) -> jax.Array:
         needed_item = recipe_items[idx]
         needed_count = recipe_counts[idx]
-        is_needed = (needed_item != int(ItemType.EMPTY)) & (
-            needed_count > 0
-        )
+        is_needed = (needed_item != int(ItemType.EMPTY)) & (needed_count > 0)
         has_it = inv[needed_item] >= needed_count
         return ~is_needed | has_it
 
@@ -628,29 +648,29 @@ def repair_machine(
         jax.vmap(_has_ingredient)(jnp.arange(MAX_RECIPE_INPUTS)),
     )
 
-    can_repair = (
-        has_machine & needs_repair & is_repairable
-        & can_afford & in_bounds
-    )
+    can_repair = has_machine & needs_repair & is_repairable & can_afford & in_bounds
 
     def do_repair(s: EnvState) -> EnvState:
         p_inv = s.player_inventory[player_idx]
 
         def consume_one(
-            inv: jax.Array, idx: jax.Array,
+            inv: jax.Array,
+            idx: jax.Array,
         ) -> tuple[jax.Array, None]:
             needed_item = recipe_items[idx]
             needed_count = recipe_counts[idx]
-            is_needed = (needed_item != int(ItemType.EMPTY)) & (
-                needed_count > 0
-            )
+            is_needed = (needed_item != int(ItemType.EMPTY)) & (needed_count > 0)
             new_inv, _ = remove_from_pouch(
-                inv, needed_item, needed_count,
+                inv,
+                needed_item,
+                needed_count,
             )
             return jnp.where(is_needed, new_inv, inv), None
 
         p_inv, _ = lax.scan(
-            consume_one, p_inv, jnp.arange(MAX_RECIPE_INPUTS),
+            consume_one,
+            p_inv,
+            jnp.arange(MAX_RECIPE_INPUTS),
         )
 
         return s.replace(
@@ -688,19 +708,19 @@ def _handle_player_action(
     is_rotate = action == Action.ROTATE
     is_repair = action == Action.REPAIR
 
-    # Placement: PLACE_MINER .. PLACE_ROCKET.
+    # Placement: PLACE_MINER .. PLACE_UNDERGROUND_BELT.
     is_place = (action >= Action.PLACE_MINER) & (
-        action <= Action.PLACE_ROCKET
+        action <= Action.PLACE_UNDERGROUND_BELT
     )
     place_item = PLACE_ACTION_TO_ITEM[
         jnp.clip(action - PLACE_BASE, 0, len(PLACE_ACTION_TO_ITEM) - 1)
     ]
 
-    # Crafting: CRAFT_MINER .. CRAFT_ASSEMBLER.
+    # Crafting: CRAFT_MINER .. CRAFT_UNDERGROUND_BELT.
     is_craft = (action >= Action.CRAFT_MINER) & (
-        action <= Action.CRAFT_ASSEMBLER
+        action <= Action.CRAFT_UNDERGROUND_BELT
     )
-    recipe_idx = jnp.clip(action - CRAFT_BASE, 0, 4)
+    recipe_idx = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
 
     # Research: RESEARCH_BASIC .. RESEARCH_ADVANCED.
     is_research = (action >= Action.RESEARCH_BASIC) & (
@@ -708,26 +728,29 @@ def _handle_player_action(
     )
     research_pack = RESEARCH_ACTION_TO_PACK[
         jnp.clip(
-            action - Action.RESEARCH_BASIC, 0,
+            action - Action.RESEARCH_BASIC,
+            0,
             len(RESEARCH_ACTION_TO_PACK) - 1,
         )
     ]
 
-    # Deposit: DEPOSIT_COAL .. DEPOSIT_ADVANCED_SCIENCE.
+    # Deposit: DEPOSIT_COAL .. DEPOSIT_UNDERGROUND_BELT.
     is_deposit = (action >= Action.DEPOSIT_COAL) & (
-        action <= Action.DEPOSIT_ADVANCED_SCIENCE
+        action <= Action.DEPOSIT_UNDERGROUND_BELT
     )
     deposit_item = jnp.clip(
-        action - DEPOSIT_BASE + int(ItemType.COAL), 0,
+        action - DEPOSIT_BASE + int(ItemType.COAL),
+        0,
         NUM_ITEM_TYPES - 1,
     )
 
-    # Withdraw: WITHDRAW_COAL .. WITHDRAW_ADVANCED_SCIENCE.
+    # Withdraw: WITHDRAW_COAL .. WITHDRAW_UNDERGROUND_BELT.
     is_withdraw = (action >= Action.WITHDRAW_COAL) & (
-        action <= Action.WITHDRAW_ADVANCED_SCIENCE
+        action <= Action.WITHDRAW_UNDERGROUND_BELT
     )
     withdraw_item = jnp.clip(
-        action - WITHDRAW_BASE + int(ItemType.COAL), 0,
+        action - WITHDRAW_BASE + int(ItemType.COAL),
+        0,
         NUM_ITEM_TYPES - 1,
     )
 
@@ -735,60 +758,78 @@ def _handle_player_action(
     state = lax.cond(
         is_mine,
         lambda s: mine_block(s, player_idx),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_craft,
         lambda s: start_crafting(s, player_idx, recipe_idx),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_place,
         lambda s: place_machine(s, player_idx, place_item),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_pickup,
         lambda s: pickup_machine(s, player_idx),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_deposit,
         lambda s: deposit_to_adjacent(s, player_idx, deposit_item),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_withdraw,
         lambda s: withdraw_from_adjacent(
-            s, player_idx, withdraw_item,
+            s,
+            player_idx,
+            withdraw_item,
         ),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_rotate,
         lambda s: rotate_adjacent(s, player_idx),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_research,
         lambda s: apply_research(s, player_idx, research_pack),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
     state = lax.cond(
         is_repair,
         lambda s: repair_machine(s, player_idx),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
 
     is_movement = ~(
-        is_mine | is_craft | is_place | is_pickup
-        | is_deposit | is_withdraw | is_rotate
-        | is_research | is_repair
+        is_mine
+        | is_craft
+        | is_place
+        | is_pickup
+        | is_deposit
+        | is_withdraw
+        | is_rotate
+        | is_research
+        | is_repair
     )
     state = lax.cond(
         is_movement,
         lambda s: move_player(s, action, player_idx),
-        lambda s: s, state,
+        lambda s: s,
+        state,
     )
 
     return state
@@ -828,7 +869,8 @@ def factoriax_step(
 
 
 def is_game_over(
-    state: EnvState, params: EnvParams,
+    state: EnvState,
+    params: EnvParams,
 ) -> jax.Array:
     """Check if the episode has ended.
 
