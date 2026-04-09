@@ -1,12 +1,18 @@
-"""Entry point for ``python -m factoriax.inspector``."""
+"""Entry point for ``python -m factoriax.agentdebugger``.
+
+Opens a trajectory replay window when given a ``.npz`` file::
+
+    python -m factoriax.agentdebugger rollout.npz
+    python -m factoriax.agentdebugger rollout.npz --level levels/mine.json
+"""
 
 import sys
 
-from factoriax.inspector.main import main
+from factoriax.agentdebugger.main import Debugger
 
 if len(sys.argv) < 2:
     print(
-        "Usage: python -m factoriax.inspector <trajectory.npz>"
+        "Usage: python -m factoriax.agentdebugger <trajectory.npz>"
         " [--level <level.json>]\n"
         "\n"
         "If the trajectory contains full state data (recorded with\n"
@@ -14,8 +20,8 @@ if len(sys.argv) < 2:
         "Otherwise, provide --level to replay actions on a level.\n"
         "\n"
         "Example:\n"
-        "  uv run python -m factoriax.inspector rollout.npz\n"
-        "  uv run python -m factoriax.inspector rollout.npz"
+        "  uv run python -m factoriax.agentdebugger rollout.npz\n"
+        "  uv run python -m factoriax.agentdebugger rollout.npz"
         " --level levels/mine_resources.json"
     )
     sys.exit(1)
@@ -27,4 +33,5 @@ if "--level" in sys.argv:
     if idx + 1 < len(sys.argv):
         level_path = sys.argv[idx + 1]
 
-main(traj_path, level_path=level_path)
+debugger = Debugger.from_trajectory(traj_path, level_path=level_path)
+debugger.run()

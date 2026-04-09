@@ -803,7 +803,7 @@ def train(config: Config) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Trajectory saving for inspector
+# Trajectory saving for debugger
 # ---------------------------------------------------------------------------
 
 
@@ -817,7 +817,7 @@ def _save_eval_trajectories(
 ) -> dict[str, Path]:
     """Re-run the policy on each level and save full-state trajectories.
 
-    Each trajectory is saved as a ``.npz`` file that the inspector can
+    Each trajectory is saved as a ``.npz`` file that the debugger can
     load directly (with full state data for game world rendering).
 
     Args:

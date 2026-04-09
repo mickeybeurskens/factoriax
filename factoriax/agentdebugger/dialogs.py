@@ -1,4 +1,4 @@
-"""Simple file browser dialog for the inspector.
+"""Simple file browser dialog for the debugger.
 
 Renders as an RGBA overlay. Scans the working directory for files
 matching a given glob pattern. Keyboard-driven: Up/Down to select,
