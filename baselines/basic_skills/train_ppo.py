@@ -1,8 +1,8 @@
 """PPO training on the basic_skills benchmark.
 
 Trains a shared policy across the three basic_skills levels (mine_resources,
-craft_chests, fill_chest) using mixed sampling. Each level has its own reward
-function: sparse mining for mining, sparse crafting for crafting, and chest
+craft_pallets, fill_pallet) using mixed sampling. Each level has its own reward
+function: sparse mining for mining, sparse crafting for crafting, and pallet
 filling for the deposit level.
 
 All three levels have different map sizes, so local observations with a fixed

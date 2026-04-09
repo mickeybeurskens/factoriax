@@ -55,7 +55,7 @@ def _run_episode_with_machines(steps: int = 5) -> list[EnvState]:
     level = (
         LevelBuilder(7, 7)
         .fill_rect(1, 1, 3, 3, BlockType.IRON, resources=100)
-        .place_machine(5, 3, MachineType.CHEST)
+        .place_machine(5, 3, MachineType.PALLET)
         .build("test_machines")
     )
     params = EnvParams(

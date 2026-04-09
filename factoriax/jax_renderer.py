@@ -159,7 +159,7 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
     colors = {
         MachineType.NONE: (0, 0, 0),
         MachineType.MINER: (0, 200, 0),
-        MachineType.CHEST: (210, 190, 50),
+        MachineType.PALLET: (140, 100, 45),
         MachineType.ASSEMBLER: (160, 80, 200),
         MachineType.CONVEYOR_BELT: (220, 180, 50),
         MachineType.ARM: (80, 120, 200),

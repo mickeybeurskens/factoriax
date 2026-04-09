@@ -159,14 +159,14 @@ def sparse_mining_reward(
     return reward
 
 
-def sparse_chest_crafting_reward(
+def sparse_pallet_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Sparse reward of 1.0 for each chest gained via crafting.
+    """Sparse reward of 1.0 for each pallet gained via crafting.
 
     Detects crafting by requiring that the player's inventory gained
-    chests *and* lost iron in the same step. Moving chests between
-    inventory and machines changes chest count without consuming iron,
+    pallets *and* lost iron in the same step. Moving pallets between
+    inventory and machines changes pallet count without consuming iron,
     so place/pickup/deposit/withdraw exploits yield zero reward.
 
     Args:
@@ -179,18 +179,18 @@ def sparse_chest_crafting_reward(
     """
 
     p = new_state.selected_player
-    chest_delta = (
-        new_state.player_inventory[p, ItemType.CHEST]
-        - prev_state.player_inventory[p, ItemType.CHEST]
+    pallet_delta = (
+        new_state.player_inventory[p, ItemType.PALLET]
+        - prev_state.player_inventory[p, ItemType.PALLET]
     )
     iron_delta = (
         new_state.player_inventory[p, ItemType.IRON]
         - prev_state.player_inventory[p, ItemType.IRON]
     )
 
-    # Crafting consumes iron and produces chests in the same step.
-    is_craft = (chest_delta > 0) & (iron_delta < 0)
-    reward: jax.Array = jnp.where(is_craft, chest_delta, 0).astype(jnp.float32)
+    # Crafting consumes iron and produces pallets in the same step.
+    is_craft = (pallet_delta > 0) & (iron_delta < 0)
+    reward: jax.Array = jnp.where(is_craft, pallet_delta, 0).astype(jnp.float32)
     return reward
 
 
@@ -297,13 +297,13 @@ def miner_throughput_reward(
     return reward
 
 
-def chest_filling_reward(
+def pallet_filling_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Reward of 1.0 for each item deposited into a chest machine.
+    """Reward of 1.0 for each item deposited into a pallet machine.
 
     Counts the total increase in item counts across all inventory slots
-    of chest-type machines.  This gives a dense signal for every
+    of pallet-type machines.  This gives a dense signal for every
     successful deposit action rather than waiting for a full stack of 64.
 
     Args:
@@ -314,10 +314,10 @@ def chest_filling_reward(
     Returns:
         Scalar float32 reward.
     """
-    is_chest = new_state.machine_types == MachineType.CHEST
-    chest_mask = is_chest[..., None]
-    prev_counts = jnp.where(chest_mask, prev_state.machine_inventory, 0)
-    new_counts = jnp.where(chest_mask, new_state.machine_inventory, 0)
+    is_pallet = new_state.machine_types == MachineType.PALLET
+    pallet_mask = is_pallet[..., None]
+    prev_counts = jnp.where(pallet_mask, prev_state.machine_inventory, 0)
+    new_counts = jnp.where(pallet_mask, new_state.machine_inventory, 0)
     delta = jnp.sum(new_counts) - jnp.sum(prev_counts)
     reward: jax.Array = delta.astype(jnp.float32)
     return reward
@@ -373,12 +373,12 @@ def _mining_delta(
     ).astype(jnp.float32)
 
 
-def _chest_filling_delta(
+def _pallet_filling_delta(
     prev: EnvState, new: EnvState
 ) -> jax.Array:
-    """Total items deposited into chests this step."""
-    is_chest = new.machine_types == MachineType.CHEST
-    mask = is_chest[..., None]
+    """Total items deposited into pallets this step."""
+    is_pallet = new.machine_types == MachineType.PALLET
+    mask = is_pallet[..., None]
     prev_c = jnp.sum(jnp.where(mask, prev.machine_inventory, 0))
     new_c = jnp.sum(jnp.where(mask, new.machine_inventory, 0))
     return (new_c - prev_c).astype(jnp.float32)
@@ -401,7 +401,7 @@ def _item_count(state: EnvState, item: int) -> jax.Array:
 def dense_craft_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Dense reward for crafting levels (craft_chests, craft_miners).
+    """Dense reward for crafting levels (craft_pallets, craft_miners).
 
     Combines ore proximity (guides toward materials), mining delta
     (rewards collecting), and a large bonus per item crafted. Crafting
@@ -421,7 +421,7 @@ def dense_craft_reward(
 
     # Detect any crafting: total placeable items increased.
     placeables = jnp.array([
-        ItemType.MINER, ItemType.CHEST, ItemType.CONVEYOR_BELT,
+        ItemType.MINER, ItemType.PALLET, ItemType.CONVEYOR_BELT,
         ItemType.ARM, ItemType.ASSEMBLER,
     ], dtype=jnp.int32)
     prev_count = jnp.sum(prev_state.player_inventory[0, placeables])
@@ -431,12 +431,12 @@ def dense_craft_reward(
     return proximity + mining + 10.0 * craft_delta.astype(jnp.float32)
 
 
-def dense_fill_chest_reward(
+def dense_fill_pallet_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Dense reward for the fill_chest level.
+    """Dense reward for the fill_pallet level.
 
-    Combines ore proximity, chest proximity, mining delta, and chest
+    Combines ore proximity, pallet proximity, mining delta, and pallet
     filling delta.
 
     Args:
@@ -448,12 +448,12 @@ def dense_fill_chest_reward(
         Scalar float32 reward.
     """
     ore_prox = _ore_proximity(new_state)
-    chest_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.CHEST
+    pallet_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.PALLET
     )
     mining = _mining_delta(prev_state, new_state)
-    filling = _chest_filling_delta(prev_state, new_state)
-    return ore_prox + chest_prox + mining + 5.0 * filling
+    filling = _pallet_filling_delta(prev_state, new_state)
+    return ore_prox + pallet_prox + mining + 5.0 * filling
 
 
 def dense_deploy_reward(
@@ -509,9 +509,9 @@ def dense_withdraw_reward(
 def dense_deposit_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Dense reward for the deposit_into_chests level.
+    """Dense reward for the deposit_into_pallets level.
 
-    Proximity to nearest chest plus chest filling bonus.
+    Proximity to nearest pallet plus pallet filling bonus.
 
     Args:
         prev_state: State immediately before the step.
@@ -521,11 +521,11 @@ def dense_deposit_reward(
     Returns:
         Scalar float32 reward.
     """
-    chest_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.CHEST
+    pallet_prox = _proximity(
+        new_state, new_state.machine_types == MachineType.PALLET
     )
-    filling = _chest_filling_delta(prev_state, new_state)
-    return chest_prox + 5.0 * filling
+    filling = _pallet_filling_delta(prev_state, new_state)
+    return pallet_prox + 5.0 * filling
 
 
 def dense_pickup_reward(
@@ -557,7 +557,7 @@ def dense_belt_reward(
 ) -> jax.Array:
     """Dense reward for the belt_line level.
 
-    Rewards belt placement and items reaching the destination chest.
+    Rewards belt placement and items reaching the destination pallet.
     No proximity component (gap tile not identifiable from state).
 
     Args:
@@ -575,7 +575,7 @@ def dense_belt_reward(
         new_state.machine_types == MachineType.CONVEYOR_BELT
     )
     belt_placed = jnp.maximum(new_belts - prev_belts, 0)
-    filling = _chest_filling_delta(prev_state, new_state)
+    filling = _pallet_filling_delta(prev_state, new_state)
     return 5.0 * belt_placed.astype(jnp.float32) + 5.0 * filling
 
 
@@ -584,7 +584,7 @@ def dense_arm_reward(
 ) -> jax.Array:
     """Dense reward for the arm_bridge level.
 
-    Proximity to the arm machine plus items arriving in any chest.
+    Proximity to the arm machine plus items arriving in any pallet.
     Once the arm is rotated correctly, items transfer every tick.
 
     Args:
@@ -598,7 +598,7 @@ def dense_arm_reward(
     arm_prox = _proximity(
         new_state, new_state.machine_types == MachineType.ARM
     )
-    filling = _chest_filling_delta(prev_state, new_state)
+    filling = _pallet_filling_delta(prev_state, new_state)
     return arm_prox + 10.0 * filling
 
 

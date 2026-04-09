@@ -182,7 +182,7 @@ class TestItemConservation:
             player_direction=int(Direction.RIGHT),
             player_inventory=inv,
             machine_types=jnp.array(
-                [[MachineType.NONE, MachineType.CHEST]], dtype=jnp.int32
+                [[MachineType.NONE, MachineType.PALLET]], dtype=jnp.int32
             ),
         )
 

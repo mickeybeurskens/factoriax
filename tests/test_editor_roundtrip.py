@@ -37,7 +37,7 @@ def _make_fully_populated_level() -> Level:
     block_resources[1, 2] = 50
 
     machine_types = np.full((h, w), int(MachineType.NONE), dtype=np.int32)
-    machine_types[2, 3] = int(MachineType.CHEST)
+    machine_types[2, 3] = int(MachineType.PALLET)
     machine_types[3, 1] = int(MachineType.ASSEMBLER)
 
     machine_directions = np.zeros((h, w), dtype=np.int32)

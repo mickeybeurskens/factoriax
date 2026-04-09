@@ -313,7 +313,7 @@ def _is_valid_deposit_item(
     """Check if an item type can be deposited into a machine.
 
     Miners accept COAL as fuel. Assemblers accept recipe inputs.
-    Chests accept anything. Belts/arms accept anything (one type).
+    Pallets accept anything. Belts/arms accept anything (one type).
 
     Args:
         machine_type: MachineType of the target machine.
@@ -333,7 +333,7 @@ def _is_valid_deposit_item(
         (item_type == asm_inputs) & (asm_counts > 0),
     )
 
-    # Chest/Belt/Arm: accept anything.
+    # Pallet/Belt/Arm: accept anything.
     storage_ok = jnp.bool_(True)
 
     is_miner = machine_type == int(MachineType.MINER)
@@ -350,7 +350,7 @@ def _is_valid_withdraw_item(
     """Check if an item type can be withdrawn from a machine.
 
     Miners: withdraw any item (ore output or leftover fuel).
-    Assemblers: withdraw recipe output. Chests: withdraw anything.
+    Assemblers: withdraw recipe output. Pallets: withdraw anything.
     Belts/Arms: withdraw anything.
 
     Args:

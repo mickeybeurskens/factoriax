@@ -338,9 +338,9 @@ def train(config: Config) -> None:
         config: Training configuration.
     """
     mine_level = _LEVEL_MAP["mine_resources"]
-    craft_level = _LEVEL_MAP["craft_chests"]
+    craft_level = _LEVEL_MAP["craft_pallets"]
     levels = [mine_level, craft_level]
-    reward_fns = [REWARD_FNS["mine_resources"], REWARD_FNS["craft_chests"]]
+    reward_fns = [REWARD_FNS["mine_resources"], REWARD_FNS["craft_pallets"]]
 
     env = FactoriaXEnv()
 

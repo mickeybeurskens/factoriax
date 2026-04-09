@@ -174,7 +174,7 @@ def _craft_all_achievements(state: EnvState) -> jax.Array:
         Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
     miner_count = count_total_items(state, ItemType.MINER)
-    chest_count = count_total_items(state, ItemType.CHEST)
+    pallet_count = count_total_items(state, ItemType.PALLET)
     belt_count = count_total_items(state, ItemType.CONVEYOR_BELT)
     arm_count = count_total_items(state, ItemType.ARM)
     assembler_count = count_total_items(state, ItemType.ASSEMBLER)
@@ -183,13 +183,13 @@ def _craft_all_achievements(state: EnvState) -> jax.Array:
         [
             # Crafted at least 1 of each
             miner_count >= 1,
-            chest_count >= 1,
+            pallet_count >= 1,
             belt_count >= 1,
             arm_count >= 1,
             assembler_count >= 1,
             # Hold 5 of each
             miner_count >= 5,
-            chest_count >= 5,
+            pallet_count >= 5,
             belt_count >= 5,
             arm_count >= 5,
             assembler_count >= 5,
@@ -203,7 +203,7 @@ _LEVEL_CRAFT = BenchmarkLevel(
     name="craft_all",
     description=(
         "12x12 map with large iron and copper patches. Craft all five "
-        "recipe types: miner, chest, belt, arm, assembler. Tests recipe "
+        "recipe types: miner, pallet, belt, arm, assembler. Tests recipe "
         "selection, resource gathering, and inventory management across "
         "500 ticks."
     ),

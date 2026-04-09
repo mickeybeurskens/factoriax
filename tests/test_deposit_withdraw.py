@@ -1,6 +1,6 @@
 """Tests for the DEPOSIT and WITHDRAW compound actions.
 
-Covers deposit into chests, miners (fuel), and assemblers (recipe-filtered
+Covers deposit into pallets, miners (fuel), and assemblers (recipe-filtered
 inputs), as well as withdraw from various machine types. Uses the pouch
 inventory model where player_inventory has shape (P, NUM_ITEM_TYPES) and
 machine_inventory has shape (H, W, NUM_ITEM_TYPES).
@@ -90,18 +90,18 @@ def _player_inv(num_players: int, entries: dict[int, int]) -> jnp.ndarray:
 # ===========================================================================
 
 
-class TestDepositToChest:
-    """Deposit items from player inventory into a chest."""
+class TestDepositToPallet:
+    """Deposit items from player inventory into a pallet."""
 
-    def test_deposit_coal_into_empty_chest(self, state_factory) -> None:
-        """Coal should transfer into the chest's pouch."""
+    def test_deposit_coal_into_empty_pallet(self, state_factory) -> None:
+        """Coal should transfer into the pallet's pouch."""
         p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
@@ -110,7 +110,7 @@ class TestDepositToChest:
         assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 10
 
     def test_deposit_stacks_into_matching_type(self, state_factory) -> None:
-        """Depositing coal should merge with existing coal in the chest."""
+        """Depositing coal should merge with existing coal in the pallet."""
         p_inv = _player_inv(1, {ItemType.COAL: 5})
         m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.COAL): 10})
         state = state_factory(
@@ -118,7 +118,7 @@ class TestDepositToChest:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
             machine_inventory=m_inv,
         )
 
@@ -128,27 +128,26 @@ class TestDepositToChest:
         assert int(state.machine_inventory[1, 2, ItemType.COAL]) == 15
 
     def test_deposit_respects_stack_cap(self, state_factory) -> None:
-        """Deposit should cap at MAX_MACHINE_STACK_SIZE, leaving remainder."""
+        """Deposit should cap at the pallet's max stack (256), leaving remainder."""
+        pallet_max = 256
         p_inv = _player_inv(1, {ItemType.COAL: 20})
         m_inv = _set_machine_inv(
             3,
             3,
-            {(1, 2, ItemType.COAL): MAX_MACHINE_STACK_SIZE - 5},
+            {(1, 2, ItemType.COAL): pallet_max - 5},
         )
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
             machine_inventory=m_inv,
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == (
-            MAX_MACHINE_STACK_SIZE
-        )
+        assert int(state.machine_inventory[1, 2, ItemType.COAL]) == pallet_max
         assert int(state.player_inventory[0, ItemType.COAL]) == 15
 
     def test_deposit_noop_no_machine(self, state_factory) -> None:
@@ -171,7 +170,7 @@ class TestDepositToChest:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
@@ -295,17 +294,17 @@ class TestDepositToAssembler:
 # ===========================================================================
 
 
-class TestWithdrawFromChest:
-    """Withdraw items from a chest into player inventory."""
+class TestWithdrawFromPallet:
+    """Withdraw items from a pallet into player inventory."""
 
-    def test_withdraw_iron_from_chest(self, state_factory) -> None:
-        """Should take the specified item type from the chest."""
+    def test_withdraw_iron_from_pallet(self, state_factory) -> None:
+        """Should take the specified item type from the pallet."""
         m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
             machine_inventory=m_inv,
         )
 
@@ -315,12 +314,12 @@ class TestWithdrawFromChest:
         assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
 
     def test_withdraw_noop_empty_machine(self, state_factory) -> None:
-        """Withdraw from empty chest should be a no-op."""
+        """Withdraw from empty pallet should be a no-op."""
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
         )
 
         state = withdraw_from_adjacent(state, 0, ItemType.IRON)
@@ -410,7 +409,7 @@ class TestWithdrawMergesIntoInventory:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
             machine_inventory=m_inv,
         )
 
@@ -436,7 +435,7 @@ class TestDepositWithdrawViaStep:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         rng = jax.random.PRNGKey(0)
@@ -458,7 +457,7 @@ class TestDepositWithdrawViaStep:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.CHEST}),
+            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
             machine_inventory=m_inv,
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)

@@ -148,7 +148,7 @@ class TestConveyorBelt:
     def test_does_not_push_to_non_belt(self, state_factory) -> None:
         """Belt adjacent to a non-belt machine does not transfer items."""
         types = jnp.array(
-            [[MachineType.CONVEYOR_BELT, MachineType.CHEST]],
+            [[MachineType.CONVEYOR_BELT, MachineType.PALLET]],
         )
         dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
         inv = _make_machine_inv((1, 2), {(0, 0, ItemType.COAL): 8})
@@ -242,11 +242,11 @@ class TestArm:
         # Miner should be empty.
         assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
 
-    def test_deposits_to_chest(self, state_factory) -> None:
-        """Arm with full buffer deposits items into adjacent chest."""
-        # Layout: [CHEST, ARM] -- arm at (0,1) facing LEFT: forward=(0,0).
+    def test_deposits_to_pallet(self, state_factory) -> None:
+        """Arm with full buffer deposits items into adjacent pallet."""
+        # Layout: [PALLET, ARM] -- arm at (0,1) facing LEFT: forward=(0,0).
         shape = (1, 2)
-        types = jnp.array([[MachineType.CHEST, MachineType.ARM]])
+        types = jnp.array([[MachineType.PALLET, MachineType.ARM]])
         dirs = jnp.array([[0, int(Direction.LEFT)]])
         inv = _make_machine_inv(shape, {(0, 1, ItemType.IRON): 20})
         state = _arm_state(
@@ -258,16 +258,16 @@ class TestArm:
         result = run_arms(state)
         # ARM buffer cleared.
         assert int(result.machine_inventory[0, 1, ItemType.IRON]) == 0
-        # Chest received items.
+        # Pallet received items.
         assert int(result.machine_inventory[0, 0, ItemType.IRON]) == 20
 
     def test_deposit_then_pick_same_tick(self, state_factory) -> None:
         """Arm deposits first, then picks in same tick if buffer is now empty."""
-        # Layout: [CHEST_with_IRON, ARM, MINER_with_COAL]
-        # Arm at (0,1) facing LEFT: fwd=(0,0) CHEST, bwd=(0,2) MINER.
+        # Layout: [PALLET_with_IRON, ARM, MINER_with_COAL]
+        # Arm at (0,1) facing LEFT: fwd=(0,0) PALLET, bwd=(0,2) MINER.
         shape = (1, 3)
         types = jnp.array(
-            [[MachineType.CHEST, MachineType.ARM, MachineType.MINER]],
+            [[MachineType.PALLET, MachineType.ARM, MachineType.MINER]],
         )
         dirs = jnp.array([[0, int(Direction.LEFT), 0]])
         inv = _make_machine_inv(
@@ -284,7 +284,7 @@ class TestArm:
             machine_inventory=inv,
         )
         result = run_arms(state)
-        # IRON deposited into chest.
+        # IRON deposited into pallet.
         assert int(result.machine_inventory[0, 0, ItemType.IRON]) == 8
         # COAL picked into arm buffer.
         assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 12
@@ -327,20 +327,20 @@ class TestArm:
         result = run_arms(state)
         assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 0
 
-    def test_chest_to_belt_no_item_corruption(self, state_factory) -> None:
-        """Arm depositing to belt then picking from chest must not corrupt items.
+    def test_pallet_to_belt_no_item_corruption(self, state_factory) -> None:
+        """Arm depositing to belt then picking from pallet must not corrupt items.
 
         Reproduces a bug where the pick phase's item-type clearing used a
         gather+where instead of a scatter, causing the belt's item type to
-        be zeroed when the arm depleted the chest slot in the same tick.
+        be zeroed when the arm depleted the pallet slot in the same tick.
         """
-        # Layout: [CHEST, ARM, BELT]
-        # ARM faces RIGHT: forward=BELT, backward=CHEST.
+        # Layout: [PALLET, ARM, BELT]
+        # ARM faces RIGHT: forward=BELT, backward=PALLET.
         shape = (1, 3)
         types = jnp.array(
             [
                 [
-                    MachineType.CHEST,
+                    MachineType.PALLET,
                     MachineType.ARM,
                     MachineType.CONVEYOR_BELT,
                 ]
@@ -350,7 +350,7 @@ class TestArm:
         inv = _make_machine_inv(
             shape,
             {
-                (0, 0, ItemType.COAL): 10,  # Chest
+                (0, 0, ItemType.COAL): 10,  # Pallet
                 (0, 1, ItemType.COAL): 5,  # ARM buffer
             },
         )
@@ -363,14 +363,14 @@ class TestArm:
         result = run_arms(state)
 
         # Deposit phase: ARM deposits 5 COAL to belt.
-        # Pick phase: ARM (now empty) picks 10 COAL from chest.
+        # Pick phase: ARM (now empty) picks 10 COAL from pallet.
         # Belt must retain COAL -- not be zeroed.
         assert int(result.machine_inventory[0, 2, ItemType.COAL]) == 5, (
             "belt item corrupted to zero"
         )
 
-        # Chest should be empty.
+        # Pallet should be empty.
         assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
 
-        # ARM buffer should hold the picked COAL from chest.
+        # ARM buffer should hold the picked COAL from pallet.
         assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 10

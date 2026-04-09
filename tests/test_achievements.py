@@ -152,11 +152,11 @@ class TestConditionComputation:
         assert conditions[_achievement_index("automated_mining")]
 
     def test_first_pipeline_condition(self, state_factory) -> None:
-        """A chest containing items satisfies First Pipeline."""
+        """A pallet containing items satisfies First Pipeline."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.CHEST]], dtype=jnp.int32,
+                [[MachineType.PALLET]], dtype=jnp.int32,
             ),
             machine_inventory=_machine_inv(1, 1, 0, 0, IRON=2),
         )

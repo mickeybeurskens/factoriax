@@ -74,7 +74,7 @@ _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "timestep",
     "craft_progress",
     "afford_miner",
-    "afford_chest",
+    "afford_pallet",
     "afford_belt",
     "afford_arm",
     "afford_assembler",

@@ -106,7 +106,7 @@ def can_add_to_machine(
     """Check if items can be added to a machine pouch.
 
     Verifies both the per-type stack limit and the max distinct types
-    constraint (e.g., belts hold 1 type, chests hold 8).
+    constraint (e.g., belts hold 1 type, pallets hold 1).
 
     Args:
         machine_counts: Machine inventory counts, shape ``(NUM_ITEM_TYPES,)``.

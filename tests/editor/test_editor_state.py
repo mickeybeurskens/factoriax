@@ -235,7 +235,7 @@ class TestLevelConversion:
     def test_machines_preserved(self) -> None:
         block_map = np.full((5, 5), int(BlockType.DIRT), dtype=np.int32)
         machines = np.full((5, 5), int(MachineType.NONE), dtype=np.int32)
-        machines[2, 2] = int(MachineType.CHEST)
+        machines[2, 2] = int(MachineType.PALLET)
         original = Level(
             name="mach_test",
             map_width=5,
@@ -244,10 +244,10 @@ class TestLevelConversion:
             machine_types=machines,
         )
         state = editor_state_from_level(original)
-        assert state.machine_types[2, 2] == int(MachineType.CHEST)
+        assert state.machine_types[2, 2] == int(MachineType.PALLET)
         level = editor_state_to_level(state)
         assert level.machine_types is not None
-        assert level.machine_types[2, 2] == int(MachineType.CHEST)
+        assert level.machine_types[2, 2] == int(MachineType.PALLET)
 
     def test_all_zero_resources_become_none(self) -> None:
         state = new_editor_state(5, 5)
@@ -402,9 +402,9 @@ class TestAddRow:
 
     def test_preserves_existing_data(self) -> None:
         state = new_editor_state(3, 3)
-        set_machine(state, 1, 1, int(MachineType.CHEST), int(Direction.RIGHT))
+        set_machine(state, 1, 1, int(MachineType.PALLET), int(Direction.RIGHT))
         add_row(state)
-        assert state.machine_types[1, 1] == int(MachineType.CHEST)
+        assert state.machine_types[1, 1] == int(MachineType.PALLET)
         assert state.machine_directions[1, 1] == int(Direction.RIGHT)
 
     def test_all_arrays_consistent_shape(self) -> None:
@@ -495,8 +495,8 @@ class TestResizeRoundTrip:
         state = new_editor_state(3, 3)
         add_column(state)
         add_row(state)
-        set_machine(state, 3, 3, int(MachineType.CHEST), int(Direction.DOWN))
-        assert state.machine_types[3, 3] == int(MachineType.CHEST)
+        set_machine(state, 3, 3, int(MachineType.PALLET), int(Direction.DOWN))
+        assert state.machine_types[3, 3] == int(MachineType.PALLET)
 
     def test_shrink_discards_edge_data(self) -> None:
         state = new_editor_state(5, 5)
@@ -731,7 +731,7 @@ class TestGetInventorySlots:
 
     def test_machine_inventory(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 2, 2, int(MachineType.CHEST), 0)
+        set_machine(state, 2, 2, int(MachineType.PALLET), 0)
         state.machine_inventory_items[2, 2, 0] = int(ItemType.IRON)
         state.machine_inventory_counts[2, 2, 0] = 10
         slots = get_inventory_slots(state, ("machine", 2, 2))
@@ -796,10 +796,10 @@ class TestGetNumSlots:
         set_machine(state, 0, 0, int(MachineType.MINER), 0)
         assert get_num_slots(state, ("machine", 0, 0)) == 2
 
-    def test_chest_has_eight(self) -> None:
+    def test_pallet_has_one(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 0, 0, int(MachineType.CHEST), 0)
-        assert get_num_slots(state, ("machine", 0, 0)) == 8
+        set_machine(state, 0, 0, int(MachineType.PALLET), 0)
+        assert get_num_slots(state, ("machine", 0, 0)) == 1
 
 
 class TestPerPlayerInventoryRoundTrip:

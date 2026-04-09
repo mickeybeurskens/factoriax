@@ -7,8 +7,8 @@ rendering from ``train_ppo.py`` to give a fast feedback loop.
 Usage::
 
     python -m baselines.basic_skills.train_single mine_resources
-    python -m baselines.basic_skills.train_single craft_chests --total-steps 5_000_000
-    python -m baselines.basic_skills.train_single fill_chest --num-envs 128
+    python -m baselines.basic_skills.train_single craft_pallets --total-steps 5_000_000
+    python -m baselines.basic_skills.train_single fill_pallet --num-envs 128
 """
 
 from __future__ import annotations

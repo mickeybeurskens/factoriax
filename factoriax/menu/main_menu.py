@@ -68,7 +68,7 @@ def _build_decoration_surfaces(icon_size: int) -> list[pygame.Surface]:
         icon_size: Pixel size for each decoration icon.
 
     Returns:
-        Ordered surfaces: player, miner, 4x belt, arm, chest.
+        Ordered surfaces: player, miner, 4x belt, arm, pallet.
     """
     surfaces: list[pygame.Surface] = []
 
@@ -91,8 +91,8 @@ def _build_decoration_surfaces(icon_size: int) -> list[pygame.Surface]:
     arm = render_item_icon(ItemType.ARM, icon_size)
     surfaces.append(_rgba_to_surface(arm))
 
-    chest = render_item_icon(ItemType.CHEST, icon_size)
-    surfaces.append(_rgba_to_surface(chest))
+    pallet = render_item_icon(ItemType.PALLET, icon_size)
+    surfaces.append(_rgba_to_surface(pallet))
 
     return surfaces
 
@@ -180,7 +180,7 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
     ore_rgba = render_item_icon(ItemType.COAL, ore_size)
     ore_surf = _rgba_to_surface(ore_rgba)
     # Animation target: slot indices where the iron travels.
-    # Row is: [0]player [1]miner [2]belt [3]belt [4]belt [5]belt [6]arm [7]chest
+    # Row is: [0]player [1]miner [2]belt [3]belt [4]belt [5]belt [6]arm [7]pallet
     # Steps 0-3: iron on belts (indices 2-5), step 4: iron on arm (index 6).
     _ANIM_SLOT_TARGETS = [2, 3, 4, 5, 6]
 

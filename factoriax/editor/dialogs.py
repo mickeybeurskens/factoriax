@@ -481,7 +481,7 @@ _ITEM_NAMES: dict[int, str] = {
     int(ItemType.IRON): "Iron",
     int(ItemType.COPPER): "Copper",
     int(ItemType.MINER): "Miner",
-    int(ItemType.CHEST): "Chest",
+    int(ItemType.PALLET): "Pallet",
     int(ItemType.CONVEYOR_BELT): "Belt",
     int(ItemType.ARM): "Arm",
     int(ItemType.ASSEMBLER): "Assembler",

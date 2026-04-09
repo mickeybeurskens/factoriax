@@ -66,7 +66,7 @@ class TestDepositAction:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.CHEST), dtype=jnp.int32,
+                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
             ),
         )
         ps = game_ui.play_state
@@ -86,7 +86,7 @@ class TestDepositAction:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.CHEST), dtype=jnp.int32,
+                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
             ),
         )
         ps = game_ui.play_state
@@ -104,7 +104,7 @@ class TestDepositAction:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.CHEST), dtype=jnp.int32,
+                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
             ),
         )
         ps = game_ui.play_state

@@ -35,9 +35,8 @@ class PlayState:
         machine_tx: X tile coordinate of the inspected machine.
         machine_ty: Y tile coordinate of the inspected machine.
         machine_panel_active: Whether the machine panel (vs player panel) has focus.
-        hotbar_page: Hotbar page (0 shows slots 0-7, 1 shows slots 2-9).
         held_item: Item type currently held for swapping, or None.
-        selected_item: Currently selected item type for UI highlighting.
+        selected_item: Currently selected item type (machine for building).
         focused_machine_item: Currently focused machine item type.
         record_enabled: Whether trajectory recording is active.
         recorded_states: Captured EnvState snapshots for trajectory.
@@ -66,9 +65,8 @@ class PlayState:
     machine_tx: int = 0
     machine_ty: int = 0
     machine_panel_active: bool = True
-    hotbar_page: int = 0
     held_item: int | None = None
-    selected_item: int = 1
+    selected_item: int = 4  # ItemType.MINER (first tool belt machine)
     focused_machine_item: int = 0
     selected_recipe: int = 0
 

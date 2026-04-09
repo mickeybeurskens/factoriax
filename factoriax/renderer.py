@@ -360,7 +360,7 @@ def render_inventory_bar(
 
 MACHINE_TO_ITEM: dict[int, int] = {
     int(MachineType.MINER): int(ItemType.MINER),
-    int(MachineType.CHEST): int(ItemType.CHEST),
+    int(MachineType.PALLET): int(ItemType.PALLET),
     int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
     int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
     int(MachineType.ARM): int(ItemType.ARM),

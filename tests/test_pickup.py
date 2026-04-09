@@ -40,10 +40,10 @@ class TestPickupMachine:
             player_direction=int(Direction.DOWN),
             machine_types=jnp.full(
                 (3, 3), MachineType.NONE, dtype=jnp.int32,
-            ).at[1, 1].set(MachineType.CHEST),
+            ).at[1, 1].set(MachineType.PALLET),
         )
         new = pickup_machine(state, 0)
-        assert int(new.player_inventory[0, ItemType.CHEST]) == 1
+        assert int(new.player_inventory[0, ItemType.PALLET]) == 1
         assert int(new.machine_types[1, 1]) == MachineType.NONE
 
     def test_pickup_transfers_contents(self, state_factory) -> None:
@@ -60,12 +60,12 @@ class TestPickupMachine:
             player_direction=int(Direction.DOWN),
             machine_types=jnp.full(
                 (3, 3), MachineType.NONE, dtype=jnp.int32,
-            ).at[1, 1].set(MachineType.CHEST),
+            ).at[1, 1].set(MachineType.PALLET),
             machine_inventory=m_inv,
         )
         new = pickup_machine(state, 0)
         assert int(new.player_inventory[0, ItemType.IRON]) == 10
-        assert int(new.player_inventory[0, ItemType.CHEST]) == 1
+        assert int(new.player_inventory[0, ItemType.PALLET]) == 1
 
     def test_pickup_empty_tile_noop(self, state_factory) -> None:
         """Picking up from an empty tile should be a no-op."""

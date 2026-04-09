@@ -36,30 +36,30 @@ def game_ui(params: EnvParams) -> GameUI:
 class TestSlotKeySelection:
     """Number keys should update PlayState.selected_item, not EnvState."""
 
-    def test_pressing_1_selects_item_type_1(
+    def test_pressing_1_selects_miner(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Key '1' sets selected_item to ItemType value 1 (COAL)."""
+        """Key '1' sets selected_item to ItemType.MINER (tool belt slot 1)."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         game_ui.play_state.selected_item = 5  # start at something else
         event = pygame.event.Event(
             pygame.KEYDOWN, key=pygame.K_1, mod=0,
         )
         result = game_ui.handle_event(event, state)
-        assert game_ui.play_state.selected_item == 1
+        assert game_ui.play_state.selected_item == int(ItemType.MINER)
         # EnvState should not be mutated for UI state
         assert result.state is not None
 
-    def test_pressing_3_selects_item_type_3(
+    def test_pressing_3_selects_belt(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Key '3' sets selected_item to ItemType value 3 (COPPER)."""
+        """Key '3' sets selected_item to ItemType.CONVEYOR_BELT (slot 3)."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         event = pygame.event.Event(
             pygame.KEYDOWN, key=pygame.K_3, mod=0,
         )
         game_ui.handle_event(event, state)
-        assert game_ui.play_state.selected_item == 3
+        assert game_ui.play_state.selected_item == int(ItemType.CONVEYOR_BELT)
 
 
 class TestInventoryNavigation:

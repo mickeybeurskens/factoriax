@@ -46,7 +46,7 @@ RECIPES: list[_Recipe] = [
         "ticks": 0,
     },
     {
-        "output": ItemType.CHEST,
+        "output": ItemType.PALLET,
         "inputs": [(ItemType.IRON, 5)],
         "ticks": 0,
     },
@@ -70,7 +70,7 @@ RECIPES: list[_Recipe] = [
 NUM_RECIPES: int = len(RECIPES)
 MAX_RECIPE_INPUTS: int = max(len(r["inputs"]) for r in RECIPES)
 
-RECIPE_NAMES: list[str] = ["Miner", "Chest", "Conveyor Belt", "Arm", "Assembler"]
+RECIPE_NAMES: list[str] = ["Miner", "Pallet", "Conveyor Belt", "Arm", "Assembler"]
 
 # Derived JAX arrays — single source of truth from the dicts above.
 RECIPE_OUTPUTS: jnp.ndarray = jnp.array(

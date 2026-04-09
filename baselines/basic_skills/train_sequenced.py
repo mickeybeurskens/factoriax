@@ -6,9 +6,9 @@ the next level. This tests whether skills transfer across tasks.
 
 Phases are specified as positional ``level:threshold`` pairs::
 
-    python -m baselines.basic_skills.train_sequenced mine_resources:16 craft_chests
+    python -m baselines.basic_skills.train_sequenced mine_resources:16 craft_pallets
     python -m baselines.basic_skills.train_sequenced \\
-        mine_resources:16 craft_chests:5 fill_chest
+        mine_resources:16 craft_pallets:5 fill_pallet
 
 A phase without a threshold (no colon) trains for ``--max-steps-per-phase``
 steps without early stopping. The last phase typically has no threshold.
@@ -870,7 +870,7 @@ def main() -> None:
         "phases", nargs="+",
         help=(
             "Training phases as level:threshold pairs. "
-            "Example: mine_resources:16 craft_chests"
+            "Example: mine_resources:16 craft_pallets"
         ),
     )
     parser.add_argument(

@@ -14,10 +14,10 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.rewards import (
-    chest_filling_reward,
+    pallet_filling_reward,
     miner_output_reward,
     player_inventory_reward,
-    sparse_chest_crafting_reward,
+    sparse_pallet_crafting_reward,
     sparse_miner_crafting_reward,
 )
 from factoriax.state import EnvParams
@@ -29,19 +29,19 @@ def params() -> EnvParams:
     return EnvParams()
 
 
-class TestSparseChestCraftingReward:
-    """Tests for sparse_chest_crafting_reward reading player_inventory."""
+class TestSparsePalletCraftingReward:
+    """Tests for sparse_pallet_crafting_reward reading player_inventory."""
 
     def test_zero_when_no_change(self, state_factory, params) -> None:
         """Identical states produce zero reward."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
-        reward = sparse_chest_crafting_reward(state, state, params)
+        reward = sparse_pallet_crafting_reward(state, state, params)
         assert float(reward) == 0.0
 
-    def test_positive_when_chest_gained_iron_lost(
+    def test_positive_when_pallet_gained_iron_lost(
         self, state_factory, params,
     ) -> None:
-        """Gaining chests while losing iron triggers positive reward."""
+        """Gaining pallets while losing iron triggers positive reward."""
         inv_before = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv_before = inv_before.at[0, int(ItemType.IRON)].set(10)
         prev = state_factory(
@@ -50,28 +50,28 @@ class TestSparseChestCraftingReward:
         )
         inv_after = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv_after = inv_after.at[0, int(ItemType.IRON)].set(6)
-        inv_after = inv_after.at[0, int(ItemType.CHEST)].set(1)
+        inv_after = inv_after.at[0, int(ItemType.PALLET)].set(1)
         new = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv_after,
         )
-        reward = sparse_chest_crafting_reward(prev, new, params)
+        reward = sparse_pallet_crafting_reward(prev, new, params)
         assert float(reward) == 1.0
 
-    def test_zero_when_only_chest_gained(
+    def test_zero_when_only_pallet_gained(
         self, state_factory, params,
     ) -> None:
-        """Gaining chests without losing iron yields zero (pickup, not craft)."""
+        """Gaining pallets without losing iron yields zero (pickup, not craft)."""
         prev = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
         inv_after = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv_after = inv_after.at[0, int(ItemType.CHEST)].set(1)
+        inv_after = inv_after.at[0, int(ItemType.PALLET)].set(1)
         new = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv_after,
         )
-        reward = sparse_chest_crafting_reward(prev, new, params)
+        reward = sparse_pallet_crafting_reward(prev, new, params)
         assert float(reward) == 0.0
 
 
@@ -136,14 +136,14 @@ class TestMinerOutputReward:
         assert float(reward) == 3.0
 
 
-class TestChestFillingReward:
-    """Tests for chest_filling_reward reading machine_inventory."""
+class TestPalletFillingReward:
+    """Tests for pallet_filling_reward reading machine_inventory."""
 
-    def test_positive_when_chest_gains_items(
+    def test_positive_when_pallet_gains_items(
         self, state_factory, params,
     ) -> None:
-        """Items deposited into a chest produce positive reward."""
-        mt = jnp.full((4, 4), int(MachineType.CHEST), dtype=jnp.int32)
+        """Items deposited into a pallet produce positive reward."""
+        mt = jnp.full((4, 4), int(MachineType.PALLET), dtype=jnp.int32)
         prev = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=mt,
@@ -157,7 +157,7 @@ class TestChestFillingReward:
             machine_types=mt,
             machine_inventory=inv_after,
         )
-        reward = chest_filling_reward(prev, new, params)
+        reward = pallet_filling_reward(prev, new, params)
         assert float(reward) == 5.0
 
 

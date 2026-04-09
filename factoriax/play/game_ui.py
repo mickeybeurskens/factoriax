@@ -27,7 +27,9 @@ from factoriax.constants import (
     DEPOSIT_BASE,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
+    PLACEABLE_ITEM_LIST,
     PLACEABLE_ITEMS,
+    RESOURCE_ITEM_LIST,
     WITHDRAW_BASE,
     Action,
     Direction,
@@ -58,7 +60,7 @@ _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(int(x) for x in PLACEABLE_ITEMS)
 
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.MINER): int(Action.PLACE_MINER),
-    int(ItemType.CHEST): int(Action.PLACE_CHEST),
+    int(ItemType.PALLET): int(Action.PLACE_PALLET),
     int(ItemType.CONVEYOR_BELT): int(Action.PLACE_BELT),
     int(ItemType.ARM): int(Action.PLACE_ARM),
     int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
@@ -86,16 +88,12 @@ _MOVE_TO_DIR: dict[str, tuple[int, int, int]] = {
 }
 
 _SLOT_ACTIONS: dict[str, int] = {
-    PlayerAction.SLOT_1: 1,
-    PlayerAction.SLOT_2: 2,
-    PlayerAction.SLOT_3: 3,
-    PlayerAction.SLOT_4: 4,
-    PlayerAction.SLOT_5: 5,
-    PlayerAction.SLOT_6: 6,
-    PlayerAction.SLOT_7: 7,
-    PlayerAction.SLOT_8: 8,
-    PlayerAction.SLOT_9: 9,
-    PlayerAction.SLOT_10: 10,
+    PlayerAction.SLOT_1: int(ItemType.MINER),
+    PlayerAction.SLOT_2: int(ItemType.PALLET),
+    PlayerAction.SLOT_3: int(ItemType.CONVEYOR_BELT),
+    PlayerAction.SLOT_4: int(ItemType.ARM),
+    PlayerAction.SLOT_5: int(ItemType.ASSEMBLER),
+    PlayerAction.SLOT_6: int(ItemType.ROCKET),
 }
 
 _PLAYER_ACTIONS: dict[str, int] = {
@@ -282,7 +280,9 @@ class GameUI:
         """
         ps = self._ps
         pixels = render_pixels(
-            state, block_pixel_size=tile_px, frame_tick=ps.frame_tick,
+            state,
+            block_pixel_size=tile_px,
+            frame_tick=ps.frame_tick,
         )
         click_regions: list[ClickRegion] = []
 
@@ -301,18 +301,18 @@ class GameUI:
             for row in (hy, hy2 - 1):
                 if 0 <= row < ui_h:
                     c0, c1 = max(0, hx), min(ui_w, hx2)
-                    ui_frame[row, c0:c1] = (
-                        ui_frame[row, c0:c1] // 2 + highlight // 2
-                    )
+                    ui_frame[row, c0:c1] = ui_frame[row, c0:c1] // 2 + highlight // 2
             for col in (hx, hx2 - 1):
                 if 0 <= col < ui_w:
                     r0, r1 = max(0, hy), min(ui_h, hy2)
-                    ui_frame[r0:r1, col] = (
-                        ui_frame[r0:r1, col] // 2 + highlight // 2
-                    )
+                    ui_frame[r0:r1, col] = ui_frame[r0:r1, col] // 2 + highlight // 2
 
         hotbar_overlay, hotbar_regions = render_hotbar(
-            state, ui_w, ui_h, ps.hotbar_page,
+            state,
+            ui_w,
+            ui_h,
+            ps.selected_item,
+            ps.frame_tick,
         )
         composite_rgba_over_rgb(ui_frame, hotbar_overlay)
         click_regions.extend(hotbar_regions)
@@ -322,17 +322,26 @@ class GameUI:
 
         if ps.machine_open:
             machine_overlay, machine_regions = render_machine_menu(
-                state, ui_w, ui_h,
-                ps.machine_tx, ps.machine_ty, ps.machine_panel_active,
-                ps.selected_item, ps.focused_machine_item,
+                state,
+                ui_w,
+                ui_h,
+                ps.machine_tx,
+                ps.machine_ty,
+                ps.machine_panel_active,
+                ps.selected_item,
+                ps.focused_machine_item,
             )
             composite_rgba_over_rgb(ui_frame, machine_overlay)
             click_regions.extend(machine_regions)
 
         if ps.inventory_open:
             menu_overlay, inv_regions = render_inventory_menu(
-                state, ui_w, ui_h,
-                ps.menu_focus, ps.held_item, ps.selected_recipe,
+                state,
+                ui_w,
+                ui_h,
+                ps.menu_focus,
+                ps.held_item,
+                ps.selected_recipe,
                 ps.selected_item,
             )
             composite_rgba_over_rgb(ui_frame, menu_overlay)
@@ -340,20 +349,28 @@ class GameUI:
 
         if ps.achievement_open:
             ach_overlay = render_achievement_menu(
-                state, ui_w, ui_h,
-                ps.achievement_scroll, ps.achievement_selection,
+                state,
+                ui_w,
+                ui_h,
+                ps.achievement_scroll,
+                ps.achievement_selection,
             )
             composite_rgba_over_rgb(ui_frame, ach_overlay)
 
         if ps.research_open:
             research_overlay = render_research_menu(
-                state, ui_w, ui_h, ps.research_selection,
+                state,
+                ui_w,
+                ui_h,
+                ps.research_selection,
             )
             composite_rgba_over_rgb(ui_frame, research_overlay)
 
         if ps.pause_open:
             pause_overlay, pause_regions = render_pause_menu(
-                ui_w, ui_h, ps.pause_selection,
+                ui_w,
+                ui_h,
+                ps.pause_selection,
             )
             composite_rgba_over_rgb(ui_frame, pause_overlay)
             click_regions.extend(pause_regions)
@@ -363,7 +380,8 @@ class GameUI:
 
         if ps.victory_open:
             composite_rgba_over_rgb(
-                ui_frame, render_victory_screen(ui_w, ui_h),
+                ui_frame,
+                render_victory_screen(ui_w, ui_h),
             )
 
         return ui_frame, click_regions
@@ -415,11 +433,12 @@ class GameUI:
                 else:
                     selected_player = int(state.selected_player)
                     state = swap_inventory_slots(
-                        state, selected_player, ps.held_item, hit.param,
+                        state,
+                        selected_player,
+                        ps.held_item,
+                        hit.param,
                     )
                     ps.held_item = None
-            elif hit.action == "hotbar_page":
-                ps.hotbar_page = 1 - ps.hotbar_page
             elif hit.action == "focus_inventory":
                 ps.menu_focus = "inventory"
             elif hit.action == "focus_crafting":
@@ -438,7 +457,10 @@ class GameUI:
                 action = place_action
 
         return GameUIResult(
-            action=action, state=state, quit=quit_flag, reset=reset_flag,
+            action=action,
+            state=state,
+            quit=quit_flag,
+            reset=reset_flag,
         )
 
     def _handle_keydown(
@@ -481,7 +503,8 @@ class GameUI:
 
         if ps.pause_open:
             state, reset_flag, quit_flag = self._handle_pause_keys(
-                actions, state,
+                actions,
+                state,
             )
         elif PlayerAction.OPEN_MACHINE in actions:
             state = self._handle_machine_toggle(state)
@@ -504,9 +527,7 @@ class GameUI:
                 ps.achievement_selection = 0
         elif ps.achievement_open:
             self._handle_achievement_keys(actions)
-        elif (
-            PlayerAction.OPEN_RESEARCH in actions and not ps.inventory_open
-        ):
+        elif PlayerAction.OPEN_RESEARCH in actions and not ps.inventory_open:
             ps.research_open = not ps.research_open
             if ps.research_open:
                 ps.inventory_open = False
@@ -524,7 +545,10 @@ class GameUI:
             state, action = self._handle_world_keys(actions, state)
 
         return GameUIResult(
-            action=action, state=state, quit=quit_flag, reset=reset_flag,
+            action=action,
+            state=state,
+            quit=quit_flag,
+            reset=reset_flag,
         )
 
     def _handle_pause_keys(
@@ -566,8 +590,7 @@ class GameUI:
             if (
                 0 <= tx < map_w
                 and 0 <= ty < map_h
-                and int(state.machine_types[ty, tx])
-                != int(MachineType.NONE)
+                and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
             ):
                 ps.machine_tx, ps.machine_ty = tx, ty
                 ps.machine_open = True
@@ -591,20 +614,14 @@ class GameUI:
         action: int | None = None
         if PlayerAction.NAV_UP in actions or PlayerAction.NAV_DOWN in actions:
             ps.machine_panel_active = not ps.machine_panel_active
-        elif (
-            PlayerAction.NAV_LEFT in actions
-            or PlayerAction.NAV_RIGHT in actions
-        ):
+        elif PlayerAction.NAV_LEFT in actions or PlayerAction.NAV_RIGHT in actions:
             is_left = PlayerAction.NAV_LEFT in actions
             if ps.machine_panel_active:
                 # Cycle focused_machine_item through non-empty types
                 # in the machine's inventory.
-                machine_inv = state.machine_inventory[
-                    ps.machine_ty, ps.machine_tx
-                ]
+                machine_inv = state.machine_inventory[ps.machine_ty, ps.machine_tx]
                 active = [
-                    i for i in range(1, NUM_ITEM_TYPES)
-                    if int(machine_inv[i]) > 0
+                    i for i in range(1, NUM_ITEM_TYPES) if int(machine_inv[i]) > 0
                 ]
                 if active and ps.focused_machine_item in active:
                     idx = active.index(ps.focused_machine_item)
@@ -631,21 +648,16 @@ class GameUI:
         return state, action
 
     def _handle_assembler_recipe_or_hotbar(
-        self, state: EnvState,
+        self,
+        state: EnvState,
     ) -> EnvState:
-        """Handle Q key: cycle assembler recipe or toggle hotbar page."""
+        """Handle Q key: cycle assembler recipe."""
         ps = self._ps
         mt = int(state.machine_types[ps.machine_ty, ps.machine_tx])
-        is_idle = (
-            int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0
-        )
+        is_idle = int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0
         mi = state.machine_inventory[ps.machine_ty, ps.machine_tx]
         has_inputs = bool(int(mi.sum()) > 0)
-        if (
-            mt == int(MachineType.ASSEMBLER)
-            and is_idle
-            and not has_inputs
-        ):
+        if mt == int(MachineType.ASSEMBLER) and is_idle and not has_inputs:
             cur = int(
                 state.machine_selected_recipe[ps.machine_ty, ps.machine_tx],
             )
@@ -654,12 +666,11 @@ class GameUI:
                 ps.machine_ty, ps.machine_tx
             ].set(new_recipe)
             state = state.replace(machine_selected_recipe=new_sel)
-        elif mt != int(MachineType.ASSEMBLER):
-            ps.hotbar_page = 1 - ps.hotbar_page
         return state
 
     def _handle_achievement_keys(
-        self, actions: frozenset[str],
+        self,
+        actions: frozenset[str],
     ) -> None:
         """Handle keys in the achievement menu."""
         ps = self._ps
@@ -668,7 +679,8 @@ class GameUI:
             ps.achievement_selection = max(0, ps.achievement_selection - 1)
         elif PlayerAction.NAV_DOWN in actions:
             ps.achievement_selection = min(
-                NUM_ACHIEVEMENTS - 1, ps.achievement_selection + 1,
+                NUM_ACHIEVEMENTS - 1,
+                ps.achievement_selection + 1,
             )
         sel_top = ps.achievement_selection * row_h
         sel_bot = sel_top + row_h
@@ -678,7 +690,8 @@ class GameUI:
             ps.achievement_scroll = sel_bot - 8 * row_h
 
     def _handle_research_keys(
-        self, actions: frozenset[str],
+        self,
+        actions: frozenset[str],
     ) -> int | None:
         """Handle keys in the research menu.
 
@@ -690,7 +703,8 @@ class GameUI:
             ps.research_selection = max(0, ps.research_selection - 1)
         elif PlayerAction.NAV_DOWN in actions:
             ps.research_selection = min(
-                NUM_TECHNOLOGIES - 1, ps.research_selection + 1,
+                NUM_TECHNOLOGIES - 1,
+                ps.research_selection + 1,
             )
         elif PlayerAction.CONFIRM in actions:
             return int(Action.RESEARCH_BASIC) + ps.research_selection
@@ -703,36 +717,69 @@ class GameUI:
     ) -> tuple[EnvState, int | None]:
         """Handle keys in the inventory panel.
 
+        The inventory grid has two sections: machines (2x3) then
+        resources (2x4). Navigation wraps between sections on
+        up/down at boundaries.
+
         Returns:
             ``(state, action)`` tuple.
         """
         ps = self._ps
         action: int | None = None
-        # Navigate a 2x7 grid of item types (1..14).
         current = ps.selected_item
-        grid_idx = current - 1  # 0-based index into 14 cells
-        cols = 7
-        col = grid_idx % cols
+
+        # Build combined item list: machines then resources.
+        all_items = list(PLACEABLE_ITEM_LIST) + list(RESOURCE_ITEM_LIST)
+        if current not in all_items:
+            ps.selected_item = all_items[0]
+            return state, action
+
+        idx = all_items.index(current)
+        n_machines = len(PLACEABLE_ITEM_LIST)
+        m_cols, r_cols = 3, 4
+
+        # Determine section and position.
+        in_machines = idx < n_machines
+        if in_machines:
+            local_idx = idx
+            cols = m_cols
+        else:
+            local_idx = idx - n_machines
+            cols = r_cols
+        row, col = divmod(local_idx, cols)
+
         if PlayerAction.NAV_LEFT in actions:
             if col > 0:
-                ps.selected_item = current - 1
+                ps.selected_item = all_items[idx - 1]
         elif PlayerAction.NAV_RIGHT in actions:
-            if col == cols - 1:
+            if in_machines and col == m_cols - 1:
                 ps.menu_focus = "crafting"
-            else:
-                new_item = current + 1
-                if new_item < NUM_ITEM_TYPES:
-                    ps.selected_item = new_item
+            elif not in_machines and col == r_cols - 1:
+                ps.menu_focus = "crafting"
+            elif idx + 1 < len(all_items):
+                ps.selected_item = all_items[idx + 1]
         elif PlayerAction.NAV_UP in actions:
-            if grid_idx >= cols:
-                ps.selected_item = current - cols
+            if row > 0:
+                ps.selected_item = all_items[idx - cols]
+            elif not in_machines:
+                # Jump from resources row 0 into machines last row.
+                m_last_row_start = (n_machines - 1) // m_cols * m_cols
+                target = min(m_last_row_start + col, n_machines - 1)
+                ps.selected_item = all_items[target]
         elif PlayerAction.NAV_DOWN in actions:
-            if grid_idx + cols < NUM_ITEM_TYPES - 1:
-                ps.selected_item = current + cols
+            if local_idx + cols < (
+                n_machines if in_machines else len(RESOURCE_ITEM_LIST)
+            ):
+                ps.selected_item = all_items[idx + cols]
+            elif in_machines:
+                # Jump from machines last row into resources row 0.
+                target_r = min(col, len(RESOURCE_ITEM_LIST) - 1)
+                ps.selected_item = all_items[n_machines + target_r]
         return state, action
 
     def _handle_crafting_nav(
-        self, actions: frozenset[str],
+        self,
+        actions: frozenset[str],
     ) -> int | None:
         """Handle keys in the crafting panel.
 
@@ -791,9 +838,7 @@ class GameUI:
                 return state, action
 
             # Movement (face-then-move).
-            for move_action, (want_dir, move_act, face_act) in (
-                _MOVE_TO_DIR.items()
-            ):
+            for move_action, (want_dir, move_act, face_act) in _MOVE_TO_DIR.items():
                 if move_action in actions:
                     sel = int(state.selected_player)
                     facing = int(state.player_directions[sel])

@@ -170,5 +170,5 @@ class TestCraftingProgress:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             player_inventory=_inv_with(ItemType.IRON, 5),
         )
-        new_state = start_crafting(state, 0, 1)  # recipe 1 = chest
-        assert new_state.player_inventory[0, ItemType.CHEST] == 1
+        new_state = start_crafting(state, 0, 1)  # recipe 1 = pallet
+        assert new_state.player_inventory[0, ItemType.PALLET] == 1

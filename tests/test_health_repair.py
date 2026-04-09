@@ -217,8 +217,8 @@ class TestRepairAction:
         new = factoriax_step(rng, state, int(Action.REPAIR), params)
         assert int(new.machine_health[0, 1]) == DEFAULT_MACHINE_MAX_HEALTH
 
-    def test_repair_chest_costs_iron(self, state_factory) -> None:
-        """Repairing a chest should consume 5 iron (chest recipe cost)."""
+    def test_repair_pallet_costs_iron(self, state_factory) -> None:
+        """Repairing a pallet should consume 5 iron (pallet recipe cost)."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.IRON].set(10)
 
@@ -228,7 +228,7 @@ class TestRepairAction:
             player_direction=int(Direction.RIGHT),
             player_inventory=inv,
             machine_types=jnp.array(
-                [[MachineType.NONE, MachineType.CHEST, MachineType.NONE]],
+                [[MachineType.NONE, MachineType.PALLET, MachineType.NONE]],
                 dtype=jnp.int32,
             ),
             machine_health=jnp.array([[0, 50, 0]], dtype=jnp.int32),

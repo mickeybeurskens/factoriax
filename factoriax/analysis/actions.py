@@ -55,7 +55,7 @@ DEFAULT_ACTION_COLORS: list[str] = [
     "#c49c94",  # NEXT_MACHINE_SLOT - light brown
     "#7f7f7f",  # PREV_MACHINE_SLOT - dark gray
     "#ff7f0e",  # CRAFT_MINER       - orange
-    "#ff9e4a",  # CRAFT_CHEST       - light orange
+    "#ff9e4a",  # CRAFT_PALLET       - light orange
     "#ffb347",  # CRAFT_BELT        - peach
     "#ffcc80",  # CRAFT_ARM         - pale orange
     "#ffe0b2",  # CRAFT_ASSEMBLER   - cream orange

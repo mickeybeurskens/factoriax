@@ -33,7 +33,7 @@ class TestRenderMachineMenuShape:
 
     @pytest.mark.parametrize(
         "machine_type",
-        [MachineType.MINER, MachineType.CHEST, MachineType.ASSEMBLER],
+        [MachineType.MINER, MachineType.PALLET, MachineType.ASSEMBLER],
     )
     def test_returns_uint8_rgba(self, state_factory, machine_type: MachineType) -> None:
         """Output must be uint8 RGBA matching the requested screen dimensions."""
@@ -125,7 +125,7 @@ class TestMachineMenuClickRegions:
         assert len(inv_regions) == NUM_ITEM_TYPES - 1
 
     def test_player_inventory_params_are_item_types(self, state_factory) -> None:
-        """Player slot region params are item type indices 1..NUM_ITEM_TYPES-1."""
+        """Player slot region params cover all non-EMPTY item types."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -134,7 +134,8 @@ class TestMachineMenuClickRegions:
         )
         _, regions = render_machine_menu(state, _SW, _SH, 0, 0)
         inv_regions = [r for r in regions if r.action == "select_slot"]
-        assert [r.param for r in inv_regions] == list(range(1, NUM_ITEM_TYPES))
+        params = sorted(r.param for r in inv_regions)
+        assert params == list(range(1, NUM_ITEM_TYPES))
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +191,8 @@ class TestMachineMenuContents:
         result, _ = render_machine_menu(state, _SW, _SH, 0, 0)
         assert result.shape == (_SH, _SW, 4)
 
-    def test_full_chest_inventory(self, state_factory) -> None:
-        """Chest with many item types filled renders cleanly."""
+    def test_full_pallet_inventory(self, state_factory) -> None:
+        """Pallet with many item types filled renders cleanly."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
@@ -202,7 +203,7 @@ class TestMachineMenuContents:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.CHEST), dtype=jnp.int32,
+                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
@@ -268,7 +269,7 @@ class TestMachineMenuFocusedItem:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.CHEST), dtype=jnp.int32,
+                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
             ),
         )
         result, _ = render_machine_menu(
@@ -290,7 +291,7 @@ class TestMachineMenuTileCoords:
     def test_non_origin_tile(self, state_factory) -> None:
         """Machine at (2, 3) is correctly inspected."""
         machine_types = jnp.zeros((4, 4), dtype=jnp.int32)
-        machine_types = machine_types.at[3, 2].set(int(MachineType.CHEST))
+        machine_types = machine_types.at[3, 2].set(int(MachineType.PALLET))
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )

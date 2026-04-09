@@ -10,8 +10,8 @@ achievement teaches one new concept or mechanic:
  4. Breaking Ground    — place a machine (teaches placement)
  5. Fueled Up          — deliver coal to a miner (teaches machine inspection)
  6. Automated Mining   — miner produces ore (confirms fuel-to-extraction loop)
- 7. Moving Parts       — place an arm and a chest (pipeline building blocks)
- 8. First Pipeline     — a chest holds items (full miner-to-arm-to-chest flow)
+ 7. Moving Parts       — place an arm and a pallet (pipeline building blocks)
+ 8. First Pipeline     — a pallet holds items (full miner-to-arm-to-pallet flow)
  9. Belt Network       — place 5 belts (transport layer)
 10. Scaling Up         — 3 miners on the map (replicate the pattern)
 11. Industrialist      — 10 machines total (capstone of tier 1)
@@ -82,12 +82,12 @@ ACHIEVEMENT_INFO = [
     AchievementInfo(
         id="moving_parts",
         name="Moving Parts",
-        hint="Craft and place both an arm and a chest.",
+        hint="Craft and place both an arm and a pallet.",
     ),
     AchievementInfo(
         id="first_pipeline",
         name="First Pipeline",
-        hint="Use an arm to move miner output into a chest.",
+        hint="Use an arm to move miner output into a pallet.",
     ),
     AchievementInfo(
         id="belt_network",
@@ -232,18 +232,18 @@ def _any_miner_has_output(state: EnvState) -> jax.Array:
     return jnp.any(is_miner & has_output)
 
 
-def _any_chest_has_items(state: EnvState) -> jax.Array:
-    """Check whether any placed chest contains items.
+def _any_pallet_has_items(state: EnvState) -> jax.Array:
+    """Check whether any placed pallet contains items.
 
     Args:
         state: Current environment state
 
     Returns:
-        Scalar boolean — True if at least one chest slot is non-empty.
+        Scalar boolean — True if at least one pallet slot is non-empty.
     """
-    is_chest = state.machine_types == MachineType.CHEST
+    is_pallet = state.machine_types == MachineType.PALLET
     has_items = jnp.any(state.machine_inventory > 0, axis=-1)
-    return jnp.any(is_chest & has_items)
+    return jnp.any(is_pallet & has_items)
 
 
 _ASSEMBLER_OUTPUT_SLOT: int = 3
@@ -299,7 +299,7 @@ def core_game_conditions(state: EnvState) -> jax.Array:
     # Count machine items across all player inventories.
     machine_items_held = (
         count_total_items(state, ItemType.MINER)
-        + count_total_items(state, ItemType.CHEST)
+        + count_total_items(state, ItemType.PALLET)
         + count_total_items(state, ItemType.CONVEYOR_BELT)
         + count_total_items(state, ItemType.ARM)
     )
@@ -318,11 +318,11 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             _any_miner_has_fuel(state),
             # 5  Automated Mining — miner output slot non-empty
             _any_miner_has_output(state),
-            # 6  Moving Parts — place an arm and a chest
+            # 6  Moving Parts — place an arm and a pallet
             (count_machines(state, MachineType.ARM) >= 1)
-            & (count_machines(state, MachineType.CHEST) >= 1),
-            # 7  First Pipeline — any chest holds items
-            _any_chest_has_items(state),
+            & (count_machines(state, MachineType.PALLET) >= 1),
+            # 7  First Pipeline — any pallet holds items
+            _any_pallet_has_items(state),
             # 8  Belt Network — place 5 belts
             count_machines(state, MachineType.CONVEYOR_BELT) >= 5,
             # 9  Scaling Up — 3 miners on the map

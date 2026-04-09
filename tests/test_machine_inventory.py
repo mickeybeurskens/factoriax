@@ -133,29 +133,29 @@ class TestMinerInventory:
         assert int(new.block_resources[0, 0]) == 50
 
 
-class TestChestInventory:
-    """Tests for chest inventory."""
+class TestPalletInventory:
+    """Tests for pallet inventory."""
 
-    def test_chest_initialized_empty(self, state_factory) -> None:
-        """Chest should start with empty inventory."""
+    def test_pallet_initialized_empty(self, state_factory) -> None:
+        """Pallet should start with empty inventory."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.DIRT]], dtype=jnp.int32,
             ),
             machine_types=jnp.array(
-                [[MachineType.CHEST]], dtype=jnp.int32,
+                [[MachineType.PALLET]], dtype=jnp.int32,
             ),
         )
         assert jnp.all(state.machine_inventory[0, 0] == 0)
 
-    def test_chest_unaffected_by_update(self, state_factory) -> None:
-        """update_all_machines should not modify chest contents."""
+    def test_pallet_unaffected_by_update(self, state_factory) -> None:
+        """update_all_machines should not modify pallet contents."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.DIRT]], dtype=jnp.int32,
             ),
             machine_types=jnp.array(
-                [[MachineType.CHEST]], dtype=jnp.int32,
+                [[MachineType.PALLET]], dtype=jnp.int32,
             ),
             machine_inventory=_machine_inv(1, 1, 0, 0, IRON=10),
         )
@@ -205,9 +205,9 @@ class TestMaxTypesConstraint:
         """Belt should hold at most 1 distinct item type."""
         assert int(MACHINE_MAX_TYPES[MachineType.CONVEYOR_BELT]) == 1
 
-    def test_chest_max_types_is_eight(self) -> None:
-        """Chest should hold at most 8 distinct item types."""
-        assert int(MACHINE_MAX_TYPES[MachineType.CHEST]) == 8
+    def test_pallet_max_types_is_one(self) -> None:
+        """Pallet should hold at most 1 distinct item type."""
+        assert int(MACHINE_MAX_TYPES[MachineType.PALLET]) == 1
 
     def test_assembler_max_types_is_four(self) -> None:
         """Assembler should hold at most 4 distinct item types."""
