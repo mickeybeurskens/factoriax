@@ -32,7 +32,6 @@ from factoriax.play.ui import _hotbar_h, render_welcome_screen
 from factoriax.state import EnvParams, EnvState
 from factoriax.ui import theme as _play_theme
 from factoriax.ui.compositing import composite_rgba_over_rgb
-from factoriax.ui.primitives import hit_test_regions
 from factoriax.ui.window import calculate_window_size
 
 _ROCKET_ACHIEVEMENT_IDX: int = next(
@@ -143,21 +142,17 @@ def play_level(
 
     step_fn = jax.jit(env.step_env)
     rng, warmup_key = random.split(rng)
-    _warmup_key = warmup_key
+    _wk = warmup_key
+    _st = state
 
-    def _warmup() -> None:
-        step_fn(
-            _warmup_key,
-            state,
-            jnp.int32(Action.NOOP),
-            params,
-        )[0].block_until_ready()
+    def _warmup() -> tuple[jax.Array, EnvState]:
+        _, s, _, _, _ = step_fn(_wk, _st, jnp.int32(Action.NOOP), params)
+        return _wk, s
 
-    _run_with_loading_screen(
-        screen,
-        "Compiling JAX",
-        _warmup,
+    warmup_result = _run_with_loading_screen(
+        screen, "Compiling JAX", _warmup,
     )
+    _, state = warmup_result  # type: ignore[misc]
 
     _play_loop(env, state, params, level, screen, rng)
 
@@ -243,19 +238,10 @@ def _handle_welcome_event(
         Updated play state and environment state.
     """
     if event.type == pygame.KEYDOWN:
-        if event.key == pygame.K_r:
-            ps.record_enabled = not ps.record_enabled
-        elif event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
+        if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
             ps.welcome_open = False
-            if ps.record_enabled:
-                ps.recorded_states.append(state)
     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-        mx = (event.pos[0] - win_ox) // win_scale
-        my = (event.pos[1] - win_oy) // win_scale
-        _, welcome_regions = render_welcome_screen(ui_w, ui_h, ps.record_enabled)
-        hit = hit_test_regions(welcome_regions, mx, my)
-        if hit is not None and hit.action == "toggle_record":
-            ps.record_enabled = not ps.record_enabled
+        ps.welcome_open = False
     return ps, state
 
 
@@ -471,18 +457,19 @@ def main() -> None:
     _, state = reset_result
 
     step_fn = jax.jit(env.step_env)
+
+    # Warm up JIT by stepping all agents with NOOP. The resulting state
+    # is used for play — one tick has passed but nothing meaningful happened.
     rng, warmup_key = random.split(rng)
-    _warmup_key = warmup_key
+    _wk = warmup_key
+    _st = state
 
-    def _warmup() -> None:
-        step_fn(
-            _warmup_key,
-            state,
-            jnp.int32(Action.NOOP),
-            params,
-        )[0].block_until_ready()
+    def _warmup() -> tuple[jax.Array, EnvState]:
+        _, s, _, _, _ = step_fn(_wk, _st, jnp.int32(Action.NOOP), params)
+        return _wk, s
 
-    _run_with_loading_screen(screen, "Compiling JAX", _warmup)
+    warmup_result = _run_with_loading_screen(screen, "Compiling JAX", _warmup)
+    _, state = warmup_result  # type: ignore[misc]
 
     _play_loop(env, state, params, None, screen, rng)
     pygame.quit()
