@@ -11,102 +11,128 @@ from factoriax.constants import Action
 class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Immutable environment state.
 
+    Machine state uses entity lists: fixed-size arrays indexed by entity
+    ID, not tile position. The ``tile_entity`` grid maps tile positions
+    to entity indices for neighbor lookups. Inactive entities have
+    ``ent_y < 0``.
+
+    Terrain (``map``, ``block_resources``) and spatial lookup
+    (``machine_types``, ``tile_entity``) remain on the grid.
+
     Attributes:
-        map: 2D grid of block types with shape (height, width).
-        player_positions: (x, y) coordinates per player, shape (num_players, 2).
-        player_directions: Facing direction per player, shape (num_players,).
-        timestep: Current timestep in the episode.
-        player_inventory: Item counts per type per player,
-            shape (num_players, NUM_ITEM_TYPES). Indexed by ItemType.
-        selected_player: Index of the currently selected player for UI/input.
-        crafting_recipe: Recipe index of the craft in progress per player,
-            shape (num_players,). Only meaningful when craft_progress > 0.
-        craft_progress: Ticks remaining in current craft per player,
-            shape (num_players,). Zero means no craft is active.
-        block_resources: Remaining resources per tile, shape (height, width).
-        machine_types: Machine type at each tile, shape (height, width).
-        machine_power: Remaining power per machine, shape (height, width).
-        machine_inventory: Item counts per type per tile,
-            shape (height, width, NUM_ITEM_TYPES). Indexed by ItemType.
-        machine_selected_recipe: Active assembler recipe per tile,
-            shape (height, width).
-        machine_direction: Facing direction per machine, shape (height, width).
-            Used by conveyor belts and arms for push/pick direction.
-        achievements_unlocked: Boolean array of unlocked achievements,
-            shape (NUM_ACHIEVEMENTS,).
-        items_mined: Lifetime mined count per item type, shape (NUM_ITEM_TYPES,).
-        research_progress: Science packs consumed per technology,
-            shape (NUM_TECHNOLOGIES,).
-        research_unlocked: Boolean array of unlocked technologies,
-            shape (NUM_TECHNOLOGIES,).
-        machine_health: Current health per tile, shape (height, width).
-            Zero means disabled (machine present but non-operational).
-        biter_positions: (x, y) coordinates per biter, shape (max_biters, 2).
-        biter_health: HP per biter, shape (max_biters,). Zero means inactive.
-        scent_field: Machine scent intensity per tile, shape (height, width).
+        map: Block types, shape ``(H, W)``, int8.
+        block_resources: Ore remaining per tile, shape ``(H, W)``, int16.
+        machine_types: Machine type per tile (walkability), shape ``(H, W)``, int8.
+        tile_entity: Entity index at each tile (-1=none), shape ``(H, W)``, int16.
+        ent_y: Entity row positions, shape ``(MAX_M,)``, int16. -1=inactive.
+        ent_x: Entity column positions, shape ``(MAX_M,)``, int16.
+        ent_type: Entity machine type, shape ``(MAX_M,)``, int8.
+        ent_direction: Entity facing, shape ``(MAX_M,)``, int8.
+        ent_power: Power/craft countdown, shape ``(MAX_M,)``, int16.
+        ent_fuel: Coal for miners, shape ``(MAX_M,)``, int16.
+        ent_buf_type: Buffer item type, shape ``(MAX_M,)``, int8.
+        ent_buf_count: Buffer item count, shape ``(MAX_M,)``, int16.
+        ent_asm_in_type: Assembler input types, shape ``(MAX_M, 2)``, int8.
+        ent_asm_in_count: Assembler input counts, shape ``(MAX_M, 2)``, int16.
+        ent_asm_out_type: Assembler output type, shape ``(MAX_M,)``, int8.
+        ent_asm_out_count: Assembler output count, shape ``(MAX_M,)``, int16.
+        player_positions: (x, y) per player, shape ``(P, 2)``, int16.
+        player_directions: Facing per player, shape ``(P,)``, int8.
+        player_inventory: Item counts per player, shape ``(P, N)``, int16.
+        selected_player: Active player index, scalar.
+        timestep: Current step, scalar.
+        items_mined: Lifetime mined per type, shape ``(N,)``, int32.
+        research_progress: Science consumed, shape ``(T,)``, int16.
+        research_unlocked: Tech flags, shape ``(T,)``, bool.
+        achievements_unlocked: Achievement flags, shape ``(A,)``, bool.
     """
 
+    # Grid (terrain + spatial lookup)
     map: jnp.ndarray
-    player_positions: jnp.ndarray
-    player_directions: jnp.ndarray
-    timestep: int
-    player_inventory: jnp.ndarray
-    selected_player: int
-    crafting_recipe: jnp.ndarray
-    craft_progress: jnp.ndarray
     block_resources: jnp.ndarray
     machine_types: jnp.ndarray
-    machine_power: jnp.ndarray
-    machine_inventory: jnp.ndarray
-    machine_selected_recipe: jnp.ndarray
-    machine_direction: jnp.ndarray
-    achievements_unlocked: jnp.ndarray
+    tile_entity: jnp.ndarray
+
+    # Entity arrays (machine state)
+    ent_y: jnp.ndarray
+    ent_x: jnp.ndarray
+    ent_type: jnp.ndarray
+    ent_direction: jnp.ndarray
+    ent_power: jnp.ndarray
+    ent_fuel: jnp.ndarray
+    ent_buf_type: jnp.ndarray
+    ent_buf_count: jnp.ndarray
+    ent_asm_in_type: jnp.ndarray
+    ent_asm_in_count: jnp.ndarray
+    ent_asm_out_type: jnp.ndarray
+    ent_asm_out_count: jnp.ndarray
+
+    # Player
+    player_positions: jnp.ndarray
+    player_directions: jnp.ndarray
+    player_inventory: jnp.ndarray
+    selected_player: int
+
+    # Progress
+    timestep: int
     items_mined: jnp.ndarray
     research_progress: jnp.ndarray
     research_unlocked: jnp.ndarray
-    machine_health: jnp.ndarray
-    biter_positions: jnp.ndarray
-    biter_health: jnp.ndarray
-    scent_field: jnp.ndarray
+    achievements_unlocked: jnp.ndarray
 
 
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Environment parameters.
 
     Attributes:
-        max_timesteps: Maximum number of timesteps per episode
-        map_width: Width of the map grid
-        map_height: Height of the map grid
-        num_players: Number of players in the game
-        water_probability: Probability of a tile being water during generation
-        iron_probability: Probability of a tile being iron ore during generation
-        copper_probability: Probability of a tile being copper ore during generation
-        coal_probability: Probability of a tile being coal during generation
-        base_resources: Starting resource count per ore tile in procedurally
-            generated worlds. Does not affect levels built with
-            :class:`~factoriax.levels.LevelBuilder`.
+        max_timesteps: Maximum steps per episode.
+        map_width: Grid width.
+        map_height: Grid height.
+        num_players: Number of players.
+        max_machines: Maximum entity slots for machines. Controls the
+            fixed-size entity arrays that all machine operations iterate
+            over. Cost scales linearly with this value regardless of how
+            many machines are actually placed. Default uses
+            ``max(64, map_width * map_height // 4)`` which gives a 4x
+            speedup over grid-based iteration while supporting up to 25%
+            machine density. Reduce for faster stepping on small maps
+            with few machines; increase if the agent needs to place more.
+        water_probability: Tile water probability during generation.
+        iron_probability: Iron ore probability.
+        copper_probability: Copper ore probability.
+        coal_probability: Coal probability.
+        tin_probability: Tin ore probability.
+        silicon_probability: Silicon probability.
+        base_resources: Starting ore count per tile.
+        power_per_coal: Power units per coal consumed.
+        miner_mining_rate: Ore extracted per powered tick.
+        max_assembler_stack_size: Max items per assembler slot.
     """
 
     max_timesteps: int = 1000
     map_width: int = 32
     map_height: int = 32
     num_players: int = 2
+    max_machines: int = 0  # 0 = auto: max(64, map_area // 4)
     water_probability: float = 0.1
     iron_probability: float = 0.12
     copper_probability: float = 0.12
     coal_probability: float = 0.12
+    tin_probability: float = 0.10
+    silicon_probability: float = 0.10
     base_resources: int = 1000
-    machine_max_health: int = 100
     power_per_coal: int = 10
     miner_mining_rate: int = 3
     max_assembler_stack_size: int = 1000
-    max_biters: int = 32
-    biter_spawn_rate: float = 0.05
-    biter_tick_interval: int = 3
-    biter_attack_damage: int = 5
-    biter_health_default: int = 20
-    scent_decay: float = 0.8
-    scent_emission: float = 1.0
-    nest_probability: float = 0.02
 
     NUM_ACTIONS: ClassVar[int] = len(Action)
+
+    def resolved_max_machines(self) -> int:
+        """Return max_machines, resolving 0 to the auto default.
+
+        Returns:
+            Concrete max_machines value.
+        """
+        if self.max_machines > 0:
+            return self.max_machines
+        return max(64, self.map_width * self.map_height // 4)

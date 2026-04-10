@@ -14,11 +14,11 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.rewards import (
-    pallet_filling_reward,
     miner_output_reward,
+    pallet_filling_reward,
     player_inventory_reward,
-    sparse_pallet_crafting_reward,
     sparse_miner_crafting_reward,
+    sparse_pallet_crafting_reward,
 )
 from factoriax.state import EnvParams
 

@@ -88,9 +88,6 @@ def _build_decoration_surfaces(icon_size: int) -> list[pygame.Surface]:
     for _ in range(4):
         surfaces.append(belt_surf)
 
-    arm = render_item_icon(ItemType.ARM, icon_size)
-    surfaces.append(_rgba_to_surface(arm))
-
     pallet = render_item_icon(ItemType.PALLET, icon_size)
     surfaces.append(_rgba_to_surface(pallet))
 
@@ -182,7 +179,7 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
     # Animation target: slot indices where the iron travels.
     # Row is: [0]player [1]miner [2]belt [3]belt [4]belt [5]belt [6]arm [7]pallet
     # Steps 0-3: iron on belts (indices 2-5), step 4: iron on arm (index 6).
-    _ANIM_SLOT_TARGETS = [2, 3, 4, 5, 6]
+    anim_slot_targets = [2, 3, 4, 5, 6]
 
     # Vertical positions: title at 25%, buttons at 50%, with overlap guard.
     title_y = int(sh * 0.25) - title_h // 2
@@ -251,8 +248,8 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
 
         # Iron ore animation: travels from miner across belts to arm.
         anim_step = (pygame.time.get_ticks() // _ANIM_STEP_MS) % _ANIM_CYCLE_LEN
-        if anim_step < len(_ANIM_SLOT_TARGETS):
-            target_idx = _ANIM_SLOT_TARGETS[anim_step]
+        if anim_step < len(anim_slot_targets):
+            target_idx = anim_slot_targets[anim_step]
             if target_idx < len(slot_positions):
                 ore_x = slot_positions[target_idx] + (icon_size - ore_size) // 2
                 ore_y = deco_y + (icon_size - ore_size) // 2

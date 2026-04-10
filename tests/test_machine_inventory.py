@@ -7,17 +7,14 @@ and basic machine operations (refueling, mining) using pouch indexing.
 from __future__ import annotations
 
 import jax.numpy as jnp
-import pytest
 
 from factoriax import BlockType, EnvParams, ItemType
 from factoriax.constants import (
-    MACHINE_INVENTORY_COUNT_DTYPE,
-    MACHINE_MAX_STACK,
     MACHINE_MAX_TYPES,
     NUM_ITEM_TYPES,
     MachineType,
 )
-from factoriax.levels import build_state, generate_state
+from factoriax.levels import generate_state
 from factoriax.machines import refuel_machines, run_miners, update_all_machines
 
 

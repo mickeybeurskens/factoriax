@@ -50,7 +50,7 @@ from factoriax.play.ui import (
     render_research_menu,
     render_victory_screen,
 )
-from factoriax.recipes import NUM_ASSEMBLER_RECIPES, NUM_RECIPES
+from factoriax.recipes import NUM_RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb
@@ -62,10 +62,8 @@ _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.MINER): int(Action.PLACE_MINER),
     int(ItemType.PALLET): int(Action.PLACE_PALLET),
     int(ItemType.CONVEYOR_BELT): int(Action.PLACE_BELT),
-    int(ItemType.ARM): int(Action.PLACE_ARM),
     int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
     int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
-    int(ItemType.UNDERGROUND_BELT): int(Action.PLACE_UNDERGROUND_BELT),
 }
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).
@@ -92,10 +90,8 @@ _SLOT_ACTIONS: dict[str, int] = {
     PlayerAction.SLOT_1: int(ItemType.MINER),
     PlayerAction.SLOT_2: int(ItemType.PALLET),
     PlayerAction.SLOT_3: int(ItemType.CONVEYOR_BELT),
-    PlayerAction.SLOT_4: int(ItemType.ARM),
-    PlayerAction.SLOT_5: int(ItemType.ASSEMBLER),
-    PlayerAction.SLOT_6: int(ItemType.ROCKET),
-    PlayerAction.SLOT_7: int(ItemType.UNDERGROUND_BELT),
+    PlayerAction.SLOT_4: int(ItemType.ASSEMBLER),
+    PlayerAction.SLOT_5: int(ItemType.ROCKET),
 }
 
 _PLAYER_ACTIONS: dict[str, int] = {
@@ -663,7 +659,7 @@ class GameUI:
             cur = int(
                 state.machine_selected_recipe[ps.machine_ty, ps.machine_tx],
             )
-            new_recipe = (cur + 1) % NUM_ASSEMBLER_RECIPES
+            new_recipe = (cur + 1) % NUM_RECIPES
             new_sel = state.machine_selected_recipe.at[
                 ps.machine_ty, ps.machine_tx
             ].set(new_recipe)
@@ -864,12 +860,4 @@ def _handle_world_interact(state: EnvState) -> int:
     Returns:
         Action integer (PICKUP or PLACE).
     """
-    selected_player = int(state.selected_player)
-    tx, ty = _tile_in_front(state, selected_player)
-    map_h, map_w = state.map.shape
-    has_machine = (
-        0 <= tx < map_w
-        and 0 <= ty < map_h
-        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
-    )
     return int(Action.PICKUP)

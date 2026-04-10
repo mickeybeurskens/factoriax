@@ -6,9 +6,6 @@ without requiring a live pygame display.
 
 from __future__ import annotations
 
-
-from unittest.mock import MagicMock, patch
-
 import pygame
 import pytest
 

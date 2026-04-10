@@ -17,7 +17,6 @@ from factoriax.benchmarks.core import Benchmark, LevelResult
 from factoriax.constants import MachineType
 from factoriax.levels import build_state
 
-
 # -----------------------------------------------------------------------
 # Level construction
 # -----------------------------------------------------------------------

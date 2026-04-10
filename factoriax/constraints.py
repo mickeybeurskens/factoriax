@@ -31,13 +31,16 @@ from factoriax.constants import ItemType
 from factoriax.state import EnvParams, EnvState
 
 _ORE_ITEMS = jnp.array(
-    [ItemType.COAL, ItemType.IRON, ItemType.COPPER],
+    [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE],
     dtype=jnp.int32,
 )
 
 # Pairs for pairwise balance: (coal, iron), (coal, copper), (iron, copper).
-_PAIR_A = jnp.array([ItemType.COAL, ItemType.COAL, ItemType.IRON], dtype=jnp.int32)
-_PAIR_B = jnp.array([ItemType.IRON, ItemType.COPPER, ItemType.COPPER], dtype=jnp.int32)
+_PAIR_A = jnp.array([ItemType.COAL, ItemType.COAL, ItemType.IRON_ORE], dtype=jnp.int32)
+_PAIR_B = jnp.array(
+    [ItemType.IRON_ORE, ItemType.COPPER_ORE, ItemType.COPPER_ORE],
+    dtype=jnp.int32,
+)
 
 
 def balance_cost(

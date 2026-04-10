@@ -12,9 +12,8 @@ import numpy as np
 import pygame
 
 from factoriax.constants import (
-    ITEM_TO_MACHINE,
-    MACHINE_TO_ITEM_ARRAY,
     MACHINE_SLOT_ROLES,
+    MACHINE_TO_ITEM_ARRAY,
     MACHINE_TYPE_NAMES,
     BlockType,
     ItemType,

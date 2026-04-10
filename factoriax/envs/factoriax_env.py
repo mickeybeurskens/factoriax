@@ -20,7 +20,7 @@ from factoriax.observations import (
     global_array,
 )
 from factoriax.renderer import render_pixels
-from factoriax.rewards import achievement_reward
+from factoriax.rewards import achievement_reward  # noqa: F401 (Stage 5)
 from factoriax.state import EnvParams, EnvState
 
 
@@ -97,14 +97,16 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         prev_state = state
         new_state = factoriax_step(key, prev_state, action_arr, params)
 
-        # Achievement checking — condition function is baked into JIT.
-        conditions = self._achievement_fn(new_state)
-        new_state = new_state.replace(
-            achievements_unlocked=new_state.achievements_unlocked
-            | conditions
-        )
+        # TODO(stage5): Re-enable achievements after porting to new state.
+        # conditions = self._achievement_fn(new_state)
+        # new_state = new_state.replace(
+        #     achievements_unlocked=new_state.achievements_unlocked
+        #     | conditions
+        # )
 
-        reward = achievement_reward(prev_state, new_state, params)
+        # TODO(stage5): Re-enable rewards after porting to new state.
+        # reward = achievement_reward(prev_state, new_state, params)
+        reward = jnp.float32(0.0)
         done = is_game_over(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}

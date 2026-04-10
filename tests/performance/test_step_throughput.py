@@ -9,7 +9,6 @@ from __future__ import annotations
 import time
 
 import jax
-import jax.numpy as jnp
 import pytest
 
 from factoriax.envs.factoriax_env import FactoriaXEnv

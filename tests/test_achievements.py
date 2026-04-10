@@ -1,6 +1,5 @@
 """Tests for the achievement system (pouch inventory model)."""
 
-import jax
 import jax.numpy as jnp
 
 from factoriax import BlockType, EnvState, ItemType

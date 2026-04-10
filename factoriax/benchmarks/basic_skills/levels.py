@@ -117,8 +117,8 @@ def _mine_ores_achievements(state: EnvState) -> jax.Array:
         Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
     total_mined = (
-        state.items_mined[ItemType.IRON]
-        + state.items_mined[ItemType.COPPER]
+        state.items_mined[ItemType.IRON_ORE]
+        + state.items_mined[ItemType.COPPER_ORE]
         + state.items_mined[ItemType.COAL]
     )
     conditions = jnp.array(
@@ -176,7 +176,6 @@ def _craft_all_achievements(state: EnvState) -> jax.Array:
     miner_count = count_total_items(state, ItemType.MINER)
     pallet_count = count_total_items(state, ItemType.PALLET)
     belt_count = count_total_items(state, ItemType.CONVEYOR_BELT)
-    arm_count = count_total_items(state, ItemType.ARM)
     assembler_count = count_total_items(state, ItemType.ASSEMBLER)
 
     conditions = jnp.array(
@@ -185,13 +184,11 @@ def _craft_all_achievements(state: EnvState) -> jax.Array:
             miner_count >= 1,
             pallet_count >= 1,
             belt_count >= 1,
-            arm_count >= 1,
             assembler_count >= 1,
             # Hold 5 of each
             miner_count >= 5,
             pallet_count >= 5,
             belt_count >= 5,
-            arm_count >= 5,
             assembler_count >= 5,
         ],
         dtype=jnp.bool_,
@@ -405,8 +402,8 @@ def _assembler_science_achievements(state: EnvState) -> jax.Array:
     Returns:
         Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
-    mined_iron = state.items_mined[ItemType.IRON] >= 1
-    mined_copper = state.items_mined[ItemType.COPPER] >= 1
+    mined_iron = state.items_mined[ItemType.IRON_ORE] >= 1
+    mined_copper = state.items_mined[ItemType.COPPER_ORE] >= 1
 
     # Any assembler has items in its pouch (evidence of deposit).
     is_asm = state.machine_types == MachineType.ASSEMBLER

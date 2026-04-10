@@ -14,6 +14,7 @@ from factoriax.ui.compositing import (
 )
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
 from factoriax.ui.primitives import ClickRegion, draw_panel, hit_test_regions
+from factoriax.ui.scaling import ScaledCanvas
 from factoriax.ui.theme import (
     BORDER,
     BORDER_PX,
@@ -32,7 +33,6 @@ from factoriax.ui.theme import (
     SLOT_COUNT_COLOR,
     TEXT_COLOR,
 )
-from factoriax.ui.scaling import ScaledCanvas
 from factoriax.ui.window import auto_ui_scale, calculate_window_size
 
 __all__ = [

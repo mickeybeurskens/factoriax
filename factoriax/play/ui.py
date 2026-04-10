@@ -25,7 +25,6 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     PLACEABLE_ITEM_LIST,
-    PLACEABLE_ITEM_SET,
     PLAYER_MAX_STACK,
     RESEARCH_COST,
     RESOURCE_ITEM_LIST,
@@ -35,7 +34,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.recipes import ASSEMBLER_RECIPE_NAMES, NUM_RECIPES, RECIPE_NAMES, RECIPES
+from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES, RECIPES
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvState
 
@@ -69,21 +68,63 @@ _CANNOT_AFFORD_COLOR: tuple[int, int, int] = (200, 80, 80)
 # Item display names keyed by ItemType value.
 _ITEM_NAMES: dict[int, str] = {
     ItemType.COAL: "Coal",
-    ItemType.IRON: "Iron",
-    ItemType.COPPER: "Copper",
+    ItemType.IRON_ORE: "Iron",
+    ItemType.COPPER_ORE: "Copper",
+    ItemType.TIN_ORE: "Tin",
+    ItemType.SILICON: "Silicon",
+    ItemType.IRON_PLATE: "Iron Plate",
+    ItemType.COPPER_PLATE: "Copper Plate",
+    ItemType.TIN_PLATE: "Tin Plate",
+    ItemType.WAFER: "Wafer",
+    ItemType.STEEL: "Steel",
+    ItemType.CIRCUIT: "Circuit",
+    ItemType.WIRE: "Wire",
+    ItemType.MOTOR: "Motor",
+    ItemType.SENSOR: "Sensor",
     ItemType.MINER: "Miner",
     ItemType.PALLET: "Pallet",
     ItemType.CONVEYOR_BELT: "Belt",
-    ItemType.ARM: "Arm",
     ItemType.ASSEMBLER: "Assembler",
-    ItemType.HULL: "Hull",
-    ItemType.FUEL_PACK: "Fuel Pk",
     ItemType.ROCKET: "Rocket",
     ItemType.BASIC_SCIENCE_PACK: "Basic Sci",
-    ItemType.FUEL_SCIENCE_PACK: "Fuel Sci",
     ItemType.ADVANCED_SCIENCE_PACK: "Adv Sci",
-    ItemType.UNDERGROUND_BELT: "Tunnel",
 }
+
+# ---------------------------------------------------------------------------
+# Entity-based inventory helper
+# ---------------------------------------------------------------------------
+
+
+def _entity_inventory(state: EnvState, ty: int, tx: int) -> np.ndarray:
+    """Build a per-item-type count array from entity buffers at a tile.
+
+    Args:
+        state: Current environment state.
+        ty: Tile Y coordinate.
+        tx: Tile X coordinate.
+
+    Returns:
+        Array of shape ``(NUM_ITEM_TYPES,)`` with item counts.
+    """
+    eidx = int(state.tile_entity[ty, tx])
+    inv = np.zeros(NUM_ITEM_TYPES, dtype=np.int32)
+    if eidx < 0:
+        return inv
+    buf_t = int(state.ent_buf_type[eidx])
+    buf_c = int(state.ent_buf_count[eidx])
+    if buf_t > 0:
+        inv[buf_t] = buf_c
+    for s in range(2):
+        at = int(state.ent_asm_in_type[eidx, s])
+        ac = int(state.ent_asm_in_count[eidx, s])
+        if at > 0:
+            inv[at] += ac
+    aot = int(state.ent_asm_out_type[eidx])
+    aoc = int(state.ent_asm_out_count[eidx])
+    if aot > 0:
+        inv[aot] += aoc
+    return inv
+
 
 # ---------------------------------------------------------------------------
 # Core drawing primitives (re-exported from factoriax.ui)
@@ -852,7 +893,7 @@ def render_machine_menu(
     click_regions: list[ClickRegion] = []
 
     machine_type = int(state.machine_types[ty, tx])
-    machine_inv = np.array(state.machine_inventory[ty, tx])
+    machine_inv = _entity_inventory(state, ty, tx)
     active_types = [i for i in range(1, NUM_ITEM_TYPES) if machine_inv[i] > 0]
     num_slots = len(active_types)
 
@@ -876,8 +917,10 @@ def render_machine_menu(
     # separator + gap + label + gap + machines row + gap + resources row
     player_strip_h = _theme.SEP_H + 8 + line_h + 6 + player_icon + 4 + player_icon
 
-    # _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8 — matches _draw_section_header offset
-    header_offset = _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8
+    # Matches _draw_section_header offset.
+    header_offset = (
+        _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8
+    )
 
     # Fixed overhead: everything except the slot grid itself.
     health_bar_h = 32  # bar (10) + text (~14) + spacing (8)
@@ -923,7 +966,7 @@ def render_machine_menu(
 
     # --- Health bar ---
     if machine_type != int(MachineType.NONE):
-        health = int(state.machine_health[ty, tx])
+        health = 100
         max_hp = DEFAULT_MACHINE_MAX_HEALTH
         bar_w = min(160, menu_w - 40)
         bar_h = 10
@@ -950,8 +993,9 @@ def render_machine_menu(
     # --- Assembler recipe subtitle ---
     if machine_type == int(MachineType.ASSEMBLER):
         sel_recipe = int(state.machine_selected_recipe[ty, tx])
-        recipe_name = ASSEMBLER_RECIPE_NAMES[sel_recipe]
-        asm_power = int(state.machine_power[ty, tx])
+        recipe_name = RECIPE_NAMES[sel_recipe]
+        eidx = int(state.tile_entity[ty, tx])
+        asm_power = int(state.ent_power[eidx]) if eidx >= 0 else 0
         status = "Idle" if asm_power == 0 else f"{asm_power} ticks left"
         subtitle = f"Recipe: {recipe_name}  |  {status}"
         sub_arr = _render_text_rgba(subtitle, body_font, (180, 170, 130))
@@ -1432,7 +1476,7 @@ def _hotbar_h() -> int:
     return _BASE_HOTBAR_H * _theme.UI_SCALE
 
 
-_HOTBAR_SLOTS: int = 7
+_HOTBAR_SLOTS: int = 6
 """Number of machine pockets in the hotbar tool belt."""
 
 _DIRECTION_LETTERS: dict[int, str] = {
@@ -1636,15 +1680,15 @@ def render_hotbar(
         180,
     )
 
-    _RES_COUNT_COLOR = (160, 155, 135)
-    for item_type in (ItemType.COAL, ItemType.IRON, ItemType.COPPER):
+    res_count_color = (160, 155, 135)
+    for item_type in (ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE):
         count = int(player_inv[int(item_type)])
         icon_arr = render_item_icon(int(item_type), res_icon_s)
         _blit_rgba(overlay, icon_arr, ry, res_x)
         count_arr = _render_text_rgba(
             str(count),
             hint_font,
-            _RES_COUNT_COLOR,
+            res_count_color,
         )
         _blit_rgba(overlay, count_arr, ry, res_x + res_icon_s + 3)
         ry += max(res_icon_s, count_arr.shape[0]) + 1
@@ -1671,7 +1715,7 @@ _BLOCK_NAMES: dict[int, str] = {
     int(BlockType.IRON): "Iron Ore",
     int(BlockType.COPPER): "Copper Ore",
     int(BlockType.COAL): "Coal Deposit",
-    int(BlockType.NEST): "Biter Nest",
+    int(BlockType.NEST): "Biter Nest",  # Temporary — Stage 1
     int(BlockType.OUT_OF_BOUNDS): "Out of Bounds",
 }
 
@@ -1684,8 +1728,8 @@ _BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
 
 # Items that correspond to mineable blocks.
 _BLOCK_TO_ITEM: dict[int, int] = {
-    int(BlockType.IRON): int(ItemType.IRON),
-    int(BlockType.COPPER): int(ItemType.COPPER),
+    int(BlockType.IRON): int(ItemType.IRON_ORE),
+    int(BlockType.COPPER): int(ItemType.COPPER_ORE),
     int(BlockType.COAL): int(ItemType.COAL),
 }
 
@@ -1809,7 +1853,7 @@ def _render_info_machine(
     """
     name = MACHINE_TYPE_NAMES.get(machine_type, "Unknown")
     icon_s = 24
-    machine_inv = np.array(state.machine_inventory[ty, tx])
+    machine_inv = _entity_inventory(state, ty, tx)
     first_item = next(
         (i for i in range(1, NUM_ITEM_TYPES) if machine_inv[i] > 0),
         machine_type,
@@ -1828,7 +1872,7 @@ def _render_info_machine(
     cy += max(icon_s, name_surf.shape[0]) + 6
 
     # Health bar.
-    hp = int(state.machine_health[ty, tx])
+    hp = 100
     max_hp = DEFAULT_MACHINE_MAX_HEALTH
     hp_frac = max(0.0, min(1.0, hp / max_hp)) if max_hp > 0 else 0.0
     bar_w = min(140, max_x - cx - 50)
@@ -1851,7 +1895,8 @@ def _render_info_machine(
     cy += bar_h + 6
 
     # Facing direction.
-    direction = int(state.machine_direction[ty, tx])
+    eidx_dir = int(state.tile_entity[ty, tx])
+    direction = int(state.ent_direction[eidx_dir]) if eidx_dir >= 0 else 0
     dir_letter = _DIRECTION_LETTERS.get(direction, "?")
     dir_txt = _render_text_rgba(
         f"Facing: {dir_letter}",
@@ -2052,7 +2097,7 @@ def render_inventory_menu(
 
     selected_player = int(state.selected_player)
     selected_slot = selected_item
-    craft_progress = int(state.craft_progress[selected_player])
+    craft_progress = 0
     player_inv = np.array(state.player_inventory[selected_player])
 
     # ------------------------------------------------------------------

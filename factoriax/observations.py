@@ -1,26 +1,12 @@
 """Observation constructors for FactoriaX.
 
 Each function maps ``(state, params, player_idx) -> jax.Array`` and is
-JAX-native and JIT-compatible.  :func:`rgb` is the exception: it returns
-a NumPy RGB image via the existing pixel renderer and cannot be JIT'd.
+JAX-native and JIT-compatible. ``rgb`` is the exception: it returns a
+NumPy RGB image via the pixel renderer and cannot be JIT'd.
 
-All three follow the same convention: ``state`` and ``params`` are the
-standard FactoriaX types; ``player_idx`` selects whose perspective the
-observation is built from.  Pure functions compose naturally with
-``jax.vmap`` for simultaneous multi-agent observations::
-
-    all_obs = jax.vmap(local_array, in_axes=(None, None, 0))(
-        state, params, jnp.arange(params.num_players)
-    )
-
-``local_array`` requires ``radius`` to be a plain Python :class:`int` so
-that pad widths and slice sizes remain concrete during JIT compilation.
-Bind it with ``functools.partial`` before calling ``jax.jit`` if you need
-a non-default radius::
-
-    import functools
-    obs_fn = functools.partial(local_array, radius=5)
-    jit_obs = jax.jit(obs_fn)
+Spatial channels: block_type, machine_type, block_resources, buffer_type.
+Player scalars: position, direction, timestep, recipe affordability,
+facing-machine state, player inventory, research state.
 """
 
 from __future__ import annotations
@@ -31,7 +17,6 @@ import numpy as np
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    DEFAULT_MACHINE_MAX_HEALTH,
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
     RESEARCH_COST,
@@ -40,32 +25,47 @@ from factoriax.constants import (
 )
 from factoriax.crafting import can_afford_recipe
 from factoriax.placement import get_tile_in_front
-from factoriax.recipes import NUM_RECIPES, RECIPES
+from factoriax.recipes import NUM_RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
+
+def _reconstruct_buffer_type_grid(state: EnvState) -> jnp.ndarray:
+    """Build a (H, W) buffer-type grid from entity arrays.
+
+    Active entities scatter their ``ent_buf_type`` onto the grid at
+    ``(ent_y, ent_x)``. Tiles without an entity remain zero.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        int8 array of shape ``(H, W)`` with buffer item types.
+    """
+    h, w = state.map.shape
+    grid = jnp.zeros((h, w), dtype=jnp.int8)
+    active = state.ent_y >= 0
+    ey = jnp.clip(state.ent_y, 0, h - 1)
+    ex = jnp.clip(state.ent_x, 0, w - 1)
+    vals = jnp.where(active, state.ent_buf_type, jnp.int8(0))
+    return grid.at[ey, ex].set(vals)
+
+
 _MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(MachineType))
-_MAX_CRAFT_TICKS: float = max(1.0, float(max(r["ticks"] for r in RECIPES)))
-_DIR_NORM: float = 4.0  # max directional Action value (LEFT=1..DOWN=4)
-_HEALTH_NORM: float = float(DEFAULT_MACHINE_MAX_HEALTH)
+_DIR_NORM: float = 4.0
 _PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
-    PLAYER_MAX_STACK.astype(jnp.float32),
-    1.0,
+    PLAYER_MAX_STACK.astype(jnp.float32), 1.0,
 )
 
 # Spatial channels shared by global_array and local_array.
-# Add new channels here; NUM_SPATIAL_CHANNELS updates automatically.
 _SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
     "block_type",
     "machine_type",
     "block_resources",
-    "biter_presence",
-    "machine_direction",
-    "machine_health",
+    "buffer_type",
 )
 NUM_SPATIAL_CHANNELS: int = len(_SPATIAL_CHANNEL_NAMES)
-
 
 # Scalar fields in every observation vector.
 _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
@@ -73,16 +73,16 @@ _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "pos_y",
     "direction",
     "timestep",
-    "craft_progress",
-    "afford_miner",
-    "afford_pallet",
-    "afford_belt",
-    "afford_arm",
-    "afford_assembler",
-    "afford_tunnel",
+    *(f"afford_{i}" for i in range(NUM_RECIPES)),
     "facing_machine_type",
-    "facing_machine_health",
-    *(f"facing_inv_{i}" for i in range(NUM_ITEM_TYPES)),
+    "facing_buffer_type",
+    "facing_buffer_count",
+    "facing_asm_in0_type",
+    "facing_asm_in0_count",
+    "facing_asm_in1_type",
+    "facing_asm_in1_count",
+    "facing_asm_out_type",
+    "facing_asm_out_count",
     *(f"player_inv_{i}" for i in range(NUM_ITEM_TYPES)),
 )
 NUM_PLAYER_SCALARS: int = len(_PLAYER_SCALAR_FIELDS)
@@ -93,16 +93,12 @@ def _player_scalars(
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """Build the per-player scalar vector shared by all observation types.
-
-    Includes position, direction, timestep, crafting state, recipe
-    affordability, facing-machine inventory, player inventory, and
-    research.
+    """Build the per-player scalar vector.
 
     Args:
         state: Current environment state.
         params: Environment parameters.
-        player_idx: Index of the player whose scalars to extract.
+        player_idx: Index of the player.
 
     Returns:
         Float32 array of shape ``(NUM_PLAYER_SCALARS
@@ -121,13 +117,12 @@ def _player_scalars(
             pos[1] / params.map_height,
             state.player_directions[player_idx] / _DIR_NORM,
             state.timestep / params.max_timesteps,
-            state.craft_progress[player_idx] / _MAX_CRAFT_TICKS,
         ],
         dtype=jnp.float32,
     )
     scalars = jnp.concatenate([scalars, afford])
 
-    # Facing-machine: type, health, and typed inventory.
+    # Facing-machine state via entity lookup.
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
@@ -135,19 +130,45 @@ def _player_scalars(
     sy = jnp.clip(ty, 0, map_h - 1)
     mask = in_bounds.astype(jnp.float32)
 
-    facing_type = state.machine_types[sy, sx].astype(jnp.float32) * mask / _MACHINE_NORM
-    facing_health = (
-        state.machine_health[sy, sx].astype(jnp.float32) * mask / _HEALTH_NORM
+    max_e = state.ent_y.shape[0]
+    eidx = jnp.clip(state.tile_entity[sy, sx], 0, max_e - 1)
+
+    facing_mt = state.machine_types[sy, sx].astype(jnp.float32) * mask
+    facing_bt = state.ent_buf_type[eidx].astype(jnp.float32) * mask
+    facing_bc = state.ent_buf_count[eidx].astype(jnp.float32) * mask
+    facing_asm_in0t = (
+        state.ent_asm_in_type[eidx, 0].astype(jnp.float32) * mask
     )
-    facing_inv = (
-        state.machine_inventory[sy, sx].astype(jnp.float32) * mask / _PLAYER_MAX_STACK_F
+    facing_asm_in0c = (
+        state.ent_asm_in_count[eidx, 0].astype(jnp.float32) * mask
     )
-    facing = jnp.concatenate(
-        [facing_type[None], facing_health[None], facing_inv],
+    facing_asm_in1t = (
+        state.ent_asm_in_type[eidx, 1].astype(jnp.float32) * mask
     )
+    facing_asm_in1c = (
+        state.ent_asm_in_count[eidx, 1].astype(jnp.float32) * mask
+    )
+    facing_asm_ot = (
+        state.ent_asm_out_type[eidx].astype(jnp.float32) * mask
+    )
+    facing_asm_oc = (
+        state.ent_asm_out_count[eidx].astype(jnp.float32) * mask
+    )
+
+    facing = jnp.array([
+        facing_mt / _MACHINE_NORM,
+        facing_bt / float(NUM_ITEM_TYPES),
+        facing_bc / 64.0,
+        facing_asm_in0t / float(NUM_ITEM_TYPES),
+        facing_asm_in0c / 64.0,
+        facing_asm_in1t / float(NUM_ITEM_TYPES),
+        facing_asm_in1c / 64.0,
+        facing_asm_ot / float(NUM_ITEM_TYPES),
+        facing_asm_oc / 64.0,
+    ])
     scalars = jnp.concatenate([scalars, facing])
 
-    # Player pouch inventory: counts normalized per type.
+    # Player inventory.
     player_inv = (
         state.player_inventory[player_idx].astype(jnp.float32) / _PLAYER_MAX_STACK_F
     )
@@ -160,24 +181,6 @@ def _player_scalars(
     )
 
 
-def _biter_grid(state: EnvState) -> jax.Array:
-    """Binary (H, W) grid with 1.0 where active biters are present.
-
-    Args:
-        state: Current environment state.
-
-    Returns:
-        Float32 array of shape ``(map_h, map_w)`` with values in {0, 1}.
-    """
-    h, w = state.map.shape
-    grid = jnp.zeros((h, w), dtype=jnp.float32)
-    is_active = state.biter_health > 0
-    bx = state.biter_positions[:, 0]
-    by = state.biter_positions[:, 1]
-    grid = grid.at[by, bx].add(is_active.astype(jnp.float32))
-    return jnp.minimum(grid, 1.0)
-
-
 def global_array(
     state: EnvState,
     params: EnvParams,
@@ -185,10 +188,8 @@ def global_array(
 ) -> jax.Array:
     """Full-map flat observation for one player.
 
-    Concatenates six normalized spatial channels (block type, machine
-    type, block resources, biter presence, machine direction, machine
-    health) in row-major order, followed by the player scalar vector
-    (position, inventory, facing-machine state, research).
+    Four spatial channels (block type, machine type, resources, buffer type)
+    followed by the player scalar vector.
 
     Args:
         state: Current environment state.
@@ -196,29 +197,28 @@ def global_array(
         player_idx: Index of the observing player.
 
     Returns:
-        Float32 array of shape ``(NUM_SPATIAL_CHANNELS * map_h * map_w
-        + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS
-        + 2 * NUM_TECHNOLOGIES,)``.
+        Float32 array of shape ``(NUM_SPATIAL_CHANNELS * H * W
+        + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES,)``.
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
-    flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
-    flat_resources = state.block_resources.flatten().astype(jnp.float32) / float(
-        BLOCK_MAX_RESOURCES
+    flat_machines = (
+        state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
     )
-    flat_biters = _biter_grid(state).ravel()
-    flat_directions = state.machine_direction.flatten().astype(jnp.float32) / _DIR_NORM
-    flat_health = state.machine_health.flatten().astype(jnp.float32) / _HEALTH_NORM
+    flat_resources = (
+        state.block_resources.flatten().astype(jnp.float32)
+        / float(BLOCK_MAX_RESOURCES)
+    )
+    buf_grid = _reconstruct_buffer_type_grid(state)
+    flat_buffer = (
+        buf_grid.flatten().astype(jnp.float32)
+        / float(NUM_ITEM_TYPES)
+    )
     spatial = jnp.concatenate(
-        [
-            flat_blocks,
-            flat_machines,
-            flat_resources,
-            flat_biters,
-            flat_directions,
-            flat_health,
-        ]
+        [flat_blocks, flat_machines, flat_resources, flat_buffer],
     )
-    return jnp.concatenate([spatial, _player_scalars(state, params, player_idx)])
+    return jnp.concatenate(
+        [spatial, _player_scalars(state, params, player_idx)],
+    )
 
 
 def local_array(
@@ -229,197 +229,63 @@ def local_array(
 ) -> jax.Array:
     """Local windowed observation centered on one player.
 
-    Extracts a ``(2*radius+1) x (2*radius+1)`` patch around the player
-    from six spatial channels: block type, machine type, block resources,
-    biter presence, machine direction, and machine health.  Out-of-bounds
-    tiles are filled with their natural sentinel values
-    (``BlockType.OUT_OF_BOUNDS``, ``MachineType.NONE``, and 0 for the
-    rest).  Player scalars are appended.
-
-    The padding trick: padding each map by ``radius`` on all sides places
-    the player at ``(pos[1] + radius, pos[0] + radius)`` in padded
-    coordinates.  A window of size ``(2*radius+1, 2*radius+1)`` starting
-    at the original ``(pos[1], pos[0])`` is therefore always centered on
-    the player and always within bounds.
-
-    JAX-native and JIT-compatible when ``radius`` is a Python ``int``.
+    Extracts a ``(2*radius+1) x (2*radius+1)`` patch from four spatial
+    channels. Player scalars are appended.
 
     Args:
         state: Current environment state.
         params: Environment parameters.
         player_idx: Index of the observing player.
-        radius: Half-width of the observation window (default 10).
-            Must be a plain Python ``int``, not a traced JAX value.
+        radius: Half-width of the observation window.
 
     Returns:
-        Float32 array of shape ``(NUM_SPATIAL_CHANNELS * (2*radius+1)**2
-        + NUM_PLAYER_SCALARS + 2 * NUM_INVENTORY_SLOTS
-        + 2 * NUM_TECHNOLOGIES,)``.
+        Float32 array of shape ``(NUM_SPATIAL_CHANNELS * (2r+1)^2
+        + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES,)``.
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))
 
     padded_map = (
-        jnp.pad(
-            state.map,
-            pw,
-            mode="constant",
-            constant_values=BlockType.OUT_OF_BOUNDS,
-        ).astype(jnp.float32)
-        / _MAP_NORM
+        jnp.pad(state.map, pw, constant_values=BlockType.OUT_OF_BOUNDS)
+        .astype(jnp.float32) / _MAP_NORM
     )
     padded_machines = (
-        jnp.pad(
-            state.machine_types,
-            pw,
-            mode="constant",
-            constant_values=MachineType.NONE,
-        ).astype(jnp.float32)
-        / _MACHINE_NORM
+        jnp.pad(state.machine_types, pw, constant_values=MachineType.NONE)
+        .astype(jnp.float32) / _MACHINE_NORM
     )
-    padded_resources = jnp.pad(
-        state.block_resources,
-        pw,
-        mode="constant",
-        constant_values=0,
-    ).astype(jnp.float32) / float(BLOCK_MAX_RESOURCES)
-    padded_biters = jnp.pad(
-        _biter_grid(state),
-        pw,
-        mode="constant",
-        constant_values=0.0,
+    padded_resources = (
+        jnp.pad(state.block_resources, pw, constant_values=0)
+        .astype(jnp.float32) / float(BLOCK_MAX_RESOURCES)
     )
-    padded_directions = (
-        jnp.pad(
-            state.machine_direction,
-            pw,
-            mode="constant",
-            constant_values=0,
-        ).astype(jnp.float32)
-        / _DIR_NORM
-    )
-    padded_health = (
-        jnp.pad(
-            state.machine_health,
-            pw,
-            mode="constant",
-            constant_values=0,
-        ).astype(jnp.float32)
-        / _HEALTH_NORM
+    buf_grid = _reconstruct_buffer_type_grid(state)
+    padded_buffer = (
+        jnp.pad(buf_grid, pw, constant_values=0)
+        .astype(jnp.float32) / float(NUM_ITEM_TYPES)
     )
 
-    # Original player (row, col) = (pos[1], pos[0]) is the start index in
-    # padded space for a centered window of size (2*radius+1).
     pos = state.player_positions[player_idx]
     start = (pos[1], pos[0])
     slice_shape = (size, size)
 
-    window_map = jax.lax.dynamic_slice(padded_map, start, slice_shape)
-    window_machines = jax.lax.dynamic_slice(padded_machines, start, slice_shape)
-    window_resources = jax.lax.dynamic_slice(padded_resources, start, slice_shape)
-    window_biters = jax.lax.dynamic_slice(padded_biters, start, slice_shape)
-    window_directions = jax.lax.dynamic_slice(padded_directions, start, slice_shape)
-    window_health = jax.lax.dynamic_slice(padded_health, start, slice_shape)
-
-    spatial = jnp.concatenate(
-        [
-            window_map.ravel(),
-            window_machines.ravel(),
-            window_resources.ravel(),
-            window_biters.ravel(),
-            window_directions.ravel(),
-            window_health.ravel(),
-        ]
+    spatial = jnp.concatenate([
+        jax.lax.dynamic_slice(padded_map, start, slice_shape).ravel(),
+        jax.lax.dynamic_slice(padded_machines, start, slice_shape).ravel(),
+        jax.lax.dynamic_slice(padded_resources, start, slice_shape).ravel(),
+        jax.lax.dynamic_slice(padded_buffer, start, slice_shape).ravel(),
+    ])
+    return jnp.concatenate(
+        [spatial, _player_scalars(state, params, player_idx)],
     )
-    return jnp.concatenate([spatial, _player_scalars(state, params, player_idx)])
 
 
 def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
-    """Render the full map as an RGB image with all players visible.
-
-    Wraps the existing pixel renderer.  The output is a NumPy array and
-    cannot be JIT-compiled or used inside ``jax.vmap``.  Intended for
-    visualization, video recording, and human play — not batched RL
-    training.
+    """Render the full map as an RGB image.
 
     Args:
         state: Current environment state.
-        block_pixel_size: Side length of each tile in pixels.
+        block_pixel_size: Tile side length in pixels.
 
     Returns:
-        uint8 NumPy array of shape
-        ``(map_h * block_pixel_size, map_w * block_pixel_size, 3)``.
+        uint8 NumPy array of shape ``(H*px, W*px, 3)``.
     """
     return render_pixels(state, block_pixel_size=block_pixel_size)
-
-
-# ---------------------------------------------------------------------------
-# Pixel observations (JAX-native, JIT/vmap-compatible)
-#
-# These use the pure-JAX renderer from factoriax.jax_renderer and return
-# device-resident JAX arrays. Unlike ``rgb`` above, they can be used
-# inside ``jax.jit`` and ``jax.vmap`` for batched pixel observations
-# during training.
-# ---------------------------------------------------------------------------
-
-
-def pixel_map(
-    state: EnvState,
-    block_atlas: jnp.ndarray,
-    machine_atlas: jnp.ndarray,
-    player_sprite: jnp.ndarray,
-) -> jax.Array:
-    """Render the map as a JAX pixel observation.
-
-    Returns the map image (terrain + machines + players) as a uint8
-    JAX array. JIT-compilable and vmappable.
-
-    Args:
-        state: Current environment state (single, non-batched).
-        block_atlas: Block texture atlas from JaxRenderer.
-        machine_atlas: Machine texture atlas from JaxRenderer.
-        player_sprite: Player sprite from JaxRenderer.
-
-    Returns:
-        uint8 JAX array of shape (H * tile_px, W * tile_px, 3).
-    """
-    from factoriax.jax_renderer import render_map
-
-    return render_map(state, block_atlas, machine_atlas, player_sprite)
-
-
-def pixel_hud(
-    state: EnvState,
-    block_atlas: jnp.ndarray,
-    machine_atlas: jnp.ndarray,
-    player_sprite: jnp.ndarray,
-    item_colors: jnp.ndarray,
-    digit_atlas: jnp.ndarray,
-) -> jax.Array:
-    """Render the map + full HUD as a JAX pixel observation.
-
-    Returns the map with a 4-quadrant HUD panel below it (inspector,
-    machine inventory, player inventory, crafting menu) as a uint8
-    JAX array. JIT-compilable and vmappable.
-
-    Args:
-        state: Current environment state (single, non-batched).
-        block_atlas: Block texture atlas from JaxRenderer.
-        machine_atlas: Machine texture atlas from JaxRenderer.
-        player_sprite: Player sprite from JaxRenderer.
-        item_colors: Item color atlas from JaxRenderer.
-        digit_atlas: Digit bitmap atlas from JaxRenderer.
-
-    Returns:
-        uint8 JAX array of shape (2 * H * tile_px, W * tile_px, 3).
-    """
-    from factoriax.jax_renderer import render_hud
-
-    return render_hud(
-        state,
-        block_atlas,
-        machine_atlas,
-        player_sprite,
-        item_colors,
-        digit_atlas,
-    )

@@ -6,6 +6,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BlockType,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.editor.state import (
@@ -36,7 +37,6 @@ from factoriax.editor.state import (
     set_tile,
     swap_inventory_slots,
 )
-from factoriax.constants import ItemType, MachineType
 from factoriax.levels import Level
 
 

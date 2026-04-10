@@ -44,7 +44,6 @@ from jax import random
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     DEFAULT_MACHINE_MAX_HEALTH,
-    DEFAULT_MAX_BITERS,
     MAX_ACHIEVEMENTS,
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
@@ -644,21 +643,6 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     map_shape = (level.map_height, level.map_width)
     inv_shape = (params.num_players, NUM_ITEM_TYPES)
     player_shape = (params.num_players,)
-    machine_inv_shape = (
-        level.map_height, level.map_width, NUM_ITEM_TYPES,
-    )
-
-    machine_inv_np = (
-        level.machine_inventory
-        if level.machine_inventory is not None
-        else np.zeros(machine_inv_shape, dtype=np.int32)
-    )
-    machine_recipe_np = (
-        level.machine_selected_recipe
-        if level.machine_selected_recipe is not None
-        else np.zeros(map_shape, dtype=np.int32)
-    )
-
     # Build player pouch inventories from (item_type, count) pairs.
     player_inv_np = np.zeros(inv_shape, dtype=np.int32)
     if level.player_inventory is not None:
@@ -673,56 +657,57 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             for item_type, count in items:
                 player_inv_np[p_idx, item_type] += count
 
+    mm = params.resolved_max_machines()
+
+    # Build entity arrays from grid machine data.
+    mt_jnp = jnp.array(machine_types_np, dtype=jnp.int8)
+    ent_y = jnp.full(mm, -1, dtype=jnp.int16)
+    ent_x = jnp.full(mm, -1, dtype=jnp.int16)
+    ent_type = jnp.zeros(mm, dtype=jnp.int8)
+    ent_dir = jnp.zeros(mm, dtype=jnp.int8)
+    tile_ent = jnp.full(map_shape, -1, dtype=jnp.int16)
+
+    # Populate entities from grid (Python loop, only at build time)
+    idx = 0
+    for y in range(map_shape[0]):
+        for x in range(map_shape[1]):
+            if int(machine_types_np[y, x]) != int(MachineType.NONE):
+                if idx < mm:
+                    ent_y = ent_y.at[idx].set(y)
+                    ent_x = ent_x.at[idx].set(x)
+                    ent_type = ent_type.at[idx].set(machine_types_np[y, x])
+                    ent_dir = ent_dir.at[idx].set(machine_dirs_np[y, x])
+                    tile_ent = tile_ent.at[y, x].set(idx)
+                    idx += 1
+
     return EnvState(
-        map=jnp.array(block_map, dtype=jnp.int32),
-        player_positions=jnp.array(
-            player_positions_np, dtype=jnp.int32,
-        ),
-        player_directions=jnp.full(
-            player_shape, int(Direction.DOWN), dtype=jnp.int32,
-        ),
-        timestep=0,
-        player_inventory=jnp.array(player_inv_np, dtype=jnp.int32),
-        selected_player=0,
-        crafting_recipe=jnp.zeros(player_shape, dtype=jnp.int32),
-        craft_progress=jnp.zeros(player_shape, dtype=jnp.int32),
+        map=jnp.array(block_map, dtype=jnp.int8),
         block_resources=jnp.array(resources_np, dtype=jnp.int16),
-        machine_types=jnp.array(machine_types_np, dtype=jnp.int32),
-        machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_inventory=jnp.array(
-            machine_inv_np, dtype=jnp.int16,
+        machine_types=mt_jnp,
+        tile_entity=tile_ent,
+        ent_y=ent_y,
+        ent_x=ent_x,
+        ent_type=ent_type,
+        ent_direction=ent_dir,
+        ent_power=jnp.zeros(mm, dtype=jnp.int16),
+        ent_fuel=jnp.zeros(mm, dtype=jnp.int16),
+        ent_buf_type=jnp.zeros(mm, dtype=jnp.int8),
+        ent_buf_count=jnp.zeros(mm, dtype=jnp.int16),
+        ent_asm_in_type=jnp.zeros((mm, 2), dtype=jnp.int8),
+        ent_asm_in_count=jnp.zeros((mm, 2), dtype=jnp.int16),
+        ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
+        ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
+        player_positions=jnp.array(player_positions_np, dtype=jnp.int16),
+        player_directions=jnp.full(
+            player_shape, int(Direction.DOWN), dtype=jnp.int8,
         ),
-        machine_selected_recipe=jnp.array(
-            machine_recipe_np, dtype=jnp.int32,
-        ),
-        machine_direction=jnp.array(
-            machine_dirs_np, dtype=jnp.int32,
-        ),
-        achievements_unlocked=jnp.zeros(
-            MAX_ACHIEVEMENTS, dtype=jnp.bool_,
-        ),
+        player_inventory=jnp.array(player_inv_np, dtype=jnp.int16),
+        selected_player=0,
+        timestep=0,
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
-        research_progress=jnp.zeros(
-            NUM_TECHNOLOGIES, dtype=jnp.int32,
-        ),
-        research_unlocked=jnp.zeros(
-            NUM_TECHNOLOGIES, dtype=jnp.bool_,
-        ),
-        machine_health=(
-            jnp.array(level.machine_health, dtype=jnp.int32)
-            if level.machine_health is not None
-            else jnp.where(
-                jnp.array(machine_types_np, dtype=jnp.int32)
-                != int(MachineType.NONE),
-                DEFAULT_MACHINE_MAX_HEALTH,
-                0,
-            ).astype(jnp.int32)
-        ),
-        biter_positions=_build_biter_positions(
-            level, DEFAULT_MAX_BITERS,
-        ),
-        biter_health=_build_biter_health(level, DEFAULT_MAX_BITERS),
-        scent_field=jnp.zeros(map_shape, dtype=jnp.float32),
+        research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int16),
+        research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 
@@ -764,75 +749,41 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         params.num_players, int(Direction.DOWN), dtype=jnp.int32
     )
 
-    # Place nests on dirt tiles away from the center.
-    rng_nest, _ = random.split(rng_map)
-    nest_noise = random.uniform(
-        rng_nest, shape=(params.map_height, params.map_width)
-    )
-    ys = jnp.broadcast_to(
-        jnp.arange(params.map_height)[:, None],
-        (params.map_height, params.map_width),
-    )
-    xs = jnp.broadcast_to(
-        jnp.arange(params.map_width)[None, :],
-        (params.map_height, params.map_width),
-    )
-    dist_from_center = jnp.abs(xs - center_x) + jnp.abs(ys - center_y)
-    min_nest_dist = max(params.map_width, params.map_height) // 4
-    is_dirt = world_map == BlockType.DIRT
-    nest_eligible = is_dirt & (dist_from_center >= min_nest_dist)
-    place_nest = nest_eligible & (nest_noise < params.nest_probability)
-    world_map = jnp.where(place_nest, BlockType.NEST, world_map)
-
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
-    block_resources = jnp.where(is_mineable, params.base_resources, 0).astype(jnp.int16)
+    block_resources = jnp.where(
+        is_mineable, params.base_resources, 0,
+    ).astype(jnp.int16)
 
     map_shape = (params.map_height, params.map_width)
     inv_shape = (params.num_players, NUM_ITEM_TYPES)
-    player_shape = (params.num_players,)
-    machine_inv_shape = (
-        params.map_height, params.map_width, NUM_ITEM_TYPES,
-    )
+    mm = params.resolved_max_machines()
 
     return EnvState(
-        map=world_map,
-        player_positions=player_positions_arr,
-        player_directions=player_directions,
-        timestep=0,
-        player_inventory=jnp.zeros(inv_shape, dtype=jnp.int32),
-        selected_player=0,
-        crafting_recipe=jnp.zeros(player_shape, dtype=jnp.int32),
-        craft_progress=jnp.zeros(player_shape, dtype=jnp.int32),
+        map=world_map.astype(jnp.int8),
         block_resources=block_resources,
-        machine_types=jnp.full(
-            map_shape, int(MachineType.NONE), dtype=jnp.int32,
-        ),
-        machine_power=jnp.zeros(map_shape, dtype=jnp.int32),
-        machine_inventory=jnp.zeros(
-            machine_inv_shape, dtype=jnp.int16,
-        ),
-        machine_selected_recipe=jnp.zeros(
-            map_shape, dtype=jnp.int32,
-        ),
-        machine_direction=jnp.zeros(map_shape, dtype=jnp.int32),
-        achievements_unlocked=jnp.zeros(
-            MAX_ACHIEVEMENTS, dtype=jnp.bool_,
-        ),
+        machine_types=jnp.full(map_shape, int(MachineType.NONE), dtype=jnp.int8),
+        tile_entity=jnp.full(map_shape, -1, dtype=jnp.int16),
+        ent_y=jnp.full(mm, -1, dtype=jnp.int16),
+        ent_x=jnp.full(mm, -1, dtype=jnp.int16),
+        ent_type=jnp.zeros(mm, dtype=jnp.int8),
+        ent_direction=jnp.zeros(mm, dtype=jnp.int8),
+        ent_power=jnp.zeros(mm, dtype=jnp.int16),
+        ent_fuel=jnp.zeros(mm, dtype=jnp.int16),
+        ent_buf_type=jnp.zeros(mm, dtype=jnp.int8),
+        ent_buf_count=jnp.zeros(mm, dtype=jnp.int16),
+        ent_asm_in_type=jnp.zeros((mm, 2), dtype=jnp.int8),
+        ent_asm_in_count=jnp.zeros((mm, 2), dtype=jnp.int16),
+        ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
+        ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
+        player_positions=player_positions_arr.astype(jnp.int16),
+        player_directions=player_directions.astype(jnp.int8),
+        player_inventory=jnp.zeros(inv_shape, dtype=jnp.int16),
+        selected_player=0,
+        timestep=0,
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
-        research_progress=jnp.zeros(
-            NUM_TECHNOLOGIES, dtype=jnp.int32,
-        ),
-        research_unlocked=jnp.zeros(
-            NUM_TECHNOLOGIES, dtype=jnp.bool_,
-        ),
-        machine_health=jnp.zeros(map_shape, dtype=jnp.int32),
-        biter_positions=jnp.zeros(
-            (params.max_biters, 2), dtype=jnp.int32,
-        ),
-        biter_health=jnp.zeros(
-            params.max_biters, dtype=jnp.int32,
-        ),
-        scent_field=jnp.zeros(map_shape, dtype=jnp.float32),
+        research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int16),
+        research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 
@@ -890,6 +841,8 @@ def _generate_terrain_uniform(
     iron_threshold = water_threshold + params.iron_probability
     copper_threshold = iron_threshold + params.copper_probability
     coal_threshold = copper_threshold + params.coal_probability
+    tin_threshold = coal_threshold + params.tin_probability
+    silicon_threshold = tin_threshold + params.silicon_probability
 
     terrain = jnp.full(
         (params.map_height, params.map_width),
@@ -897,24 +850,22 @@ def _generate_terrain_uniform(
         dtype=jnp.int32,
     )
     terrain = jnp.where(
-        random_values < coal_threshold,
-        int(BlockType.COAL),
-        terrain,
+        random_values < silicon_threshold, int(BlockType.SILICON), terrain,
     )
     terrain = jnp.where(
-        random_values < copper_threshold,
-        int(BlockType.COPPER),
-        terrain,
+        random_values < tin_threshold, int(BlockType.TIN), terrain,
     )
     terrain = jnp.where(
-        random_values < iron_threshold,
-        int(BlockType.IRON),
-        terrain,
+        random_values < coal_threshold, int(BlockType.COAL), terrain,
     )
     terrain = jnp.where(
-        random_values < water_threshold,
-        int(BlockType.WATER),
-        terrain,
+        random_values < copper_threshold, int(BlockType.COPPER), terrain,
+    )
+    terrain = jnp.where(
+        random_values < iron_threshold, int(BlockType.IRON), terrain,
+    )
+    terrain = jnp.where(
+        random_values < water_threshold, int(BlockType.WATER), terrain,
     )
 
     return terrain
@@ -973,33 +924,39 @@ def _generate_terrain_patched(
         2D int32 array of shape ``(map_height, map_width)``.
     """
     h, w = params.map_height, params.map_width
-    k_water, k_iron, k_copper, k_coal = random.split(rng, 4)
+    keys = random.split(rng, 6)
 
-    noise_water = _smooth_noise(k_water, h, w, scale=6)
-    noise_iron = _smooth_noise(k_iron, h, w, scale=4)
-    noise_copper = _smooth_noise(k_copper, h, w, scale=4)
-    noise_coal = _smooth_noise(k_coal, h, w, scale=4)
+    noise_water = _smooth_noise(keys[0], h, w, scale=6)
+    noise_iron = _smooth_noise(keys[1], h, w, scale=4)
+    noise_copper = _smooth_noise(keys[2], h, w, scale=4)
+    noise_coal = _smooth_noise(keys[3], h, w, scale=4)
+    noise_tin = _smooth_noise(keys[4], h, w, scale=4)
+    noise_silicon = _smooth_noise(keys[5], h, w, scale=4)
 
     terrain = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
     terrain = jnp.where(
+        noise_silicon < params.silicon_probability,
+        int(BlockType.SILICON), terrain,
+    )
+    terrain = jnp.where(
+        noise_tin < params.tin_probability,
+        int(BlockType.TIN), terrain,
+    )
+    terrain = jnp.where(
         noise_coal < params.coal_probability,
-        int(BlockType.COAL),
-        terrain,
+        int(BlockType.COAL), terrain,
     )
     terrain = jnp.where(
         noise_copper < params.copper_probability,
-        int(BlockType.COPPER),
-        terrain,
+        int(BlockType.COPPER), terrain,
     )
     terrain = jnp.where(
         noise_iron < params.iron_probability,
-        int(BlockType.IRON),
-        terrain,
+        int(BlockType.IRON), terrain,
     )
     terrain = jnp.where(
         noise_water < params.water_probability,
-        int(BlockType.WATER),
-        terrain,
+        int(BlockType.WATER), terrain,
     )
 
     return terrain

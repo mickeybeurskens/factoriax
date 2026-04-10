@@ -121,7 +121,7 @@ def mining_reward(
     proximity: jax.Array = 0.05 / (1.0 + min_dist.astype(jnp.float32))
 
     ore_items = jnp.array(
-        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
     mined_delta = jnp.sum(
         new_state.items_mined[ore_items] - prev_state.items_mined[ore_items]
@@ -150,7 +150,7 @@ def sparse_mining_reward(
         Scalar float32 reward.
     """
     ore_items = jnp.array(
-        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
     delta = jnp.sum(
         new_state.items_mined[ore_items] - prev_state.items_mined[ore_items]
@@ -184,8 +184,8 @@ def sparse_pallet_crafting_reward(
         - prev_state.player_inventory[p, ItemType.PALLET]
     )
     iron_delta = (
-        new_state.player_inventory[p, ItemType.IRON]
-        - prev_state.player_inventory[p, ItemType.IRON]
+        new_state.player_inventory[p, ItemType.IRON_ORE]
+        - prev_state.player_inventory[p, ItemType.IRON_ORE]
     )
 
     # Crafting consumes iron and produces pallets in the same step.
@@ -220,12 +220,12 @@ def sparse_miner_crafting_reward(
         - prev_state.player_inventory[p, ItemType.MINER]
     )
     iron_delta = (
-        new_state.player_inventory[p, ItemType.IRON]
-        - prev_state.player_inventory[p, ItemType.IRON]
+        new_state.player_inventory[p, ItemType.IRON_ORE]
+        - prev_state.player_inventory[p, ItemType.IRON_ORE]
     )
     copper_delta = (
-        new_state.player_inventory[p, ItemType.COPPER]
-        - prev_state.player_inventory[p, ItemType.COPPER]
+        new_state.player_inventory[p, ItemType.COPPER_ORE]
+        - prev_state.player_inventory[p, ItemType.COPPER_ORE]
     )
 
     is_craft = (miner_delta > 0) & (iron_delta < 0) & (copper_delta < 0)
@@ -253,7 +253,7 @@ def miner_output_reward(
     """
     is_miner = new_state.machine_types == MachineType.MINER
     ore_types = jnp.array(
-        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
     prev_output = jnp.where(
         is_miner[..., None],
@@ -366,7 +366,7 @@ def _mining_delta(
 ) -> jax.Array:
     """Total ore items mined this step."""
     ore = jnp.array(
-        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
     return jnp.sum(
         new.items_mined[ore] - prev.items_mined[ore]
@@ -422,7 +422,7 @@ def dense_craft_reward(
     # Detect any crafting: total placeable items increased.
     placeables = jnp.array([
         ItemType.MINER, ItemType.PALLET, ItemType.CONVEYOR_BELT,
-        ItemType.ARM, ItemType.ASSEMBLER,
+        ItemType.ASSEMBLER,
     ], dtype=jnp.int32)
     prev_count = jnp.sum(prev_state.player_inventory[0, placeables])
     new_count = jnp.sum(new_state.player_inventory[0, placeables])
@@ -495,7 +495,7 @@ def dense_withdraw_reward(
         Scalar float32 reward.
     """
     ore_types = jnp.array(
-        [ItemType.COAL, ItemType.IRON, ItemType.COPPER], dtype=jnp.int32
+        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
     has_output = (
         (new_state.machine_types == MachineType.MINER)
@@ -577,29 +577,6 @@ def dense_belt_reward(
     belt_placed = jnp.maximum(new_belts - prev_belts, 0)
     filling = _pallet_filling_delta(prev_state, new_state)
     return 5.0 * belt_placed.astype(jnp.float32) + 5.0 * filling
-
-
-def dense_arm_reward(
-    prev_state: EnvState, new_state: EnvState, params: EnvParams
-) -> jax.Array:
-    """Dense reward for the arm_bridge level.
-
-    Proximity to the arm machine plus items arriving in any pallet.
-    Once the arm is rotated correctly, items transfer every tick.
-
-    Args:
-        prev_state: State immediately before the step.
-        new_state: State immediately after the step.
-        params: Environment parameters.
-
-    Returns:
-        Scalar float32 reward.
-    """
-    arm_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.ARM
-    )
-    filling = _pallet_filling_delta(prev_state, new_state)
-    return arm_prox + 10.0 * filling
 
 
 def dense_fuel_collect_reward(

@@ -121,7 +121,8 @@ def blit_scroll_view(
 
     if needs_bar:
         bar_x = vp_x + vp_w - _theme.SCROLLBAR_W
-        overlay[vp_y : vp_y + vp_h, bar_x : bar_x + _theme.SCROLLBAR_W] = _theme.SCROLLBAR_BG
+        bar_end = bar_x + _theme.SCROLLBAR_W
+        overlay[vp_y : vp_y + vp_h, bar_x:bar_end] = _theme.SCROLLBAR_BG
         thumb_h = max(12, vp_h * vp_h // content_h)
         max_scroll = content_h - vp_h
         thumb_y = vp_y + int((vp_h - thumb_h) * scroll_offset / max(1, max_scroll))

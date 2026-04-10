@@ -159,13 +159,10 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
     colors = {
         MachineType.NONE: (0, 0, 0),
         MachineType.MINER: (0, 200, 0),
-        MachineType.PALLET: (140, 100, 45),
+        MachineType.PALLET: (170, 170, 175),
         MachineType.ASSEMBLER: (160, 80, 200),
         MachineType.CONVEYOR_BELT: (220, 180, 50),
-        MachineType.ARM: (80, 120, 200),
         MachineType.ROCKET: (240, 240, 240),
-        MachineType.UNDERGROUND_ENTRY: (160, 130, 40),
-        MachineType.UNDERGROUND_EXIT: (160, 130, 40),
     }
     num_types = max(colors.keys()) + 1
     atlas = np.zeros((num_types, tile_px, tile_px, 3), dtype=np.uint8)

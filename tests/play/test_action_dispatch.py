@@ -9,7 +9,6 @@ is valid.
 from __future__ import annotations
 
 import jax.numpy as jnp
-import numpy as np
 import pygame
 import pytest
 
@@ -18,14 +17,12 @@ from factoriax.constants import (
     DEPOSIT_BASE,
     MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_ITEM_TYPES,
-    WITHDRAW_BASE,
     Action,
     ItemType,
     MachineType,
 )
 from factoriax.play.game_ui import GameUI
 from factoriax.state import EnvParams
-
 
 
 @pytest.fixture

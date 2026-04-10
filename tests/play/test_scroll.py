@@ -120,27 +120,33 @@ class TestBlitScrollView:
 
     def test_scrollbar_thumb_at_top_when_offset_zero(self) -> None:
         """Scrollbar thumb starts at the top when scroll_offset is 0."""
-        from factoriax.ui.theme import SCROLLBAR_THUMB as _SCROLLBAR_THUMB, SCROLLBAR_W as _SCROLLBAR_W
+        from factoriax.ui.theme import (
+            SCROLLBAR_THUMB,
+            SCROLLBAR_W,
+        )
 
         overlay = self._make_overlay(100, 60)
         content = self._make_content(300, 60, fill=10)
         blit_scroll_view(
             overlay, content, vp_x=0, vp_y=0, vp_w=60, vp_h=100, scroll_offset=0
         )
-        bar_x = 60 - _SCROLLBAR_W
-        assert tuple(overlay[0, bar_x]) == _SCROLLBAR_THUMB
+        bar_x = 60 - SCROLLBAR_W
+        assert tuple(overlay[0, bar_x]) == SCROLLBAR_THUMB
 
     def test_scrollbar_thumb_at_bottom_when_fully_scrolled(self) -> None:
         """Scrollbar thumb sits at the bottom when fully scrolled."""
-        from factoriax.ui.theme import SCROLLBAR_THUMB as _SCROLLBAR_THUMB, SCROLLBAR_W as _SCROLLBAR_W
+        from factoriax.ui.theme import (
+            SCROLLBAR_THUMB,
+            SCROLLBAR_W,
+        )
 
         overlay = self._make_overlay(100, 60)
         content = self._make_content(200, 60, fill=10)
         blit_scroll_view(
             overlay, content, vp_x=0, vp_y=0, vp_w=60, vp_h=100, scroll_offset=100
         )
-        bar_x = 60 - _SCROLLBAR_W
-        assert tuple(overlay[99, bar_x]) == _SCROLLBAR_THUMB
+        bar_x = 60 - SCROLLBAR_W
+        assert tuple(overlay[99, bar_x]) == SCROLLBAR_THUMB
 
 
 # ---------------------------------------------------------------------------

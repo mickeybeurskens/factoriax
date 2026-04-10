@@ -26,7 +26,7 @@ from factoriax.constants import (
     MachineType,
     SlotRole,
 )
-from factoriax.recipes import ASSEMBLER_RECIPE_NAMES, NUM_ASSEMBLER_RECIPES
+from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.renderer import render_item_icon
 from factoriax.ui.fonts import get_pixel_font
 
@@ -420,7 +420,9 @@ class FileDialog:
         fy = dy + 50
         overlay[fy : fy + 22, dx + 12 : dx + w - 12] = _FIELD_ACTIVE
         val = _render_text_rgba(
-            self.filename_text + "_", font, _TEXT_COLOR,
+            self.filename_text + "_",
+            font,
+            _TEXT_COLOR,
         )
         _blit_rgba(overlay, val, fy + 3, dx + 16)
 
@@ -430,17 +432,11 @@ class FileDialog:
         _blit_rgba(overlay, list_label, list_y, dx + 12)
         list_y += 16
         row_h = 18
-        visible = self.files[
-            self.scroll_offset : self.scroll_offset + _FILE_LIST_ROWS
-        ]
+        visible = self.files[self.scroll_offset : self.scroll_offset + _FILE_LIST_ROWS]
         for i, fname in enumerate(visible):
             abs_idx = self.scroll_offset + i
             ry = list_y + i * row_h
-            bg = (
-                _FILE_SELECTED_BG
-                if abs_idx == self.selected_index
-                else _FILE_ROW_BG
-            )
+            bg = _FILE_SELECTED_BG if abs_idx == self.selected_index else _FILE_ROW_BG
             overlay[ry : ry + row_h - 1, dx + 12 : dx + w - 12] = bg
             ftxt = _render_text_rgba(fname, small, _TEXT_COLOR)
             _blit_rgba(overlay, ftxt, ry + 2, dx + 16)
@@ -455,7 +451,10 @@ class FileDialog:
             _LABEL_COLOR,
         )
         _blit_rgba(
-            overlay, hint, dy + h - 16, dx + (w - hint.shape[1]) // 2,
+            overlay,
+            hint,
+            dy + h - 16,
+            dx + (w - hint.shape[1]) // 2,
         )
         return overlay
 
@@ -478,20 +477,26 @@ def _list_level_files() -> list[str]:
 _ITEM_NAMES: dict[int, str] = {
     int(ItemType.EMPTY): "(empty)",
     int(ItemType.COAL): "Coal",
-    int(ItemType.IRON): "Iron",
-    int(ItemType.COPPER): "Copper",
+    int(ItemType.IRON_ORE): "Iron Ore",
+    int(ItemType.COPPER_ORE): "Copper Ore",
+    int(ItemType.TIN_ORE): "Tin Ore",
+    int(ItemType.SILICON): "Silicon",
+    int(ItemType.IRON_PLATE): "Iron Plate",
+    int(ItemType.COPPER_PLATE): "Copper Plate",
+    int(ItemType.TIN_PLATE): "Tin Plate",
+    int(ItemType.WAFER): "Wafer",
+    int(ItemType.STEEL): "Steel",
+    int(ItemType.CIRCUIT): "Circuit",
+    int(ItemType.WIRE): "Wire",
+    int(ItemType.MOTOR): "Motor",
+    int(ItemType.SENSOR): "Sensor",
     int(ItemType.MINER): "Miner",
     int(ItemType.PALLET): "Pallet",
     int(ItemType.CONVEYOR_BELT): "Belt",
-    int(ItemType.ARM): "Arm",
     int(ItemType.ASSEMBLER): "Assembler",
-    int(ItemType.HULL): "Hull",
-    int(ItemType.FUEL_PACK): "Fuel Pack",
     int(ItemType.ROCKET): "Rocket",
     int(ItemType.BASIC_SCIENCE_PACK): "Basic Sci",
-    int(ItemType.FUEL_SCIENCE_PACK): "Fuel Sci",
     int(ItemType.ADVANCED_SCIENCE_PACK): "Adv Sci",
-    int(ItemType.UNDERGROUND_BELT): "Tunnel Belt",
 }
 
 # Items valid for each slot role. INPUT and STORAGE accept raw materials
@@ -602,14 +607,10 @@ class MachineInspectorDialog:
         if key == pygame.K_a or key == pygame.K_LEFT:
             self.focused_slot = max(0, self.focused_slot - 1)
         elif key == pygame.K_d or key == pygame.K_RIGHT:
-            self.focused_slot = min(
-                self.num_slots - 1, self.focused_slot + 1
-            )
+            self.focused_slot = min(self.num_slots - 1, self.focused_slot + 1)
         elif key == pygame.K_RETURN or key == pygame.K_e:
             if self.num_slots > 0:
-                role = int(
-                    MACHINE_SLOT_ROLES[self.machine_type, self.focused_slot]
-                )
+                role = int(MACHINE_SLOT_ROLES[self.machine_type, self.focused_slot])
                 if role != int(SlotRole.NONE):
                     self.editing_slot = self.focused_slot
                     self.picker_scroll = 0
@@ -623,8 +624,8 @@ class MachineInspectorDialog:
             if self.machine_type == int(MachineType.ASSEMBLER):
                 cur = int(self.selected_recipe[self.recipe_row, self.recipe_col])
                 self.selected_recipe[self.recipe_row, self.recipe_col] = (
-                    (cur + 1) % NUM_ASSEMBLER_RECIPES
-                )
+                    cur + 1
+                ) % NUM_RECIPES
         return None
 
     def _handle_picker_key(self, key: int) -> str | None:
@@ -636,9 +637,7 @@ class MachineInspectorDialog:
         Returns:
             ``None`` (picker stays within the dialog).
         """
-        role = int(
-            MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot]
-        )
+        role = int(MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot])
         valid = _valid_items_for_role(role)
         if not valid:
             self.editing_slot = -1
@@ -649,9 +648,7 @@ class MachineInspectorDialog:
         elif key == pygame.K_UP or key == pygame.K_w:
             self.picker_scroll = max(0, self.picker_scroll - 1)
         elif key == pygame.K_DOWN or key == pygame.K_s:
-            self.picker_scroll = min(
-                len(valid) - 1, self.picker_scroll + 1
-            )
+            self.picker_scroll = min(len(valid) - 1, self.picker_scroll + 1)
         elif key == pygame.K_RETURN:
             chosen = valid[self.picker_scroll]
             if chosen == int(ItemType.EMPTY):
@@ -664,9 +661,7 @@ class MachineInspectorDialog:
             self.editing_slot = -1
         return None
 
-    def _handle_count_key(
-        self, key: int, event: pygame.event.Event
-    ) -> str | None:
+    def _handle_count_key(self, key: int, event: pygame.event.Event) -> str | None:
         """Handle keys while editing a slot count.
 
         Args:
@@ -729,17 +724,13 @@ class MachineInspectorDialog:
 
         machine_name = MACHINE_TYPE_NAMES.get(self.machine_type, "Machine")
         title = _render_text_rgba(machine_name, font, _TEXT_COLOR)
-        _blit_rgba(
-            overlay, title, dy + 8, dx + (dlg_w - title.shape[1]) // 2
-        )
+        _blit_rgba(overlay, title, dy + 8, dx + (dlg_w - title.shape[1]) // 2)
 
         y = dy + 30
 
         if is_assembler:
-            r_idx = int(
-                self.selected_recipe[self.recipe_row, self.recipe_col]
-            )
-            r_name = ASSEMBLER_RECIPE_NAMES[r_idx]
+            r_idx = int(self.selected_recipe[self.recipe_row, self.recipe_col])
+            r_name = RECIPE_NAMES[r_idx]
             rtxt = _render_text_rgba(
                 f"Recipe: {r_name}  [Q] cycle", small, (190, 165, 55)
             )
@@ -753,9 +744,7 @@ class MachineInspectorDialog:
             is_focused = slot_idx == self.focused_slot
 
             row_bg = (70, 70, 70, 255) if is_focused else (45, 45, 45, 255)
-            overlay[sy : sy + _INSP_SLOT_H - 1, dx + 8 : dx + dlg_w - 8] = (
-                row_bg
-            )
+            overlay[sy : sy + _INSP_SLOT_H - 1, dx + 8 : dx + dlg_w - 8] = row_bg
 
             role_color = SLOT_ROLE_COLORS.get(role, (60, 60, 60))
             role_label = SLOT_ROLE_LABELS.get(role, "")
@@ -776,9 +765,7 @@ class MachineInspectorDialog:
                 _blit_rgba(overlay, icon, sy + 3, dx + 46)
 
                 name = _ITEM_NAMES.get(item_type, "?")
-                ntxt = _render_text_rgba(
-                    f"{name} x{count}", font, _TEXT_COLOR
-                )
+                ntxt = _render_text_rgba(f"{name} x{count}", font, _TEXT_COLOR)
                 _blit_rgba(overlay, ntxt, sy + 4, dx + 46 + icon_s + 4)
             else:
                 etxt = _render_text_rgba("(empty)", small, _LABEL_COLOR)
@@ -790,9 +777,7 @@ class MachineInspectorDialog:
             hint_parts.insert(0, "Q: recipe")
         hint_str = "  ".join(hint_parts)
         hint = _render_text_rgba(hint_str, small, _LABEL_COLOR)
-        _blit_rgba(
-            overlay, hint, hint_y, dx + (dlg_w - hint.shape[1]) // 2
-        )
+        _blit_rgba(overlay, hint, hint_y, dx + (dlg_w - hint.shape[1]) // 2)
 
         if self.editing_slot >= 0 and not self.editing_count:
             self._render_item_picker(overlay, base_w, base_h)
@@ -811,9 +796,7 @@ class MachineInspectorDialog:
             base_w: Base window width.
             base_h: Base window height.
         """
-        role = int(
-            MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot]
-        )
+        role = int(MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot])
         valid = _valid_items_for_role(role)
         if not valid:
             return
@@ -865,9 +848,7 @@ class MachineInspectorDialog:
         hint = _render_text_rgba(
             "Up/Down  Enter: select  Esc: cancel", small, _LABEL_COLOR
         )
-        _blit_rgba(
-            overlay, hint, py + ph - 16, px + (pw - hint.shape[1]) // 2
-        )
+        _blit_rgba(overlay, hint, py + ph - 16, px + (pw - hint.shape[1]) // 2)
 
     def _render_count_editor(
         self, overlay: np.ndarray, base_w: int, base_h: int
@@ -902,12 +883,8 @@ class MachineInspectorDialog:
         val = _render_text_rgba(self.count_text + "_", font, _TEXT_COLOR)
         _blit_rgba(overlay, val, fy + 2, cx + 12)
 
-        hint = _render_text_rgba(
-            "Enter: OK  Esc: cancel", small, _LABEL_COLOR
-        )
-        _blit_rgba(
-            overlay, hint, cy + ch - 14, cx + (cw - hint.shape[1]) // 2
-        )
+        hint = _render_text_rgba("Enter: OK  Esc: cancel", small, _LABEL_COLOR)
+        _blit_rgba(overlay, hint, cy + ch - 14, cx + (cw - hint.shape[1]) // 2)
 
 
 _HELP_LINES = [

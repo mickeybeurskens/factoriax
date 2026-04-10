@@ -317,8 +317,8 @@ class BenchmarkRunner:
                 fs_i = jax.tree.map(lambda x: x[i], final_states)
                 items_mined = {
                     "coal": int(fs_i.items_mined[ItemType.COAL]),
-                    "iron": int(fs_i.items_mined[ItemType.IRON]),
-                    "copper": int(fs_i.items_mined[ItemType.COPPER]),
+                    "iron": int(fs_i.items_mined[ItemType.IRON_ORE]),
+                    "copper": int(fs_i.items_mined[ItemType.COPPER_ORE]),
                 }
                 score = benchmark.score_level(bench_level, items_mined)
                 level_results.append(LevelResult(
@@ -411,8 +411,8 @@ class BenchmarkRunner:
 
         items_mined: dict[str, int] = {
             "coal": int(state.items_mined[ItemType.COAL]),
-            "iron": int(state.items_mined[ItemType.IRON]),
-            "copper": int(state.items_mined[ItemType.COPPER]),
+            "iron": int(state.items_mined[ItemType.IRON_ORE]),
+            "copper": int(state.items_mined[ItemType.COPPER_ORE]),
         }
         weighted_score = benchmark.score_level(bench_level, items_mined)
         constraint_costs = np.stack(costs_log) if costs_log else None

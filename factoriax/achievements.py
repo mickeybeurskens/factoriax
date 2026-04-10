@@ -29,7 +29,7 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, MachineType
-from factoriax.recipes import ASSEMBLER_RECIPE_OUTPUTS
+from factoriax.recipes import RECIPE_OUTPUTS
 from factoriax.state import EnvState
 
 
@@ -263,7 +263,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
     # input resource (check all non-zero types; good enough since
     # assemblers only produce via recipes).
     recipe = state.machine_selected_recipe
-    recipe_out = ASSEMBLER_RECIPE_OUTPUTS[recipe]
+    recipe_out = RECIPE_OUTPUTS[recipe]
     h, w = state.machine_types.shape
     rows = jnp.broadcast_to(jnp.arange(h)[:, None], (h, w))
     cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
@@ -290,8 +290,8 @@ def core_game_conditions(state: EnvState) -> jax.Array:
     """
     total_mined = (
         state.items_mined[ItemType.COAL]
-        + state.items_mined[ItemType.IRON]
-        + state.items_mined[ItemType.COPPER]
+        + state.items_mined[ItemType.IRON_ORE]
+        + state.items_mined[ItemType.COPPER_ORE]
     )
 
     total_machines = jnp.sum(state.machine_types != MachineType.NONE)
@@ -301,7 +301,6 @@ def core_game_conditions(state: EnvState) -> jax.Array:
         count_total_items(state, ItemType.MINER)
         + count_total_items(state, ItemType.PALLET)
         + count_total_items(state, ItemType.CONVEYOR_BELT)
-        + count_total_items(state, ItemType.ARM)
     )
 
     conditions = jnp.array(
@@ -318,9 +317,8 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             _any_miner_has_fuel(state),
             # 5  Automated Mining — miner output slot non-empty
             _any_miner_has_output(state),
-            # 6  Moving Parts — place an arm and a pallet
-            (count_machines(state, MachineType.ARM) >= 1)
-            & (count_machines(state, MachineType.PALLET) >= 1),
+            # 6  Moving Parts — place a pallet
+            count_machines(state, MachineType.PALLET) >= 1,
             # 7  First Pipeline — any pallet holds items
             _any_pallet_has_items(state),
             # 8  Belt Network — place 5 belts
@@ -335,16 +333,15 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             count_machines(state, MachineType.ASSEMBLER) >= 1,
             # 13 First Assembly — assembler output non-empty
             _any_assembler_has_output(state),
-            # 14 Hull Production — hold 10 hulls
-            count_total_items(state, ItemType.HULL) >= 10,
-            # 15 Fuel Production — hold 10 fuel packs
-            count_total_items(state, ItemType.FUEL_PACK) >= 10,
+            # 14 Hull Production — placeholder (item removed, always False)
+            jnp.bool_(False),
+            # 15 Fuel Production — placeholder (item removed, always False)
+            jnp.bool_(False),
             # 16 Rocket Complete — place a rocket on the map
             count_machines(state, MachineType.ROCKET) >= 1,
             # 17 First Science — hold any science pack
             (
                 count_total_items(state, ItemType.BASIC_SCIENCE_PACK)
-                + count_total_items(state, ItemType.FUEL_SCIENCE_PACK)
                 + count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK)
             )
             >= 1,

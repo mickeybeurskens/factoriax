@@ -223,6 +223,8 @@ experiments/
 wandb/
 levels/
 checkpoints/
+runs/
+.claude/worktrees/
 
 # LaTeX build artifacts
 paper/*.aux
@@ -235,3 +237,4 @@ paper/*.synctex.gz
 paper/*.toc
 paper/*.log
 paper/*.pdf
+docs/profiling/traces/

@@ -7,6 +7,7 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
+    MAX_MACHINE_STACK_SIZE,
     NUM_ITEM_TYPES,
     BlockType,
     Direction,
@@ -288,8 +289,7 @@ def render_inventory_bar(
     """Render inventory bar showing the selected player's inventory.
 
     Each slot corresponds to an ``ItemType`` index. The slot matching
-    *selected_item* is highlighted with a white border. If the player
-    is crafting, a progress indicator is shown.
+    *selected_item* is highlighted with a white border.
 
     Args:
         state: Current environment state containing inventory data.
@@ -310,7 +310,6 @@ def render_inventory_bar(
 
     selected_player = int(state.selected_player)
     inventory = np.array(state.player_inventory[selected_player])
-    craft_progress = int(state.craft_progress[selected_player])
 
     for item_idx in range(NUM_ITEM_TYPES):
         x_center = item_idx * slot_width + slot_width // 2
@@ -354,15 +353,6 @@ def render_inventory_bar(
                 x_start + pad : x_start + slot_size - pad,
             ] = color
 
-    if craft_progress > 0:
-        indicator_width = 20
-        indicator_x = width - indicator_width - 4
-        bar[2:6, indicator_x : indicator_x + indicator_width] = (
-            100,
-            200,
-            100,
-        )
-
     return bar
 
 
@@ -371,10 +361,7 @@ MACHINE_TO_ITEM: dict[int, int] = {
     int(MachineType.PALLET): int(ItemType.PALLET),
     int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
     int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
-    int(MachineType.ARM): int(ItemType.ARM),
     int(MachineType.ROCKET): int(ItemType.ROCKET),
-    int(MachineType.UNDERGROUND_ENTRY): int(ItemType.UNDERGROUND_BELT),
-    int(MachineType.UNDERGROUND_EXIT): int(ItemType.UNDERGROUND_BELT),
 }
 
 # Dark arrow colour drawn on top of the gold conveyor belt square.
@@ -444,105 +431,6 @@ def _draw_belt_arrows(
             _draw_chevron(icon, cy, cx, arrow_size, direction)
 
 
-# Colours for the arm (inserter) direction overlay.
-_ARM_LINE_COLOR: tuple[int, int, int, int] = (30, 55, 110, 255)
-_ARM_HEAD_COLOR: tuple[int, int, int, int] = (200, 220, 255, 255)
-_ARM_TAIL_COLOR: tuple[int, int, int, int] = (40, 70, 140, 255)
-
-
-def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
-    """Draw a pick-to-deposit flow indicator on an arm icon.
-
-    Draws a centre line along the arm's facing axis with a small
-    circle on the pick (back) end and a chevron arrowhead on the
-    deposit (front) end so the player can tell input from output
-    at a glance.
-
-    Args:
-        icon: RGBA array of shape ``(size, size, 4)``, modified
-            in place.
-        direction: ``Action`` direction the arm faces (deposit side).
-    """
-    size = icon.shape[0]
-    mid = size // 2
-    thickness = max(1, size // 10)
-    half_t = thickness // 2
-
-    # Shaft line along the facing axis, inset from edges.
-    margin = max(2, size // 6)
-    if direction in (Direction.LEFT, Direction.RIGHT):
-        icon[mid - half_t : mid + half_t + 1, margin : size - margin] = _ARM_LINE_COLOR
-    else:
-        icon[margin : size - margin, mid - half_t : mid + half_t + 1] = _ARM_LINE_COLOR
-
-    # Arrowhead on the deposit (forward) end.
-    arrow_size = max(1, size // 8)
-    if direction == Direction.RIGHT:
-        _draw_arm_chevron(icon, mid, size - margin - 1, arrow_size, direction)
-    elif direction == Direction.LEFT:
-        _draw_arm_chevron(icon, mid, margin, arrow_size, direction)
-    elif direction == Direction.DOWN:
-        _draw_arm_chevron(icon, size - margin - 1, mid, arrow_size, direction)
-    elif direction == Direction.UP:
-        _draw_arm_chevron(icon, margin, mid, arrow_size, direction)
-
-    # Small circle on the pick (back) end.
-    radius = max(1, size // 8)
-    if direction == Direction.RIGHT:
-        cy, cx = mid, margin
-    elif direction == Direction.LEFT:
-        cy, cx = mid, size - margin - 1
-    elif direction == Direction.DOWN:
-        cy, cx = mid, margin
-    else:  # UP
-        cy, cx = mid, size - margin - 1
-    # Swap for vertical directions — circle is at the opposite end.
-    if direction == Direction.DOWN:
-        cy, cx = margin, mid
-    elif direction == Direction.UP:
-        cy, cx = size - margin - 1, mid
-
-    ys, xs = np.ogrid[:size, :size]
-    dist = (xs - cx) ** 2 + (ys - cy) ** 2
-    icon[dist <= radius**2] = _ARM_TAIL_COLOR
-
-
-def _draw_arm_chevron(
-    image: np.ndarray,
-    cy: int,
-    cx: int,
-    size: int,
-    direction: int,
-) -> None:
-    """Draw a filled chevron arrowhead for the arm deposit end.
-
-    Same geometry as ``_draw_chevron`` but uses the arm head colour.
-
-    Args:
-        image: RGBA image array (modified in place).
-        cy: Centre row of the chevron.
-        cx: Centre column of the chevron.
-        size: Half-extent of the arrow in pixels.
-        direction: Direction.LEFT / RIGHT / UP / DOWN.
-    """
-    h, w = image.shape[:2]
-    for d in range(-size, size + 1):
-        depth = size - abs(d)
-        for t in range(depth + 1):
-            if direction == Direction.RIGHT:
-                py, px = cy + d, cx + t
-            elif direction == Direction.LEFT:
-                py, px = cy + d, cx - t
-            elif direction == Direction.DOWN:
-                py, px = cy + t, cx + d
-            elif direction == Direction.UP:
-                py, px = cy - t, cx + d
-            else:
-                return
-            if 0 <= py < h and 0 <= px < w:
-                image[py, px] = _ARM_HEAD_COLOR
-
-
 _MINER_ARROW_COLOR: tuple[int, int, int, int] = (0, 90, 0, 255)
 
 
@@ -579,7 +467,38 @@ def _draw_miner_indicator(icon: np.ndarray, direction: int) -> None:
                 icon[py, px] = _MINER_ARROW_COLOR
 
 
-@functools.lru_cache(maxsize=128)
+# Pallet sprite colours.
+_PALLET_RIM: tuple[int, int, int, int] = (60, 60, 60, 255)
+_PALLET_SURFACE: tuple[int, int, int, int] = (170, 170, 175, 255)
+_PALLET_RIVET: tuple[int, int, int, int] = (220, 220, 225, 255)
+
+
+def _draw_pallet_icon(icon: np.ndarray) -> None:
+    """Draw a riveted iron plate onto a pallet icon.
+
+    Dark 1px rim, iron-gray interior, bright dots in corners.
+
+    Args:
+        icon: RGBA array modified in place.
+    """
+    s = icon.shape[0]
+    # Dark rim.
+    icon[0, :] = _PALLET_RIM
+    icon[s - 1, :] = _PALLET_RIM
+    icon[:, 0] = _PALLET_RIM
+    icon[:, s - 1] = _PALLET_RIM
+    # Iron surface.
+    icon[1 : s - 1, 1 : s - 1] = _PALLET_SURFACE
+    # Corner rivets (2px dots if large enough).
+    r = max(1, s // 8)
+    for cy, cx in [(1, 1), (1, s - 2), (s - 2, 1), (s - 2, s - 2)]:
+        y0, y1 = cy, min(cy + r, s)
+        x0, x1 = cx, min(cx + r, s)
+        icon[y0:y1, x0:x1] = _PALLET_RIVET
+
+
+
+@functools.lru_cache(maxsize=256)
 def render_item_icon(
     item_type: int,
     size: int,
@@ -611,12 +530,11 @@ def render_item_icon(
     if item_type == ItemType.CONVEYOR_BELT and size >= 6:
         belt_dir = direction if direction is not None else int(Direction.RIGHT)
         _draw_belt_arrows(icon, belt_dir)
-    elif item_type == ItemType.ARM and size >= 6:
-        arm_dir = direction if direction is not None else int(Direction.RIGHT)
-        _draw_arm_indicator(icon, arm_dir)
     elif item_type == ItemType.MINER and size >= 6:
         miner_dir = direction if direction is not None else int(Direction.RIGHT)
         _draw_miner_indicator(icon, miner_dir)
+    elif item_type == ItemType.PALLET and size >= 4:
+        _draw_pallet_icon(icon)
 
     return icon
 
@@ -644,26 +562,34 @@ def render_machine_overlays(
     offset = (block_pixel_size - machine_size) // 2
 
     machine_types = np.array(state.machine_types)
+    tile_entity = np.array(state.tile_entity)
+    ent_direction = np.array(state.ent_direction)
+    ent_power = np.array(state.ent_power)
+
     ys, xs = np.nonzero(machine_types != MachineType.NONE)
     if ys.size == 0:
         return
 
-    directions = np.array(state.machine_direction)
-
     for y, x in zip(ys, xs):
         machine_type = int(machine_types[y, x])
         item_type = MACHINE_TO_ITEM.get(machine_type, int(ItemType.EMPTY))
-        direction = int(directions[y, x])
 
-        icon = render_item_icon(item_type, machine_size, direction)
+        eidx = int(tile_entity[y, x])
+        direction = int(ent_direction[eidx]) if eidx >= 0 else int(Direction.DOWN)
+
+        icon = render_item_icon(
+            item_type,
+            machine_size,
+            direction,
+        )
 
         if frame_tick > 0:
             if machine_type == int(MachineType.MINER):
                 active = is_miner_active(state, int(y), int(x))
-            elif machine_type == int(MachineType.ARM):
-                active = is_arm_active(state, int(y), int(x))
             elif machine_type == int(MachineType.ASSEMBLER):
-                active = int(state.machine_power[y, x]) > 0
+                active = (
+                    int(ent_power[eidx]) > 0 if eidx >= 0 else False
+                )
             else:
                 active = True
             icon = apply_activity_tint(icon, active, frame_tick)
@@ -748,26 +674,6 @@ def render_pixels(
             px_start,
             block_pixel_size,
         )
-
-    # --- Biter rendering ---
-    biter_positions = np.array(state.biter_positions)
-    biter_health = np.array(state.biter_health)
-    biter_texture = _get_biter_texture(block_pixel_size)
-    map_h, map_w = state.map.shape
-
-    for biter_idx in range(biter_health.shape[0]):
-        if int(biter_health[biter_idx]) <= 0:
-            continue
-        bx = int(biter_positions[biter_idx, 0])
-        by = int(biter_positions[biter_idx, 1])
-        if 0 <= bx < map_w and 0 <= by < map_h:
-            _alpha_blend_inplace(
-                image,
-                biter_texture,
-                by * block_pixel_size,
-                bx * block_pixel_size,
-                block_pixel_size,
-            )
 
     return image[:, :, :3]
 
@@ -921,12 +827,14 @@ def draw_belt_cargo(
         block_pixel_size: Tile side length in pixels.
     """
     machine_types = np.array(state.machine_types)
+    tile_entity = np.array(state.tile_entity)
+    ent_buf_type = np.array(state.ent_buf_type)
+    ent_buf_count = np.array(state.ent_buf_count)
+
     belt_mask = machine_types == MachineType.CONVEYOR_BELT
     belt_ys, belt_xs = np.nonzero(belt_mask)
     if belt_ys.size == 0:
         return
-
-    inv = np.array(state.machine_inventory)
 
     dot_size = max(4, block_pixel_size // 4)
     border = max(2, dot_size // 3)
@@ -936,12 +844,14 @@ def draw_belt_cargo(
 
     for idx in range(belt_ys.size):
         y, x = int(belt_ys[idx]), int(belt_xs[idx])
-        tile_inv = inv[y, x]
-        nonzero = np.nonzero(tile_inv)[0]
-        if nonzero.size == 0:
+        eidx = int(tile_entity[y, x])
+        if eidx < 0:
+            continue
+        item_type = int(ent_buf_type[eidx])
+        item_count = int(ent_buf_count[eidx])
+        if item_type == 0 or item_count <= 0:
             continue
 
-        item_type = int(nonzero[0])
         color = ITEM_COLORS.get(item_type, (128, 128, 128))
 
         py0 = y * block_pixel_size + mid - half_outer
@@ -982,27 +892,11 @@ def is_miner_active(state: EnvState, y: int, x: int) -> bool:
     Returns:
         True if the miner is doing work this tick.
     """
-    has_power = int(state.machine_power[y, x]) > 0
+    eidx = int(state.tile_entity[y, x])
+    if eidx < 0:
+        return False
+    has_power = int(state.ent_power[eidx]) > 0
     has_resources = int(state.block_resources[y, x]) > 0
-    from factoriax.constants import MAX_MACHINE_STACK_SIZE
-
-    total_count = int(np.array(state.machine_inventory[y, x]).sum())
+    total_count = int(state.ent_buf_count[eidx])
     has_space = total_count < MAX_MACHINE_STACK_SIZE
     return has_power and has_resources and has_space
-
-
-def is_arm_active(state: EnvState, y: int, x: int) -> bool:
-    """Check whether the arm at ``(y, x)`` is doing work.
-
-    An arm is considered active if its inventory holds any items
-    (mid-transfer).
-
-    Args:
-        state: Current environment state.
-        y: Row of the arm tile.
-        x: Column of the arm tile.
-
-    Returns:
-        True if the arm inventory is non-empty.
-    """
-    return int(np.array(state.machine_inventory[y, x]).sum()) > 0

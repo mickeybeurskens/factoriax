@@ -8,9 +8,9 @@ correctly read from player_inventory and machine_inventory.
 import numpy as np
 
 from factoriax.constants import (
+    NUM_ITEM_TYPES,
     ItemType,
     MachineType,
-    NUM_ITEM_TYPES,
 )
 from factoriax.renderer import (
     INVENTORY_BAR_HEIGHT,
@@ -102,7 +102,7 @@ class TestIsArmActive:
     def test_empty_arm_inactive(self, state_factory) -> None:
         """Arm with empty inventory is inactive."""
         import jax.numpy as jnp
-        from factoriax.constants import MACHINE_INVENTORY_COUNT_DTYPE
+
 
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
@@ -115,6 +115,7 @@ class TestIsArmActive:
     def test_arm_with_items_active(self, state_factory) -> None:
         """Arm holding items in its inventory is active."""
         import jax.numpy as jnp
+
         from factoriax.constants import MACHINE_INVENTORY_COUNT_DTYPE
 
         machine_inv = jnp.zeros(

@@ -13,7 +13,6 @@ import jax.numpy as jnp
 from factoriax import Action, BlockType, Direction, ItemType
 from factoriax.constants import (
     MACHINE_INVENTORY_COUNT_DTYPE,
-    MAX_MACHINE_STACK_SIZE,
     NUM_ITEM_TYPES,
     MachineType,
 )

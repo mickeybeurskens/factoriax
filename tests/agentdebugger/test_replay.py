@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import jax
@@ -25,7 +24,6 @@ from factoriax.agentdebugger.main import Debugger
 from factoriax.analysis.trajectory import Trajectory, states_to_trajectory
 from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
-
 
 # ------------------------------------------------------------------
 # Fixtures

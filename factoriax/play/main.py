@@ -27,10 +27,10 @@ from factoriax.constants import Action, Direction
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import Level
 from factoriax.play.game_ui import GameUI
-from factoriax.play.ui import _hotbar_h
 from factoriax.play.play_state import PlayState
-from factoriax.play.ui import render_welcome_screen
+from factoriax.play.ui import _hotbar_h, render_welcome_screen
 from factoriax.state import EnvParams, EnvState
+from factoriax.ui import theme as _play_theme
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import hit_test_regions
 from factoriax.ui.window import calculate_window_size
@@ -121,7 +121,8 @@ def play_level(
     )
 
     prev_size = screen.get_size() if screen is not None else None
-    game_win_w, game_win_h = calculate_window_size(_BASE_UI_SIZE * _play_theme.UI_SCALE, _BASE_UI_SIZE * _play_theme.UI_SCALE)
+    scaled = _BASE_UI_SIZE * _play_theme.UI_SCALE
+    game_win_w, game_win_h = calculate_window_size(scaled, scaled)
     if screen is None:
         screen = pygame.display.set_mode((game_win_w, game_win_h))
     else:
@@ -165,8 +166,6 @@ def play_level(
     elif prev_size is not None:
         pygame.display.set_mode(prev_size, pygame.RESIZABLE)
 
-
-from factoriax.ui import theme as _play_theme
 
 _BASE_UI_SIZE = 1024
 

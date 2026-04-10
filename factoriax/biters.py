@@ -284,13 +284,12 @@ def update_biters(
     """
     is_biter_tick = (state.timestep % params.biter_tick_interval) == 0
 
-    def do_update(s: EnvState) -> EnvState:
-        rng_local = jax.random.fold_in(rng, s.timestep)
-        r1, r2 = jax.random.split(rng_local)
-        s = spawn_biters(s, params, r1)
-        s = move_biters(s, params, r2)
-        s = attack_machines(s, params)
-        return s
+    rng_local = jax.random.fold_in(rng, state.timestep)
+    r1, r2 = jax.random.split(rng_local)
+    updated = spawn_biters(state, params, r1)
+    updated = move_biters(updated, params, r2)
+    updated = attack_machines(updated, params)
 
-    result: EnvState = jax.lax.cond(is_biter_tick, do_update, lambda s: s, state)
-    return result
+    return jax.tree.map(
+        lambda n, o: jnp.where(is_biter_tick, n, o), updated, state,
+    )

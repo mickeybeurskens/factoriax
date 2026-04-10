@@ -174,31 +174,20 @@ def _build_sections(params: EnvParams) -> list[_Section]:
             _f("iron_probability", "Iron Prob", "float"),
             _f("copper_probability", "Copper Prob", "float"),
             _f("coal_probability", "Coal Prob", "float"),
+            _f("tin_probability", "Tin Prob", "float"),
+            _f("silicon_probability", "Silicon Prob", "float"),
         ],
     )
     machines = _Section(
         "Machines",
         [
-            _f("machine_max_health", "Machine Health", "int"),
+            _f("max_machines", "Max Machines", "int"),
             _f("power_per_coal", "Power/Coal", "int"),
             _f("miner_mining_rate", "Mining Rate", "int"),
             _f("max_assembler_stack_size", "Assembler Stack", "int"),
         ],
     )
-    biters = _Section(
-        "Biters",
-        [
-            _f("max_biters", "Max Biters", "int"),
-            _f("biter_spawn_rate", "Spawn Rate", "float"),
-            _f("nest_probability", "Nest Prob", "float"),
-            _f("biter_tick_interval", "Tick Interval", "int"),
-            _f("biter_attack_damage", "Attack Damage", "int"),
-            _f("biter_health_default", "Biter Health", "int"),
-            _f("scent_decay", "Scent Decay", "float"),
-            _f("scent_emission", "Scent Emission", "float"),
-        ],
-    )
-    return [world, resources, machines, biters]
+    return [world, resources, machines]
 
 
 def _field_index_in_sections(
@@ -304,10 +293,6 @@ def _build_params(
                 kwargs[fs.name] = parsed
             else:
                 kwargs[fs.name] = getattr(defaults, fs.name)
-
-    if not biters_enabled:
-        kwargs["biter_spawn_rate"] = 0.0
-        kwargs["nest_probability"] = 0.0
 
     return EnvParams(**kwargs)  # type: ignore[arg-type]
 
@@ -566,8 +551,7 @@ def run_settings_menu(
     clock = pygame.time.Clock()
     params = initial_params if initial_params is not None else EnvParams()
     sections = _build_sections(params)
-    biters_enabled = params.biter_spawn_rate > 0.0
-    stored_spawn_rate = _format_value(params.biter_spawn_rate, "float")
+    biters_enabled = False  # Biters removed from game
 
     scroll_offset = 0
     font_header = get_pixel_font(32 * s)

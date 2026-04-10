@@ -11,13 +11,10 @@ import jax.numpy as jnp
 import pygame
 import pytest
 
-from factoriax.config import PlayerAction, build_key_lookup, default_keyboard
-from factoriax.constants import NUM_ITEM_TYPES, Action, ItemType, MachineType
+from factoriax.config import build_key_lookup, default_keyboard
+from factoriax.constants import Action, ItemType
 from factoriax.play.game_ui import GameUI
 from factoriax.state import EnvParams
-
-
-
 
 
 @pytest.fixture
@@ -81,7 +78,7 @@ class TestInventoryNavigation:
         event = pygame.event.Event(
             pygame.KEYDOWN, key=right_key, mod=0,
         )
-        result = game_ui.handle_event(event, state)
+        game_ui.handle_event(event, state)
         assert ps.selected_item == 2
 
 

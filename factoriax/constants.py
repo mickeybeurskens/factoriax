@@ -19,7 +19,9 @@ class BlockType(IntEnum):
     IRON = 4
     COPPER = 5
     COAL = 6
-    NEST = 7
+    TIN = 7
+    SILICON = 8
+    NEST = 9  # Temporary backward-compat (Stage 1)
 
 
 class ItemType(IntEnum):
@@ -27,20 +29,26 @@ class ItemType(IntEnum):
 
     EMPTY = 0
     COAL = 1
-    IRON = 2
-    COPPER = 3
-    MINER = 4
-    PALLET = 5
-    CONVEYOR_BELT = 6
-    ARM = 7
-    ASSEMBLER = 8
-    HULL = 9
-    FUEL_PACK = 10
-    ROCKET = 11
-    BASIC_SCIENCE_PACK = 12
-    FUEL_SCIENCE_PACK = 13
-    ADVANCED_SCIENCE_PACK = 14
-    UNDERGROUND_BELT = 15
+    IRON_ORE = 2
+    COPPER_ORE = 3
+    TIN_ORE = 4
+    SILICON = 5
+    IRON_PLATE = 6
+    COPPER_PLATE = 7
+    TIN_PLATE = 8
+    WAFER = 9
+    STEEL = 10
+    CIRCUIT = 11
+    WIRE = 12
+    MOTOR = 13
+    SENSOR = 14
+    CONVEYOR_BELT = 15
+    MINER = 16
+    ASSEMBLER = 17
+    PALLET = 18
+    BASIC_SCIENCE_PACK = 19
+    ADVANCED_SCIENCE_PACK = 20
+    ROCKET = 21
 
 
 class MachineType(IntEnum):
@@ -51,158 +59,104 @@ class MachineType(IntEnum):
     PALLET = 2
     ASSEMBLER = 3
     CONVEYOR_BELT = 4
-    ARM = 5
-    ROCKET = 6
-    UNDERGROUND_ENTRY = 7
-    UNDERGROUND_EXIT = 8
+    ROCKET = 5
 
 
 NUM_ITEM_TYPES = len(ItemType)
 MAX_STACK_SIZE = 64
 MAX_MACHINE_STACK_SIZE = 64
-MAX_UNDERGROUND_RANGE: int = 5
 
-# Backward-compat aliases for Phase 2 modules (renderer, editor, play).
-# These will be removed when the UI is updated for pouches.
-NUM_INVENTORY_SLOTS = 10  # deprecated
-MAX_MACHINE_INVENTORY_SLOTS = 8  # deprecated
-MACHINE_NUM_SLOTS = np.array(  # deprecated
-    [0, 2, 1, 4, 1, 1, 0, 1, 1],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, UG_ENTRY, UG_EXIT
-    dtype=np.int32,
-)
-
-
-class SlotRole(IntEnum):  # deprecated — Phase 2 UI still references this
-    """Deprecated slot role enum. Kept for Phase 2 UI compat."""
-
-    NONE = 0
-    INPUT = 1
-    OUTPUT = 2
-    STORAGE = 3
-
-
-MACHINE_SLOT_ROLES: np.ndarray = np.array(  # deprecated
-    [
-        [SlotRole.NONE] * 8,
-        [SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
-        [SlotRole.STORAGE] * 8,
-        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
-        + [SlotRole.NONE] * 4,
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
-        [SlotRole.NONE] * 8,
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,  # UG_ENTRY
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,  # UG_EXIT
-    ],
-    dtype=np.int32,
-)
-SLOT_ROLE_LABELS: dict[int, str] = {  # deprecated
-    0: "",
-    1: "IN",
-    2: "OUT",
-    3: "STORE",
-}
-SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {  # deprecated
-    0: (40, 40, 40),
-    1: (190, 120, 40),
-    2: (40, 170, 140),
-    3: (80, 115, 175),
-}
-
-# Canonical dtypes for state arrays. Use these in tests and level
-# builders to avoid int32/int16 mismatch warnings from JAX scatter ops.
+# Canonical dtypes for state arrays.
 INVENTORY_COUNT_DTYPE = jnp.int32
 MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
 BLOCK_RESOURCE_DTYPE = jnp.int16
 
 # Max distinct item types a machine can hold simultaneously.
-# Belt/Arm hold one type at a time; Pallet holds 1 type.
 MACHINE_MAX_TYPES = jnp.array(
-    [0, 2, 1, 4, 1, 1, 0, 1, 1],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, UG_ENTRY, UG_EXIT
+    [0, 2, 1, 4, 1, 0],
+    # NONE, MINER, PALLET, ASM, BELT, ROCKET
     dtype=jnp.int32,
 )
 
 # Max stack count per item type per machine type.
 MACHINE_MAX_STACK = jnp.array(
-    [
-        0,
-        MAX_MACHINE_STACK_SIZE,
-        256,
-        1000,
-        MAX_MACHINE_STACK_SIZE,
-        MAX_MACHINE_STACK_SIZE,
-        0,
-        MAX_MACHINE_STACK_SIZE,  # UNDERGROUND_ENTRY
-        MAX_MACHINE_STACK_SIZE,  # UNDERGROUND_EXIT
-    ],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, UG_ENTRY, UG_EXIT
+    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, MAX_MACHINE_STACK_SIZE, 0],
+    # NONE, MINER, PALLET, ASM, BELT, ROCKET
     dtype=jnp.int32,
 )
 
 # Max stack count per item type for the player inventory.
 PLAYER_MAX_STACK = jnp.array(
     [
-        0,  # EMPTY
+        0,   # EMPTY
         64,  # COAL
-        64,  # IRON
-        64,  # COPPER
-        10,  # MINER
-        10,  # PALLET
+        64,  # IRON_ORE
+        64,  # COPPER_ORE
+        64,  # TIN_ORE
+        64,  # SILICON
+        64,  # IRON_PLATE
+        64,  # COPPER_PLATE
+        64,  # TIN_PLATE
+        64,  # WAFER
+        64,  # STEEL
+        64,  # CIRCUIT
+        64,  # WIRE
+        64,  # MOTOR
+        64,  # SENSOR
         10,  # CONVEYOR_BELT
-        10,  # ARM
+        10,  # MINER
         10,  # ASSEMBLER
-        64,  # HULL
-        64,  # FUEL_PACK
-        10,  # ROCKET
+        10,  # PALLET
         64,  # BASIC_SCIENCE_PACK
-        64,  # FUEL_SCIENCE_PACK
         64,  # ADVANCED_SCIENCE_PACK
-        10,  # UNDERGROUND_BELT
+        10,  # ROCKET
     ],
     dtype=jnp.int32,
 )
 
-BLOCK_TO_ITEM: dict[BlockType, ItemType] = {
+BLOCK_TO_ITEM: dict[int, int] = {
     BlockType.COAL: ItemType.COAL,
-    BlockType.IRON: ItemType.IRON,
-    BlockType.COPPER: ItemType.COPPER,
+    BlockType.IRON: ItemType.IRON_ORE,
+    BlockType.COPPER: ItemType.COPPER_ORE,
+    BlockType.TIN: ItemType.TIN_ORE,
+    BlockType.SILICON: ItemType.SILICON,
 }
 
 ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.COAL: (54, 54, 54),
-    ItemType.IRON: (192, 192, 192),
-    ItemType.COPPER: (184, 115, 51),
-    ItemType.MINER: (0, 200, 0),
-    ItemType.PALLET: (140, 100, 45),
+    ItemType.IRON_ORE: (160, 140, 130),
+    ItemType.COPPER_ORE: (170, 100, 50),
+    ItemType.TIN_ORE: (180, 180, 170),
+    ItemType.SILICON: (100, 110, 130),
+    ItemType.IRON_PLATE: (192, 192, 192),
+    ItemType.COPPER_PLATE: (184, 115, 51),
+    ItemType.TIN_PLATE: (200, 200, 190),
+    ItemType.WAFER: (80, 90, 140),
+    ItemType.STEEL: (140, 150, 165),
+    ItemType.CIRCUIT: (40, 160, 80),
+    ItemType.WIRE: (200, 140, 60),
+    ItemType.MOTOR: (100, 100, 180),
+    ItemType.SENSOR: (180, 80, 80),
     ItemType.CONVEYOR_BELT: (220, 180, 50),
-    ItemType.ARM: (80, 120, 200),
+    ItemType.MINER: (0, 200, 0),
     ItemType.ASSEMBLER: (160, 80, 200),
-    ItemType.HULL: (170, 170, 190),
-    ItemType.FUEL_PACK: (220, 140, 40),
-    ItemType.ROCKET: (240, 240, 240),
+    ItemType.PALLET: (170, 170, 175),
     ItemType.BASIC_SCIENCE_PACK: (200, 50, 50),
-    ItemType.FUEL_SCIENCE_PACK: (50, 150, 50),
     ItemType.ADVANCED_SCIENCE_PACK: (50, 50, 200),
-    ItemType.UNDERGROUND_BELT: (160, 130, 40),
+    ItemType.ROCKET: (240, 240, 240),
 }
 
-# Human-readable display names for each MachineType, used by the UI.
+# Human-readable display names for each MachineType.
 MACHINE_TYPE_NAMES: dict[int, str] = {
     int(MachineType.NONE): "None",
     int(MachineType.MINER): "Miner",
     int(MachineType.PALLET): "Pallet",
     int(MachineType.ASSEMBLER): "Assembler",
     int(MachineType.CONVEYOR_BELT): "Conveyor Belt",
-    int(MachineType.ARM): "Arm",
     int(MachineType.ROCKET): "Rocket",
-    int(MachineType.UNDERGROUND_ENTRY): "Tunnel Entry",
-    int(MachineType.UNDERGROUND_EXIT): "Tunnel Exit",
 }
 
 # Recipes are defined in factoriax.recipes (single source of truth).
-# Re-exported here for backward compatibility.
 from factoriax.recipes import (  # noqa: E402, F401
     ASSEMBLER_RECIPE_INPUT_COUNTS,
     ASSEMBLER_RECIPE_INPUT_ITEMS,
@@ -210,11 +164,12 @@ from factoriax.recipes import (  # noqa: E402, F401
     ASSEMBLER_RECIPE_OUTPUTS,
     ASSEMBLER_RECIPE_TICKS,
     ASSEMBLER_RECIPES,
+    CRAFT_ACTION_TO_RECIPE,
     MAX_ASSEMBLER_RECIPE_INPUTS,
-    MAX_ASSEMBLER_STACK_SIZE,
     MAX_RECIPE_INPUTS,
     NUM_ASSEMBLER_RECIPES,
     NUM_RECIPES,
+    OUTPUT_TO_RECIPE,
     RECIPE_INPUT_COUNTS,
     RECIPE_INPUT_ITEMS,
     RECIPE_NAMES,
@@ -231,83 +186,48 @@ NUM_TECHNOLOGIES: int = 2
 RESEARCH_COST: int = 10  # science packs per unlock
 
 # Maps science pack item type -> technology index.
-# BASIC_SCIENCE_PACK unlocks tech 0, FUEL_SCIENCE_PACK unlocks tech 1.
 SCIENCE_PACK_TO_TECH = (
-    jnp.zeros(len(ItemType), dtype=jnp.int32)
+    jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
     .at[ItemType.BASIC_SCIENCE_PACK]
     .set(0)
-    .at[ItemType.FUEL_SCIENCE_PACK]
+    .at[ItemType.ADVANCED_SCIENCE_PACK]
     .set(1)
 )
 
 # Whether an item type is a science pack that can be used for research.
 IS_RESEARCH_ITEM = (
-    jnp.zeros(len(ItemType), dtype=jnp.bool_)
+    jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.bool_)
     .at[ItemType.BASIC_SCIENCE_PACK]
     .set(True)
-    .at[ItemType.FUEL_SCIENCE_PACK]
+    .at[ItemType.ADVANCED_SCIENCE_PACK]
     .set(True)
 )
 
-# Which assembler recipe index each technology gates.
-# Tech 0 gates assembler recipe 0 (Hull), tech 1 gates recipe 1 (Fuel Pack).
-TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
-
-# Which assembler recipes require no research (ungated).
-# Recipes not in TECH_GATES_RECIPE are always available.
-# Science pack recipes (indices 3, 4, 5) and Rocket (index 2) are ungated.
-
 # ---------------------------------------------------------------------------
-# Machine health / repair
+# Placeable items and machine mappings
 # ---------------------------------------------------------------------------
-
-DEFAULT_MACHINE_MAX_HEALTH: int = 100
-DEFAULT_MAX_BITERS: int = 32
-
-# Maps MachineType -> player recipe index for repair cost.
-# -1 means not repairable (NONE, ROCKET).
-MACHINE_TO_RECIPE = jnp.array(
-    [
-        -1,  # NONE
-        0,  # MINER -> recipe 0 (5 copper, 5 iron)
-        1,  # PALLET -> recipe 1 (5 iron)
-        4,  # ASSEMBLER -> recipe 4 (10 iron, 5 copper)
-        2,  # CONVEYOR_BELT -> recipe 2 (1 iron)
-        3,  # ARM -> recipe 3 (5 iron, 1 copper)
-        -1,  # ROCKET
-        -1,  # UNDERGROUND_ENTRY (not repairable)
-        -1,  # UNDERGROUND_EXIT (not repairable)
-    ],
-    dtype=jnp.int32,
-)
 
 PLACEABLE_ITEMS = jnp.array(
     [
         ItemType.MINER,
         ItemType.PALLET,
         ItemType.CONVEYOR_BELT,
-        ItemType.ARM,
         ItemType.ASSEMBLER,
         ItemType.ROCKET,
-        ItemType.UNDERGROUND_BELT,
     ],
     dtype=jnp.int32,
 )
 
-# Ordered tuple for UI iteration (hotbar tool belt order).
 PLACEABLE_ITEM_LIST: tuple[int, ...] = (
     int(ItemType.MINER),
     int(ItemType.PALLET),
     int(ItemType.CONVEYOR_BELT),
-    int(ItemType.ARM),
     int(ItemType.ASSEMBLER),
     int(ItemType.ROCKET),
-    int(ItemType.UNDERGROUND_BELT),
 )
 
 PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
 
-# Non-placeable item types for the inventory resources section.
 RESOURCE_ITEM_LIST: tuple[int, ...] = tuple(
     i for i in range(1, NUM_ITEM_TYPES) if i not in PLACEABLE_ITEM_SET
 )
@@ -316,30 +236,34 @@ ITEM_TO_MACHINE = {
     ItemType.MINER: MachineType.MINER,
     ItemType.PALLET: MachineType.PALLET,
     ItemType.CONVEYOR_BELT: MachineType.CONVEYOR_BELT,
-    ItemType.ARM: MachineType.ARM,
     ItemType.ASSEMBLER: MachineType.ASSEMBLER,
     ItemType.ROCKET: MachineType.ROCKET,
-    ItemType.UNDERGROUND_BELT: MachineType.UNDERGROUND_ENTRY,
 }
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
     [
         MachineType.NONE,  # EMPTY
         MachineType.NONE,  # COAL
-        MachineType.NONE,  # IRON
-        MachineType.NONE,  # COPPER
-        MachineType.MINER,  # MINER
-        MachineType.PALLET,  # PALLET
+        MachineType.NONE,  # IRON_ORE
+        MachineType.NONE,  # COPPER_ORE
+        MachineType.NONE,  # TIN_ORE
+        MachineType.NONE,  # SILICON
+        MachineType.NONE,  # IRON_PLATE
+        MachineType.NONE,  # COPPER_PLATE
+        MachineType.NONE,  # TIN_PLATE
+        MachineType.NONE,  # WAFER
+        MachineType.NONE,  # STEEL
+        MachineType.NONE,  # CIRCUIT
+        MachineType.NONE,  # WIRE
+        MachineType.NONE,  # MOTOR
+        MachineType.NONE,  # SENSOR
         MachineType.CONVEYOR_BELT,  # CONVEYOR_BELT
-        MachineType.ARM,  # ARM
+        MachineType.MINER,  # MINER
         MachineType.ASSEMBLER,  # ASSEMBLER
-        MachineType.NONE,  # HULL
-        MachineType.NONE,  # FUEL_PACK
-        MachineType.ROCKET,  # ROCKET
+        MachineType.PALLET,  # PALLET
         MachineType.NONE,  # BASIC_SCIENCE_PACK
-        MachineType.NONE,  # FUEL_SCIENCE_PACK
         MachineType.NONE,  # ADVANCED_SCIENCE_PACK
-        MachineType.UNDERGROUND_ENTRY,  # UNDERGROUND_BELT (default)
+        MachineType.ROCKET,  # ROCKET
     ],
     dtype=jnp.int32,
 )
@@ -351,22 +275,18 @@ MACHINE_TO_ITEM_ARRAY = jnp.array(
         ItemType.PALLET,  # PALLET
         ItemType.ASSEMBLER,  # ASSEMBLER
         ItemType.CONVEYOR_BELT,  # CONVEYOR_BELT
-        ItemType.ARM,  # ARM
         ItemType.ROCKET,  # ROCKET
-        ItemType.UNDERGROUND_BELT,  # UNDERGROUND_ENTRY
-        ItemType.UNDERGROUND_BELT,  # UNDERGROUND_EXIT
     ],
     dtype=jnp.int32,
 )
 
+# ---------------------------------------------------------------------------
+# Direction and movement
+# ---------------------------------------------------------------------------
+
 
 class Direction(IntEnum):
-    """Compass facing directions for players and machines.
-
-    These are stored in ``player_directions`` and ``machine_direction``
-    state arrays. They are NOT actions. Use :class:`Action` for agent
-    inputs and :class:`Direction` for spatial orientation.
-    """
+    """Compass facing directions for players and machines."""
 
     LEFT = 1
     RIGHT = 2
@@ -374,13 +294,30 @@ class Direction(IntEnum):
     DOWN = 4
 
 
+# (dx, dy) offset per compass direction, indexed by Direction value.
+DIRECTIONS = jnp.array(
+    [
+        [0, 0],   # 0: NONE / invalid
+        [-1, 0],  # 1: LEFT
+        [1, 0],   # 2: RIGHT
+        [0, -1],  # 3: UP
+        [0, 1],   # 4: DOWN
+    ],
+    dtype=jnp.int32,
+)
+
+# ---------------------------------------------------------------------------
+# Action enum
+# ---------------------------------------------------------------------------
+
+
 class Action(IntEnum):
     """Player actions using compound action design.
 
     Every action is self-contained: placement, deposit, and withdraw
     actions name the specific item type so no slot cursor is needed.
-    Movement actions move in absolute map directions without changing
-    facing. FACE_* snaps facing without moving.
+    Movement actions move in absolute map directions. FACE_* snaps
+    facing without moving.
     """
 
     # Movement (11)
@@ -389,143 +326,154 @@ class Action(IntEnum):
     DOWN = 2
     LEFT = 3
     RIGHT = 4
-    TURN_LEFT = 5
-    TURN_RIGHT = 6
-    FACE_UP = 7
-    FACE_DOWN = 8
-    FACE_LEFT = 9
-    FACE_RIGHT = 10
+    FACE_UP = 5
+    FACE_DOWN = 6
+    FACE_LEFT = 7
+    FACE_RIGHT = 8
 
-    # World (4)
-    MINE = 11
-    PICKUP = 12
-    ROTATE = 13
-    REPAIR = 14
+    # World (2)
+    MINE = 9
+    PICKUP = 10
 
-    # Placement — one per placeable machine type (7)
-    PLACE_MINER = 15
-    PLACE_PALLET = 16
-    PLACE_BELT = 17
-    PLACE_ARM = 18
-    PLACE_ASSEMBLER = 19
-    PLACE_ROCKET = 20
-    PLACE_UNDERGROUND_BELT = 21
+    # Placement — one per placeable machine type (5)
+    PLACE_MINER = 11
+    PLACE_PALLET = 12
+    PLACE_BELT = 13
+    PLACE_ASSEMBLER = 14
+    PLACE_ROCKET = 15
 
-    # Crafting — one per player recipe (6)
-    CRAFT_MINER = 22
-    CRAFT_PALLET = 23
-    CRAFT_BELT = 24
-    CRAFT_ARM = 25
-    CRAFT_ASSEMBLER = 26
-    CRAFT_UNDERGROUND_BELT = 27
+    # Crafting — one per recipe output (16)
+    CRAFT_IRON_PLATE = 16
+    CRAFT_COPPER_PLATE = 17
+    CRAFT_TIN_PLATE = 18
+    CRAFT_WAFER = 19
+    CRAFT_STEEL = 20
+    CRAFT_CIRCUIT = 21
+    CRAFT_WIRE = 22
+    CRAFT_MOTOR = 23
+    CRAFT_SENSOR = 24
+    CRAFT_BELT = 25
+    CRAFT_MINER = 26
+    CRAFT_ASSEMBLER = 27
+    CRAFT_PALLET = 28
+    CRAFT_BASIC_SCIENCE = 29
+    CRAFT_ADV_SCIENCE = 30
+    CRAFT_ROCKET = 31
 
-    # Research — one per science pack type (3)
-    RESEARCH_BASIC = 28
-    RESEARCH_FUEL = 29
-    RESEARCH_ADVANCED = 30
+    # Research (2)
+    RESEARCH_BASIC = 32
+    RESEARCH_ADVANCED = 33
 
-    # Deposit — one per item type (15)
-    DEPOSIT_COAL = 31
-    DEPOSIT_IRON = 32
-    DEPOSIT_COPPER = 33
-    DEPOSIT_MINER = 34
-    DEPOSIT_PALLET = 35
-    DEPOSIT_BELT = 36
-    DEPOSIT_ARM = 37
-    DEPOSIT_ASSEMBLER = 38
-    DEPOSIT_HULL = 39
-    DEPOSIT_FUEL_PACK = 40
-    DEPOSIT_ROCKET = 41
-    DEPOSIT_BASIC_SCIENCE = 42
-    DEPOSIT_FUEL_SCIENCE = 43
-    DEPOSIT_ADVANCED_SCIENCE = 44
-    DEPOSIT_UNDERGROUND_BELT = 45
+    # Deposit — one per non-EMPTY item type (21)
+    DEPOSIT_COAL = 34
+    DEPOSIT_IRON_ORE = 35
+    DEPOSIT_COPPER_ORE = 36
+    DEPOSIT_TIN_ORE = 37
+    DEPOSIT_SILICON = 38
+    DEPOSIT_IRON_PLATE = 39
+    DEPOSIT_COPPER_PLATE = 40
+    DEPOSIT_TIN_PLATE = 41
+    DEPOSIT_WAFER = 42
+    DEPOSIT_STEEL = 43
+    DEPOSIT_CIRCUIT = 44
+    DEPOSIT_WIRE = 45
+    DEPOSIT_MOTOR = 46
+    DEPOSIT_SENSOR = 47
+    DEPOSIT_BELT = 48
+    DEPOSIT_MINER = 49
+    DEPOSIT_ASSEMBLER = 50
+    DEPOSIT_PALLET = 51
+    DEPOSIT_BASIC_SCIENCE = 52
+    DEPOSIT_ADV_SCIENCE = 53
+    DEPOSIT_ROCKET = 54
 
-    # Withdraw — one per item type (15)
-    WITHDRAW_COAL = 46
-    WITHDRAW_IRON = 47
-    WITHDRAW_COPPER = 48
-    WITHDRAW_MINER = 49
-    WITHDRAW_PALLET = 50
-    WITHDRAW_BELT = 51
-    WITHDRAW_ARM = 52
-    WITHDRAW_ASSEMBLER = 53
-    WITHDRAW_HULL = 54
-    WITHDRAW_FUEL_PACK = 55
-    WITHDRAW_ROCKET = 56
-    WITHDRAW_BASIC_SCIENCE = 57
-    WITHDRAW_FUEL_SCIENCE = 58
-    WITHDRAW_ADVANCED_SCIENCE = 59
-    WITHDRAW_UNDERGROUND_BELT = 60
+    # Withdraw — one per non-EMPTY item type (21)
+    WITHDRAW_COAL = 55
+    WITHDRAW_IRON_ORE = 56
+    WITHDRAW_COPPER_ORE = 57
+    WITHDRAW_TIN_ORE = 58
+    WITHDRAW_SILICON = 59
+    WITHDRAW_IRON_PLATE = 60
+    WITHDRAW_COPPER_PLATE = 61
+    WITHDRAW_TIN_PLATE = 62
+    WITHDRAW_WAFER = 63
+    WITHDRAW_STEEL = 64
+    WITHDRAW_CIRCUIT = 65
+    WITHDRAW_WIRE = 66
+    WITHDRAW_MOTOR = 67
+    WITHDRAW_SENSOR = 68
+    WITHDRAW_BELT = 69
+    WITHDRAW_MINER = 70
+    WITHDRAW_ASSEMBLER = 71
+    WITHDRAW_PALLET = 72
+    WITHDRAW_BASIC_SCIENCE = 73
+    WITHDRAW_ADV_SCIENCE = 74
+    WITHDRAW_ROCKET = 75
+
+    # Temporary backward-compat actions
+    TURN_LEFT = 76
+    TURN_RIGHT = 77
+    ROTATE = 78
+    REPAIR = 79
+
+    # Aliases for old naming convention
+    DEPOSIT_ADVANCED_SCIENCE = 53
+    WITHDRAW_ADVANCED_SCIENCE = 74
 
 
 # Base offsets for arithmetic dispatch of compound actions.
-# item_type = action - DEPOSIT_BASE + ItemType.COAL
 PLACE_BASE: int = Action.PLACE_MINER
-CRAFT_BASE: int = Action.CRAFT_MINER
+CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
 DEPOSIT_BASE: int = Action.DEPOSIT_COAL
 WITHDRAW_BASE: int = Action.WITHDRAW_COAL
 
-# Maps PLACE_* action offset (0..6) to the ItemType of the machine placed.
+# Maps PLACE_* action offset (0..5) to the ItemType of the machine placed.
 PLACE_ACTION_TO_ITEM = jnp.array(
     [
-        ItemType.MINER,  # PLACE_MINER - PLACE_BASE = 0
-        ItemType.PALLET,  # 1
-        ItemType.CONVEYOR_BELT,  # 2
-        ItemType.ARM,  # 3
-        ItemType.ASSEMBLER,  # 4
-        ItemType.ROCKET,  # 5
-        ItemType.UNDERGROUND_BELT,  # 6
+        ItemType.MINER,
+        ItemType.PALLET,
+        ItemType.CONVEYOR_BELT,
+        ItemType.ASSEMBLER,
+        ItemType.ROCKET,
     ],
     dtype=jnp.int32,
 )
 
-# Maps RESEARCH_* action offset (0..2) to the science pack item type.
+# Maps RESEARCH_* action offset (0..1) to the science pack item type.
 RESEARCH_ACTION_TO_PACK = jnp.array(
     [
-        ItemType.BASIC_SCIENCE_PACK,  # RESEARCH_BASIC
-        ItemType.FUEL_SCIENCE_PACK,  # RESEARCH_FUEL
-        ItemType.ADVANCED_SCIENCE_PACK,  # RESEARCH_ADVANCED
+        ItemType.BASIC_SCIENCE_PACK,
+        ItemType.ADVANCED_SCIENCE_PACK,
     ],
     dtype=jnp.int32,
 )
 
+# ---------------------------------------------------------------------------
+# Block/terrain constants
+# ---------------------------------------------------------------------------
 
-# (dx, dy) offset per compass direction, indexed by Direction value.
-DIRECTIONS = jnp.array(
-    [
-        [0, 0],  # 0: NONE / invalid
-        [-1, 0],  # 1: LEFT
-        [1, 0],  # 2: RIGHT
-        [0, -1],  # 3: UP
-        [0, 1],  # 4: DOWN
-    ],
-    dtype=jnp.int32,
+MINEABLE_BLOCKS = jnp.array(
+    [BlockType.COAL, BlockType.IRON, BlockType.COPPER,
+     BlockType.TIN, BlockType.SILICON],
 )
-
-# Counterclockwise turn: UP→LEFT→DOWN→RIGHT→UP
-TURN_LEFT_MAP = jnp.array([0, 4, 3, 1, 2], dtype=jnp.int32)
-
-# Clockwise turn: UP→RIGHT→DOWN→LEFT→UP
-TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
-
-MINEABLE_BLOCKS = jnp.array([BlockType.COAL, BlockType.IRON, BlockType.COPPER])
 
 BLOCK_TO_ITEM_ARRAY = jnp.array(
     [
-        ItemType.EMPTY,  # INVALID -> EMPTY
-        ItemType.EMPTY,  # OUT_OF_BOUNDS -> EMPTY
-        ItemType.EMPTY,  # DIRT -> EMPTY
-        ItemType.EMPTY,  # WATER -> EMPTY
-        ItemType.IRON,  # IRON -> IRON
-        ItemType.COPPER,  # COPPER -> COPPER
-        ItemType.COAL,  # COAL -> COAL
+        ItemType.EMPTY,      # INVALID
+        ItemType.EMPTY,      # OUT_OF_BOUNDS
+        ItemType.EMPTY,      # DIRT
+        ItemType.EMPTY,      # WATER
+        ItemType.IRON_ORE,   # IRON
+        ItemType.COPPER_ORE, # COPPER
+        ItemType.COAL,       # COAL
+        ItemType.TIN_ORE,    # TIN
+        ItemType.SILICON,    # SILICON
     ],
     dtype=jnp.int32,
 )
 
 SOLID_BLOCKS = jnp.array(
-    [BlockType.WATER, BlockType.OUT_OF_BOUNDS, BlockType.NEST], dtype=jnp.int32
+    [BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32,
 )
 
 BLOCK_MAX_RESOURCES = 1000
@@ -533,14 +481,14 @@ BLOCK_MAX_RESOURCES = 1000
 POWER_PER_COAL = 10
 
 MACHINE_POWER_CONSUMPTION = jnp.array(
-    [0, 1, 0, 0, 0, 0, 0, 0, 0],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, UG_ENTRY, UG_EXIT
+    [0, 1, 0, 0, 0, 0],
+    # NONE, MINER, PALLET, ASM, BELT, ROCKET
     dtype=jnp.int32,
 )
 
 MACHINE_MINING_RATE = jnp.array(
-    [0, 3, 0, 0, 0, 0, 0, 0, 0],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, UG_ENTRY, UG_EXIT
+    [0, 3, 0, 0, 0, 0],
+    # NONE, MINER, PALLET, ASM, BELT, ROCKET
     dtype=jnp.int32,
 )
 
@@ -550,17 +498,72 @@ NUM_ACTIONS = len(Action)
 MAX_ACHIEVEMENTS = 64
 
 
+# ---------------------------------------------------------------------------
+# Temporary backward-compat constants (will be removed in Stage 2+)
+# ---------------------------------------------------------------------------
+
+DEFAULT_MACHINE_MAX_HEALTH: int = 100
+DEFAULT_MAX_BITERS: int = 32
+MAX_ASSEMBLER_STACK_SIZE: int = 1000
+NUM_INVENTORY_SLOTS: int = 10
+MAX_MACHINE_INVENTORY_SLOTS: int = 8
+
+TURN_LEFT_MAP = jnp.array([0, 4, 3, 1, 2], dtype=jnp.int32)
+TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
+
+MACHINE_TO_RECIPE = jnp.array([-1, 0, 1, 4, 2, -1], dtype=jnp.int32)
+TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
+
+MACHINE_NUM_SLOTS = np.array([0, 2, 1, 4, 1, 0], dtype=np.int32)
+
+
+class SlotRole(IntEnum):
+    """Slot roles for machine inventory display (editor compat)."""
+
+    NONE = 0
+    INPUT = 1
+    OUTPUT = 2
+    STORAGE = 3
+
+
+MACHINE_SLOT_ROLES = np.array(
+    [
+        [SlotRole.NONE] * 8,
+        [SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
+        [SlotRole.STORAGE] * 8,
+        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
+        + [SlotRole.NONE] * 4,
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
+        [SlotRole.NONE] * 8,
+    ],
+    dtype=np.int32,
+)
+
+SLOT_ROLE_LABELS: dict[int, str] = {
+    0: "",
+    1: "IN",
+    2: "OUT",
+    3: "STORE",
+}
+SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {
+    0: (40, 40, 40),
+    1: (190, 120, 40),
+    2: (40, 170, 140),
+    3: (80, 115, 175),
+}
+
+
 def load_texture(name: str) -> np.ndarray:
     """Load a texture from the assets directory.
 
     Args:
-        name: Name of the texture file (without extension)
+        name: Name of the texture file (without extension).
 
     Returns:
-        RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4)
+        RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4).
 
     Raises:
-        FileNotFoundError: If the texture file does not exist
+        FileNotFoundError: If the texture file does not exist.
     """
     import imageio.v3 as iio
 
@@ -574,7 +577,7 @@ def load_all_textures() -> dict[int, np.ndarray]:
     """Load all block textures into a dictionary.
 
     Returns:
-        Dictionary mapping BlockType values to RGBA texture arrays
+        Dictionary mapping BlockType values to RGBA texture arrays.
     """
     textures: dict[int, np.ndarray] = {}
     texture_names = {

@@ -9,11 +9,10 @@ from __future__ import annotations
 import time
 
 import jax
-import jax.numpy as jnp
 import pytest
 
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.jax_renderer import JaxRenderer, render_hud, render_map
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.state import EnvParams
 
 from .conftest import NUM_STEPS, make_batched_envs
