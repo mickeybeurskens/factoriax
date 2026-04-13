@@ -1,14 +1,15 @@
 """Comprehensive step throughput benchmark for FactoriaX.
 
 Measures vmapped step_env throughput across a matrix of map sizes,
-batch sizes, and entity array capacities. Results are logged to wandb
-for tracking performance across commits.
+batch sizes, and entity array capacities. Each configuration runs
+for a fixed wall-clock duration (default 15s) to get stable
+measurements regardless of speed. Results are logged to wandb.
 
 Usage:
-    python scripts/benchmark.py                  # Run on current code, log to wandb
+    python scripts/benchmark.py                  # Current commit, log to wandb
     python scripts/benchmark.py --no-wandb       # Print to stdout only
-    python scripts/benchmark.py --map-size 32    # Single map size
-    python scripts/benchmark.py --history        # Benchmark past week's commits
+    python scripts/benchmark.py --map-size 8 16  # Specific map sizes
+    python scripts/benchmark.py --history        # Sweep past week's commits
     python scripts/benchmark.py --dry-run        # Show matrix without running
 """
 
@@ -27,8 +28,8 @@ logger = logging.getLogger(__name__)
 MAP_SIZES = [8, 16, 32, 64]
 BATCH_SIZES = [1, 64, 1024, 4096]
 MAX_MACHINES_MODES = ["auto", "small"]
-WARMUP_ITERS = 5
-TIMED_ITERS = 50
+WARMUP_ITERS = 10
+MEASURE_SECONDS = 15.0
 
 PERFORMANCE_COMMITS = [
     "1dacb74",
@@ -40,6 +41,7 @@ PERFORMANCE_COMMITS = [
     "61b44a1",
     "dd0c9c4",
     "ac31b2c",
+    "8844782",
 ]
 
 
@@ -62,8 +64,12 @@ def _measure_throughput(
     map_size: int,
     batch_size: int,
     max_machines: int,
-) -> float | None:
+) -> dict[str, float] | None:
     """Measure vmapped step_env throughput for one configuration.
+
+    Runs warmup iterations first, then steps continuously for
+    MEASURE_SECONDS wall-clock time. Reports both warmup duration
+    and timed throughput.
 
     Args:
         map_size: Square map side length.
@@ -71,15 +77,16 @@ def _measure_throughput(
         max_machines: Entity array capacity.
 
     Returns:
-        Steps per second, or None if the configuration failed.
+        Dict with steps_per_sec, warmup_sec, total_steps, measure_sec.
+        None if the configuration failed.
     """
-    import jax
-    import jax.numpy as jnp
-
-    from factoriax.envs.factoriax_env import FactoriaXEnv
-    from factoriax.state import EnvParams
-
     try:
+        import jax
+        import jax.numpy as jnp
+
+        from factoriax.envs.factoriax_env import FactoriaXEnv
+        from factoriax.state import EnvParams
+
         num_actions = 80
         try:
             from factoriax.constants import NUM_ACTIONS
@@ -112,15 +119,19 @@ def _measure_throughput(
         rng = jax.random.key(77)
         actions = jnp.zeros(batch_size, dtype=jnp.int32)
         step_keys = jax.random.split(rng, batch_size)
+
+        warmup_t0 = time.perf_counter()
         for _ in range(WARMUP_ITERS):
             _, states, _, _, _ = vmap_step(
                 step_keys, states, actions, params
             )
         jax.block_until_ready(jax.tree.leaves(states))
+        warmup_sec = time.perf_counter() - warmup_t0
 
         rng_t = jax.random.key(88)
+        total_iters = 0
         t0 = time.perf_counter()
-        for _ in range(TIMED_ITERS):
+        while True:
             rng_t, k_a, k_s = jax.random.split(rng_t, 3)
             actions = jax.random.randint(
                 k_a, (batch_size,), 0, num_actions
@@ -129,10 +140,21 @@ def _measure_throughput(
             _, states, _, _, _ = vmap_step(
                 step_keys, states, actions, params
             )
+            total_iters += 1
+            if total_iters % 10 == 0:
+                jax.block_until_ready(jax.tree.leaves(states))
+                if time.perf_counter() - t0 >= MEASURE_SECONDS:
+                    break
         jax.block_until_ready(jax.tree.leaves(states))
         elapsed = time.perf_counter() - t0
+        total_steps = batch_size * total_iters
 
-        return batch_size * TIMED_ITERS / elapsed
+        return {
+            "steps_per_sec": total_steps / elapsed,
+            "warmup_sec": warmup_sec,
+            "total_steps": total_steps,
+            "measure_sec": elapsed,
+        }
     except Exception as exc:
         logger.warning(
             "Failed map=%d batch=%d mm=%d: %s",
@@ -206,29 +228,52 @@ def run_matrix(
     print(f"Device: {device}")
     print(f"Commit: {info['commit']} - {info['message']}")
     print(f"Date:   {info['date']}")
-    print(f"Matrix: {len(configs)} configurations")
+    print(f"Matrix: {len(configs)} configs x {MEASURE_SECONDS:.0f}s each")
     print()
     print(
         f"  {'map':>5s}  {'batch':>6s}  {'max_m':>6s}  "
-        f"{'mode':>5s}  {'steps/s':>12s}"
+        f"{'mode':>5s}  {'steps/s':>12s}  {'warmup':>8s}  "
+        f"{'iters':>8s}"
     )
-    print(f"  {'-' * 5}  {'-' * 6}  {'-' * 6}  {'-' * 5}  {'-' * 12}")
+    print(
+        f"  {'-' * 5}  {'-' * 6}  {'-' * 6}  {'-' * 5}  "
+        f"{'-' * 12}  {'-' * 8}  {'-' * 8}"
+    )
 
     for ms, bs, mm, mm_mode in configs:
-        sps = _measure_throughput(ms, bs, mm)
-        row = {
-            "map_size": ms,
-            "batch_size": bs,
-            "max_machines": mm,
-            "max_machines_mode": mm_mode,
-            "steps_per_sec": sps or 0.0,
-        }
-        results.append(row)
-        sps_str = f"{sps:>12.0f}" if sps else "       FAILED"
-        print(
-            f"  {ms:>5d}  {bs:>6d}  {mm:>6d}  "
-            f"{mm_mode:>5s}  {sps_str}"
-        )
+        result = _measure_throughput(ms, bs, mm)
+        if result:
+            row = {
+                "map_size": ms,
+                "batch_size": bs,
+                "max_machines": mm,
+                "max_machines_mode": mm_mode,
+                **result,
+            }
+            results.append(row)
+            print(
+                f"  {ms:>5d}  {bs:>6d}  {mm:>6d}  "
+                f"{mm_mode:>5s}  {result['steps_per_sec']:>12.0f}  "
+                f"{result['warmup_sec']:>7.1f}s  "
+                f"{int(result['total_steps']):>8d}"
+            )
+        else:
+            row = {
+                "map_size": ms,
+                "batch_size": bs,
+                "max_machines": mm,
+                "max_machines_mode": mm_mode,
+                "steps_per_sec": 0.0,
+                "warmup_sec": 0.0,
+                "total_steps": 0,
+                "measure_sec": 0.0,
+            }
+            results.append(row)
+            print(
+                f"  {ms:>5d}  {bs:>6d}  {mm:>6d}  "
+                f"{mm_mode:>5s}  {'FAILED':>12s}  "
+                f"{'':>8s}  {'':>8s}"
+            )
 
     if use_wandb and results:
         _log_wandb(results, info, device)
@@ -266,17 +311,18 @@ def _log_wandb(
             "map_sizes": sorted({r["map_size"] for r in results}),
             "batch_sizes": sorted({r["batch_size"] for r in results}),
             "warmup_iters": WARMUP_ITERS,
-            "timed_iters": TIMED_ITERS,
+            "measure_seconds": MEASURE_SECONDS,
         },
     )
 
     columns = [
         "map_size", "batch_size", "max_machines",
         "max_machines_mode", "steps_per_sec",
+        "warmup_sec", "total_steps", "measure_sec",
     ]
     table = wandb.Table(columns=columns)
     for r in results:
-        table.add_data(*[r[c] for c in columns])
+        table.add_data(*[r.get(c, 0) for c in columns])
 
     run.log({"throughput_matrix": table})
 
@@ -286,9 +332,15 @@ def _log_wandb(
             f"_mm{r['max_machines_mode']}"
         )
         run.summary[key] = r["steps_per_sec"]
+        warmup_key = (
+            f"warmup/map{r['map_size']}_batch{r['batch_size']}"
+            f"_mm{r['max_machines_mode']}"
+        )
+        run.summary[warmup_key] = r.get("warmup_sec", 0)
 
-    peak = max(r["steps_per_sec"] for r in results)
-    run.summary["peak_steps_per_sec"] = peak
+    successful = [r["steps_per_sec"] for r in results if r["steps_per_sec"] > 0]
+    if successful:
+        run.summary["peak_steps_per_sec"] = max(successful)
 
     run.finish()
     print(f"\nwandb run: {run.url}")
@@ -324,11 +376,16 @@ def run_history(
     print()
 
     for commit_hash in commit_list:
-        full_hash = subprocess.check_output(
-            ["git", "rev-parse", "--short", commit_hash],
-            text=True,
-            cwd=repo_root,
-        ).strip()
+        try:
+            full_hash = subprocess.check_output(
+                ["git", "rev-parse", "--short", commit_hash],
+                text=True,
+                cwd=repo_root,
+            ).strip()
+        except subprocess.CalledProcessError:
+            logger.error("Unknown commit: %s", commit_hash)
+            continue
+
         message = subprocess.check_output(
             ["git", "log", "-1", "--format=%s", commit_hash],
             text=True,
@@ -345,13 +402,12 @@ def run_history(
         print(f"Date:   {date}")
         print(f"{'=' * 70}")
 
-        work_dir = Path(tempfile.mkdtemp(prefix=f"factoriax-bench-{full_hash}-"))
+        work_dir = Path(
+            tempfile.mkdtemp(prefix=f"factoriax-bench-{full_hash}-")
+        )
         try:
             subprocess.run(
-                [
-                    "git", "worktree", "add",
-                    str(work_dir), commit_hash,
-                ],
+                ["git", "worktree", "add", str(work_dir), commit_hash],
                 cwd=repo_root,
                 check=True,
                 capture_output=True,
@@ -379,7 +435,7 @@ def run_history(
             result = subprocess.run(
                 env_cmd,
                 cwd=work_dir,
-                timeout=600,
+                timeout=1800,
                 capture_output=False,
             )
 
