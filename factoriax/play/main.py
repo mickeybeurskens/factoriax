@@ -12,7 +12,6 @@ from collections.abc import Callable
 from datetime import UTC
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 import pygame
 from jax import random
@@ -24,6 +23,7 @@ from factoriax.config import (
     default_keyboard,
 )
 from factoriax.constants import Action, Direction
+from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import Level
 from factoriax.play.game_ui import GameUI
@@ -112,7 +112,8 @@ def play_level(
     if owns_pygame:
         pygame.init()
 
-    env, _ = make_factoriax_env()
+    inner_env, _ = make_factoriax_env()
+    env = AchievementWrapper(inner_env)
     params = EnvParams(
         map_width=level.map_width,
         map_height=level.map_height,
@@ -132,7 +133,7 @@ def play_level(
 
     pygame.display.set_caption(f"FactoriaX - {level.name}")
 
-    reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]
+    reset_result: tuple[jax.Array, AchievementState] = _run_with_loading_screen(  # type: ignore[assignment]
         screen,
         "Building world",
         lambda: env.reset_from_level(level, params),
@@ -201,19 +202,19 @@ def _mouse_facing_direction(
 def _handle_welcome_event(
     event: pygame.event.Event,
     ps: PlayState,
-    state: EnvState,
+    state: AchievementState,
     win_ox: int,
     win_oy: int,
     win_scale: int,
     ui_w: int,
     ui_h: int,
-) -> tuple[PlayState, EnvState]:
+) -> tuple[PlayState, AchievementState]:
     """Process events while the welcome screen is showing.
 
     Args:
         event: Pygame event.
         ps: Current play state.
-        state: Current environment state.
+        state: Current wrapped state.
         win_ox: Window X offset for coordinate transform.
         win_oy: Window Y offset for coordinate transform.
         win_scale: Window scale factor.
@@ -221,7 +222,7 @@ def _handle_welcome_event(
         ui_h: UI canvas height.
 
     Returns:
-        Updated play state and environment state.
+        Updated play state and wrapped state.
     """
     if event.type == pygame.KEYDOWN:
         if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
@@ -232,8 +233,8 @@ def _handle_welcome_event(
 
 
 def _play_loop(
-    env: FactoriaXEnv,
-    state: EnvState,
+    env: AchievementWrapper,
+    state: AchievementState,
     params: EnvParams,
     level: Level | None,
     screen: pygame.Surface,
@@ -243,8 +244,8 @@ def _play_loop(
     """Run the full interactive game loop with all menus and controls.
 
     Args:
-        env: FactoriaX environment instance.
-        state: Initial environment state.
+        env: Achievement-wrapped environment instance.
+        state: Initial wrapped state.
         params: Environment parameters.
         level: Source level for reset, or ``None`` for procedural reset.
         screen: Pygame display surface.
@@ -260,7 +261,7 @@ def _play_loop(
     _wk = warmup_key
     _st = state
 
-    def _warmup() -> tuple[jax.Array, EnvState]:
+    def _warmup() -> tuple[jax.Array, AchievementState]:
         _, s, _, _, _ = step_fn(_wk, _st, int(Action.NOOP), params)
         return _wk, s
 
@@ -308,9 +309,9 @@ def _play_loop(
             elif event.type in (
                 pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN,
             ):
-                result = ui.handle_event(event, state)
+                result = ui.handle_event(event, state.env_state)
                 if result.state is not None:
-                    state = result.state
+                    state = state.replace(env_state=result.state)
                 if result.action is not None:
                     action = result.action
                 if result.quit:
@@ -323,7 +324,7 @@ def _play_loop(
                         _, state = env.reset_env(reset_key, params)
 
         # Highlight the tile the player is facing.
-        ui.update_hover(state)
+        ui.update_hover(state.env_state)
 
         if action != int(Action.NOOP):
             rng, step_key = random.split(rng)
@@ -333,7 +334,7 @@ def _play_loop(
             if ps.record_enabled:
                 ps.recorded_actions.append(int(action))
                 ps.recorded_rewards.append(float(reward))
-                ps.recorded_states.append(state)
+                ps.recorded_states.append(state.env_state)
             if done:
                 if level is not None:
                     _, state = env.reset_from_level(level, params)
@@ -350,7 +351,8 @@ def _play_loop(
                     ps.victory_shown = True
 
         ui_frame, ps.click_regions = ui.render_frame(
-            state, ui_w, ui_h, tile_px, world_ox, world_oy,
+            state.env_state, ui_w, ui_h, tile_px, world_ox, world_oy,
+            achievements=state.achievements_unlocked,
         )
 
         # Welcome screen overlay (managed outside GameUI).
@@ -440,13 +442,14 @@ def main() -> None:
         "Initialising environment",
         make_factoriax_env,
     )
-    env: FactoriaXEnv = env_result[0]  # type: ignore[index]
+    inner_env: FactoriaXEnv = env_result[0]  # type: ignore[index]
     params: EnvParams = env_result[1]  # type: ignore[index]
+    env = AchievementWrapper(inner_env)
 
     rng = random.PRNGKey(42)
     rng, reset_key = random.split(rng)
 
-    reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]
+    reset_result: tuple[jax.Array, AchievementState] = _run_with_loading_screen(  # type: ignore[assignment]
         screen,
         "Generating world",
         lambda: env.reset_env(reset_key, params),

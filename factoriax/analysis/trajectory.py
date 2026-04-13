@@ -391,12 +391,12 @@ class Trajectory:
 _TRAJ_TO_STATE: dict[str, str] = {
     "positions": "player_positions",
     "block_map": "map",
-    "achievements": "achievements_unlocked",
 }
 
 # Deprecated trajectory fields that no longer exist on EnvState.
 # These are silently skipped during reconstruction.
 _DEPRECATED_TRAJ_FIELDS: frozenset[str] = frozenset({
+    "achievements",
     "inventory_items",
     "inventory_counts",
     "selected_slots",

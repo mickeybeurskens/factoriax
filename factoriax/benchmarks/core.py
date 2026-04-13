@@ -46,17 +46,12 @@ class BenchmarkLevel:
             makes it difficult.
         level: Factoriax ``Level`` describing the world layout.
         env_params: Runtime constraints. Map dimensions must match the level.
-        achievement_fn: Optional custom achievement condition function.
-            When set, the environment uses these conditions instead of
-            the default core game milestones.  ``None`` keeps the
-            default.
     """
 
     name: str
     description: str
     level: Level
     env_params: EnvParams
-    achievement_fn: Callable[[EnvState], jax.Array] | None = None
 
 
 @dataclasses.dataclass

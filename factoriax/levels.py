@@ -44,7 +44,6 @@ from jax import random
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     DEFAULT_MACHINE_MAX_HEALTH,
-    MAX_ACHIEVEMENTS,
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
@@ -707,7 +706,6 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int16),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 
@@ -783,7 +781,6 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         research_progress=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int16),
         research_unlocked=jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_),
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 

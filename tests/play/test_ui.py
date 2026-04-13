@@ -25,29 +25,23 @@ _SH = 128
 class TestRenderAchievementMenu:
     """Output-contract tests for render_achievement_menu."""
 
-    def test_returns_uint8_rgba(self, state_factory) -> None:
+    def test_returns_uint8_rgba(self) -> None:
         """Must return a uint8 RGBA array matching the requested dimensions."""
-        state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result = render_achievement_menu(state, _SW, _SH)
+        achievements = np.zeros(MAX_ACHIEVEMENTS, dtype=np.bool_)
+        result = render_achievement_menu(achievements, _SW, _SH)
         assert result.dtype == np.uint8
         assert result.shape == (_SH, _SW, 4)
 
-    def test_all_locked(self, state_factory) -> None:
+    def test_all_locked(self) -> None:
         """Should not crash when no achievements are unlocked."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-            achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-        )
-        result = render_achievement_menu(state, _SW, _SH)
+        achievements = np.zeros(MAX_ACHIEVEMENTS, dtype=np.bool_)
+        result = render_achievement_menu(achievements, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
-    def test_all_unlocked(self, state_factory) -> None:
+    def test_all_unlocked(self) -> None:
         """Should not crash when every achievement is unlocked."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-            achievements_unlocked=jnp.ones(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-        )
-        result = render_achievement_menu(state, _SW, _SH)
+        achievements = np.ones(MAX_ACHIEVEMENTS, dtype=np.bool_)
+        result = render_achievement_menu(achievements, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
 

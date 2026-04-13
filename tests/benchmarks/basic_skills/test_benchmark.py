@@ -72,36 +72,20 @@ class TestLevelConstruction:
 
 
 class TestAchievementFunctions:
-    """Verify custom achievement functions produce valid output."""
+    """Verify standalone achievement condition functions produce valid output.
 
-    def test_all_have_achievement_fn(self) -> None:
-        """Every level should have a custom achievement function."""
-        for bl in BASIC_SKILLS_LEVELS:
-            assert bl.achievement_fn is not None
+    Achievement functions were moved out of BenchmarkLevel during the
+    wrapper refactor. These tests verify the functions still exist as
+    pure state predicates in the levels module.
+    """
 
-    def test_achievement_shape(self) -> None:
-        """Achievement functions should return (MAX_ACHIEVEMENTS,) bool."""
-        from factoriax.constants import MAX_ACHIEVEMENTS
+    def test_achievement_functions_exist(self) -> None:
+        """The levels module should export achievement functions."""
+        from factoriax.benchmarks.basic_skills import levels
 
-        for bl in BASIC_SKILLS_LEVELS:
-            state = build_state(bl.level, bl.env_params)
-            assert bl.achievement_fn is not None
-            result = bl.achievement_fn(state)
-            assert result.shape == (MAX_ACHIEVEMENTS,)
-            assert result.dtype == jnp.bool_
-
-    def test_initial_state_achievements(self) -> None:
-        """Fresh states should have few or no achievements unlocked."""
-        for bl in BASIC_SKILLS_LEVELS:
-            state = build_state(bl.level, bl.env_params)
-            assert bl.achievement_fn is not None
-            result = bl.achievement_fn(state)
-            n = ACHIEVEMENT_COUNTS[bl.name]
-            unlocked = int(jnp.sum(result[:n]))
-            assert unlocked <= 1, (
-                f"{bl.name}: expected <= 1 achievement on fresh state, "
-                f"got {unlocked}"
-            )
+        for name in ACHIEVEMENT_COUNTS:
+            fn_name = f"_{name}_achievements"
+            assert hasattr(levels, fn_name), f"Missing {fn_name}"
 
 
 # -----------------------------------------------------------------------

@@ -245,11 +245,7 @@ def train(config: Config) -> None:
             logger.error("wandb not found. Install with: uv add wandb")
 
     # Build env and network.
-    env = FactoriaXEnv(
-        achievement_fn=bench_level.achievement_fn
-        if bench_level.achievement_fn is not None
-        else None,
-    )
+    env = FactoriaXEnv()
     level_state = build_state(bench_level.level, env_params)
     use_vision = config.obs_type == "vision"
 
@@ -755,11 +751,7 @@ def _evaluate(
 
     # 1. Save trajectory.
     logger.info("Running evaluation rollout...")
-    env = FactoriaXEnv(
-        achievement_fn=bench_level.achievement_fn
-        if bench_level.achievement_fn is not None
-        else None,
-    )
+    env = FactoriaXEnv()
     jit_step = jax.jit(env.step_env)
     state = build_state(bench_level.level, env_params)
     rng_eval = jax.random.PRNGKey(config.seed)

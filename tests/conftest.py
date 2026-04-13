@@ -7,7 +7,6 @@ import pytest
 from factoriax import EnvState
 from factoriax.constants import (
     BLOCK_RESOURCE_DTYPE,
-    MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     Direction,
@@ -59,7 +58,6 @@ def state_factory():
         asm_in_count: jnp.ndarray | None = None,
         asm_out_type: jnp.ndarray | None = None,
         asm_out_count: jnp.ndarray | None = None,
-        achievements_unlocked: jnp.ndarray | None = None,
         items_mined: jnp.ndarray | None = None,
         research_progress: jnp.ndarray | None = None,
         research_unlocked: jnp.ndarray | None = None,
@@ -90,7 +88,6 @@ def state_factory():
             asm_in_count: Assembler input counts (grid, translated).
             asm_out_type: Assembler output type (grid, translated).
             asm_out_count: Assembler output count (grid, translated).
-            achievements_unlocked: Achievement flags.
             items_mined: Lifetime mined counts.
             research_progress: Per-technology progress.
             research_unlocked: Per-technology flags.
@@ -262,11 +259,6 @@ def state_factory():
                 research_unlocked
                 if research_unlocked is not None
                 else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_)
-            ),
-            achievements_unlocked=(
-                achievements_unlocked
-                if achievements_unlocked is not None
-                else jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
             ),
         )
 

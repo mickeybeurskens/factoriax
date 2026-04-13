@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.achievements import core_game_conditions
 from factoriax.constants import NUM_ACTIONS, NUM_TECHNOLOGIES
 from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.jax_renderer import JaxRenderer
@@ -20,46 +18,35 @@ from factoriax.observations import (
     global_array,
 )
 from factoriax.renderer import render_pixels
-from factoriax.rewards import achievement_reward  # noqa: F401 (Stage 5)
 from factoriax.state import EnvParams, EnvState
 
 
 class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """FactoriaX JAX-based grid environment.
 
-    The ``achievement_fn`` parameter controls which achievement
-    conditions are checked after each step. It must be a JAX-
-    compatible function with signature
-    ``(EnvState) -> jax.Array`` returning a boolean array of shape
-    ``(MAX_ACHIEVEMENTS,)``.  The default uses the 17 core game
-    milestones. Benchmarks can inject their own condition function
-    to define custom one-shot reward events.
+    Pure simulation engine. Advances world state (terrain, machines,
+    player inventories) without computing achievements or rewards.
+    Those concerns belong in gymnax wrappers that compose over this
+    environment.
 
     The ``tile_px`` parameter controls the pixel size for the JAX
     renderer. A :class:`~factoriax.jax_renderer.JaxRenderer` is
     created at init and used by :meth:`render` and :meth:`render_hud`.
 
     Args:
-        achievement_fn: Achievement condition function. Defaults to
-            :func:`~factoriax.achievements.core_game_conditions`.
         tile_px: Tile side length in pixels for the JAX renderer.
     """
 
     def __init__(
         self,
-        achievement_fn: Callable[
-            [EnvState], jax.Array
-        ] = core_game_conditions,
         tile_px: int = 8,
     ) -> None:
         """Initialize the environment.
 
         Args:
-            achievement_fn: Achievement condition function.
             tile_px: Tile side length in pixels for the JAX renderer.
         """
         super().__init__()
-        self._achievement_fn = achievement_fn
         self.jax_renderer = JaxRenderer(tile_px=tile_px)
 
     @property
@@ -94,23 +81,11 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             Tuple of (observation, new_state, reward, done, info).
         """
         action_arr = jnp.int32(action)
-        prev_state = state
-        new_state = factoriax_step(key, prev_state, action_arr, params)
-
-        # TODO(stage5): Re-enable achievements after porting to new state.
-        # conditions = self._achievement_fn(new_state)
-        # new_state = new_state.replace(
-        #     achievements_unlocked=new_state.achievements_unlocked
-        #     | conditions
-        # )
-
-        # TODO(stage5): Re-enable rewards after porting to new state.
-        # reward = achievement_reward(prev_state, new_state, params)
-        reward = jnp.float32(0.0)
+        new_state = factoriax_step(key, state, action_arr, params)
         done = is_game_over(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}
-        return obs, new_state, jnp.float32(reward), done, info
+        return obs, new_state, jnp.float32(0.0), done, info
 
     def reset_env(
         self, key: jax.Array, params: EnvParams
@@ -247,21 +222,12 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return jnp.array(render_pixels(state))
 
 
-def make_factoriax_env(
-    achievement_fn: Callable[
-        [EnvState], jax.Array
-    ] = core_game_conditions,
-) -> tuple[FactoriaXEnv, EnvParams]:
+def make_factoriax_env() -> tuple[FactoriaXEnv, EnvParams]:
     """Create a FactoriaX environment.
-
-    Args:
-        achievement_fn: Achievement condition function. Defaults to
-            the core game milestones. Pass a custom function for
-            benchmark-specific achievements.
 
     Returns:
         Tuple of (environment, default_params).
     """
-    env = FactoriaXEnv(achievement_fn=achievement_fn)
+    env = FactoriaXEnv()
     params = env.default_params
     return env, params

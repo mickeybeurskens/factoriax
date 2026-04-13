@@ -68,12 +68,13 @@ class TestPlayUISmoke:
         assert overlay.shape == (480, 480, 4)
         assert overlay.dtype == np.uint8
 
-    def test_achievement_menu(self, env_and_state) -> None:
+    def test_achievement_menu(self) -> None:
         """render_achievement_menu returns an RGBA overlay."""
+        from factoriax.constants import MAX_ACHIEVEMENTS
         from factoriax.play.ui import render_achievement_menu
 
-        _, _, state = env_and_state
-        overlay = render_achievement_menu(state, 480, 480)
+        achievements = np.zeros(MAX_ACHIEVEMENTS, dtype=np.bool_)
+        overlay = render_achievement_menu(achievements, 480, 480)
         assert overlay.shape == (480, 480, 4)
 
     def test_welcome_screen(self) -> None:

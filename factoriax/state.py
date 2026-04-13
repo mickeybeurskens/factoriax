@@ -44,7 +44,6 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         items_mined: Lifetime mined per type, shape ``(N,)``, int32.
         research_progress: Science consumed, shape ``(T,)``, int16.
         research_unlocked: Tech flags, shape ``(T,)``, bool.
-        achievements_unlocked: Achievement flags, shape ``(A,)``, bool.
     """
 
     # Grid (terrain + spatial lookup)
@@ -78,7 +77,6 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     items_mined: jnp.ndarray
     research_progress: jnp.ndarray
     research_unlocked: jnp.ndarray
-    achievements_unlocked: jnp.ndarray
 
 
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]

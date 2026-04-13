@@ -1,22 +1,12 @@
 """Scoring functions for the basic skills benchmark.
 
-Scoring is achievement-based: each level defines custom achievements as
-binary state predicates, and the score is the fraction of achievements
-unlocked at episode end. This approach is robust against reward hacking
-because achievements test actual game state rather than accumulated
-reward signals.
-
-The ``score_level`` function uses ``items_mined`` for a rough per-level
-metric (called by the runner before ``final_state`` is available on the
-result). The ``aggregate_score`` function uses ``final_state`` to compute
-the achievement-based score that matters.
+Scoring uses ``items_mined`` as a rough per-level metric. Achievement-
+based scoring is temporarily disabled while the benchmark system is
+being redesigned around gymnax wrappers.
 """
 
 from __future__ import annotations
 
-import jax.numpy as jnp
-
-from factoriax.benchmarks.basic_skills.levels import ACHIEVEMENT_COUNTS
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 
 
@@ -45,25 +35,18 @@ def score_level_items(
 
 
 def score_level_achievements(result: LevelResult) -> float:
-    """Compute the achievement-based score for a single level result.
+    """Placeholder for achievement-based scoring.
 
-    Returns the fraction of achievements unlocked at episode end,
-    ranging from 0.0 (no progress) to 1.0 (all milestones reached).
-    Falls back to 0.0 if the result has no ``final_state``.
+    Returns the items-based score until the benchmark is redesigned
+    with gymnax skill wrappers that track their own progression.
 
     Args:
-        result: Completed level result with ``final_state`` attached.
+        result: Completed level result.
 
     Returns:
-        Achievement fraction in [0.0, 1.0].
+        Items-based score as a float.
     """
-    if result.final_state is None:
-        return 0.0
-    total = ACHIEVEMENT_COUNTS.get(result.level_name, 0)
-    if total == 0:
-        return 0.0
-    unlocked = int(jnp.sum(result.final_state.achievements_unlocked[:total]))
-    return unlocked / total
+    return result.weighted_score
 
 
 def aggregate_score(level_results: list[LevelResult]) -> float:

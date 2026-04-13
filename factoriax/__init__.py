@@ -8,6 +8,7 @@ from factoriax.constants import (
     Direction,
     ItemType,
 )
+from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import (
     LEVELS,
@@ -20,10 +21,12 @@ from factoriax.levels import (
     save_level,
 )
 from factoriax.observations import global_array, local_array, rgb
-from factoriax.rewards import achievement_reward, mining_reward
+from factoriax.rewards import mining_reward
 from factoriax.state import EnvParams, EnvState
 
 __all__ = [
+    "AchievementState",
+    "AchievementWrapper",
     "Action",
     "BlockType",
     "Direction",
@@ -36,7 +39,6 @@ __all__ = [
     "LevelBuilder",
     "MAX_STACK_SIZE",
     "NUM_ITEM_TYPES",
-    "achievement_reward",
     "build_state",
     "generate_state",
     "get_level",

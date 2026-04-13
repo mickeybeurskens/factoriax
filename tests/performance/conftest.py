@@ -25,8 +25,6 @@ def perf_params() -> EnvParams:
         map_height=MAP_SIZE,
         num_players=1,
         max_timesteps=NUM_STEPS,
-        nest_probability=0.0,
-        max_biters=1,
     )
 
 

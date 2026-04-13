@@ -175,11 +175,6 @@ class TestTrajectoryToStates:
                 err_msg=f"block_resources mismatch at step {t}",
             )
             npt.assert_array_equal(
-                np.asarray(recon.achievements_unlocked),
-                np.asarray(orig.achievements_unlocked),
-                err_msg=f"achievements mismatch at step {t}",
-            )
-            npt.assert_array_equal(
                 np.asarray(recon.items_mined),
                 np.asarray(orig.items_mined),
                 err_msg=f"items_mined mismatch at step {t}",

@@ -150,7 +150,7 @@ _LEVEL_MINE = BenchmarkLevel(
         .build("basic_mine_ores")
     ),
     env_params=_params(10, 10, 200),
-    achievement_fn=_mine_ores_achievements,
+
 )
 
 ACHIEVEMENT_WEIGHTS["mine_ores"] = _pad_weights([1.0, 1.0, 2.0, 3.0, 5.0])
@@ -212,7 +212,7 @@ _LEVEL_CRAFT = BenchmarkLevel(
         .build("basic_craft_all")
     ),
     env_params=_params(12, 12, 500),
-    achievement_fn=_craft_all_achievements,
+
 )
 
 ACHIEVEMENT_WEIGHTS["craft_all"] = _pad_weights(
@@ -286,7 +286,7 @@ _LEVEL_FUEL = BenchmarkLevel(
         .build("basic_fuel_miner")
     ),
     env_params=_params(8, 8, 200),
-    achievement_fn=_fuel_miner_achievements,
+
 )
 
 ACHIEVEMENT_WEIGHTS["fuel_miner"] = _pad_weights([1.0, 2.0, 3.0, 4.0, 5.0])
@@ -377,7 +377,7 @@ _LEVEL_DEPLOY = BenchmarkLevel(
         .build("basic_deploy_miners")
     ),
     env_params=_params(12, 12, 500),
-    achievement_fn=_deploy_miners_achievements,
+
 )
 
 ACHIEVEMENT_WEIGHTS["deploy_miners"] = _pad_weights([1.0, 2.0, 3.0, 4.0, 3.0, 5.0, 6.0])
@@ -452,7 +452,7 @@ _LEVEL_ASSEMBLER = BenchmarkLevel(
         .build("basic_assembler_science")
     ),
     env_params=_params(10, 10, 300),
-    achievement_fn=_assembler_science_achievements,
+
 )
 
 ACHIEVEMENT_WEIGHTS["assembler_science"] = _pad_weights(

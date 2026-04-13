@@ -13,7 +13,6 @@ import pytest
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    MAX_ACHIEVEMENTS,
     BlockType,
     Direction,
     MachineType,
@@ -242,11 +241,6 @@ class TestBuildState:
     def test_timestep_zero(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)
         assert int(state.timestep) == 0
-
-    def test_achievements_zeroed(self) -> None:
-        state = build_state(_dirt_level(), _PARAMS_1P)
-        assert state.achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
-        assert not jnp.any(state.achievements_unlocked)
 
     def test_auto_fill_resources_from_ore(self) -> None:
         level = LevelBuilder(4, 4).fill_rect(0, 0, 2, 2, BlockType.COAL).build("t")

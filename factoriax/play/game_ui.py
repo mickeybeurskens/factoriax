@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 
+import jax.numpy as jnp
 import numpy as np
 import pygame
 
@@ -260,6 +261,7 @@ class GameUI:
         tile_px: int,
         world_ox: int,
         world_oy: int,
+        achievements: jnp.ndarray | None = None,
     ) -> tuple[np.ndarray, list[ClickRegion]]:
         """Build one UI frame with all active overlays.
 
@@ -272,6 +274,8 @@ class GameUI:
             tile_px: Tile pixel size.
             world_ox: World X offset within canvas.
             world_oy: World Y offset within canvas.
+            achievements: Achievement flags from the wrapper state.
+                Required when the achievement menu is open.
 
         Returns:
             Tuple of (RGB frame array, click regions for this frame).
@@ -345,9 +349,9 @@ class GameUI:
             composite_rgba_over_rgb(ui_frame, menu_overlay)
             click_regions.extend(inv_regions)
 
-        if ps.achievement_open:
+        if ps.achievement_open and achievements is not None:
             ach_overlay = render_achievement_menu(
-                state,
+                achievements,
                 ui_w,
                 ui_h,
                 ps.achievement_scroll,

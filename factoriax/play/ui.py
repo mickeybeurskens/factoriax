@@ -258,7 +258,7 @@ def scroll_adjust_regions(
 
 
 def render_achievement_menu(
-    state: EnvState,
+    achievements: np.ndarray,
     screen_width: int,
     screen_height: int,
     scroll_offset: int = 0,
@@ -273,7 +273,7 @@ def render_achievement_menu(
     selected achievement is shown above the footer.
 
     Args:
-        state: Current environment state.
+        achievements: Boolean array of unlocked achievement flags.
         screen_width: Total render width in pixels.
         screen_height: Total render height in pixels.
         scroll_offset: Pixels of content scrolled off the top.
@@ -303,7 +303,7 @@ def render_achievement_menu(
         _theme.BORDER
     )
 
-    unlocked = np.array(state.achievements_unlocked)
+    unlocked = np.array(achievements)
     n_unlocked = int(np.sum(unlocked))
 
     hint_font = get_pixel_font(_theme.FONT_HINT)

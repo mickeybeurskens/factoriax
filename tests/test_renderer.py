@@ -13,7 +13,6 @@ from factoriax import EnvState
 from factoriax.constants import (
     DEFAULT_MAX_BITERS,
     MACHINE_INVENTORY_COUNT_DTYPE,
-    MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
     BlockType,
@@ -64,9 +63,6 @@ def _make_state(world_map: np.ndarray) -> EnvState:
             dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         ),
         machine_selected_recipe=jnp.zeros(shape, dtype=jnp.int32),
-        achievements_unlocked=jnp.zeros(
-            MAX_ACHIEVEMENTS, dtype=jnp.bool_,
-        ),
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         machine_direction=jnp.zeros(shape, dtype=jnp.int32),
         research_progress=jnp.zeros(
