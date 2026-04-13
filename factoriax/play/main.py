@@ -140,20 +140,6 @@ def play_level(
     _, state = reset_result
     rng = random.PRNGKey(42)
 
-    step_fn = jax.jit(env.step_env)
-    rng, warmup_key = random.split(rng)
-    _wk = warmup_key
-    _st = state
-
-    def _warmup() -> tuple[jax.Array, EnvState]:
-        _, s, _, _, _ = step_fn(_wk, _st, jnp.int32(Action.NOOP), params)
-        return _wk, s
-
-    warmup_result = _run_with_loading_screen(
-        screen, "Compiling JAX", _warmup,
-    )
-    _, state = warmup_result  # type: ignore[misc]
-
     _play_loop(env, state, params, level, screen, rng)
 
     if owns_pygame:
@@ -270,6 +256,17 @@ def _play_loop(
         kb_lookup = build_key_lookup(default_keyboard())
     window_width, window_height = screen.get_size()
     step_fn = jax.jit(env.step_env)
+    rng, warmup_key = random.split(rng)
+    _wk = warmup_key
+    _st = state
+
+    def _warmup() -> tuple[jax.Array, EnvState]:
+        _, s, _, _, _ = step_fn(_wk, _st, int(Action.NOOP), params)
+        return _wk, s
+
+    warmup_result = _run_with_loading_screen(screen, "Compiling JAX", _warmup)
+    _, state = warmup_result  # type: ignore[misc]
+
     clock = pygame.time.Clock()
 
     ui_w = _BASE_UI_SIZE * _play_theme.UI_SCALE
@@ -455,21 +452,6 @@ def main() -> None:
         lambda: env.reset_env(reset_key, params),
     )
     _, state = reset_result
-
-    step_fn = jax.jit(env.step_env)
-
-    # Warm up JIT by stepping all agents with NOOP. The resulting state
-    # is used for play — one tick has passed but nothing meaningful happened.
-    rng, warmup_key = random.split(rng)
-    _wk = warmup_key
-    _st = state
-
-    def _warmup() -> tuple[jax.Array, EnvState]:
-        _, s, _, _, _ = step_fn(_wk, _st, jnp.int32(Action.NOOP), params)
-        return _wk, s
-
-    warmup_result = _run_with_loading_screen(screen, "Compiling JAX", _warmup)
-    _, state = warmup_result  # type: ignore[misc]
 
     _play_loop(env, state, params, None, screen, rng)
     pygame.quit()
