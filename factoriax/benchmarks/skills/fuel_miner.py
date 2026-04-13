@@ -1,9 +1,12 @@
-"""Fuel miner skill: reward for miners on ore, 3x when fueled.
+"""Fuel miner skill: reward for fueling pre-placed miners.
 
 Pre-placed miners sit on ore tiles. The agent starts with coal and
-must deposit it into miners to fuel them. Every timestep the reward
-is ``unfueled_on_ore + fueled_on_ore * 3``, so fueling triples the
-per-miner payout.
+must deposit it into miners to fuel them. The reward combines:
+
+- ``+1`` for each newly fueled miner (sparse goal signal)
+- ``-1`` for each miner picked up / removed (penalty)
+- Small proximity bonus toward the nearest unfueled miner (dense
+  shaping signal to guide exploration on larger maps)
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from factoriax.benchmarks.skills import (
     count_miners_on_ore,
 )
 from factoriax.constants import (
+    MINEABLE_BLOCKS,
     NUM_ACTIONS,
     NUM_TECHNOLOGIES,
     BlockType,
@@ -35,27 +39,76 @@ from factoriax.state import EnvParams, EnvState
 _ORE_TYPES = [BlockType.IRON, BlockType.COPPER, BlockType.COAL]
 
 
-class FuelMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
-    """Gymnax environment rewarding fueled miners on ore.
+def _proximity_bonus(
+    state: EnvState,
+    params: EnvParams,
+) -> jax.Array:
+    """Compute proximity bonus toward the nearest unfueled miner on ore.
 
-    Wraps :class:`~factoriax.envs.factoriax_env.FactoriaXEnv`. Each
-    tick the reward is the count of miners on ore plus a 2x bonus for
-    each that is fueled (total 3x for fueled miners).
+    Returns a scalar in [0, 1] where 1 means the player is on top of
+    an unfueled miner and 0 means no unfueled miners remain (or
+    maximum distance). Uses Manhattan distance, fully JIT-compatible.
+
+    Args:
+        state: Current environment state.
+        params: Environment parameters.
+
+    Returns:
+        Scalar float32 proximity bonus.
+    """
+    px, py = state.player_positions[0]
+    active = state.ent_y >= 0
+    is_miner = state.ent_type == MachineType.MINER
+    not_fueled = state.ent_fuel <= 0
+    ey = jnp.clip(state.ent_y, 0)
+    ex = jnp.clip(state.ent_x, 0)
+    tile = state.map[ey, ex]
+    on_ore = jnp.isin(tile, MINEABLE_BLOCKS)
+    target = active & is_miner & not_fueled & on_ore
+
+    dist = jnp.abs(ex - px) + jnp.abs(ey - py)
+    max_dist = params.map_width + params.map_height
+    # Use max_dist for non-target entities so they don't affect the min.
+    masked_dist = jnp.where(target, dist, max_dist)
+    min_dist = jnp.min(masked_dist)
+    has_target = jnp.any(target)
+    bonus = jnp.where(
+        has_target,
+        1.0 - min_dist.astype(jnp.float32) / max_dist,
+        0.0,
+    )
+    return bonus
+
+
+class FuelMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
+    """Gymnax environment rewarding miner fueling.
+
+    Wraps :class:`~factoriax.envs.factoriax_env.FactoriaXEnv`. The
+    reward combines a sparse delta signal (``+1`` per newly fueled
+    miner, ``-1`` per picked-up miner) with a small proximity bonus
+    toward the nearest unfueled miner on ore.
 
     Args:
         inner: Core environment instance. Created automatically
             when ``None``.
+        proximity_scale: Weight of the proximity bonus (default 0.01).
     """
 
-    def __init__(self, inner: FactoriaXEnv | None = None) -> None:
+    def __init__(
+        self,
+        inner: FactoriaXEnv | None = None,
+        proximity_scale: float = 0.01,
+    ) -> None:
         """Initialize the fuel miner skill wrapper.
 
         Args:
             inner: Core environment. A fresh instance is created
                 when ``None``.
+            proximity_scale: Weight of the proximity bonus.
         """
         super().__init__()
         self._inner = inner or FactoriaXEnv()
+        self._proximity_scale = proximity_scale
 
     @property
     def default_params(self) -> EnvParams:
@@ -75,7 +128,7 @@ class FuelMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ign
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
         """Step the environment and compute fueling reward.
 
-        Reward is ``unfueled_on_ore * 1 + fueled_on_ore * 3``.
+        Reward is ``fuel_delta + pickup_penalty + proximity_bonus``.
 
         Args:
             key: JAX random key.
@@ -86,13 +139,23 @@ class FuelMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ign
         Returns:
             Tuple of (observation, new_state, reward, done, info).
         """
+        prev_fueled = count_fueled_miners_on_ore(state)
+        prev_total = count_miners_on_ore(state)
         obs, new_state, _, done, info = self._inner.step_env(
-            key, state, action, params,
+            key,
+            state,
+            action,
+            params,
         )
-        total = count_miners_on_ore(new_state)
-        fueled = count_fueled_miners_on_ore(new_state)
-        unfueled = total - fueled
-        reward = (unfueled + fueled * 3).astype(jnp.float32)
+        new_fueled = count_fueled_miners_on_ore(new_state)
+        new_total = count_miners_on_ore(new_state)
+        fuel_delta = (new_fueled - prev_fueled).astype(jnp.float32)
+        pickup_penalty = jnp.minimum(
+            new_total - prev_total,
+            0,
+        ).astype(jnp.float32)
+        prox = self._proximity_scale * _proximity_bonus(new_state, params)
+        reward = fuel_delta + pickup_penalty + prox
         return obs, new_state, reward, done, info
 
     def reset_env(
@@ -135,9 +198,7 @@ class FuelMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ign
         """
         return self._inner.get_obs(state, params)
 
-    def is_terminal(
-        self, state: EnvState, params: EnvParams
-    ) -> jax.Array:
+    def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.
 
         Args:
@@ -208,9 +269,7 @@ def fuel_miner_level(
                 candidates.append((x, y))
 
     center = map_size // 2
-    candidates = [
-        (x, y) for x, y in candidates if not (x == center and y == center)
-    ]
+    candidates = [(x, y) for x, y in candidates if not (x == center and y == center)]
 
     rng.shuffle(candidates)
     placed = candidates[: min(num_miners, len(candidates))]
