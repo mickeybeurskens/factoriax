@@ -418,6 +418,20 @@ class LevelBuilder:
         self._biter_positions.append((x, y))
         return self
 
+    def set_player_inventory(
+        self, items: list[tuple[int, int]]
+    ) -> LevelBuilder:
+        """Set starting inventory for all players.
+
+        Args:
+            items: List of ``(ItemType, count)`` tuples.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        self._player_inventory = list(items)
+        return self
+
     def build(self, name: str) -> Level:
         """Finalise and return the :class:`Level`.
 
@@ -470,6 +484,7 @@ class LevelBuilder:
                 if self._biter_positions is not None
                 else None
             ),
+            player_inventory=getattr(self, "_player_inventory", None),
         )
 
 
