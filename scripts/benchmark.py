@@ -31,6 +31,8 @@ WARMUP_ITERS = 5
 TIMED_ITERS = 50
 
 PERFORMANCE_COMMITS = [
+    "1dacb74",
+    "da02d3f",
     "b3d20b2",
     "ae44678",
     "2776db2",
@@ -86,12 +88,19 @@ def _measure_throughput(
         except ImportError:
             pass
 
-        params = EnvParams(
-            map_width=map_size,
-            map_height=map_size,
-            num_players=1,
-            max_machines=max_machines,
-        )
+        try:
+            params = EnvParams(
+                map_width=map_size,
+                map_height=map_size,
+                num_players=1,
+                max_machines=max_machines,
+            )
+        except TypeError:
+            params = EnvParams(
+                map_width=map_size,
+                map_height=map_size,
+                num_players=1,
+            )
         env = FactoriaXEnv()
 
         keys = jax.random.split(jax.random.key(42), batch_size)
@@ -288,6 +297,7 @@ def _log_wandb(
 def run_history(
     use_wandb: bool = True,
     commits: list[str] | None = None,
+    map_sizes: list[int] | None = None,
 ) -> None:
     """Benchmark across historical commits using git worktrees.
 
@@ -298,6 +308,8 @@ def run_history(
         use_wandb: Whether to log to wandb.
         commits: Commits to benchmark. Uses PERFORMANCE_COMMITS
             when None.
+        map_sizes: Map sizes to pass to each subprocess. Uses all
+            sizes when None.
     """
     commit_list = commits or PERFORMANCE_COMMITS
     script_path = Path(__file__).resolve()
@@ -350,9 +362,13 @@ def run_history(
             shutil.copy2(script_path, scripts_dir / "benchmark.py")
 
             wandb_flag = [] if use_wandb else ["--no-wandb"]
+            map_flag = []
+            for ms in (map_sizes or []):
+                map_flag.extend(["--map-size", str(ms)])
             env_cmd = (
                 ["uv", "run", "python", "scripts/benchmark.py"]
                 + wandb_flag
+                + map_flag
                 + [
                     "--commit-hash", full_hash,
                     "--commit-message", message,
@@ -401,7 +417,8 @@ def main() -> None:
     parser.add_argument(
         "--map-size",
         type=int,
-        help="Benchmark a single map size instead of all.",
+        nargs="+",
+        help="Map size(s) to benchmark (default: all).",
     )
     parser.add_argument(
         "--dry-run",
@@ -431,11 +448,14 @@ def main() -> None:
     use_wandb = not args.no_wandb
 
     if args.history:
-        run_history(use_wandb=use_wandb)
+        run_history(
+            use_wandb=use_wandb,
+            map_sizes=args.map_size,
+        )
         return
 
     if args.dry_run:
-        sizes = [args.map_size] if args.map_size else MAP_SIZES
+        sizes = args.map_size or MAP_SIZES
         print("Benchmark matrix (dry run):")
         for ms in sizes:
             for bs in BATCH_SIZES:
@@ -455,7 +475,7 @@ def main() -> None:
             "date": args.commit_date or "",
         }
 
-    map_sizes = [args.map_size] if args.map_size else None
+    map_sizes = args.map_size or None
     run_matrix(
         map_sizes=map_sizes,
         use_wandb=use_wandb,

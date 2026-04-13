@@ -8,7 +8,12 @@ from factoriax.constants import (
     Direction,
     ItemType,
 )
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
+from factoriax.envs.achievement_wrapper import (
+    AchievementState,
+    AchievementWrapper,
+    AutoResetState,
+    AutoResetWrapper,
+)
 from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
 from factoriax.levels import (
     LEVELS,
@@ -28,6 +33,8 @@ __all__ = [
     "AchievementState",
     "AchievementWrapper",
     "Action",
+    "AutoResetState",
+    "AutoResetWrapper",
     "BlockType",
     "Direction",
     "EnvParams",

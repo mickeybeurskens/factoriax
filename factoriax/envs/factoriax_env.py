@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
 import jax
@@ -57,6 +58,38 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             Default EnvParams instance.
         """
         return EnvParams()
+
+    @partial(jax.jit, static_argnames=("self",))
+    def step(
+        self,
+        key: jax.Array,
+        state: EnvState,
+        action: int | jax.Array,
+        params: EnvParams | None = None,
+    ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
+        """Step the environment without auto-reset.
+
+        Overrides the gymnax base ``step()`` which unconditionally
+        calls ``reset_env`` every tick for auto-reset. That design
+        runs full procedural terrain generation on every step even
+        when the episode is not done, roughly tripling the per-step
+        cost. This override simply calls ``step_env`` directly.
+
+        Use :class:`~factoriax.envs.achievement_wrapper.AutoResetWrapper`
+        if you need auto-reset for ``lax.scan`` training loops.
+
+        Args:
+            key: JAX random key.
+            state: Current environment state.
+            action: Action to take.
+            params: Environment parameters. Uses default when None.
+
+        Returns:
+            Tuple of (observation, new_state, reward, done, info).
+        """
+        if params is None:
+            params = self.default_params
+        return self.step_env(key, state, action, params)
 
     def step_env(
         self,
