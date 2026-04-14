@@ -470,10 +470,6 @@ class GameUI:
                     reset_flag = True
                 else:
                     quit_flag = True
-        elif not self.has_menu_open() and not ps.welcome_open:
-            place_action = _ITEM_TO_PLACE_ACTION.get(ps.selected_item)
-            if place_action is not None:
-                action = place_action
 
         return GameUIResult(
             action=action,
@@ -812,7 +808,9 @@ class GameUI:
         params = self._params
 
         if PlayerAction.INTERACT in actions:
-            action = _handle_world_interact(state)
+            action = _handle_world_interact(
+                state, self._ps.selected_item,
+            )
         elif PlayerAction.ROTATE in actions:
             action = int(Action.ROTATE)
         elif PlayerAction.MINE in actions:
@@ -854,13 +852,31 @@ class GameUI:
         return state, action
 
 
-def _handle_world_interact(state: EnvState) -> int:
-    """Determine action for E key in the world (pickup or place).
+def _handle_world_interact(
+    state: EnvState,
+    selected_item: int,
+) -> int | None:
+    """Determine action for the interact key (pickup or place).
+
+    If the tile in front of the player has a machine, returns PICKUP.
+    Otherwise, returns the placement action for the currently selected
+    machine, or ``None`` if no placeable machine is selected.
 
     Args:
         state: Current environment state.
+        selected_item: Currently selected item type from the hotbar.
 
     Returns:
-        Action integer (PICKUP or PLACE).
+        Action integer, or ``None`` if nothing to do.
     """
-    return int(Action.PICKUP)
+    selected_player = int(state.selected_player)
+    tx, ty = _tile_in_front(state, selected_player)
+    map_h, map_w = state.map.shape
+    has_machine = (
+        0 <= tx < map_w
+        and 0 <= ty < map_h
+        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
+    )
+    if has_machine:
+        return int(Action.PICKUP)
+    return _ITEM_TO_PLACE_ACTION.get(selected_item)

@@ -78,44 +78,37 @@ class TestInventoryIsCraftingOnly:
         assert ps.selected_recipe == 0
 
 
-class TestPlacementUsesSelectedItem:
-    """World click with a placeable item selected should emit PLACE action."""
+class TestInteractPlacesAndPicksUp:
+    """E key places on empty tile, picks up facing a machine."""
 
-    def test_click_with_placeable_item_emits_place(
+    def test_interact_places_on_empty(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Clicking in the world with MINER selected produces PLACE action."""
+        """E key with MINER selected places on empty tile."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         ps = game_ui.play_state
         ps.selected_item = int(ItemType.MINER)
-        # No menus open, no welcome screen
-        ps.inventory_open = False
-        ps.machine_open = False
         ps.welcome_open = False
 
         event = pygame.event.Event(
-            pygame.MOUSEBUTTONDOWN,
-            pos=(50, 50),
-            button=1,
+            pygame.KEYDOWN,
+            key=pygame.K_e, mod=0, unicode="e", scancode=0,
         )
         result = game_ui.handle_event(event, state)
         assert result.action == int(Action.PLACE_MINER)
 
-    def test_click_with_non_placeable_item_no_action(
+    def test_interact_noop_without_placeable(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Clicking in the world with COAL selected produces no action."""
+        """E key with COAL selected on empty tile does nothing."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         ps = game_ui.play_state
         ps.selected_item = int(ItemType.COAL)
-        ps.inventory_open = False
-        ps.machine_open = False
         ps.welcome_open = False
 
         event = pygame.event.Event(
-            pygame.MOUSEBUTTONDOWN,
-            pos=(50, 50),
-            button=1,
+            pygame.KEYDOWN,
+            key=pygame.K_e, mod=0, unicode="e", scancode=0,
         )
         result = game_ui.handle_event(event, state)
         assert result.action is None

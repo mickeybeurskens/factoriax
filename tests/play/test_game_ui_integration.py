@@ -83,10 +83,28 @@ class TestWorldKeys:
         result = ui.handle_event(_key(pygame.K_SPACE), state)
         assert result.action == int(Action.MINE)
 
-    def test_interact(self, ui, state_factory) -> None:
-        """E produces PICKUP."""
+    def test_interact_places_on_empty_tile(
+        self, ui, state_factory,
+    ) -> None:
+        """E places selected machine when facing empty tile."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
+        )
+        ui.play_state.selected_item = int(ItemType.MINER)
+        result = ui.handle_event(_key(pygame.K_e), state)
+        assert result.action == int(Action.PLACE_MINER)
+
+    def test_interact_picks_up_machine(
+        self, ui, state_factory,
+    ) -> None:
+        """E picks up when facing a machine."""
+        state = state_factory(
+            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
+            player_position=(1, 0),
+            player_direction=int(Direction.DOWN),
+            machine_types=jnp.zeros(
+                (8, 8), dtype=jnp.int32,
+            ).at[1, 1].set(int(MachineType.MINER)),
         )
         result = ui.handle_event(_key(pygame.K_e), state)
         assert result.action == int(Action.PICKUP)
@@ -438,23 +456,12 @@ class TestHelpContext:
 class TestMouseClick:
     """Mouse clicks on the world and UI buttons."""
 
-    def test_click_world_with_placeable(self, ui, state_factory) -> None:
-        """Click on world with miner selected places it."""
+    def test_click_world_no_placement(self, ui, state_factory) -> None:
+        """Mouse click on world no longer places (use E key instead)."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
         )
         ui.play_state.selected_item = int(ItemType.MINER)
-        result = ui.handle_event(_click(100, 100), state)
-        assert result.action == int(Action.PLACE_MINER)
-
-    def test_click_world_without_placeable(
-        self, ui, state_factory,
-    ) -> None:
-        """Click on world without placeable item does nothing."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        ui.play_state.selected_item = int(ItemType.COAL)
         result = ui.handle_event(_click(100, 100), state)
         assert result.action is None
 
