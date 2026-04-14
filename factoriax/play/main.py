@@ -18,9 +18,13 @@ from jax import random
 
 from factoriax.achievements import ACHIEVEMENT_INFO
 from factoriax.config import (
+    ControllerLookup,
     KeyLookup,
+    build_controller_lookup,
     build_key_lookup,
+    default_controller,
     default_keyboard,
+    resolve_controller_axis,
 )
 from factoriax.constants import Action, Direction
 from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
@@ -159,6 +163,48 @@ _MOUSE_DIR_TO_FACE: dict[int, int] = {
 }
 
 
+def _init_joystick() -> pygame.joystick.JoystickType | None:
+    """Initialize the first available joystick, if any.
+
+    Safe to call multiple times; pygame's joystick subsystem is
+    initialized idempotently.
+
+    Returns:
+        The initialized joystick, or ``None`` if none connected.
+    """
+    pygame.joystick.init()
+    if pygame.joystick.get_count() == 0:
+        return None
+    joy = pygame.joystick.Joystick(0)
+    joy.init()
+    return joy
+
+
+def _poll_stick_actions(
+    joystick: pygame.joystick.JoystickType,
+    ctrl_lookup: ControllerLookup,
+) -> frozenset[str]:
+    """Read all joystick axes and return matching player actions.
+
+    Called once per frame to convert continuous stick deflection into
+    discrete actions. Values within the deadzone produce nothing.
+
+    Args:
+        joystick: Initialized pygame joystick.
+        ctrl_lookup: Controller lookup from config.
+
+    Returns:
+        Union of all axis actions past the deadzone.
+    """
+    result: frozenset[str] = frozenset()
+    for axis in range(joystick.get_numaxes()):
+        value = joystick.get_axis(axis)
+        result = result | resolve_controller_axis(
+            ctrl_lookup, axis, value,
+        )
+    return result
+
+
 def _tile_pixel_size(map_w: int, map_h: int) -> int:
     """Choose a tile pixel size so the map fits within the UI canvas.
 
@@ -240,6 +286,7 @@ def _play_loop(
     screen: pygame.Surface,
     rng: jax.Array,
     kb_lookup: KeyLookup | None = None,
+    ctrl_lookup: ControllerLookup | None = None,
 ) -> None:
     """Run the full interactive game loop with all menus and controls.
 
@@ -252,9 +299,14 @@ def _play_loop(
         rng: JAX random key.
         kb_lookup: Key lookup table from :func:`build_key_lookup`. Built
             from default bindings when ``None``.
+        ctrl_lookup: Controller lookup from
+            :func:`build_controller_lookup`. Built from default
+            bindings when ``None``.
     """
     if kb_lookup is None:
         kb_lookup = build_key_lookup(default_keyboard())
+    if ctrl_lookup is None:
+        ctrl_lookup = build_controller_lookup(default_controller())
     window_width, window_height = screen.get_size()
     step_fn = jax.jit(env.step_env)
     rng, warmup_key = random.split(rng)
@@ -282,7 +334,13 @@ def _play_loop(
     win_ox = (window_width - ui_w * win_scale) // 2
     win_oy = (window_height - ui_h * win_scale) // 2
 
-    ui = GameUI(params, kb_lookup, welcome_open=True)
+    joystick = _init_joystick()
+
+    ui = GameUI(
+        params, kb_lookup,
+        ctrl_lookup=ctrl_lookup,
+        welcome_open=True,
+    )
     ps = ui.play_state
     running = True
 
@@ -292,6 +350,10 @@ def _play_loop(
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.JOYDEVICEADDED:
+                joystick = _init_joystick()
+            elif event.type == pygame.JOYDEVICEREMOVED:
+                joystick = None
             elif ps.welcome_open:
                 ps, state = _handle_welcome_event(
                     event, ps, state,
@@ -305,9 +367,14 @@ def _play_loop(
                     pygame.K_ESCAPE,
                 ):
                     ps.victory_open = False
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    ps.victory_open = False
                 continue
             elif event.type in (
-                pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN,
+                pygame.MOUSEBUTTONDOWN,
+                pygame.KEYDOWN,
+                pygame.JOYBUTTONDOWN,
+                pygame.JOYHATMOTION,
             ):
                 result = ui.handle_event(event, state.env_state)
                 if result.state is not None:
@@ -322,6 +389,23 @@ def _play_loop(
                     else:
                         rng, reset_key = random.split(rng)
                         _, state = env.reset_env(reset_key, params)
+
+        # Per-frame stick polling (lower priority than discrete inputs).
+        if (
+            joystick is not None
+            and action == int(Action.NOOP)
+            and not ps.welcome_open
+            and not ps.victory_open
+        ):
+            stick_actions = _poll_stick_actions(joystick, ctrl_lookup)
+            if stick_actions:
+                result = ui._dispatch_actions(
+                    stick_actions, state.env_state,
+                )
+                if result.state is not None:
+                    state = state.replace(env_state=result.state)
+                if result.action is not None:
+                    action = result.action
 
         # Highlight the tile the player is facing.
         ui.update_hover(state.env_state)

@@ -11,6 +11,7 @@ import pygame
 
 from factoriax.config import (
     PlayerConfig,
+    build_controller_lookup,
     build_key_lookup,
     config_to_env_params,
     env_params_to_dict,
@@ -116,8 +117,12 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     _, state = reset_result  # type: ignore[misc]
 
     kb_lookup = build_key_lookup(config.keyboard)
+    ctrl_lookup = build_controller_lookup(config.controller)
     pygame.display.set_caption("FactoriaX")
-    _play_loop(env, state, params, None, screen, rng, kb_lookup=kb_lookup)
+    _play_loop(
+        env, state, params, None, screen, rng,
+        kb_lookup=kb_lookup, ctrl_lookup=ctrl_lookup,
+    )
 
 
 def _handle_editor(screen: pygame.Surface) -> None:
