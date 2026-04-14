@@ -565,7 +565,7 @@ def render_pause_menu(
     click_regions: list[ClickRegion] = []
 
     menu_w = int(screen_width * 0.35)
-    menu_h = int(screen_height * 0.35)
+    menu_h = int(screen_height * 0.42)
     menu_x = (screen_width - menu_w) // 2
     menu_y = (screen_height - menu_h) // 2
 
@@ -583,7 +583,7 @@ def render_pause_menu(
         _theme.BORDER
     )
 
-    options = ["Resume", "Reset", "Quit Game"]
+    options = ["Resume", "Controls", "Reset", "Quit Game"]
     option_h = 40
     options_start_y = sep_y + _theme.SEP_H + 24
 
@@ -2197,42 +2197,35 @@ def render_inventory_menu(
 
 _HELP_LINES: list[str] = [
     "-- Movement --",
-    "WASD          Move player",
-    "Ctrl+1-9      Switch active player",
+    "WASD / D-pad    Move player",
+    "Ctrl+1-9        Switch active player",
     "",
     "-- Actions --",
-    "SPACE         Mine ore at current tile",
-    "E             Place / pick up machine",
-    "R             Rotate machine in front",
-    "G             Repair machine in front",
-    "F             Inspect machine in front",
+    "SPACE           Mine ore at current tile",
+    "E / A-button    Place / pick up machine",
+    "R               Rotate machine in front",
+    "G               Repair machine in front",
+    "1-5             Quick-select machine",
     "",
-    "-- Inventory & Crafting --",
-    "I             Toggle inventory menu",
-    "A/D           Select inventory slot",
-    "W/S           Navigate rows / recipes",
-    "D (rightmost) Switch to crafting",
-    "A (crafting)  Switch to inventory",
-    "1-8 / Sh+1-2  Quick-select slot 1-10",
-    "Q             Toggle hotbar page",
-    "E             Craft selected recipe",
-    "Click slot    Pick up / swap item",
+    "-- Crafting --",
+    "I               Open crafting menu",
+    "W/S             Select recipe",
+    "E               Craft selected recipe",
     "",
     "-- Machine Transfer --",
-    "F             Open machine panel",
-    "W/S           Switch machine / player panel",
-    "A/D           Select slot",
-    "E             Transfer items",
+    "F               Inspect machine in front",
+    "W/S             Switch panel",
+    "A/D             Select item",
+    "E               Transfer items",
     "",
     "-- Research --",
-    "T             Toggle research menu",
-    "W/S           Select technology",
-    "E             Spend science pack",
+    "T               Research menu",
+    "W/S             Select technology",
+    "E               Spend science pack",
     "",
     "-- Other --",
-    "P             Achievements",
-    "?             This help screen",
-    "ESC           Close menu / pause",
+    "P               Achievements",
+    "ESC / B-button  Close menu / pause",
 ]
 
 

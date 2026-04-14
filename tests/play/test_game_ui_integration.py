@@ -407,13 +407,18 @@ class TestAchievementContext:
 class TestHelpContext:
     """Help overlay interaction."""
 
-    def test_open_help(self, ui, state_factory) -> None:
-        """? key opens help."""
+    def test_controls_from_pause_opens_help(
+        self, ui, state_factory,
+    ) -> None:
+        """Selecting Controls in pause menu opens help overlay."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
         )
-        ui.handle_event(_key(pygame.K_QUESTION), state)
+        ui.play_state.pause_open = True
+        ui.play_state.pause_selection = 1  # Controls
+        ui.handle_event(_key(pygame.K_e), state)
         assert ui.play_state.help_open is True
+        assert ui.play_state.pause_open is False
 
     def test_any_key_closes_help(self, ui, state_factory) -> None:
         """Any key closes the help overlay."""

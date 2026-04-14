@@ -142,7 +142,7 @@ class TestRenderPauseMenu:
         assert result.dtype == np.uint8
         assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)
         assert isinstance(click_regions, list)
-        assert len(click_regions) == 3
+        assert len(click_regions) == 4
         assert all(isinstance(r, ClickRegion) for r in click_regions)
 
     def test_selection_zero(self) -> None:

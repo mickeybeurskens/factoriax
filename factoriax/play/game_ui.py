@@ -463,6 +463,9 @@ class GameUI:
                 if hit.param == 0:
                     ps.pause_open = False
                 elif hit.param == 1:
+                    ps.help_open = True
+                    ps.pause_open = False
+                elif hit.param == 2:
                     ps.pause_open = False
                     reset_flag = True
                 else:
@@ -578,8 +581,6 @@ class GameUI:
                 ps.research_selection = 0
         elif ps.research_open:
             action = self._handle_research_keys(actions)
-        elif PlayerAction.OPEN_HELP in actions:
-            ps.help_open = True
         elif ps.inventory_open:
             action = self._handle_crafting_nav(actions)
         else:
@@ -639,11 +640,14 @@ class GameUI:
         if PlayerAction.NAV_UP in actions:
             ps.pause_selection = max(0, ps.pause_selection - 1)
         elif PlayerAction.NAV_DOWN in actions:
-            ps.pause_selection = min(2, ps.pause_selection + 1)
+            ps.pause_selection = min(3, ps.pause_selection + 1)
         elif PlayerAction.CONFIRM in actions:
             if ps.pause_selection == 0:
                 ps.pause_open = False
             elif ps.pause_selection == 1:
+                ps.help_open = True
+                ps.pause_open = False
+            elif ps.pause_selection == 2:
                 ps.pause_open = False
                 reset_flag = True
             else:
