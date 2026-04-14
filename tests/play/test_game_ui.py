@@ -59,27 +59,23 @@ class TestSlotKeySelection:
         assert game_ui.play_state.selected_item == int(ItemType.CONVEYOR_BELT)
 
 
-class TestInventoryNavigation:
-    """Arrow key nav in inventory menu should update PlayState only."""
+class TestInventoryIsCraftingOnly:
+    """Inventory menu goes straight to crafting navigation."""
 
-    def test_nav_right_increments_selected_item(
+    def test_up_cycles_recipe(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Right arrow in inventory menu increments selected_item."""
+        """W key in inventory cycles recipe selection."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         ps = game_ui.play_state
         ps.inventory_open = True
-        ps.menu_focus = "inventory"
-        ps.selected_item = 1  # COAL
-
-        # NAV_RIGHT is bound to K_d by default.
-        right_key = getattr(pygame, "K_d")
+        ps.selected_recipe = 1
 
         event = pygame.event.Event(
-            pygame.KEYDOWN, key=right_key, mod=0,
+            pygame.KEYDOWN, key=pygame.K_w, mod=0,
         )
         game_ui.handle_event(event, state)
-        assert ps.selected_item == 2
+        assert ps.selected_recipe == 0
 
 
 class TestPlacementUsesSelectedItem:

@@ -24,7 +24,6 @@ from factoriax.constants import (
     ITEM_COLORS,
     MACHINE_TYPE_NAMES,
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
     PLACEABLE_ITEM_LIST,
     PLAYER_MAX_STACK,
     RESEARCH_COST,
@@ -1448,9 +1447,6 @@ def _hotbar_h() -> int:
     return _BASE_HOTBAR_H * _theme.UI_SCALE
 
 
-_HOTBAR_SLOTS: int = 6
-"""Number of machine pockets in the hotbar tool belt."""
-
 _DIRECTION_LETTERS: dict[int, str] = {
     int(Direction.LEFT): "W",
     int(Direction.RIGHT): "E",
@@ -1540,17 +1536,42 @@ def render_hotbar(
         badge_x + circle_r * 2 + 6,
     )
 
-    # --- 6 machine pockets (tool belt, left portion) ---
+    # --- Machine pockets with [<] [>] [Place] buttons ---
     resource_area_w = 150
-    slot_area_x = 64
-    slot_area_w = bar_w - 64 - resource_area_w - 8
-    slot_w = slot_area_w // _HOTBAR_SLOTS
+    n_slots = len(PLACEABLE_ITEM_LIST)
+    arrow_w = 20
+    place_btn_w = 44
+    btn_gap = 4
+    slot_area_x = 64 + arrow_w + btn_gap
+    slot_area_w = (
+        bar_w - 64 - resource_area_w - 8
+        - 2 * (arrow_w + btn_gap)
+        - place_btn_w - btn_gap
+    )
+    slot_w = slot_area_w // max(n_slots, 1)
     icon_size = min(40, slot_w - 12)
     name_h = hint_font.get_height()
     pocket_h = icon_size
     pocket_y = content_y + (content_h - pocket_h) // 2
-    # Leave room for name below pocket and triangle below that.
     name_y = pocket_y + pocket_h + 2
+
+    # [<] cycle-prev arrow button.
+    arrow_x = 64
+    arrow_cy = pocket_y + pocket_h // 2
+    for dy in range(-5, 6):
+        half = 5 - abs(dy)
+        lx = arrow_x + (arrow_w // 2) + half
+        rx = arrow_x + (arrow_w // 2) - half
+        if 0 <= arrow_cy + dy < screen_height and rx <= lx:
+            overlay[arrow_cy + dy, rx:lx, :3] = 160
+            overlay[arrow_cy + dy, rx:lx, 3] = 255
+    regions.append(
+        ClickRegion(
+            x=arrow_x, y=pocket_y,
+            w=arrow_w, h=pocket_h,
+            action="cycle_prev", param=0,
+        ),
+    )
 
     max_stack_arr = np.array(PLAYER_MAX_STACK)
 
@@ -1561,13 +1582,8 @@ def render_hotbar(
         is_selected = item_type == selected_item
         item_color = ITEM_COLORS.get(item_type, (128, 128, 128))
 
-        # Pocket frame with pulsing border when selected.
         _render_pocket_bg(
-            overlay,
-            pocket_x,
-            pocket_y,
-            icon_size,
-            pocket_h,
+            overlay, pocket_x, pocket_y, icon_size, pocket_h,
             selected=is_selected,
             building_color=item_color if is_selected else None,
             frame_tick=frame_tick,
@@ -1576,7 +1592,6 @@ def render_hotbar(
         count = int(player_inv[item_type])
         max_stack = int(max_stack_arr[item_type])
 
-        # Icon or ghost.
         icon_pad = 4
         icon_s = icon_size - 2 * icon_pad - _CHIP_W - 1
         if icon_s > 0:
@@ -1589,31 +1604,24 @@ def render_hotbar(
                     icon_x : icon_x + icon_s,
                 ] = icon_arr
             else:
-                _render_ghost_icon(overlay, icon_x, icon_iy, icon_s, item_type)
+                _render_ghost_icon(
+                    overlay, icon_x, icon_iy, icon_s, item_type,
+                )
 
-        # Chips on right edge.
         chip_edge_x = pocket_x + icon_size - 1
         _render_chips(
-            overlay,
-            chip_edge_x,
-            pocket_y + 2,
-            pocket_h - 4,
-            count,
-            max_stack,
-            item_color,
+            overlay, chip_edge_x, pocket_y + 2,
+            pocket_h - 4, count, max_stack, item_color,
         )
 
-        # Count badge (only when non-zero).
         if count > 0:
             _render_count_badge(
                 overlay,
                 pocket_x + icon_size - _CHIP_W - 2,
                 pocket_y + pocket_h - 1,
-                count,
-                hint_font,
+                count, hint_font,
             )
 
-        # Item name below pocket.
         name = _ITEM_NAMES.get(item_type, "")
         name_color = (220, 215, 180) if is_selected else (130, 125, 100)
         if count == 0:
@@ -1622,60 +1630,88 @@ def render_hotbar(
         nx = sx + (slot_w - name_arr.shape[1]) // 2
         _blit_rgba(overlay, name_arr, name_y, nx)
 
-        # Placement triangle when selected.
         if is_selected:
             tri_y = name_y + name_h + 1
             tri_cx = pocket_x + icon_size // 2
-            _render_placement_triangle(overlay, tri_cx, tri_y, item_color)
+            _render_placement_triangle(
+                overlay, tri_cx, tri_y, item_color,
+            )
 
         regions.append(
             ClickRegion(
-                x=pocket_x,
-                y=pocket_y,
-                w=icon_size,
-                h=pocket_h + name_h + 4,
-                action="select_slot",
-                param=item_type,
+                x=pocket_x, y=pocket_y,
+                w=icon_size, h=pocket_h + name_h + 4,
+                action="select_slot", param=item_type,
             ),
         )
 
-    # --- Resource counts + research (right column, subtle) ---
-    res_x = bar_w - resource_area_w
-    ry = content_y + 2
-    res_icon_s = 12
-
-    # Thin vertical separator.
-    overlay[content_y : content_y + content_h, res_x - 3] = (
-        50,
-        50,
-        45,
-        180,
+    # [>] cycle-next arrow button.
+    arrow_rx = slot_area_x + n_slots * slot_w + btn_gap
+    for dy in range(-5, 6):
+        half = 5 - abs(dy)
+        lx = arrow_rx + (arrow_w // 2) - half
+        rx = arrow_rx + (arrow_w // 2) + half
+        if 0 <= arrow_cy + dy < screen_height and lx <= rx:
+            overlay[arrow_cy + dy, lx:rx, :3] = 160
+            overlay[arrow_cy + dy, lx:rx, 3] = 255
+    regions.append(
+        ClickRegion(
+            x=arrow_rx, y=pocket_y,
+            w=arrow_w, h=pocket_h,
+            action="cycle_next", param=0,
+        ),
     )
 
+    # [Place] button.
+    place_x = arrow_rx + arrow_w + btn_gap
+    place_bg: tuple[int, int, int, int] = (45, 45, 40, 255)
+    place_border: tuple[int, int, int, int] = (130, 120, 60, 255)
+    overlay[pocket_y : pocket_y + pocket_h, place_x : place_x + place_btn_w] = (
+        place_bg
+    )
+    overlay[pocket_y, place_x : place_x + place_btn_w] = place_border
+    overlay[pocket_y + pocket_h - 1, place_x : place_x + place_btn_w] = (
+        place_border
+    )
+    overlay[pocket_y : pocket_y + pocket_h, place_x] = place_border
+    overlay[pocket_y : pocket_y + pocket_h, place_x + place_btn_w - 1] = (
+        place_border
+    )
+    place_txt = _render_text_rgba("Place", hint_font, (200, 195, 160))
+    ptx = place_x + (place_btn_w - place_txt.shape[1]) // 2
+    pty = pocket_y + (pocket_h - place_txt.shape[0]) // 2
+    _blit_rgba(overlay, place_txt, pty, ptx)
+    regions.append(
+        ClickRegion(
+            x=place_x, y=pocket_y,
+            w=place_btn_w, h=pocket_h,
+            action="place_selected", param=0,
+        ),
+    )
+
+    # --- Resource counts (two-column layout, no research) ---
+    res_x = bar_w - resource_area_w
+    res_icon_s = 12
+    col_w = resource_area_w // 2
+
+    overlay[content_y : content_y + content_h, res_x - 3] = (
+        50, 50, 45, 180,
+    )
+
+    ore_items = list(BLOCK_TO_ITEM.values())
     res_count_color = (160, 155, 135)
-    for item_type in BLOCK_TO_ITEM.values():
+    for oi, item_type in enumerate(ore_items):
+        col = oi // 3  # 0 for first 3, 1 for rest
+        row = oi % 3
+        rx = res_x + col * col_w
+        ry = content_y + 2 + row * (res_icon_s + 2)
         count = int(player_inv[int(item_type)])
         icon_arr = render_item_icon(int(item_type), res_icon_s)
-        _blit_rgba(overlay, icon_arr, ry, res_x)
+        _blit_rgba(overlay, icon_arr, ry, rx)
         count_arr = _render_text_rgba(
-            str(count),
-            hint_font,
-            res_count_color,
+            str(count), hint_font, res_count_color,
         )
-        _blit_rgba(overlay, count_arr, ry, res_x + res_icon_s + 3)
-        ry += max(res_icon_s, count_arr.shape[0]) + 1
-
-    ry += 2
-    tech_names = ["Hull", "Fuel"]
-    tech_dim = [(160, 50, 50), (50, 120, 50)]
-    for t in range(NUM_TECHNOLOGIES):
-        progress = int(state.research_progress[t])
-        unlocked = bool(state.research_unlocked[t])
-        color = (80, 160, 80) if unlocked else tech_dim[t]
-        txt = f"{tech_names[t]}:OK" if unlocked else f"{tech_names[t]}:{progress}"
-        tech_arr = _render_text_rgba(txt, hint_font, color)
-        _blit_rgba(overlay, tech_arr, ry, res_x)
-        ry += tech_arr.shape[0] + 1
+        _blit_rgba(overlay, count_arr, ry, rx + res_icon_s + 3)
 
     return overlay, regions
 
@@ -1982,28 +2018,25 @@ def render_inventory_menu(
     state: EnvState,
     screen_width: int,
     screen_height: int,
-    menu_focus: str = "inventory",
+    menu_focus: str = "crafting",
     held_item: int | None = None,
     selected_recipe: int = 0,
     selected_item: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
-    """Render the inventory and crafting menu as an RGBA overlay.
+    """Render the crafting menu as an RGBA overlay.
 
-    Left section: 2x7 inventory grid showing each item type with its icon,
-    count, and name.  Right section: recipe list showing output, name, and
+    Shows a scrollable recipe list with output icons, names, and
     per-ingredient have/need counts coloured by affordability.
-
-    When *held_item* is not ``None`` the corresponding inventory cell is
-    drawn with a gold border to indicate a pending swap operation.
+    Machine selection has moved to the hotbar.
 
     Args:
         state: Current environment state.
         screen_width: Total screen width in pixels.
         screen_height: Total screen height in pixels.
-        menu_focus: Focused section — "inventory" or "crafting".
-        held_item: Item type currently "held" for swapping, or None.
+        menu_focus: Kept for API compat (always "crafting").
+        held_item: Kept for API compat (unused).
         selected_recipe: Currently focused recipe index.
-        selected_item: Currently selected item type for highlighting.
+        selected_item: Kept for API compat (unused).
 
     Returns:
         Tuple of (RGBA overlay array, list of click regions).
@@ -2011,248 +2044,36 @@ def render_inventory_menu(
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     click_regions: list[ClickRegion] = []
 
-    menu_w = int(screen_width * 0.75)
-    menu_h = int(screen_height * 0.5)
+    menu_w = int(screen_width * 0.45)
+    menu_h = int(screen_height * 0.55)
     menu_x = (screen_width - menu_w) // 2
     menu_y = (screen_height - menu_h) // 2
 
     draw_panel(overlay, menu_x, menu_y, menu_w, menu_h)
 
-    inv_w = int(menu_w * 0.6)
-    craft_w = menu_w - inv_w
-    div_x = menu_x + inv_w
-
-    # Gold vertical divider between sections.
-    for i in range(_theme.BORDER_PX):
-        overlay[menu_y : menu_y + menu_h, div_x + i] = _theme.BORDER
-
     header_font = get_pixel_font(_theme.FONT_HEADER)
     body_font = get_pixel_font(_theme.FONT_BODY)
 
-    inv_content_y = _draw_section_header(
-        overlay,
-        menu_x,
-        menu_y,
-        inv_w,
-        "INVENTORY",
-        header_font,
-        menu_focus == "inventory",
-    )
     craft_content_y = _draw_section_header(
-        overlay,
-        div_x,
-        menu_y,
-        craft_w,
-        "CRAFTING",
-        header_font,
-        menu_focus == "crafting",
-    )
-
-    click_regions.append(
-        ClickRegion(
-            x=menu_x,
-            y=menu_y,
-            w=inv_w,
-            h=inv_content_y - menu_y,
-            action="focus_inventory",
-            param=0,
-        )
-    )
-    click_regions.append(
-        ClickRegion(
-            x=div_x,
-            y=menu_y,
-            w=craft_w,
-            h=craft_content_y - menu_y,
-            action="focus_crafting",
-            param=0,
-        )
+        overlay, menu_x, menu_y, menu_w,
+        "CRAFTING", header_font, True,
     )
 
     selected_player = int(state.selected_player)
-    selected_slot = selected_item
     craft_progress = 0
-    player_inv = np.array(state.player_inventory[selected_player])
 
-    # ------------------------------------------------------------------
-    # Inventory grid — MACHINES (2x3) then RESOURCES (2x4)
-    # ------------------------------------------------------------------
-    hint_font = get_pixel_font(_theme.FONT_HINT)
-    padding = 20
-    grid_x = menu_x + padding
-    grid_w = inv_w - 2 * padding
-    line_h = body_font.get_height()
-    hint_h = hint_font.get_height()
-    max_stack_arr = np.array(PLAYER_MAX_STACK)
-
-    # Shared cell metrics (sized for 4-column layout to fit both grids).
-    cell_w = grid_w // 4
-    icon_size = min(cell_w - 12, 48)
-    cell_h = icon_size + 4 + line_h + 2 + line_h + 8
-
-    cy_cursor = inv_content_y + 4
-
-    def _draw_inv_cell(
-        item_type_idx: int,
-        cell_x: int,
-        cell_y: int,
-        is_machine: bool,
-    ) -> None:
-        icon_x = cell_x + (cell_w - icon_size) // 2
-        is_selected = (item_type_idx == selected_slot) and (menu_focus == "inventory")
-        is_held = item_type_idx == held_item
-        count = int(player_inv[item_type_idx])
-        max_stack = int(max_stack_arr[item_type_idx])
-        item_color = ITEM_COLORS.get(item_type_idx, (128, 128, 128))
-
-        # Pocket frame for machines, simple bg for resources.
-        if is_machine:
-            building_c = item_color if is_selected else None
-            _render_pocket_bg(
-                overlay,
-                icon_x,
-                cell_y,
-                icon_size,
-                icon_size,
-                selected=is_selected,
-                building_color=building_c,
-                frame_tick=0,  # No pulsing in menu.
-            )
-        else:
-            bg = _POCKET_SELECTED_BG if is_selected else _POCKET_BG
-            overlay[
-                cell_y : cell_y + icon_size,
-                icon_x : icon_x + icon_size,
-            ] = bg
-
-        # Held/selected borders.
-        if is_held:
-            for bw in range(2):
-                overlay[cell_y + bw, icon_x : icon_x + icon_size] = _HELD_BORDER
-                overlay[
-                    cell_y + icon_size - 1 - bw,
-                    icon_x : icon_x + icon_size,
-                ] = _HELD_BORDER
-                overlay[
-                    cell_y : cell_y + icon_size,
-                    icon_x + bw,
-                ] = _HELD_BORDER
-                overlay[
-                    cell_y : cell_y + icon_size,
-                    icon_x + icon_size - 1 - bw,
-                ] = _HELD_BORDER
-        elif is_selected and not is_machine:
-            white = (255, 255, 255, 255)
-            overlay[cell_y, icon_x : icon_x + icon_size] = white
-            overlay[
-                cell_y + icon_size - 1,
-                icon_x : icon_x + icon_size,
-            ] = white
-            overlay[cell_y : cell_y + icon_size, icon_x] = white
-            overlay[
-                cell_y : cell_y + icon_size,
-                icon_x + icon_size - 1,
-            ] = white
-
-        click_regions.append(
-            ClickRegion(
-                x=icon_x,
-                y=cell_y,
-                w=icon_size,
-                h=cell_h,
-                action="toggle_held",
-                param=item_type_idx,
-            ),
-        )
-
-        # Icon or ghost + chips for machines.
-        icon_pad = 6
-        chip_space = (_CHIP_W + 1) if is_machine else 0
-        icon_s = icon_size - 2 * icon_pad - chip_space
-        if icon_s > 0:
-            ix = icon_x + icon_pad
-            iy = cell_y + (icon_size - icon_s) // 2
-            if count > 0:
-                icon_arr = render_item_icon(item_type_idx, icon_s)
-                overlay[iy : iy + icon_s, ix : ix + icon_s] = icon_arr
-            else:
-                _render_ghost_icon(
-                    overlay,
-                    ix,
-                    iy,
-                    icon_s,
-                    item_type_idx,
-                )
-
-        if is_machine:
-            chip_edge = icon_x + icon_size - 1
-            _render_chips(
-                overlay,
-                chip_edge,
-                cell_y + 2,
-                icon_size - 4,
-                count,
-                max_stack,
-                item_color,
-            )
-
-        # Count text.
-        count_txt = f"x{count}"
-        count_arr = _render_text_rgba(
-            count_txt,
-            body_font,
-            _theme.SLOT_COUNT_COLOR,
-        )
-        ct_y = cell_y + icon_size + 4
-        ct_x = cell_x + (cell_w - count_arr.shape[1]) // 2
-        _blit_rgba(overlay, count_arr, ct_y, ct_x)
-
-        # Name text.
-        name = _ITEM_NAMES.get(item_type_idx, "")
-        if name:
-            nc: tuple[int, int, int] = (
-                (235, 228, 185) if is_selected else (160, 155, 130)
-            )
-            name_arr = _render_text_rgba(name, body_font, nc)
-            ny = ct_y + line_h + 2
-            nx = cell_x + (cell_w - name_arr.shape[1]) // 2
-            _blit_rgba(overlay, name_arr, ny, nx)
-
-    # --- MACHINES section label + 2x3 grid ---
-    lbl = _render_text_rgba("MACHINES", hint_font, (100, 95, 80))
-    _blit_rgba(overlay, lbl, cy_cursor, grid_x)
-    cy_cursor += hint_h + 4
-
-    m_cols = 3
-    for gi, item_type in enumerate(PLACEABLE_ITEM_LIST):
-        r, c = divmod(gi, m_cols)
-        cx = grid_x + c * cell_w
-        cy = cy_cursor + r * (cell_h + 6)
-        _draw_inv_cell(item_type, cx, cy, is_machine=True)
-
-    m_rows = (len(PLACEABLE_ITEM_LIST) + m_cols - 1) // m_cols
-    cy_cursor += m_rows * (cell_h + 6) + 6
-
-    # --- RESOURCES section label + 2x4 grid ---
-    lbl2 = _render_text_rgba("RESOURCES", hint_font, (100, 95, 80))
-    _blit_rgba(overlay, lbl2, cy_cursor, grid_x)
-    cy_cursor += hint_h + 4
-
-    r_cols = 4
-    for gi, item_type in enumerate(RESOURCE_ITEM_LIST):
-        r, c = divmod(gi, r_cols)
-        cx = grid_x + c * cell_w
-        cy = cy_cursor + r * (cell_h + 6)
-        _draw_inv_cell(item_type, cx, cy, is_machine=False)
+    # Dummy references to suppress unused-parameter warnings for
+    # API-compat kwargs that are no longer used.
+    _ = menu_focus, held_item, selected_item
 
     # ------------------------------------------------------------------
     # Crafting recipes list — rendered into a scroll view
     # ------------------------------------------------------------------
     hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
 
-    vp_x_craft = div_x + _theme.BORDER_PX
+    vp_x_craft = menu_x + _theme.BORDER_PX
     vp_y_craft = craft_content_y
-    vp_w_craft = craft_w - _theme.BORDER_PX
+    vp_w_craft = menu_w - 2 * _theme.BORDER_PX
     vp_h_craft = hint_y - craft_content_y
 
     recipe_h = 80
@@ -2272,9 +2093,7 @@ def render_inventory_menu(
 
     for recipe_idx in range(NUM_RECIPES):
         recipe = RECIPES[recipe_idx]
-        is_selected_recipe = (recipe_idx == selected_recipe) and (
-            menu_focus == "crafting"
-        )
+        is_selected_recipe = recipe_idx == selected_recipe
         can_afford = bool(can_afford_recipe(state, selected_player, recipe_idx))
         ry = recipe_idx * recipe_h
 
@@ -2362,12 +2181,11 @@ def render_inventory_menu(
         )
     )
 
-    if menu_focus == "crafting":
-        hints = "[W/S] Select | [A] Inventory | [E] Craft | [ESC] Close"
-    else:
-        hints = "[A/D] Select | [W/S] Row | [E] Place | [ESC] Close"
+    hints = "[W/S] Select | [E] Craft | [ESC] Close"
     _render_control_hints(
-        overlay, hints, menu_x + _theme.BORDER_PX, hint_y, menu_w - 2 * _theme.BORDER_PX
+        overlay, hints,
+        menu_x + _theme.BORDER_PX, hint_y,
+        menu_w - 2 * _theme.BORDER_PX,
     )
 
     return overlay, click_regions

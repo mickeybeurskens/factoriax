@@ -34,7 +34,6 @@ from factoriax.constants import (
     NUM_TECHNOLOGIES,
     PLACEABLE_ITEM_LIST,
     PLACEABLE_ITEMS,
-    RESOURCE_ITEM_LIST,
     WITHDRAW_BASE,
     Action,
     Direction,
@@ -42,7 +41,6 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.play.play_state import PlayState
-from factoriax.play.transfer import swap_inventory_slots
 from factoriax.play.ui import (
     _entity_inventory,
     _hotbar_h,  # noqa: F401 — re-export
@@ -430,33 +428,37 @@ class GameUI:
                 ps.selected_item = hit.param
                 if ps.machine_open:
                     ps.machine_panel_active = False
-                else:
-                    ps.menu_focus = "inventory"
+            elif hit.action == "cycle_prev":
+                items = PLACEABLE_ITEM_LIST
+                idx = (
+                    items.index(ps.selected_item)
+                    if ps.selected_item in items
+                    else 0
+                )
+                ps.selected_item = items[
+                    (idx - 1) % len(items)
+                ]
+            elif hit.action == "cycle_next":
+                items = PLACEABLE_ITEM_LIST
+                idx = (
+                    items.index(ps.selected_item)
+                    if ps.selected_item in items
+                    else -1
+                )
+                ps.selected_item = items[
+                    (idx + 1) % len(items)
+                ]
+            elif hit.action == "place_selected":
+                place_action = _ITEM_TO_PLACE_ACTION.get(
+                    ps.selected_item,
+                )
+                if place_action is not None:
+                    action = place_action
             elif hit.action == "select_recipe":
-                ps.menu_focus = "crafting"
                 ps.selected_recipe = hit.param
             elif hit.action == "select_machine_slot":
                 ps.focused_machine_item = hit.param
                 ps.machine_panel_active = True
-            elif hit.action == "toggle_held":
-                if ps.held_item is None:
-                    ps.held_item = hit.param
-                    ps.selected_item = hit.param
-                elif ps.held_item == hit.param:
-                    ps.held_item = None
-                else:
-                    selected_player = int(state.selected_player)
-                    state = swap_inventory_slots(
-                        state,
-                        selected_player,
-                        ps.held_item,
-                        hit.param,
-                    )
-                    ps.held_item = None
-            elif hit.action == "focus_inventory":
-                ps.menu_focus = "inventory"
-            elif hit.action == "focus_crafting":
-                ps.menu_focus = "crafting"
             elif hit.action == "pause_option":
                 if hit.param == 0:
                     ps.pause_open = False
@@ -560,8 +562,6 @@ class GameUI:
             if ps.inventory_open:
                 ps.achievement_open = False
                 ps.machine_open = False
-            else:
-                ps.held_item = None
         elif PlayerAction.OPEN_ACHIEVEMENTS in actions:
             ps.achievement_open = not ps.achievement_open
             if ps.achievement_open:
@@ -580,9 +580,7 @@ class GameUI:
             action = self._handle_research_keys(actions)
         elif PlayerAction.OPEN_HELP in actions:
             ps.help_open = True
-        elif ps.inventory_open and ps.menu_focus == "inventory":
-            state, action = self._handle_inventory_nav(actions, state)
-        elif ps.inventory_open and ps.menu_focus == "crafting":
+        elif ps.inventory_open:
             action = self._handle_crafting_nav(actions)
         else:
             state, action = self._handle_world_keys(actions, state)
@@ -777,72 +775,6 @@ class GameUI:
             return int(Action.RESEARCH_BASIC) + ps.research_selection
         return None
 
-    def _handle_inventory_nav(
-        self,
-        actions: frozenset[str],
-        state: EnvState,
-    ) -> tuple[EnvState, int | None]:
-        """Handle keys in the inventory panel.
-
-        The inventory grid has two sections: machines (2x3) then
-        resources (2x4). Navigation wraps between sections on
-        up/down at boundaries.
-
-        Returns:
-            ``(state, action)`` tuple.
-        """
-        ps = self._ps
-        action: int | None = None
-        current = ps.selected_item
-
-        # Build combined item list: machines then resources.
-        all_items = list(PLACEABLE_ITEM_LIST) + list(RESOURCE_ITEM_LIST)
-        if current not in all_items:
-            ps.selected_item = all_items[0]
-            return state, action
-
-        idx = all_items.index(current)
-        n_machines = len(PLACEABLE_ITEM_LIST)
-        m_cols, r_cols = 3, 4
-
-        # Determine section and position.
-        in_machines = idx < n_machines
-        if in_machines:
-            local_idx = idx
-            cols = m_cols
-        else:
-            local_idx = idx - n_machines
-            cols = r_cols
-        row, col = divmod(local_idx, cols)
-
-        if PlayerAction.NAV_LEFT in actions:
-            if col > 0:
-                ps.selected_item = all_items[idx - 1]
-        elif PlayerAction.NAV_RIGHT in actions:
-            if in_machines and col == m_cols - 1:
-                ps.menu_focus = "crafting"
-            elif not in_machines and col == r_cols - 1:
-                ps.menu_focus = "crafting"
-            elif idx + 1 < len(all_items):
-                ps.selected_item = all_items[idx + 1]
-        elif PlayerAction.NAV_UP in actions:
-            if row > 0:
-                ps.selected_item = all_items[idx - cols]
-            elif not in_machines:
-                # Jump from resources row 0 into machines last row.
-                m_last_row_start = (n_machines - 1) // m_cols * m_cols
-                target = min(m_last_row_start + col, n_machines - 1)
-                ps.selected_item = all_items[target]
-        elif PlayerAction.NAV_DOWN in actions:
-            if local_idx + cols < (
-                n_machines if in_machines else len(RESOURCE_ITEM_LIST)
-            ):
-                ps.selected_item = all_items[idx + cols]
-            elif in_machines:
-                # Jump from machines last row into resources row 0.
-                target_r = min(col, len(RESOURCE_ITEM_LIST) - 1)
-                ps.selected_item = all_items[n_machines + target_r]
-        return state, action
 
     def _handle_crafting_nav(
         self,
@@ -858,8 +790,6 @@ class GameUI:
             ps.selected_recipe = (ps.selected_recipe - 1) % NUM_RECIPES
         elif PlayerAction.NAV_DOWN in actions:
             ps.selected_recipe = (ps.selected_recipe + 1) % NUM_RECIPES
-        elif PlayerAction.NAV_LEFT in actions:
-            ps.menu_focus = "inventory"
         elif PlayerAction.CONFIRM in actions:
             return CRAFT_BASE + ps.selected_recipe
         return None
