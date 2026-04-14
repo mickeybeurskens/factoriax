@@ -1212,14 +1212,21 @@ def _export_benchmark_levels() -> None:
     in the Load dialog. The levels/ directory is gitignored, so these
     files are regenerated each run and never committed.
     """
-    from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+    from factoriax.benchmarks.skills.fuel_miner import fuel_miner_level
+    from factoriax.benchmarks.skills.mining import mining_level
+    from factoriax.benchmarks.skills.place_miner import place_miner_level
     from factoriax.editor.dialogs import LEVELS_DIR
 
     LEVELS_DIR.mkdir(parents=True, exist_ok=True)
-    for bl in BASIC_SKILLS_LEVELS:
-        path = LEVELS_DIR / f"{bl.name}.json"
+    for name, gen in [
+        ("mining", mining_level),
+        ("place_miner", place_miner_level),
+        ("fuel_miner", fuel_miner_level),
+    ]:
+        path = LEVELS_DIR / f"{name}.json"
         if not path.exists():
-            save_level(bl.level, path)
+            level, _ = gen()
+            save_level(level, path)
 
 
 def main(screen: pygame.Surface | None = None) -> None:
