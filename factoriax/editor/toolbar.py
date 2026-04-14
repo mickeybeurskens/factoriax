@@ -575,6 +575,8 @@ def get_palette_items_for_machine_slot(
     role = int(MACHINE_SLOT_ROLES[machine_type, slot_idx])
     if role == int(SlotRole.NONE):
         return []
+    if role == int(SlotRole.FUEL):
+        return [(int(ItemType.COAL), _ITEM_DISPLAY_NAMES[int(ItemType.COAL)])]
     return [
         (int(it), _ITEM_DISPLAY_NAMES[int(it)])
         for it in ItemType

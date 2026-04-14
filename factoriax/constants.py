@@ -527,7 +527,7 @@ TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 MACHINE_TO_RECIPE = jnp.array([-1, 0, 1, 4, 2, -1], dtype=jnp.int32)
 TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
 
-MACHINE_NUM_SLOTS = np.array([0, 2, 1, 4, 1, 0], dtype=np.int32)
+MACHINE_NUM_SLOTS = np.array([0, 2, 1, 3, 1, 0], dtype=np.int32)
 
 
 class SlotRole(IntEnum):
@@ -537,15 +537,16 @@ class SlotRole(IntEnum):
     INPUT = 1
     OUTPUT = 2
     STORAGE = 3
+    FUEL = 4
 
 
 MACHINE_SLOT_ROLES = np.array(
     [
         [SlotRole.NONE] * 8,
-        [SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
+        [SlotRole.FUEL, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
         [SlotRole.STORAGE] * 8,
-        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
-        + [SlotRole.NONE] * 4,
+        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
+        + [SlotRole.NONE] * 5,
         [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
         [SlotRole.NONE] * 8,
     ],
@@ -557,12 +558,14 @@ SLOT_ROLE_LABELS: dict[int, str] = {
     1: "IN",
     2: "OUT",
     3: "STORE",
+    4: "FUEL",
 }
 SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {
     0: (40, 40, 40),
     1: (190, 120, 40),
     2: (40, 170, 140),
     3: (80, 115, 175),
+    4: (200, 60, 60),
 }
 
 

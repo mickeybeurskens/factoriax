@@ -517,6 +517,8 @@ def _valid_items_for_role(role: int) -> list[int]:
     """
     if role == int(SlotRole.NONE):
         return []
+    if role == int(SlotRole.FUEL):
+        return [int(ItemType.EMPTY), int(ItemType.COAL)]
     return [int(ItemType.EMPTY)] + _ALL_ITEMS
 
 
