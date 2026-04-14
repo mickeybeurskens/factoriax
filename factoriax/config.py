@@ -337,6 +337,182 @@ def resolve_key(lookup: KeyLookup, key: int, mods: int = 0) -> frozenset[str]:
 
 
 # ---------------------------------------------------------------------------
+# Controller resolver
+# ---------------------------------------------------------------------------
+
+# Joystick deadzone threshold for axis-to-action conversion.
+_AXIS_DEADZONE: float = 0.3
+
+# Reverse lookup: controller input name -> frozenset of actions.
+ControllerLookup = dict[str, frozenset[str]]
+
+
+def build_controller_lookup(bindings: Bindings) -> ControllerLookup:
+    """Build a reverse lookup dict from controller bindings.
+
+    Maps input name strings (``"BUTTON_0"``, ``"HAT_0_UP"``,
+    ``"AXIS_1_NEG"``) to the frozenset of action names bound to
+    that input.
+
+    Args:
+        bindings: Action name to input name list mapping.
+
+    Returns:
+        Reverse lookup dict for O(1) controller input resolution.
+    """
+    tmp: dict[str, set[str]] = {}
+    for action, inputs in bindings.items():
+        for input_name in inputs:
+            tmp.setdefault(input_name, set()).add(action)
+    return {k: frozenset(v) for k, v in tmp.items()}
+
+
+def resolve_controller_button(
+    lookup: ControllerLookup,
+    button: int,
+) -> frozenset[str]:
+    """Resolve a controller button press to player actions.
+
+    Args:
+        lookup: Controller lookup from :func:`build_controller_lookup`.
+        button: Button index from the pygame event.
+
+    Returns:
+        Frozenset of matching action names, or empty frozenset.
+    """
+    return lookup.get(f"BUTTON_{button}", frozenset())
+
+
+def resolve_controller_hat(
+    lookup: ControllerLookup,
+    hat: int,
+    value: tuple[int, int],
+) -> frozenset[str]:
+    """Resolve a controller hat/d-pad event to player actions.
+
+    A hat value of ``(0, 0)`` (centered) produces no actions. Non-zero
+    components are mapped to direction names and unioned.
+
+    Args:
+        lookup: Controller lookup from :func:`build_controller_lookup`.
+        hat: Hat index from the pygame event.
+        value: ``(x, y)`` hat position from the pygame event.
+
+    Returns:
+        Frozenset of matching action names, or empty frozenset.
+    """
+    x, y = value
+    result: frozenset[str] = frozenset()
+    if x < 0:
+        result = result | lookup.get(f"HAT_{hat}_LEFT", frozenset())
+    elif x > 0:
+        result = result | lookup.get(f"HAT_{hat}_RIGHT", frozenset())
+    if y > 0:
+        result = result | lookup.get(f"HAT_{hat}_UP", frozenset())
+    elif y < 0:
+        result = result | lookup.get(f"HAT_{hat}_DOWN", frozenset())
+    return result
+
+
+def resolve_controller_axis(
+    lookup: ControllerLookup,
+    axis: int,
+    value: float,
+) -> frozenset[str]:
+    """Resolve a controller axis value to player actions.
+
+    Values within the deadzone (``+/-_AXIS_DEADZONE``) produce no
+    actions. Beyond the deadzone, the positive or negative direction
+    name is looked up.
+
+    Args:
+        lookup: Controller lookup from :func:`build_controller_lookup`.
+        axis: Axis index.
+        value: Current axis value (``-1.0`` to ``1.0``).
+
+    Returns:
+        Frozenset of matching action names, or empty frozenset.
+    """
+    if value > _AXIS_DEADZONE:
+        return lookup.get(f"AXIS_{axis}_POS", frozenset())
+    if value < -_AXIS_DEADZONE:
+        return lookup.get(f"AXIS_{axis}_NEG", frozenset())
+    return frozenset()
+
+
+# ---------------------------------------------------------------------------
+# Input name formatting (for rebinding UI)
+# ---------------------------------------------------------------------------
+
+# Reverse mapping from pygame key int to attribute name (e.g. 119 -> "K_w").
+_KEY_INT_TO_NAME: dict[int, str] = {
+    getattr(pygame, attr): attr
+    for attr in dir(pygame)
+    if attr.startswith("K_")
+}
+
+
+def event_to_key_name(key: int, mods: int) -> str:
+    """Format a key press as a binding name string.
+
+    Inverse of :func:`_parse_key_name`. Converts a pygame key constant
+    and modifier bitmask into the ``"K_w"`` / ``"SHIFT+K_1"`` format
+    used in the bindings config.
+
+    Args:
+        key: Pygame key constant (e.g. ``pygame.K_w``).
+        mods: Pygame modifier bitmask from ``pygame.key.get_mods()``.
+
+    Returns:
+        Binding name string.
+    """
+    key_part = _KEY_INT_TO_NAME.get(key, f"K_{key}")
+    parts: list[str] = []
+    normalized = mods & _MOD_MASK
+    if normalized & _MOD_CTRL:
+        parts.append("CTRL")
+    if normalized & _MOD_SHIFT:
+        parts.append("SHIFT")
+    parts.append(key_part)
+    return "+".join(parts)
+
+
+def controller_event_to_name(event: pygame.event.Event) -> str | None:
+    """Format a controller event as a binding name string.
+
+    Handles ``JOYBUTTONDOWN``, ``JOYHATMOTION``, and
+    ``JOYAXISMOTION`` events. Returns ``None`` for hat center
+    position or axis values within the deadzone.
+
+    Args:
+        event: Pygame joystick event.
+
+    Returns:
+        Binding name string, or ``None`` if the input is neutral.
+    """
+    if event.type == pygame.JOYBUTTONDOWN:
+        return f"BUTTON_{event.button}"
+    if event.type == pygame.JOYHATMOTION:
+        x, y = event.value
+        if x < 0:
+            return f"HAT_{event.hat}_LEFT"
+        if x > 0:
+            return f"HAT_{event.hat}_RIGHT"
+        if y > 0:
+            return f"HAT_{event.hat}_UP"
+        if y < 0:
+            return f"HAT_{event.hat}_DOWN"
+        return None
+    if event.type == pygame.JOYAXISMOTION:
+        if event.value > _AXIS_DEADZONE:
+            return f"AXIS_{event.axis}_POS"
+        if event.value < -_AXIS_DEADZONE:
+            return f"AXIS_{event.axis}_NEG"
+        return None
+    return None
+
+
+# ---------------------------------------------------------------------------
 # EnvParams conversion
 # ---------------------------------------------------------------------------
 
