@@ -92,7 +92,7 @@ class TestDisabledMachines:
         )
         new = run_conveyor_belts(state)
         # Source belt disabled, items should not move.
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == 5
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == 5
 
     def test_assembler_disabled_at_zero_health(self, state_factory) -> None:
         """An assembler at 0 HP should not start crafting."""
@@ -119,8 +119,8 @@ class TestRepairAction:
     def test_repair_restores_full_health(self, state_factory) -> None:
         """Repairing a damaged miner consumes 5 copper + 5 iron, restores HP."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.COPPER].set(10)
-        inv = inv.at[0, ItemType.IRON].set(10)
+        inv = inv.at[0, ItemType.COPPER_ORE].set(10)
+        inv = inv.at[0, ItemType.IRON_ORE].set(10)
 
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
@@ -135,13 +135,13 @@ class TestRepairAction:
         )
         new = repair_machine(state, 0)
         assert int(new.machine_health[0, 1]) == DEFAULT_MACHINE_MAX_HEALTH
-        assert int(new.player_inventory[0, ItemType.COPPER]) == 5
-        assert int(new.player_inventory[0, ItemType.IRON]) == 5
+        assert int(new.player_inventory[0, ItemType.COPPER_ORE]) == 5
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 5
 
     def test_repair_noop_without_materials(self, state_factory) -> None:
         """Repair should fail if player lacks required materials."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.IRON].set(2)  # Not enough (need 5)
+        inv = inv.at[0, ItemType.IRON_ORE].set(2)  # Not enough (need 5)
 
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
@@ -156,13 +156,13 @@ class TestRepairAction:
         )
         new = repair_machine(state, 0)
         assert int(new.machine_health[0, 1]) == 10  # Unchanged
-        assert int(new.player_inventory[0, ItemType.IRON]) == 2
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 2
 
     def test_repair_noop_at_full_health(self, state_factory) -> None:
         """Repair should be a no-op if machine is already at full health."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.COPPER].set(10)
-        inv = inv.at[0, ItemType.IRON].set(10)
+        inv = inv.at[0, ItemType.COPPER_ORE].set(10)
+        inv = inv.at[0, ItemType.IRON_ORE].set(10)
 
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
@@ -178,13 +178,13 @@ class TestRepairAction:
             ),
         )
         new = repair_machine(state, 0)
-        assert int(new.player_inventory[0, ItemType.COPPER]) == 10
-        assert int(new.player_inventory[0, ItemType.IRON]) == 10
+        assert int(new.player_inventory[0, ItemType.COPPER_ORE]) == 10
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 10
 
     def test_repair_noop_no_machine(self, state_factory) -> None:
         """Repair should be a no-op when facing an empty tile."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.IRON].set(10)
+        inv = inv.at[0, ItemType.IRON_ORE].set(10)
 
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
@@ -193,13 +193,13 @@ class TestRepairAction:
             player_inventory=inv,
         )
         new = repair_machine(state, 0)
-        assert int(new.player_inventory[0, ItemType.IRON]) == 10
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 10
 
     def test_repair_via_step(self, state_factory) -> None:
         """REPAIR action through factoriax_step should work."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.COPPER].set(10)
-        inv = inv.at[0, ItemType.IRON].set(10)
+        inv = inv.at[0, ItemType.COPPER_ORE].set(10)
+        inv = inv.at[0, ItemType.IRON_ORE].set(10)
 
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
@@ -220,7 +220,7 @@ class TestRepairAction:
     def test_repair_pallet_costs_iron(self, state_factory) -> None:
         """Repairing a pallet should consume 5 iron (pallet recipe cost)."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.IRON].set(10)
+        inv = inv.at[0, ItemType.IRON_ORE].set(10)
 
         state = state_factory(
             world_map=jnp.zeros((1, 3), dtype=jnp.int32),
@@ -235,4 +235,4 @@ class TestRepairAction:
         )
         new = repair_machine(state, 0)
         assert int(new.machine_health[0, 1]) == DEFAULT_MACHINE_MAX_HEALTH
-        assert int(new.player_inventory[0, ItemType.IRON]) == 5  # 10 - 5
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 5  # 10 - 5

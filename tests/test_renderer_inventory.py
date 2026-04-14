@@ -38,7 +38,7 @@ class TestRenderInventoryBar:
 
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, int(ItemType.COAL)].set(10)
-        inv = inv.at[0, int(ItemType.IRON)].set(5)
+        inv = inv.at[0, int(ItemType.IRON_ORE)].set(5)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv,
@@ -107,7 +107,7 @@ class TestIsArmActive:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.ARM), dtype=jnp.int32,
+                (4, 4), int(MachineType.CONVEYOR_BELT), dtype=jnp.int32,
             ),
         )
         assert not is_arm_active(state, 0, 0)
@@ -125,7 +125,7 @@ class TestIsArmActive:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.ARM), dtype=jnp.int32,
+                (4, 4), int(MachineType.CONVEYOR_BELT), dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )

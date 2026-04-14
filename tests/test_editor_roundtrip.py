@@ -45,13 +45,13 @@ def _make_fully_populated_level() -> Level:
     machine_directions[3, 1] = int(Direction.UP)
 
     machine_inventory = np.zeros((h, w, NUM_ITEM_TYPES), dtype=np.int32)
-    machine_inventory[2, 3, int(ItemType.IRON)] = 42
+    machine_inventory[2, 3, int(ItemType.IRON_ORE)] = 42
 
     machine_selected_recipe = np.zeros((h, w), dtype=np.int32)
     machine_selected_recipe[3, 1] = 1
 
     player_inventory = [
-        (int(ItemType.IRON), 30),
+        (int(ItemType.IRON_ORE), 30),
         (int(ItemType.COAL), 10),
     ]
 

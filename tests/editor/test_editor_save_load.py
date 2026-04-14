@@ -135,7 +135,7 @@ class TestEditorSaveLoadRoundTrip:
     def test_round_trip_preserves_machines(self) -> None:
         """Machines and directions survive save/load."""
         state = new_editor_state(8, 8, name="roundtrip")
-        set_machine(state, 3, 3, int(MachineType.ARM), int(Direction.LEFT))
+        set_machine(state, 3, 3, int(MachineType.CONVEYOR_BELT), int(Direction.LEFT))
 
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "test.json"
@@ -144,7 +144,7 @@ class TestEditorSaveLoadRoundTrip:
             loaded = load_level(path)
 
         restored = editor_state_from_level(loaded)
-        assert restored.machine_types[3, 3] == int(MachineType.ARM)
+        assert restored.machine_types[3, 3] == int(MachineType.CONVEYOR_BELT)
         assert restored.machine_directions[3, 3] == int(Direction.LEFT)
         np.testing.assert_array_equal(
             restored.block_map, state.block_map

@@ -27,8 +27,8 @@ def _make_items_mined(
     """Build an items_mined array with specified counts."""
     arr = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
     arr = arr.at[ItemType.COAL].set(coal)
-    arr = arr.at[ItemType.IRON].set(iron)
-    arr = arr.at[ItemType.COPPER].set(copper)
+    arr = arr.at[ItemType.IRON_ORE].set(iron)
+    arr = arr.at[ItemType.COPPER_ORE].set(copper)
     return arr
 
 

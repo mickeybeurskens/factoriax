@@ -355,7 +355,7 @@ class TestSerialization:
     def test_roundtrip_with_machine_directions(self) -> None:
         """Machine directions must survive save/load."""
         machines = np.full((4, 4), int(MachineType.NONE), dtype=np.int32)
-        machines[1, 2] = int(MachineType.ARM)
+        machines[1, 2] = int(MachineType.CONVEYOR_BELT)
         dirs = np.zeros((4, 4), dtype=np.int32)
         dirs[1, 2] = int(Direction.LEFT)
         level = Level(

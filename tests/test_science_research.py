@@ -73,15 +73,15 @@ class TestSciencePackRecipes:
         state = _make_assembler_state(
             recipe=3,
             inv_entries={
-                int(ItemType.IRON): 5,
-                int(ItemType.COPPER): 5,
+                int(ItemType.IRON_ORE): 5,
+                int(ItemType.COPPER_ORE): 5,
             },
             research_unlocked=unlocked,
         )
         new = run_assemblers(state)
         assert int(new.machine_power[0, 0]) == 4
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == 4
-        assert int(new.machine_inventory[0, 0, ItemType.COPPER]) == 4
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == 4
+        assert int(new.machine_inventory[0, 0, ItemType.COPPER_ORE]) == 4
 
     def test_fuel_science_pack_crafts(self) -> None:
         """Fuel science pack: 1 iron + 1 coal -> starts craft."""
@@ -89,14 +89,14 @@ class TestSciencePackRecipes:
         state = _make_assembler_state(
             recipe=4,
             inv_entries={
-                int(ItemType.IRON): 5,
+                int(ItemType.IRON_ORE): 5,
                 int(ItemType.COAL): 5,
             },
             research_unlocked=unlocked,
         )
         new = run_assemblers(state)
         assert int(new.machine_power[0, 0]) == 4
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == 4
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == 4
         assert int(new.machine_inventory[0, 0, ItemType.COAL]) == 4
 
     def test_advanced_science_pack_crafts(self) -> None:
@@ -105,14 +105,14 @@ class TestSciencePackRecipes:
         state = _make_assembler_state(
             recipe=5,
             inv_entries={
-                int(ItemType.HULL): 3,
+                int(ItemType.STEEL): 3,
                 int(ItemType.FUEL_PACK): 3,
             },
             research_unlocked=unlocked,
         )
         new = run_assemblers(state)
         assert int(new.machine_power[0, 0]) == 8
-        assert int(new.machine_inventory[0, 0, ItemType.HULL]) == 2
+        assert int(new.machine_inventory[0, 0, ItemType.STEEL]) == 2
         assert int(new.machine_inventory[0, 0, ItemType.FUEL_PACK]) == 2
 
 
@@ -123,11 +123,11 @@ class TestTechGating:
         """Hull recipe should not start when basic science is not researched."""
         state = _make_assembler_state(
             recipe=0,
-            inv_entries={int(ItemType.IRON): 10},
+            inv_entries={int(ItemType.IRON_ORE): 10},
         )
         new = run_assemblers(state)
         assert int(new.machine_power[0, 0]) == 0
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == 10
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == 10
 
     def test_hull_starts_when_researched(self) -> None:
         """Hull recipe should start when basic science tech is unlocked."""
@@ -140,19 +140,19 @@ class TestTechGating:
         )
         state = _make_assembler_state(
             recipe=0,
-            inv_entries={int(ItemType.IRON): 10},
+            inv_entries={int(ItemType.IRON_ORE): 10},
             research_unlocked=unlocked,
         )
         new = run_assemblers(state)
         assert int(new.machine_power[0, 0]) == 4
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == 5
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == 5
 
     def test_fuel_pack_blocked_without_research(self) -> None:
         """Fuel pack recipe should not start without fuel science research."""
         state = _make_assembler_state(
             recipe=1,
             inv_entries={
-                int(ItemType.COPPER): 10,
+                int(ItemType.COPPER_ORE): 10,
                 int(ItemType.COAL): 10,
             },
         )
@@ -171,7 +171,7 @@ class TestTechGating:
         state = _make_assembler_state(
             recipe=1,
             inv_entries={
-                int(ItemType.COPPER): 10,
+                int(ItemType.COPPER_ORE): 10,
                 int(ItemType.COAL): 10,
             },
             research_unlocked=unlocked,
@@ -184,8 +184,8 @@ class TestTechGating:
         state = _make_assembler_state(
             recipe=3,
             inv_entries={
-                int(ItemType.IRON): 5,
-                int(ItemType.COPPER): 5,
+                int(ItemType.IRON_ORE): 5,
+                int(ItemType.COPPER_ORE): 5,
             },
         )
         new = run_assemblers(state)

@@ -101,7 +101,7 @@ class TestPlayerScalars:
         from factoriax.constants import ItemType
 
         inv = jnp.zeros((2, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[1, ItemType.IRON].set(5)
+        inv = inv.at[1, ItemType.IRON_ORE].set(5)
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_positions=jnp.array([[0, 0], [3, 3]], dtype=jnp.int32),

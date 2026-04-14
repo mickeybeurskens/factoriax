@@ -89,7 +89,7 @@ class TestAchievementReward:
     ) -> None:
         """Reward equals the number of newly unlocked achievements."""
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-        items_mined = items_mined.at[ItemType.IRON].set(10)
+        items_mined = items_mined.at[ItemType.IRON_ORE].set(10)
 
         prev_state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
@@ -255,7 +255,7 @@ class TestMiningReward:
         prev_state = state_factory(world_map=world_map)
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         items_mined = items_mined.at[ItemType.COAL].set(1)
-        items_mined = items_mined.at[ItemType.IRON].set(2)
+        items_mined = items_mined.at[ItemType.IRON_ORE].set(2)
         new_state = state_factory(
             world_map=world_map,
             items_mined=items_mined,
@@ -294,8 +294,8 @@ class TestSparseMiningReward:
         prev = state_factory(world_map=world_map)
         items = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         items = items.at[ItemType.COAL].set(1)
-        items = items.at[ItemType.IRON].set(2)
-        items = items.at[ItemType.COPPER].set(3)
+        items = items.at[ItemType.IRON_ORE].set(2)
+        items = items.at[ItemType.COPPER_ORE].set(3)
         new = state_factory(world_map=world_map, items_mined=items)
         assert float(sparse_mining_reward(prev, new, params)) == pytest.approx(
             6.0,

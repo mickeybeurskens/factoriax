@@ -76,23 +76,23 @@ class TestAssemblerStartsCraft:
         """Hull recipe: 5 iron -> power set, iron consumed."""
         state = _make_state_with_assembler(
             recipe=0,
-            inv_entries={int(ItemType.IRON): 10},
+            inv_entries={int(ItemType.IRON_ORE): 10},
         )
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 4
-        assert int(new_state.machine_inventory[0, 0, ItemType.IRON]) == 5
+        assert int(new_state.machine_inventory[0, 0, ItemType.IRON_ORE]) == 5
 
     def test_no_start_without_inputs(self) -> None:
         """Assembler with insufficient inputs should remain idle."""
         state = _make_state_with_assembler(
             recipe=0,
-            inv_entries={int(ItemType.IRON): 3},
+            inv_entries={int(ItemType.IRON_ORE): 3},
         )
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 0
-        assert int(new_state.machine_inventory[0, 0, ItemType.IRON]) == 3
+        assert int(new_state.machine_inventory[0, 0, ItemType.IRON_ORE]) == 3
 
 
 class TestAssemblerCompletesCraft:
@@ -104,18 +104,18 @@ class TestAssemblerCompletesCraft:
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 0
-        assert int(new_state.machine_inventory[0, 0, ItemType.HULL]) == 1
+        assert int(new_state.machine_inventory[0, 0, ItemType.STEEL]) == 1
 
     def test_output_stacks(self) -> None:
         """Completing a craft adds to existing output stack."""
         state = _make_state_with_assembler(
             recipe=0,
             power=1,
-            inv_entries={int(ItemType.HULL): 5},
+            inv_entries={int(ItemType.STEEL): 5},
         )
         new_state = run_assemblers(state)
 
-        assert int(new_state.machine_inventory[0, 0, ItemType.HULL]) == 6
+        assert int(new_state.machine_inventory[0, 0, ItemType.STEEL]) == 6
 
 
 class TestAssemblerStallsOutputFull:
@@ -126,13 +126,13 @@ class TestAssemblerStallsOutputFull:
         state = _make_state_with_assembler(
             recipe=0,
             power=1,
-            inv_entries={int(ItemType.HULL): MAX_ASSEMBLER_STACK_SIZE},
+            inv_entries={int(ItemType.STEEL): MAX_ASSEMBLER_STACK_SIZE},
         )
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 1
         assert (
-            int(new_state.machine_inventory[0, 0, ItemType.HULL])
+            int(new_state.machine_inventory[0, 0, ItemType.STEEL])
             == MAX_ASSEMBLER_STACK_SIZE
         )
 
@@ -145,21 +145,21 @@ class TestAssemblerTwoInputRecipe:
         state = _make_state_with_assembler(
             recipe=1,
             inv_entries={
-                int(ItemType.COPPER): 5,
+                int(ItemType.COPPER_ORE): 5,
                 int(ItemType.COAL): 4,
             },
         )
         new_state = run_assemblers(state)
 
         assert int(new_state.machine_power[0, 0]) == 6
-        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER]) == 2
+        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER_ORE]) == 2
         assert int(new_state.machine_inventory[0, 0, ItemType.COAL]) == 2
 
     def test_fuel_pack_missing_second_input(self) -> None:
         """Missing coal should prevent craft start."""
         state = _make_state_with_assembler(
             recipe=1,
-            inv_entries={int(ItemType.COPPER): 5},
+            inv_entries={int(ItemType.COPPER_ORE): 5},
         )
         new_state = run_assemblers(state)
 
@@ -180,10 +180,10 @@ class TestAssemblerRecipeChangeBlocked:
         """Items in input types should prevent recipe switching."""
         state = _make_state_with_assembler(
             recipe=0,
-            inv_entries={int(ItemType.IRON): 5},
+            inv_entries={int(ItemType.IRON_ORE): 5},
         )
 
-        has_inputs = int(state.machine_inventory[0, 0, ItemType.IRON]) > 0
+        has_inputs = int(state.machine_inventory[0, 0, ItemType.IRON_ORE]) > 0
         assert has_inputs
 
 
@@ -198,12 +198,12 @@ class TestAssemblerDepositFiltering:
             player_directions=state.player_directions.at[0].set(
                 Direction.LEFT,
             ),
-            player_inventory=state.player_inventory.at[0, ItemType.IRON].set(10),
+            player_inventory=state.player_inventory.at[0, ItemType.IRON_ORE].set(10),
         )
-        new_state = deposit_to_adjacent(state, 0, ItemType.IRON)
+        new_state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
         assert (
             int(
-                new_state.machine_inventory[0, 0, ItemType.IRON],
+                new_state.machine_inventory[0, 0, ItemType.IRON_ORE],
             )
             == 10
         )
@@ -216,11 +216,11 @@ class TestAssemblerDepositFiltering:
             player_directions=state.player_directions.at[0].set(
                 Direction.LEFT,
             ),
-            player_inventory=state.player_inventory.at[0, ItemType.COPPER].set(10),
+            player_inventory=state.player_inventory.at[0, ItemType.COPPER_ORE].set(10),
         )
-        new_state = deposit_to_adjacent(state, 0, ItemType.COPPER)
-        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER]) == 0
-        assert int(new_state.player_inventory[0, ItemType.COPPER]) == 10
+        new_state = deposit_to_adjacent(state, 0, ItemType.COPPER_ORE)
+        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER_ORE]) == 0
+        assert int(new_state.player_inventory[0, ItemType.COPPER_ORE]) == 10
 
 
 class TestAssemblerPlacementAndPickup:

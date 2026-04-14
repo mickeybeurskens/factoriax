@@ -103,7 +103,7 @@ class TestMinerInventory:
             machine_power=jnp.array([[5]], dtype=jnp.int32),
         )
         new = run_miners(state)
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) > 0
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) > 0
 
     def test_output_full_blocks_mining(self, state_factory) -> None:
         """Miner should not mine when ore pouch is at max stack."""
@@ -124,7 +124,7 @@ class TestMinerInventory:
         )
         new = run_miners(state)
         # No change — already at capacity.
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == (
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == (
             MAX_MACHINE_STACK_SIZE
         )
         assert int(new.block_resources[0, 0]) == 50
@@ -158,7 +158,7 @@ class TestPalletInventory:
         )
         params = EnvParams(map_width=1, map_height=1, num_players=1)
         new = update_all_machines(state, params)
-        assert int(new.machine_inventory[0, 0, ItemType.IRON]) == 10
+        assert int(new.machine_inventory[0, 0, ItemType.IRON_ORE]) == 10
 
 
 class TestAssemblerInventory:

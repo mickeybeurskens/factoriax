@@ -262,8 +262,8 @@ class TestMinerDifferentOres:
     @pytest.mark.parametrize(
         "block_type, item_type",
         [
-            (BlockType.IRON, ItemType.IRON),
-            (BlockType.COPPER, ItemType.COPPER),
+            (BlockType.IRON, ItemType.IRON_ORE),
+            (BlockType.COPPER, ItemType.COPPER_ORE),
         ],
         ids=["iron", "copper"],
     )
@@ -313,8 +313,8 @@ class TestMultipleMiners:
         assert new_state.block_resources[1, 1] == 0
 
         assert new_state.machine_inventory[0, 0, ItemType.COAL] == 3
-        assert new_state.machine_inventory[0, 1, ItemType.IRON] == 3
-        assert new_state.machine_inventory[1, 0, ItemType.COPPER] == 3
+        assert new_state.machine_inventory[0, 1, ItemType.IRON_ORE] == 3
+        assert new_state.machine_inventory[1, 0, ItemType.COPPER_ORE] == 3
 
 
 class TestUpdateAllMachines:

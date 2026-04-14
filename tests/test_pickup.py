@@ -14,7 +14,7 @@ class TestCanFitInPlayer:
         """Empty player inventory should accept any single item."""
         player = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         to_add = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-        to_add = to_add.at[ItemType.IRON].set(5)
+        to_add = to_add.at[ItemType.IRON_ORE].set(5)
         assert bool(can_fit_in_player(player, to_add))
 
     def test_full_inventory_rejects(self) -> None:
@@ -23,7 +23,7 @@ class TestCanFitInPlayer:
 
         player = PLAYER_MAX_STACK.astype(jnp.int32)
         to_add = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-        to_add = to_add.at[ItemType.IRON].set(1)
+        to_add = to_add.at[ItemType.IRON_ORE].set(1)
         assert not bool(can_fit_in_player(player, to_add))
 
 
@@ -51,7 +51,7 @@ class TestPickupMachine:
         m_inv = jnp.zeros(
             (3, 3, NUM_ITEM_TYPES), dtype=jnp.int16,
         )
-        m_inv = m_inv.at[1, 1, ItemType.IRON].set(10)
+        m_inv = m_inv.at[1, 1, ItemType.IRON_ORE].set(10)
         state = state_factory(
             world_map=jnp.full(
                 (3, 3), BlockType.DIRT, dtype=jnp.int32,
@@ -64,7 +64,7 @@ class TestPickupMachine:
             machine_inventory=m_inv,
         )
         new = pickup_machine(state, 0)
-        assert int(new.player_inventory[0, ItemType.IRON]) == 10
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 10
         assert int(new.player_inventory[0, ItemType.PALLET]) == 1
 
     def test_pickup_empty_tile_noop(self, state_factory) -> None:

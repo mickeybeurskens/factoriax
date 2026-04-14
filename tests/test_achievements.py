@@ -69,8 +69,8 @@ class TestItemCounting:
     ) -> None:
         """Should sum items across multiple players."""
         inv = jnp.zeros((2, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.IRON].set(5)
-        inv = inv.at[1, ItemType.IRON].set(7)
+        inv = inv.at[0, ItemType.IRON_ORE].set(5)
+        inv = inv.at[1, ItemType.IRON_ORE].set(7)
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             num_players=2,
@@ -79,7 +79,7 @@ class TestItemCounting:
             ),
             player_inventory=inv,
         )
-        assert count_total_items(state, ItemType.IRON) == 12
+        assert count_total_items(state, ItemType.IRON_ORE) == 12
 
 
 class TestMachineCounting:
@@ -118,7 +118,7 @@ class TestConditionComputation:
     def test_first_ore_condition(self, state_factory) -> None:
         """Mining one ore satisfies First Ore."""
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-        items_mined = items_mined.at[ItemType.IRON].set(1)
+        items_mined = items_mined.at[ItemType.IRON_ORE].set(1)
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,
@@ -237,7 +237,7 @@ class TestAchievementUnlocking:
     def test_achievement_persists(self, state_factory) -> None:
         """Once unlocked, achievements stay unlocked."""
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-        items_mined = items_mined.at[ItemType.IRON].set(1)
+        items_mined = items_mined.at[ItemType.IRON_ORE].set(1)
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             items_mined=items_mined,

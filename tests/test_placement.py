@@ -83,7 +83,7 @@ class TestPlaceableItems:
         [
             (ItemType.MINER, True),
             (ItemType.COAL, False),
-            (ItemType.IRON, False),
+            (ItemType.IRON_ORE, False),
             (ItemType.EMPTY, False),
         ],
         ids=["miner", "coal", "iron", "empty"],

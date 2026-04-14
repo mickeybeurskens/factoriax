@@ -134,7 +134,7 @@ class TestConveyorBelt:
             [[MachineType.CONVEYOR_BELT], [MachineType.CONVEYOR_BELT]],
         )
         dirs = jnp.array([[Direction.DOWN], [Direction.DOWN]])
-        inv = _make_machine_inv((2, 1), {(0, 0, ItemType.IRON): 5})
+        inv = _make_machine_inv((2, 1), {(0, 0, ItemType.IRON_ORE): 5})
         state = _belt_state(
             state_factory,
             machine_types=types,
@@ -142,8 +142,8 @@ class TestConveyorBelt:
             machine_inventory=inv,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.IRON]) == 0
-        assert int(result.machine_inventory[1, 0, ItemType.IRON]) == 5
+        assert int(result.machine_inventory[0, 0, ItemType.IRON_ORE]) == 0
+        assert int(result.machine_inventory[1, 0, ItemType.IRON_ORE]) == 5
 
     def test_does_not_push_to_non_belt(self, state_factory) -> None:
         """Belt adjacent to a non-belt machine does not transfer items."""
@@ -170,7 +170,7 @@ class TestConveyorBelt:
             (1, 2),
             {
                 (0, 0, ItemType.COAL): 5,
-                (0, 1, ItemType.IRON): MAX_MACHINE_STACK_SIZE,
+                (0, 1, ItemType.IRON_ORE): MAX_MACHINE_STACK_SIZE,
             },
         )
         state = _belt_state(
@@ -227,7 +227,7 @@ class TestArm:
         """Arm picks item from miner's inventory (e.g. mined COAL)."""
         # Layout: [MINER, ARM] -- arm faces RIGHT: bwd=(0,0) MINER.
         shape = (1, 2)
-        types = jnp.array([[MachineType.MINER, MachineType.ARM]])
+        types = jnp.array([[MachineType.MINER, MachineType.CONVEYOR_BELT]])
         dirs = jnp.array([[0, int(Direction.RIGHT)]])
         inv = _make_machine_inv(shape, {(0, 0, ItemType.COAL): 15})
         state = _arm_state(
@@ -246,9 +246,9 @@ class TestArm:
         """Arm with full buffer deposits items into adjacent pallet."""
         # Layout: [PALLET, ARM] -- arm at (0,1) facing LEFT: forward=(0,0).
         shape = (1, 2)
-        types = jnp.array([[MachineType.PALLET, MachineType.ARM]])
+        types = jnp.array([[MachineType.PALLET, MachineType.CONVEYOR_BELT]])
         dirs = jnp.array([[0, int(Direction.LEFT)]])
-        inv = _make_machine_inv(shape, {(0, 1, ItemType.IRON): 20})
+        inv = _make_machine_inv(shape, {(0, 1, ItemType.IRON_ORE): 20})
         state = _arm_state(
             state_factory,
             machine_types=types,
@@ -257,9 +257,9 @@ class TestArm:
         )
         result = run_arms(state)
         # ARM buffer cleared.
-        assert int(result.machine_inventory[0, 1, ItemType.IRON]) == 0
+        assert int(result.machine_inventory[0, 1, ItemType.IRON_ORE]) == 0
         # Pallet received items.
-        assert int(result.machine_inventory[0, 0, ItemType.IRON]) == 20
+        assert int(result.machine_inventory[0, 0, ItemType.IRON_ORE]) == 20
 
     def test_deposit_then_pick_same_tick(self, state_factory) -> None:
         """Arm deposits first, then picks in same tick if buffer is now empty."""
@@ -267,13 +267,13 @@ class TestArm:
         # Arm at (0,1) facing LEFT: fwd=(0,0) PALLET, bwd=(0,2) MINER.
         shape = (1, 3)
         types = jnp.array(
-            [[MachineType.PALLET, MachineType.ARM, MachineType.MINER]],
+            [[MachineType.PALLET, MachineType.CONVEYOR_BELT, MachineType.MINER]],
         )
         dirs = jnp.array([[0, int(Direction.LEFT), 0]])
         inv = _make_machine_inv(
             shape,
             {
-                (0, 1, ItemType.IRON): 8,  # ARM buffer
+                (0, 1, ItemType.IRON_ORE): 8,  # ARM buffer
                 (0, 2, ItemType.COAL): 12,  # MINER output
             },
         )
@@ -285,7 +285,7 @@ class TestArm:
         )
         result = run_arms(state)
         # IRON deposited into pallet.
-        assert int(result.machine_inventory[0, 0, ItemType.IRON]) == 8
+        assert int(result.machine_inventory[0, 0, ItemType.IRON_ORE]) == 8
         # COAL picked into arm buffer.
         assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 12
         # MINER output now empty.
@@ -297,7 +297,7 @@ class TestArm:
     ) -> None:
         """Arm with buffer full but no compatible deposit target does nothing."""
         shape = (1, 2)
-        types = jnp.array([[MachineType.ARM, MachineType.NONE]])
+        types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.NONE]])
         dirs = jnp.array([[int(Direction.RIGHT), 0]])
         inv = _make_machine_inv(shape, {(0, 0, ItemType.COAL): 5})
         state = _arm_state(
@@ -315,7 +315,7 @@ class TestArm:
     ) -> None:
         """Arm with empty buffer and empty backward neighbour does nothing."""
         shape = (1, 2)
-        types = jnp.array([[MachineType.NONE, MachineType.ARM]])
+        types = jnp.array([[MachineType.NONE, MachineType.CONVEYOR_BELT]])
         dirs = jnp.array([[0, int(Direction.RIGHT)]])
         inv = _make_machine_inv(shape)
         state = _arm_state(
@@ -341,7 +341,7 @@ class TestArm:
             [
                 [
                     MachineType.PALLET,
-                    MachineType.ARM,
+                    MachineType.CONVEYOR_BELT,
                     MachineType.CONVEYOR_BELT,
                 ]
             ]

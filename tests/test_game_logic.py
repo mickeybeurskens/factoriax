@@ -149,7 +149,7 @@ class TestCompoundDeposit:
     def test_deposit_invalid_item_is_noop(self, state_factory) -> None:
         """Depositing copper into a miner should be a no-op."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.COPPER].set(5)
+        inv = inv.at[0, ItemType.COPPER_ORE].set(5)
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 0),
@@ -159,9 +159,9 @@ class TestCompoundDeposit:
                 (3, 3), MachineType.NONE, dtype=jnp.int32,
             ).at[1, 1].set(MachineType.MINER),
         )
-        new = deposit_to_adjacent(state, 0, int(ItemType.COPPER))
+        new = deposit_to_adjacent(state, 0, int(ItemType.COPPER_ORE))
         # Copper is not valid fuel for miners.
-        assert int(new.player_inventory[0, ItemType.COPPER]) == 5
+        assert int(new.player_inventory[0, ItemType.COPPER_ORE]) == 5
 
 
 class TestCompoundWithdraw:
@@ -170,7 +170,7 @@ class TestCompoundWithdraw:
     def test_withdraw_iron_from_miner(self, state_factory) -> None:
         """WITHDRAW_IRON should pull iron from the miner's pouch."""
         m_inv = jnp.zeros((3, 3, NUM_ITEM_TYPES), dtype=jnp.int16)
-        m_inv = m_inv.at[1, 1, ItemType.IRON].set(8)
+        m_inv = m_inv.at[1, 1, ItemType.IRON_ORE].set(8)
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 0),
@@ -180,9 +180,9 @@ class TestCompoundWithdraw:
             ).at[1, 1].set(MachineType.MINER),
             machine_inventory=m_inv,
         )
-        new = withdraw_from_adjacent(state, 0, int(ItemType.IRON))
-        assert int(new.player_inventory[0, ItemType.IRON]) == 8
-        assert int(new.machine_inventory[1, 1, ItemType.IRON]) == 0
+        new = withdraw_from_adjacent(state, 0, int(ItemType.IRON_ORE))
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 8
+        assert int(new.machine_inventory[1, 1, ItemType.IRON_ORE]) == 0
 
     def test_withdraw_empty_is_noop(self, state_factory) -> None:
         """Withdrawing an item that isn't there should be a no-op."""
@@ -194,8 +194,8 @@ class TestCompoundWithdraw:
                 (3, 3), MachineType.NONE, dtype=jnp.int32,
             ).at[1, 1].set(MachineType.MINER),
         )
-        new = withdraw_from_adjacent(state, 0, int(ItemType.IRON))
-        assert int(new.player_inventory[0, ItemType.IRON]) == 0
+        new = withdraw_from_adjacent(state, 0, int(ItemType.IRON_ORE))
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 0
 
 
 class TestFactoriaxStep:

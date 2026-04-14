@@ -212,7 +212,7 @@ class TestDepositToMiner:
 
     def test_deposit_non_fuel_rejected_by_miner(self, state_factory) -> None:
         """Iron deposited into a miner should be rejected (not fuel)."""
-        p_inv = _player_inv(1, {ItemType.IRON: 5})
+        p_inv = _player_inv(1, {ItemType.IRON_ORE: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -221,10 +221,10 @@ class TestDepositToMiner:
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
         )
 
-        state = deposit_to_adjacent(state, 0, ItemType.IRON)
+        state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 5
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 5
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 0
 
 
 class TestDepositToAssembler:
@@ -232,7 +232,7 @@ class TestDepositToAssembler:
 
     def test_deposit_iron_into_hull_assembler(self, state_factory) -> None:
         """Iron should be accepted by a hull assembler (recipe 0 needs iron)."""
-        p_inv = _player_inv(1, {ItemType.IRON: 10})
+        p_inv = _player_inv(1, {ItemType.IRON_ORE: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -242,14 +242,14 @@ class TestDepositToAssembler:
             machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = deposit_to_adjacent(state, 0, ItemType.IRON)
+        state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 10
-        assert int(state.player_inventory[0, ItemType.IRON]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 10
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
 
     def test_deposit_wrong_item_rejected(self, state_factory) -> None:
         """Copper should be rejected by a hull assembler (needs only iron)."""
-        p_inv = _player_inv(1, {ItemType.COPPER: 10})
+        p_inv = _player_inv(1, {ItemType.COPPER_ORE: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -259,15 +259,15 @@ class TestDepositToAssembler:
             machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = deposit_to_adjacent(state, 0, ItemType.COPPER)
+        state = deposit_to_adjacent(state, 0, ItemType.COPPER_ORE)
 
-        assert int(state.player_inventory[0, ItemType.COPPER]) == 10
-        assert int(state.machine_inventory[1, 2, ItemType.COPPER]) == 0
+        assert int(state.player_inventory[0, ItemType.COPPER_ORE]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.COPPER_ORE]) == 0
 
     def test_deposit_fuel_pack_recipe_both_inputs(self, state_factory) -> None:
         """Fuel pack recipe needs copper and coal; both should deposit."""
         # Deposit copper first.
-        p_inv = _player_inv(1, {ItemType.COPPER: 3})
+        p_inv = _player_inv(1, {ItemType.COPPER_ORE: 3})
         recipe = jnp.zeros((3, 3), dtype=jnp.int32).at[1, 2].set(1)
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -277,8 +277,8 @@ class TestDepositToAssembler:
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
             machine_selected_recipe=recipe,
         )
-        state = deposit_to_adjacent(state, 0, ItemType.COPPER)
-        assert int(state.machine_inventory[1, 2, ItemType.COPPER]) == 3
+        state = deposit_to_adjacent(state, 0, ItemType.COPPER_ORE)
+        assert int(state.machine_inventory[1, 2, ItemType.COPPER_ORE]) == 3
 
         # Now deposit coal.
         state = state.replace(
@@ -298,7 +298,7 @@ class TestWithdrawFromPallet:
 
     def test_withdraw_iron_from_pallet(self, state_factory) -> None:
         """Should take the specified item type from the pallet."""
-        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON_ORE): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -307,10 +307,10 @@ class TestWithdrawFromPallet:
             machine_inventory=m_inv,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 10
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 0
 
     def test_withdraw_noop_empty_machine(self, state_factory) -> None:
         """Withdraw from empty pallet should be a no-op."""
@@ -321,9 +321,9 @@ class TestWithdrawFromPallet:
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
 
     def test_withdraw_noop_no_machine(self, state_factory) -> None:
         """Withdraw with no machine in front should be a no-op."""
@@ -333,9 +333,9 @@ class TestWithdrawFromPallet:
             player_direction=Direction.RIGHT,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
 
 
 class TestWithdrawFromMiner:
@@ -343,7 +343,7 @@ class TestWithdrawFromMiner:
 
     def test_withdraw_ore_from_miner(self, state_factory) -> None:
         """Should be able to withdraw mined ore from a miner."""
-        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON_ORE): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -352,10 +352,10 @@ class TestWithdrawFromMiner:
             machine_inventory=m_inv,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 10
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 0
 
 
 class TestWithdrawFromAssembler:
@@ -363,7 +363,7 @@ class TestWithdrawFromAssembler:
 
     def test_withdraw_output_from_assembler(self, state_factory) -> None:
         """Withdrawing the recipe output (hull) should work."""
-        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.HULL): 5})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.STEEL): 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -373,14 +373,14 @@ class TestWithdrawFromAssembler:
             machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.HULL)
+        state = withdraw_from_adjacent(state, 0, ItemType.STEEL)
 
-        assert int(state.player_inventory[0, ItemType.HULL]) == 5
-        assert int(state.machine_inventory[1, 2, ItemType.HULL]) == 0
+        assert int(state.player_inventory[0, ItemType.STEEL]) == 5
+        assert int(state.machine_inventory[1, 2, ItemType.STEEL]) == 0
 
     def test_withdraw_input_from_assembler_rejected(self, state_factory) -> None:
         """Withdrawing a recipe input (iron) should be rejected."""
-        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 5})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON_ORE): 5})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -390,10 +390,10 @@ class TestWithdrawFromAssembler:
             machine_selected_recipe=jnp.zeros((3, 3), dtype=jnp.int32),
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 0
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 5
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 5
 
 
 class TestWithdrawMergesIntoInventory:
@@ -401,8 +401,8 @@ class TestWithdrawMergesIntoInventory:
 
     def test_withdraw_merges_with_existing_stack(self, state_factory) -> None:
         """Items withdrawn should add to existing count in player pouch."""
-        p_inv = _player_inv(1, {ItemType.IRON: 3})
-        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 7})
+        p_inv = _player_inv(1, {ItemType.IRON_ORE: 3})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON_ORE): 7})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -412,10 +412,10 @@ class TestWithdrawMergesIntoInventory:
             machine_inventory=m_inv,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON)
+        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 10
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 0
 
 
 class TestDepositWithdrawViaStep:
@@ -451,7 +451,7 @@ class TestDepositWithdrawViaStep:
         from factoriax.game_logic import factoriax_step
         from factoriax.state import EnvParams
 
-        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON): 10})
+        m_inv = _set_machine_inv(3, 3, {(1, 2, ItemType.IRON_ORE): 10})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -462,7 +462,7 @@ class TestDepositWithdrawViaStep:
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         rng = jax.random.PRNGKey(0)
 
-        state = factoriax_step(rng, state, Action.WITHDRAW_IRON, params)
+        state = factoriax_step(rng, state, Action.WITHDRAW_IRON_ORE, params)
 
-        assert int(state.player_inventory[0, ItemType.IRON]) == 10
-        assert int(state.machine_inventory[1, 2, ItemType.IRON]) == 0
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.machine_inventory[1, 2, ItemType.IRON_ORE]) == 0

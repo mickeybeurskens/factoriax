@@ -111,8 +111,8 @@ class TestMiningResources:
     @pytest.mark.parametrize(
         "block_type, item_type",
         [
-            (BlockType.IRON, ItemType.IRON),
-            (BlockType.COPPER, ItemType.COPPER),
+            (BlockType.IRON, ItemType.IRON_ORE),
+            (BlockType.COPPER, ItemType.COPPER_ORE),
         ],
         ids=["iron", "copper"],
     )

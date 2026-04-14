@@ -54,8 +54,8 @@ class TestItemType:
         values = [
             ItemType.EMPTY,
             ItemType.COAL,
-            ItemType.IRON,
-            ItemType.COPPER,
+            ItemType.IRON_ORE,
+            ItemType.COPPER_ORE,
         ]
         assert len(values) == len(set(values))
 

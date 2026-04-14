@@ -37,7 +37,7 @@ class TestInventoryHelpers:
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
         assert state.player_inventory[0, ItemType.COAL] == 0
-        assert state.player_inventory[0, ItemType.IRON] == 0
+        assert state.player_inventory[0, ItemType.IRON_ORE] == 0
 
     def test_add_item_to_empty_inventory(self, state_factory) -> None:
         """Should add item count to the correct type slot."""
@@ -71,7 +71,7 @@ class TestRecipeAffordability:
         """Should not afford recipe with only some materials."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            player_inventory=_inv_with(ItemType.COPPER, 5),
+            player_inventory=_inv_with(ItemType.COPPER_ORE, 5),
         )
         # Recipe 0 (miner) needs 5 copper + 5 iron.
         assert not can_afford_recipe(state, 0, 0)
@@ -104,8 +104,8 @@ class TestMaterialConsumption:
         )
         # Recipe 0 (miner): 5 copper + 5 iron.
         new_state = consume_recipe_materials(state, 0, 0)
-        assert new_state.player_inventory[0, ItemType.COPPER] == 5
-        assert new_state.player_inventory[0, ItemType.IRON] == 5
+        assert new_state.player_inventory[0, ItemType.COPPER_ORE] == 5
+        assert new_state.player_inventory[0, ItemType.IRON_ORE] == 5
 
 
 class TestCraftingProgress:
@@ -130,8 +130,8 @@ class TestCraftingProgress:
             player_inventory=_inv_with_multi(COPPER=5, IRON=5),
         )
         new_state = start_crafting(state, 0, 0)
-        assert new_state.player_inventory[0, ItemType.COPPER] == 0
-        assert new_state.player_inventory[0, ItemType.IRON] == 0
+        assert new_state.player_inventory[0, ItemType.COPPER_ORE] == 0
+        assert new_state.player_inventory[0, ItemType.IRON_ORE] == 0
 
     def test_cannot_start_while_crafting(self, state_factory) -> None:
         """Should not start new craft while already crafting."""
@@ -142,7 +142,7 @@ class TestCraftingProgress:
         )
         new_state = start_crafting(state, 0, 0)
         assert new_state.craft_progress[0] == 2
-        assert new_state.player_inventory[0, ItemType.COPPER] == 10
+        assert new_state.player_inventory[0, ItemType.COPPER_ORE] == 10
 
     def test_update_decrements_progress(self, state_factory) -> None:
         """Update should decrement crafting progress."""
@@ -168,7 +168,7 @@ class TestCraftingProgress:
         """Direct craft action should produce the specified output."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            player_inventory=_inv_with(ItemType.IRON, 5),
+            player_inventory=_inv_with(ItemType.IRON_ORE, 5),
         )
         new_state = start_crafting(state, 0, 1)  # recipe 1 = pallet
         assert new_state.player_inventory[0, ItemType.PALLET] == 1

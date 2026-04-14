@@ -43,13 +43,13 @@ class TestSparsePalletCraftingReward:
     ) -> None:
         """Gaining pallets while losing iron triggers positive reward."""
         inv_before = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv_before = inv_before.at[0, int(ItemType.IRON)].set(10)
+        inv_before = inv_before.at[0, int(ItemType.IRON_ORE)].set(10)
         prev = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv_before,
         )
         inv_after = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv_after = inv_after.at[0, int(ItemType.IRON)].set(6)
+        inv_after = inv_after.at[0, int(ItemType.IRON_ORE)].set(6)
         inv_after = inv_after.at[0, int(ItemType.PALLET)].set(1)
         new = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
@@ -83,15 +83,15 @@ class TestSparseMinerCraftingReward:
     ) -> None:
         """Gaining miner while losing iron and copper triggers reward."""
         inv_before = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv_before = inv_before.at[0, int(ItemType.IRON)].set(10)
-        inv_before = inv_before.at[0, int(ItemType.COPPER)].set(10)
+        inv_before = inv_before.at[0, int(ItemType.IRON_ORE)].set(10)
+        inv_before = inv_before.at[0, int(ItemType.COPPER_ORE)].set(10)
         prev = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv_before,
         )
         inv_after = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv_after = inv_after.at[0, int(ItemType.IRON)].set(6)
-        inv_after = inv_after.at[0, int(ItemType.COPPER)].set(6)
+        inv_after = inv_after.at[0, int(ItemType.IRON_ORE)].set(6)
+        inv_after = inv_after.at[0, int(ItemType.COPPER_ORE)].set(6)
         inv_after = inv_after.at[0, int(ItemType.MINER)].set(1)
         new = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
@@ -151,7 +151,7 @@ class TestPalletFillingReward:
         inv_after = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
-        inv_after = inv_after.at[1, 1, int(ItemType.IRON)].set(5)
+        inv_after = inv_after.at[1, 1, int(ItemType.IRON_ORE)].set(5)
         new = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=mt,

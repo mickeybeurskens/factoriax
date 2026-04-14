@@ -278,7 +278,7 @@ class TestLevelConversion:
         machines = np.full(
             (5, 5), int(MachineType.NONE), dtype=np.int32
         )
-        machines[1, 1] = int(MachineType.ARM)
+        machines[1, 1] = int(MachineType.CONVEYOR_BELT)
         dirs = np.zeros((5, 5), dtype=np.int32)
         dirs[1, 1] = int(Direction.RIGHT)
         original = Level(
@@ -722,20 +722,20 @@ class TestGetInventorySlots:
         state = new_editor_state(5, 5)
         state.player_inventories[0] = [
             (int(ItemType.COAL), 50),
-            (int(ItemType.IRON), 30),
+            (int(ItemType.IRON_ORE), 30),
         ]
         slots = get_inventory_slots(state, ("player", 0, 0))
         assert slots[0] == (int(ItemType.COAL), 50)
-        assert slots[1] == (int(ItemType.IRON), 30)
+        assert slots[1] == (int(ItemType.IRON_ORE), 30)
         assert slots[2] == (int(ItemType.EMPTY), 0)
 
     def test_machine_inventory(self) -> None:
         state = new_editor_state(5, 5)
         set_machine(state, 2, 2, int(MachineType.PALLET), 0)
-        state.machine_inventory_items[2, 2, 0] = int(ItemType.IRON)
+        state.machine_inventory_items[2, 2, 0] = int(ItemType.IRON_ORE)
         state.machine_inventory_counts[2, 2, 0] = 10
         slots = get_inventory_slots(state, ("machine", 2, 2))
-        assert slots[0] == (int(ItemType.IRON), 10)
+        assert slots[0] == (int(ItemType.IRON_ORE), 10)
 
 
 class TestSetInventorySlot:
@@ -744,9 +744,9 @@ class TestSetInventorySlot:
     def test_set_player_slot(self) -> None:
         state = new_editor_state(5, 5)
         target: InvTarget = ("player", 0, 0)
-        set_inventory_slot(state, target, 3, int(ItemType.COPPER), 25)
+        set_inventory_slot(state, target, 3, int(ItemType.COPPER_ORE), 25)
         slots = get_inventory_slots(state, target)
-        assert slots[3] == (int(ItemType.COPPER), 25)
+        assert slots[3] == (int(ItemType.COPPER_ORE), 25)
         assert state.dirty is True
 
     def test_set_machine_slot(self) -> None:
@@ -764,7 +764,7 @@ class TestClearInventorySlot:
     def test_clear_player_slot(self) -> None:
         state = new_editor_state(5, 5)
         target: InvTarget = ("player", 0, 0)
-        set_inventory_slot(state, target, 0, int(ItemType.IRON), 10)
+        set_inventory_slot(state, target, 0, int(ItemType.IRON_ORE), 10)
         clear_inventory_slot(state, target, 0)
         slots = get_inventory_slots(state, target)
         assert slots[0] == (int(ItemType.EMPTY), 0)
@@ -777,10 +777,10 @@ class TestSwapInventorySlots:
         state = new_editor_state(5, 5)
         target: InvTarget = ("player", 0, 0)
         set_inventory_slot(state, target, 0, int(ItemType.COAL), 10)
-        set_inventory_slot(state, target, 1, int(ItemType.IRON), 20)
+        set_inventory_slot(state, target, 1, int(ItemType.IRON_ORE), 20)
         swap_inventory_slots(state, target, 0, 1)
         slots = get_inventory_slots(state, target)
-        assert slots[0] == (int(ItemType.IRON), 20)
+        assert slots[0] == (int(ItemType.IRON_ORE), 20)
         assert slots[1] == (int(ItemType.COAL), 10)
 
 
@@ -809,14 +809,14 @@ class TestPerPlayerInventoryRoundTrip:
         state = new_editor_state(8, 8)
         set_player_position(state, 0, 1, 1)
         set_inventory_slot(state, ("player", 0, 0), 0, int(ItemType.COAL), 50)
-        set_inventory_slot(state, ("player", 0, 0), 1, int(ItemType.IRON), 30)
+        set_inventory_slot(state, ("player", 0, 0), 1, int(ItemType.IRON_ORE), 30)
         level = editor_state_to_level(state)
         assert level.player_inventories is not None
         assert 0 in level.player_inventories
         state2 = editor_state_from_level(level)
         slots = get_inventory_slots(state2, ("player", 0, 0))
         assert slots[0] == (int(ItemType.COAL), 50)
-        assert slots[1] == (int(ItemType.IRON), 30)
+        assert slots[1] == (int(ItemType.IRON_ORE), 30)
 
     def test_empty_becomes_none(self) -> None:
         state = new_editor_state(5, 5)
