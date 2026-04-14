@@ -88,28 +88,28 @@ MACHINE_MAX_STACK = jnp.array(
 # Max stack count per item type for the player inventory.
 PLAYER_MAX_STACK = jnp.array(
     [
-        0,   # EMPTY
-        64,  # COAL
-        64,  # IRON_ORE
-        64,  # COPPER_ORE
-        64,  # TIN_ORE
-        64,  # SILICON
-        64,  # IRON_PLATE
-        64,  # COPPER_PLATE
-        64,  # TIN_PLATE
-        64,  # WAFER
-        64,  # STEEL
-        64,  # CIRCUIT
-        64,  # WIRE
-        64,  # MOTOR
-        64,  # SENSOR
-        10,  # CONVEYOR_BELT
-        10,  # MINER
-        10,  # ASSEMBLER
-        10,  # PALLET
-        64,  # BASIC_SCIENCE_PACK
-        64,  # ADVANCED_SCIENCE_PACK
-        10,  # ROCKET
+        0,  # EMPTY
+        1024,  # COAL
+        1024,  # IRON_ORE
+        1024,  # COPPER_ORE
+        1024,  # TIN_ORE
+        1024,  # SILICON
+        1024,  # IRON_PLATE
+        1024,  # COPPER_PLATE
+        1024,  # TIN_PLATE
+        1024,  # WAFER
+        1024,  # STEEL
+        1024,  # CIRCUIT
+        1024,  # WIRE
+        1024,  # MOTOR
+        1024,  # SENSOR
+        128,  # CONVEYOR_BELT
+        128,  # MINER
+        128,  # ASSEMBLER
+        128,  # PALLET
+        1024,  # BASIC_SCIENCE_PACK
+        1024,  # ADVANCED_SCIENCE_PACK
+        128,  # ROCKET
     ],
     dtype=jnp.int32,
 )
@@ -297,11 +297,11 @@ class Direction(IntEnum):
 # (dx, dy) offset per compass direction, indexed by Direction value.
 DIRECTIONS = jnp.array(
     [
-        [0, 0],   # 0: NONE / invalid
+        [0, 0],  # 0: NONE / invalid
         [-1, 0],  # 1: LEFT
-        [1, 0],   # 2: RIGHT
+        [1, 0],  # 2: RIGHT
         [0, -1],  # 3: UP
-        [0, 1],   # 4: DOWN
+        [0, 1],  # 4: DOWN
     ],
     dtype=jnp.int32,
 )
@@ -453,27 +453,33 @@ RESEARCH_ACTION_TO_PACK = jnp.array(
 # ---------------------------------------------------------------------------
 
 MINEABLE_BLOCKS = jnp.array(
-    [BlockType.COAL, BlockType.IRON, BlockType.COPPER,
-     BlockType.TIN, BlockType.SILICON],
+    [
+        BlockType.COAL,
+        BlockType.IRON,
+        BlockType.COPPER,
+        BlockType.TIN,
+        BlockType.SILICON,
+    ],
 )
 
 BLOCK_TO_ITEM_ARRAY = jnp.array(
     [
-        ItemType.EMPTY,      # INVALID
-        ItemType.EMPTY,      # OUT_OF_BOUNDS
-        ItemType.EMPTY,      # DIRT
-        ItemType.EMPTY,      # WATER
-        ItemType.IRON_ORE,   # IRON
-        ItemType.COPPER_ORE, # COPPER
-        ItemType.COAL,       # COAL
-        ItemType.TIN_ORE,    # TIN
-        ItemType.SILICON,    # SILICON
+        ItemType.EMPTY,  # INVALID
+        ItemType.EMPTY,  # OUT_OF_BOUNDS
+        ItemType.EMPTY,  # DIRT
+        ItemType.EMPTY,  # WATER
+        ItemType.IRON_ORE,  # IRON
+        ItemType.COPPER_ORE,  # COPPER
+        ItemType.COAL,  # COAL
+        ItemType.TIN_ORE,  # TIN
+        ItemType.SILICON,  # SILICON
     ],
     dtype=jnp.int32,
 )
 
 SOLID_BLOCKS = jnp.array(
-    [BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32,
+    [BlockType.WATER, BlockType.OUT_OF_BOUNDS],
+    dtype=jnp.int32,
 )
 
 BLOCK_MAX_RESOURCES = 1000
@@ -586,6 +592,8 @@ def load_all_textures() -> dict[int, np.ndarray]:
         BlockType.IRON: "iron",
         BlockType.COPPER: "copper",
         BlockType.COAL: "coal",
+        BlockType.TIN: "tin",
+        BlockType.SILICON: "silicon",
     }
     for block_type, name in texture_names.items():
         textures[int(block_type)] = load_texture(name)

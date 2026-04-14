@@ -53,6 +53,8 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
         int(BlockType.IRON): (192, 192, 192),
         int(BlockType.COPPER): (184, 115, 51),
         int(BlockType.COAL): (54, 54, 54),
+        int(BlockType.TIN): (180, 180, 170),
+        int(BlockType.SILICON): (100, 110, 130),
         int(BlockType.NEST): (90, 40, 60),
     }
     textures: dict[int, np.ndarray] = {}
