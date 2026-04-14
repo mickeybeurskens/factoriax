@@ -44,6 +44,7 @@ from factoriax.constants import (
 from factoriax.play.play_state import PlayState
 from factoriax.play.transfer import swap_inventory_slots
 from factoriax.play.ui import (
+    _entity_inventory,
     _hotbar_h,  # noqa: F401 — re-export
     render_achievement_menu,
     render_help_overlay,
@@ -692,9 +693,12 @@ class GameUI:
             if ps.machine_panel_active:
                 # Cycle focused_machine_item through non-empty types
                 # in the machine's inventory.
-                machine_inv = state.machine_inventory[ps.machine_ty, ps.machine_tx]
+                machine_inv = _entity_inventory(
+                    state, ps.machine_ty, ps.machine_tx,
+                )
                 active = [
-                    i for i in range(1, NUM_ITEM_TYPES) if int(machine_inv[i]) > 0
+                    i for i in range(1, NUM_ITEM_TYPES)
+                    if int(machine_inv[i]) > 0
                 ]
                 if active and ps.focused_machine_item in active:
                     idx = active.index(ps.focused_machine_item)
@@ -724,21 +728,11 @@ class GameUI:
         self,
         state: EnvState,
     ) -> EnvState:
-        """Handle Q key: cycle assembler recipe."""
-        ps = self._ps
-        mt = int(state.machine_types[ps.machine_ty, ps.machine_tx])
-        is_idle = int(state.machine_power[ps.machine_ty, ps.machine_tx]) == 0
-        mi = state.machine_inventory[ps.machine_ty, ps.machine_tx]
-        has_inputs = bool(int(mi.sum()) > 0)
-        if mt == int(MachineType.ASSEMBLER) and is_idle and not has_inputs:
-            cur = int(
-                state.machine_selected_recipe[ps.machine_ty, ps.machine_tx],
-            )
-            new_recipe = (cur + 1) % NUM_RECIPES
-            new_sel = state.machine_selected_recipe.at[
-                ps.machine_ty, ps.machine_tx
-            ].set(new_recipe)
-            state = state.replace(machine_selected_recipe=new_sel)
+        """Handle Q key (no-op, assemblers auto-detect recipes).
+
+        Retained as a stub so the dispatch table entry and key binding
+        continue to resolve without error.
+        """
         return state
 
     def _handle_achievement_keys(
