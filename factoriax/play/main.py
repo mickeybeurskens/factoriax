@@ -311,6 +311,15 @@ def _play_loop(
         ctrl_lookup = build_controller_lookup(default_controller())
     window_width, window_height = screen.get_size()
     step_fn = jax.jit(env.step_env)
+
+    # !! INTENTIONAL JIT WARMUP — DO NOT REMOVE !!
+    # The first call to step_fn triggers JAX JIT compilation which
+    # takes several seconds. Running it here behind a loading screen
+    # prevents the game from freezing on the player's first input.
+    # The action MUST be passed as int(Action.NOOP), not
+    # jnp.int32(Action.NOOP), to avoid a weak-type mismatch that
+    # would cause a second retrace on the first real action.
+    # See commit 61b44a1 for the original bugfix.
     rng, warmup_key = random.split(rng)
     _wk = warmup_key
     _st = state
