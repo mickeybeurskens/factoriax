@@ -275,6 +275,8 @@ def _handle_welcome_event(
             ps.welcome_open = False
     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
         ps.welcome_open = False
+    elif event.type == pygame.JOYBUTTONDOWN:
+        ps.welcome_open = False
     return ps, state
 
 

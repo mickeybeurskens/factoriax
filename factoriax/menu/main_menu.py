@@ -11,6 +11,12 @@ from __future__ import annotations
 import numpy as np
 import pygame
 
+from factoriax.config import (
+    ControllerLookup,
+    KeyLookup,
+    PlayerAction,
+    resolve_event,
+)
 from factoriax.constants import Direction, ItemType
 from factoriax.renderer import (
     create_player_texture,
@@ -131,18 +137,37 @@ def _draw_button(
 # -- Public API --------------------------------------------------------------
 
 
-def run_main_menu(screen: pygame.Surface) -> str | None:
+def run_main_menu(
+    screen: pygame.Surface,
+    kb_lookup: KeyLookup | None = None,
+    ctrl_lookup: ControllerLookup | None = None,
+) -> str | None:
     """Show the main menu and return the user's choice.
 
     Blocks until the player clicks a button or closes the window.
     Renders to a fixed-size canvas that is integer-scaled to the window.
+    Accepts optional key/controller lookups so navigation uses the
+    same configured bindings as the in-game menus.
 
     Args:
         screen: Pygame display surface.
+        kb_lookup: Keyboard lookup (built from defaults when ``None``).
+        ctrl_lookup: Controller lookup (built from defaults when ``None``).
 
     Returns:
         ``"play"``, ``"editor"``, ``"settings"``, or ``None`` (quit).
     """
+    from factoriax.config import (
+        build_controller_lookup,
+        build_key_lookup,
+        default_controller,
+        default_keyboard,
+    )
+
+    if kb_lookup is None:
+        kb_lookup = build_key_lookup(default_keyboard())
+    if ctrl_lookup is None:
+        ctrl_lookup = build_controller_lookup(default_controller())
     s = _theme.UI_SCALE
     canvas = ScaledCanvas(1024, s, screen)
     clock = pygame.time.Clock()
@@ -222,13 +247,21 @@ def run_main_menu(screen: pygame.Surface) -> str | None:
                 if hit is not None:
                     return hit.action
 
-            if event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    return regions[focus_idx].action
-                if event.key in (pygame.K_DOWN, pygame.K_TAB):
-                    focus_idx = (focus_idx + 1) % len(regions)
-                if event.key in (pygame.K_UP,):
-                    focus_idx = (focus_idx - 1) % len(regions)
+            actions = resolve_event(event, kb_lookup, ctrl_lookup)
+            if PlayerAction.CONFIRM in actions:
+                return regions[focus_idx].action
+            if PlayerAction.BACK in actions:
+                return None
+            if PlayerAction.NAV_DOWN in actions:
+                focus_idx = (focus_idx + 1) % len(regions)
+            elif PlayerAction.NAV_UP in actions:
+                focus_idx = (focus_idx - 1) % len(regions)
+            # Keep Tab as a direct key for convenience.
+            if (
+                event.type == pygame.KEYDOWN
+                and event.key == pygame.K_TAB
+            ):
+                focus_idx = (focus_idx + 1) % len(regions)
 
         # -- Draw to canvas --------------------------------------------------
         surf = canvas.surface

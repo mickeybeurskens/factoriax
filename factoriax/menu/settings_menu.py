@@ -17,7 +17,15 @@ from dataclasses import dataclass, field
 
 import pygame
 
-from factoriax.config import PlayerConfig
+from factoriax.config import (
+    PlayerAction,
+    PlayerConfig,
+    build_controller_lookup,
+    build_key_lookup,
+    default_controller,
+    default_keyboard,
+    resolve_event,
+)
 from factoriax.state import EnvParams
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
@@ -270,17 +278,13 @@ def _cancel_edit(fs: FieldState) -> None:
     fs.edit_buffer = ""
 
 
-def _build_params(
-    sections: list[_Section],
-    biters_enabled: bool,
-) -> EnvParams:
+def _build_params(sections: list[_Section]) -> EnvParams:
     """Construct an EnvParams from the current field string values.
 
     Invalid strings fall back to the EnvParams default for that field.
 
     Args:
         sections: The populated section list.
-        biters_enabled: Whether the biters checkbox is checked.
 
     Returns:
         A new EnvParams instance.
@@ -494,6 +498,7 @@ class _RebindState:
 
     active_tab: str = "keyboard"
     listening_action: str | None = None
+    focused_row: int = 0
 
 
 # -- Scrollbar helper -----------------------------------------------------
@@ -573,7 +578,6 @@ def run_settings_menu(
     side_pad = _BASE_SIDE_PAD * s
     input_w = _BASE_INPUT_W * s
     input_h = _BASE_INPUT_H * s
-    checkbox_size = _BASE_CHECKBOX_SIZE * s
     btn_w = _BASE_BTN_W * s
     btn_h = _BASE_BTN_H * s
     scroll_step = _BASE_SCROLL_STEP * s
@@ -589,7 +593,6 @@ def run_settings_menu(
     clock = pygame.time.Clock()
     params = initial_params if initial_params is not None else EnvParams()
     sections = _build_sections(params)
-    biters_enabled = False  # Biters removed from game
 
     scroll_offset = 0
     font_header = get_pixel_font(32 * s)
@@ -602,8 +605,6 @@ def run_settings_menu(
     content_h = section_pad_top
     for sec in sections:
         content_h += section_header_h + section_rule_h + section_gap
-        if sec.title == "Biters":
-            content_h += row_h + row_gap
         num_rows = (len(sec.fields) + 1) // 2
         content_h += num_rows * (row_h + row_gap)
         content_h += section_pad_top
@@ -634,7 +635,7 @@ def run_settings_menu(
                     for fs in _flat_fields(sections):
                         if fs.editing:
                             _confirm_edit(fs)
-                    return _build_params(sections, biters_enabled)
+                    return _build_params(sections)
 
                 # Content area clicks (adjusted for scroll).
                 cy = top_bar_h + section_pad_top - scroll_offset
@@ -643,43 +644,11 @@ def run_settings_menu(
                 for sec in sections:
                     cy += section_header_h + section_rule_h + section_gap
 
-                    if sec.title == "Biters":
-                        cb_x = side_pad
-                        cb_y = cy + (row_h - checkbox_size) // 2
-                        cb_label = font_label.render(
-                            "Enable Biters",
-                            False,
-                            _LABEL_COLOR,
-                        )
-                        cb_hit = pygame.Rect(
-                            cb_x,
-                            cb_y,
-                            checkbox_size + 8 + cb_label.get_width(),
-                            checkbox_size,
-                        )
-                        if cb_hit.collidepoint(mx, my):
-                            biters_enabled = not biters_enabled
-                            if biters_enabled:
-                                spawn_fs = next(
-                                    (
-                                        f
-                                        for f in sec.fields
-                                        if f.name == "biter_spawn_rate"
-                                    ),
-                                    None,
-                                )
-                                if spawn_fs is not None and spawn_fs.value == "0.00":
-                                    spawn_fs.value = stored_spawn_rate
-                        cy += row_h + row_gap
-
-                    is_biter_section = sec.title == "Biters"
                     for i in range(0, len(sec.fields), 2):
                         for col_idx in range(2):
                             fi = i + col_idx
                             if fi >= len(sec.fields):
                                 break
-                            if is_biter_section and not biters_enabled:
-                                continue
                             fx = side_pad + col_idx * (col_w + col_gap) + label_w + 8
                             fy = cy + (row_h - input_h) // 2
                             hit = pygame.Rect(fx, fy, input_w, input_h)
@@ -735,10 +704,75 @@ def run_settings_menu(
                 else:
                     if event.key == pygame.K_ESCAPE:
                         return None
+                    if event.key == pygame.K_RETURN:
+                        return _build_params(sections)
                     if event.key == pygame.K_TAB:
                         flat = _flat_fields(sections)
                         if flat:
                             _focus_field(sections, flat[0])
+
+            # Controller/keyboard navigation via configured bindings.
+            if event.type in (
+                pygame.JOYHATMOTION,
+                pygame.JOYBUTTONDOWN,
+            ):
+                _kb = build_key_lookup(default_keyboard())
+                _cl = build_controller_lookup(default_controller())
+                nav = resolve_event(event, _kb, _cl)
+                active = next(
+                    (
+                        fs
+                        for fs in _flat_fields(sections)
+                        if fs.editing
+                    ),
+                    None,
+                )
+                if PlayerAction.NAV_DOWN in nav:
+                    if active is not None:
+                        _confirm_edit(active)
+                    flat = _flat_fields(sections)
+                    if flat:
+                        cur = next(
+                            (
+                                i for i, f in enumerate(flat)
+                                if f.editing
+                            ),
+                            -1,
+                        )
+                        _focus_field(
+                            sections,
+                            flat[(cur + 1) % len(flat)],
+                        )
+                elif PlayerAction.NAV_UP in nav:
+                    if active is not None:
+                        _confirm_edit(active)
+                    flat = _flat_fields(sections)
+                    if flat:
+                        cur = next(
+                            (
+                                i for i, f in enumerate(flat)
+                                if f.editing
+                            ),
+                            -1,
+                        )
+                        _focus_field(
+                            sections,
+                            flat[(cur - 1) % len(flat)],
+                        )
+                elif PlayerAction.CONFIRM in nav:
+                    if active is not None:
+                        _confirm_edit(active)
+                    else:
+                        # No field editing → Play.
+                        for fs in _flat_fields(sections):
+                            if fs.editing:
+                                _confirm_edit(fs)
+                        return _build_params(sections)
+                elif PlayerAction.BACK in nav:
+                    if active is not None:
+                        _cancel_edit(active)
+                    else:
+                        return None
 
         # -- Drawing ------------------------------------------------------
         surf = canvas.surface
@@ -774,8 +808,6 @@ def run_settings_menu(
         cy = top_bar_h + section_pad_top - scroll_offset
 
         for sec in sections:
-            is_biter_section = sec.title == "Biters"
-
             sec_surf = font_section.render(sec.title, False, _GOLD)
             surf.blit(sec_surf, (side_pad, cy))
             cy += section_header_h
@@ -787,33 +819,6 @@ def run_settings_menu(
             )
             cy += section_rule_h + section_gap
 
-            if is_biter_section:
-                cb_x = side_pad
-                cb_y = cy + (row_h - checkbox_size) // 2
-                cb_rect = pygame.Rect(
-                    cb_x,
-                    cb_y,
-                    checkbox_size,
-                    checkbox_size,
-                )
-                _draw_checkbox(
-                    surf,
-                    cb_x,
-                    cb_y,
-                    checkbox_size,
-                    biters_enabled,
-                    cb_rect.collidepoint(mouse_pos),
-                )
-                lbl_surf = font_label.render(
-                    "Enable Biters",
-                    False,
-                    _LABEL_COLOR,
-                )
-                lbl_x = cb_x + checkbox_size + 8
-                lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
-                surf.blit(lbl_surf, (lbl_x, lbl_y))
-                cy += row_h + row_gap
-
             for i in range(0, len(sec.fields), 2):
                 for col_idx in range(2):
                     fi = i + col_idx
@@ -821,7 +826,7 @@ def run_settings_menu(
                         break
 
                     fs = sec.fields[fi]
-                    disabled = is_biter_section and not biters_enabled
+                    disabled = False
                     col_x = side_pad + col_idx * (col_w + col_gap)
 
                     lbl_color = _LABEL_DISABLED if disabled else _LABEL_COLOR
@@ -939,6 +944,13 @@ def _confirm_scale_change(
                     return True
                 if event.key == pygame.K_ESCAPE:
                     return False
+            _kb = build_key_lookup(default_keyboard())
+            _cl = build_controller_lookup(default_controller())
+            _nav = resolve_event(event, _kb, _cl)
+            if PlayerAction.CONFIRM in _nav:
+                return True
+            if PlayerAction.BACK in _nav:
+                return False
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
                 if pygame.Rect(keep_x, btn_y, btn_w, btn_h).collidepoint(
@@ -1138,6 +1150,13 @@ def run_controls_menu(
             return config.keyboard
         return config.controller
 
+    # Flat list of action keys for focused_row indexing.
+    flat_actions: list[str] = [
+        action_key
+        for _, actions in _REBIND_ACTIONS
+        for action_key, _ in actions
+    ]
+
     while True:
         scrollable_area = sh - top_bar_h
         max_scroll = max(0, content_h - scrollable_area)
@@ -1181,6 +1200,53 @@ def run_controls_menu(
                 scroll_offset = max(
                     0, min(scroll_offset, max_scroll),
                 )
+
+            # Keyboard/controller navigation via configured bindings.
+            _kb = build_key_lookup(default_keyboard())
+            _cl = build_controller_lookup(default_controller())
+            nav = resolve_event(event, _kb, _cl)
+
+            _nav_up = PlayerAction.NAV_UP in nav
+            _nav_down = PlayerAction.NAV_DOWN in nav
+            _nav_confirm = PlayerAction.CONFIRM in nav
+            _nav_back = PlayerAction.BACK in nav
+            _nav_left = PlayerAction.NAV_LEFT in nav
+            _nav_right = PlayerAction.NAV_RIGHT in nav
+
+            # Escape is hardcoded (not in bindings) so handle it too.
+            if (
+                event.type == pygame.KEYDOWN
+                and event.key == pygame.K_ESCAPE
+            ):
+                _nav_back = True
+
+            if _nav_up and flat_actions:
+                rs.focused_row = (
+                    (rs.focused_row - 1) % len(flat_actions)
+                )
+                # Auto-scroll to keep focused row visible.
+                row_y = rs.focused_row * (row_h + row_gap)
+                if row_y < scroll_offset:
+                    scroll_offset = row_y
+                elif row_y + row_h > scroll_offset + scrollable_area:
+                    scroll_offset = row_y + row_h - scrollable_area
+            elif _nav_down and flat_actions:
+                rs.focused_row = (
+                    (rs.focused_row + 1) % len(flat_actions)
+                )
+                row_y = rs.focused_row * (row_h + row_gap)
+                if row_y < scroll_offset:
+                    scroll_offset = row_y
+                elif row_y + row_h > scroll_offset + scrollable_area:
+                    scroll_offset = row_y + row_h - scrollable_area
+            elif _nav_confirm and flat_actions:
+                rs.listening_action = flat_actions[rs.focused_row]
+            elif _nav_back:
+                return fullscreen, ui_scale
+            elif _nav_left:
+                rs.active_tab = "keyboard"
+            elif _nav_right:
+                rs.active_tab = "controller"
 
             if (
                 event.type == pygame.MOUSEBUTTONDOWN
@@ -1369,6 +1435,7 @@ def run_controls_menu(
         # Binding rows.
         bindings = _active_bindings()
         box_x = sw - side_pad - input_w
+        flat_idx = 0
         for cat_label, actions in _REBIND_ACTIONS:
             if cat_label is not None:
                 cat_surf = font_cat.render(
@@ -1379,9 +1446,15 @@ def run_controls_menu(
                 cy += cat_h + row_gap
 
             for action_key, label in actions:
+                is_focused = flat_idx == rs.focused_row
+                flat_idx += 1
+
                 # Label.
+                lbl_color = (
+                    _GOLD if is_focused else _LABEL_COLOR
+                )
                 lbl_surf = font_label.render(
-                    label, False, _LABEL_COLOR,
+                    label, False, lbl_color,
                 )
                 lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
                 surf.blit(lbl_surf, (side_pad, lbl_y))
@@ -1401,6 +1474,8 @@ def run_controls_menu(
                 )
                 if is_listening:
                     border_c = _GOLD
+                elif is_focused:
+                    border_c = _LABEL_COLOR
                 elif is_hovered:
                     border_c = _LABEL_COLOR
                 else:

@@ -42,8 +42,11 @@ def _run() -> None:
 
     from factoriax.menu.main_menu import run_main_menu
 
+    kb_lookup = build_key_lookup(config.keyboard)
+    ctrl_lookup = build_controller_lookup(config.controller)
+
     while True:
-        choice = run_main_menu(screen)
+        choice = run_main_menu(screen, kb_lookup, ctrl_lookup)
 
         if choice is None:
             break

@@ -440,6 +440,40 @@ def resolve_controller_axis(
     return frozenset()
 
 
+def resolve_event(
+    event: pygame.event.Event,
+    kb_lookup: KeyLookup,
+    ctrl_lookup: ControllerLookup | None = None,
+) -> frozenset[str]:
+    """Resolve any input event to player actions.
+
+    Handles KEYDOWN, JOYBUTTONDOWN, and JOYHATMOTION events through
+    the appropriate lookup. Returns an empty frozenset for unrecognised
+    event types. Useful in menus that need the same navigation as the
+    in-game UI without duplicating resolution logic.
+
+    Args:
+        event: Pygame event.
+        kb_lookup: Keyboard reverse lookup.
+        ctrl_lookup: Controller reverse lookup (may be ``None``).
+
+    Returns:
+        Frozenset of matching :class:`PlayerAction` value strings.
+    """
+    if event.type == pygame.KEYDOWN:
+        mods = pygame.key.get_mods()
+        return resolve_key(kb_lookup, event.key, mods)
+    if ctrl_lookup is None:
+        return frozenset()
+    if event.type == pygame.JOYBUTTONDOWN:
+        return resolve_controller_button(ctrl_lookup, event.button)
+    if event.type == pygame.JOYHATMOTION:
+        return resolve_controller_hat(
+            ctrl_lookup, event.hat, event.value,
+        )
+    return frozenset()
+
+
 # ---------------------------------------------------------------------------
 # Input name formatting (for rebinding UI)
 # ---------------------------------------------------------------------------
