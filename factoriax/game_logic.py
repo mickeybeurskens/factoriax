@@ -19,6 +19,8 @@ from factoriax.constants import (
     PLAYER_MAX_STACK,
     RESEARCH_ACTION_TO_PACK,
     RESEARCH_COST,
+    ROTATE_ACTION_TO_DIR,
+    ROTATE_BASE,
     SCIENCE_PACK_TO_TECH,
     WITHDRAW_BASE,
     Action,
@@ -29,7 +31,12 @@ from factoriax.constants import (
 )
 from factoriax.crafting import craft_recipe
 from factoriax.machines import update_all_machines
-from factoriax.placement import get_tile_in_front, pickup_machine, place_machine
+from factoriax.placement import (
+    get_tile_in_front,
+    pickup_machine,
+    place_machine,
+    set_machine_direction,
+)
 from factoriax.recipes import NUM_RECIPES
 from factoriax.state import EnvParams, EnvState
 
@@ -462,6 +469,13 @@ def _handle_player_action(
     is_mine = action == Action.MINE
     is_pickup = action == Action.PICKUP
 
+    is_rotate = (action >= Action.ROTATE_LEFT) & (
+        action <= Action.ROTATE_DOWN
+    )
+    rotate_dir = ROTATE_ACTION_TO_DIR[
+        jnp.clip(action - ROTATE_BASE, 0, 3)
+    ]
+
     is_place = (action >= Action.PLACE_MINER) & (action <= Action.PLACE_ROCKET)
     place_item = PLACE_ACTION_TO_ITEM[
         jnp.clip(action - PLACE_BASE, 0, len(PLACE_ACTION_TO_ITEM) - 1)
@@ -509,6 +523,11 @@ def _handle_player_action(
     )
     state = _select(is_pickup, pickup_machine(state, player_idx), state)
     state = _select(
+        is_rotate,
+        set_machine_direction(state, player_idx, rotate_dir),
+        state,
+    )
+    state = _select(
         is_deposit,
         deposit_to_adjacent(state, player_idx, deposit_item),
         state,
@@ -525,7 +544,7 @@ def _handle_player_action(
     )
 
     is_movement = ~(
-        is_mine | is_craft | is_place | is_pickup
+        is_mine | is_craft | is_place | is_pickup | is_rotate
         | is_deposit | is_withdraw | is_research
     )
     state = _select(

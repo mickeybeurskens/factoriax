@@ -395,7 +395,6 @@ def _init_rebind_actions() -> list[tuple[str | None, list[tuple[str, str]]]]:
                 (PlayerAction.MINE, "Mine"),
                 (PlayerAction.INTERACT, "Interact"),
                 (PlayerAction.ROTATE, "Rotate"),
-                (PlayerAction.REPAIR, "Repair"),
             ],
         ),
         (

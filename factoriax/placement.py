@@ -304,3 +304,48 @@ def pickup_machine(
         ent_asm_out_type=new_asm_out_type,
         ent_asm_out_count=new_asm_out_count,
     )
+
+
+def set_machine_direction(
+    state: EnvState,
+    player_idx: int | jax.Array,
+    target_dir: int | jax.Array,
+) -> EnvState:
+    """Set the direction of the machine in front of the player.
+
+    Sets the entity's direction to *target_dir* absolutely. No-op
+    if the tile has no machine or is out of bounds.
+
+    Args:
+        state: Current environment state.
+        player_idx: Player index.
+        target_dir: Target Direction value to set.
+
+    Returns:
+        Updated state with the machine direction set (or unchanged).
+    """
+    tx, ty = get_tile_in_front(state, player_idx)
+    h, w = state.map.shape
+    in_bounds = (tx >= 0) & (tx < w) & (ty >= 0) & (ty < h)
+    sx = jnp.clip(tx, 0, w - 1)
+    sy = jnp.clip(ty, 0, h - 1)
+
+    mt = jnp.where(
+        in_bounds, state.machine_types[sy, sx], MachineType.NONE,
+    )
+    has_machine = mt != MachineType.NONE
+    should_set = in_bounds & has_machine
+
+    max_e = state.ent_y.shape[0]
+    eidx = jnp.clip(state.tile_entity[sy, sx], 0, max_e - 1)
+
+    old_dir = state.ent_direction[eidx]
+    new_dir = jnp.int8(target_dir)
+    updated_dirs = state.ent_direction.at[eidx].set(
+        jnp.where(should_set, new_dir, old_dir),
+    )
+    return state.replace(
+        ent_direction=jnp.where(
+            should_set, updated_dirs, state.ent_direction,
+        ),
+    )

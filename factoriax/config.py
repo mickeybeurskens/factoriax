@@ -57,12 +57,9 @@ class PlayerAction(StrEnum):
     MOVE_DOWN = "move_down"
     MOVE_LEFT = "move_left"
     MOVE_RIGHT = "move_right"
-    TURN_LEFT = "turn_left"
-    TURN_RIGHT = "turn_right"
     MINE = "mine"
     INTERACT = "interact"
     ROTATE = "rotate"
-    REPAIR = "repair"
 
     # Direct slot selection (1-indexed to match keyboard labels).
     SLOT_1 = "slot_1"
@@ -155,7 +152,6 @@ def default_keyboard() -> Bindings:
         PlayerAction.MINE: ["K_SPACE"],
         PlayerAction.INTERACT: ["K_e"],
         PlayerAction.ROTATE: ["K_r"],
-        PlayerAction.REPAIR: ["K_g"],
         # Gameplay: slots (0-indexed internally, 1-indexed names)
         PlayerAction.SLOT_1: ["K_1"],
         PlayerAction.SLOT_2: ["K_2"],
@@ -194,10 +190,6 @@ def default_keyboard() -> Bindings:
         PlayerAction.OPEN_HELP: ["K_QUESTION", "SHIFT+K_SLASH"],
         PlayerAction.TOGGLE_HOTBAR: ["K_q"],
         PlayerAction.CYCLE_RECIPE: ["K_q"],
-        # Turn left/right have no default keyboard binding.
-        # The face-then-move system handles facing implicitly.
-        PlayerAction.TURN_LEFT: [],
-        PlayerAction.TURN_RIGHT: [],
     }
 
 
@@ -225,10 +217,6 @@ def default_controller() -> Bindings:
         PlayerAction.MINE: ["BUTTON_2"],
         PlayerAction.INTERACT: ["BUTTON_0"],
         PlayerAction.ROTATE: ["BUTTON_3"],
-        PlayerAction.REPAIR: ["BUTTON_8"],
-        # Slot cycling via bumpers
-        PlayerAction.TURN_LEFT: ["BUTTON_4"],
-        PlayerAction.TURN_RIGHT: ["BUTTON_5"],
         # Navigation via D-pad
         PlayerAction.NAV_UP: ["HAT_0_UP"],
         PlayerAction.NAV_DOWN: ["HAT_0_DOWN"],

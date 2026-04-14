@@ -109,21 +109,30 @@ class TestWorldKeys:
         result = ui.handle_event(_key(pygame.K_e), state)
         assert result.action == int(Action.PICKUP)
 
-    def test_rotate(self, ui, state_factory) -> None:
-        """R produces ROTATE."""
+    def test_rotate_on_machine(self, ui, state_factory) -> None:
+        """R facing a machine produces a ROTATE_* action."""
+        state = state_factory(
+            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
+            player_position=(1, 0),
+            player_direction=int(Direction.DOWN),
+            machine_types=jnp.zeros(
+                (8, 8), dtype=jnp.int32,
+            ).at[1, 1].set(int(MachineType.MINER)),
+            machine_direction=jnp.zeros(
+                (8, 8), dtype=jnp.int32,
+            ).at[1, 1].set(int(Direction.DOWN)),
+        )
+        result = ui.handle_event(_key(pygame.K_r), state)
+        # DOWN -> clockwise -> LEFT = ROTATE_LEFT
+        assert result.action == int(Action.ROTATE_LEFT)
+
+    def test_rotate_on_empty_is_noop(self, ui, state_factory) -> None:
+        """R facing empty tile produces NOOP."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
         )
         result = ui.handle_event(_key(pygame.K_r), state)
-        assert result.action == int(Action.ROTATE)
-
-    def test_repair(self, ui, state_factory) -> None:
-        """G produces REPAIR."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        result = ui.handle_event(_key(pygame.K_g), state)
-        assert result.action == int(Action.REPAIR)
+        assert result.action == int(Action.NOOP)
 
     def test_slot_1(self, ui, state_factory) -> None:
         """1 key selects miner slot."""

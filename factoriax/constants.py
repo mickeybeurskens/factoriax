@@ -410,11 +410,11 @@ class Action(IntEnum):
     WITHDRAW_ADV_SCIENCE = 74
     WITHDRAW_ROCKET = 75
 
-    # Temporary backward-compat actions
-    TURN_LEFT = 76
-    TURN_RIGHT = 77
-    ROTATE = 78
-    REPAIR = 79
+    # Machine rotation — absolute direction set (4)
+    ROTATE_LEFT = 76
+    ROTATE_RIGHT = 77
+    ROTATE_UP = 78
+    ROTATE_DOWN = 79
 
     # Aliases for old naming convention
     DEPOSIT_ADVANCED_SCIENCE = 53
@@ -426,6 +426,7 @@ PLACE_BASE: int = Action.PLACE_MINER
 CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
 DEPOSIT_BASE: int = Action.DEPOSIT_COAL
 WITHDRAW_BASE: int = Action.WITHDRAW_COAL
+ROTATE_BASE: int = Action.ROTATE_LEFT
 
 # Maps PLACE_* action offset (0..5) to the ItemType of the machine placed.
 PLACE_ACTION_TO_ITEM = jnp.array(
@@ -436,6 +437,12 @@ PLACE_ACTION_TO_ITEM = jnp.array(
         ItemType.ASSEMBLER,
         ItemType.ROCKET,
     ],
+    dtype=jnp.int32,
+)
+
+# Maps ROTATE_* action offset (0..3) to Direction values.
+ROTATE_ACTION_TO_DIR = jnp.array(
+    [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
     dtype=jnp.int32,
 )
 

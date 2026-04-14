@@ -34,6 +34,8 @@ from factoriax.constants import (
     NUM_TECHNOLOGIES,
     PLACEABLE_ITEM_LIST,
     PLACEABLE_ITEMS,
+    ROTATE_BASE,
+    TURN_RIGHT_MAP,
     WITHDRAW_BASE,
     Action,
     Direction,
@@ -812,11 +814,9 @@ class GameUI:
                 state, self._ps.selected_item,
             )
         elif PlayerAction.ROTATE in actions:
-            action = int(Action.ROTATE)
+            action = _rotate_action_for_tile(state)
         elif PlayerAction.MINE in actions:
             action = int(Action.MINE)
-        elif PlayerAction.REPAIR in actions:
-            action = int(Action.REPAIR)
         else:
             # Player selection.
             player_match = actions & _PLAYER_ACTIONS.keys()
@@ -837,19 +837,47 @@ class GameUI:
                 return state, action
 
             # Movement (face-then-move).
-            for move_action, (want_dir, move_act, face_act) in _MOVE_TO_DIR.items():
+            for move_action, (want_dir, move_act, face_act) in (
+                _MOVE_TO_DIR.items()
+            ):
                 if move_action in actions:
                     sel = int(state.selected_player)
                     facing = int(state.player_directions[sel])
                     action = move_act if facing == want_dir else face_act
                     break
-            else:
-                if PlayerAction.TURN_LEFT in actions:
-                    action = int(Action.TURN_LEFT)
-                elif PlayerAction.TURN_RIGHT in actions:
-                    action = int(Action.TURN_RIGHT)
 
         return state, action
+
+
+def _rotate_action_for_tile(state: EnvState) -> int:
+    """Compute the ROTATE_* action to cycle a machine clockwise.
+
+    Looks up the machine in front of the player, reads its current
+    direction, advances it one step clockwise via TURN_RIGHT_MAP,
+    and returns the corresponding absolute ROTATE_* action.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        ``ROTATE_LEFT/RIGHT/UP/DOWN`` action, or ``NOOP`` if no
+        machine is in front.
+    """
+    selected_player = int(state.selected_player)
+    tx, ty = _tile_in_front(state, selected_player)
+    map_h, map_w = state.map.shape
+    if not (0 <= tx < map_w and 0 <= ty < map_h):
+        return int(Action.NOOP)
+    if int(state.machine_types[ty, tx]) == int(MachineType.NONE):
+        return int(Action.NOOP)
+    eidx = int(state.tile_entity[ty, tx])
+    if eidx < 0:
+        return int(Action.NOOP)
+    cur_dir = int(state.ent_direction[eidx])
+    next_dir = int(TURN_RIGHT_MAP[cur_dir])
+    # Direction values are 1-indexed (LEFT=1..DOWN=4),
+    # ROTATE_* offsets are 0-indexed (LEFT=0..DOWN=3).
+    return ROTATE_BASE + next_dir - 1
 
 
 def _handle_world_interact(
