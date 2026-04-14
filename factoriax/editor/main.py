@@ -1205,30 +1205,6 @@ def _render_frame(
 # ---------------------------------------------------------------------------
 
 
-def _export_benchmark_levels() -> None:
-    """Write benchmark levels as JSON files into the levels/ directory.
-
-    Called at editor startup so that benchmark levels are always available
-    in the Load dialog. The levels/ directory is gitignored, so these
-    files are regenerated each run and never committed.
-    """
-    from factoriax.benchmarks.skills.fuel_miner import fuel_miner_level
-    from factoriax.benchmarks.skills.mining import mining_level
-    from factoriax.benchmarks.skills.place_miner import place_miner_level
-    from factoriax.editor.dialogs import LEVELS_DIR
-
-    LEVELS_DIR.mkdir(parents=True, exist_ok=True)
-    for name, gen in [
-        ("mining", mining_level),
-        ("place_miner", place_miner_level),
-        ("fuel_miner", fuel_miner_level),
-    ]:
-        path = LEVELS_DIR / f"{name}.json"
-        if not path.exists():
-            level, _ = gen()
-            save_level(level, path)
-
-
 def main(screen: pygame.Surface | None = None) -> None:
     """Run the FactoriaX level editor.
 
@@ -1238,7 +1214,6 @@ def main(screen: pygame.Surface | None = None) -> None:
 
     Press ``?`` for a full list of controls.
     """
-    _export_benchmark_levels()
     owns_pygame = screen is None
     if owns_pygame:
         pygame.init()
