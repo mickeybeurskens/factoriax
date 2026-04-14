@@ -90,10 +90,10 @@ class TestDepositAction:
         ps = game_ui.play_state
         ps.machine_open = True
         ps.machine_panel_active = False
-        ps.selected_item = int(ItemType.IRON)
+        ps.selected_item = int(ItemType.IRON_ORE)
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.DEPOSIT_IRON)
+        assert result.action == int(Action.DEPOSIT_IRON_ORE)
 
     def test_deposit_empty_type_is_noop(
         self, game_ui: GameUI, state_factory,
@@ -153,7 +153,7 @@ class TestWithdrawAction:
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
-        machine_inv = machine_inv.at[1, 1, int(ItemType.COPPER)].set(5)
+        machine_inv = machine_inv.at[1, 1, int(ItemType.COPPER_ORE)].set(5)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -165,10 +165,10 @@ class TestWithdrawAction:
         ps.machine_open = True
         ps.machine_panel_active = True
         ps.machine_tx, ps.machine_ty = 1, 1
-        ps.focused_machine_item = int(ItemType.COPPER)
+        ps.focused_machine_item = int(ItemType.COPPER_ORE)
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.WITHDRAW_COPPER)
+        assert result.action == int(Action.WITHDRAW_COPPER_ORE)
 
 
 # ---------------------------------------------------------------------------
@@ -193,10 +193,10 @@ class TestResearchAction:
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
         assert result.action == int(Action.RESEARCH_BASIC)
 
-    def test_research_fuel(
+    def test_research_advanced(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Second research option emits RESEARCH_FUEL."""
+        """Second research option emits RESEARCH_ADVANCED."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
@@ -205,7 +205,7 @@ class TestResearchAction:
         ps.research_selection = 1
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.RESEARCH_FUEL)
+        assert result.action == int(Action.RESEARCH_ADVANCED)
 
 
 # ---------------------------------------------------------------------------

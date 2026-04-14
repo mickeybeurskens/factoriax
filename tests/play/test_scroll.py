@@ -5,6 +5,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.play.ui import (
     SCROLL_STEP,
     ClickRegion,
@@ -236,30 +237,36 @@ class TestScrollAdjustRegions:
 
 
 class TestRenderAchievementMenuScroll:
-    def test_renders_without_error_at_zero_offset(self, state_factory) -> None:
+    def test_renders_without_error_at_zero_offset(self) -> None:
         """Default zero offset renders successfully."""
-        state = state_factory(world_map=_MAP)
-        result = render_achievement_menu(state, 480, 480, scroll_offset=0)
+        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        result = render_achievement_menu(achievements, 480, 480, scroll_offset=0)
         assert result.shape == (480, 480, 4)
 
-    def test_renders_with_nonzero_offset(self, state_factory) -> None:
+    def test_renders_with_nonzero_offset(self) -> None:
         """Non-zero scroll offset renders without error."""
-        state = state_factory(world_map=_MAP)
-        result = render_achievement_menu(state, 480, 480, scroll_offset=50)
+        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        result = render_achievement_menu(achievements, 480, 480, scroll_offset=50)
         assert result.shape == (480, 480, 4)
 
-    def test_scroll_changes_pixels(self, state_factory) -> None:
+    def test_scroll_changes_pixels(self) -> None:
         """Scrolling the list produces a visually different frame."""
-        state = state_factory(world_map=_MAP)
-        frame0 = render_achievement_menu(state, 480, 480, scroll_offset=0)
-        frame1 = render_achievement_menu(state, 480, 480, scroll_offset=SCROLL_STEP)
+        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        frame0 = render_achievement_menu(achievements, 480, 480, scroll_offset=0)
+        frame1 = render_achievement_menu(
+            achievements, 480, 480, scroll_offset=SCROLL_STEP,
+        )
         assert not np.array_equal(frame0, frame1)
 
-    def test_excessive_offset_clamped(self, state_factory) -> None:
+    def test_excessive_offset_clamped(self) -> None:
         """An offset far beyond the content end is clamped; result is stable."""
-        state = state_factory(world_map=_MAP)
-        frame_huge = render_achievement_menu(state, 480, 480, scroll_offset=999999)
-        frame_max = render_achievement_menu(state, 480, 480, scroll_offset=999998)
+        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        frame_huge = render_achievement_menu(
+            achievements, 480, 480, scroll_offset=999999,
+        )
+        frame_max = render_achievement_menu(
+            achievements, 480, 480, scroll_offset=999998,
+        )
         assert np.array_equal(frame_huge, frame_max)
 
 

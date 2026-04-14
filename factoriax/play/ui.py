@@ -34,7 +34,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES, RECIPES
+from factoriax.recipes import NUM_RECIPES, OUTPUT_TO_RECIPE, RECIPE_NAMES, RECIPES
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvState
 
@@ -953,11 +953,21 @@ def render_machine_menu(
 
     # --- Assembler recipe subtitle ---
     if machine_type == int(MachineType.ASSEMBLER):
-        sel_recipe = int(state.machine_selected_recipe[ty, tx])
-        recipe_name = RECIPE_NAMES[sel_recipe]
         eidx = int(state.tile_entity[ty, tx])
-        asm_power = int(state.ent_power[eidx]) if eidx >= 0 else 0
-        status = "Idle" if asm_power == 0 else f"{asm_power} ticks left"
+        if eidx >= 0:
+            out_type = int(state.ent_asm_out_type[eidx])
+            asm_power = int(state.ent_power[eidx])
+            if out_type > 0:
+                recipe_idx = int(OUTPUT_TO_RECIPE[out_type])
+                recipe_name = (
+                    RECIPE_NAMES[recipe_idx] if recipe_idx >= 0 else "Unknown"
+                )
+            else:
+                recipe_name = "Auto"
+            status = "Idle" if asm_power == 0 else f"{asm_power} ticks left"
+        else:
+            recipe_name = "Auto"
+            status = "Idle"
         subtitle = f"Recipe: {recipe_name}  |  {status}"
         sub_arr = _render_text_rgba(subtitle, body_font, (180, 170, 130))
         sub_x = menu_x + (menu_w - sub_arr.shape[1]) // 2

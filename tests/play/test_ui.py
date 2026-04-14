@@ -75,8 +75,8 @@ class TestRenderInventoryMenu:
 
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, int(ItemType.COAL)].set(5)
-        inv = inv.at[0, int(ItemType.IRON)].set(3)
-        inv = inv.at[0, int(ItemType.COPPER)].set(12)
+        inv = inv.at[0, int(ItemType.IRON_ORE)].set(3)
+        inv = inv.at[0, int(ItemType.COPPER_ORE)].set(12)
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
             player_inventory=inv,
@@ -123,11 +123,11 @@ class TestRenderWelcomeScreen:
             result, _ = render_welcome_screen(w, h)
             assert result.shape == (h, w, 4)
 
-    def test_record_toggle_region(self) -> None:
-        """Should return a click region for the record checkbox."""
+    def test_no_record_toggle_region(self) -> None:
+        """Record toggle was moved out of the welcome screen."""
         _, regions = render_welcome_screen(self._W, self._H)
         record_regions = [r for r in regions if r.action == "toggle_record"]
-        assert len(record_regions) == 1
+        assert len(record_regions) == 0
 
 
 class TestRenderPauseMenu:

@@ -169,10 +169,10 @@ class TestEnvParamsConversion:
 
     def test_custom_values(self) -> None:
         """Custom param values should be preserved."""
-        params = EnvParams(map_width=64, map_height=64, max_biters=100)
+        params = EnvParams(map_width=64, map_height=64, num_players=4)
         d = env_params_to_dict(params)
         assert d["map_width"] == 64
-        assert d["max_biters"] == 100
+        assert d["num_players"] == 4
 
     def test_missing_fields_use_defaults(self) -> None:
         """Missing fields in the dict should fall back to defaults."""

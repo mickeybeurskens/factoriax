@@ -19,27 +19,29 @@ class TestSwapInventorySlots:
         """Swapping two item types exchanges their counts."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, int(ItemType.COAL)].set(5)
-        inv = inv.at[0, int(ItemType.IRON)].set(10)
-        state = state_factory(
-            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
-            player_inventory=inv,
-        )
-        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.IRON))
-        assert int(result.player_inventory[0, int(ItemType.COAL)]) == 10
-        assert int(result.player_inventory[0, int(ItemType.IRON)]) == 5
-
-    def test_swap_occupied_with_empty(self, state_factory) -> None:
-        """Swapping an occupied type with an empty one moves the count."""
-        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, int(ItemType.COPPER)].set(3)
+        inv = inv.at[0, int(ItemType.IRON_ORE)].set(10)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv,
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.COPPER), int(ItemType.MINER),
+            state, 0, int(ItemType.COAL), int(ItemType.IRON_ORE),
         )
-        assert int(result.player_inventory[0, int(ItemType.COPPER)]) == 0
+        assert int(result.player_inventory[0, int(ItemType.COAL)]) == 10
+        assert int(result.player_inventory[0, int(ItemType.IRON_ORE)]) == 5
+
+    def test_swap_occupied_with_empty(self, state_factory) -> None:
+        """Swapping an occupied type with an empty one moves the count."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, int(ItemType.COPPER_ORE)].set(3)
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+            player_inventory=inv,
+        )
+        result = swap_inventory_slots(
+            state, 0, int(ItemType.COPPER_ORE), int(ItemType.MINER),
+        )
+        assert int(result.player_inventory[0, int(ItemType.COPPER_ORE)]) == 0
         assert int(result.player_inventory[0, int(ItemType.MINER)]) == 3
 
     def test_same_type_is_noop(self, state_factory) -> None:
@@ -59,22 +61,24 @@ class TestSwapInventorySlots:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.HULL), int(ItemType.ROCKET),
+            state, 0, int(ItemType.STEEL), int(ItemType.ROCKET),
         )
-        assert int(result.player_inventory[0, int(ItemType.HULL)]) == 0
+        assert int(result.player_inventory[0, int(ItemType.STEEL)]) == 0
         assert int(result.player_inventory[0, int(ItemType.ROCKET)]) == 0
 
     def test_swap_preserves_total(self, state_factory) -> None:
         """Swapping two types preserves the total inventory count."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, int(ItemType.COAL)].set(10)
-        inv = inv.at[0, int(ItemType.IRON)].set(20)
+        inv = inv.at[0, int(ItemType.IRON_ORE)].set(20)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv,
         )
         total_before = int(jnp.sum(state.player_inventory))
-        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.IRON))
+        result = swap_inventory_slots(
+            state, 0, int(ItemType.COAL), int(ItemType.IRON_ORE),
+        )
         total_after = int(jnp.sum(result.player_inventory))
         assert total_before == total_after
 
@@ -97,11 +101,13 @@ class TestSwapInventorySlots:
         """Swapping two types does not modify any other type counts."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, int(ItemType.COAL)].set(5)
-        inv = inv.at[0, int(ItemType.IRON)].set(10)
-        inv = inv.at[0, int(ItemType.COPPER)].set(99)
+        inv = inv.at[0, int(ItemType.IRON_ORE)].set(10)
+        inv = inv.at[0, int(ItemType.COPPER_ORE)].set(99)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             player_inventory=inv,
         )
-        result = swap_inventory_slots(state, 0, int(ItemType.COAL), int(ItemType.IRON))
-        assert int(result.player_inventory[0, int(ItemType.COPPER)]) == 99
+        result = swap_inventory_slots(
+            state, 0, int(ItemType.COAL), int(ItemType.IRON_ORE),
+        )
+        assert int(result.player_inventory[0, int(ItemType.COPPER_ORE)]) == 99
