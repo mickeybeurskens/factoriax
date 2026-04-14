@@ -282,7 +282,7 @@ def deposit_to_adjacent(
     buf_empty = state.ent_buf_count[eidx] == 0
     buf_same = state.ent_buf_type[eidx] == item_type
     buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
-    is_buf = ~is_asm & has_machine & ~can_deposit_fuel
+    is_buf = ~is_asm & ~is_miner & has_machine
     can_deposit_buf = (
         in_bounds & has_item & is_buf
         & (buf_empty | buf_same) & buf_space
