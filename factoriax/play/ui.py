@@ -85,6 +85,7 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.PALLET: "Pallet",
     ItemType.CONVEYOR_BELT: "Belt",
     ItemType.ASSEMBLER: "Assembler",
+    ItemType.ARM: "Arm",
     ItemType.ROCKET: "Rocket",
     ItemType.BASIC_SCIENCE_PACK: "Basic Sci",
     ItemType.ADVANCED_SCIENCE_PACK: "Adv Sci",
@@ -110,10 +111,14 @@ def _entity_inventory(state: EnvState, ty: int, tx: int) -> np.ndarray:
     inv = np.zeros(NUM_ITEM_TYPES, dtype=np.int32)
     if eidx < 0:
         return inv
+    # Miner fuel shows as coal in the inventory display.
+    fuel = int(state.ent_fuel[eidx])
+    if fuel > 0:
+        inv[int(ItemType.COAL)] += fuel
     buf_t = int(state.ent_buf_type[eidx])
     buf_c = int(state.ent_buf_count[eidx])
     if buf_t > 0:
-        inv[buf_t] = buf_c
+        inv[buf_t] += buf_c
     for s in range(2):
         at = int(state.ent_asm_in_type[eidx, s])
         ac = int(state.ent_asm_in_count[eidx, s])

@@ -12,6 +12,7 @@ import jax.numpy as jnp
 
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
+    MACHINE_MAX_STACK,
     BlockType,
     ItemType,
     MachineType,
@@ -44,6 +45,7 @@ def update_all_machines(
     state = run_miners(state, params)
     state = run_assemblers(state)
     state = run_conveyor_belts(state)
+    state = run_arms(state)
     return state
 
 
@@ -142,6 +144,45 @@ def run_miners(
             )),
         )
 
+    # --- Push buffer to adjacent entity in facing direction ---
+    for d in range(1, 5):
+        dy, dx = _DY[d], _DX[d]
+        facing_d = (state.ent_direction == d) & is_miner
+
+        dn_y = jnp.clip(ey + dy, 0, h - 1)
+        dn_x = jnp.clip(ex + dx, 0, w - 1)
+        dn_eidx = state.tile_entity[dn_y, dn_x]
+        dn_valid = dn_eidx >= 0
+        dn_safe = jnp.clip(dn_eidx, 0, new_buf_type.shape[0] - 1)
+
+        dn_bc = new_buf_count[dn_safe]
+        dn_bt = new_buf_type[dn_safe]
+        dn_max = MACHINE_MAX_STACK[
+            state.ent_type[dn_safe].astype(jnp.int32)
+        ]
+        dn_empty = dn_bc == 0
+        dn_same = dn_bt == new_buf_type
+        has_buf = new_buf_count > 0
+
+        can_push = (
+            facing_d & has_buf & dn_valid
+            & (dn_empty | (dn_same & (dn_bc < dn_max)))
+        )
+        xfer = jnp.where(can_push, new_buf_count, jnp.int16(0))
+        xfer = jnp.minimum(xfer, dn_max - dn_bc)
+
+        new_buf_type = new_buf_type.at[dn_safe].set(
+            jnp.where(can_push, new_buf_type, new_buf_type[dn_safe]),
+        )
+        new_buf_count = new_buf_count.at[dn_safe].set(
+            jnp.where(can_push, dn_bc + xfer, new_buf_count[dn_safe]),
+        )
+        remaining = new_buf_count - xfer
+        new_buf_type = jnp.where(
+            can_push & (remaining == 0), jnp.int8(0), new_buf_type,
+        )
+        new_buf_count = jnp.where(can_push, remaining, new_buf_count)
+
     return state.replace(
         map=new_map,
         block_resources=new_resources,
@@ -150,6 +191,91 @@ def run_miners(
         ent_power=new_power,
         items_mined=state.items_mined + mined_flat,
     )
+
+
+def run_arms(state: EnvState) -> EnvState:
+    """Transfer one item from source (behind) to destination (in front).
+
+    Arms perform instant pass-through: no internal buffer. Each tick
+    an arm looks at the entity behind it (opposite of facing), takes
+    one item from its buffer, and deposits it into the entity it
+    faces (if that entity has space).
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Updated state.
+    """
+    h, w = state.map.shape
+    active = state.ent_y >= 0
+    is_arm = (state.ent_type == MachineType.ARM) & active
+
+    ey = jnp.clip(state.ent_y, 0, h - 1)
+    ex = jnp.clip(state.ent_x, 0, w - 1)
+
+    buf_type = state.ent_buf_type
+    buf_count = state.ent_buf_count
+
+    for d in range(1, 5):
+        dy, dx = _DY[d], _DX[d]
+        facing_d = (state.ent_direction == d) & is_arm
+
+        # Source = behind (opposite of facing).
+        src_y = jnp.clip(ey - dy, 0, h - 1)
+        src_x = jnp.clip(ex - dx, 0, w - 1)
+        src_eidx = state.tile_entity[src_y, src_x]
+        src_valid = src_eidx >= 0
+        src_safe = jnp.clip(src_eidx, 0, buf_type.shape[0] - 1)
+
+        src_bt = buf_type[src_safe]
+        src_bc = buf_count[src_safe]
+        src_has = src_valid & (src_bc > 0)
+
+        # Destination = in front (facing direction).
+        dst_y = jnp.clip(ey + dy, 0, h - 1)
+        dst_x = jnp.clip(ex + dx, 0, w - 1)
+        dst_eidx = state.tile_entity[dst_y, dst_x]
+        dst_valid = dst_eidx >= 0
+        dst_safe = jnp.clip(dst_eidx, 0, buf_type.shape[0] - 1)
+
+        dst_bc = buf_count[dst_safe]
+        dst_bt = buf_type[dst_safe]
+        dst_max = MACHINE_MAX_STACK[
+            state.ent_type[dst_safe].astype(jnp.int32)
+        ]
+        dst_empty = dst_bc == 0
+        dst_same = dst_bt == src_bt
+        dst_space = dst_bc < dst_max
+
+        can_xfer = (
+            facing_d & src_has & dst_valid
+            & (dst_empty | (dst_same & dst_space))
+        )
+
+        # Transfer 1 item.
+        buf_type = buf_type.at[dst_safe].set(
+            jnp.where(can_xfer, src_bt, buf_type[dst_safe]),
+        )
+        buf_count = buf_count.at[dst_safe].set(
+            jnp.where(
+                can_xfer, dst_bc + jnp.int16(1), buf_count[dst_safe],
+            ),
+        )
+
+        new_src_c = src_bc - jnp.where(can_xfer, jnp.int16(1), jnp.int16(0))
+        buf_count = buf_count.at[src_safe].set(
+            jnp.where(can_xfer, new_src_c, buf_count[src_safe]),
+        )
+        buf_type = buf_type.at[src_safe].set(
+            jnp.where(
+                can_xfer & (new_src_c == 0),
+                jnp.int8(0),
+                buf_type[src_safe],
+            ),
+        )
+
+    return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)
 
 
 def run_assemblers(state: EnvState) -> EnvState:
@@ -284,9 +410,11 @@ def run_assemblers(state: EnvState) -> EnvState:
 
 
 def run_conveyor_belts(state: EnvState) -> EnvState:
-    """Move items along belts using entity-based neighbor lookups.
+    """Push items along belts into the entity they face.
 
-    Each belt looks up its upstream neighbor via ``tile_entity``.
+    Each belt pushes its buffer into the downstream entity (belt,
+    pallet, or any machine with buffer space). This replaces the
+    old pull-from-upstream model so belts naturally feed into pallets.
 
     Args:
         state: Current environment state.
@@ -308,28 +436,42 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
         dy, dx = _DY[d], _DX[d]
         facing_d = (state.ent_direction == d) & is_belt
 
-        # Upstream = opposite of facing direction.
-        up_y = jnp.clip(ey - dy, 0, h - 1)
-        up_x = jnp.clip(ex - dx, 0, w - 1)
+        dn_y = jnp.clip(ey + dy, 0, h - 1)
+        dn_x = jnp.clip(ex + dx, 0, w - 1)
 
-        up_eidx = state.tile_entity[up_y, up_x]
-        up_valid = up_eidx >= 0
-        up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
+        dn_eidx = state.tile_entity[dn_y, dn_x]
+        dn_valid = dn_eidx >= 0
+        dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
 
-        up_bt = buf_type[up_safe]
-        up_bc = buf_count[up_safe]
+        dn_bt = buf_type[dn_safe]
+        dn_bc = buf_count[dn_safe]
+        dn_empty = dn_bc == 0
+        dn_same = dn_bt == buf_type
+        dn_max = MACHINE_MAX_STACK[
+            state.ent_type[dn_safe].astype(jnp.int32)
+        ]
+        dn_space = dn_bc < dn_max
 
-        can_pull = facing_d & up_valid & (buf_count == 0) & (up_bc > 0)
-
-        buf_type = jnp.where(can_pull, up_bt, buf_type)
-        buf_count = jnp.where(can_pull, up_bc, buf_count)
-
-        # Clear upstream.
-        buf_type = buf_type.at[up_safe].set(
-            jnp.where(can_pull, jnp.int8(0), buf_type[up_safe]),
+        has_item = buf_count > 0
+        can_push = (
+            facing_d & has_item & dn_valid
+            & (dn_empty | (dn_same & dn_space))
         )
-        buf_count = buf_count.at[up_safe].set(
-            jnp.where(can_pull, jnp.int16(0), buf_count[up_safe]),
+
+        xfer = jnp.where(can_push, buf_count, jnp.int16(0))
+        xfer = jnp.minimum(xfer, dn_max - dn_bc)
+
+        buf_type = buf_type.at[dn_safe].set(
+            jnp.where(can_push, buf_type, buf_type[dn_safe]),
         )
+        buf_count = buf_count.at[dn_safe].set(
+            jnp.where(can_push, dn_bc + xfer, buf_count[dn_safe]),
+        )
+
+        new_c = buf_count - xfer
+        buf_type = jnp.where(
+            can_push & (new_c == 0), jnp.int8(0), buf_type,
+        )
+        buf_count = jnp.where(can_push, new_c, buf_count)
 
     return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)

@@ -69,6 +69,7 @@ _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.PALLET): int(Action.PLACE_PALLET),
     int(ItemType.CONVEYOR_BELT): int(Action.PLACE_BELT),
     int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
+    int(ItemType.ARM): int(Action.PLACE_ARM),
     int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
 }
 
@@ -97,7 +98,8 @@ _SLOT_ACTIONS: dict[str, int] = {
     PlayerAction.SLOT_2: int(ItemType.PALLET),
     PlayerAction.SLOT_3: int(ItemType.CONVEYOR_BELT),
     PlayerAction.SLOT_4: int(ItemType.ASSEMBLER),
-    PlayerAction.SLOT_5: int(ItemType.ROCKET),
+    PlayerAction.SLOT_5: int(ItemType.ARM),
+    PlayerAction.SLOT_6: int(ItemType.ROCKET),
 }
 
 _PLAYER_ACTIONS: dict[str, int] = {

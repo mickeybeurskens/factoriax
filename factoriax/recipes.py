@@ -100,6 +100,11 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.STEEL, 2), (ItemType.TIN_PLATE, 1)],
         "ticks": 4,
     },
+    {
+        "output": ItemType.ARM,
+        "inputs": [(ItemType.WIRE, 1), (ItemType.IRON_PLATE, 1)],
+        "ticks": 4,
+    },
     # Science packs
     {
         "output": ItemType.BASIC_SCIENCE_PACK,
@@ -136,6 +141,7 @@ RECIPE_NAMES: list[str] = [
     "Miner",
     "Assembler",
     "Pallet",
+    "Arm",
     "Basic Science Pack",
     "Advanced Science Pack",
     "Rocket",

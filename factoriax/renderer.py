@@ -488,6 +488,63 @@ def _draw_miner_indicator(icon: np.ndarray, direction: int) -> None:
                 icon[py, px] = _MINER_ARROW_COLOR
 
 
+_ARM_BODY_COLOR: tuple[int, int, int, int] = (180, 130, 70, 255)
+_ARM_ARROW_COLOR: tuple[int, int, int, int] = (255, 255, 255, 255)
+_ARM_CIRCLE_COLOR: tuple[int, int, int, int] = (80, 60, 40, 255)
+
+
+def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
+    """Draw arm icon: circle (pick side) + arrowhead (deposit side).
+
+    The circle marks the source (behind the arm) and the arrow marks
+    the destination (facing direction), so the visual clearly shows
+    which way items flow.
+
+    Args:
+        icon: RGBA array modified in place.
+        direction: ``Direction`` value the arm faces (output side).
+    """
+    s = icon.shape[0]
+    mid = s // 2
+
+    # Fill base with arm body color.
+    icon[1 : s - 1, 1 : s - 1] = _ARM_BODY_COLOR
+
+    # Arrow on facing edge (output).
+    arrow_len = max(2, s // 4)
+    half_w = max(2, s // 4)
+    for t in range(arrow_len):
+        spread = half_w * (arrow_len - t) // arrow_len
+        for off in range(-spread, spread + 1):
+            if direction == Direction.RIGHT:
+                py, px = mid + off, s - 1 - t
+            elif direction == Direction.LEFT:
+                py, px = mid + off, t
+            elif direction == Direction.DOWN:
+                py, px = s - 1 - t, mid + off
+            else:
+                py, px = t, mid + off
+            if 0 <= py < s and 0 <= px < s:
+                icon[py, px] = _ARM_ARROW_COLOR
+
+    # Circle on back edge (source).
+    cr = max(1, s // 6)
+    if direction == Direction.RIGHT:
+        cy, cx = mid, cr + 1
+    elif direction == Direction.LEFT:
+        cy, cx = mid, s - cr - 2
+    elif direction == Direction.DOWN:
+        cy, cx = cr + 1, mid
+    else:
+        cy, cx = s - cr - 2, mid
+    for dy in range(-cr, cr + 1):
+        for dx in range(-cr, cr + 1):
+            if dy * dy + dx * dx <= cr * cr:
+                py, px = cy + dy, cx + dx
+                if 0 <= py < s and 0 <= px < s:
+                    icon[py, px] = _ARM_CIRCLE_COLOR
+
+
 # Pallet sprite colours.
 _PALLET_RIM: tuple[int, int, int, int] = (60, 60, 60, 255)
 _PALLET_SURFACE: tuple[int, int, int, int] = (170, 170, 175, 255)
@@ -554,6 +611,9 @@ def render_item_icon(
     elif item_type == ItemType.MINER and size >= 6:
         miner_dir = direction if direction is not None else int(Direction.RIGHT)
         _draw_miner_indicator(icon, miner_dir)
+    elif item_type == ItemType.ARM and size >= 6:
+        arm_dir = direction if direction is not None else int(Direction.RIGHT)
+        _draw_arm_indicator(icon, arm_dir)
     elif item_type == ItemType.PALLET and size >= 4:
         _draw_pallet_icon(icon)
 
@@ -852,8 +912,11 @@ def draw_belt_cargo(
     ent_buf_type = np.array(state.ent_buf_type)
     ent_buf_count = np.array(state.ent_buf_count)
 
-    belt_mask = machine_types == MachineType.CONVEYOR_BELT
-    belt_ys, belt_xs = np.nonzero(belt_mask)
+    show_cargo = (
+        (machine_types == MachineType.CONVEYOR_BELT)
+        | (machine_types == MachineType.PALLET)
+    )
+    belt_ys, belt_xs = np.nonzero(show_cargo)
     if belt_ys.size == 0:
         return
 
