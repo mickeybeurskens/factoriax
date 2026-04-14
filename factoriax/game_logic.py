@@ -270,22 +270,36 @@ def deposit_to_adjacent(
 
     can_deposit_asm = in_bounds & has_item & (use_s0 | use_s1)
 
-    # Deposit to buffer machine.
+    # Deposit coal to miner fuel slot.
+    is_miner = mt == MachineType.MINER
+    is_coal = item_type == int(ItemType.COAL)
+    fuel_space = state.ent_fuel[eidx] < jnp.int16(64)
+    can_deposit_fuel = (
+        in_bounds & has_item & is_miner & is_coal & fuel_space
+    )
+
+    # Deposit to buffer machine (non-assembler, non-fuel).
     buf_empty = state.ent_buf_count[eidx] == 0
     buf_same = state.ent_buf_type[eidx] == item_type
     buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
-    is_buf = ~is_asm & has_machine
+    is_buf = ~is_asm & has_machine & ~can_deposit_fuel
     can_deposit_buf = (
         in_bounds & has_item & is_buf
         & (buf_empty | buf_same) & buf_space
     )
 
-    can_deposit = can_deposit_asm | can_deposit_buf
+    can_deposit = can_deposit_asm | can_deposit_buf | can_deposit_fuel
     transfer = jnp.where(can_deposit, jnp.int16(1), jnp.int16(0))
 
     # Apply.
     new_player_inv = state.player_inventory.at[player_idx, item_type].add(
         -transfer,
+    )
+
+    new_fuel = jnp.where(
+        can_deposit_fuel,
+        state.ent_fuel.at[eidx].add(transfer),
+        state.ent_fuel,
     )
 
     new_buf_type = jnp.where(
@@ -324,6 +338,7 @@ def deposit_to_adjacent(
 
     return state.replace(
         player_inventory=new_player_inv,
+        ent_fuel=new_fuel,
         ent_buf_type=new_buf_type,
         ent_buf_count=new_buf_count,
         ent_asm_in_type=new_asm_in_type,
