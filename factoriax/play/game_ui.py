@@ -20,8 +20,11 @@ import pygame
 
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.config import (
+    ControllerLookup,
     KeyLookup,
     PlayerAction,
+    resolve_controller_button,
+    resolve_controller_hat,
     resolve_key,
 )
 from factoriax.constants import (
@@ -168,10 +171,12 @@ class GameUI:
         params: EnvParams,
         kb_lookup: KeyLookup,
         *,
+        ctrl_lookup: ControllerLookup | None = None,
         welcome_open: bool = True,
     ) -> None:
         self._ps = PlayState(welcome_open=welcome_open)
         self._kb_lookup = kb_lookup
+        self._ctrl_lookup = ctrl_lookup
         self._params = params
         self._win_ox = 0
         self._win_oy = 0
@@ -234,6 +239,11 @@ class GameUI:
             return self._handle_click(event, state)
         if event.type == pygame.KEYDOWN:
             return self._handle_keydown(event, state)
+        if event.type in (
+            pygame.JOYBUTTONDOWN,
+            pygame.JOYHATMOTION,
+        ):
+            return self._handle_controller_event(event, state)
         return GameUIResult(state=state)
 
     def update_hover(self, state: EnvState) -> None:
@@ -473,16 +483,50 @@ class GameUI:
     ) -> GameUIResult:
         """Dispatch a KEYDOWN event to the appropriate context handler."""
         ps = self._ps
-        action: int | None = None
-        quit_flag = False
-        reset_flag = False
 
         if ps.help_open:
             ps.help_open = False
             return GameUIResult(state=state)
 
-        # Escape: universal back / open pause.
         if event.key == pygame.K_ESCAPE:
+            return self._dispatch_actions(
+                frozenset(), state, is_escape=True,
+            )
+
+        mods = pygame.key.get_mods()
+        actions = resolve_key(self._kb_lookup, event.key, mods)
+        if not actions:
+            return GameUIResult(state=state)
+
+        return self._dispatch_actions(actions, state)
+
+    def _dispatch_actions(
+        self,
+        actions: frozenset[str],
+        state: EnvState,
+        *,
+        is_escape: bool = False,
+    ) -> GameUIResult:
+        """Route a set of player actions through the context dispatch.
+
+        Shared by keyboard and controller event handlers. The
+        ``is_escape`` flag triggers the universal back/pause logic
+        (closing the topmost open menu, or opening the pause menu).
+
+        Args:
+            actions: Resolved player action names.
+            state: Current environment state.
+            is_escape: Whether to apply escape/back logic.
+
+        Returns:
+            A :class:`GameUIResult` describing what to do.
+        """
+        ps = self._ps
+        action: int | None = None
+        quit_flag = False
+        reset_flag = False
+
+        if is_escape:
             if ps.pause_open:
                 ps.pause_open = False
             elif ps.inventory_open:
@@ -497,11 +541,6 @@ class GameUI:
             else:
                 ps.pause_open = True
                 ps.pause_selection = 0
-            return GameUIResult(state=state)
-
-        mods = pygame.key.get_mods()
-        actions = resolve_key(self._kb_lookup, event.key, mods)
-        if not actions:
             return GameUIResult(state=state)
 
         if ps.pause_open:
@@ -553,6 +592,37 @@ class GameUI:
             quit=quit_flag,
             reset=reset_flag,
         )
+
+    def _handle_controller_event(
+        self,
+        event: pygame.event.Event,
+        state: EnvState,
+    ) -> GameUIResult:
+        """Dispatch a controller button or hat event."""
+        if self._ctrl_lookup is None:
+            return GameUIResult(state=state)
+
+        ps = self._ps
+        lookup = self._ctrl_lookup
+
+        if ps.help_open:
+            if event.type == pygame.JOYBUTTONDOWN:
+                ps.help_open = False
+            return GameUIResult(state=state)
+
+        actions: frozenset[str] = frozenset()
+        if event.type == pygame.JOYBUTTONDOWN:
+            actions = resolve_controller_button(lookup, event.button)
+        elif event.type == pygame.JOYHATMOTION:
+            actions = resolve_controller_hat(
+                lookup, event.hat, event.value,
+            )
+
+        if not actions:
+            return GameUIResult(state=state)
+
+        is_escape = PlayerAction.BACK in actions
+        return self._dispatch_actions(actions, state, is_escape=is_escape)
 
     def _handle_pause_keys(
         self,
