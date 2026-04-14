@@ -25,6 +25,7 @@ from factoriax.config import (
     resolve_key,
 )
 from factoriax.constants import (
+    CRAFT_BASE,
     DEPOSIT_BASE,
     NUM_ITEM_TYPES,
     NUM_TECHNOLOGIES,
@@ -796,7 +797,7 @@ class GameUI:
         elif PlayerAction.NAV_LEFT in actions:
             ps.menu_focus = "inventory"
         elif PlayerAction.CONFIRM in actions:
-            return int(Action.CRAFT_MINER) + ps.selected_recipe
+            return CRAFT_BASE + ps.selected_recipe
         return None
 
     def _handle_world_keys(

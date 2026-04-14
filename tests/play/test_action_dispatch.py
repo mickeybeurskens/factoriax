@@ -14,6 +14,7 @@ import pytest
 
 from factoriax.config import build_key_lookup, default_keyboard
 from factoriax.constants import (
+    CRAFT_BASE,
     DEPOSIT_BASE,
     MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_ITEM_TYPES,
@@ -213,12 +214,12 @@ class TestResearchAction:
 
 
 class TestCraftAction:
-    """CONFIRM in crafting panel emits CRAFT_MINER + recipe offset."""
+    """CONFIRM in crafting panel emits CRAFT_BASE + recipe offset."""
 
     def test_craft_first_recipe(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """First recipe emits CRAFT_MINER."""
+        """First recipe (Iron Plate) emits CRAFT_IRON_PLATE."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
@@ -228,12 +229,12 @@ class TestCraftAction:
         ps.selected_recipe = 0
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.CRAFT_MINER)
+        assert result.action == int(Action.CRAFT_IRON_PLATE)
 
     def test_craft_second_recipe(
         self, game_ui: GameUI, state_factory,
     ) -> None:
-        """Second recipe emits CRAFT_MINER + 1."""
+        """Second recipe (Copper Plate) emits CRAFT_COPPER_PLATE."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
@@ -243,4 +244,22 @@ class TestCraftAction:
         ps.selected_recipe = 1
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.CRAFT_MINER) + 1
+        assert result.action == int(Action.CRAFT_COPPER_PLATE)
+
+    def test_craft_action_uses_craft_base(
+        self, game_ui: GameUI, state_factory,
+    ) -> None:
+        """All craft actions are CRAFT_BASE + recipe index."""
+        state = state_factory(
+            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
+        )
+        ps = game_ui.play_state
+        ps.inventory_open = True
+        ps.menu_focus = "crafting"
+
+        for recipe_idx in range(3):
+            ps.selected_recipe = recipe_idx
+            result = game_ui.handle_event(
+                _make_keydown(_confirm_key()), state,
+            )
+            assert result.action == CRAFT_BASE + recipe_idx
