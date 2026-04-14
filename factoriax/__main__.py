@@ -134,19 +134,13 @@ def _handle_editor(screen: pygame.Surface) -> None:
 
 
 def _handle_settings(screen: pygame.Surface, config: PlayerConfig) -> None:
-    """Open the controls overview screen and persist display changes."""
+    """Open the controls/rebinding screen and persist changes."""
     from factoriax.menu.settings_menu import run_controls_menu
 
-    new_fullscreen, new_scale = run_controls_menu(
-        screen, fullscreen=config.fullscreen, ui_scale=config.ui_scale,
-    )
-    changed = (
-        new_fullscreen != config.fullscreen or new_scale != config.ui_scale
-    )
-    if changed:
-        config.fullscreen = new_fullscreen
-        config.ui_scale = new_scale
-        save_config(config)
+    new_fullscreen, new_scale = run_controls_menu(screen, config)
+    config.fullscreen = new_fullscreen
+    config.ui_scale = new_scale
+    save_config(config)
 
 
 if __name__ == "__main__":

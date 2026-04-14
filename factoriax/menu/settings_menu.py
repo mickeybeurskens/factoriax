@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 import pygame
 
+from factoriax.config import PlayerConfig
 from factoriax.state import EnvParams
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
@@ -362,100 +363,137 @@ def _draw_checkbox(
 # -- Controls display helper ----------------------------------------------
 
 
-def _build_controls_lines() -> list[tuple[str, str]]:
-    """Build read-only key binding display rows.
+_REBIND_ACTIONS: list[tuple[str | None, list[tuple[str, str]]]] = []
+"""Grouped actions for the rebinding UI: ``(category, [(action, label)])``."""
+
+
+def _init_rebind_actions() -> list[tuple[str | None, list[tuple[str, str]]]]:
+    """Build the grouped action list on first access.
 
     Returns:
-        List of (label, key_names) tuples for each displayed action.
+        List of ``(category_label, [(action_key, display_label)])``.
     """
-    from factoriax.config import PlayerAction, default_keyboard
+    from factoriax.config import PlayerAction
 
-    kb = default_keyboard()
-    display_names: dict[str, str] = {
-        PlayerAction.MOVE_UP: "Move Up",
-        PlayerAction.MOVE_DOWN: "Move Down",
-        PlayerAction.MOVE_LEFT: "Move Left",
-        PlayerAction.MOVE_RIGHT: "Move Right",
-        PlayerAction.MINE: "Mine",
-        PlayerAction.INTERACT: "Interact",
-        PlayerAction.ROTATE: "Rotate",
-        PlayerAction.REPAIR: "Repair",
-        PlayerAction.OPEN_INVENTORY: "Inventory",
-        PlayerAction.OPEN_ACHIEVEMENTS: "Achievements",
-        PlayerAction.OPEN_RESEARCH: "Research",
-        PlayerAction.OPEN_MACHINE: "Inspect Machine",
-        PlayerAction.OPEN_HELP: "Help",
-        PlayerAction.TOGGLE_HOTBAR: "Hotbar Page",
-        PlayerAction.CONFIRM: "Confirm",
-    }
-    lines: list[tuple[str, str]] = []
-    for action, label in display_names.items():
-        keys = kb.get(action, [])
-        key_str = ", ".join(k.replace("K_", "") for k in keys) if keys else "-"
-        lines.append((label, key_str))
-    return lines
+    return [
+        (
+            "Movement",
+            [
+                (PlayerAction.MOVE_UP, "Move Up"),
+                (PlayerAction.MOVE_DOWN, "Move Down"),
+                (PlayerAction.MOVE_LEFT, "Move Left"),
+                (PlayerAction.MOVE_RIGHT, "Move Right"),
+            ],
+        ),
+        (
+            "Actions",
+            [
+                (PlayerAction.MINE, "Mine"),
+                (PlayerAction.INTERACT, "Interact"),
+                (PlayerAction.ROTATE, "Rotate"),
+                (PlayerAction.REPAIR, "Repair"),
+            ],
+        ),
+        (
+            "Menus",
+            [
+                (PlayerAction.OPEN_INVENTORY, "Inventory"),
+                (PlayerAction.OPEN_ACHIEVEMENTS, "Achievements"),
+                (PlayerAction.OPEN_RESEARCH, "Research"),
+                (PlayerAction.OPEN_MACHINE, "Inspect Machine"),
+                (PlayerAction.OPEN_HELP, "Help"),
+                (PlayerAction.TOGGLE_HOTBAR, "Hotbar Page"),
+                (PlayerAction.CONFIRM, "Confirm"),
+            ],
+        ),
+    ]
 
 
-def _draw_controls_section(
-    surface: pygame.Surface,
-    lines: list[tuple[str, str]],
-    cy: int,
-    label_w: int,
-    font_section: pygame.font.Font,
-    font_label: pygame.font.Font,
-    font_value: pygame.font.Font,
-    side_pad: int,
-    section_header_h: int,
-    section_rule_h: int,
-    section_gap: int,
-    row_h: int,
-    row_gap: int,
-    section_pad_top: int,
-    sw: int,
-) -> int:
-    """Draw the read-only controls section and return updated y cursor.
+# Friendly display names for controller input strings.
+_CONTROLLER_DISPLAY: dict[str, str] = {
+    "BUTTON_0": "A / Cross",
+    "BUTTON_1": "B / Circle",
+    "BUTTON_2": "X / Square",
+    "BUTTON_3": "Y / Triangle",
+    "BUTTON_4": "LB",
+    "BUTTON_5": "RB",
+    "BUTTON_6": "Select",
+    "BUTTON_7": "Start",
+    "BUTTON_8": "L3",
+    "BUTTON_9": "R3",
+    "AXIS_0_NEG": "L-Stick Left",
+    "AXIS_0_POS": "L-Stick Right",
+    "AXIS_1_NEG": "L-Stick Up",
+    "AXIS_1_POS": "L-Stick Down",
+    "HAT_0_UP": "D-pad Up",
+    "HAT_0_DOWN": "D-pad Down",
+    "HAT_0_LEFT": "D-pad Left",
+    "HAT_0_RIGHT": "D-pad Right",
+}
+
+
+def _format_key_display(names: list[str]) -> str:
+    """Format keyboard binding names for display.
 
     Args:
-        surface: Target surface.
-        lines: (label, key_names) pairs from :func:`_build_controls_lines`.
-        cy: Current y position.
-        label_w: Width allocated for the label column.
-        font_section: Font for the section header.
-        font_label: Font for row labels.
-        font_value: Font for key name values.
-        side_pad: Horizontal padding from edges.
-        section_header_h: Height of section header text area.
-        section_rule_h: Thickness of the horizontal rule.
-        section_gap: Gap below the rule before content rows.
-        row_h: Height of each content row.
-        row_gap: Vertical gap between rows.
-        section_pad_top: Padding after all rows in the section.
-        sw: Total surface width (for rule endpoint).
+        names: Raw binding names (e.g. ``["K_w", "K_UP"]``).
 
     Returns:
-        Updated y cursor after the section.
+        Human-readable string (e.g. ``"w, UP"``).
     """
-    sec_surf = font_section.render("Controls", False, _GOLD)
-    surface.blit(sec_surf, (side_pad, cy))
-    cy += section_header_h
-    pygame.draw.line(
-        surface,
-        _SECTION_RULE,
-        (side_pad, cy),
-        (sw - side_pad, cy),
+    if not names:
+        return "-"
+    parts: list[str] = []
+    for n in names:
+        # "SHIFT+K_1" -> "Shift+1", "K_w" -> "w", "K_UP" -> "UP"
+        pieces = n.split("+")
+        formatted = []
+        for p in pieces:
+            if p.startswith("K_"):
+                formatted.append(p[2:])
+            else:
+                formatted.append(p.capitalize())
+        parts.append("+".join(formatted))
+    return ", ".join(parts)
+
+
+def _format_controller_display(names: list[str]) -> str:
+    """Format controller binding names for display.
+
+    Args:
+        names: Raw binding names (e.g. ``["BUTTON_0"]``).
+
+    Returns:
+        Human-readable string (e.g. ``"A / Cross"``).
+    """
+    if not names:
+        return "-"
+    return ", ".join(
+        _CONTROLLER_DISPLAY.get(n, n) for n in names
     )
-    cy += section_rule_h + section_gap
-    for label, keys in lines:
-        lbl_surf = font_label.render(label, False, _LABEL_COLOR)
-        lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
-        surface.blit(lbl_surf, (side_pad, lbl_y))
-        val_surf = font_value.render(keys, False, _INPUT_TEXT)
-        val_x = side_pad + label_w + 8
-        val_y = cy + (row_h - val_surf.get_height()) // 2
-        surface.blit(val_surf, (val_x, val_y))
-        cy += row_h + row_gap
-    cy += section_pad_top
-    return cy
+
+
+def _format_binding(names: list[str], device: str) -> str:
+    """Format binding names for the active device tab.
+
+    Args:
+        names: Raw binding name list from config.
+        device: ``"keyboard"`` or ``"controller"``.
+
+    Returns:
+        Human-readable display string.
+    """
+    if device == "keyboard":
+        return _format_key_display(names)
+    return _format_controller_display(names)
+
+
+@dataclass
+class _RebindState:
+    """Tracks which tab is active and whether we're listening for input."""
+
+    active_tab: str = "keyboard"
+    listening_action: str | None = None
 
 
 # -- Scrollbar helper -----------------------------------------------------
@@ -975,26 +1013,75 @@ def _confirm_scale_change(
         clock.tick(30)
 
 
+def _controls_section_height(
+    n_rows: int,
+    n_categories: int,
+    s: int,
+) -> int:
+    """Compute the pixel height of the controls section.
+
+    Args:
+        n_rows: Number of binding rows.
+        n_categories: Number of category sub-headers.
+        s: UI scale factor.
+
+    Returns:
+        Total height in pixels.
+    """
+    section_header_h = _BASE_SECTION_HEADER_H * s
+    section_rule_h = _BASE_SECTION_RULE_H * s
+    section_gap = _BASE_SECTION_GAP * s
+    row_h = _BASE_ROW_H * s
+    row_gap = _BASE_ROW_GAP * s
+    cat_h = 20 * s
+    btn_h = _BASE_BTN_H * s
+    pad = _BASE_SECTION_PAD_TOP * s
+    return (
+        pad
+        + section_header_h
+        + row_h + row_gap  # tab bar
+        + section_rule_h + section_gap
+        + n_categories * (cat_h + row_gap)
+        + n_rows * (row_h + row_gap)
+        + btn_h + row_gap  # reset button
+        + pad
+    )
+
+
 def run_controls_menu(
     screen: pygame.Surface,
-    fullscreen: bool = False,
-    ui_scale: int = 0,
+    config: PlayerConfig,
 ) -> tuple[bool, int]:
-    """Show a read-only overview of current key bindings.
+    """Show key/controller bindings with rebinding and display settings.
 
-    Displays all mapped player actions and their keyboard keys plus
-    display settings (fullscreen toggle, UI scale selector). The only
-    interactions are scrolling, toggling options, and pressing Back
-    (or Escape) to return.
+    Displays a tabbed view of keyboard and controller bindings. Each
+    binding is clickable: click to enter listening mode, then press the
+    desired key or button to rebind it. The Display section at the
+    bottom provides fullscreen and UI scale toggles.
+
+    Bindings are mutated in place on *config*. The caller should
+    persist the config after this function returns.
 
     Args:
         screen: Pygame display surface.
-        fullscreen: Current fullscreen state (shown as a checkbox).
-        ui_scale: Current UI scale (0=auto, 1/2/3=fixed).
+        config: Full player configuration (bindings mutated in place).
 
     Returns:
-        Tuple of (fullscreen, ui_scale) with possibly updated values.
+        Tuple of ``(fullscreen, ui_scale)`` with possibly updated
+        display settings.
     """
+    from factoriax.config import (
+        Bindings,
+        controller_event_to_name,
+        default_controller,
+        default_keyboard,
+        event_to_key_name,
+    )
+
+    global _REBIND_ACTIONS  # noqa: PLW0603
+    if not _REBIND_ACTIONS:
+        _REBIND_ACTIONS = _init_rebind_actions()
+
     s = _theme.UI_SCALE
     canvas = ScaledCanvas(1024, s, screen)
     sw, sh = canvas.width, canvas.height
@@ -1007,24 +1094,24 @@ def run_controls_menu(
     section_gap = _BASE_SECTION_GAP * s
     row_h = _BASE_ROW_H * s
     row_gap = _BASE_ROW_GAP * s
-    col_gap = _BASE_COL_GAP * s
     side_pad = _BASE_SIDE_PAD * s
     input_w = _BASE_INPUT_W * s
+    input_h = _BASE_INPUT_H * s
     checkbox_size = _BASE_CHECKBOX_SIZE * s
     btn_w = _BASE_BTN_W * s
     btn_h = _BASE_BTN_H * s
     scroll_step = _BASE_SCROLL_STEP * s
-
-    # Derived layout (constant because canvas size is fixed).
-    content_w = sw - 2 * side_pad
-    col_w = (content_w - col_gap) // 2
-    label_w = col_w - input_w - 8
+    cat_h = 20 * s  # category sub-header height
+    tab_gap = 24 * s
 
     back_rect = pygame.Rect(side_pad, 8 * s, btn_w, btn_h)
+    reset_btn_w = 200 * s
 
     clock = pygame.time.Clock()
-    controls_lines = _build_controls_lines()
 
+    fullscreen = config.fullscreen
+    ui_scale = config.ui_scale
+    rs = _RebindState()
     scroll_offset = 0
 
     font_header = get_pixel_font(32 * s)
@@ -1032,23 +1119,31 @@ def run_controls_menu(
     font_input = get_pixel_font(28 * s)
     font_btn = get_pixel_font(28 * s)
     font_section = get_pixel_font(32 * s)
+    font_cat = get_pixel_font(20 * s)
 
-    # Measure total content height (constant).
-    content_h = section_pad_top
-    # Controls section.
-    content_h += section_header_h + section_rule_h + section_gap
-    content_h += len(controls_lines) * (row_h + row_gap)
-    content_h += section_pad_top
-    # Display section (fullscreen checkbox + UI scale selector).
-    content_h += section_header_h + section_rule_h + section_gap
-    content_h += 2 * (row_h + row_gap)  # fullscreen + ui_scale rows
-    content_h += section_pad_top
+    # Count rows and categories for height calculation.
+    n_rows = sum(len(acts) for _, acts in _REBIND_ACTIONS)
+    n_cats = len(_REBIND_ACTIONS)
+
+    controls_h = _controls_section_height(n_rows, n_cats, s)
+    display_h = (
+        section_header_h + section_rule_h + section_gap
+        + 2 * (row_h + row_gap)
+        + section_pad_top
+    )
+    content_h = controls_h + display_h
+
+    def _active_bindings() -> Bindings:
+        if rs.active_tab == "keyboard":
+            return config.keyboard
+        return config.controller
 
     while True:
         scrollable_area = sh - top_bar_h
         max_scroll = max(0, content_h - scrollable_area)
         scroll_offset = max(0, min(scroll_offset, max_scroll))
 
+        # -- Events ---------------------------------------------------
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return fullscreen, ui_scale
@@ -1056,31 +1151,115 @@ def run_controls_menu(
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
 
+            # --- Listening mode: capture input -----------------------
+            if rs.listening_action is not None:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        rs.listening_action = None
+                    elif rs.active_tab == "keyboard":
+                        mods = pygame.key.get_mods()
+                        name = event_to_key_name(event.key, mods)
+                        bindings = _active_bindings()
+                        bindings[rs.listening_action] = [name]
+                        rs.listening_action = None
+                elif rs.active_tab == "controller":
+                    if event.type in (
+                        pygame.JOYBUTTONDOWN,
+                        pygame.JOYHATMOTION,
+                        pygame.JOYAXISMOTION,
+                    ):
+                        name = controller_event_to_name(event)
+                        if name is not None:
+                            bindings = _active_bindings()
+                            bindings[rs.listening_action] = [name]
+                            rs.listening_action = None
+                continue  # Consume all events while listening.
+
+            # --- Normal mode -----------------------------------------
             if event.type == pygame.MOUSEWHEEL:
                 scroll_offset -= event.y * scroll_step
-                scroll_offset = max(0, min(scroll_offset, max_scroll))
+                scroll_offset = max(
+                    0, min(scroll_offset, max_scroll),
+                )
 
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if (
+                event.type == pygame.MOUSEBUTTONDOWN
+                and event.button == 1
+            ):
                 mx, my = canvas.to_canvas(*event.pos)
+
                 if back_rect.collidepoint(mx, my):
                     return fullscreen, ui_scale
 
-                # Hit-test the fullscreen checkbox.
-                # Recompute its position to match the draw pass.
-                fs_cy = top_bar_h + section_pad_top - scroll_offset
-                # Skip controls section.
-                fs_cy += section_header_h + section_rule_h + section_gap
-                fs_cy += len(controls_lines) * (row_h + row_gap)
-                fs_cy += section_pad_top
-                # Display section header.
-                fs_cy += section_header_h + section_rule_h + section_gap
+                # Tab buttons (recompute positions to match draw).
+                tab_cy = (
+                    top_bar_h + section_pad_top - scroll_offset
+                    + section_header_h
+                )
+                kb_surf = font_label.render(
+                    "Keyboard", False, _GOLD,
+                )
+                kb_rect = pygame.Rect(
+                    side_pad, tab_cy,
+                    kb_surf.get_width() + 16 * s, row_h,
+                )
+                ctrl_surf = font_label.render(
+                    "Controller", False, _GOLD,
+                )
+                ctrl_rect = pygame.Rect(
+                    kb_rect.right + tab_gap, tab_cy,
+                    ctrl_surf.get_width() + 16 * s, row_h,
+                )
+                if kb_rect.collidepoint(mx, my):
+                    rs.active_tab = "keyboard"
+                elif ctrl_rect.collidepoint(mx, my):
+                    rs.active_tab = "controller"
+
+                # Binding boxes.
+                bind_cy = (
+                    tab_cy + row_h + row_gap
+                    + section_rule_h + section_gap
+                )
+                box_x = sw - side_pad - input_w
+                for cat_label, actions in _REBIND_ACTIONS:
+                    if cat_label is not None:
+                        bind_cy += cat_h + row_gap
+                    for action_key, _label in actions:
+                        box_y = bind_cy + (row_h - input_h) // 2
+                        box_rect = pygame.Rect(
+                            box_x, box_y, input_w, input_h,
+                        )
+                        if box_rect.collidepoint(mx, my):
+                            rs.listening_action = action_key
+                        bind_cy += row_h + row_gap
+
+                # Reset button.
+                reset_cy = bind_cy + row_gap
+                reset_rect = pygame.Rect(
+                    (sw - reset_btn_w) // 2, reset_cy,
+                    reset_btn_w, btn_h,
+                )
+                if reset_rect.collidepoint(mx, my):
+                    if rs.active_tab == "keyboard":
+                        config.keyboard = default_keyboard()
+                    else:
+                        config.controller = default_controller()
+
+                # Display: fullscreen checkbox.
+                disp_cy = (
+                    reset_cy + btn_h + row_gap
+                    + section_pad_top
+                    + section_header_h
+                    + section_rule_h + section_gap
+                )
                 cb_x = side_pad
-                cb_y = fs_cy + (row_h - checkbox_size) // 2
-                cb_label_surf = font_label.render("Fullscreen", False, _LABEL_COLOR)
+                cb_y = disp_cy + (row_h - checkbox_size) // 2
+                cb_lbl = font_label.render(
+                    "Fullscreen", False, _LABEL_COLOR,
+                )
                 cb_hit = pygame.Rect(
-                    cb_x,
-                    cb_y,
-                    checkbox_size + 8 + cb_label_surf.get_width(),
+                    cb_x, cb_y,
+                    checkbox_size + 8 + cb_lbl.get_width(),
                     checkbox_size,
                 )
                 if cb_hit.collidepoint(mx, my):
@@ -1090,26 +1269,26 @@ def run_controls_menu(
                             (0, 0), pygame.FULLSCREEN,
                         )
                     else:
-                        canvas_px = 1024 * s
-                        w, h = calculate_window_size(canvas_px, canvas_px)
+                        cpx = 1024 * s
+                        w, h = calculate_window_size(cpx, cpx)
                         screen = pygame.display.set_mode((w, h))
                     canvas.handle_resize(*screen.get_size())
 
-                # Hit-test UI scale buttons (row below fullscreen).
-                scale_row_cy = fs_cy + row_h + row_gap
-                scale_label_surf = font_label.render(
+                # Display: UI scale buttons.
+                scale_cy = disp_cy + row_h + row_gap
+                scale_lbl = font_label.render(
                     "UI Scale", False, _LABEL_COLOR,
                 )
                 sbtn_w = 60 * s
-                sbtn_h = row_h - 4 * s
+                sbtn_h2 = row_h - 4 * s
                 sbtn_x0 = (
-                    side_pad + scale_label_surf.get_width() + 16 * s
+                    side_pad + scale_lbl.get_width() + 16 * s
                 )
-                sbtn_y = scale_row_cy + (row_h - sbtn_h) // 2
+                sbtn_y = scale_cy + (row_h - sbtn_h2) // 2
                 for si in range(4):
                     bx = sbtn_x0 + si * (sbtn_w + 4 * s)
                     if pygame.Rect(
-                        bx, sbtn_y, sbtn_w, sbtn_h,
+                        bx, sbtn_y, sbtn_w, sbtn_h2,
                     ).collidepoint(mx, my):
                         if si != ui_scale:
                             confirmed = _confirm_scale_change(
@@ -1117,34 +1296,28 @@ def run_controls_menu(
                             )
                             if confirmed:
                                 ui_scale = si
-                            # Restore current menu's scale either way
-                            # since _confirm_scale_change resets on
-                            # revert but the caller re-enters this
-                            # function on next launch.
                             cur_s = (
                                 ui_scale
                                 if ui_scale > 0
                                 else auto_ui_scale()
                             )
                             _theme.apply_scale(cur_s)
-                            # Fully re-enter: return so __main__
-                            # can rebuild the window if needed.
                             return fullscreen, ui_scale
                         break
 
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if (
+                event.type == pygame.KEYDOWN
+                and event.key == pygame.K_ESCAPE
+            ):
                 return fullscreen, ui_scale
 
-        # -- Drawing ------------------------------------------------------
+        # -- Drawing --------------------------------------------------
         surf = canvas.surface
         mouse_pos = canvas.to_canvas(*pygame.mouse.get_pos())
         surf.fill(_BG)
 
         _draw_button(
-            surf,
-            back_rect,
-            "< Back",
-            font_btn,
+            surf, back_rect, "< Back", font_btn,
             back_rect.collidepoint(mouse_pos),
         )
 
@@ -1157,86 +1330,204 @@ def run_controls_menu(
         surf.set_clip(content_clip)
 
         cy = top_bar_h + section_pad_top - scroll_offset
-        cy = _draw_controls_section(
-            surf,
-            controls_lines,
-            cy,
-            label_w,
-            font_section,
-            font_label,
-            font_input,
-            side_pad,
-            section_header_h,
-            section_rule_h,
-            section_gap,
-            row_h,
-            row_gap,
-            section_pad_top,
-            sw,
-        )
 
-        # -- Display section with fullscreen checkbox ---------------------
+        # -- Controls section header ----------------------------------
+        sec_surf = font_section.render("Bindings", False, _GOLD)
+        surf.blit(sec_surf, (side_pad, cy))
+        cy += section_header_h
+
+        # Tab bar.
+        for tab_name in ("Keyboard", "Controller"):
+            tab_key = tab_name.lower()
+            is_active_tab = rs.active_tab == tab_key
+            color = _GOLD if is_active_tab else _LABEL_COLOR
+            tab_surf = font_label.render(tab_name, False, color)
+            tab_x = side_pad if tab_name == "Keyboard" else (
+                side_pad
+                + font_label.render("Keyboard", False, _GOLD).get_width()
+                + 16 * s + tab_gap
+            )
+            tab_y = cy + (row_h - tab_surf.get_height()) // 2
+            surf.blit(tab_surf, (tab_x, tab_y))
+            if is_active_tab:
+                underline_y = cy + row_h - 2 * s
+                pygame.draw.line(
+                    surf, _GOLD,
+                    (tab_x, underline_y),
+                    (tab_x + tab_surf.get_width(), underline_y),
+                    2,
+                )
+        cy += row_h + row_gap
+
+        # Rule below tabs.
+        pygame.draw.line(
+            surf, _SECTION_RULE,
+            (side_pad, cy), (sw - side_pad, cy),
+        )
+        cy += section_rule_h + section_gap
+
+        # Binding rows.
+        bindings = _active_bindings()
+        box_x = sw - side_pad - input_w
+        for cat_label, actions in _REBIND_ACTIONS:
+            if cat_label is not None:
+                cat_surf = font_cat.render(
+                    cat_label, False, _GOLD,
+                )
+                cat_y = cy + (cat_h - cat_surf.get_height()) // 2
+                surf.blit(cat_surf, (side_pad, cat_y))
+                cy += cat_h + row_gap
+
+            for action_key, label in actions:
+                # Label.
+                lbl_surf = font_label.render(
+                    label, False, _LABEL_COLOR,
+                )
+                lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
+                surf.blit(lbl_surf, (side_pad, lbl_y))
+
+                # Binding box.
+                box_y = cy + (row_h - input_h) // 2
+                box_rect = pygame.Rect(
+                    box_x, box_y, input_w, input_h,
+                )
+                is_listening = (
+                    rs.listening_action == action_key
+                )
+                is_hovered = box_rect.collidepoint(mouse_pos)
+
+                pygame.draw.rect(
+                    surf, _INPUT_BG, box_rect,
+                )
+                if is_listening:
+                    border_c = _GOLD
+                elif is_hovered:
+                    border_c = _LABEL_COLOR
+                else:
+                    border_c = _INPUT_BORDER
+                pygame.draw.rect(surf, border_c, box_rect, 1)
+
+                if is_listening:
+                    prompt = (
+                        "Press key..."
+                        if rs.active_tab == "keyboard"
+                        else "Press input..."
+                    )
+                    txt_surf = font_input.render(
+                        prompt, False, _GOLD,
+                    )
+                else:
+                    names = bindings.get(action_key, [])
+                    display = _format_binding(
+                        names, rs.active_tab,
+                    )
+                    txt_surf = font_input.render(
+                        display, False, _INPUT_TEXT,
+                    )
+
+                # Clip text to box width.
+                max_tw = input_w - 8
+                if txt_surf.get_width() > max_tw:
+                    txt_surf = txt_surf.subsurface(
+                        txt_surf.get_width() - max_tw, 0,
+                        max_tw, txt_surf.get_height(),
+                    )
+                surf.blit(
+                    txt_surf,
+                    (
+                        box_x + 4,
+                        box_y
+                        + (input_h - txt_surf.get_height()) // 2,
+                    ),
+                )
+
+                cy += row_h + row_gap
+
+        # Reset button.
+        cy += row_gap
+        reset_rect = pygame.Rect(
+            (sw - reset_btn_w) // 2, cy, reset_btn_w, btn_h,
+        )
+        _draw_button(
+            surf, reset_rect, "Reset to Defaults", font_btn,
+            reset_rect.collidepoint(mouse_pos),
+        )
+        cy += btn_h + row_gap + section_pad_top
+
+        # -- Display section ------------------------------------------
         sec_surf = font_section.render("Display", False, _GOLD)
         surf.blit(sec_surf, (side_pad, cy))
         cy += section_header_h
         pygame.draw.line(
-            surf,
-            _SECTION_RULE,
-            (side_pad, cy),
-            (sw - side_pad, cy),
+            surf, _SECTION_RULE,
+            (side_pad, cy), (sw - side_pad, cy),
         )
         cy += section_rule_h + section_gap
 
         cb_x = side_pad
         cb_y = cy + (row_h - checkbox_size) // 2
-        cb_rect = pygame.Rect(cb_x, cb_y, checkbox_size, checkbox_size)
         _draw_checkbox(
-            surf,
-            cb_x,
-            cb_y,
-            checkbox_size,
+            surf, cb_x, cb_y, checkbox_size,
             fullscreen,
-            cb_rect.collidepoint(mouse_pos),
+            pygame.Rect(
+                cb_x, cb_y, checkbox_size, checkbox_size,
+            ).collidepoint(mouse_pos),
         )
-        lbl_surf = font_label.render("Fullscreen", False, _LABEL_COLOR)
-        lbl_x = cb_x + checkbox_size + 8
-        lbl_y = cy + (row_h - lbl_surf.get_height()) // 2
-        surf.blit(lbl_surf, (lbl_x, lbl_y))
+        lbl_surf = font_label.render(
+            "Fullscreen", False, _LABEL_COLOR,
+        )
+        surf.blit(
+            lbl_surf,
+            (
+                cb_x + checkbox_size + 8,
+                cy + (row_h - lbl_surf.get_height()) // 2,
+            ),
+        )
         cy += row_h + row_gap
 
-        # UI Scale selector row.
+        # UI Scale selector.
         scale_labels = ["Auto", "1x", "2x", "3x"]
-        scale_label = font_label.render("UI Scale", False, _LABEL_COLOR)
-        surf.blit(
-            scale_label,
-            (side_pad, cy + (row_h - scale_label.get_height()) // 2),
+        scale_lbl = font_label.render(
+            "UI Scale", False, _LABEL_COLOR,
         )
-        scale_btn_w = 60 * s
-        scale_btn_h = row_h - 4 * s
-        scale_btn_x = side_pad + scale_label.get_width() + 16 * s
-        scale_btn_y = cy + (row_h - scale_btn_h) // 2
+        surf.blit(
+            scale_lbl,
+            (
+                side_pad,
+                cy + (row_h - scale_lbl.get_height()) // 2,
+            ),
+        )
+        sbtn_w = 60 * s
+        sbtn_h2 = row_h - 4 * s
+        sbtn_x0 = side_pad + scale_lbl.get_width() + 16 * s
+        sbtn_y = cy + (row_h - sbtn_h2) // 2
         for si, sl in enumerate(scale_labels):
-            bx = scale_btn_x + si * (scale_btn_w + 4 * s)
-            is_active = si == ui_scale
-            bg = (80, 75, 50) if is_active else (40, 40, 45)
-            pygame.draw.rect(surf, bg, (bx, scale_btn_y, scale_btn_w, scale_btn_h))
-            border_c = _GOLD if is_active else (70, 70, 70)
+            bx = sbtn_x0 + si * (sbtn_w + 4 * s)
+            is_active_scale = si == ui_scale
+            bg = (80, 75, 50) if is_active_scale else (40, 40, 45)
             pygame.draw.rect(
-                surf, border_c, (bx, scale_btn_y, scale_btn_w, scale_btn_h), 2,
+                surf, bg, (bx, sbtn_y, sbtn_w, sbtn_h2),
+            )
+            border_c = _GOLD if is_active_scale else (70, 70, 70)
+            pygame.draw.rect(
+                surf, border_c,
+                (bx, sbtn_y, sbtn_w, sbtn_h2), 2,
             )
             st = font_label.render(sl, False, _LABEL_COLOR)
             surf.blit(
                 st,
                 (
-                    bx + (scale_btn_w - st.get_width()) // 2,
-                    scale_btn_y + (scale_btn_h - st.get_height()) // 2,
+                    bx + (sbtn_w - st.get_width()) // 2,
+                    sbtn_y + (sbtn_h2 - st.get_height()) // 2,
                 ),
             )
-        cy += row_h + row_gap
-        cy += section_pad_top
+        cy += row_h + row_gap + section_pad_top
 
         surf.set_clip(None)
-        _draw_scrollbar(surf, scroll_offset, max_scroll, content_h, top_bar_h)
+        _draw_scrollbar(
+            surf, scroll_offset, max_scroll,
+            content_h, top_bar_h,
+        )
 
         canvas.present(screen)
         clock.tick(_FPS)
