@@ -49,6 +49,7 @@ from factoriax.constants import (
     NUM_TECHNOLOGIES,
     BlockType,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.state import EnvParams, EnvState
@@ -681,18 +682,61 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     ent_dir = jnp.zeros(mm, dtype=jnp.int8)
     tile_ent = jnp.full(map_shape, -1, dtype=jnp.int16)
 
+    # Entity inventory arrays (populated from level.machine_inventory).
+    ent_fuel_np = np.zeros(mm, dtype=np.int16)
+    ent_buf_type_np = np.zeros(mm, dtype=np.int8)
+    ent_buf_count_np = np.zeros(mm, dtype=np.int16)
+    ent_asm_in_type_np = np.zeros((mm, 2), dtype=np.int8)
+    ent_asm_in_count_np = np.zeros((mm, 2), dtype=np.int16)
+
+    has_inv = level.machine_inventory is not None
+
     # Populate entities from grid (Python loop, only at build time)
     idx = 0
     for y in range(map_shape[0]):
         for x in range(map_shape[1]):
-            if int(machine_types_np[y, x]) != int(MachineType.NONE):
-                if idx < mm:
-                    ent_y = ent_y.at[idx].set(y)
-                    ent_x = ent_x.at[idx].set(x)
-                    ent_type = ent_type.at[idx].set(machine_types_np[y, x])
-                    ent_dir = ent_dir.at[idx].set(machine_dirs_np[y, x])
-                    tile_ent = tile_ent.at[y, x].set(idx)
-                    idx += 1
+            mt = int(machine_types_np[y, x])
+            if mt == int(MachineType.NONE):
+                continue
+            if idx >= mm:
+                break
+            ent_y = ent_y.at[idx].set(y)
+            ent_x = ent_x.at[idx].set(x)
+            ent_type = ent_type.at[idx].set(machine_types_np[y, x])
+            ent_dir = ent_dir.at[idx].set(machine_dirs_np[y, x])
+            tile_ent = tile_ent.at[y, x].set(idx)
+
+            # Populate inventory from level data.
+            if has_inv:
+                inv_row = level.machine_inventory[y, x]
+                if mt == int(MachineType.MINER):
+                    ent_fuel_np[idx] = int(inv_row[int(ItemType.COAL)])
+                    # First non-coal item goes to buffer (mined ore).
+                    for it in range(1, NUM_ITEM_TYPES):
+                        if it == int(ItemType.COAL):
+                            continue
+                        if int(inv_row[it]) > 0:
+                            ent_buf_type_np[idx] = it
+                            ent_buf_count_np[idx] = int(inv_row[it])
+                            break
+                elif mt == int(MachineType.ASSEMBLER):
+                    slot = 0
+                    for it in range(1, NUM_ITEM_TYPES):
+                        if int(inv_row[it]) > 0 and slot < 2:
+                            ent_asm_in_type_np[idx, slot] = it
+                            ent_asm_in_count_np[idx, slot] = int(
+                                inv_row[it],
+                            )
+                            slot += 1
+                else:
+                    # Pallet, belt, etc: first non-zero item to buffer.
+                    for it in range(1, NUM_ITEM_TYPES):
+                        if int(inv_row[it]) > 0:
+                            ent_buf_type_np[idx] = it
+                            ent_buf_count_np[idx] = int(inv_row[it])
+                            break
+
+            idx += 1
 
     return EnvState(
         map=jnp.array(block_map, dtype=jnp.int8),
@@ -704,11 +748,11 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         ent_type=ent_type,
         ent_direction=ent_dir,
         ent_power=jnp.zeros(mm, dtype=jnp.int16),
-        ent_fuel=jnp.zeros(mm, dtype=jnp.int16),
-        ent_buf_type=jnp.zeros(mm, dtype=jnp.int8),
-        ent_buf_count=jnp.zeros(mm, dtype=jnp.int16),
-        ent_asm_in_type=jnp.zeros((mm, 2), dtype=jnp.int8),
-        ent_asm_in_count=jnp.zeros((mm, 2), dtype=jnp.int16),
+        ent_fuel=jnp.array(ent_fuel_np, dtype=jnp.int16),
+        ent_buf_type=jnp.array(ent_buf_type_np, dtype=jnp.int8),
+        ent_buf_count=jnp.array(ent_buf_count_np, dtype=jnp.int16),
+        ent_asm_in_type=jnp.array(ent_asm_in_type_np, dtype=jnp.int8),
+        ent_asm_in_count=jnp.array(ent_asm_in_count_np, dtype=jnp.int16),
         ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
         player_positions=jnp.array(player_positions_np, dtype=jnp.int16),
