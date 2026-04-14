@@ -38,31 +38,114 @@ def _resize_texture(texture: np.ndarray, size: int) -> np.ndarray:
     return resized
 
 
+def _noise_texture(
+    size: int,
+    base: tuple[int, int, int],
+    variation: int = 12,
+    seed: int = 0,
+) -> np.ndarray:
+    """Create a noisy solid-color RGBA texture.
+
+    Adds per-pixel brightness variation to a base color so each
+    block type has a distinct visual grain. Ore blocks use this to
+    look like rough stone surfaces rather than flat color swatches.
+
+    Args:
+        size: Side length in pixels.
+        base: Base RGB color.
+        variation: Max +/- brightness jitter per pixel.
+        seed: Deterministic seed for the noise.
+
+    Returns:
+        RGBA uint8 array of shape ``(size, size, 4)``.
+    """
+    rng = np.random.RandomState(seed)
+    noise = rng.randint(-variation, variation + 1, (size, size, 3))
+    t = np.empty((size, size, 4), dtype=np.uint8)
+    t[:, :, :3] = np.clip(
+        np.array(base, dtype=np.int16) + noise, 0, 255,
+    ).astype(np.uint8)
+    t[:, :, 3] = 255
+    return t
+
+
+def _speckled_texture(
+    size: int,
+    base: tuple[int, int, int],
+    speckle: tuple[int, int, int],
+    density: float = 0.15,
+    seed: int = 0,
+) -> np.ndarray:
+    """Create a texture with colored speckles over a noisy base.
+
+    Simulates visible ore veins or crystal inclusions scattered
+    across a stone-like background.
+
+    Args:
+        size: Side length in pixels.
+        base: Base stone RGB color.
+        speckle: Speckle RGB color (the ore highlight).
+        density: Fraction of pixels that are speckles.
+        seed: Deterministic seed.
+
+    Returns:
+        RGBA uint8 array of shape ``(size, size, 4)``.
+    """
+    t = _noise_texture(size, base, variation=10, seed=seed)
+    rng = np.random.RandomState(seed + 1000)
+    mask = rng.random((size, size)) < density
+    noise = rng.randint(-15, 16, (size, size, 3))
+    bright = np.clip(
+        np.array(speckle, dtype=np.int16) + noise, 0, 255,
+    ).astype(np.uint8)
+    t[:, :, :3][mask] = bright[mask]
+    return t
+
+
 def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
-    """Create simple default textures if asset files don't exist.
+    """Create procedural block textures with distinct visual styles.
+
+    Each block type gets a unique pattern so ores are easy to tell
+    apart at a glance. Dirt and water use noisy fills, ores use
+    speckled stone with colored vein highlights.
 
     Args:
         size: Side length of each texture in pixels.
 
     Returns:
-        Dictionary mapping BlockType values to RGBA texture arrays
+        Dictionary mapping BlockType values to RGBA texture arrays.
     """
-    colors: dict[int, tuple[int, int, int]] = {
-        int(BlockType.DIRT): (139, 90, 43),
-        int(BlockType.WATER): (64, 164, 223),
-        int(BlockType.IRON): (192, 192, 192),
-        int(BlockType.COPPER): (184, 115, 51),
-        int(BlockType.COAL): (54, 54, 54),
-        int(BlockType.TIN): (180, 180, 170),
-        int(BlockType.SILICON): (100, 110, 130),
-        int(BlockType.NEST): (90, 40, 60),
+    return {
+        int(BlockType.DIRT): _noise_texture(
+            size, (139, 90, 43), variation=15, seed=1,
+        ),
+        int(BlockType.WATER): _noise_texture(
+            size, (50, 140, 200), variation=18, seed=2,
+        ),
+        int(BlockType.IRON): _speckled_texture(
+            size, (120, 115, 110), (210, 210, 220),
+            density=0.18, seed=3,
+        ),
+        int(BlockType.COPPER): _speckled_texture(
+            size, (110, 80, 55), (220, 140, 60),
+            density=0.20, seed=4,
+        ),
+        int(BlockType.COAL): _speckled_texture(
+            size, (40, 40, 42), (75, 75, 80),
+            density=0.15, seed=5,
+        ),
+        int(BlockType.TIN): _speckled_texture(
+            size, (140, 135, 125), (210, 210, 195),
+            density=0.18, seed=6,
+        ),
+        int(BlockType.SILICON): _speckled_texture(
+            size, (70, 78, 95), (120, 140, 180),
+            density=0.20, seed=7,
+        ),
+        int(BlockType.NEST): _noise_texture(
+            size, (90, 40, 60), variation=12, seed=8,
+        ),
     }
-    textures: dict[int, np.ndarray] = {}
-    for block_id, (r, g, b) in colors.items():
-        t = np.empty((size, size, 4), dtype=np.uint8)
-        t[:, :] = (r, g, b, 255)
-        textures[block_id] = t
-    return textures
 
 
 PLAYER_COLORS = [

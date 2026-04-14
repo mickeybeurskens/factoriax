@@ -19,6 +19,7 @@ import pygame
 from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
+    BLOCK_TO_ITEM,
     DEFAULT_MACHINE_MAX_HEALTH,
     ITEM_COLORS,
     MACHINE_TYPE_NAMES,
@@ -1540,7 +1541,7 @@ def render_hotbar(
     )
 
     # --- 6 machine pockets (tool belt, left portion) ---
-    resource_area_w = 120
+    resource_area_w = 150
     slot_area_x = 64
     slot_area_w = bar_w - 64 - resource_area_w - 8
     slot_w = slot_area_w // _HOTBAR_SLOTS
@@ -1641,7 +1642,7 @@ def render_hotbar(
     # --- Resource counts + research (right column, subtle) ---
     res_x = bar_w - resource_area_w
     ry = content_y + 2
-    res_icon_s = 10
+    res_icon_s = 12
 
     # Thin vertical separator.
     overlay[content_y : content_y + content_h, res_x - 3] = (
@@ -1652,7 +1653,7 @@ def render_hotbar(
     )
 
     res_count_color = (160, 155, 135)
-    for item_type in (ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE):
+    for item_type in BLOCK_TO_ITEM.values():
         count = int(player_inv[int(item_type)])
         icon_arr = render_item_icon(int(item_type), res_icon_s)
         _blit_rgba(overlay, icon_arr, ry, res_x)
@@ -1680,28 +1681,30 @@ def render_hotbar(
 
 
 # Display names for block types shown in the info panel.
+# Ore names are derived from BLOCK_TO_ITEM + _ITEM_NAMES so new
+# ores are included automatically.
 _BLOCK_NAMES: dict[int, str] = {
     int(BlockType.DIRT): "Dirt",
     int(BlockType.WATER): "Water",
-    int(BlockType.IRON): "Iron Ore",
-    int(BlockType.COPPER): "Copper Ore",
-    int(BlockType.COAL): "Coal Deposit",
-    int(BlockType.NEST): "Biter Nest",  # Temporary — Stage 1
+    int(BlockType.NEST): "Biter Nest",
     int(BlockType.OUT_OF_BOUNDS): "Out of Bounds",
+    **{
+        int(bt): f"{_ITEM_NAMES.get(int(it), '?')} Deposit"
+        for bt, it in BLOCK_TO_ITEM.items()
+    },
 }
 
-# Colors for resource block names.
+# Colors for resource block names, derived from ITEM_COLORS so new
+# ores get their color automatically.
 _BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
-    int(BlockType.IRON): (180, 180, 200),
-    int(BlockType.COPPER): (210, 140, 60),
-    int(BlockType.COAL): (140, 140, 140),
+    int(bt): ITEM_COLORS.get(int(it), (220, 215, 180))
+    for bt, it in BLOCK_TO_ITEM.items()
 }
 
-# Items that correspond to mineable blocks.
+# Items that correspond to mineable blocks (re-exported from constants
+# as int keys for the info panel renderer).
 _BLOCK_TO_ITEM: dict[int, int] = {
-    int(BlockType.IRON): int(ItemType.IRON_ORE),
-    int(BlockType.COPPER): int(ItemType.COPPER_ORE),
-    int(BlockType.COAL): int(ItemType.COAL),
+    int(bt): int(it) for bt, it in BLOCK_TO_ITEM.items()
 }
 
 
