@@ -313,13 +313,15 @@ def _play_loop(
     step_fn = jax.jit(env.step_env)
 
     # !! INTENTIONAL JIT WARMUP — DO NOT REMOVE !!
-    # The first call to step_fn triggers JAX JIT compilation which
-    # takes several seconds. Running it here behind a loading screen
-    # prevents the game from freezing on the player's first input.
-    # The action MUST be passed as int(Action.NOOP), not
-    # jnp.int32(Action.NOOP), to avoid a weak-type mismatch that
-    # would cause a second retrace on the first real action.
-    # See commit 61b44a1 for the original bugfix.
+    # The first call to step_fn triggers JAX JIT compilation (~5s).
+    # Running it behind a loading screen prevents a freeze on the
+    # player's first input.
+    #
+    # The action MUST be int(), not jnp.int32(), to avoid a
+    # weak-type retrace. The state from reset MUST have matching
+    # dtypes to the step output (jnp.int32 scalars, int16 buffers)
+    # or the second call retraces. See generate_state/build_state
+    # for where these types are set. See commit 61b44a1.
     rng, warmup_key = random.split(rng)
     _wk = warmup_key
     _st = state
@@ -423,6 +425,9 @@ def _play_loop(
 
         if action != int(Action.NOOP):
             rng, step_key = random.split(rng)
+            # action MUST be plain int to match the warmup trace type.
+            # IntEnum or jnp.int32 would cause a JIT retrace.
+            action = int(action)
             obs, state, reward, done, info = step_fn(
                 step_key, state, action, params,
             )

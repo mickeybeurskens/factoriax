@@ -84,7 +84,7 @@ MACHINE_MAX_TYPES = jnp.array(
 MACHINE_MAX_STACK = jnp.array(
     [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0],
     # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET
-    dtype=jnp.int32,
+    dtype=jnp.int16,
 )
 
 # Max stack count per item type for the player inventory.
