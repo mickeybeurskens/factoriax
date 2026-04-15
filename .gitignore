@@ -238,3 +238,7 @@ paper/*.toc
 paper/*.log
 paper/*.pdf
 docs/profiling/traces/
+
+# Profiler output
+profiled.json
+profiles/
