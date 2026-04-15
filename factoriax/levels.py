@@ -700,11 +700,13 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
                 continue
             if idx >= mm:
                 break
-            ent_y = ent_y.at[idx].set(y)
-            ent_x = ent_x.at[idx].set(x)
-            ent_type = ent_type.at[idx].set(machine_types_np[y, x])
-            ent_dir = ent_dir.at[idx].set(machine_dirs_np[y, x])
-            tile_ent = tile_ent.at[y, x].set(idx)
+            ent_y = ent_y.at[idx].set(jnp.int16(y))
+            ent_x = ent_x.at[idx].set(jnp.int16(x))
+            ent_type = ent_type.at[idx].set(jnp.int8(mt))
+            ent_dir = ent_dir.at[idx].set(
+                jnp.int8(machine_dirs_np[y, x]),
+            )
+            tile_ent = tile_ent.at[y, x].set(jnp.int16(idx))
 
             # Populate inventory from level data.
             if has_inv:
@@ -799,7 +801,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         px = jnp.clip(center_x + offset, 0, params.map_width - 1)
         py = center_y
         player_positions.append([px, py])
-        world_map = world_map.at[py, px].set(BlockType.DIRT)
+        world_map = world_map.at[py, px].set(jnp.int8(BlockType.DIRT))
 
     player_positions_arr = jnp.array(player_positions, dtype=jnp.int32)
     player_directions = jnp.full(
