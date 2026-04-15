@@ -7,6 +7,7 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
+    ITEM_TO_MACHINE,
     MAX_MACHINE_STACK_SIZE,
     NUM_ITEM_TYPES,
     BlockType,
@@ -377,12 +378,10 @@ def render_inventory_bar(
     return bar
 
 
+# Derived from the single source of truth in constants.ITEM_TO_MACHINE.
+# New machine types added there automatically appear here.
 MACHINE_TO_ITEM: dict[int, int] = {
-    int(MachineType.MINER): int(ItemType.MINER),
-    int(MachineType.PALLET): int(ItemType.PALLET),
-    int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
-    int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
-    int(MachineType.ROCKET): int(ItemType.ROCKET),
+    int(mt): int(it) for it, mt in ITEM_TO_MACHINE.items()
 }
 
 # Dark arrow colour drawn on top of the gold conveyor belt square.
