@@ -86,7 +86,8 @@ def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
 
 
 def is_position_walkable(
-    state: EnvState, position: jax.Array,
+    state: EnvState,
+    position: jax.Array,
 ) -> jax.Array:
     """Check if a position can be walked on.
 
@@ -98,9 +99,15 @@ def is_position_walkable(
         Boolean: walkable.
     """
     block = get_block_at(state, position)
-    is_solid = jnp.any(block == jnp.array([
-        BlockType.WATER, BlockType.OUT_OF_BOUNDS,
-    ]))
+    is_solid = jnp.any(
+        block
+        == jnp.array(
+            [
+                BlockType.WATER,
+                BlockType.OUT_OF_BOUNDS,
+            ]
+        )
+    )
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
     clipped_x = jnp.clip(position[0], 0, map_width - 1)
@@ -146,16 +153,24 @@ def move_player(
     # Facing: movement sets facing, FACE_* sets facing without moving.
     new_facing = jnp.where(is_move, move_dir, current_dir)
     new_facing = jnp.where(
-        action == Action.FACE_UP, Direction.UP, new_facing,
+        action == Action.FACE_UP,
+        Direction.UP,
+        new_facing,
     )
     new_facing = jnp.where(
-        action == Action.FACE_DOWN, Direction.DOWN, new_facing,
+        action == Action.FACE_DOWN,
+        Direction.DOWN,
+        new_facing,
     )
     new_facing = jnp.where(
-        action == Action.FACE_LEFT, Direction.LEFT, new_facing,
+        action == Action.FACE_LEFT,
+        Direction.LEFT,
+        new_facing,
     )
     new_facing = jnp.where(
-        action == Action.FACE_RIGHT, Direction.RIGHT, new_facing,
+        action == Action.FACE_RIGHT,
+        Direction.RIGHT,
+        new_facing,
     )
 
     return state.replace(
@@ -169,7 +184,8 @@ def move_player(
 
 
 def mine_block(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> EnvState:
     """Mine the block at the player's position.
 
@@ -274,19 +290,14 @@ def deposit_to_adjacent(
     is_miner = mt == MachineType.MINER
     is_coal = item_type == int(ItemType.COAL)
     fuel_space = state.ent_fuel[eidx] < jnp.int16(64)
-    can_deposit_fuel = (
-        in_bounds & has_item & is_miner & is_coal & fuel_space
-    )
+    can_deposit_fuel = in_bounds & has_item & is_miner & is_coal & fuel_space
 
     # Deposit to buffer machine (non-assembler, non-fuel).
     buf_empty = state.ent_buf_count[eidx] == 0
     buf_same = state.ent_buf_type[eidx] == item_type
     buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
     is_buf = ~is_asm & ~is_miner & has_machine
-    can_deposit_buf = (
-        in_bounds & has_item & is_buf
-        & (buf_empty | buf_same) & buf_space
-    )
+    can_deposit_buf = in_bounds & has_item & is_buf & (buf_empty | buf_same) & buf_space
 
     can_deposit = can_deposit_asm | can_deposit_buf | can_deposit_fuel
     transfer = jnp.where(can_deposit, jnp.int16(1), jnp.int16(0))
@@ -407,7 +418,9 @@ def withdraw_from_adjacent(
         state.ent_asm_out_count,
     )
     new_asm_out_type = jnp.where(
-        new_asm_out_count == 0, jnp.int8(0), state.ent_asm_out_type,
+        new_asm_out_count == 0,
+        jnp.int8(0),
+        state.ent_asm_out_type,
     )
 
     new_buf_count = jnp.where(
@@ -416,7 +429,9 @@ def withdraw_from_adjacent(
         state.ent_buf_count,
     )
     new_buf_type = jnp.where(
-        new_buf_count == 0, jnp.int8(0), state.ent_buf_type,
+        new_buf_count == 0,
+        jnp.int8(0),
+        state.ent_buf_type,
     )
 
     return state.replace(
@@ -455,8 +470,7 @@ def apply_research(
         jnp.where(should_research, jnp.int16(1), jnp.int16(0)),
     )
     new_unlocked = state.research_unlocked.at[tech_idx].set(
-        state.research_unlocked[tech_idx]
-        | (new_progress[tech_idx] >= RESEARCH_COST),
+        state.research_unlocked[tech_idx] | (new_progress[tech_idx] >= RESEARCH_COST),
     )
 
     return state.replace(
@@ -481,89 +495,80 @@ def _handle_player_action(
     Returns:
         Updated environment state.
     """
-    is_mine = action == Action.MINE
-    is_pickup = action == Action.PICKUP
-
-    is_rotate = (action >= Action.ROTATE_LEFT) & (
-        action <= Action.ROTATE_DOWN
-    )
-    rotate_dir = ROTATE_ACTION_TO_DIR[
-        jnp.clip(action - ROTATE_BASE, 0, 3)
-    ]
-
-    is_place = (action >= Action.PLACE_MINER) & (action <= Action.PLACE_ROCKET)
+    # Pre-compute all derived action parameters (cheap indexing).
+    recipe_idx = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
     place_item = PLACE_ACTION_TO_ITEM[
         jnp.clip(action - PLACE_BASE, 0, len(PLACE_ACTION_TO_ITEM) - 1)
     ]
-
-    is_craft = (action >= Action.CRAFT_IRON_PLATE) & (
-        action <= Action.CRAFT_ROCKET
+    rotate_dir = ROTATE_ACTION_TO_DIR[jnp.clip(action - ROTATE_BASE, 0, 3)]
+    deposit_item = jnp.clip(
+        action - DEPOSIT_BASE + int(ItemType.COAL),
+        0,
+        NUM_ITEM_TYPES - 1,
     )
-    recipe_idx = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
-
-    is_research = (action >= Action.RESEARCH_BASIC) & (
-        action <= Action.RESEARCH_ADVANCED
+    withdraw_item = jnp.clip(
+        action - WITHDRAW_BASE + int(ItemType.COAL),
+        0,
+        NUM_ITEM_TYPES - 1,
     )
     research_pack = RESEARCH_ACTION_TO_PACK[
         jnp.clip(
-            action - Action.RESEARCH_BASIC, 0,
+            action - Action.RESEARCH_BASIC,
+            0,
             len(RESEARCH_ACTION_TO_PACK) - 1,
         )
     ]
 
-    is_deposit = (action >= Action.DEPOSIT_COAL) & (
-        action <= Action.DEPOSIT_ROCKET
+    # Map action to handler category (0-8).
+    cat = jnp.int32(0)  # default: movement
+    cat = jnp.where(action == Action.MINE, 1, cat)
+    cat = jnp.where(
+        (action >= Action.CRAFT_IRON_PLATE) & (action <= Action.CRAFT_ROCKET),
+        2,
+        cat,
     )
-    deposit_item = jnp.clip(
-        action - DEPOSIT_BASE + int(ItemType.COAL), 0, NUM_ITEM_TYPES - 1,
+    cat = jnp.where(
+        (action >= Action.PLACE_MINER) & (action <= Action.PLACE_ROCKET),
+        3,
+        cat,
     )
-
-    is_withdraw = (action >= Action.WITHDRAW_COAL) & (
-        action <= Action.WITHDRAW_ROCKET
+    cat = jnp.where(action == Action.PICKUP, 4, cat)
+    cat = jnp.where(
+        (action >= Action.ROTATE_LEFT) & (action <= Action.ROTATE_DOWN),
+        5,
+        cat,
     )
-    withdraw_item = jnp.clip(
-        action - WITHDRAW_BASE + int(ItemType.COAL), 0, NUM_ITEM_TYPES - 1,
+    cat = jnp.where(
+        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_ROCKET),
+        6,
+        cat,
     )
-
-    # Branchless dispatch.
-    def _select(pred: jax.Array, new: EnvState, old: EnvState) -> EnvState:
-        return jax.tree.map(lambda n, o: jnp.where(pred, n, o), new, old)
-
-    state = _select(is_mine, mine_block(state, player_idx), state)
-    state = _select(
-        is_craft, craft_recipe(state, player_idx, recipe_idx), state,
+    cat = jnp.where(
+        (action >= Action.WITHDRAW_COAL) & (action <= Action.WITHDRAW_ROCKET),
+        7,
+        cat,
     )
-    state = _select(
-        is_place, place_machine(state, player_idx, place_item), state,
-    )
-    state = _select(is_pickup, pickup_machine(state, player_idx), state)
-    state = _select(
-        is_rotate,
-        set_machine_direction(state, player_idx, rotate_dir),
-        state,
-    )
-    state = _select(
-        is_deposit,
-        deposit_to_adjacent(state, player_idx, deposit_item),
-        state,
-    )
-    state = _select(
-        is_withdraw,
-        withdraw_from_adjacent(state, player_idx, withdraw_item),
-        state,
-    )
-    state = _select(
-        is_research,
-        apply_research(state, player_idx, research_pack),
-        state,
+    cat = jnp.where(
+        (action >= Action.RESEARCH_BASIC) & (action <= Action.RESEARCH_ADVANCED),
+        8,
+        cat,
     )
 
-    is_movement = ~(
-        is_mine | is_craft | is_place | is_pickup | is_rotate
-        | is_deposit | is_withdraw | is_research
-    )
-    state = _select(
-        is_movement, move_player(state, action, player_idx), state,
+    # Single-dispatch: only the matching handler executes at runtime.
+    return jax.lax.switch(
+        cat,
+        [
+            lambda s: move_player(s, action, player_idx),
+            lambda s: mine_block(s, player_idx),
+            lambda s: craft_recipe(s, player_idx, recipe_idx),
+            lambda s: place_machine(s, player_idx, place_item),
+            lambda s: pickup_machine(s, player_idx),
+            lambda s: set_machine_direction(s, player_idx, rotate_dir),
+            lambda s: deposit_to_adjacent(s, player_idx, deposit_item),
+            lambda s: withdraw_from_adjacent(s, player_idx, withdraw_item),
+            lambda s: apply_research(s, player_idx, research_pack),
+        ],
+        state,
     )
 
     return state
@@ -593,7 +598,8 @@ def factoriax_step(
 
 
 def is_game_over(
-    state: EnvState, params: EnvParams,
+    state: EnvState,
+    params: EnvParams,
 ) -> jax.Array:
     """Check if the episode has ended.
 
