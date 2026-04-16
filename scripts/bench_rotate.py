@@ -13,7 +13,6 @@ from __future__ import annotations
 import time
 
 import jax
-import jax.numpy as jnp
 
 from factoriax.constants import Action
 from factoriax.envs.factoriax_env import make_factoriax_env

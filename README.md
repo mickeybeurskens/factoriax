@@ -62,6 +62,27 @@ Once you have an assembler placed, it can produce the rocket components:
 
 Place the rocket on the map and you win.
 
+## Development
+
+Git hooks enforce code quality and track performance across commits. Install them once after cloning:
+
+```bash
+make install-hooks
+```
+
+This sets up two hooks:
+
+**Pre-commit** runs `ruff check`, `ruff format --check`, and the full test suite before every commit. If anything fails, the commit is blocked until you fix it.
+
+**Post-commit** prompts you to run a performance benchmark after each commit. The benchmark measures `step_env` throughput across a matrix of map sizes (8x8, 32x32, 128x128) and batch sizes (256, 1024, 4096), along with an addition baseline that gives a practical upper bound. Results are logged to WandB and a summary of the last 7 commits is printed to the terminal.
+
+You can also run the benchmark manually at any time:
+
+```bash
+uv run python scripts/post_commit_perf.py            # full run with WandB
+uv run python scripts/post_commit_perf.py --no-wandb  # stdout only
+```
+
 ## Design principles
 
 Every action in the environment follows three properties that make the benchmark RL-native.

@@ -18,7 +18,6 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step
 from factoriax.state import EnvParams, EnvState
 

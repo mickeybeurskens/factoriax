@@ -21,7 +21,7 @@ from jax import random
 from factoriax.agentdebugger import Debugger
 from factoriax.constants import Action
 from factoriax.constraints import balance_cost, balance_cost_names
-from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
+from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.observations import global_array
 from factoriax.rewards import achievement_reward
 from factoriax.state import EnvParams

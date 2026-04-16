@@ -31,8 +31,6 @@ from factoriax.constants import BlockType, Direction, ItemType, MachineType
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.jax_renderer import (
     JaxRenderer,
-    render_hud,
-    render_map,
 )
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState

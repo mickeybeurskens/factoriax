@@ -12,7 +12,6 @@ would invalidate the JIT cache.
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 from jax import random
 
 from factoriax.constants import Action
@@ -92,6 +91,6 @@ class TestDtypeConsistency:
                     f"Leaf {i}: dtype {l0.dtype} -> {l1.dtype}"
                 )
             else:
-                assert type(l0) == type(l1), (
+                assert type(l0) is type(l1), (
                     f"Leaf {i}: type {type(l0)} -> {type(l1)}"
                 )

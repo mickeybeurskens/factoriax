@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Post-commit hook: optionally runs performance benchmark after commit.
+# Install with: make install-hooks
+
+# Skip in non-interactive contexts (CI, rebase, etc.).
+if [ ! -t 0 ]; then
+    exit 0
+fi
+
+printf "[post-commit] Run performance benchmark? [y/N] "
+read -r answer </dev/tty
+if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+    uv run python scripts/post_commit_perf.py
+fi
+
+exit 0

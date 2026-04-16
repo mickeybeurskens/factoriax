@@ -28,9 +28,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Exclude performance tests from default `pytest` runs; run them
-# explicitly with `pytest tests/performance/`.
-addopts = "--ignore=tests/performance"
+addopts = "-x -q"
 markers = [
     "slow: marks tests as slow (e.g. CPU JIT compilation)",
 ]

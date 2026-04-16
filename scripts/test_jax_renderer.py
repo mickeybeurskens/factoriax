@@ -17,13 +17,8 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import LevelBuilder, build_state
-from factoriax.renderer import render_pixels
-from factoriax.state import EnvParams, EnvState
 from factoriax.jax_renderer import (
     INV_HEIGHT,
-    JaxRenderer,
-    SLOT_BG,
     build_block_atlas,
     build_digit_atlas,
     build_item_color_atlas,
@@ -34,6 +29,8 @@ from factoriax.jax_renderer import (
     render_map,
     render_map_with_inventory,
 )
+from factoriax.levels import LevelBuilder, build_state
+from factoriax.state import EnvParams, EnvState
 from scripts.jax_render_benchmark import (
     extract_single_state,
     make_batched_envs,

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pre-commit hook: runs linting and tests before allowing a commit.
+# Install with: make install-hooks
+
+set -e
+
+# Only lint staged Python files.
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+
+if [ -n "$STAGED" ]; then
+    echo "[pre-commit] Running ruff check on staged files..."
+    uv run ruff check $STAGED
+
+    echo "[pre-commit] Running ruff format check on staged files..."
+    uv run ruff format --check $STAGED
+fi
+
+echo "[pre-commit] Running tests..."
+uv run pytest tests/ -x -q
+
+echo "[pre-commit] All checks passed."
