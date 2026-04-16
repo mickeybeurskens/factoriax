@@ -157,12 +157,14 @@ class TestPlaceMinerReward:
 class TestFuelMinerReward:
     """Verify fuel miner skill reward computation."""
 
-    def test_unfueled_miners_give_base_reward(self) -> None:
-        """Each unfueled miner on ore should give 1.0 reward."""
+    def test_unfueled_miners_give_proximity_reward(self) -> None:
+        """NOOP with unfueled miners yields only proximity bonus."""
         level, params = fuel_miner_level(num_miners=5)
         env = FuelMinerSkill()
         _, state = env.reset_from_level(level, params)
         step_fn = jax.jit(env.step_env)
         key = jax.random.PRNGKey(0)
         _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)
-        assert float(reward) == 5.0
+        # No miners fueled or picked up so fuel_delta=0, penalty=0.
+        # Only the small proximity bonus remains (0.01 * bonus).
+        assert 0.0 < float(reward) < 0.02

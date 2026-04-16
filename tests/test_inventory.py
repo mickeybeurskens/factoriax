@@ -34,16 +34,17 @@ class TestInventoryState:
         state = generate_world(rng, params)
 
         assert state.player_inventory.shape == (
-            params.num_players, NUM_ITEM_TYPES,
+            params.num_players,
+            NUM_ITEM_TYPES,
         )
 
-    def test_inventory_arrays_are_int32(self) -> None:
-        """Inventory array should be int32 dtype."""
+    def test_inventory_arrays_are_int16(self) -> None:
+        """Inventory array should be int16 dtype."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_world(rng, params)
 
-        assert state.player_inventory.dtype == jnp.int32
+        assert state.player_inventory.dtype == jnp.int16
 
 
 class TestItemType:
@@ -99,9 +100,7 @@ class TestInventoryObservation:
         rng = random.PRNGKey(0)
         obs, state = env.reset_env(rng, params)
 
-        spatial_size = (
-            NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
-        )
+        spatial_size = NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
         inv_start = spatial_size
         inv_data = obs[inv_start:]
 
@@ -117,9 +116,9 @@ class TestInventoryObservation:
         selected = state.selected_player
         max_coal = int(PLAYER_MAX_STACK[ItemType.COAL])
         state = state.replace(
-            player_inventory=state.player_inventory.at[
-                selected, ItemType.COAL
-            ].set(max_coal),
+            player_inventory=state.player_inventory.at[selected, ItemType.COAL].set(
+                max_coal
+            ),
         )
 
         obs = env.get_obs(state, params)
@@ -140,5 +139,7 @@ class TestInventoryRenderer:
 
         pixels = render_pixels(state)
         assert pixels.shape == (
-            8 * BLOCK_PIXEL_SIZE, 8 * BLOCK_PIXEL_SIZE, 3,
+            8 * BLOCK_PIXEL_SIZE,
+            8 * BLOCK_PIXEL_SIZE,
+            3,
         )

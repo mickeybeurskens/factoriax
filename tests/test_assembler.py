@@ -1,238 +1,312 @@
 """Tests for the assembler machine system.
 
-Uses the pouch inventory model where machine_inventory has shape
-(H, W, NUM_ITEM_TYPES) and items are indexed by ItemType.
+Uses the entity-based state model where assembler inputs live in
+ent_asm_in_type/count and outputs in ent_asm_out_type/count.
 """
 
 import jax.numpy as jnp
-from jax import random
 
 from factoriax.constants import (
-    DEFAULT_MACHINE_MAX_HEALTH,
-    MACHINE_INVENTORY_COUNT_DTYPE,
-    NUM_TECHNOLOGIES,
+    BlockType,
     Direction,
     ItemType,
     MachineType,
 )
 from factoriax.game_logic import deposit_to_adjacent
 from factoriax.machines import run_assemblers
-from factoriax.recipes import MAX_ASSEMBLER_STACK_SIZE
-from factoriax.state import EnvParams
-from factoriax.world_gen import generate_world
+from factoriax.state import EnvState
 
 
-def _make_state_with_assembler(
-    recipe: int = 0,
-    inv_entries: dict[int, int] | None = None,
-    power: int = 0,
-    research_unlocked: jnp.ndarray | None = None,
-) -> object:
-    """Create a minimal world state with an assembler at (0, 0).
+def _eid(state: EnvState, y: int, x: int) -> int:
+    """Return entity index at grid position (y, x).
 
     Args:
-        recipe: Assembler recipe index.
-        inv_entries: Mapping of item_type -> count for the assembler
-            at (0, 0).
-        power: Initial machine_power value.
-        research_unlocked: Boolean array of unlocked technologies.
-            Defaults to all True so existing tests pass without modification.
+        state: Current environment state.
+        y: Row position.
+        x: Column position.
 
     Returns:
-        An EnvState with the assembler configured.
+        Entity index (asserts >= 0).
     """
-    rng = random.PRNGKey(42)
-    params = EnvParams(map_width=4, map_height=4, num_players=1)
-    state = generate_world(rng, params)
+    eid = int(state.tile_entity[y, x])
+    assert eid >= 0, f"No entity at ({y}, {x})"
+    return eid
 
-    if research_unlocked is None:
-        research_unlocked = jnp.ones(NUM_TECHNOLOGIES, dtype=jnp.bool_)
 
-    state = state.replace(
-        machine_types=state.machine_types.at[0, 0].set(MachineType.ASSEMBLER),
-        machine_selected_recipe=state.machine_selected_recipe.at[0, 0].set(
-            recipe,
-        ),
-        machine_power=state.machine_power.at[0, 0].set(power),
-        machine_health=state.machine_health.at[0, 0].set(
-            DEFAULT_MACHINE_MAX_HEALTH,
-        ),
-        research_unlocked=research_unlocked,
+def _make_assembler_state(
+    state_factory,
+    *,
+    power: int = 0,
+    asm_in_type: list[int] | None = None,
+    asm_in_count: list[int] | None = None,
+    asm_out_type: int = 0,
+    asm_out_count: int = 0,
+    buf_type: int = 0,
+    buf_count: int = 0,
+) -> EnvState:
+    """Create a 3x3 world with an assembler at (0, 0).
+
+    Args:
+        state_factory: Conftest fixture for building states.
+        power: Initial ent_power for the assembler.
+        asm_in_type: Input slot types [slot0, slot1].
+        asm_in_count: Input slot counts [slot0, slot1].
+        asm_out_type: Output item type.
+        asm_out_count: Output item count.
+        buf_type: Buffer item type.
+        buf_count: Buffer item count.
+
+    Returns:
+        Configured EnvState.
+    """
+    shape = (3, 3)
+    world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
+    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = mt.at[0, 0].set(int(MachineType.ASSEMBLER))
+
+    in_types = asm_in_type or [0, 0]
+    in_counts = asm_in_count or [0, 0]
+    ait = jnp.zeros((*shape, 2), dtype=jnp.int32)
+    ait = ait.at[0, 0, 0].set(in_types[0])
+    ait = ait.at[0, 0, 1].set(in_types[1])
+    aic = jnp.zeros((*shape, 2), dtype=jnp.int32)
+    aic = aic.at[0, 0, 0].set(in_counts[0])
+    aic = aic.at[0, 0, 1].set(in_counts[1])
+
+    aot = jnp.zeros(shape, dtype=jnp.int32)
+    aot = aot.at[0, 0].set(asm_out_type)
+    aoc = jnp.zeros(shape, dtype=jnp.int32)
+    aoc = aoc.at[0, 0].set(asm_out_count)
+
+    mp = jnp.zeros(shape, dtype=jnp.int32)
+    mp = mp.at[0, 0].set(power)
+
+    bt = jnp.zeros(shape, dtype=jnp.int32)
+    bt = bt.at[0, 0].set(buf_type)
+    bc = jnp.zeros(shape, dtype=jnp.int32)
+    bc = bc.at[0, 0].set(buf_count)
+
+    return state_factory(
+        world_map=world_map,
+        machine_types=mt,
+        machine_power=mp,
+        asm_in_type=ait,
+        asm_in_count=aic,
+        asm_out_type=aot,
+        asm_out_count=aoc,
+        buffer_type=bt,
+        buffer_count=bc,
     )
-
-    inv = state.machine_inventory.astype(jnp.int32)
-    for item_type, count in (inv_entries or {}).items():
-        inv = inv.at[0, 0, item_type].set(count)
-    state = state.replace(
-        machine_inventory=inv.astype(MACHINE_INVENTORY_COUNT_DTYPE),
-    )
-    return state
 
 
 class TestAssemblerStartsCraft:
     """Assembler should consume inputs and start a countdown."""
 
-    def test_hull_recipe_starts(self) -> None:
-        """Hull recipe: 5 iron -> power set, iron consumed."""
-        state = _make_state_with_assembler(
-            recipe=0,
-            inv_entries={int(ItemType.IRON_ORE): 10},
+    def test_iron_plate_recipe_starts(self, state_factory) -> None:
+        """Iron plate recipe: 2 iron_ore -> power set, inputs consumed."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[5, 0],
         )
-        new_state = run_assemblers(state)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
 
-        assert int(new_state.machine_power[0, 0]) == 4
-        assert int(new_state.machine_inventory[0, 0, ItemType.IRON_ORE]) == 5
+        assert int(new.ent_power[eid]) == 2
+        assert int(new.ent_asm_in_count[eid, 0]) == 0
 
-    def test_no_start_without_inputs(self) -> None:
+    def test_no_start_without_inputs(self, state_factory) -> None:
         """Assembler with insufficient inputs should remain idle."""
-        state = _make_state_with_assembler(
-            recipe=0,
-            inv_entries={int(ItemType.IRON_ORE): 3},
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[1, 0],
         )
-        new_state = run_assemblers(state)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
 
-        assert int(new_state.machine_power[0, 0]) == 0
-        assert int(new_state.machine_inventory[0, 0, ItemType.IRON_ORE]) == 3
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 1
 
 
 class TestAssemblerCompletesCraft:
     """Assembler at power == 1 should produce output."""
 
-    def test_hull_output_produced(self) -> None:
-        """Power == 1 with space in output produces 1 hull."""
-        state = _make_state_with_assembler(recipe=0, power=1)
-        new_state = run_assemblers(state)
-
-        assert int(new_state.machine_power[0, 0]) == 0
-        assert int(new_state.machine_inventory[0, 0, ItemType.STEEL]) == 1
-
-    def test_output_stacks(self) -> None:
-        """Completing a craft adds to existing output stack."""
-        state = _make_state_with_assembler(
-            recipe=0,
+    def test_iron_plate_output_produced(self, state_factory) -> None:
+        """Power == 1 with empty output produces 1 iron_plate."""
+        state = _make_assembler_state(
+            state_factory,
             power=1,
-            inv_entries={int(ItemType.STEEL): 5},
+            asm_out_type=int(ItemType.IRON_PLATE),
         )
-        new_state = run_assemblers(state)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
 
-        assert int(new_state.machine_inventory[0, 0, ItemType.STEEL]) == 6
+        assert int(new.ent_power[eid]) == 0
+        # Output goes to asm_out then is pushed to buffer.
+        out_count = int(new.ent_asm_out_count[eid])
+        buf_count = int(new.ent_buf_count[eid])
+        buf_type = int(new.ent_buf_type[eid])
+        total = out_count + buf_count
+        assert total == 1
+        if buf_count > 0:
+            assert buf_type == int(ItemType.IRON_PLATE)
+
+    def test_output_blocked_when_buffer_occupied(
+        self,
+        state_factory,
+    ) -> None:
+        """Output stalls if buffer already holds items."""
+        state = _make_assembler_state(
+            state_factory,
+            power=1,
+            asm_out_type=int(ItemType.IRON_PLATE),
+            buf_type=int(ItemType.COAL),
+            buf_count=5,
+        )
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+
+        # Craft completes, but buffer is occupied so output stays.
+        assert int(new.ent_asm_out_count[eid]) == 1
+        assert int(new.ent_buf_count[eid]) == 5
+        assert int(new.ent_buf_type[eid]) == int(ItemType.COAL)
 
 
 class TestAssemblerStallsOutputFull:
-    """Assembler should stall when output slot is at capacity."""
+    """Assembler behavior when output slot is already occupied."""
 
-    def test_stall_at_cap(self) -> None:
-        """Power stays at 1 and no item is lost when output is full."""
-        state = _make_state_with_assembler(
-            recipe=0,
-            power=1,
-            inv_entries={int(ItemType.STEEL): MAX_ASSEMBLER_STACK_SIZE},
+    def test_output_blocked_keeps_item(self, state_factory) -> None:
+        """Existing output stays when buffer is occupied."""
+        state = _make_assembler_state(
+            state_factory,
+            power=2,
+            asm_out_type=int(ItemType.IRON_PLATE),
+            asm_out_count=1,
+            buf_type=int(ItemType.COAL),
+            buf_count=5,
         )
-        new_state = run_assemblers(state)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
 
-        assert int(new_state.machine_power[0, 0]) == 1
-        assert (
-            int(new_state.machine_inventory[0, 0, ItemType.STEEL])
-            == MAX_ASSEMBLER_STACK_SIZE
-        )
+        # Output cannot push to buffer, so it stays.
+        assert int(new.ent_asm_out_count[eid]) == 1
+        assert int(new.ent_buf_count[eid]) == 5
 
 
 class TestAssemblerTwoInputRecipe:
-    """Fuel pack recipe requires two distinct inputs."""
+    """Steel recipe requires two distinct inputs."""
 
-    def test_fuel_pack_starts(self) -> None:
-        """Fuel pack: 3 copper + 2 coal -> power set, inputs consumed."""
-        state = _make_state_with_assembler(
-            recipe=1,
-            inv_entries={
-                int(ItemType.COPPER_ORE): 5,
-                int(ItemType.COAL): 4,
-            },
+    def test_steel_recipe_starts(self, state_factory) -> None:
+        """Steel: 2 iron_plate + 1 tin_plate -> power set, consumed."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_PLATE), int(ItemType.TIN_PLATE)],
+            asm_in_count=[3, 2],
         )
-        new_state = run_assemblers(state)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
 
-        assert int(new_state.machine_power[0, 0]) == 6
-        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER_ORE]) == 2
-        assert int(new_state.machine_inventory[0, 0, ItemType.COAL]) == 2
+        assert int(new.ent_power[eid]) == 4
+        assert int(new.ent_asm_in_count[eid, 0]) == 0
+        assert int(new.ent_asm_in_count[eid, 1]) == 0
 
-    def test_fuel_pack_missing_second_input(self) -> None:
-        """Missing coal should prevent craft start."""
-        state = _make_state_with_assembler(
-            recipe=1,
-            inv_entries={int(ItemType.COPPER_ORE): 5},
+    def test_steel_missing_second_input(self, state_factory) -> None:
+        """Missing tin_plate should prevent craft start."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_PLATE), 0],
+            asm_in_count=[3, 0],
         )
-        new_state = run_assemblers(state)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
 
-        assert int(new_state.machine_power[0, 0]) == 0
+        assert int(new.ent_power[eid]) == 0
 
 
 class TestAssemblerRecipeChangeBlocked:
-    """Recipe change should be blocked while crafting or with items loaded."""
+    """Recipe change conditions based on crafting state."""
 
-    def test_power_blocks_recipe_change(self) -> None:
-        """An assembler mid-craft (power > 0) keeps its recipe."""
-        state = _make_state_with_assembler(recipe=0, power=3)
+    def test_power_indicates_mid_craft(self, state_factory) -> None:
+        """An assembler mid-craft (power > 0) is not idle."""
+        state = _make_assembler_state(state_factory, power=3)
+        eid = _eid(state, 0, 0)
 
-        is_idle = int(state.machine_power[0, 0]) == 0
+        is_idle = int(state.ent_power[eid]) == 0
         assert not is_idle
 
-    def test_items_in_inventory_block_recipe_change(self) -> None:
-        """Items in input types should prevent recipe switching."""
-        state = _make_state_with_assembler(
-            recipe=0,
-            inv_entries={int(ItemType.IRON_ORE): 5},
+    def test_items_in_input_slots(self, state_factory) -> None:
+        """Items in input slots should be detectable."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[5, 0],
         )
+        eid = _eid(state, 0, 0)
 
-        has_inputs = int(state.machine_inventory[0, 0, ItemType.IRON_ORE]) > 0
+        has_inputs = int(state.ent_asm_in_count[eid, 0]) > 0
         assert has_inputs
 
 
 class TestAssemblerDepositFiltering:
-    """Only recipe-correct items should be depositable into assembler inputs."""
+    """Deposits into assembler go to asm_in slots."""
 
-    def test_correct_item_accepted(self) -> None:
-        """Iron into hull recipe assembler should succeed."""
-        state = _make_state_with_assembler(recipe=0)
+    def test_deposit_goes_to_asm_in(self, state_factory) -> None:
+        """Depositing iron_ore into assembler fills asm_in slot."""
+        state = _make_assembler_state(state_factory)
         state = state.replace(
-            player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(
-                Direction.LEFT,
+            player_positions=jnp.array([[1, 0]], dtype=jnp.int16),
+            player_directions=jnp.array(
+                [int(Direction.LEFT)],
+                dtype=jnp.int8,
             ),
-            player_inventory=state.player_inventory.at[0, ItemType.IRON_ORE].set(10),
+            player_inventory=state.player_inventory.at[0, int(ItemType.IRON_ORE)].set(
+                10
+            ),
         )
-        new_state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
-        assert (
-            int(
-                new_state.machine_inventory[0, 0, ItemType.IRON_ORE],
-            )
-            == 10
-        )
+        new = deposit_to_adjacent(state, 0, int(ItemType.IRON_ORE))
+        eid = _eid(new, 0, 0)
 
-    def test_wrong_item_rejected(self) -> None:
-        """Copper into hull recipe assembler should be rejected."""
-        state = _make_state_with_assembler(recipe=0)
-        state = state.replace(
-            player_positions=state.player_positions.at[0].set([1, 0]),
-            player_directions=state.player_directions.at[0].set(
-                Direction.LEFT,
-            ),
-            player_inventory=state.player_inventory.at[0, ItemType.COPPER_ORE].set(10),
+        in_c0 = int(new.ent_asm_in_count[eid, 0])
+        in_c1 = int(new.ent_asm_in_count[eid, 1])
+        assert in_c0 + in_c1 == 1
+
+    def test_second_item_type_goes_to_slot1(self, state_factory) -> None:
+        """A different item type fills the second input slot."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[2, 0],
         )
-        new_state = deposit_to_adjacent(state, 0, ItemType.COPPER_ORE)
-        assert int(new_state.machine_inventory[0, 0, ItemType.COPPER_ORE]) == 0
-        assert int(new_state.player_inventory[0, ItemType.COPPER_ORE]) == 10
+        state = state.replace(
+            player_positions=jnp.array([[1, 0]], dtype=jnp.int16),
+            player_directions=jnp.array(
+                [int(Direction.LEFT)],
+                dtype=jnp.int8,
+            ),
+            player_inventory=state.player_inventory.at[0, int(ItemType.COPPER_ORE)].set(
+                10
+            ),
+        )
+        new = deposit_to_adjacent(state, 0, int(ItemType.COPPER_ORE))
+        eid = _eid(new, 0, 0)
+
+        assert int(new.ent_asm_in_count[eid, 0]) == 2
+        assert int(new.ent_asm_in_count[eid, 1]) == 1
+        assert int(new.ent_asm_in_type[eid, 1]) == int(ItemType.COPPER_ORE)
 
 
 class TestAssemblerPlacementAndPickup:
-    """Assembler should round-trip through place and pickup."""
+    """Assembler should be placed and queryable in entity state."""
 
-    def test_assembler_exists_in_state(self) -> None:
+    def test_assembler_exists_in_state(self, state_factory) -> None:
         """Placing an assembler sets the correct machine type."""
-        state = _make_state_with_assembler()
+        state = _make_assembler_state(state_factory)
         assert int(state.machine_types[0, 0]) == int(MachineType.ASSEMBLER)
 
-    def test_progress_decrements(self) -> None:
+    def test_progress_decrements(self, state_factory) -> None:
         """Power > 1 should decrement by 1 each tick."""
-        state = _make_state_with_assembler(power=5)
-        new_state = run_assemblers(state)
-        assert int(new_state.machine_power[0, 0]) == 4
+        state = _make_assembler_state(state_factory, power=5)
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+        assert int(new.ent_power[eid]) == 4

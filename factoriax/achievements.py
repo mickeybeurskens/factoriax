@@ -29,7 +29,6 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, MachineType
-from factoriax.recipes import RECIPE_OUTPUTS
 from factoriax.state import EnvState
 
 
@@ -163,9 +162,7 @@ NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 #: Shape ``(MAX_ACHIEVEMENTS,)`` — slots beyond the 17 core achievements
 #: are zero so they contribute no reward.
 CORE_ACHIEVEMENT_WEIGHTS = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
-CORE_ACHIEVEMENT_WEIGHTS = CORE_ACHIEVEMENT_WEIGHTS.at[:NUM_ACHIEVEMENTS].set(
-    1.0
-)
+CORE_ACHIEVEMENT_WEIGHTS = CORE_ACHIEVEMENT_WEIGHTS.at[:NUM_ACHIEVEMENTS].set(1.0)
 
 # Miner machine inventory layout (mirrors machines.py constants).
 _MINER_FUEL_SLOT: int = 0
@@ -209,9 +206,10 @@ def _any_miner_has_fuel(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one miner is fueled.
     """
-    is_miner = state.machine_types == MachineType.MINER
-    has_coal = state.machine_inventory[..., ItemType.COAL] > 0
-    return jnp.any(is_miner & has_coal)
+    is_miner = state.ent_type == MachineType.MINER
+    is_active = state.ent_y >= 0
+    has_fuel = state.ent_fuel > 0
+    return jnp.any(is_miner & is_active & has_fuel)
 
 
 def _any_miner_has_output(state: EnvState) -> jax.Array:
@@ -223,13 +221,10 @@ def _any_miner_has_output(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one miner output is non-empty.
     """
-    is_miner = state.machine_types == MachineType.MINER
-    # Miner output is any non-coal, non-zero item type (ore).
-    ore_mask = state.machine_inventory[..., 1:] > 0  # skip EMPTY
-    # Exclude coal (index 1 in the full array, index 0 in sliced).
-    ore_only = ore_mask.at[..., 0].set(False)  # ItemType.COAL is index 1
-    has_output = jnp.any(ore_only, axis=-1)
-    return jnp.any(is_miner & has_output)
+    is_miner = state.ent_type == MachineType.MINER
+    is_active = state.ent_y >= 0
+    has_output = state.ent_buf_count > 0
+    return jnp.any(is_miner & is_active & has_output)
 
 
 def _any_pallet_has_items(state: EnvState) -> jax.Array:
@@ -241,12 +236,10 @@ def _any_pallet_has_items(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one pallet slot is non-empty.
     """
-    is_pallet = state.machine_types == MachineType.PALLET
-    has_items = jnp.any(state.machine_inventory > 0, axis=-1)
-    return jnp.any(is_pallet & has_items)
-
-
-_ASSEMBLER_OUTPUT_SLOT: int = 3
+    is_pallet = state.ent_type == MachineType.PALLET
+    is_active = state.ent_y >= 0
+    has_items = state.ent_buf_count > 0
+    return jnp.any(is_pallet & is_active & has_items)
 
 
 def _any_assembler_has_output(state: EnvState) -> jax.Array:
@@ -258,17 +251,10 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one assembler output is non-empty.
     """
-    is_asm = state.machine_types == MachineType.ASSEMBLER
-    # Assembler output: any item type with count > 0 that isn't an
-    # input resource (check all non-zero types; good enough since
-    # assemblers only produce via recipes).
-    recipe = state.machine_selected_recipe
-    recipe_out = RECIPE_OUTPUTS[recipe]
-    h, w = state.machine_types.shape
-    rows = jnp.broadcast_to(jnp.arange(h)[:, None], (h, w))
-    cols = jnp.broadcast_to(jnp.arange(w)[None, :], (h, w))
-    has_output = state.machine_inventory[rows, cols, recipe_out] > 0
-    return jnp.any(is_asm & has_output)
+    is_asm = state.ent_type == MachineType.ASSEMBLER
+    is_active = state.ent_y >= 0
+    has_output = state.ent_asm_out_count > 0
+    return jnp.any(is_asm & is_active & has_output)
 
 
 def core_game_conditions(state: EnvState) -> jax.Array:

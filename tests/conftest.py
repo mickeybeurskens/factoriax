@@ -105,7 +105,8 @@ def state_factory():
         elif player_position is not None:
             if isinstance(player_position, tuple):
                 positions = jnp.array(
-                    [player_position], dtype=jnp.int16,
+                    [player_position],
+                    dtype=jnp.int16,
                 )
             else:
                 positions = player_position.reshape(1, 2).astype(jnp.int16)
@@ -118,11 +119,14 @@ def state_factory():
             directions = player_directions.astype(jnp.int8)
         elif player_direction is not None:
             directions = jnp.array(
-                [player_direction], dtype=jnp.int8,
+                [player_direction],
+                dtype=jnp.int8,
             )
         else:
             directions = jnp.full(
-                num_players, Direction.DOWN, dtype=jnp.int8,
+                num_players,
+                Direction.DOWN,
+                dtype=jnp.int8,
             )
 
         inv_shape = (num_players, NUM_ITEM_TYPES)

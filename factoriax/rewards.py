@@ -42,9 +42,7 @@ def _proximity(state: EnvState, tile_mask: jax.Array) -> jax.Array:
     pos = state.player_positions[state.selected_player]
     px, py = pos[0], pos[1]
     map_h, map_w = state.map.shape
-    grid_y, grid_x = jnp.meshgrid(
-        jnp.arange(map_h), jnp.arange(map_w), indexing="ij"
-    )
+    grid_y, grid_x = jnp.meshgrid(jnp.arange(map_h), jnp.arange(map_w), indexing="ij")
     dist = jnp.abs(grid_x - px) + jnp.abs(grid_y - py)
     large = jnp.int32(map_h + map_w)
     min_dist = jnp.min(jnp.where(tile_mask, dist, large))
@@ -238,9 +236,9 @@ def miner_output_reward(
 ) -> jax.Array:
     """Reward for each ore item produced by placed miners.
 
-    Counts the total increase in ore item counts (coal, iron, copper)
-    across all miner-type machine inventories. This gives a dense
-    signal that fires every tick a fueled miner extracts ore.
+    Counts the total increase in buffer item counts across all
+    miner-type entities. This gives a dense signal that fires every
+    tick a fueled miner extracts ore.
 
     Args:
         prev_state: State immediately before the step.
@@ -251,20 +249,9 @@ def miner_output_reward(
     Returns:
         Scalar float32 reward.
     """
-    is_miner = new_state.machine_types == MachineType.MINER
-    ore_types = jnp.array(
-        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
-    )
-    prev_output = jnp.where(
-        is_miner[..., None],
-        prev_state.machine_inventory[..., ore_types],
-        0,
-    )
-    new_output = jnp.where(
-        is_miner[..., None],
-        new_state.machine_inventory[..., ore_types],
-        0,
-    )
+    is_miner = (new_state.ent_type == MachineType.MINER) & (new_state.ent_y >= 0)
+    prev_output = jnp.where(is_miner, prev_state.ent_buf_count, 0)
+    new_output = jnp.where(is_miner, new_state.ent_buf_count, 0)
     delta = jnp.sum(new_output) - jnp.sum(prev_output)
     reward: jax.Array = delta.astype(jnp.float32)
     return reward
@@ -302,22 +289,22 @@ def pallet_filling_reward(
 ) -> jax.Array:
     """Reward of 1.0 for each item deposited into a pallet machine.
 
-    Counts the total increase in item counts across all inventory slots
-    of pallet-type machines.  This gives a dense signal for every
-    successful deposit action rather than waiting for a full stack of 64.
+    Counts the total increase in buffer item counts across all
+    pallet-type entities. This gives a dense signal for every
+    successful deposit action rather than waiting for a full stack.
 
     Args:
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface uniformity).
+        params: Environment parameters (unused; present for interface
+            uniformity).
 
     Returns:
         Scalar float32 reward.
     """
-    is_pallet = new_state.machine_types == MachineType.PALLET
-    pallet_mask = is_pallet[..., None]
-    prev_counts = jnp.where(pallet_mask, prev_state.machine_inventory, 0)
-    new_counts = jnp.where(pallet_mask, new_state.machine_inventory, 0)
+    is_pallet = (new_state.ent_type == MachineType.PALLET) & (new_state.ent_y >= 0)
+    prev_counts = jnp.where(is_pallet, prev_state.ent_buf_count, 0)
+    new_counts = jnp.where(is_pallet, new_state.ent_buf_count, 0)
     delta = jnp.sum(new_counts) - jnp.sum(prev_counts)
     reward: jax.Array = delta.astype(jnp.float32)
     return reward
@@ -355,32 +342,23 @@ def player_inventory_reward(
 
 def _ore_proximity(state: EnvState) -> jax.Array:
     """Proximity to the nearest mineable ore tile."""
-    is_ore = jnp.any(
-        state.map[..., None] == MINEABLE_BLOCKS, axis=-1
-    )
+    is_ore = jnp.any(state.map[..., None] == MINEABLE_BLOCKS, axis=-1)
     return _proximity(state, is_ore)
 
 
-def _mining_delta(
-    prev: EnvState, new: EnvState
-) -> jax.Array:
+def _mining_delta(prev: EnvState, new: EnvState) -> jax.Array:
     """Total ore items mined this step."""
     ore = jnp.array(
         [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
-    return jnp.sum(
-        new.items_mined[ore] - prev.items_mined[ore]
-    ).astype(jnp.float32)
+    return jnp.sum(new.items_mined[ore] - prev.items_mined[ore]).astype(jnp.float32)
 
 
-def _pallet_filling_delta(
-    prev: EnvState, new: EnvState
-) -> jax.Array:
+def _pallet_filling_delta(prev: EnvState, new: EnvState) -> jax.Array:
     """Total items deposited into pallets this step."""
-    is_pallet = new.machine_types == MachineType.PALLET
-    mask = is_pallet[..., None]
-    prev_c = jnp.sum(jnp.where(mask, prev.machine_inventory, 0))
-    new_c = jnp.sum(jnp.where(mask, new.machine_inventory, 0))
+    is_pallet = (new.ent_type == MachineType.PALLET) & (new.ent_y >= 0)
+    prev_c = jnp.sum(jnp.where(is_pallet, prev.ent_buf_count, 0))
+    new_c = jnp.sum(jnp.where(is_pallet, new.ent_buf_count, 0))
     return (new_c - prev_c).astype(jnp.float32)
 
 
@@ -388,8 +366,7 @@ def _inventory_delta(prev: EnvState, new: EnvState) -> jax.Array:
     """Net items gained in the selected player's inventory."""
     p = new.selected_player
     return (
-        jnp.sum(new.player_inventory[p])
-        - jnp.sum(prev.player_inventory[p])
+        jnp.sum(new.player_inventory[p]) - jnp.sum(prev.player_inventory[p])
     ).astype(jnp.float32)
 
 
@@ -420,10 +397,15 @@ def dense_craft_reward(
     mining = _mining_delta(prev_state, new_state)
 
     # Detect any crafting: total placeable items increased.
-    placeables = jnp.array([
-        ItemType.MINER, ItemType.PALLET, ItemType.CONVEYOR_BELT,
-        ItemType.ASSEMBLER,
-    ], dtype=jnp.int32)
+    placeables = jnp.array(
+        [
+            ItemType.MINER,
+            ItemType.PALLET,
+            ItemType.CONVEYOR_BELT,
+            ItemType.ASSEMBLER,
+        ],
+        dtype=jnp.int32,
+    )
     prev_count = jnp.sum(prev_state.player_inventory[0, placeables])
     new_count = jnp.sum(new_state.player_inventory[0, placeables])
     craft_delta = jnp.maximum(new_count - prev_count, 0)
@@ -448,9 +430,7 @@ def dense_fill_pallet_reward(
         Scalar float32 reward.
     """
     ore_prox = _ore_proximity(new_state)
-    pallet_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.PALLET
-    )
+    pallet_prox = _proximity(new_state, new_state.machine_types == MachineType.PALLET)
     mining = _mining_delta(prev_state, new_state)
     filling = _pallet_filling_delta(prev_state, new_state)
     return ore_prox + pallet_prox + mining + 5.0 * filling
@@ -494,14 +474,18 @@ def dense_withdraw_reward(
     Returns:
         Scalar float32 reward.
     """
-    ore_types = jnp.array(
-        [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
-    )
     has_output = (
-        (new_state.machine_types == MachineType.MINER)
-        & (jnp.sum(new_state.machine_inventory[..., ore_types], axis=-1) > 0)
+        (new_state.ent_type == MachineType.MINER)
+        & (new_state.ent_y >= 0)
+        & (new_state.ent_buf_count > 0)
     )
-    proximity = _proximity(new_state, has_output)
+    # Build a spatial mask from entity positions for proximity.
+    h, w = new_state.map.shape
+    has_output_grid = jnp.zeros((h, w), dtype=jnp.bool_)
+    has_output_grid = has_output_grid.at[new_state.ent_y, new_state.ent_x].set(
+        has_output
+    )
+    proximity = _proximity(new_state, has_output_grid)
     inv_gain = _inventory_delta(prev_state, new_state)
     return proximity + 10.0 * jnp.maximum(inv_gain, 0.0)
 
@@ -521,9 +505,7 @@ def dense_deposit_reward(
     Returns:
         Scalar float32 reward.
     """
-    pallet_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.PALLET
-    )
+    pallet_prox = _proximity(new_state, new_state.machine_types == MachineType.PALLET)
     filling = _pallet_filling_delta(prev_state, new_state)
     return pallet_prox + 5.0 * filling
 
@@ -568,12 +550,8 @@ def dense_belt_reward(
     Returns:
         Scalar float32 reward.
     """
-    prev_belts = jnp.sum(
-        prev_state.machine_types == MachineType.CONVEYOR_BELT
-    )
-    new_belts = jnp.sum(
-        new_state.machine_types == MachineType.CONVEYOR_BELT
-    )
+    prev_belts = jnp.sum(prev_state.machine_types == MachineType.CONVEYOR_BELT)
+    new_belts = jnp.sum(new_state.machine_types == MachineType.CONVEYOR_BELT)
     belt_placed = jnp.maximum(new_belts - prev_belts, 0)
     filling = _pallet_filling_delta(prev_state, new_state)
     return 5.0 * belt_placed.astype(jnp.float32) + 5.0 * filling
@@ -595,17 +573,11 @@ def dense_fuel_collect_reward(
     Returns:
         Scalar float32 reward.
     """
-    miner_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.MINER
-    )
-    # Fuel deposited = coal count increase in miner inventories.
-    is_miner = new_state.machine_types == MachineType.MINER
-    prev_fuel = jnp.sum(jnp.where(
-        is_miner, prev_state.machine_inventory[..., ItemType.COAL], 0
-    ))
-    new_fuel = jnp.sum(jnp.where(
-        is_miner, new_state.machine_inventory[..., ItemType.COAL], 0
-    ))
+    miner_prox = _proximity(new_state, new_state.machine_types == MachineType.MINER)
+    # Fuel deposited = coal count increase in miner entities.
+    is_miner = (new_state.ent_type == MachineType.MINER) & (new_state.ent_y >= 0)
+    prev_fuel = jnp.sum(jnp.where(is_miner, prev_state.ent_fuel, 0))
+    new_fuel = jnp.sum(jnp.where(is_miner, new_state.ent_fuel, 0))
     fuel_delta = jnp.maximum(new_fuel - prev_fuel, 0).astype(jnp.float32)
     inv_gain = jnp.maximum(_inventory_delta(prev_state, new_state), 0.0)
     return miner_prox + 5.0 * fuel_delta + 10.0 * inv_gain
@@ -627,30 +599,28 @@ def dense_assembler_reward(
     Returns:
         Scalar float32 reward.
     """
-    asm_prox = _proximity(
-        new_state, new_state.machine_types == MachineType.ASSEMBLER
+    asm_prox = _proximity(new_state, new_state.machine_types == MachineType.ASSEMBLER)
+    # Input deposited = total items in assembler entity buffers.
+    is_asm = (new_state.ent_type == MachineType.ASSEMBLER) & (new_state.ent_y >= 0)
+    prev_inputs = jnp.sum(
+        jnp.where(
+            is_asm[:, None],
+            prev_state.ent_asm_in_count,
+            0,
+        )
     )
-    # Input deposited = total items in assembler inventories.
-    is_asm = new_state.machine_types == MachineType.ASSEMBLER
-    prev_inputs = jnp.sum(jnp.where(
-        is_asm[..., None],
-        prev_state.machine_inventory,
-        0,
-    ))
-    new_inputs = jnp.sum(jnp.where(
-        is_asm[..., None],
-        new_state.machine_inventory,
-        0,
-    ))
-    input_delta = jnp.maximum(
-        new_inputs - prev_inputs, 0
-    ).astype(jnp.float32)
+    new_inputs = jnp.sum(
+        jnp.where(
+            is_asm[:, None],
+            new_state.ent_asm_in_count,
+            0,
+        )
+    )
+    input_delta = jnp.maximum(new_inputs - prev_inputs, 0).astype(jnp.float32)
     # Science packs gained in player inventory.
     prev_packs = _item_count(prev_state, ItemType.BASIC_SCIENCE_PACK)
     new_packs = _item_count(new_state, ItemType.BASIC_SCIENCE_PACK)
-    pack_delta = jnp.maximum(
-        new_packs - prev_packs, 0
-    ).astype(jnp.float32)
+    pack_delta = jnp.maximum(new_packs - prev_packs, 0).astype(jnp.float32)
     return asm_prox + 2.0 * input_delta + 10.0 * pack_delta
 
 
@@ -670,9 +640,7 @@ def dense_research_reward(
     Returns:
         Scalar float32 reward.
     """
-    delta = jnp.sum(
-        new_state.research_progress - prev_state.research_progress
-    )
+    delta = jnp.sum(new_state.research_progress - prev_state.research_progress)
     return 10.0 * delta.astype(jnp.float32)
 
 
@@ -692,9 +660,8 @@ def dense_repair_reward(
     Returns:
         Scalar float32 reward.
     """
-    is_damaged = (
-        (new_state.machine_types != MachineType.NONE)
-        & (new_state.machine_health < DEFAULT_MACHINE_MAX_HEALTH)
+    is_damaged = (new_state.machine_types != MachineType.NONE) & (
+        new_state.machine_health < DEFAULT_MACHINE_MAX_HEALTH
     )
     proximity = _proximity(new_state, is_damaged)
     prev_full = jnp.sum(

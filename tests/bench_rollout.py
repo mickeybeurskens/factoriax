@@ -58,9 +58,7 @@ def bench_single_env(num_steps: int = 2000) -> float:
     return num_steps / (t1 - t0)
 
 
-def bench_batched_env(
-    num_envs: int = 64, num_steps: int = 500
-) -> float:
+def bench_batched_env(num_envs: int = 64, num_steps: int = 500) -> float:
     """Benchmark vmapped multi-environment rollout.
 
     Args:
@@ -79,9 +77,7 @@ def bench_batched_env(
     vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
     obs_batch, state_batch = vmap_reset(reset_keys, params)
 
-    vmap_step = jax.jit(
-        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
-    )
+    vmap_step = jax.jit(jax.vmap(env.step_env, in_axes=(0, 0, 0, None)))
 
     # Warmup.
     rng, warmup_key = random.split(rng)
@@ -94,13 +90,9 @@ def bench_batched_env(
 
     # Timed rollout.
     rng, action_rng = random.split(rng)
-    all_actions = random.randint(
-        action_rng, (num_steps, num_envs), 0, NUM_ACTIONS
-    )
+    all_actions = random.randint(action_rng, (num_steps, num_envs), 0, NUM_ACTIONS)
     rng, *step_rngs = random.split(rng, num_steps + 1)
-    all_keys = jnp.array(
-        [random.split(k, num_envs) for k in step_rngs]
-    )
+    all_keys = jnp.array([random.split(k, num_envs) for k in step_rngs])
 
     jax.block_until_ready(state_batch)
 
@@ -123,10 +115,7 @@ if __name__ == "__main__":
 
     for n_envs in [64, 256, 1024, 4096, 8192, 16384]:
         steps = max(20, 500 // max(1, n_envs // 64))
-        print(
-            f"Benchmarking batched rollout"
-            f" ({n_envs} envs x {steps} steps)..."
-        )
+        print(f"Benchmarking batched rollout ({n_envs} envs x {steps} steps)...")
         try:
             batched_sps = bench_batched_env(n_envs, steps)
             print(f"  {batched_sps:.0f} steps/sec")

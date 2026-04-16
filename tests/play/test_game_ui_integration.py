@@ -48,14 +48,20 @@ def ui(params, kb_lookup) -> GameUI:
 def _key(key: int, mod: int = 0) -> pygame.event.Event:
     """Create a KEYDOWN event."""
     return pygame.event.Event(
-        pygame.KEYDOWN, key=key, mod=mod, unicode="", scancode=0,
+        pygame.KEYDOWN,
+        key=key,
+        mod=mod,
+        unicode="",
+        scancode=0,
     )
 
 
 def _click(x: int, y: int) -> pygame.event.Event:
     """Create a MOUSEBUTTONDOWN event."""
     return pygame.event.Event(
-        pygame.MOUSEBUTTONDOWN, button=1, pos=(x, y),
+        pygame.MOUSEBUTTONDOWN,
+        button=1,
+        pos=(x, y),
     )
 
 
@@ -84,7 +90,9 @@ class TestWorldKeys:
         assert result.action == int(Action.MINE)
 
     def test_interact_places_on_empty_tile(
-        self, ui, state_factory,
+        self,
+        ui,
+        state_factory,
     ) -> None:
         """E places selected machine when facing empty tile."""
         state = state_factory(
@@ -95,7 +103,9 @@ class TestWorldKeys:
         assert result.action == int(Action.PLACE_MINER)
 
     def test_interact_picks_up_machine(
-        self, ui, state_factory,
+        self,
+        ui,
+        state_factory,
     ) -> None:
         """E picks up when facing a machine."""
         state = state_factory(
@@ -103,8 +113,11 @@ class TestWorldKeys:
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             machine_types=jnp.zeros(
-                (8, 8), dtype=jnp.int32,
-            ).at[1, 1].set(int(MachineType.MINER)),
+                (8, 8),
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(int(MachineType.MINER)),
         )
         result = ui.handle_event(_key(pygame.K_e), state)
         assert result.action == int(Action.PICKUP)
@@ -116,11 +129,17 @@ class TestWorldKeys:
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             machine_types=jnp.zeros(
-                (8, 8), dtype=jnp.int32,
-            ).at[1, 1].set(int(MachineType.MINER)),
+                (8, 8),
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(int(MachineType.MINER)),
             machine_direction=jnp.zeros(
-                (8, 8), dtype=jnp.int32,
-            ).at[1, 1].set(int(Direction.DOWN)),
+                (8, 8),
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(int(Direction.DOWN)),
         )
         result = ui.handle_event(_key(pygame.K_r), state)
         # DOWN -> clockwise -> LEFT = ROTATE_LEFT
@@ -157,7 +176,8 @@ class TestWorldKeys:
             num_players=2,
         )
         result = ui.handle_event(
-            _key(pygame.K_2, pygame.KMOD_CTRL), state,
+            _key(pygame.K_2, pygame.KMOD_CTRL),
+            state,
         )
         assert isinstance(result, GameUIResult)
 
@@ -291,8 +311,11 @@ class TestMachineContext:
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             machine_types=jnp.zeros(
-                (8, 8), dtype=jnp.int32,
-            ).at[1, 1].set(int(MachineType.MINER)),
+                (8, 8),
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(int(MachineType.MINER)),
         )
 
     def test_open_machine(self, ui, machine_state) -> None:
@@ -310,7 +333,9 @@ class TestMachineContext:
         assert ps.machine_panel_active is False
 
     def test_machine_nav_left_right_player_panel(
-        self, ui, machine_state,
+        self,
+        ui,
+        machine_state,
     ) -> None:
         """A/D on player panel cycles selected item."""
         ps = ui.play_state
@@ -322,7 +347,9 @@ class TestMachineContext:
         assert ps.selected_item != 1
 
     def test_machine_nav_left_right_machine_panel(
-        self, ui, machine_state,
+        self,
+        ui,
+        machine_state,
     ) -> None:
         """A/D on machine panel cycles focused item (no crash)."""
         ps = ui.play_state
@@ -435,7 +462,9 @@ class TestHelpContext:
     """Help overlay interaction."""
 
     def test_controls_from_pause_opens_help(
-        self, ui, state_factory,
+        self,
+        ui,
+        state_factory,
     ) -> None:
         """Selecting Controls in pause menu opens help overlay."""
         state = state_factory(
@@ -489,7 +518,12 @@ class TestRenderFrame:
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
         )
         frame, regions = ui.render_frame(
-            state, 256, 256, 32, 0, 0,
+            state,
+            256,
+            256,
+            32,
+            0,
+            0,
         )
         assert frame.shape == (256, 256, 3)
         assert isinstance(regions, list)
@@ -499,14 +533,22 @@ class TestRenderFrame:
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
             machine_types=jnp.zeros(
-                (8, 8), dtype=jnp.int32,
-            ).at[1, 1].set(int(MachineType.MINER)),
+                (8, 8),
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(int(MachineType.MINER)),
         )
         ps = ui.play_state
         ps.machine_open = True
         ps.machine_tx, ps.machine_ty = 1, 1
         frame, regions = ui.render_frame(
-            state, 256, 256, 32, 0, 0,
+            state,
+            256,
+            256,
+            32,
+            0,
+            0,
         )
         assert frame.shape == (256, 256, 3)
 
@@ -517,7 +559,12 @@ class TestRenderFrame:
         )
         ui.play_state.inventory_open = True
         frame, regions = ui.render_frame(
-            state, 512, 512, 32, 0, 0,
+            state,
+            512,
+            512,
+            32,
+            0,
+            0,
         )
         assert frame.shape == (512, 512, 3)
 
@@ -528,7 +575,12 @@ class TestRenderFrame:
         )
         ui.play_state.pause_open = True
         frame, regions = ui.render_frame(
-            state, 256, 256, 32, 0, 0,
+            state,
+            256,
+            256,
+            32,
+            0,
+            0,
         )
         assert frame.shape == (256, 256, 3)
 
@@ -539,7 +591,12 @@ class TestRenderFrame:
         )
         ui.play_state.research_open = True
         frame, regions = ui.render_frame(
-            state, 256, 256, 32, 0, 0,
+            state,
+            256,
+            256,
+            32,
+            0,
+            0,
         )
         assert frame.shape == (256, 256, 3)
 
@@ -550,7 +607,12 @@ class TestRenderFrame:
         )
         ui.play_state.help_open = True
         frame, regions = ui.render_frame(
-            state, 256, 256, 32, 0, 0,
+            state,
+            256,
+            256,
+            32,
+            0,
+            0,
         )
         assert frame.shape == (256, 256, 3)
 

@@ -116,8 +116,8 @@ class TestBlitScrollView:
         blit_scroll_view(
             overlay, content, vp_x=40, vp_y=80, vp_w=60, vp_h=100, scroll_offset=0
         )
-        assert overlay[80, 40, 3] == 255   # inside viewport — has content
-        assert overlay[79, 40, 3] == 0    # above viewport — untouched
+        assert overlay[80, 40, 3] == 255  # inside viewport — has content
+        assert overlay[79, 40, 3] == 0  # above viewport — untouched
 
     def test_scrollbar_thumb_at_top_when_offset_zero(self) -> None:
         """Scrollbar thumb starts at the top when scroll_offset is 0."""
@@ -177,9 +177,7 @@ class TestScrollAdjustRegions:
     def test_translates_x_by_viewport_x(self) -> None:
         """Region x is shifted by vp_x."""
         r = ClickRegion(x=5, y=0, w=80, h=20, action="select_recipe", param=0)
-        result = scroll_adjust_regions(
-            [r], vp_x=20, vp_y=0, vp_h=200, scroll_offset=0
-        )
+        result = scroll_adjust_regions([r], vp_x=20, vp_y=0, vp_h=200, scroll_offset=0)
         assert result[0].x == 25
 
     def test_scroll_offset_reduces_screen_y(self) -> None:
@@ -209,17 +207,13 @@ class TestScrollAdjustRegions:
     def test_preserves_action_and_param(self) -> None:
         """Action and param fields are preserved through the transform."""
         r = ClickRegion(x=0, y=0, w=80, h=20, action="select_recipe", param=3)
-        result = scroll_adjust_regions(
-            [r], vp_x=0, vp_y=0, vp_h=200, scroll_offset=0
-        )
+        result = scroll_adjust_regions([r], vp_x=0, vp_y=0, vp_h=200, scroll_offset=0)
         assert result[0].action == "select_recipe"
         assert result[0].param == 3
 
     def test_empty_input_returns_empty(self) -> None:
         """Empty input list returns empty list."""
-        result = scroll_adjust_regions(
-            [], vp_x=0, vp_y=0, vp_h=200, scroll_offset=0
-        )
+        result = scroll_adjust_regions([], vp_x=0, vp_y=0, vp_h=200, scroll_offset=0)
         assert result == []
 
     def test_partially_visible_region_included(self) -> None:
@@ -254,7 +248,10 @@ class TestRenderAchievementMenuScroll:
         achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
         frame0 = render_achievement_menu(achievements, 480, 480, scroll_offset=0)
         frame1 = render_achievement_menu(
-            achievements, 480, 480, scroll_offset=SCROLL_STEP,
+            achievements,
+            480,
+            480,
+            scroll_offset=SCROLL_STEP,
         )
         assert not np.array_equal(frame0, frame1)
 
@@ -262,10 +259,16 @@ class TestRenderAchievementMenuScroll:
         """An offset far beyond the content end is clamped; result is stable."""
         achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
         frame_huge = render_achievement_menu(
-            achievements, 480, 480, scroll_offset=999999,
+            achievements,
+            480,
+            480,
+            scroll_offset=999999,
         )
         frame_max = render_achievement_menu(
-            achievements, 480, 480, scroll_offset=999998,
+            achievements,
+            480,
+            480,
+            scroll_offset=999998,
         )
         assert np.array_equal(frame_huge, frame_max)
 

@@ -46,12 +46,16 @@ def debugger(env_and_state: tuple) -> Debugger:
         return jnp.int32(Action.NOOP)
 
     def dummy_reward(
-        prev: object, new: object, p: object,
+        prev: object,
+        new: object,
+        p: object,
     ) -> jax.Array:
         return jnp.float32(1.0)
 
     def dummy_constraint(
-        prev: object, new: object, p: object,
+        prev: object,
+        new: object,
+        p: object,
     ) -> jax.Array:
         return jnp.array([0.5, 0.1], dtype=jnp.float32)
 

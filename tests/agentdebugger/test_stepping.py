@@ -41,7 +41,8 @@ class TestExecuteStep:
         debugger._execute_step(int(Action.NOOP))
         assert len(debugger._costs) == 1
         np.testing.assert_array_almost_equal(
-            debugger._costs[0], [0.5, 0.1],
+            debugger._costs[0],
+            [0.5, 0.1],
         )
 
     def test_advances_cursor(self, debugger: Debugger) -> None:
@@ -51,7 +52,8 @@ class TestExecuteStep:
         assert debugger._dbg.current_step == 1
 
     def test_invalidates_chart_caches(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """Chart caches are cleared after stepping."""
         debugger._dbg.reward_chart_cache = np.zeros((10, 10, 3))
@@ -61,7 +63,8 @@ class TestExecuteStep:
         assert debugger._dbg.cost_chart_cache is None
 
     def test_multiple_steps_accumulate(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """Multiple steps build up the history correctly."""
         for i in range(5):
@@ -73,7 +76,8 @@ class TestExecuteStep:
         assert debugger._dbg.current_step == 5
 
     def test_state_changes_after_step(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """The new state differs from the initial state (timestep advances)."""
         initial = debugger._states[0]
@@ -86,7 +90,8 @@ class TestStepForward:
     """Tests for Debugger._step_forward."""
 
     def test_ai_mode_queries_policy(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """In AI mode, step_forward calls the policy and steps."""
         debugger._dbg.mode = "ai"
@@ -99,7 +104,8 @@ class TestStepForward:
         assert len(debugger._states) == 2
 
     def test_human_mode_sets_awaiting(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """In human mode, step_forward sets the awaiting flag."""
         debugger._dbg.mode = "human"
@@ -111,7 +117,8 @@ class TestStepForward:
         assert len(debugger._states) == 1  # No step taken yet.
 
     def test_done_blocks_stepping(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """No step is taken after the environment is done."""
         debugger._dbg.done = True
@@ -122,7 +129,8 @@ class TestStepForward:
         assert len(debugger._states) == 1
 
     def test_cursor_mid_history_advances_without_step(
-        self, debugger: Debugger,
+        self,
+        debugger: Debugger,
     ) -> None:
         """When cursor is behind history head, advance cursor only."""
         debugger._execute_step(int(Action.NOOP))
@@ -144,27 +152,32 @@ class TestNoRewardOrConstraint:
         """Debugger with no reward or constraint functions."""
         env, params, state = env_and_state
         return Debugger(
-            env, params, state,
+            env,
+            params,
+            state,
             policy=lambda obs: jnp.int32(Action.NOOP),
             seed=0,
         )
 
     def test_no_rewards_recorded(
-        self, bare_debugger: Debugger,
+        self,
+        bare_debugger: Debugger,
     ) -> None:
         """No rewards list entries when reward_fn is None."""
         bare_debugger._execute_step(int(Action.NOOP))
         assert bare_debugger._rewards == []
 
     def test_no_costs_recorded(
-        self, bare_debugger: Debugger,
+        self,
+        bare_debugger: Debugger,
     ) -> None:
         """No costs list entries when constraint_fn is None."""
         bare_debugger._execute_step(int(Action.NOOP))
         assert bare_debugger._costs == []
 
     def test_stepping_still_works(
-        self, bare_debugger: Debugger,
+        self,
+        bare_debugger: Debugger,
     ) -> None:
         """Environment stepping works without reward/constraint."""
         bare_debugger._execute_step(int(Action.MINE))
@@ -180,7 +193,9 @@ class TestMultiPlayer:
         """Two-player debugger where human controls player 0."""
         env, _ = make_factoriax_env()
         params = EnvParams(
-            map_width=8, map_height=8, num_players=2,
+            map_width=8,
+            map_height=8,
+            num_players=2,
         )
         _, state = env.reset_env(jax.random.PRNGKey(0), params)
 
@@ -191,7 +206,9 @@ class TestMultiPlayer:
             return jnp.int32(Action.MINE)
 
         dbg = Debugger(
-            env, params, state,
+            env,
+            params,
+            state,
             policy=tracking_policy,
             obs_fn=global_array,
             player_idx=0,
@@ -201,7 +218,8 @@ class TestMultiPlayer:
         return dbg
 
     def test_both_players_stepped(
-        self, mp_debugger: Debugger,
+        self,
+        mp_debugger: Debugger,
     ) -> None:
         """A single execute_step advances the timestep for all players."""
         initial_ts = int(mp_debugger._states[0].timestep)
@@ -211,7 +229,8 @@ class TestMultiPlayer:
         assert final_ts == initial_ts + 2
 
     def test_policy_called_for_other_player(
-        self, mp_debugger: Debugger,
+        self,
+        mp_debugger: Debugger,
     ) -> None:
         """The policy is queried for the non-controlled player."""
         mp_debugger._execute_step(int(Action.NOOP))
@@ -219,7 +238,8 @@ class TestMultiPlayer:
         assert len(mp_debugger._policy_calls) == 1  # type: ignore[attr-defined]
 
     def test_recorded_action_is_human_action(
-        self, mp_debugger: Debugger,
+        self,
+        mp_debugger: Debugger,
     ) -> None:
         """The recorded action is the human player's action."""
         mp_debugger._execute_step(int(Action.UP))

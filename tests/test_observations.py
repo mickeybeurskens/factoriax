@@ -142,9 +142,7 @@ class TestGlobalArray:
 
     def test_block_channel_correct(self, state_factory) -> None:
         """The first H*W elements (block channel) match the normalized map."""
-        world_map = jnp.array(
-            [[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32
-        )
+        world_map = jnp.array([[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32)
         state = state_factory(world_map=world_map)
         out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
         tiles = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
@@ -211,9 +209,7 @@ class TestGlobalArray:
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
 _LOCAL_OBS_SIZE = (
-    NUM_SPATIAL_CHANNELS * _WINDOW**2
-    + NUM_PLAYER_SCALARS
-    + 2 * NUM_TECHNOLOGIES
+    NUM_SPATIAL_CHANNELS * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
 )
 
 
@@ -225,9 +221,7 @@ class TestLocalArray:
         radius = 10
         window = 2 * radius + 1
         expected = (
-            NUM_SPATIAL_CHANNELS * window**2
-            + NUM_PLAYER_SCALARS
-            + 2 * NUM_TECHNOLOGIES
+            NUM_SPATIAL_CHANNELS * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
         )
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),

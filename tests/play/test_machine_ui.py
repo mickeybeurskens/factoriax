@@ -57,13 +57,16 @@ class TestMachineMenuClickRegions:
     """Click regions must cover machine items and player item types."""
 
     def test_empty_machine_has_no_machine_slot_regions(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """Empty machine inventory produces zero select_machine_slot regions."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
         )
         _, regions = render_machine_menu(state, _SW, _SH, 0, 0)
@@ -71,7 +74,8 @@ class TestMachineMenuClickRegions:
         assert len(slot_regions) == 0
 
     def test_populated_machine_has_correct_region_count(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """Machine with 3 item types produces 3 select_machine_slot regions."""
         shape = (4, 4)
@@ -88,7 +92,9 @@ class TestMachineMenuClickRegions:
         state = state_factory(
             world_map=jnp.zeros(shape, dtype=jnp.int32),
             machine_types=jnp.full(
-                shape, int(MachineType.ASSEMBLER), dtype=jnp.int32,
+                shape,
+                int(MachineType.ASSEMBLER),
+                dtype=jnp.int32,
             ),
             asm_in_type=asm_in_type,
             asm_in_count=asm_in_count,
@@ -111,7 +117,9 @@ class TestMachineMenuClickRegions:
         state = state_factory(
             world_map=jnp.zeros(shape, dtype=jnp.int32),
             machine_types=jnp.full(
-                shape, int(MachineType.ASSEMBLER), dtype=jnp.int32,
+                shape,
+                int(MachineType.ASSEMBLER),
+                dtype=jnp.int32,
             ),
             asm_in_type=asm_in_type,
             asm_in_count=asm_in_count,
@@ -128,7 +136,9 @@ class TestMachineMenuClickRegions:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
         )
         _, regions = render_machine_menu(state, _SW, _SH, 0, 0)
@@ -140,7 +150,9 @@ class TestMachineMenuClickRegions:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
         )
         _, regions = render_machine_menu(state, _SW, _SH, 0, 0)
@@ -162,7 +174,9 @@ class TestMachineMenuContents:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
         )
         result, _ = render_machine_menu(state, _SW, _SH, 0, 0)
@@ -171,13 +185,16 @@ class TestMachineMenuContents:
     def test_populated_miner(self, state_factory) -> None:
         """Miner with coal output renders without crash."""
         machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            (4, 4, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
         machine_inv = machine_inv.at[2, 3, int(ItemType.COAL)].set(12)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
@@ -187,7 +204,8 @@ class TestMachineMenuContents:
     def test_multiple_item_types(self, state_factory) -> None:
         """Assembler with multiple item types renders cleanly."""
         machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            (4, 4, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
         machine_inv = machine_inv.at[0, 0, int(ItemType.COPPER_ORE)].set(5)
         machine_inv = machine_inv.at[0, 0, int(ItemType.IRON_ORE)].set(5)
@@ -195,7 +213,9 @@ class TestMachineMenuContents:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.ASSEMBLER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.ASSEMBLER),
+                dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
@@ -205,7 +225,8 @@ class TestMachineMenuContents:
     def test_full_pallet_inventory(self, state_factory) -> None:
         """Pallet with many item types filled renders cleanly."""
         machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            (4, 4, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
         for i, item in enumerate(
             [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE, ItemType.MINER],
@@ -214,7 +235,9 @@ class TestMachineMenuContents:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.PALLET),
+                dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
@@ -229,7 +252,9 @@ class TestMachineMenuContents:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
             player_inventory=inv,
         )
@@ -246,26 +271,37 @@ class TestMachineMenuFocusedItem:
     """Focused-item state renders without crash for various item types."""
 
     @pytest.mark.parametrize(
-        "focused_item", [int(ItemType.COAL), int(ItemType.IRON_ORE)],
+        "focused_item",
+        [int(ItemType.COAL), int(ItemType.IRON_ORE)],
     )
     def test_focused_machine_items(
-        self, state_factory, focused_item: int,
+        self,
+        state_factory,
+        focused_item: int,
     ) -> None:
         """Different focused machine items render without crash."""
         machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            (4, 4, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
         machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(5)
         machine_inv = machine_inv.at[0, 0, int(ItemType.IRON_ORE)].set(3)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
         result, _ = render_machine_menu(
-            state, _SW, _SH, 0, 0, focused_machine_item=focused_item,
+            state,
+            _SW,
+            _SH,
+            0,
+            0,
+            focused_machine_item=focused_item,
         )
         assert result.shape == (_SH, _SW, 4)
 
@@ -274,17 +310,25 @@ class TestMachineMenuFocusedItem:
         [int(ItemType.COAL), int(ItemType.IRON_ORE), int(ItemType.COPPER_ORE)],
     )
     def test_focused_player_items(
-        self, state_factory, focused_item: int,
+        self,
+        state_factory,
+        focused_item: int,
     ) -> None:
         """Different focused player items render without crash."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.PALLET),
+                dtype=jnp.int32,
             ),
         )
         result, _ = render_machine_menu(
-            state, _SW, _SH, 0, 0,
+            state,
+            _SW,
+            _SH,
+            0,
+            0,
             machine_panel_active=False,
             selected_item=focused_item,
         )
@@ -327,7 +371,9 @@ class TestMachineMenuTileCoords:
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
             buffer_type=buf_type,
             buffer_count=buf_count,

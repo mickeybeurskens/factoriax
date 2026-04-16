@@ -24,7 +24,8 @@ class TestBuildPartialTrajectory:
     def test_dtypes(self) -> None:
         """Actions are int32, rewards are float32."""
         traj = build_partial_trajectory(
-            rewards=[0.5], actions=[7],
+            rewards=[0.5],
+            actions=[7],
         )
         assert traj.actions.dtype == np.int32
         assert traj.rewards is not None
@@ -56,7 +57,8 @@ class TestBuildPartialTrajectory:
         np.testing.assert_array_equal(traj.actions[0], [3, 7])
         assert traj.rewards is not None
         np.testing.assert_array_almost_equal(
-            traj.rewards[0], [10.0, 20.0],
+            traj.rewards[0],
+            [10.0, 20.0],
         )
 
 

@@ -60,9 +60,7 @@ def _run_random_episode(
         state = factoriax_step(step_key, state, action, params)
         return (state, key), None
 
-    (final_state, _), _ = lax.scan(
-        step_fn, (init_state, rng), None, length=num_steps
-    )
+    (final_state, _), _ = lax.scan(step_fn, (init_state, rng), None, length=num_steps)
     return init_state, final_state
 
 
@@ -105,18 +103,15 @@ class TestStateConsistency:
         assert jnp.all(final.player_inventory <= PLAYER_MAX_STACK)
 
     def test_machine_inventory_within_limits(self) -> None:
-        """Machine inventory counts must not exceed per-type stack limits."""
+        """Entity buffer counts must be non-negative and within stack limits."""
         env = FactoriaXEnv()
         _, final = _run_random_episode(
             random.PRNGKey(21), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
         )
 
-        machine_cap = MACHINE_MAX_STACK[final.machine_types]
-        assert jnp.all(final.machine_inventory >= 0)
-        assert jnp.all(
-            final.machine_inventory
-            <= machine_cap[:, :, None].astype(jnp.int16)
-        )
+        ent_cap = MACHINE_MAX_STACK[final.ent_type]
+        assert jnp.all(final.ent_buf_count >= 0)
+        assert jnp.all(final.ent_buf_count <= ent_cap)
 
     def test_block_resources_non_negative(self) -> None:
         """Block resources must never go negative."""
@@ -143,8 +138,7 @@ class TestItemConservation:
         the initial block resources when only mining (no machines).
         """
         world_map = jnp.array(
-            [[BlockType.COAL, BlockType.DIRT],
-             [BlockType.DIRT, BlockType.DIRT]],
+            [[BlockType.COAL, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
             dtype=jnp.int32,
         )
         initial_resources = 10
@@ -171,9 +165,7 @@ class TestItemConservation:
         from factoriax.constants import Direction
         from factoriax.game_logic import deposit_to_adjacent, withdraw_from_adjacent
 
-        world_map = jnp.array(
-            [[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32
-        )
+        world_map = jnp.array([[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32)
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.COAL].set(10)
         state = state_factory(
@@ -188,15 +180,19 @@ class TestItemConservation:
 
         initial_total = int(state.player_inventory[0, ItemType.COAL])
 
+        # Look up the entity at tile (row=0, col=1) where the pallet is.
+        eid = int(state.tile_entity[0, 1])
+        assert eid >= 0, "Expected an entity at tile (0, 1)"
+
         state = deposit_to_adjacent(state, 0, int(ItemType.COAL))
         inv_after = int(state.player_inventory[0, ItemType.COAL])
-        machine_after = int(state.machine_inventory[0, 1, ItemType.COAL])
-        assert inv_after + machine_after == initial_total
+        buf_after = int(state.ent_buf_count[eid])
+        assert inv_after + buf_after == initial_total
 
         state = withdraw_from_adjacent(state, 0, int(ItemType.COAL))
         inv_after2 = int(state.player_inventory[0, ItemType.COAL])
-        machine_after2 = int(state.machine_inventory[0, 1, ItemType.COAL])
-        assert inv_after2 + machine_after2 == initial_total
+        buf_after2 = int(state.ent_buf_count[eid])
+        assert inv_after2 + buf_after2 == initial_total
 
 
 # ---------------------------------------------------------------------------

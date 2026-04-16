@@ -85,12 +85,14 @@ class TestResolveControllerHat:
     @pytest.fixture
     def lookup(self) -> dict[str, frozenset[str]]:
         """Build a lookup with d-pad navigation bindings."""
-        return build_controller_lookup({
-            "nav_up": ["HAT_0_UP"],
-            "nav_down": ["HAT_0_DOWN"],
-            "nav_left": ["HAT_0_LEFT"],
-            "nav_right": ["HAT_0_RIGHT"],
-        })
+        return build_controller_lookup(
+            {
+                "nav_up": ["HAT_0_UP"],
+                "nav_down": ["HAT_0_DOWN"],
+                "nav_left": ["HAT_0_LEFT"],
+                "nav_right": ["HAT_0_RIGHT"],
+            }
+        )
 
     def test_up(self, lookup) -> None:
         """Hat up returns nav_up."""
@@ -137,10 +139,12 @@ class TestResolveControllerAxis:
     @pytest.fixture
     def lookup(self) -> dict[str, frozenset[str]]:
         """Build a lookup with stick movement bindings."""
-        return build_controller_lookup({
-            "move_up": ["AXIS_1_NEG"],
-            "move_down": ["AXIS_1_POS"],
-        })
+        return build_controller_lookup(
+            {
+                "move_up": ["AXIS_1_NEG"],
+                "move_down": ["AXIS_1_POS"],
+            }
+        )
 
     def test_positive_past_deadzone(self, lookup) -> None:
         """Value above deadzone resolves to POS actions."""
@@ -160,12 +164,22 @@ class TestResolveControllerAxis:
 
     def test_exactly_at_deadzone(self, lookup) -> None:
         """Value exactly at the deadzone boundary returns empty."""
-        assert resolve_controller_axis(
-            lookup, 1, _AXIS_DEADZONE,
-        ) == frozenset()
-        assert resolve_controller_axis(
-            lookup, 1, -_AXIS_DEADZONE,
-        ) == frozenset()
+        assert (
+            resolve_controller_axis(
+                lookup,
+                1,
+                _AXIS_DEADZONE,
+            )
+            == frozenset()
+        )
+        assert (
+            resolve_controller_axis(
+                lookup,
+                1,
+                -_AXIS_DEADZONE,
+            )
+            == frozenset()
+        )
 
 
 # ---------------------------------------------------------------------------

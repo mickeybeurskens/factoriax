@@ -7,14 +7,39 @@ import pytest
 from factoriax import BlockType, ItemType
 from factoriax.achievements import core_game_conditions
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
+from factoriax.envs.achievement_wrapper import AchievementState
 from factoriax.rewards import achievement_reward, mining_reward, sparse_mining_reward
 from factoriax.state import EnvParams, EnvState
 
 
-def _apply_conds(state: EnvState) -> EnvState:
-    """Apply core game conditions to state (test helper)."""
-    conds = core_game_conditions(state)
-    return state.replace(achievements_unlocked=state.achievements_unlocked | conds)
+def _wrap(state: EnvState) -> AchievementState:
+    """Wrap an EnvState with empty achievement tracking."""
+    return AchievementState(
+        env_state=state,
+        achievements_unlocked=jnp.zeros(
+            MAX_ACHIEVEMENTS,
+            dtype=jnp.bool_,
+        ),
+    )
+
+
+def _wrap_with(
+    state: EnvState,
+    unlocked: jnp.ndarray,
+) -> AchievementState:
+    """Wrap an EnvState with specified achievement flags."""
+    return AchievementState(
+        env_state=state,
+        achievements_unlocked=unlocked,
+    )
+
+
+def _apply_conds(state: AchievementState) -> AchievementState:
+    """Apply core game conditions to wrapped state."""
+    conds = core_game_conditions(state.env_state)
+    return state.replace(
+        achievements_unlocked=state.achievements_unlocked | conds,
+    )
 
 
 @pytest.fixture
@@ -32,8 +57,10 @@ class TestAchievementReward:
         params,
     ) -> None:
         """No reward when no new achievements were unlocked."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+        state = _wrap(
+            state_factory(
+                world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            )
         )
         reward = achievement_reward(state, state, params)
         assert float(reward) == 0.0
@@ -44,17 +71,22 @@ class TestAchievementReward:
         params,
     ) -> None:
         """Reward of 1.0 for a single newly unlocked achievement."""
-        prev_state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+        prev_state = _wrap(
+            state_factory(
+                world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            )
         )
         items_mined = (
             jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
         )
-        new_state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            items_mined=items_mined,
+        new_state = _apply_conds(
+            _wrap(
+                state_factory(
+                    world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+                    items_mined=items_mined,
+                )
+            )
         )
-        new_state = _apply_conds(new_state)
         reward = achievement_reward(prev_state, new_state, params)
         assert float(reward) == 1.0
 
@@ -63,21 +95,25 @@ class TestAchievementReward:
         state_factory,
         params,
     ) -> None:
-        """No reward when the achievement was already unlocked in prev_state."""
-        already = (
-            jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
-            .at[0]
-            .set(
-                True,
-            )
+        """No reward when the achievement was already unlocked."""
+        already = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_).at[0].set(True)
+        prev_state = _wrap_with(
+            state_factory(
+                world_map=jnp.array(
+                    [[BlockType.DIRT]],
+                    dtype=jnp.int32,
+                ),
+            ),
+            already,
         )
-        prev_state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            achievements_unlocked=already,
-        )
-        new_state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            achievements_unlocked=already,
+        new_state = _wrap_with(
+            state_factory(
+                world_map=jnp.array(
+                    [[BlockType.DIRT]],
+                    dtype=jnp.int32,
+                ),
+            ),
+            already,
         )
         reward = achievement_reward(prev_state, new_state, params)
         assert float(reward) == 0.0
@@ -91,22 +127,28 @@ class TestAchievementReward:
         items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         items_mined = items_mined.at[ItemType.IRON_ORE].set(10)
 
-        prev_state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-        )
-        new_state = _apply_conds(
+        prev_state = _wrap(
             state_factory(
                 world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-                items_mined=items_mined,
-            ),
+            )
+        )
+        new_state = _apply_conds(
+            _wrap(
+                state_factory(
+                    world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+                    items_mined=items_mined,
+                )
+            )
         )
         reward = achievement_reward(prev_state, new_state, params)
         assert float(reward) == 2.0
 
     def test_jit_compatible(self, state_factory, params) -> None:
         """achievement_reward should be JIT-compilable."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+        state = _wrap(
+            state_factory(
+                world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+            )
         )
         jit_fn = jax.jit(achievement_reward)
         reward = jit_fn(state, state, params)
@@ -117,14 +159,18 @@ class TestAchievementReward:
         items_mined = (
             jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
         )
-        prev = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-        )
-        new = _apply_conds(
+        prev = _wrap(
             state_factory(
                 world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-                items_mined=items_mined,
-            ),
+            )
+        )
+        new = _apply_conds(
+            _wrap(
+                state_factory(
+                    world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+                    items_mined=items_mined,
+                )
+            )
         )
         batch_prev = jax.tree_util.tree_map(
             lambda x: jnp.stack([x, x]),

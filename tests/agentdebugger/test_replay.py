@@ -85,7 +85,8 @@ class TestFromTrajectory:
     """Tests for Debugger.from_trajectory()."""
 
     def test_loads_and_sets_replay_mode(
-        self, minimal_trajectory: Path,
+        self,
+        minimal_trajectory: Path,
     ) -> None:
         """Replay mode flag is set on construction."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
@@ -108,14 +109,16 @@ class TestFromTrajectory:
         assert len(dbg._rewards) == 20
 
     def test_no_frames_without_block_map(
-        self, minimal_trajectory: Path,
+        self,
+        minimal_trajectory: Path,
     ) -> None:
         """No rendered frames when trajectory has no state data."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         assert dbg._dbg.rendered_frames is None
 
     def test_frames_with_state_data(
-        self, stateful_trajectory: Path,
+        self,
+        stateful_trajectory: Path,
     ) -> None:
         """Rendered frames are produced from state data."""
         dbg = Debugger.from_trajectory(str(stateful_trajectory))
@@ -125,14 +128,16 @@ class TestFromTrajectory:
     def test_episode_selection(self, minimal_trajectory: Path) -> None:
         """Can select a specific episode."""
         dbg = Debugger.from_trajectory(
-            str(minimal_trajectory), episode=1,
+            str(minimal_trajectory),
+            episode=1,
         )
         assert dbg._dbg.selected_episode == 1
 
     def test_player_selection(self, minimal_trajectory: Path) -> None:
         """Can select a specific player index."""
         dbg = Debugger.from_trajectory(
-            str(minimal_trajectory), player_idx=0,
+            str(minimal_trajectory),
+            player_idx=0,
         )
         assert dbg._player_idx == 0
 
@@ -154,7 +159,9 @@ class TestReplayKeybindings:
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         assert dbg._dbg.current_step == 0
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_RIGHTBRACKET), 320, 240,
+            self._make_event(pygame.K_RIGHTBRACKET),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 1
 
@@ -163,17 +170,22 @@ class TestReplayKeybindings:
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._dbg.current_step = 5
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_LEFTBRACKET), 320, 240,
+            self._make_event(pygame.K_LEFTBRACKET),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 4
 
     def test_step_backward_clamped(
-        self, minimal_trajectory: Path,
+        self,
+        minimal_trajectory: Path,
     ) -> None:
         """Step doesn't go below 0."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_LEFTBRACKET), 320, 240,
+            self._make_event(pygame.K_LEFTBRACKET),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 0
 
@@ -182,22 +194,29 @@ class TestReplayKeybindings:
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         assert dbg._dbg.playing is False
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_SPACE), 320, 240,
+            self._make_event(pygame.K_SPACE),
+            320,
+            240,
         )
         assert dbg._dbg.playing is True
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_SPACE), 320, 240,
+            self._make_event(pygame.K_SPACE),
+            320,
+            240,
         )
         assert dbg._dbg.playing is False
 
     def test_home_jumps_to_start(
-        self, minimal_trajectory: Path,
+        self,
+        minimal_trajectory: Path,
     ) -> None:
         """Home key jumps to step 0."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._dbg.current_step = 10
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_HOME), 320, 240,
+            self._make_event(pygame.K_HOME),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 0
 
@@ -205,7 +224,9 @@ class TestReplayKeybindings:
         """End key jumps to the last step."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_END), 320, 240,
+            self._make_event(pygame.K_END),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 19
 
@@ -213,22 +234,29 @@ class TestReplayKeybindings:
         """N key also steps forward."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_n), 320, 240,
+            self._make_event(pygame.K_n),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 1
 
     def test_episode_navigation(
-        self, minimal_trajectory: Path,
+        self,
+        minimal_trajectory: Path,
     ) -> None:
         """Period/comma navigate episodes."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         assert dbg._dbg.selected_episode == 0
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_PERIOD), 320, 240,
+            self._make_event(pygame.K_PERIOD),
+            320,
+            240,
         )
         assert dbg._dbg.selected_episode == 1
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_COMMA), 320, 240,
+            self._make_event(pygame.K_COMMA),
+            320,
+            240,
         )
         assert dbg._dbg.selected_episode == 0
 
@@ -236,11 +264,15 @@ class TestReplayKeybindings:
         """Arrow keys step backward / forward."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_RIGHT), 320, 240,
+            self._make_event(pygame.K_RIGHT),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 1
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_LEFT), 320, 240,
+            self._make_event(pygame.K_LEFT),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 0
 
@@ -249,11 +281,15 @@ class TestReplayKeybindings:
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         assert dbg._dbg.playback_speed == 1
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_EQUALS), 320, 240,
+            self._make_event(pygame.K_EQUALS),
+            320,
+            240,
         )
         assert dbg._dbg.playback_speed == 2
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_MINUS), 320, 240,
+            self._make_event(pygame.K_MINUS),
+            320,
+            240,
         )
         assert dbg._dbg.playback_speed == 1
 
@@ -262,7 +298,9 @@ class TestReplayKeybindings:
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._dbg.current_step = 10
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_0), 320, 240,
+            self._make_event(pygame.K_0),
+            320,
+            240,
         )
         assert dbg._dbg.current_step == 0
 
@@ -270,7 +308,9 @@ class TestReplayKeybindings:
         """Question mark toggles help overlay."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         dbg._handle_replay_keydown(
-            self._make_event(pygame.K_QUESTION), 320, 240,
+            self._make_event(pygame.K_QUESTION),
+            320,
+            240,
         )
         assert dbg._dbg.show_help is True
 
@@ -278,7 +318,9 @@ class TestReplayKeybindings:
         """Escape returns running=False."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         running, _ = dbg._handle_replay_keydown(
-            self._make_event(pygame.K_ESCAPE), 320, 240,
+            self._make_event(pygame.K_ESCAPE),
+            320,
+            240,
         )
         assert running is False
 

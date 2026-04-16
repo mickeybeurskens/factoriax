@@ -30,7 +30,8 @@ _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
 
 
 def update_all_machines(
-    state: EnvState, params: EnvParams,
+    state: EnvState,
+    params: EnvParams,
 ) -> EnvState:
     """Update all machines for one step.
 
@@ -50,7 +51,8 @@ def update_all_machines(
 
 
 def refuel_machines(
-    state: EnvState, params: EnvParams,
+    state: EnvState,
+    params: EnvParams,
 ) -> EnvState:
     """Consume coal from miner fuel to restore power.
 
@@ -75,7 +77,8 @@ def refuel_machines(
 
 
 def run_miners(
-    state: EnvState, params: EnvParams,
+    state: EnvState,
+    params: EnvParams,
 ) -> EnvState:
     """Extract ore into miner buffers.
 
@@ -108,7 +111,9 @@ def run_miners(
 
     can_mine = is_miner & has_power & has_resources & buf_ok & has_space
     mine_amt = jnp.where(
-        can_mine, jnp.int16(params.miner_mining_rate), jnp.int16(0),
+        can_mine,
+        jnp.int16(params.miner_mining_rate),
+        jnp.int16(0),
     )
     mine_amt = jnp.minimum(mine_amt, resources)
     mine_amt = jnp.minimum(mine_amt, jnp.int16(64) - state.ent_buf_count)
@@ -116,7 +121,9 @@ def run_miners(
 
     # Update entity state.
     new_buf_type = jnp.where(
-        mined, block_item.astype(jnp.int8), state.ent_buf_type,
+        mined,
+        block_item.astype(jnp.int8),
+        state.ent_buf_type,
     )
     new_buf_count = state.ent_buf_count + mine_amt
     new_power = state.ent_power - mined.astype(jnp.int16)
@@ -133,15 +140,20 @@ def run_miners(
     # Track mined items.
     mined_flat = jnp.zeros(len(ItemType), dtype=jnp.int32)
     for item_id in (
-        int(ItemType.COAL), int(ItemType.IRON_ORE),
-        int(ItemType.COPPER_ORE), int(ItemType.TIN_ORE),
+        int(ItemType.COAL),
+        int(ItemType.IRON_ORE),
+        int(ItemType.COPPER_ORE),
+        int(ItemType.TIN_ORE),
         int(ItemType.SILICON),
     ):
         mined_flat = mined_flat.at[item_id].set(
-            jnp.sum(jnp.where(
-                (block_item == item_id) & mined,
-                mine_amt.astype(jnp.int32), 0,
-            )),
+            jnp.sum(
+                jnp.where(
+                    (block_item == item_id) & mined,
+                    mine_amt.astype(jnp.int32),
+                    0,
+                )
+            ),
         )
 
     # --- Push buffer to adjacent entity in facing direction ---
@@ -153,33 +165,50 @@ def run_miners(
         dn_x = jnp.clip(ex + dx, 0, w - 1)
         dn_eidx = state.tile_entity[dn_y, dn_x]
         dn_valid = dn_eidx >= 0
+        dn_diff = (dn_y != ey) | (dn_x != ex)
         dn_safe = jnp.clip(dn_eidx, 0, new_buf_type.shape[0] - 1)
 
         dn_bc = new_buf_count[dn_safe]
         dn_bt = new_buf_type[dn_safe]
-        dn_max = MACHINE_MAX_STACK[
-            state.ent_type[dn_safe].astype(jnp.int32)
-        ]
+        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
         dn_empty = dn_bc == 0
         dn_same = dn_bt == new_buf_type
         has_buf = new_buf_count > 0
 
         can_push = (
-            facing_d & has_buf & dn_valid
+            facing_d
+            & has_buf
+            & dn_valid
+            & dn_diff
             & (dn_empty | (dn_same & (dn_bc < dn_max)))
         )
         xfer = jnp.where(can_push, new_buf_count, jnp.int16(0))
         xfer = jnp.minimum(xfer, dn_max - dn_bc)
 
-        new_buf_type = new_buf_type.at[dn_safe].set(
-            jnp.where(can_push, new_buf_type, new_buf_type[dn_safe]),
+        # Gather: each entity checks if a miner behind it (opposite
+        # of d) is pushing to it.
+        up_y = jnp.clip(ey - dy, 0, h - 1)
+        up_x = jnp.clip(ex - dx, 0, w - 1)
+        up_diff = (up_y != ey) | (up_x != ex)
+        up_eidx = state.tile_entity[up_y, up_x]
+        up_safe = jnp.clip(up_eidx, 0, new_buf_type.shape[0] - 1)
+        incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
+        in_type = new_buf_type[up_safe]
+        in_xfer = xfer[up_safe]
+
+        new_buf_type = jnp.where(incoming, in_type, new_buf_type)
+        new_buf_count = jnp.where(
+            incoming,
+            new_buf_count + in_xfer,
+            new_buf_count,
         )
-        new_buf_count = new_buf_count.at[dn_safe].set(
-            jnp.where(can_push, dn_bc + xfer, new_buf_count[dn_safe]),
-        )
+
+        # Subtract sent items from source.
         remaining = new_buf_count - xfer
         new_buf_type = jnp.where(
-            can_push & (remaining == 0), jnp.int8(0), new_buf_type,
+            can_push & (remaining == 0),
+            jnp.int8(0),
+            new_buf_type,
         )
         new_buf_count = jnp.where(can_push, remaining, new_buf_count)
 
@@ -226,54 +255,68 @@ def run_arms(state: EnvState) -> EnvState:
         src_x = jnp.clip(ex - dx, 0, w - 1)
         src_eidx = state.tile_entity[src_y, src_x]
         src_valid = src_eidx >= 0
+        src_diff = (src_y != ey) | (src_x != ex)
         src_safe = jnp.clip(src_eidx, 0, buf_type.shape[0] - 1)
 
         src_bt = buf_type[src_safe]
         src_bc = buf_count[src_safe]
-        src_has = src_valid & (src_bc > 0)
+        src_has = src_valid & src_diff & (src_bc > 0)
 
         # Destination = in front (facing direction).
         dst_y = jnp.clip(ey + dy, 0, h - 1)
         dst_x = jnp.clip(ex + dx, 0, w - 1)
         dst_eidx = state.tile_entity[dst_y, dst_x]
         dst_valid = dst_eidx >= 0
+        dst_diff = (dst_y != ey) | (dst_x != ex)
         dst_safe = jnp.clip(dst_eidx, 0, buf_type.shape[0] - 1)
 
         dst_bc = buf_count[dst_safe]
         dst_bt = buf_type[dst_safe]
-        dst_max = MACHINE_MAX_STACK[
-            state.ent_type[dst_safe].astype(jnp.int32)
-        ]
+        dst_max = MACHINE_MAX_STACK[state.ent_type[dst_safe].astype(jnp.int32)]
         dst_empty = dst_bc == 0
         dst_same = dst_bt == src_bt
         dst_space = dst_bc < dst_max
 
         can_xfer = (
-            facing_d & src_has & dst_valid
+            facing_d
+            & src_has
+            & dst_valid
+            & dst_diff
             & (dst_empty | (dst_same & dst_space))
         )
 
-        # Transfer 1 item.
-        buf_type = buf_type.at[dst_safe].set(
-            jnp.where(can_xfer, src_bt, buf_type[dst_safe]),
-        )
-        buf_count = buf_count.at[dst_safe].set(
-            jnp.where(
-                can_xfer, dst_bc + jnp.int16(1), buf_count[dst_safe],
-            ),
+        # Gather: each entity checks if an arm behind it (opposite
+        # of d) is transferring to it, and if an arm in front of it
+        # is taking from it.
+        # -- Destination side: look at tile (ey - dy, ex - dx). If an
+        #    arm there faces d and can_xfer, this entity receives.
+        rcv_y = jnp.clip(ey - dy, 0, h - 1)
+        rcv_x = jnp.clip(ex - dx, 0, w - 1)
+        rcv_diff = (rcv_y != ey) | (rcv_x != ex)
+        rcv_eidx = state.tile_entity[rcv_y, rcv_x]
+        rcv_safe = jnp.clip(rcv_eidx, 0, buf_type.shape[0] - 1)
+        receiving = can_xfer[rcv_safe] & (rcv_eidx >= 0) & rcv_diff
+        rcv_bt = src_bt[rcv_safe]
+
+        buf_type = jnp.where(receiving, rcv_bt, buf_type)
+        buf_count = jnp.where(
+            receiving,
+            buf_count + jnp.int16(1),
+            buf_count,
         )
 
-        new_src_c = src_bc - jnp.where(can_xfer, jnp.int16(1), jnp.int16(0))
-        buf_count = buf_count.at[src_safe].set(
-            jnp.where(can_xfer, new_src_c, buf_count[src_safe]),
-        )
-        buf_type = buf_type.at[src_safe].set(
-            jnp.where(
-                can_xfer & (new_src_c == 0),
-                jnp.int8(0),
-                buf_type[src_safe],
-            ),
-        )
+        # -- Source side: look at tile (ey + dy, ex + dx). If an arm
+        #    there faces d and can_xfer, this entity loses 1 item.
+        giv_y = jnp.clip(ey + dy, 0, h - 1)
+        giv_x = jnp.clip(ex + dx, 0, w - 1)
+        giv_diff = (giv_y != ey) | (giv_x != ex)
+        giv_eidx = state.tile_entity[giv_y, giv_x]
+        giv_safe = jnp.clip(giv_eidx, 0, buf_type.shape[0] - 1)
+        giving = can_xfer[giv_safe] & (giv_eidx >= 0) & giv_diff
+
+        new_c = buf_count - jnp.where(giving, jnp.int16(1), jnp.int16(0))
+        buf_type = jnp.where(giving & (new_c == 0), jnp.int8(0), buf_type)
+        buf_count = jnp.where(giving, new_c, buf_count)
 
     return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)
 
@@ -313,12 +356,12 @@ def run_assemblers(state: EnvState) -> EnvState:
         # Look up neighbor entity via grid.
         nb_eidx = state.tile_entity[ny, nx]
         nb_valid = nb_eidx >= 0
-        # Clip for safe gathering (invalid slots read entity 0, masked out).
+        nb_diff = (ny != ey) | (nx != ex)
         nb_safe = jnp.clip(nb_eidx, 0, buf_type.shape[0] - 1)
 
         nb_bt = buf_type[nb_safe]
         nb_bc = buf_count[nb_safe]
-        nb_has = nb_valid & (nb_bc > 0)
+        nb_has = nb_valid & nb_diff & (nb_bc > 0)
 
         s0_ok = (in_c0 == 0) | (in_t0 == nb_bt)
         s1_ok = (in_c1 == 0) | (in_t1 == nb_bt)
@@ -331,14 +374,22 @@ def run_assemblers(state: EnvState) -> EnvState:
         in_t1 = jnp.where(tk1, nb_bt, in_t1)
         in_c1 = jnp.where(tk1, in_c1 + jnp.int16(1), in_c1)
 
-        # Clear taken item from neighbor entity.
-        new_nb_c = jnp.where(tk, nb_bc - jnp.int16(1), nb_bc)
-        buf_count = buf_count.at[nb_safe].set(
-            jnp.where(tk, new_nb_c, buf_count[nb_safe]),
+        # Gather: each entity checks if an assembler on the opposite
+        # side (direction d) is taking from it.
+        asm_y = jnp.clip(ey - dy, 0, h - 1)
+        asm_x = jnp.clip(ex - dx, 0, w - 1)
+        asm_diff = (asm_y != ey) | (asm_x != ex)
+        asm_eidx = state.tile_entity[asm_y, asm_x]
+        asm_safe = jnp.clip(asm_eidx, 0, buf_type.shape[0] - 1)
+        taken = tk[asm_safe] & (asm_eidx >= 0) & asm_diff
+
+        new_c = buf_count - jnp.where(taken, jnp.int16(1), jnp.int16(0))
+        buf_type = jnp.where(
+            taken & (new_c == 0),
+            jnp.int8(0),
+            buf_type,
         )
-        buf_type = buf_type.at[nb_safe].set(
-            jnp.where(tk & (new_nb_c == 0), jnp.int8(0), buf_type[nb_safe]),
-        )
+        buf_count = jnp.where(taken, new_c, buf_count)
 
     # --- Phase 1: Complete crafts (power == 1) ---
     completing = is_asm & (state.ent_power == 1)
@@ -346,7 +397,9 @@ def run_assemblers(state: EnvState) -> EnvState:
     can_complete = completing & (state.ent_asm_out_type != 0) & out_empty
 
     new_out_count = jnp.where(
-        can_complete, jnp.int16(1), state.ent_asm_out_count,
+        can_complete,
+        jnp.int16(1),
+        state.ent_asm_out_count,
     )
     new_out_type = state.ent_asm_out_type
     new_power = jnp.where(completing, jnp.int16(0), state.ent_power)
@@ -368,14 +421,8 @@ def run_assemblers(state: EnvState) -> EnvState:
                 (in_t1 == rt_a) & (in_c1 >= ra_a)
             )
         else:
-            o1 = (
-                (in_t0 == rt_a) & (in_c0 >= ra_a)
-                & (in_t1 == rt_b) & (in_c1 >= ra_b)
-            )
-            o2 = (
-                (in_t0 == rt_b) & (in_c0 >= ra_b)
-                & (in_t1 == rt_a) & (in_c1 >= ra_a)
-            )
+            o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)
+            o2 = (in_t0 == rt_b) & (in_c0 >= ra_b) & (in_t1 == rt_a) & (in_c1 >= ra_a)
             m = o1 | o2
         matched = jnp.where(m & idle, jnp.int32(r), matched)
 
@@ -441,36 +488,45 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
         dn_eidx = state.tile_entity[dn_y, dn_x]
         dn_valid = dn_eidx >= 0
+        dn_diff = (dn_y != ey) | (dn_x != ex)  # not pushing to self
         dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
 
         dn_bt = buf_type[dn_safe]
         dn_bc = buf_count[dn_safe]
         dn_empty = dn_bc == 0
         dn_same = dn_bt == buf_type
-        dn_max = MACHINE_MAX_STACK[
-            state.ent_type[dn_safe].astype(jnp.int32)
-        ]
+        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
         dn_space = dn_bc < dn_max
 
         has_item = buf_count > 0
         can_push = (
-            facing_d & has_item & dn_valid
-            & (dn_empty | (dn_same & dn_space))
+            facing_d & has_item & dn_valid & dn_diff & (dn_empty | (dn_same & dn_space))
         )
 
         xfer = jnp.where(can_push, buf_count, jnp.int16(0))
         xfer = jnp.minimum(xfer, dn_max - dn_bc)
 
-        buf_type = buf_type.at[dn_safe].set(
-            jnp.where(can_push, buf_type, buf_type[dn_safe]),
-        )
-        buf_count = buf_count.at[dn_safe].set(
-            jnp.where(can_push, dn_bc + xfer, buf_count[dn_safe]),
-        )
+        # Gather: for each entity, check if a pusher targets it.
+        # Look at the tile opposite to direction d; if an entity there
+        # is pushing (facing d), this entity is the destination.
+        up_y = jnp.clip(ey - dy, 0, h - 1)
+        up_x = jnp.clip(ex - dx, 0, w - 1)
+        up_diff = (up_y != ey) | (up_x != ex)
+        up_eidx = state.tile_entity[up_y, up_x]
+        up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
+        incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
+        in_type = buf_type[up_safe]
+        in_xfer = xfer[up_safe]
 
+        buf_type = jnp.where(incoming, in_type, buf_type)
+        buf_count = jnp.where(incoming, buf_count + in_xfer, buf_count)
+
+        # Subtract sent items from source.
         new_c = buf_count - xfer
         buf_type = jnp.where(
-            can_push & (new_c == 0), jnp.int8(0), buf_type,
+            can_push & (new_c == 0),
+            jnp.int8(0),
+            buf_type,
         )
         buf_count = jnp.where(can_push, new_c, buf_count)
 

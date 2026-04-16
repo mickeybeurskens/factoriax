@@ -86,22 +86,26 @@ class TestEditorRoundTrip:
 
         assert restored.block_resources is not None
         npt.assert_array_equal(
-            restored.block_resources, original.block_resources,
+            restored.block_resources,
+            original.block_resources,
         )
 
         assert restored.machine_types is not None
         npt.assert_array_equal(
-            restored.machine_types, original.machine_types,
+            restored.machine_types,
+            original.machine_types,
         )
 
         assert restored.machine_directions is not None
         npt.assert_array_equal(
-            restored.machine_directions, original.machine_directions,
+            restored.machine_directions,
+            original.machine_directions,
         )
 
         assert restored.machine_inventory is not None
         npt.assert_array_equal(
-            restored.machine_inventory, original.machine_inventory,
+            restored.machine_inventory,
+            original.machine_inventory,
         )
 
         assert restored.machine_selected_recipe is not None
@@ -140,8 +144,12 @@ class TestFieldCoverage:
     # design (dimensions are stored as plain ints, block_map is always
     # present, etc.).
     _EXCLUDED = {
-        "name", "map_width", "map_height", "block_map",
-        "player_positions", "machine_health",
+        "name",
+        "map_width",
+        "map_height",
+        "block_map",
+        "player_positions",
+        "machine_health",
         # machine_inventory is converted to slot-based on the editor side
         "machine_inventory",
     }
@@ -158,9 +166,7 @@ class TestFieldCoverage:
         from factoriax.editor.state import EditorState
 
         level_fields = {
-            f.name
-            for f in dataclasses.fields(Level)
-            if f.name not in self._EXCLUDED
+            f.name for f in dataclasses.fields(Level) if f.name not in self._EXCLUDED
         }
         editor_fields = {f.name for f in dataclasses.fields(EditorState)}
 

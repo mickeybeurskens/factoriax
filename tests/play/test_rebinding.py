@@ -170,7 +170,9 @@ class TestGameUIWithReboundKey:
         return EnvParams(map_width=4, map_height=4, num_players=1)
 
     def test_rebound_mine_key_dispatches(
-        self, params, state_factory,
+        self,
+        params,
+        state_factory,
     ) -> None:
         """Rebinding mine to K_j makes J produce MINE action."""
         from factoriax.constants import Action
@@ -188,13 +190,18 @@ class TestGameUIWithReboundKey:
 
         event = pygame.event.Event(
             pygame.KEYDOWN,
-            key=pygame.K_j, mod=0, unicode="j", scancode=0,
+            key=pygame.K_j,
+            mod=0,
+            unicode="j",
+            scancode=0,
         )
         result = ui.handle_event(event, state)
         assert result.action == int(Action.MINE)
 
     def test_old_key_no_longer_dispatches(
-        self, params, state_factory,
+        self,
+        params,
+        state_factory,
     ) -> None:
         """After rebinding mine away from SPACE, SPACE does nothing."""
         bindings = default_keyboard()
@@ -210,7 +217,10 @@ class TestGameUIWithReboundKey:
 
         event = pygame.event.Event(
             pygame.KEYDOWN,
-            key=pygame.K_SPACE, mod=0, unicode=" ", scancode=0,
+            key=pygame.K_SPACE,
+            mod=0,
+            unicode=" ",
+            scancode=0,
         )
         result = ui.handle_event(event, state)
         assert result.action is None
@@ -298,9 +308,7 @@ class TestRebindActions:
         groups = _init_rebind_actions()
         for _, actions in groups:
             for action_key, _ in actions:
-                assert action_key in kb, (
-                    f"{action_key} missing from default_keyboard"
-                )
+                assert action_key in kb, f"{action_key} missing from default_keyboard"
 
     def test_actions_exist_in_default_controller(self) -> None:
         """Every listed action has a default controller binding entry."""

@@ -61,8 +61,7 @@ class TestNoRetrace:
         rng, k = random.split(rng)
         _, state, _, _, _ = step_fn(k, state, int(Action.MINE), params)
         assert step_fn._cache_size() == 1, (
-            "JIT retraced on different action value. "
-            "Action may be traced as static."
+            "JIT retraced on different action value. Action may be traced as static."
         )
 
 
@@ -83,14 +82,8 @@ class TestDtypeConsistency:
         assert len(leaves0) == len(leaves1)
 
         for i, (l0, l1) in enumerate(zip(leaves0, leaves1)):
-            if hasattr(l0, 'dtype') and hasattr(l1, 'dtype'):
-                assert l0.shape == l1.shape, (
-                    f"Leaf {i}: shape {l0.shape} -> {l1.shape}"
-                )
-                assert l0.dtype == l1.dtype, (
-                    f"Leaf {i}: dtype {l0.dtype} -> {l1.dtype}"
-                )
+            if hasattr(l0, "dtype") and hasattr(l1, "dtype"):
+                assert l0.shape == l1.shape, f"Leaf {i}: shape {l0.shape} -> {l1.shape}"
+                assert l0.dtype == l1.dtype, f"Leaf {i}: dtype {l0.dtype} -> {l1.dtype}"
             else:
-                assert type(l0) is type(l1), (
-                    f"Leaf {i}: type {type(l0)} -> {type(l1)}"
-                )
+                assert type(l0) is type(l1), f"Leaf {i}: type {type(l0)} -> {type(l1)}"

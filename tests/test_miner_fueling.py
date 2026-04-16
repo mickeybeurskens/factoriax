@@ -36,7 +36,9 @@ def _make_miner_state(state_factory) -> EnvState:
     resources = resources.at[0, 1].set(100)
 
     machine_types = jnp.full(
-        shape, int(MachineType.NONE), dtype=jnp.int32,
+        shape,
+        int(MachineType.NONE),
+        dtype=jnp.int32,
     )
     machine_types = machine_types.at[0, 1].set(int(MachineType.MINER))
 
@@ -61,7 +63,8 @@ class TestMinerFueling:
     """Depositing coal into a miner should enable mining."""
 
     def test_deposit_coal_goes_to_buffer(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """Depositing coal puts it in ent_buf, not ent_fuel."""
         state = _make_miner_state(state_factory)
@@ -70,7 +73,10 @@ class TestMinerFueling:
 
         rng, k = jax.random.split(rng)
         state = factoriax_step(
-            k, state, int(Action.DEPOSIT_COAL), params,
+            k,
+            state,
+            int(Action.DEPOSIT_COAL),
+            params,
         )
 
         eidx = int(state.tile_entity[0, 1])
@@ -91,7 +97,8 @@ class TestMinerFueling:
         )
 
     def test_fueled_miner_produces_ore(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """After depositing coal, the miner should produce ore."""
         state = _make_miner_state(state_factory)
@@ -100,7 +107,10 @@ class TestMinerFueling:
 
         rng, k = jax.random.split(rng)
         state = factoriax_step(
-            k, state, int(Action.DEPOSIT_COAL), params,
+            k,
+            state,
+            int(Action.DEPOSIT_COAL),
+            params,
         )
 
         eidx = int(state.tile_entity[0, 1])
@@ -109,7 +119,10 @@ class TestMinerFueling:
         for _ in range(20):
             rng, k = jax.random.split(rng)
             state = factoriax_step(
-                k, state, int(Action.NOOP), params,
+                k,
+                state,
+                int(Action.NOOP),
+                params,
             )
 
         buf_type = int(state.ent_buf_type[eidx])
@@ -126,9 +139,7 @@ class TestMinerFueling:
 
         # The miner must have actually extracted ore.
         resources_depleted = resources < 100
-        has_ore_in_buffer = (
-            buf_type == int(ItemType.IRON_ORE) and buf_count > 0
-        )
+        has_ore_in_buffer = buf_type == int(ItemType.IRON_ORE) and buf_count > 0
         assert resources_depleted or has_ore_in_buffer, (
             f"Miner did not mine. buf=({buf_type},{buf_count}), "
             f"power={power}, fuel={fuel}, resources={resources}"

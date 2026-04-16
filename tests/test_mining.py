@@ -59,12 +59,14 @@ class TestMiningResources:
             ),
             player_position=(1, 1),
             block_resources=jnp.array(
-                [[0, 0, 0], [0, 5, 0], [0, 0, 0]], dtype=jnp.int16,
+                [[0, 0, 0], [0, 5, 0], [0, 0, 0]],
+                dtype=jnp.int16,
             ),
         )
 
     def test_mining_decrements_resources(
-        self, coal_state: EnvState,
+        self,
+        coal_state: EnvState,
     ) -> None:
         """Mining should decrement resources by 1."""
         new = mine_block(coal_state, 0)
@@ -76,19 +78,22 @@ class TestMiningResources:
         assert new.player_inventory[0, ItemType.COAL] == 1
 
     def test_block_stays_while_resources_remain(
-        self, coal_state: EnvState,
+        self,
+        coal_state: EnvState,
     ) -> None:
         """Block should remain while resources > 0."""
         new = mine_block(coal_state, 0)
         assert new.map[1, 1] == BlockType.COAL
 
     def test_block_becomes_dirt_when_depleted(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """Block should become dirt when resources reach zero."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL]], dtype=jnp.int32,
+                [[BlockType.COAL]],
+                dtype=jnp.int32,
             ),
             block_resources=jnp.array([[1]], dtype=jnp.int16),
         )
@@ -101,7 +106,8 @@ class TestMiningResources:
         """Should not mine a block with zero resources."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL]], dtype=jnp.int32,
+                [[BlockType.COAL]],
+                dtype=jnp.int32,
             ),
             block_resources=jnp.array([[0]], dtype=jnp.int16),
         )
@@ -117,12 +123,16 @@ class TestMiningResources:
         ids=["iron", "copper"],
     )
     def test_mining_ore_type(
-        self, state_factory, block_type, item_type,
+        self,
+        state_factory,
+        block_type,
+        item_type,
     ) -> None:
         """Mining should yield the correct ore type."""
         state = state_factory(
             world_map=jnp.array(
-                [[block_type]], dtype=jnp.int32,
+                [[block_type]],
+                dtype=jnp.int32,
             ),
             block_resources=jnp.array([[5]], dtype=jnp.int16),
         )
@@ -136,12 +146,14 @@ class TestMiningEdgeCases:
     """Edge case tests for mining."""
 
     def test_mining_non_mineable_block_does_nothing(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """Mining dirt should have no effect."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT]], dtype=jnp.int32,
+                [[BlockType.DIRT]],
+                dtype=jnp.int32,
             ),
         )
         new = mine_block(state, 0)

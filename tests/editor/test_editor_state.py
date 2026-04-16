@@ -275,9 +275,7 @@ class TestLevelConversion:
     def test_directions_preserved(self) -> None:
         """Machine directions must survive editor round-trip."""
         block_map = np.full((5, 5), int(BlockType.DIRT), dtype=np.int32)
-        machines = np.full(
-            (5, 5), int(MachineType.NONE), dtype=np.int32
-        )
+        machines = np.full((5, 5), int(MachineType.NONE), dtype=np.int32)
         machines[1, 1] = int(MachineType.CONVEYOR_BELT)
         dirs = np.zeros((5, 5), dtype=np.int32)
         dirs[1, 1] = int(Direction.RIGHT)

@@ -27,7 +27,9 @@ class TestMachineIconCoverage:
         """render_item_icon produces a valid array for every machine."""
         for item_type in ITEM_TO_MACHINE:
             icon = render_item_icon(
-                int(item_type), 32, int(Direction.RIGHT),
+                int(item_type),
+                32,
+                int(Direction.RIGHT),
             )
             assert icon.shape == (32, 32, 4), (
                 f"ItemType {item_type!r}: bad icon shape {icon.shape}"

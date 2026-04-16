@@ -34,13 +34,17 @@ class TestSlotKeySelection:
     """Number keys should update PlayState.selected_item, not EnvState."""
 
     def test_pressing_1_selects_miner(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Key '1' sets selected_item to ItemType.MINER (tool belt slot 1)."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         game_ui.play_state.selected_item = 5  # start at something else
         event = pygame.event.Event(
-            pygame.KEYDOWN, key=pygame.K_1, mod=0,
+            pygame.KEYDOWN,
+            key=pygame.K_1,
+            mod=0,
         )
         result = game_ui.handle_event(event, state)
         assert game_ui.play_state.selected_item == int(ItemType.MINER)
@@ -48,12 +52,16 @@ class TestSlotKeySelection:
         assert result.state is not None
 
     def test_pressing_3_selects_belt(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Key '3' sets selected_item to ItemType.CONVEYOR_BELT (slot 3)."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
         event = pygame.event.Event(
-            pygame.KEYDOWN, key=pygame.K_3, mod=0,
+            pygame.KEYDOWN,
+            key=pygame.K_3,
+            mod=0,
         )
         game_ui.handle_event(event, state)
         assert game_ui.play_state.selected_item == int(ItemType.CONVEYOR_BELT)
@@ -63,7 +71,9 @@ class TestInventoryIsCraftingOnly:
     """Inventory menu goes straight to crafting navigation."""
 
     def test_up_cycles_recipe(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """W key in inventory cycles recipe selection."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
@@ -72,7 +82,9 @@ class TestInventoryIsCraftingOnly:
         ps.selected_recipe = 1
 
         event = pygame.event.Event(
-            pygame.KEYDOWN, key=pygame.K_w, mod=0,
+            pygame.KEYDOWN,
+            key=pygame.K_w,
+            mod=0,
         )
         game_ui.handle_event(event, state)
         assert ps.selected_recipe == 0
@@ -82,7 +94,9 @@ class TestInteractPlacesAndPicksUp:
     """E key places on empty tile, picks up facing a machine."""
 
     def test_interact_places_on_empty(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """E key with MINER selected places on empty tile."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
@@ -92,13 +106,18 @@ class TestInteractPlacesAndPicksUp:
 
         event = pygame.event.Event(
             pygame.KEYDOWN,
-            key=pygame.K_e, mod=0, unicode="e", scancode=0,
+            key=pygame.K_e,
+            mod=0,
+            unicode="e",
+            scancode=0,
         )
         result = game_ui.handle_event(event, state)
         assert result.action == int(Action.PLACE_MINER)
 
     def test_interact_noop_without_placeable(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """E key with COAL selected on empty tile does nothing."""
         state = state_factory(world_map=jnp.zeros((4, 4), dtype=jnp.int32))
@@ -108,7 +127,10 @@ class TestInteractPlacesAndPicksUp:
 
         event = pygame.event.Event(
             pygame.KEYDOWN,
-            key=pygame.K_e, mod=0, unicode="e", scancode=0,
+            key=pygame.K_e,
+            mod=0,
+            unicode="e",
+            scancode=0,
         )
         result = game_ui.handle_event(event, state)
         assert result.action is None

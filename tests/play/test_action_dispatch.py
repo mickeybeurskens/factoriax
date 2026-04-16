@@ -58,13 +58,17 @@ class TestDepositAction:
     """CONFIRM in machine menu with player panel active emits DEPOSIT_*."""
 
     def test_deposit_emits_valid_action(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Depositing coal emits DEPOSIT_COAL."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.PALLET),
+                dtype=jnp.int32,
             ),
         )
         ps = game_ui.play_state
@@ -78,13 +82,17 @@ class TestDepositAction:
         assert result.action == int(Action.DEPOSIT_COAL)
 
     def test_deposit_iron(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Depositing iron emits DEPOSIT_IRON."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.PALLET),
+                dtype=jnp.int32,
             ),
         )
         ps = game_ui.play_state
@@ -96,13 +104,17 @@ class TestDepositAction:
         assert result.action == int(Action.DEPOSIT_IRON_ORE)
 
     def test_deposit_empty_type_is_noop(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Depositing with EMPTY selected emits no action."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.PALLET), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.PALLET),
+                dtype=jnp.int32,
             ),
         )
         ps = game_ui.play_state
@@ -123,17 +135,22 @@ class TestWithdrawAction:
     """CONFIRM in machine menu with machine panel active emits WITHDRAW_*."""
 
     def test_withdraw_emits_valid_action(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Withdrawing coal emits WITHDRAW_COAL."""
         machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            (4, 4, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
         machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(10)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
@@ -147,17 +164,22 @@ class TestWithdrawAction:
         assert result.action == int(Action.WITHDRAW_COAL)
 
     def test_withdraw_copper(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Withdrawing copper emits WITHDRAW_COPPER."""
         machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES), dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            (4, 4, NUM_ITEM_TYPES),
+            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
         )
         machine_inv = machine_inv.at[1, 1, int(ItemType.COPPER_ORE)].set(5)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
-                (4, 4), int(MachineType.MINER), dtype=jnp.int32,
+                (4, 4),
+                int(MachineType.MINER),
+                dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
         )
@@ -180,7 +202,9 @@ class TestResearchAction:
     """CONFIRM in research menu emits RESEARCH_BASIC + selection offset."""
 
     def test_research_basic(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """First research option emits RESEARCH_BASIC."""
         state = state_factory(
@@ -194,7 +218,9 @@ class TestResearchAction:
         assert result.action == int(Action.RESEARCH_BASIC)
 
     def test_research_advanced(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Second research option emits RESEARCH_ADVANCED."""
         state = state_factory(
@@ -217,7 +243,9 @@ class TestCraftAction:
     """CONFIRM in crafting panel emits CRAFT_BASE + recipe offset."""
 
     def test_craft_first_recipe(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """First recipe (Iron Plate) emits CRAFT_IRON_PLATE."""
         state = state_factory(
@@ -232,7 +260,9 @@ class TestCraftAction:
         assert result.action == int(Action.CRAFT_IRON_PLATE)
 
     def test_craft_second_recipe(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """Second recipe (Copper Plate) emits CRAFT_COPPER_PLATE."""
         state = state_factory(
@@ -247,7 +277,9 @@ class TestCraftAction:
         assert result.action == int(Action.CRAFT_COPPER_PLATE)
 
     def test_craft_action_uses_craft_base(
-        self, game_ui: GameUI, state_factory,
+        self,
+        game_ui: GameUI,
+        state_factory,
     ) -> None:
         """All craft actions are CRAFT_BASE + recipe index."""
         state = state_factory(
@@ -260,6 +292,7 @@ class TestCraftAction:
         for recipe_idx in range(3):
             ps.selected_recipe = recipe_idx
             result = game_ui.handle_event(
-                _make_keydown(_confirm_key()), state,
+                _make_keydown(_confirm_key()),
+                state,
             )
             assert result.action == CRAFT_BASE + recipe_idx

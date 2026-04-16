@@ -1,7 +1,9 @@
 """Tests for conveyor belt and pick-and-place arm machine logic.
 
-Uses the pouch inventory model where machine_inventory has shape
-(H, W, NUM_ITEM_TYPES) and items are indexed by ItemType.
+Uses the entity-based state model where each machine has a single buffer
+slot (ent_buf_type, ent_buf_count) accessed via tile_entity mapping.
+Belt max stack is 3, arm has no internal buffer and transfers 1 item per
+tick between the entity behind it and the entity in front.
 """
 
 from __future__ import annotations
@@ -9,10 +11,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.constants import (
-    DEFAULT_MACHINE_MAX_HEALTH,
-    MACHINE_INVENTORY_COUNT_DTYPE,
-    MAX_MACHINE_STACK_SIZE,
-    NUM_ITEM_TYPES,
     Direction,
     ItemType,
     MachineType,
@@ -23,82 +21,92 @@ from factoriax.machines import run_arms, run_conveyor_belts
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Per MACHINE_MAX_STACK: NONE=0, MINER=64, PALLET=256, ASM=1000, BELT=3,
+# ARM=1, ROCKET=0.
+_BELT_MAX = 3
+_NOOP = 0  # Direction that does not push anywhere.
 
-def _make_machine_inv(
+
+def _buf_grids(
     shape: tuple[int, int],
-    entries: dict[tuple[int, int, int], int] | None = None,
-) -> jnp.ndarray:
-    """Build a machine inventory pouch with specific item counts.
+    entries: dict[tuple[int, int], tuple[int, int]] | None = None,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Build buffer_type and buffer_count grids.
 
     Args:
         shape: Grid (H, W).
-        entries: Mapping of (y, x, item_type) -> count.
+        entries: Mapping of (y, x) -> (item_type, count).
 
     Returns:
-        Machine inventory array of shape (H, W, NUM_ITEM_TYPES).
+        Tuple of (buffer_type, buffer_count) arrays, each shape (H, W).
     """
-    inv = jnp.zeros(
-        (*shape, NUM_ITEM_TYPES),
-        dtype=MACHINE_INVENTORY_COUNT_DTYPE,
-    )
-    for (y, x, item_type), count in (entries or {}).items():
-        inv = inv.at[y, x, item_type].set(count)
-    return inv
+    bt = jnp.zeros(shape, dtype=jnp.int8)
+    bc = jnp.zeros(shape, dtype=jnp.int16)
+    for (y, x), (item_type, count) in (entries or {}).items():
+        bt = bt.at[y, x].set(item_type)
+        bc = bc.at[y, x].set(count)
+    return bt, bc
 
 
-def _belt_state(
+def _make_state(
     state_factory,
     *,
     machine_types: jnp.ndarray,
     machine_direction: jnp.ndarray,
-    machine_inventory: jnp.ndarray | None = None,
+    buffer_type: jnp.ndarray | None = None,
+    buffer_count: jnp.ndarray | None = None,
 ):
-    """Build a state with the given belt grid and optional inventory."""
+    """Build a state with the given machine grid and optional buffer.
+
+    Uses max_machines equal to the actual entity count to avoid
+    inactive-entity scatter collisions in JAX vectorised loops.
+
+    Args:
+        state_factory: Pytest fixture that creates EnvState.
+        machine_types: Machine type per tile.
+        machine_direction: Direction per tile.
+        buffer_type: Buffer item type per tile (optional).
+        buffer_count: Buffer item count per tile (optional).
+
+    Returns:
+        Configured EnvState.
+    """
     shape = machine_types.shape
-    if machine_inventory is None:
-        machine_inventory = jnp.zeros(
-            (*shape, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
-        )
-    health = jnp.where(
-        machine_types != int(MachineType.NONE),
-        DEFAULT_MACHINE_MAX_HEALTH,
-        0,
-    ).astype(jnp.int32)
+    n_entities = int((machine_types != int(MachineType.NONE)).sum())
     return state_factory(
         world_map=jnp.zeros(shape, dtype=jnp.int32),
         machine_types=machine_types,
         machine_direction=machine_direction,
-        machine_inventory=machine_inventory,
-        machine_health=health,
+        buffer_type=buffer_type,
+        buffer_count=buffer_count,
+        max_machines=n_entities,
     )
 
 
-def _arm_state(
-    state_factory,
-    *,
-    machine_types: jnp.ndarray,
-    machine_direction: jnp.ndarray,
-    machine_inventory: jnp.ndarray,
-):
-    """Build a state with the given machine grid and full inventory."""
-    health = jnp.where(
-        machine_types != int(MachineType.NONE),
-        DEFAULT_MACHINE_MAX_HEALTH,
-        0,
-    ).astype(jnp.int32)
-    return state_factory(
-        world_map=jnp.zeros(machine_types.shape, dtype=jnp.int32),
-        machine_types=machine_types,
-        machine_direction=machine_direction,
-        machine_inventory=machine_inventory,
-        machine_health=health,
-    )
+def _get_buf(state, y: int, x: int) -> tuple[int, int]:
+    """Return (buf_type, buf_count) for the entity at tile (y, x).
+
+    Args:
+        state: Environment state.
+        y: Tile row.
+        x: Tile column.
+
+    Returns:
+        Tuple of (item_type, count). Returns (0, 0) if no entity.
+    """
+    eid = int(state.tile_entity[y, x])
+    if eid < 0:
+        return (0, 0)
+    return (int(state.ent_buf_type[eid]), int(state.ent_buf_count[eid]))
 
 
 # ---------------------------------------------------------------------------
 # Conveyor belt tests
 # ---------------------------------------------------------------------------
+
+B = MachineType.CONVEYOR_BELT
+R = int(Direction.RIGHT)
+D = int(Direction.DOWN)
 
 
 class TestConveyorBelt:
@@ -106,113 +114,129 @@ class TestConveyorBelt:
 
     def test_noop_when_no_items(self, state_factory) -> None:
         """Belt with empty inventory does nothing."""
-        types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
-        state = _belt_state(state_factory, machine_types=types, machine_direction=dirs)
+        types = jnp.array([[B, B]])
+        dirs = jnp.array([[R, _NOOP]])
+        state = _make_state(state_factory, machine_types=types, machine_direction=dirs)
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 0
+        assert _get_buf(result, 0, 0) == (0, 0)
+        assert _get_buf(result, 0, 1) == (0, 0)
 
     def test_pushes_item_right(self, state_factory) -> None:
         """Belt facing right moves items from (0,0) to (0,1)."""
-        types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
-        inv = _make_machine_inv((1, 2), {(0, 0, ItemType.COAL): 10})
-        state = _belt_state(
+        types = jnp.array([[B, B]])
+        dirs = jnp.array([[R, _NOOP]])
+        bt, bc = _buf_grids((1, 2), {(0, 0): (ItemType.COAL, 2)})
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 10
+        _, src_count = _get_buf(result, 0, 0)
+        dst_type, dst_count = _get_buf(result, 0, 1)
+        assert src_count == 0
+        assert dst_type == int(ItemType.COAL)
+        assert dst_count == 2
 
     def test_pushes_item_down(self, state_factory) -> None:
         """Belt facing down moves items from row 0 to row 1."""
-        types = jnp.array(
-            [[MachineType.CONVEYOR_BELT], [MachineType.CONVEYOR_BELT]],
-        )
-        dirs = jnp.array([[Direction.DOWN], [Direction.DOWN]])
-        inv = _make_machine_inv((2, 1), {(0, 0, ItemType.IRON_ORE): 5})
-        state = _belt_state(
+        types = jnp.array([[B], [B]])
+        dirs = jnp.array([[D], [_NOOP]])
+        bt, bc = _buf_grids((2, 1), {(0, 0): (ItemType.IRON_ORE, 2)})
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.IRON_ORE]) == 0
-        assert int(result.machine_inventory[1, 0, ItemType.IRON_ORE]) == 5
+        _, src_count = _get_buf(result, 0, 0)
+        dst_type, dst_count = _get_buf(result, 1, 0)
+        assert src_count == 0
+        assert dst_type == int(ItemType.IRON_ORE)
+        assert dst_count == 2
 
-    def test_does_not_push_to_non_belt(self, state_factory) -> None:
-        """Belt adjacent to a non-belt machine does not transfer items."""
-        types = jnp.array(
-            [[MachineType.CONVEYOR_BELT, MachineType.PALLET]],
-        )
-        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
-        inv = _make_machine_inv((1, 2), {(0, 0, ItemType.COAL): 8})
-        state = _belt_state(
+    def test_does_not_push_to_empty_tile(self, state_factory) -> None:
+        """Belt facing an empty tile does not transfer items."""
+        types = jnp.array([[B, MachineType.NONE]])
+        dirs = jnp.array([[R, _NOOP]])
+        bt, bc = _buf_grids((1, 2), {(0, 0): (ItemType.COAL, 2)})
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 8
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 0
+        src_type, src_count = _get_buf(result, 0, 0)
+        assert src_type == int(ItemType.COAL)
+        assert src_count == 2
 
     def test_does_not_push_to_blocked_target(self, state_factory) -> None:
-        """Belt does not push when target holds a different item at max stack."""
-        types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
-        inv = _make_machine_inv(
+        """Belt does not push when target holds a different item at max."""
+        types = jnp.array([[B, B]])
+        dirs = jnp.array([[R, _NOOP]])
+        bt, bc = _buf_grids(
             (1, 2),
             {
-                (0, 0, ItemType.COAL): 5,
-                (0, 1, ItemType.IRON_ORE): MAX_MACHINE_STACK_SIZE,
+                (0, 0): (ItemType.COAL, 2),
+                (0, 1): (ItemType.IRON_ORE, _BELT_MAX),
             },
         )
-        state = _belt_state(
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 5
+        src_type, src_count = _get_buf(result, 0, 0)
+        assert src_type == int(ItemType.COAL)
+        assert src_count == 2
 
     def test_merges_same_item_into_target(self, state_factory) -> None:
         """Items of the same type merge into the target's existing stack."""
-        types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[Direction.RIGHT, Direction.RIGHT]])
-        inv = _make_machine_inv(
+        types = jnp.array([[B, B]])
+        dirs = jnp.array([[R, _NOOP]])
+        bt, bc = _buf_grids(
             (1, 2),
-            {(0, 0, ItemType.COAL): 3, (0, 1, ItemType.COAL): 7},
+            {(0, 0): (ItemType.COAL, 1), (0, 1): (ItemType.COAL, 2)},
         )
-        state = _belt_state(
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 10
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
+        dst_type, dst_count = _get_buf(result, 0, 1)
+        assert dst_type == int(ItemType.COAL)
+        assert dst_count == 3
+        _, src_count = _get_buf(result, 0, 0)
+        assert src_count == 0
 
     def test_noop_with_zero_direction(self, state_factory) -> None:
-        """Belt with NOOP direction (0) does not push to self."""
-        types = jnp.array([[MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[0]])  # NOOP
-        inv = _make_machine_inv((1, 1), {(0, 0, ItemType.COAL): 5})
-        state = _belt_state(
+        """Belt with NOOP direction (0) does not push."""
+        types = jnp.array([[B]])
+        dirs = jnp.array([[_NOOP]])
+        bt, bc = _buf_grids((1, 1), {(0, 0): (ItemType.COAL, 2)})
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_conveyor_belts(state)
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 5
+        buf_type, buf_count = _get_buf(result, 0, 0)
+        assert buf_type == int(ItemType.COAL)
+        assert buf_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -221,156 +245,164 @@ class TestConveyorBelt:
 
 
 class TestArm:
-    """Pick-and-place arm tests."""
+    """Pick-and-place arm tests.
 
-    def test_picks_from_miner_output(self, state_factory) -> None:
-        """Arm picks item from miner's inventory (e.g. mined COAL)."""
-        # Layout: [MINER, ARM] -- arm faces RIGHT: bwd=(0,0) MINER.
-        shape = (1, 2)
-        types = jnp.array([[MachineType.MINER, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[0, int(Direction.RIGHT)]])
-        inv = _make_machine_inv(shape, {(0, 0, ItemType.COAL): 15})
-        state = _arm_state(
+    Arms have no internal buffer. Each tick, an arm transfers 1 item from
+    the entity behind it to the entity in front (facing direction).
+    Layout: [SOURCE, ARM(RIGHT), DESTINATION] means the arm picks from
+    SOURCE (behind) and deposits into DESTINATION (in front).
+    """
+
+    def test_transfers_from_miner_to_belt(self, state_factory) -> None:
+        """Arm transfers 1 item from miner behind to belt in front."""
+        # [MINER, ARM(RIGHT), BELT]
+        types = jnp.array([[MachineType.MINER, MachineType.ARM, B]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.COAL, 5)})
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_arms(state)
-        # ARM buffer should now hold COAL.
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 15
-        # Miner should be empty.
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
+        belt_type, belt_count = _get_buf(result, 0, 2)
+        assert belt_type == int(ItemType.COAL)
+        assert belt_count == 1
+        _, miner_count = _get_buf(result, 0, 0)
+        assert miner_count == 4
 
     def test_deposits_to_pallet(self, state_factory) -> None:
-        """Arm with full buffer deposits items into adjacent pallet."""
-        # Layout: [PALLET, ARM] -- arm at (0,1) facing LEFT: forward=(0,0).
-        shape = (1, 2)
-        types = jnp.array([[MachineType.PALLET, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[0, int(Direction.LEFT)]])
-        inv = _make_machine_inv(shape, {(0, 1, ItemType.IRON_ORE): 20})
-        state = _arm_state(
+        """Arm transfers 1 item from belt behind to pallet in front."""
+        # [BELT, ARM(RIGHT), PALLET]
+        types = jnp.array([[B, MachineType.ARM, MachineType.PALLET]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.IRON_ORE, 3)})
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_arms(state)
-        # ARM buffer cleared.
-        assert int(result.machine_inventory[0, 1, ItemType.IRON_ORE]) == 0
-        # Pallet received items.
-        assert int(result.machine_inventory[0, 0, ItemType.IRON_ORE]) == 20
+        pallet_type, pallet_count = _get_buf(result, 0, 2)
+        assert pallet_type == int(ItemType.IRON_ORE)
+        assert pallet_count == 1
+        _, belt_count = _get_buf(result, 0, 0)
+        assert belt_count == 2
 
-    def test_deposit_then_pick_same_tick(self, state_factory) -> None:
-        """Arm deposits first, then picks in same tick if buffer is now empty."""
-        # Layout: [PALLET_with_IRON, ARM, MINER_with_COAL]
-        # Arm at (0,1) facing LEFT: fwd=(0,0) PALLET, bwd=(0,2) MINER.
-        shape = (1, 3)
-        types = jnp.array(
-            [[MachineType.PALLET, MachineType.CONVEYOR_BELT, MachineType.MINER]],
-        )
-        dirs = jnp.array([[0, int(Direction.LEFT), 0]])
-        inv = _make_machine_inv(
-            shape,
+    def test_merges_same_item_into_destination(self, state_factory) -> None:
+        """Arm merges item into destination holding the same type."""
+        # [MINER, ARM(RIGHT), PALLET with existing COAL]
+        types = jnp.array([[MachineType.MINER, MachineType.ARM, MachineType.PALLET]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids(
+            (1, 3),
             {
-                (0, 1, ItemType.IRON_ORE): 8,  # ARM buffer
-                (0, 2, ItemType.COAL): 12,  # MINER output
+                (0, 0): (ItemType.COAL, 5),
+                (0, 2): (ItemType.COAL, 10),
             },
         )
-        state = _arm_state(
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_arms(state)
-        # IRON deposited into pallet.
-        assert int(result.machine_inventory[0, 0, ItemType.IRON_ORE]) == 8
-        # COAL picked into arm buffer.
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 12
-        # MINER output now empty.
-        assert int(result.machine_inventory[0, 2, ItemType.COAL]) == 0
+        pallet_type, pallet_count = _get_buf(result, 0, 2)
+        assert pallet_type == int(ItemType.COAL)
+        assert pallet_count == 11
+        _, miner_count = _get_buf(result, 0, 0)
+        assert miner_count == 4
 
-    def test_noop_when_buffer_full_and_no_deposit_slot(
+    def test_noop_when_dest_full(self, state_factory) -> None:
+        """Arm does nothing when destination is at max stack."""
+        # [MINER, ARM(RIGHT), BELT at max]
+        types = jnp.array([[MachineType.MINER, MachineType.ARM, B]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids(
+            (1, 3),
+            {
+                (0, 0): (ItemType.COAL, 5),
+                (0, 2): (ItemType.COAL, _BELT_MAX),
+            },
+        )
+        state = _make_state(
+            state_factory,
+            machine_types=types,
+            machine_direction=dirs,
+            buffer_type=bt,
+            buffer_count=bc,
+        )
+        result = run_arms(state)
+        _, miner_count = _get_buf(result, 0, 0)
+        assert miner_count == 5
+        _, belt_count = _get_buf(result, 0, 2)
+        assert belt_count == _BELT_MAX
+
+    def test_noop_when_source_empty(self, state_factory) -> None:
+        """Arm with empty source does nothing."""
+        # [empty MINER, ARM(RIGHT), BELT]
+        types = jnp.array([[MachineType.MINER, MachineType.ARM, B]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        state = _make_state(
+            state_factory,
+            machine_types=types,
+            machine_direction=dirs,
+        )
+        result = run_arms(state)
+        assert _get_buf(result, 0, 0) == (0, 0)
+        assert _get_buf(result, 0, 2) == (0, 0)
+
+    def test_noop_when_no_dest_entity(self, state_factory) -> None:
+        """Arm facing into empty tile does nothing."""
+        # [MINER, ARM(RIGHT), NONE]
+        types = jnp.array([[MachineType.MINER, MachineType.ARM, MachineType.NONE]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.COAL, 3)})
+        state = _make_state(
+            state_factory,
+            machine_types=types,
+            machine_direction=dirs,
+            buffer_type=bt,
+            buffer_count=bc,
+        )
+        result = run_arms(state)
+        _, miner_count = _get_buf(result, 0, 0)
+        assert miner_count == 3
+
+    def test_does_not_corrupt_unrelated_entities(
         self,
         state_factory,
     ) -> None:
-        """Arm with buffer full but no compatible deposit target does nothing."""
-        shape = (1, 2)
-        types = jnp.array([[MachineType.CONVEYOR_BELT, MachineType.NONE]])
-        dirs = jnp.array([[int(Direction.RIGHT), 0]])
-        inv = _make_machine_inv(shape, {(0, 0, ItemType.COAL): 5})
-        state = _arm_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            machine_inventory=inv,
-        )
-        result = run_arms(state)
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 5
+        """Arm transfer does not zero out unrelated entity buffers.
 
-    def test_noop_when_buffer_empty_and_no_pick_source(
-        self,
-        state_factory,
-    ) -> None:
-        """Arm with empty buffer and empty backward neighbour does nothing."""
-        shape = (1, 2)
-        types = jnp.array([[MachineType.NONE, MachineType.CONVEYOR_BELT]])
-        dirs = jnp.array([[0, int(Direction.RIGHT)]])
-        inv = _make_machine_inv(shape)
-        state = _arm_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            machine_inventory=inv,
-        )
-        result = run_arms(state)
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 0
-
-    def test_pallet_to_belt_no_item_corruption(self, state_factory) -> None:
-        """Arm depositing to belt then picking from pallet must not corrupt items.
-
-        Reproduces a bug where the pick phase's item-type clearing used a
-        gather+where instead of a scatter, causing the belt's item type to
-        be zeroed when the arm depleted the pallet slot in the same tick.
+        Reproduces a bug where the pick phase's item-type clearing used
+        a gather+where instead of a scatter, causing nearby entity
+        buffers to be zeroed in the same tick.
         """
-        # Layout: [PALLET, ARM, BELT]
-        # ARM faces RIGHT: forward=BELT, backward=PALLET.
-        shape = (1, 3)
-        types = jnp.array(
-            [
-                [
-                    MachineType.PALLET,
-                    MachineType.CONVEYOR_BELT,
-                    MachineType.CONVEYOR_BELT,
-                ]
-            ]
+        # [PALLET, ARM(RIGHT), BELT]
+        types = jnp.array([[MachineType.PALLET, MachineType.ARM, B]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids(
+            (1, 3),
+            {(0, 0): (ItemType.COAL, 3)},
         )
-        dirs = jnp.array([[0, int(Direction.RIGHT), int(Direction.RIGHT)]])
-        inv = _make_machine_inv(
-            shape,
-            {
-                (0, 0, ItemType.COAL): 10,  # Pallet
-                (0, 1, ItemType.COAL): 5,  # ARM buffer
-            },
-        )
-        state = _arm_state(
+        state = _make_state(
             state_factory,
             machine_types=types,
             machine_direction=dirs,
-            machine_inventory=inv,
+            buffer_type=bt,
+            buffer_count=bc,
         )
         result = run_arms(state)
-
-        # Deposit phase: ARM deposits 5 COAL to belt.
-        # Pick phase: ARM (now empty) picks 10 COAL from pallet.
-        # Belt must retain COAL -- not be zeroed.
-        assert int(result.machine_inventory[0, 2, ItemType.COAL]) == 5, (
-            "belt item corrupted to zero"
-        )
-
-        # Pallet should be empty.
-        assert int(result.machine_inventory[0, 0, ItemType.COAL]) == 0
-
-        # ARM buffer should hold the picked COAL from pallet.
-        assert int(result.machine_inventory[0, 1, ItemType.COAL]) == 10
+        belt_type, belt_count = _get_buf(result, 0, 2)
+        assert belt_type == int(ItemType.COAL), "belt item corrupted"
+        assert belt_count == 1
+        pallet_type, pallet_count = _get_buf(result, 0, 0)
+        assert pallet_type == int(ItemType.COAL)
+        assert pallet_count == 2

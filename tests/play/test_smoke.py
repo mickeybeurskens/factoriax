@@ -50,7 +50,10 @@ class TestRendererSmoke:
 
         env, params, state = env_and_state
         _, state2, _, _, _ = env.step_env(
-            jax.random.key(1), state, jnp.int32(Action.NOOP), params,
+            jax.random.key(1),
+            state,
+            jnp.int32(Action.NOOP),
+            params,
         )
         img = render_pixels(state2, block_pixel_size=8)
         assert img.shape == (128, 128, 3)
@@ -124,7 +127,6 @@ class TestConfigSmoke:
         config = load_config()
         assert config is not None
 
-
     def test_settings_fields_exist_on_env_params(self) -> None:
         """Every field in the settings menu must exist on EnvParams."""
         from factoriax.menu.settings_menu import _build_sections
@@ -168,11 +170,16 @@ class TestEnvStepSmoke:
         """Reset + step completes without error at each map size."""
         env = FactoriaXEnv()
         params = EnvParams(
-            map_width=size, map_height=size, num_players=1,
+            map_width=size,
+            map_height=size,
+            num_players=1,
         )
         _, state = env.reset_env(jax.random.key(0), params)
         obs, state2, reward, done, info = env.step_env(
-            jax.random.key(1), state, jnp.int32(Action.NOOP), params,
+            jax.random.key(1),
+            state,
+            jnp.int32(Action.NOOP),
+            params,
         )
         assert state2.timestep == 1
         assert obs.shape[0] > 0
@@ -184,7 +191,8 @@ class TestEnvStepSmoke:
         n = 8
         keys = jax.random.split(jax.random.key(42), n)
         _, states = jax.vmap(env.reset_env, in_axes=(0, None))(
-            keys, params,
+            keys,
+            params,
         )
         vmap_step = jax.jit(
             jax.vmap(env.step_env, in_axes=(0, 0, 0, None)),
@@ -192,6 +200,9 @@ class TestEnvStepSmoke:
         step_keys = jax.random.split(jax.random.key(99), n)
         actions = jnp.zeros(n, dtype=jnp.int32)
         _, states2, _, _, _ = vmap_step(
-            step_keys, states, actions, params,
+            step_keys,
+            states,
+            actions,
+            params,
         )
         assert states2.timestep.shape == (n,)

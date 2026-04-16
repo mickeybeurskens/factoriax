@@ -31,7 +31,9 @@ def _make_level_with_fueled_miner() -> Level:
     resources[2, 2] = 100
 
     machine_types = np.full(
-        (h, w), int(MachineType.NONE), dtype=np.int32,
+        (h, w),
+        int(MachineType.NONE),
+        dtype=np.int32,
     )
     machine_types[2, 2] = int(MachineType.MINER)
 
@@ -60,7 +62,9 @@ def _make_level_with_pallet_items() -> Level:
     block_map = np.full((h, w), int(BlockType.DIRT), dtype=np.int32)
 
     machine_types = np.full(
-        (h, w), int(MachineType.NONE), dtype=np.int32,
+        (h, w),
+        int(MachineType.NONE),
+        dtype=np.int32,
     )
     machine_types[2, 2] = int(MachineType.PALLET)
 
@@ -113,7 +117,9 @@ class TestEditorInventoryInit:
         h, w = 3, 3
         block_map = np.full((h, w), int(BlockType.IRON), dtype=np.int32)
         machine_types = np.full(
-            (h, w), int(MachineType.NONE), dtype=np.int32,
+            (h, w),
+            int(MachineType.NONE),
+            dtype=np.int32,
         )
         machine_types[1, 1] = int(MachineType.MINER)
 

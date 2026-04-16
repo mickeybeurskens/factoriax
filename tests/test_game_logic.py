@@ -1,4 +1,4 @@
-"""Tests for game logic orchestration (pouch inventory model).
+"""Tests for game logic orchestration (entity-based state).
 
 Covers the action dispatcher ``_handle_player_action``, compound
 deposit/withdraw actions, and the top-level ``factoriax_step``.
@@ -25,53 +25,80 @@ class TestHandlePlayerAction:
     """Tests for the action dispatch function."""
 
     def test_up_moves_north_on_map(self, state_factory) -> None:
-        """UP should move the player north (y-1)."""
+        """UP should move the player north (y-1) and face UP."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 1),
             player_direction=int(Direction.RIGHT),
         )
         new_state = _handle_player_action(state, Action.UP, 0)
         assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array([1, 0]),
+            new_state.player_positions[0],
+            jnp.array([1, 0]),
         )
-        assert int(new_state.player_directions[0]) == Direction.RIGHT
+        # Movement now sets facing to the movement direction.
+        assert int(new_state.player_directions[0]) == Direction.UP
 
     def test_left_moves_west_on_map(self, state_factory) -> None:
         """LEFT should move the player west (x-1)."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 1),
             player_direction=int(Direction.DOWN),
         )
         new_state = _handle_player_action(state, Action.LEFT, 0)
         assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array([0, 1]),
+            new_state.player_positions[0],
+            jnp.array([0, 1]),
         )
 
-    def test_movement_preserves_facing(self, state_factory) -> None:
-        """All movement actions should preserve the facing direction."""
+    def test_movement_sets_facing(self, state_factory) -> None:
+        """Movement actions should set facing to the movement direction."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 1),
             player_direction=int(Direction.LEFT),
         )
-        for action in [Action.UP, Action.DOWN, Action.LEFT, Action.RIGHT]:
+        expected = {
+            Action.UP: Direction.UP,
+            Action.DOWN: Direction.DOWN,
+            Action.LEFT: Direction.LEFT,
+            Action.RIGHT: Direction.RIGHT,
+        }
+        for action, expected_dir in expected.items():
             new = _handle_player_action(state, action, 0)
-            assert int(new.player_directions[0]) == Direction.LEFT
+            assert int(new.player_directions[0]) == expected_dir
 
-    def test_turn_changes_facing_without_moving(
-        self, state_factory,
+    def test_face_changes_facing_without_moving(
+        self,
+        state_factory,
     ) -> None:
-        """TURN_RIGHT should rotate facing in place."""
+        """FACE_RIGHT should set facing in place without moving."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 1),
             player_direction=int(Direction.UP),
         )
-        new_state = _handle_player_action(state, Action.TURN_RIGHT, 0)
+        new_state = _handle_player_action(state, Action.FACE_RIGHT, 0)
         assert jnp.array_equal(
-            new_state.player_positions[0], jnp.array([1, 1]),
+            new_state.player_positions[0],
+            jnp.array([1, 1]),
         )
         assert int(new_state.player_directions[0]) == Direction.RIGHT
 
@@ -85,11 +112,18 @@ class TestHandlePlayerAction:
         ],
     )
     def test_face_action_dispatches(
-        self, state_factory, action: Action, expected_dir: Direction,
+        self,
+        state_factory,
+        action: Action,
+        expected_dir: Direction,
     ) -> None:
         """FACE_* actions should set facing."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 1),
             player_direction=int(Direction.UP),
         )
@@ -100,7 +134,8 @@ class TestHandlePlayerAction:
         """MINE should extract a resource into the player's pouch."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL]], dtype=jnp.int32,
+                [[BlockType.COAL]],
+                dtype=jnp.int32,
             ),
             block_resources=jnp.array([[10]], dtype=jnp.int16),
         )
@@ -112,15 +147,18 @@ class TestHandlePlayerAction:
         """NOOP should not change position or inventory."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT]], dtype=jnp.int32,
+                [[BlockType.DIRT]],
+                dtype=jnp.int32,
             ),
         )
         new_state = _handle_player_action(state, Action.NOOP, 0)
         assert jnp.array_equal(
-            new_state.player_positions, state.player_positions,
+            new_state.player_positions,
+            state.player_positions,
         )
         assert jnp.array_equal(
-            new_state.player_inventory, state.player_inventory,
+            new_state.player_inventory,
+            state.player_inventory,
         )
 
 
@@ -128,36 +166,51 @@ class TestCompoundDeposit:
     """Tests for typed deposit actions."""
 
     def test_deposit_coal_into_miner(self, state_factory) -> None:
-        """DEPOSIT_COAL should transfer coal into the miner's pouch."""
+        """DEPOSIT_COAL should transfer coal into the miner's fuel."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.COAL].set(10)
-        m_inv = jnp.zeros((3, 3, NUM_ITEM_TYPES), dtype=jnp.int16)
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             player_inventory=inv,
             machine_types=jnp.full(
-                (3, 3), MachineType.NONE, dtype=jnp.int32,
-            ).at[1, 1].set(MachineType.MINER),
-            machine_inventory=m_inv,
+                (3, 3),
+                MachineType.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(MachineType.MINER),
         )
         new = deposit_to_adjacent(state, 0, int(ItemType.COAL))
-        assert int(new.machine_inventory[1, 1, ItemType.COAL]) == 10
-        assert int(new.player_inventory[0, ItemType.COAL]) == 0
+        eid = int(state.tile_entity[1, 1])
+        assert int(new.ent_fuel[eid]) == 1
+        assert int(new.player_inventory[0, ItemType.COAL]) == 9
 
     def test_deposit_invalid_item_is_noop(self, state_factory) -> None:
         """Depositing copper into a miner should be a no-op."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.COPPER_ORE].set(5)
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             player_inventory=inv,
             machine_types=jnp.full(
-                (3, 3), MachineType.NONE, dtype=jnp.int32,
-            ).at[1, 1].set(MachineType.MINER),
+                (3, 3),
+                MachineType.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(MachineType.MINER),
         )
         new = deposit_to_adjacent(state, 0, int(ItemType.COPPER_ORE))
         # Copper is not valid fuel for miners.
@@ -168,31 +221,49 @@ class TestCompoundWithdraw:
     """Tests for typed withdraw actions."""
 
     def test_withdraw_iron_from_miner(self, state_factory) -> None:
-        """WITHDRAW_IRON should pull iron from the miner's pouch."""
-        m_inv = jnp.zeros((3, 3, NUM_ITEM_TYPES), dtype=jnp.int16)
-        m_inv = m_inv.at[1, 1, ItemType.IRON_ORE].set(8)
+        """WITHDRAW_IRON should pull iron from the miner's buffer."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             machine_types=jnp.full(
-                (3, 3), MachineType.NONE, dtype=jnp.int32,
-            ).at[1, 1].set(MachineType.MINER),
-            machine_inventory=m_inv,
+                (3, 3),
+                MachineType.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(MachineType.MINER),
+            buffer_type=jnp.zeros((3, 3), dtype=jnp.int8)
+            .at[1, 1]
+            .set(int(ItemType.IRON_ORE)),
+            buffer_count=jnp.zeros((3, 3), dtype=jnp.int16).at[1, 1].set(8),
         )
         new = withdraw_from_adjacent(state, 0, int(ItemType.IRON_ORE))
-        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 8
-        assert int(new.machine_inventory[1, 1, ItemType.IRON_ORE]) == 0
+        eid = int(state.tile_entity[1, 1])
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 1
+        assert int(new.ent_buf_count[eid]) == 7
 
     def test_withdraw_empty_is_noop(self, state_factory) -> None:
         """Withdrawing an item that isn't there should be a no-op."""
         state = state_factory(
-            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
             player_position=(1, 0),
             player_direction=int(Direction.DOWN),
             machine_types=jnp.full(
-                (3, 3), MachineType.NONE, dtype=jnp.int32,
-            ).at[1, 1].set(MachineType.MINER),
+                (3, 3),
+                MachineType.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(MachineType.MINER),
         )
         new = withdraw_from_adjacent(state, 0, int(ItemType.IRON_ORE))
         assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 0
@@ -205,7 +276,8 @@ class TestFactoriaxStep:
         """Each step should increment the timestep by 1."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.DIRT]], dtype=jnp.int32,
+                [[BlockType.DIRT]],
+                dtype=jnp.int32,
             ),
         )
         rng = jax.random.PRNGKey(0)
@@ -214,12 +286,14 @@ class TestFactoriaxStep:
         assert int(new_state.timestep) == int(state.timestep) + 1
 
     def test_mine_and_machines_in_single_step(
-        self, state_factory,
+        self,
+        state_factory,
     ) -> None:
         """A step should run player action, crafting, and machines."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL, BlockType.IRON]], dtype=jnp.int32,
+                [[BlockType.COAL, BlockType.IRON]],
+                dtype=jnp.int32,
             ),
             block_resources=jnp.array([[10, 50]], dtype=jnp.int16),
             machine_types=jnp.array(

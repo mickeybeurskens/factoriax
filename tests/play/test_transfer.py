@@ -25,7 +25,10 @@ class TestSwapInventorySlots:
             player_inventory=inv,
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.COAL), int(ItemType.IRON_ORE),
+            state,
+            0,
+            int(ItemType.COAL),
+            int(ItemType.IRON_ORE),
         )
         assert int(result.player_inventory[0, int(ItemType.COAL)]) == 10
         assert int(result.player_inventory[0, int(ItemType.IRON_ORE)]) == 5
@@ -39,7 +42,10 @@ class TestSwapInventorySlots:
             player_inventory=inv,
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.COPPER_ORE), int(ItemType.MINER),
+            state,
+            0,
+            int(ItemType.COPPER_ORE),
+            int(ItemType.MINER),
         )
         assert int(result.player_inventory[0, int(ItemType.COPPER_ORE)]) == 0
         assert int(result.player_inventory[0, int(ItemType.MINER)]) == 3
@@ -61,7 +67,10 @@ class TestSwapInventorySlots:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.STEEL), int(ItemType.ROCKET),
+            state,
+            0,
+            int(ItemType.STEEL),
+            int(ItemType.ROCKET),
         )
         assert int(result.player_inventory[0, int(ItemType.STEEL)]) == 0
         assert int(result.player_inventory[0, int(ItemType.ROCKET)]) == 0
@@ -77,7 +86,10 @@ class TestSwapInventorySlots:
         )
         total_before = int(jnp.sum(state.player_inventory))
         result = swap_inventory_slots(
-            state, 0, int(ItemType.COAL), int(ItemType.IRON_ORE),
+            state,
+            0,
+            int(ItemType.COAL),
+            int(ItemType.IRON_ORE),
         )
         total_after = int(jnp.sum(result.player_inventory))
         assert total_before == total_after
@@ -92,7 +104,10 @@ class TestSwapInventorySlots:
             player_inventory=inv,
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.MINER), int(ItemType.ASSEMBLER),
+            state,
+            0,
+            int(ItemType.MINER),
+            int(ItemType.ASSEMBLER),
         )
         assert int(result.player_inventory[0, int(ItemType.MINER)]) == 15
         assert int(result.player_inventory[0, int(ItemType.ASSEMBLER)]) == 7
@@ -108,6 +123,9 @@ class TestSwapInventorySlots:
             player_inventory=inv,
         )
         result = swap_inventory_slots(
-            state, 0, int(ItemType.COAL), int(ItemType.IRON_ORE),
+            state,
+            0,
+            int(ItemType.COAL),
+            int(ItemType.IRON_ORE),
         )
         assert int(result.player_inventory[0, int(ItemType.COPPER_ORE)]) == 99

@@ -276,9 +276,9 @@ class TestBuildState:
         assert jnp.all(state.machine_types == int(MachineType.NONE))
 
     def test_machine_directions_zero_by_default(self) -> None:
-        """Without directions in the level, all default to zero."""
+        """Without directions in the level, all entity directions default to zero."""
         state = build_state(_dirt_level(), _PARAMS_1P)
-        assert jnp.all(state.machine_direction == 0)
+        assert jnp.all(state.ent_direction == 0)
 
     def test_machine_directions_preserved(self) -> None:
         """Directions set in the Level must appear in the built state."""
@@ -295,7 +295,9 @@ class TestBuildState:
             machine_directions=dirs,
         )
         state = build_state(level, _PARAMS_1P)
-        assert int(state.machine_direction[3, 3]) == int(Direction.RIGHT)
+        eid = int(state.tile_entity[3, 3])
+        assert eid >= 0, "Expected an entity at tile (3, 3)"
+        assert int(state.ent_direction[eid]) == int(Direction.RIGHT)
 
 
 # ---------------------------------------------------------------------------
@@ -362,9 +364,7 @@ class TestSerialization:
             name="dir",
             map_width=4,
             map_height=4,
-            block_map=np.full(
-                (4, 4), int(BlockType.DIRT), dtype=np.int32
-            ),
+            block_map=np.full((4, 4), int(BlockType.DIRT), dtype=np.int32),
             machine_types=machines,
             machine_directions=dirs,
         )
@@ -373,9 +373,7 @@ class TestSerialization:
             save_level(level, path)
             loaded = load_level(path)
         assert loaded.machine_directions is not None
-        np.testing.assert_array_equal(
-            loaded.machine_directions, dirs
-        )
+        np.testing.assert_array_equal(loaded.machine_directions, dirs)
 
     def test_roundtrip_no_directions_stays_none(self) -> None:
         """Levels without directions must load as None."""
@@ -502,9 +500,7 @@ class TestGenerateState:
 
         from factoriax.constants import MINEABLE_BLOCKS
 
-        params = EnvParams(
-            map_width=32, map_height=32, num_players=1, base_resources=3
-        )
+        params = EnvParams(map_width=32, map_height=32, num_players=1, base_resources=3)
         state = generate_state(jax.random.PRNGKey(5), params)
         world_map = np.array(state.map)
         resources = np.array(state.block_resources)

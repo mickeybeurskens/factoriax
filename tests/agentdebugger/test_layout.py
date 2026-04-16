@@ -40,7 +40,10 @@ class TestRenderDebuggerFrame:
             debugger._actions,
             debugger._costs,
             debugger._constraint_names,
-            bw, bh, qw, qh,
+            bw,
+            bh,
+            qw,
+            qh,
             has_reward=True,
             has_cost=True,
         )
@@ -58,7 +61,10 @@ class TestRenderDebuggerFrame:
             debugger._actions,
             debugger._costs,
             debugger._constraint_names,
-            bw, bh, qw, qh,
+            bw,
+            bh,
+            qw,
+            qh,
         )
         assert frame.sum() > 0
 
@@ -75,7 +81,10 @@ class TestRenderDebuggerFrame:
             debugger._actions,
             debugger._costs,
             debugger._constraint_names,
-            bw, bh, qw, qh,
+            bw,
+            bh,
+            qw,
+            qh,
             has_reward=True,
             has_cost=True,
         )
