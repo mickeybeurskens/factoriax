@@ -327,23 +327,37 @@ class TestRenderer:
             assert texture.dtype == np.uint8
 
     def test_resource_textures_have_expected_colors(self) -> None:
-        """Resource textures should have distinct recognizable colors."""
+        """Resource textures should be dominated by their base color.
+
+        Ore textures now paint darker patches and occasional bright
+        pixels on top of the base fill, so any given pixel might not
+        equal the base color. The mode (most common color) still is.
+        """
         textures = create_default_textures()
 
-        iron = textures[int(BlockType.IRON)]
-        assert iron[0, 0, 0] == 180  # Blue-gray RGB
-        assert iron[0, 0, 1] == 185
-        assert iron[0, 0, 2] == 200
-
-        copper = textures[int(BlockType.COPPER)]
-        assert copper[0, 0, 0] == 200  # Orange-brown RGB
-        assert copper[0, 0, 1] == 120
-        assert copper[0, 0, 2] == 45
-
-        coal = textures[int(BlockType.COAL)]
-        assert coal[0, 0, 0] == 50  # Dark gray RGB
-        assert coal[0, 0, 1] == 50
-        assert coal[0, 0, 2] == 55
+        expected = {
+            int(BlockType.IRON): (180, 185, 200),
+            int(BlockType.COPPER): (200, 120, 45),
+            int(BlockType.COAL): (50, 50, 55),
+        }
+        for block_id, base_rgb in expected.items():
+            tex = textures[block_id]
+            # Collapse each pixel to an int tag, find the most common.
+            pixels = tex[..., :3].reshape(-1, 3)
+            as_int = (
+                pixels[:, 0].astype(np.uint32) * 65536
+                + pixels[:, 1].astype(np.uint32) * 256
+                + pixels[:, 2].astype(np.uint32)
+            )
+            mode_tag = np.bincount(as_int).argmax()
+            mode_rgb = (
+                int(mode_tag >> 16) & 0xFF,
+                int(mode_tag >> 8) & 0xFF,
+                int(mode_tag) & 0xFF,
+            )
+            assert mode_rgb == base_rgb, (
+                f"block {block_id}: dominant color {mode_rgb}, expected {base_rgb}"
+            )
 
     def test_render_pixels_returns_correct_shape(self) -> None:
         """Rendered image should have correct dimensions."""

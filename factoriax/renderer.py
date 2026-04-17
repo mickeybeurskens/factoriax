@@ -58,10 +58,12 @@ def _solid_texture(
 
 
 def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
-    """Create solid-color block textures with distinct colors.
+    """Create patterned block textures without touching disk.
 
-    Each ore type has a saturated, high-contrast color so they are
-    easy to tell apart at a glance on the map.
+    Ore blocks get the same irregular-patches pattern used by their
+    inventory icons so the tile, the mined item, and any plate that
+    descends from it all share a visual family. Non-ore blocks stay
+    solid.
 
     Args:
         size: Side length of each texture in pixels.
@@ -69,20 +71,27 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
     Returns:
         Dictionary mapping BlockType values to RGBA texture arrays.
     """
-    colors: dict[int, tuple[int, int, int]] = {
+    solid_colors: dict[int, tuple[int, int, int]] = {
         int(BlockType.DIRT): (139, 90, 43),
         int(BlockType.WATER): (50, 120, 190),
-        int(BlockType.IRON): (180, 185, 200),
-        int(BlockType.COPPER): (200, 120, 45),
-        int(BlockType.COAL): (50, 50, 55),
-        int(BlockType.TIN): (195, 195, 175),
-        int(BlockType.SILICON): (80, 95, 150),
         int(BlockType.NEST): (130, 40, 55),
     }
-    return {
-        block_id: _solid_texture(size, rgb)
-        for block_id, rgb in colors.items()
+    ore_colors: dict[int, tuple[tuple[int, int, int], bool]] = {
+        int(BlockType.IRON): ((180, 185, 200), False),
+        int(BlockType.COPPER): ((200, 120, 45), False),
+        int(BlockType.COAL): ((50, 50, 55), False),
+        int(BlockType.TIN): ((195, 195, 175), False),
+        int(BlockType.SILICON): ((80, 95, 150), True),
     }
+
+    textures: dict[int, np.ndarray] = {
+        block_id: _solid_texture(size, rgb) for block_id, rgb in solid_colors.items()
+    }
+    for block_id, (rgb, crystalline) in ore_colors.items():
+        tex = _solid_texture(size, rgb)
+        _draw_ore_patches(tex, rgb, seed=block_id, crystalline=crystalline)
+        textures[block_id] = tex
+    return textures
 
 
 PLAYER_COLORS = [
@@ -544,35 +553,511 @@ def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
                     icon[py, px] = _ARM_CIRCLE_COLOR
 
 
-# Pallet sprite colours.
-_PALLET_RIM: tuple[int, int, int, int] = (60, 60, 60, 255)
-_PALLET_SURFACE: tuple[int, int, int, int] = (170, 170, 175, 255)
-_PALLET_RIVET: tuple[int, int, int, int] = (220, 220, 225, 255)
+# ---------------------------------------------------------------------------
+# Shared drawing helpers for ore / plate / item / machine textures
+# ---------------------------------------------------------------------------
 
 
-def _draw_pallet_icon(icon: np.ndarray) -> None:
-    """Draw a riveted iron plate onto a pallet icon.
+def _shade(rgb: tuple[int, int, int], delta: int) -> tuple[int, int, int]:
+    """Shift an RGB triple toward black (negative) or white (positive).
 
-    Dark 1px rim, iron-gray interior, bright dots in corners.
+    Args:
+        rgb: Base color.
+        delta: Amount to add/subtract from each channel. Clamped to [0, 255].
+
+    Returns:
+        Shifted RGB triple.
+    """
+    return tuple(max(0, min(255, c + delta)) for c in rgb)  # type: ignore[return-value]
+
+
+def _draw_ore_patches(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+    seed: int,
+    *,
+    crystalline: bool = False,
+) -> None:
+    """Paint irregular darker blobs (and optional bright glints) onto an icon.
+
+    The patch distribution is deterministic for a given ``seed``, so every
+    tile of the same ore type looks identical between frames. When
+    ``crystalline`` is True, extra sharp single-pixel highlights are added
+    on top (used for silicon).
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base ore color (already filled into the icon).
+        seed: RNG seed controlling patch layout.
+        crystalline: Whether to add crystalline glint sparkles.
+    """
+    s = icon.shape[0]
+    if s < 4:
+        return
+    rng = np.random.default_rng(seed)
+    dark = _shade(base_rgb, -35)
+    deep = _shade(base_rgb, -60)
+    light = _shade(base_rgb, 45)
+
+    n_patches = max(4, (s * s) // 40)
+    max_r = max(1, s // 7)
+    for _ in range(n_patches):
+        cy = int(rng.integers(0, s))
+        cx = int(rng.integers(0, s))
+        r = int(rng.integers(1, max_r + 1))
+        color = deep if rng.random() < 0.25 else dark
+        ys, xs = np.ogrid[:s, :s]
+        # Jitter the radius squared so blobs aren't perfect circles.
+        jitter = float(rng.uniform(-1.5, 1.5))
+        mask = ((ys - cy) ** 2 + (xs - cx) ** 2) <= (r * r + jitter)
+        icon[mask, :3] = color
+
+    # Sparse bright pinpoints (rare single glints).
+    n_glints = max(1, s // 16)
+    for _ in range(n_glints):
+        gy = int(rng.integers(0, s))
+        gx = int(rng.integers(0, s))
+        icon[gy, gx, :3] = light
+
+    if crystalline:
+        n_sparkles = max(3, s // 5)
+        sparkle = _shade(base_rgb, 90)
+        for _ in range(n_sparkles):
+            sy = int(rng.integers(1, s - 1))
+            sx = int(rng.integers(1, s - 1))
+            icon[sy, sx, :3] = sparkle
+
+
+def _draw_plate_shine(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a diagonal highlight band on a plate icon.
+
+    Creates a 3-pixel-wide bright diagonal slanting from the top-left
+    plus subtle corner shadows, so the plate reads as a flat milled
+    surface catching the light.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base plate color.
+    """
+    s = icon.shape[0]
+    if s < 4:
+        return
+    bright = _shade(base_rgb, 45)
+    mid = _shade(base_rgb, 22)
+    dark = _shade(base_rgb, -35)
+
+    # Diagonal band near the upper-left, three pixels wide.
+    band_len = max(2, (2 * s) // 3)
+    for i in range(band_len):
+        for t, color in ((-1, mid), (0, bright), (1, mid)):
+            y = i + t
+            x = i - t
+            if 0 <= y < s and 0 <= x < s:
+                icon[y, x, :3] = color
+
+    # Soft shadow in the top-left-most corner and bottom-right edge.
+    icon[0, 0, :3] = dark
+    icon[s - 1, s - 1, :3] = dark
+    if s >= 8:
+        icon[s - 1, s - 2, :3] = dark
+        icon[s - 2, s - 1, :3] = dark
+
+
+def _draw_wafer(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a wafer icon: plate shine plus faint concentric arcs.
+
+    The arcs hint at a silicon disc rather than a flat metal sheet.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base wafer color.
+    """
+    _draw_plate_shine(icon, base_rgb)
+    s = icon.shape[0]
+    if s < 8:
+        return
+    cy = cx = s // 2
+    arc = _shade(base_rgb, -25)
+    ys, xs = np.ogrid[:s, :s]
+    dist = np.sqrt((ys - cy) ** 2 + (xs - cx) ** 2)
+    for ring_r in (s // 4, s // 3):
+        mask = np.abs(dist - ring_r) < 0.6
+        icon[mask, :3] = arc
+
+
+def _draw_wire_helix(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw twin diagonal strands suggesting a coiled wire.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base wire color.
+    """
+    s = icon.shape[0]
+    dark = _shade(base_rgb, -55)
+    sep = max(2, s // 5)
+    for i in range(s):
+        icon[i, i, :3] = dark
+        if i + sep < s:
+            icon[i, i + sep, :3] = dark
+
+
+def _draw_circuit_traces(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw PCB traces: two right-angle paths meeting a solder pad.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base circuit (green) color.
+    """
+    s = icon.shape[0]
+    if s < 6:
+        return
+    dark = _shade(base_rgb, -70)
+    pad = _shade(base_rgb, 60)
+    mid = s // 2
+    q = max(1, s // 4)
+    # Horizontal trace near top, vertical spine down to lower-right pad.
+    icon[q, 1 : mid + 1, :3] = dark
+    icon[q : s - q, mid, :3] = dark
+    icon[s - q - 1, mid : s - 1, :3] = dark
+    # Two solder pads.
+    icon[q - 1 : q + 2, 1:3, :3] = pad
+    icon[s - q - 2 : s - q + 1, s - 3 : s - 1, :3] = pad
+
+
+def _draw_motor(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a motor: cylindrical housing with a visible shaft.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base motor color.
+    """
+    s = icon.shape[0]
+    if s < 6:
+        return
+    dark = _shade(base_rgb, -55)
+    bright = _shade(base_rgb, 55)
+    mid = s // 2
+    body_top = s // 4
+    body_bot = 3 * s // 4
+    body_left = s // 5
+    body_right = 3 * s // 5
+    # Housing outline.
+    icon[body_top:body_bot, body_left:body_right, :3] = dark
+    # Shaft sticking out to the right.
+    shaft_y0 = mid - max(1, s // 12)
+    shaft_y1 = mid + max(1, s // 12) + 1
+    icon[shaft_y0:shaft_y1, body_right : body_right + s // 5, :3] = dark
+    # A couple of rivet highlights on the housing.
+    for ry in (body_top + 1, body_bot - 2):
+        for rx in (body_left + 1, body_right - 2):
+            if 0 <= ry < s and 0 <= rx < s:
+                icon[ry, rx, :3] = bright
+
+
+def _draw_sensor_lens(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a sensor as a single large lens with a bright glint.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base sensor body color.
+    """
+    s = icon.shape[0]
+    if s < 6:
+        return
+    dark = _shade(base_rgb, -55)
+    darker = _shade(base_rgb, -30)
+    bright = _shade(base_rgb, 90)
+    cy = cx = s // 2
+    outer_r = s // 3
+    inner_r = max(1, s // 5)
+    ys, xs = np.ogrid[:s, :s]
+    dist = np.sqrt((ys - cy) ** 2 + (xs - cx) ** 2)
+    icon[(dist <= outer_r) & (dist > inner_r), :3] = dark
+    icon[dist <= inner_r, :3] = darker
+    icon[cy, cx, :3] = bright
+
+
+def _draw_frame_ibeam(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a structural frame as an I-beam cross-section.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base frame color.
+    """
+    s = icon.shape[0]
+    if s < 8:
+        return
+    dark = _shade(base_rgb, -45)
+    flange_h = max(1, s // 6)
+    web_half = max(1, s // 8)
+    mid = s // 2
+    margin = s // 6
+    # Top flange.
+    icon[margin : margin + flange_h, margin : s - margin, :3] = dark
+    # Bottom flange.
+    icon[s - margin - flange_h : s - margin, margin : s - margin, :3] = dark
+    # Web in the middle.
+    icon[margin : s - margin, mid - web_half : mid + web_half + 1, :3] = dark
+
+
+def _draw_flask(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+    *,
+    advanced: bool = False,
+) -> None:
+    """Draw a science-pack flask silhouette.
+
+    The basic and advanced packs share the same flask; the advanced
+    variant adds a bright glow in the center of the bulb.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base flask color.
+        advanced: If True, draw a central glow.
+    """
+    s = icon.shape[0]
+    if s < 8:
+        return
+    dark = _shade(base_rgb, -55)
+    bright = _shade(base_rgb, 60)
+    mid = s // 2
+    neck_top = s // 6
+    neck_bot = s // 2
+    neck_half = max(1, s // 12)
+    # Neck.
+    icon[neck_top:neck_bot, mid - neck_half : mid + neck_half + 1, :3] = dark
+    # Bulb body: a filled circle sitting low in the icon.
+    body_cy = (3 * s) // 5
+    body_r = s // 3
+    ys, xs = np.ogrid[:s, :s]
+    dist = np.sqrt((ys - body_cy) ** 2 + (xs - mid) ** 2)
+    ring = (dist <= body_r) & (dist >= body_r - 1.5)
+    fill = (dist <= body_r - 1.2) & (ys >= neck_bot - 1)
+    icon[ring, :3] = dark
+    icon[fill, :3] = bright
+    if advanced:
+        glow = (255, 230, 120)
+        icon[body_cy - 1 : body_cy + 2, mid - 1 : mid + 2, :3] = glow
+
+
+def _draw_rocket(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a rocket silhouette: nose, body, fins, exhaust spark.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base rocket body color.
+    """
+    s = icon.shape[0]
+    if s < 8:
+        return
+    dark = _shade(base_rgb, -90)
+    exhaust = (255, 210, 80)
+    mid = s // 2
+    body_w = max(2, s // 5)
+    body_top = s // 5
+    body_bot = (4 * s) // 5
+    # Body.
+    icon[body_top:body_bot, mid - body_w // 2 : mid - body_w // 2 + body_w, :3] = dark
+    # Conical nose.
+    for t in range(body_top):
+        y = body_top - 1 - t
+        half = body_w // 2 - (body_top - 1 - t) // 2
+        if half < 0:
+            continue
+        icon[y, mid - half : mid + half + 1, :3] = dark
+    # Fins.
+    fin_y = body_bot - 2
+    fin_len = max(1, s // 8)
+    icon[fin_y : fin_y + 2, max(0, mid - body_w) : mid - body_w // 2, :3] = dark
+    icon[fin_y : fin_y + 2, mid + body_w // 2 + 1 : min(s, mid + body_w + 1), :3] = dark
+    # Exhaust spark below body.
+    if body_bot < s:
+        icon[body_bot : min(body_bot + fin_len, s), mid, :3] = exhaust
+
+
+def _draw_assembler_body(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw an assembler: two side input ports flanking a dark window.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base assembler (purple) color.
+    """
+    s = icon.shape[0]
+    if s < 6:
+        return
+    window = _shade(base_rgb, -55)
+    port = _shade(base_rgb, 55)
+    cy = cx = s // 2
+    win_half = max(1, s // 5)
+    icon[cy - win_half : cy + win_half + 1, cx - win_half : cx + win_half + 1, :3] = (
+        window
+    )
+    # Ports: two small squares on the left and right edges, vertically centred.
+    port_half = max(1, s // 8)
+    icon[cy - port_half : cy + port_half + 1, 1 : 2 + port_half, :3] = port
+    icon[cy - port_half : cy + port_half + 1, s - 2 - port_half : s - 1, :3] = port
+
+
+def _draw_furnace_body(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a furnace: dark brick body with a glowing central maw.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base furnace (dark red-brown) color.
+    """
+    s = icon.shape[0]
+    if s < 6:
+        return
+    body = _shade(base_rgb, -35)
+    maw = (200, 110, 40)
+    ember = (255, 200, 100)
+    # Dark body fill.
+    icon[1 : s - 1, 1 : s - 1, :3] = body
+    # Maw in the center.
+    maw_top = s // 4
+    maw_bot = (3 * s) // 4
+    maw_left = s // 4
+    maw_right = (3 * s) // 4
+    icon[maw_top:maw_bot, maw_left:maw_right, :3] = maw
+    # Bright ember core.
+    cy = cx = s // 2
+    core = max(1, s // 8)
+    icon[cy - core : cy + core + 1, cx - core : cx + core + 1, :3] = ember
+
+
+def _draw_pallet_slats(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a pallet as a surface with three horizontal dark slat gaps.
+
+    Args:
+        icon: RGBA array modified in place.
+        base_rgb: Base pallet surface color.
+    """
+    s = icon.shape[0]
+    dark = _shade(base_rgb, -60)
+    # Surface was filled by the caller; stripe three gaps across it.
+    if s < 5:
+        return
+    for i in range(3):
+        y = (i + 1) * s // 4
+        if 0 <= y < s:
+            icon[y, 1 : s - 1, :3] = dark
+
+
+def _draw_machine_frame(icon: np.ndarray) -> None:
+    """Bevel every machine with a lighter top-left and darker bottom-right edge.
+
+    Creates a consistent "placed object" look shared by all machines.
 
     Args:
         icon: RGBA array modified in place.
     """
     s = icon.shape[0]
-    # Dark rim.
-    icon[0, :] = _PALLET_RIM
-    icon[s - 1, :] = _PALLET_RIM
-    icon[:, 0] = _PALLET_RIM
-    icon[:, s - 1] = _PALLET_RIM
-    # Iron surface.
-    icon[1 : s - 1, 1 : s - 1] = _PALLET_SURFACE
-    # Corner rivets (2px dots if large enough).
-    r = max(1, s // 8)
-    for cy, cx in [(1, 1), (1, s - 2), (s - 2, 1), (s - 2, s - 2)]:
-        y0, y1 = cy, min(cy + r, s)
-        x0, x1 = cx, min(cx + r, s)
-        icon[y0:y1, x0:x1] = _PALLET_RIVET
+    if s < 3:
+        return
+    # Sample the base color from the center so the bevel adapts per machine.
+    base = tuple(int(c) for c in icon[s // 2, s // 2, :3])
+    light = _shade(base, 45)  # type: ignore[arg-type]
+    dark = _shade(base, -55)  # type: ignore[arg-type]
+    icon[0, :, :3] = light
+    icon[:, 0, :3] = light
+    icon[s - 1, :, :3] = dark
+    icon[:, s - 1, :3] = dark
 
+
+def _draw_belt_edges(icon: np.ndarray, direction: int) -> None:
+    """Draw dark edge stripes parallel to belt travel direction.
+
+    Args:
+        icon: RGBA array modified in place.
+        direction: ``Direction`` value the belt faces.
+    """
+    s = icon.shape[0]
+    if s < 4:
+        return
+    base = tuple(int(c) for c in icon[s // 2, s // 2, :3])
+    edge = _shade(base, -55)  # type: ignore[arg-type]
+    if direction in (Direction.LEFT, Direction.RIGHT):
+        icon[0, :, :3] = edge
+        icon[s - 1, :, :3] = edge
+    else:
+        icon[:, 0, :3] = edge
+        icon[:, s - 1, :3] = edge
+
+
+def _draw_miner_bore(icon: np.ndarray) -> None:
+    """Draw a central dark circular bore on a miner icon.
+
+    Args:
+        icon: RGBA array modified in place.
+    """
+    s = icon.shape[0]
+    if s < 5:
+        return
+    cy = cx = s // 2
+    r = max(1, s // 5)
+    ys, xs = np.ogrid[:s, :s]
+    dist = (ys - cy) ** 2 + (xs - cx) ** 2
+    icon[dist <= r * r, :3] = (0, 70, 0)
+    if r >= 2:
+        icon[dist <= (r - 1) * (r - 1), :3] = (0, 40, 0)
+
+
+# ItemTypes whose icons are machines placed on the map. Each gets the
+# shared top-left highlight / bottom-right shadow frame so placed
+# machines read as "built things" against terrain.
+_MACHINE_ITEM_TYPES: frozenset[int] = frozenset(int(it) for it in ITEM_TO_MACHINE)
+
+# Ores share the patched-rock texture; silicon additionally gets
+# crystalline sparkles on top.
+_ORE_ITEMS: dict[int, bool] = {
+    int(ItemType.COAL): False,
+    int(ItemType.IRON_ORE): False,
+    int(ItemType.COPPER_ORE): False,
+    int(ItemType.TIN_ORE): False,
+    int(ItemType.SILICON): True,
+}
+
+_PLATE_ITEMS: frozenset[int] = frozenset(
+    {
+        int(ItemType.IRON_PLATE),
+        int(ItemType.COPPER_PLATE),
+        int(ItemType.TIN_PLATE),
+    }
+)
 
 
 @functools.lru_cache(maxsize=256)
@@ -587,15 +1072,27 @@ def render_item_icon(
     Both the map renderer and the menu UI call this function so that
     placed machines and inventory icons are always identical.
 
-    Conveyor belts get three chevron arrows overlaid on the base colour.
-    Arms get a flow indicator showing pick (circle, back) and deposit
-    (arrowhead, front) sides.  When *direction* is ``None`` (e.g. in a
-    menu with no placement context), arrows default to pointing right.
+    Each item category has a distinct visual language:
+
+    - Ores: irregular darker blobs on a rough base (silicon adds
+      crystalline sparkles).
+    - Plates: diagonal shine band on a uniform base; wafer adds
+      concentric arcs to suggest a disc.
+    - Intermediate items: a shape that hints at the object — wire
+      helix, circuit traces, motor cylinder, sensor lens, frame I-beam,
+      flask, rocket silhouette.
+    - Machines: an interior pattern (miner bore, pallet slats, belt
+      edge stripes, assembler ports, furnace glowing maw, rocket
+      silhouette) plus a shared top-left highlight and bottom-right
+      shadow so every placed machine reads as a built object.
+
+    When ``direction`` is ``None`` (e.g. in a menu with no placement
+    context), directional indicators default to pointing right.
 
     Args:
         item_type: ``ItemType`` integer value.
         size: Side length of the returned square in pixels.
-        direction: Optional ``Action`` direction for directional items.
+        direction: Optional ``Direction`` for directional items.
             Ignored for non-directional items.
 
     Returns:
@@ -604,17 +1101,70 @@ def render_item_icon(
     rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
     icon = np.full((size, size, 4), (*rgb, 255), dtype=np.uint8)
 
-    if item_type == ItemType.CONVEYOR_BELT and size >= 6:
-        belt_dir = direction if direction is not None else int(Direction.RIGHT)
-        _draw_belt_arrows(icon, belt_dir)
-    elif item_type == ItemType.MINER and size >= 6:
-        miner_dir = direction if direction is not None else int(Direction.RIGHT)
-        _draw_miner_indicator(icon, miner_dir)
-    elif item_type == ItemType.ARM and size >= 6:
-        arm_dir = direction if direction is not None else int(Direction.RIGHT)
-        _draw_arm_indicator(icon, arm_dir)
-    elif item_type == ItemType.PALLET and size >= 4:
-        _draw_pallet_icon(icon)
+    # --- Ores ---
+    if item_type in _ORE_ITEMS:
+        _draw_ore_patches(
+            icon,
+            rgb,
+            seed=item_type,
+            crystalline=_ORE_ITEMS[item_type],
+        )
+        return icon
+
+    # --- Plates and wafer ---
+    if item_type in _PLATE_ITEMS:
+        _draw_plate_shine(icon, rgb)
+        return icon
+    if item_type == int(ItemType.WAFER):
+        _draw_wafer(icon, rgb)
+        return icon
+
+    # --- Intermediate items ---
+    if item_type == int(ItemType.WIRE):
+        _draw_wire_helix(icon, rgb)
+        return icon
+    if item_type == int(ItemType.CIRCUIT):
+        _draw_circuit_traces(icon, rgb)
+        return icon
+    if item_type == int(ItemType.MOTOR):
+        _draw_motor(icon, rgb)
+        return icon
+    if item_type == int(ItemType.SENSOR):
+        _draw_sensor_lens(icon, rgb)
+        return icon
+    if item_type == int(ItemType.FRAME):
+        _draw_frame_ibeam(icon, rgb)
+        return icon
+    if item_type == int(ItemType.BASIC_SCIENCE_PACK):
+        _draw_flask(icon, rgb, advanced=False)
+        return icon
+    if item_type == int(ItemType.ADVANCED_SCIENCE_PACK):
+        _draw_flask(icon, rgb, advanced=True)
+        return icon
+
+    # --- Machines (draw interior, then the shared bevel frame) ---
+    if item_type in _MACHINE_ITEM_TYPES:
+        if item_type == int(ItemType.CONVEYOR_BELT) and size >= 6:
+            belt_dir = direction if direction is not None else int(Direction.RIGHT)
+            _draw_belt_edges(icon, belt_dir)
+            _draw_belt_arrows(icon, belt_dir)
+        elif item_type == int(ItemType.MINER) and size >= 6:
+            miner_dir = direction if direction is not None else int(Direction.RIGHT)
+            _draw_miner_bore(icon)
+            _draw_miner_indicator(icon, miner_dir)
+        elif item_type == int(ItemType.ARM) and size >= 6:
+            arm_dir = direction if direction is not None else int(Direction.RIGHT)
+            _draw_arm_indicator(icon, arm_dir)
+        elif item_type == int(ItemType.PALLET):
+            _draw_pallet_slats(icon, rgb)
+        elif item_type == int(ItemType.ASSEMBLER) and size >= 6:
+            _draw_assembler_body(icon, rgb)
+        elif item_type == int(ItemType.FURNACE) and size >= 6:
+            _draw_furnace_body(icon, rgb)
+        elif item_type == int(ItemType.ROCKET) and size >= 6:
+            _draw_rocket(icon, rgb)
+        _draw_machine_frame(icon)
+        return icon
 
     return icon
 
@@ -667,9 +1217,7 @@ def render_machine_overlays(
             if machine_type == int(MachineType.MINER):
                 active = is_miner_active(state, int(y), int(x))
             elif machine_type == int(MachineType.ASSEMBLER):
-                active = (
-                    int(ent_power[eidx]) > 0 if eidx >= 0 else False
-                )
+                active = int(ent_power[eidx]) > 0 if eidx >= 0 else False
             else:
                 active = True
             icon = apply_activity_tint(icon, active, frame_tick)
@@ -911,9 +1459,8 @@ def draw_belt_cargo(
     ent_buf_type = np.array(state.ent_buf_type)
     ent_buf_count = np.array(state.ent_buf_count)
 
-    show_cargo = (
-        (machine_types == MachineType.CONVEYOR_BELT)
-        | (machine_types == MachineType.PALLET)
+    show_cargo = (machine_types == MachineType.CONVEYOR_BELT) | (
+        machine_types == MachineType.PALLET
     )
     belt_ys, belt_xs = np.nonzero(show_cargo)
     if belt_ys.size == 0:
