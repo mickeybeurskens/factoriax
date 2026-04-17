@@ -43,18 +43,21 @@ def _make_assembler_state(
     asm_out_count: int = 0,
     buf_type: int = 0,
     buf_count: int = 0,
+    machine_type: int = int(MachineType.ASSEMBLER),
 ) -> EnvState:
-    """Create a 3x3 world with an assembler at (0, 0).
+    """Create a 3x3 world with a combiner (assembler or furnace) at (0, 0).
 
     Args:
         state_factory: Conftest fixture for building states.
-        power: Initial ent_power for the assembler.
+        power: Initial ent_power for the machine.
         asm_in_type: Input slot types [slot0, slot1].
         asm_in_count: Input slot counts [slot0, slot1].
         asm_out_type: Output item type.
         asm_out_count: Output item count.
         buf_type: Buffer item type.
         buf_count: Buffer item count.
+        machine_type: MachineType to place. Defaults to ASSEMBLER;
+            use FURNACE for smelting-recipe tests.
 
     Returns:
         Configured EnvState.
@@ -62,7 +65,7 @@ def _make_assembler_state(
     shape = (3, 3)
     world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
     mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
-    mt = mt.at[0, 0].set(int(MachineType.ASSEMBLER))
+    mt = mt.at[0, 0].set(machine_type)
 
     in_types = asm_in_type or [0, 0]
     in_counts = asm_in_count or [0, 0]
@@ -106,6 +109,7 @@ class TestAssemblerStartsCraft:
         """Iron plate recipe: 2 iron_ore + 1 coal -> power set, consumed."""
         state = _make_assembler_state(
             state_factory,
+            machine_type=int(MachineType.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
             asm_in_count=[5, 3],
         )
@@ -116,10 +120,25 @@ class TestAssemblerStartsCraft:
         assert int(new.ent_asm_in_count[eid, 0]) == 0
         assert int(new.ent_asm_in_count[eid, 1]) == 0
 
+    def test_assembler_rejects_smelting_recipe(self, state_factory) -> None:
+        """Assemblers can't run smelting recipes (gated to FURNACE)."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
+            asm_in_count=[5, 3],
+        )
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 5
+        assert int(new.ent_asm_in_count[eid, 1]) == 3
+
     def test_no_start_without_coal(self, state_factory) -> None:
         """Iron plate needs coal as reductant; no coal means no start."""
         state = _make_assembler_state(
             state_factory,
+            machine_type=int(MachineType.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), 0],
             asm_in_count=[5, 0],
         )
@@ -133,6 +152,7 @@ class TestAssemblerStartsCraft:
         """Having only coal (no ore) should not start smelting."""
         state = _make_assembler_state(
             state_factory,
+            machine_type=int(MachineType.FURNACE),
             asm_in_type=[int(ItemType.COAL), 0],
             asm_in_count=[3, 0],
         )

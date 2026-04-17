@@ -15,7 +15,7 @@ from typing import TypedDict
 
 import jax.numpy as jnp
 
-from factoriax.constants import ItemType
+from factoriax.constants import ItemType, MachineType
 
 
 class _Recipe(TypedDict):
@@ -105,6 +105,11 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.WIRE, 1), (ItemType.IRON_PLATE, 1)],
         "ticks": 4,
     },
+    {
+        "output": ItemType.FURNACE,
+        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.COPPER_PLATE, 1)],
+        "ticks": 4,
+    },
     # Science packs
     {
         "output": ItemType.BASIC_SCIENCE_PACK,
@@ -142,6 +147,7 @@ RECIPE_NAMES: list[str] = [
     "Assembler",
     "Pallet",
     "Arm",
+    "Furnace",
     "Basic Science Pack",
     "Advanced Science Pack",
     "Rocket",
@@ -150,6 +156,28 @@ RECIPE_NAMES: list[str] = [
 # ---------------------------------------------------------------------------
 # Derived JAX arrays — single source of truth from the dicts above.
 # ---------------------------------------------------------------------------
+
+# Per-recipe machine-type gate: first 4 smelting recipes run on
+# FURNACE entities, all others on ASSEMBLER entities. The engine
+# shares a single code path — the gate only restricts which recipes
+# each machine type can match during Phase 3.
+_FURNACE_OUTPUTS: frozenset[int] = frozenset(
+    {
+        int(ItemType.IRON_PLATE),
+        int(ItemType.COPPER_PLATE),
+        int(ItemType.TIN_PLATE),
+        int(ItemType.WAFER),
+    }
+)
+RECIPE_MACHINE_TYPE: jnp.ndarray = jnp.array(
+    [
+        int(MachineType.FURNACE)
+        if r["output"] in _FURNACE_OUTPUTS
+        else int(MachineType.ASSEMBLER)
+        for r in RECIPES
+    ],
+    dtype=jnp.int32,
+)
 
 RECIPE_OUTPUTS: jnp.ndarray = jnp.array(
     [r["output"] for r in RECIPES],

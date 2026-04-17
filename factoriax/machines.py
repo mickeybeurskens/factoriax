@@ -19,6 +19,7 @@ from factoriax.constants import (
 )
 from factoriax.recipes import (
     NUM_RECIPES,
+    RECIPE_MACHINE_TYPE,
     RECIPE_OUTPUTS,
     RECIPE_TICKS,
     RECIPES,
@@ -305,7 +306,13 @@ def run_assemblers(state: EnvState) -> EnvState:
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
-    is_asm = (state.ent_type == MachineType.ASSEMBLER) & active
+    # Assemblers and furnaces share the same engine shape and code path;
+    # they only differ in which recipes they're allowed to match in
+    # Phase 3 (via RECIPE_MACHINE_TYPE).
+    is_combiner = (
+        (state.ent_type == MachineType.ASSEMBLER)
+        | (state.ent_type == MachineType.FURNACE)
+    ) & active
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
@@ -335,8 +342,8 @@ def run_assemblers(state: EnvState) -> EnvState:
 
         s0_ok = (in_c0 == 0) | (in_t0 == nb_bt)
         s1_ok = (in_c1 == 0) | (in_t1 == nb_bt)
-        tk0 = is_asm & nb_has & s0_ok
-        tk1 = is_asm & nb_has & ~tk0 & s1_ok
+        tk0 = is_combiner & nb_has & s0_ok
+        tk1 = is_combiner & nb_has & ~tk0 & s1_ok
         tk = tk0 | tk1
 
         in_t0 = jnp.where(tk0, nb_bt, in_t0)
@@ -362,7 +369,7 @@ def run_assemblers(state: EnvState) -> EnvState:
         buf_count = jnp.where(taken, new_c, buf_count)
 
     # --- Phase 1: Complete crafts (power == 1) ---
-    completing = is_asm & (state.ent_power == 1)
+    completing = is_combiner & (state.ent_power == 1)
     out_empty = state.ent_asm_out_count == 0
     can_complete = completing & (state.ent_asm_out_type != 0) & out_empty
 
@@ -375,18 +382,22 @@ def run_assemblers(state: EnvState) -> EnvState:
     new_power = jnp.where(completing, jnp.int16(0), state.ent_power)
 
     # --- Phase 2: Progress (power > 1) ---
-    progressing = is_asm & (new_power > 1)
+    progressing = is_combiner & (new_power > 1)
     new_power = jnp.where(progressing, new_power - jnp.int16(1), new_power)
 
     # --- Phase 3: Start new crafts ---
     # All recipes are uniform 2-input; inputs can land in either slot.
-    idle = is_asm & (new_power == 0)
+    # Each recipe is gated to its owning machine type (assembler/furnace)
+    # via RECIPE_MACHINE_TYPE — one int8 equality per recipe per entity.
+    idle = is_combiner & (new_power == 0)
     matched = jnp.int32(-1)
     for r in range(NUM_RECIPES):
         (rt_a, ra_a), (rt_b, ra_b) = RECIPES[r]["inputs"]
+        rmt = RECIPE_MACHINE_TYPE[r]
         o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)
         o2 = (in_t0 == rt_b) & (in_c0 >= ra_b) & (in_t1 == rt_a) & (in_c1 >= ra_a)
-        matched = jnp.where((o1 | o2) & idle, jnp.int32(r), matched)
+        type_ok = state.ent_type == rmt
+        matched = jnp.where((o1 | o2) & idle & type_ok, jnp.int32(r), matched)
 
     can_start = matched >= 0
     ridx = jnp.clip(matched, 0, NUM_RECIPES - 1)
@@ -401,7 +412,7 @@ def run_assemblers(state: EnvState) -> EnvState:
     in_c1 = jnp.where(can_start, jnp.int16(0), in_c1)
 
     # --- Phase 4: Push output to buffer ---
-    can_push = is_asm & (new_out_count > 0) & (buf_count == 0)
+    can_push = is_combiner & (new_out_count > 0) & (buf_count == 0)
     buf_type = jnp.where(can_push, new_out_type, buf_type)
     buf_count = jnp.where(can_push, new_out_count, buf_count)
     new_out_type = jnp.where(can_push, jnp.int8(0), new_out_type)

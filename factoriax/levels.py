@@ -698,7 +698,10 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
                             ent_buf_type_np[idx] = it
                             ent_buf_count_np[idx] = int(inv_row[it])
                             break
-                elif mt == int(MachineType.ASSEMBLER):
+                elif mt in (
+                    int(MachineType.ASSEMBLER),
+                    int(MachineType.FURNACE),
+                ):
                     slot = 0
                     for it in range(1, NUM_ITEM_TYPES):
                         if int(inv_row[it]) > 0 and slot < 2:

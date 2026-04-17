@@ -271,9 +271,10 @@ def deposit_to_adjacent(
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    is_asm = mt == MachineType.ASSEMBLER
+    # Assemblers and furnaces share the 2-input-slot shape.
+    is_combiner = (mt == MachineType.ASSEMBLER) | (mt == MachineType.FURNACE)
 
-    # Deposit to assembler input slot.
+    # Deposit to combiner input slot.
     in_t0 = state.ent_asm_in_type[eidx, 0]
     in_c0 = state.ent_asm_in_count[eidx, 0]
     in_t1 = state.ent_asm_in_type[eidx, 1]
@@ -281,17 +282,17 @@ def deposit_to_adjacent(
 
     slot0_ok = (in_c0 == 0) | (in_t0 == item_type)
     slot1_ok = (in_c1 == 0) | (in_t1 == item_type)
-    use_s0 = is_asm & slot0_ok
-    use_s1 = is_asm & ~use_s0 & slot1_ok
+    use_s0 = is_combiner & slot0_ok
+    use_s1 = is_combiner & ~use_s0 & slot1_ok
 
     can_deposit_asm = in_bounds & has_item & (use_s0 | use_s1)
 
-    # Deposit to buffer machine (non-assembler).
+    # Deposit to buffer machine (non-combiner, non-miner).
     is_miner = mt == MachineType.MINER
     buf_empty = state.ent_buf_count[eidx] == 0
     buf_same = state.ent_buf_type[eidx] == item_type
     buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
-    is_buf = ~is_asm & ~is_miner & has_machine
+    is_buf = ~is_combiner & ~is_miner & has_machine
     can_deposit_buf = in_bounds & has_item & is_buf & (buf_empty | buf_same) & buf_space
 
     can_deposit = can_deposit_asm | can_deposit_buf
@@ -380,17 +381,17 @@ def withdraw_from_adjacent(
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    is_asm = mt == MachineType.ASSEMBLER
+    is_combiner = (mt == MachineType.ASSEMBLER) | (mt == MachineType.FURNACE)
 
-    # Withdraw from assembler output.
+    # Withdraw from combiner output.
     out_match = state.ent_asm_out_type[eidx] == item_type
     out_has = state.ent_asm_out_count[eidx] > 0
-    can_withdraw_asm = in_bounds & is_asm & out_match & out_has & has_space
+    can_withdraw_asm = in_bounds & is_combiner & out_match & out_has & has_space
 
     # Withdraw from buffer.
     buf_match = state.ent_buf_type[eidx] == item_type
     buf_has = state.ent_buf_count[eidx] > 0
-    is_buf = ~is_asm & (mt != MachineType.NONE)
+    is_buf = ~is_combiner & (mt != MachineType.NONE)
     can_withdraw_buf = in_bounds & is_buf & buf_match & buf_has & has_space
 
     can_withdraw = can_withdraw_asm | can_withdraw_buf
