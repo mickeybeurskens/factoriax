@@ -578,18 +578,21 @@ def _draw_ore_patches(
     *,
     crystalline: bool = False,
 ) -> None:
-    """Paint irregular darker blobs (and optional bright glints) onto an icon.
+    """Paint small speckly darker patches onto an ore icon.
 
-    The patch distribution is deterministic for a given ``seed``, so every
-    tile of the same ore type looks identical between frames. When
-    ``crystalline`` is True, extra sharp single-pixel highlights are added
-    on top (used for silicon).
+    Each "patch" is a scattered cluster of 3-7 small dots rather than a
+    smooth circular blob, so ore textures read as grainy rock instead of
+    polka dots. Distribution is deterministic for a given ``seed``.
+
+    When ``crystalline`` is True, two to three deliberate bright facet
+    dots are placed near the center to signal silicon's glassy nature
+    without looking noisy.
 
     Args:
         icon: RGBA array modified in place.
         base_rgb: Base ore color (already filled into the icon).
         seed: RNG seed controlling patch layout.
-        crystalline: Whether to add crystalline glint sparkles.
+        crystalline: Whether to add a few bright facet highlights.
     """
     s = icon.shape[0]
     if s < 4:
@@ -597,46 +600,58 @@ def _draw_ore_patches(
     rng = np.random.default_rng(seed)
     dark = _shade(base_rgb, -35)
     deep = _shade(base_rgb, -60)
-    light = _shade(base_rgb, 45)
+    light = _shade(base_rgb, 35)
 
-    n_patches = max(4, (s * s) // 40)
-    max_r = max(1, s // 7)
-    for _ in range(n_patches):
+    # Many small clusters rather than a few big blobs.
+    n_clusters = max(6, (s * s) // 25)
+    cluster_spread = max(1, s // 10)
+    for _ in range(n_clusters):
         cy = int(rng.integers(0, s))
         cx = int(rng.integers(0, s))
-        r = int(rng.integers(1, max_r + 1))
         color = deep if rng.random() < 0.25 else dark
-        ys, xs = np.ogrid[:s, :s]
-        # Jitter the radius squared so blobs aren't perfect circles.
-        jitter = float(rng.uniform(-1.5, 1.5))
-        mask = ((ys - cy) ** 2 + (xs - cx) ** 2) <= (r * r + jitter)
-        icon[mask, :3] = color
+        # Drop 3-7 individual pixels within a small box around (cy, cx),
+        # with probability tapering off at the edges.
+        for _ in range(int(rng.integers(3, 8))):
+            off_y = int(rng.integers(-cluster_spread, cluster_spread + 1))
+            off_x = int(rng.integers(-cluster_spread, cluster_spread + 1))
+            # Reject pixels far from center with decreasing probability.
+            dist = max(abs(off_y), abs(off_x))
+            if rng.random() > 1.0 - (dist / (cluster_spread + 1)) * 0.6:
+                py, px = cy + off_y, cx + off_x
+                if 0 <= py < s and 0 <= px < s:
+                    icon[py, px, :3] = color
 
-    # Sparse bright pinpoints (rare single glints).
-    n_glints = max(1, s // 16)
-    for _ in range(n_glints):
+    # A couple of subtle bright pinpoints for material catching light.
+    for _ in range(max(1, s // 16)):
         gy = int(rng.integers(0, s))
         gx = int(rng.integers(0, s))
         icon[gy, gx, :3] = light
 
     if crystalline:
-        n_sparkles = max(3, s // 5)
-        sparkle = _shade(base_rgb, 90)
-        for _ in range(n_sparkles):
-            sy = int(rng.integers(1, s - 1))
-            sx = int(rng.integers(1, s - 1))
-            icon[sy, sx, :3] = sparkle
+        facet = _shade(base_rgb, 80)
+        # Two-to-three deliberate facets in a loose diagonal near center.
+        cy = cx = s // 2
+        facets = [(cy - s // 6, cx - s // 6), (cy, cx), (cy + s // 6, cx + s // 8)]
+        for i, (fy, fx) in enumerate(facets):
+            if i >= 2 + int(rng.integers(0, 2)):
+                break
+            if 0 <= fy < s and 0 <= fx < s:
+                icon[fy, fx, :3] = facet
+                # One neighbor pixel for a tiny plus-shape.
+                if fx + 1 < s:
+                    icon[fy, fx + 1, :3] = facet
 
 
 def _draw_plate_shine(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw a diagonal highlight band on a plate icon.
+    """Draw a riveted, beveled plate: shine band, edge bevel, corner screws.
 
-    Creates a 3-pixel-wide bright diagonal slanting from the top-left
-    plus subtle corner shadows, so the plate reads as a flat milled
-    surface catching the light.
+    Combines three cues for "manufactured sheet metal":
+    - Diagonal bright band across the upper third (light source).
+    - 1-pixel bevel: lighter top+left, darker bottom+right.
+    - Four small dark screws in the corners, inside the bevel.
 
     Args:
         icon: RGBA array modified in place.
@@ -647,7 +662,8 @@ def _draw_plate_shine(
         return
     bright = _shade(base_rgb, 45)
     mid = _shade(base_rgb, 22)
-    dark = _shade(base_rgb, -35)
+    bevel_dark = _shade(base_rgb, -35)
+    screw = _shade(base_rgb, -70)
 
     # Diagonal band near the upper-left, three pixels wide.
     band_len = max(2, (2 * s) // 3)
@@ -658,12 +674,17 @@ def _draw_plate_shine(
             if 0 <= y < s and 0 <= x < s:
                 icon[y, x, :3] = color
 
-    # Soft shadow in the top-left-most corner and bottom-right edge.
-    icon[0, 0, :3] = dark
-    icon[s - 1, s - 1, :3] = dark
-    if s >= 8:
-        icon[s - 1, s - 2, :3] = dark
-        icon[s - 2, s - 1, :3] = dark
+    # Bevel: lighter top+left, darker bottom+right (drawn after shine so
+    # the outermost ring is clean).
+    icon[0, :, :3] = bright
+    icon[:, 0, :3] = bright
+    icon[s - 1, :, :3] = bevel_dark
+    icon[:, s - 1, :3] = bevel_dark
+
+    # Four corner screws (one pixel in each corner, one inside the bevel).
+    if s >= 6:
+        for cy, cx in ((1, 1), (1, s - 2), (s - 2, 1), (s - 2, s - 2)):
+            icon[cy, cx, :3] = screw
 
 
 def _draw_wafer(
@@ -695,130 +716,169 @@ def _draw_wire_helix(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw twin diagonal strands suggesting a coiled wire.
+    """Draw twin diagonal strands on a transparent background.
+
+    Two 2-pixel-thick diagonal strands in the wire's base color, with
+    a darker center line for depth. Background stays transparent.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base wire color.
     """
     s = icon.shape[0]
-    dark = _shade(base_rgb, -55)
-    sep = max(2, s // 5)
+    if s < 4:
+        return
+    dark = _shade(base_rgb, -40)
+    sep = max(2, s // 4)
+    rgba = (*base_rgb, 255)
+    dark_rgba = (*dark, 255)
     for i in range(s):
-        icon[i, i, :3] = dark
-        if i + sep < s:
-            icon[i, i + sep, :3] = dark
+        # Strand 1.
+        if 0 <= i < s:
+            icon[i, i] = dark_rgba
+            if i + 1 < s:
+                icon[i, i + 1] = rgba
+        # Strand 2 (offset).
+        j = i + sep
+        if 0 <= j < s:
+            icon[i, j] = dark_rgba
+            if j - 1 >= 0 and j - 1 < s:
+                icon[i, j - 1] = rgba
 
 
 def _draw_circuit_traces(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw PCB traces: two right-angle paths meeting a solder pad.
+    """Draw a PCB tile: green board body with dark traces and bright pads.
+
+    Transparent background, small green board inset from the corners,
+    traces and solder pads on top.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base circuit (green) color.
     """
     s = icon.shape[0]
     if s < 6:
         return
-    dark = _shade(base_rgb, -70)
-    pad = _shade(base_rgb, 60)
+    board = (*base_rgb, 255)
+    dark = (*_shade(base_rgb, -60), 255)
+    pad = (*_shade(base_rgb, 70), 255)
+    margin = max(1, s // 8)
+    icon[margin : s - margin, margin : s - margin] = board
     mid = s // 2
-    q = max(1, s // 4)
-    # Horizontal trace near top, vertical spine down to lower-right pad.
-    icon[q, 1 : mid + 1, :3] = dark
-    icon[q : s - q, mid, :3] = dark
-    icon[s - q - 1, mid : s - 1, :3] = dark
-    # Two solder pads.
-    icon[q - 1 : q + 2, 1:3, :3] = pad
-    icon[s - q - 2 : s - q + 1, s - 3 : s - 1, :3] = pad
+    q = max(margin + 1, s // 4)
+    icon[q, margin + 1 : mid + 1] = dark
+    icon[q : s - q, mid] = dark
+    icon[s - q - 1, mid : s - margin - 1] = dark
+    # Two solder pads (2x2 blocks near the trace endpoints).
+    icon[q - 1 : q + 1, margin + 1 : margin + 3] = pad
+    icon[s - q - 1 : s - q + 1, s - margin - 3 : s - margin - 1] = pad
 
 
 def _draw_motor(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw a motor: cylindrical housing with a visible shaft.
+    """Draw a motor on a transparent background: housing + shaft + rivets.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base motor color.
     """
     s = icon.shape[0]
     if s < 6:
         return
-    dark = _shade(base_rgb, -55)
-    bright = _shade(base_rgb, 55)
+    body = (*base_rgb, 255)
+    dark = (*_shade(base_rgb, -50), 255)
+    bright = (*_shade(base_rgb, 55), 255)
     mid = s // 2
     body_top = s // 4
     body_bot = 3 * s // 4
     body_left = s // 5
     body_right = 3 * s // 5
-    # Housing outline.
-    icon[body_top:body_bot, body_left:body_right, :3] = dark
-    # Shaft sticking out to the right.
+    # Solid housing body.
+    icon[body_top:body_bot, body_left:body_right] = body
+    # Dark outline on housing top and bottom.
+    icon[body_top, body_left:body_right] = dark
+    icon[body_bot - 1, body_left:body_right] = dark
+    # Shaft sticking right.
     shaft_y0 = mid - max(1, s // 12)
     shaft_y1 = mid + max(1, s // 12) + 1
-    icon[shaft_y0:shaft_y1, body_right : body_right + s // 5, :3] = dark
-    # A couple of rivet highlights on the housing.
+    icon[shaft_y0:shaft_y1, body_right : body_right + s // 5] = dark
+    # Rivet highlights on the housing.
     for ry in (body_top + 1, body_bot - 2):
         for rx in (body_left + 1, body_right - 2):
             if 0 <= ry < s and 0 <= rx < s:
-                icon[ry, rx, :3] = bright
+                icon[ry, rx] = bright
 
 
 def _draw_sensor_lens(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw a sensor as a single large lens with a bright glint.
+    """Draw a sensor lens on a transparent background.
+
+    A round body (body color) with a darker iris and bright central glint.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base sensor body color.
     """
     s = icon.shape[0]
     if s < 6:
         return
-    dark = _shade(base_rgb, -55)
-    darker = _shade(base_rgb, -30)
-    bright = _shade(base_rgb, 90)
+    body = (*base_rgb, 255)
+    dark = (*_shade(base_rgb, -55), 255)
+    iris = (*_shade(base_rgb, -30), 255)
+    bright = (*_shade(base_rgb, 90), 255)
     cy = cx = s // 2
     outer_r = s // 3
     inner_r = max(1, s // 5)
     ys, xs = np.ogrid[:s, :s]
     dist = np.sqrt((ys - cy) ** 2 + (xs - cx) ** 2)
-    icon[(dist <= outer_r) & (dist > inner_r), :3] = dark
-    icon[dist <= inner_r, :3] = darker
-    icon[cy, cx, :3] = bright
+    # Body (full disc).
+    icon[dist <= outer_r + 1] = body
+    # Dark iris ring.
+    icon[(dist <= outer_r) & (dist > inner_r)] = dark
+    # Iris center.
+    icon[dist <= inner_r] = iris
+    # Bright glint.
+    icon[cy, cx] = bright
 
 
 def _draw_frame_ibeam(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw a structural frame as an I-beam cross-section.
+    """Draw an I-beam silhouette on a transparent background.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base frame color.
     """
     s = icon.shape[0]
     if s < 8:
         return
-    dark = _shade(base_rgb, -45)
+    body = (*base_rgb, 255)
+    dark = (*_shade(base_rgb, -45), 255)
     flange_h = max(1, s // 6)
     web_half = max(1, s // 8)
     mid = s // 2
     margin = s // 6
-    # Top flange.
-    icon[margin : margin + flange_h, margin : s - margin, :3] = dark
+    # Top flange (body color with dark edge).
+    icon[margin : margin + flange_h, margin : s - margin] = body
+    icon[margin, margin : s - margin] = dark
+    icon[margin + flange_h - 1, margin : s - margin] = dark
     # Bottom flange.
-    icon[s - margin - flange_h : s - margin, margin : s - margin, :3] = dark
-    # Web in the middle.
-    icon[margin : s - margin, mid - web_half : mid + web_half + 1, :3] = dark
+    icon[s - margin - flange_h : s - margin, margin : s - margin] = body
+    icon[s - margin - flange_h, margin : s - margin] = dark
+    icon[s - margin - 1, margin : s - margin] = dark
+    # Web.
+    icon[margin : s - margin, mid - web_half : mid + web_half + 1] = body
+    icon[margin : s - margin, mid - web_half] = dark
+    icon[margin : s - margin, mid + web_half] = dark
 
 
 def _draw_flask(
@@ -827,77 +887,88 @@ def _draw_flask(
     *,
     advanced: bool = False,
 ) -> None:
-    """Draw a science-pack flask silhouette.
+    """Draw a flask silhouette on a transparent background.
 
-    The basic and advanced packs share the same flask; the advanced
-    variant adds a bright glow in the center of the bulb.
+    The bulb is filled with the base color; the neck, rim, and bulb
+    outline are drawn in a darker shade. Advanced packs add a central
+    glow.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base flask color.
         advanced: If True, draw a central glow.
     """
     s = icon.shape[0]
     if s < 8:
         return
-    dark = _shade(base_rgb, -55)
-    bright = _shade(base_rgb, 60)
+    body = (*base_rgb, 255)
+    dark = (*_shade(base_rgb, -55), 255)
     mid = s // 2
     neck_top = s // 6
     neck_bot = s // 2
     neck_half = max(1, s // 12)
-    # Neck.
-    icon[neck_top:neck_bot, mid - neck_half : mid + neck_half + 1, :3] = dark
-    # Bulb body: a filled circle sitting low in the icon.
+    # Neck outline in dark, inside body color.
+    icon[neck_top:neck_bot, mid - neck_half : mid + neck_half + 1] = dark
+    if neck_half >= 1:
+        icon[neck_top + 1 : neck_bot, mid - neck_half + 1 : mid + neck_half] = body
+    # Bulb.
     body_cy = (3 * s) // 5
     body_r = s // 3
     ys, xs = np.ogrid[:s, :s]
     dist = np.sqrt((ys - body_cy) ** 2 + (xs - mid) ** 2)
-    ring = (dist <= body_r) & (dist >= body_r - 1.5)
-    fill = (dist <= body_r - 1.2) & (ys >= neck_bot - 1)
-    icon[ring, :3] = dark
-    icon[fill, :3] = bright
+    fill = (dist <= body_r - 0.5) & (ys >= neck_bot - 1)
+    icon[fill] = body
+    ring = (dist <= body_r) & (dist >= body_r - 1.2) & (ys >= neck_bot - 1)
+    icon[ring] = dark
     if advanced:
-        glow = (255, 230, 120)
-        icon[body_cy - 1 : body_cy + 2, mid - 1 : mid + 2, :3] = glow
+        glow = (255, 230, 120, 255)
+        icon[body_cy - 1 : body_cy + 2, mid - 1 : mid + 2] = glow
 
 
 def _draw_rocket(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
 ) -> None:
-    """Draw a rocket silhouette: nose, body, fins, exhaust spark.
+    """Draw a rocket silhouette on a transparent background.
 
     Args:
-        icon: RGBA array modified in place.
+        icon: RGBA array modified in place (assumed transparent).
         base_rgb: Base rocket body color.
     """
     s = icon.shape[0]
     if s < 8:
         return
-    dark = _shade(base_rgb, -90)
-    exhaust = (255, 210, 80)
+    body = (*base_rgb, 255)
+    dark = (*_shade(base_rgb, -90), 255)
+    exhaust = (255, 210, 80, 255)
     mid = s // 2
     body_w = max(2, s // 5)
     body_top = s // 5
     body_bot = (4 * s) // 5
-    # Body.
-    icon[body_top:body_bot, mid - body_w // 2 : mid - body_w // 2 + body_w, :3] = dark
+    # Body (fill + dark edge).
+    icon[body_top:body_bot, mid - body_w // 2 : mid - body_w // 2 + body_w] = body
+    icon[body_top:body_bot, mid - body_w // 2] = dark
+    icon[body_top:body_bot, mid - body_w // 2 + body_w - 1] = dark
     # Conical nose.
     for t in range(body_top):
         y = body_top - 1 - t
         half = body_w // 2 - (body_top - 1 - t) // 2
         if half < 0:
             continue
-        icon[y, mid - half : mid + half + 1, :3] = dark
+        icon[y, mid - half : mid + half + 1] = body
+        if 0 <= y < s:
+            if mid - half >= 0:
+                icon[y, mid - half] = dark
+            if mid + half < s:
+                icon[y, mid + half] = dark
     # Fins.
     fin_y = body_bot - 2
-    fin_len = max(1, s // 8)
-    icon[fin_y : fin_y + 2, max(0, mid - body_w) : mid - body_w // 2, :3] = dark
-    icon[fin_y : fin_y + 2, mid + body_w // 2 + 1 : min(s, mid + body_w + 1), :3] = dark
+    icon[fin_y : fin_y + 2, max(0, mid - body_w) : mid - body_w // 2] = dark
+    icon[fin_y : fin_y + 2, mid + body_w // 2 + 1 : min(s, mid + body_w + 1)] = dark
     # Exhaust spark below body.
+    fin_len = max(1, s // 8)
     if body_bot < s:
-        icon[body_bot : min(body_bot + fin_len, s), mid, :3] = exhaust
+        icon[body_bot : min(body_bot + fin_len, s), mid] = exhaust
 
 
 def _draw_assembler_body(
@@ -1099,7 +1170,27 @@ def render_item_icon(
         RGBA uint8 array of shape ``(size, size, 4)``.
     """
     rgb = ITEM_COLORS.get(item_type, (128, 128, 128))
-    icon = np.full((size, size, 4), (*rgb, 255), dtype=np.uint8)
+
+    # Shaped items render on a transparent canvas so only the silhouette
+    # is visible. Ores, plates, and placed machines keep the full square
+    # fill since the base color is itself the material/body of the object.
+    shaped_items = {
+        int(ItemType.WIRE),
+        int(ItemType.CIRCUIT),
+        int(ItemType.MOTOR),
+        int(ItemType.SENSOR),
+        int(ItemType.FRAME),
+        int(ItemType.BASIC_SCIENCE_PACK),
+        int(ItemType.ADVANCED_SCIENCE_PACK),
+    }
+    # ROCKET is both a machine (placed on map) and a shaped item; always
+    # render as a transparent silhouette because its sprite is iconic.
+    shaped_items.add(int(ItemType.ROCKET))
+
+    if item_type in shaped_items:
+        icon = np.zeros((size, size, 4), dtype=np.uint8)
+    else:
+        icon = np.full((size, size, 4), (*rgb, 255), dtype=np.uint8)
 
     # --- Ores ---
     if item_type in _ORE_ITEMS:
@@ -1119,7 +1210,7 @@ def render_item_icon(
         _draw_wafer(icon, rgb)
         return icon
 
-    # --- Intermediate items ---
+    # --- Intermediate shaped items (transparent background) ---
     if item_type == int(ItemType.WIRE):
         _draw_wire_helix(icon, rgb)
         return icon
@@ -1141,8 +1232,11 @@ def render_item_icon(
     if item_type == int(ItemType.ADVANCED_SCIENCE_PACK):
         _draw_flask(icon, rgb, advanced=True)
         return icon
+    if item_type == int(ItemType.ROCKET):
+        _draw_rocket(icon, rgb)
+        return icon
 
-    # --- Machines (draw interior, then the shared bevel frame) ---
+    # --- Machines (solid fill with interior + shared bevel frame) ---
     if item_type in _MACHINE_ITEM_TYPES:
         if item_type == int(ItemType.CONVEYOR_BELT) and size >= 6:
             belt_dir = direction if direction is not None else int(Direction.RIGHT)
@@ -1161,9 +1255,14 @@ def render_item_icon(
             _draw_assembler_body(icon, rgb)
         elif item_type == int(ItemType.FURNACE) and size >= 6:
             _draw_furnace_body(icon, rgb)
-        elif item_type == int(ItemType.ROCKET) and size >= 6:
-            _draw_rocket(icon, rgb)
         _draw_machine_frame(icon)
+        # Knock the four corner pixels transparent so placed machines
+        # read as "objects on terrain" rather than square tiles.
+        if size >= 4:
+            icon[0, 0, 3] = 0
+            icon[0, size - 1, 3] = 0
+            icon[size - 1, 0, 3] = 0
+            icon[size - 1, size - 1, 3] = 0
         return icon
 
     return icon
@@ -1224,10 +1323,14 @@ def render_machine_overlays(
 
         y_start = y * block_pixel_size + offset
         x_start = x * block_pixel_size + offset
-        image[
+        # Alpha composite so transparent pixels (corner knockouts, shaped
+        # machines like the rocket) let the terrain tile show through.
+        mask = icon[..., 3] > 0
+        tile = image[
             y_start : y_start + machine_size,
             x_start : x_start + machine_size,
-        ] = icon
+        ]
+        tile[mask] = icon[mask]
 
     draw_belt_cargo(image, state, block_pixel_size)
 
