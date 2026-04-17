@@ -76,7 +76,7 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.COPPER_PLATE: "Copper Plate",
     ItemType.TIN_PLATE: "Tin Plate",
     ItemType.WAFER: "Wafer",
-    ItemType.STEEL: "Steel",
+    ItemType.FRAME: "Frame",
     ItemType.CIRCUIT: "Circuit",
     ItemType.WIRE: "Wire",
     ItemType.MOTOR: "Motor",

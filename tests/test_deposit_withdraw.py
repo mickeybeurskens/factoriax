@@ -410,7 +410,7 @@ class TestWithdrawFromAssembler:
 
     def test_withdraw_output_from_assembler(self, state_factory) -> None:
         """Withdrawing the output item type should work."""
-        aot, aoc = _asm_out_grids(3, 3, {(1, 2): (ItemType.STEEL, 5)})
+        aot, aoc = _asm_out_grids(3, 3, {(1, 2): (ItemType.FRAME, 5)})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -420,15 +420,15 @@ class TestWithdrawFromAssembler:
             asm_out_count=aoc,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.STEEL)
+        state = withdraw_from_adjacent(state, 0, ItemType.FRAME)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.STEEL]) == 1
+        assert int(state.player_inventory[0, ItemType.FRAME]) == 1
         assert int(state.ent_asm_out_count[eidx]) == 4
 
     def test_withdraw_wrong_type_from_assembler_rejected(self, state_factory) -> None:
         """Withdrawing a type that doesn't match asm_out should fail."""
-        aot, aoc = _asm_out_grids(3, 3, {(1, 2): (ItemType.STEEL, 5)})
+        aot, aoc = _asm_out_grids(3, 3, {(1, 2): (ItemType.FRAME, 5)})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),

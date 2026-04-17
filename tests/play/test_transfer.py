@@ -69,10 +69,10 @@ class TestSwapInventorySlots:
         result = swap_inventory_slots(
             state,
             0,
-            int(ItemType.STEEL),
+            int(ItemType.FRAME),
             int(ItemType.ROCKET),
         )
-        assert int(result.player_inventory[0, int(ItemType.STEEL)]) == 0
+        assert int(result.player_inventory[0, int(ItemType.FRAME)]) == 0
         assert int(result.player_inventory[0, int(ItemType.ROCKET)]) == 0
 
     def test_swap_preserves_total(self, state_factory) -> None:

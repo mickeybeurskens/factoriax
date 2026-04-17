@@ -485,7 +485,7 @@ _ITEM_NAMES: dict[int, str] = {
     int(ItemType.COPPER_PLATE): "Copper Plate",
     int(ItemType.TIN_PLATE): "Tin Plate",
     int(ItemType.WAFER): "Wafer",
-    int(ItemType.STEEL): "Steel",
+    int(ItemType.FRAME): "Frame",
     int(ItemType.CIRCUIT): "Circuit",
     int(ItemType.WIRE): "Wire",
     int(ItemType.MOTOR): "Motor",

@@ -789,10 +789,10 @@ class TestGetNumSlots:
         state = new_editor_state(5, 5)
         assert get_num_slots(state, ("player", 0, 0)) == 10
 
-    def test_miner_has_two(self) -> None:
+    def test_miner_has_one(self) -> None:
         state = new_editor_state(5, 5)
         set_machine(state, 0, 0, int(MachineType.MINER), 0)
-        assert get_num_slots(state, ("machine", 0, 0)) == 2
+        assert get_num_slots(state, ("machine", 0, 0)) == 1
 
     def test_pallet_has_one(self) -> None:
         state = new_editor_state(5, 5)

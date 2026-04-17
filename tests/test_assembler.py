@@ -229,10 +229,10 @@ class TestAssemblerStallsOutputFull:
 
 
 class TestAssemblerTwoInputRecipe:
-    """Steel recipe requires two distinct inputs."""
+    """Frame recipe requires two distinct inputs."""
 
-    def test_steel_recipe_starts(self, state_factory) -> None:
-        """Steel: 2 iron_plate + 1 tin_plate -> power set, consumed."""
+    def test_frame_recipe_starts(self, state_factory) -> None:
+        """Frame: 2 iron_plate + 1 tin_plate -> power set, consumed."""
         state = _make_assembler_state(
             state_factory,
             asm_in_type=[int(ItemType.IRON_PLATE), int(ItemType.TIN_PLATE)],
@@ -245,7 +245,7 @@ class TestAssemblerTwoInputRecipe:
         assert int(new.ent_asm_in_count[eid, 0]) == 0
         assert int(new.ent_asm_in_count[eid, 1]) == 0
 
-    def test_steel_missing_second_input(self, state_factory) -> None:
+    def test_frame_missing_second_input(self, state_factory) -> None:
         """Missing tin_plate should prevent craft start."""
         state = _make_assembler_state(
             state_factory,

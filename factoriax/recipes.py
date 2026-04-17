@@ -1,12 +1,15 @@
 """Recipe definitions for the FactoriaX environment.
 
-Unified recipe table used by both player crafting (instant) and assembler
-auto-crafting (timed). Each recipe has a unique input type-set: the
-assembler determines what to produce from what goes in, with no manual
-recipe selection needed.
+Unified recipe table used by both player crafting (instant) and
+combiner auto-crafting (timed). Each recipe has a unique input
+type-set: the machine determines what to produce from what goes in,
+with no manual recipe selection needed. The ``RECIPE_MACHINE_TYPE``
+array gates each recipe to its owning machine type — smelting
+recipes run on furnaces, everything else on assemblers.
 
-Player crafting consumes materials from inventory and produces one output
-item instantly. Assemblers use the ``ticks`` field as a production delay.
+Player crafting consumes materials from inventory and produces one
+output item instantly. Combiners use the ``ticks`` field as a
+production delay.
 """
 
 from __future__ import annotations
@@ -54,7 +57,7 @@ RECIPES: list[_Recipe] = [
     },
     # Intermediates (tier 1)
     {
-        "output": ItemType.STEEL,
+        "output": ItemType.FRAME,
         "inputs": [(ItemType.IRON_PLATE, 2), (ItemType.TIN_PLATE, 1)],
         "ticks": 4,
     },
@@ -71,7 +74,7 @@ RECIPES: list[_Recipe] = [
     # Components (tier 2)
     {
         "output": ItemType.MOTOR,
-        "inputs": [(ItemType.STEEL, 1), (ItemType.WIRE, 1)],
+        "inputs": [(ItemType.FRAME, 1), (ItemType.WIRE, 1)],
         "ticks": 6,
     },
     {
@@ -87,7 +90,7 @@ RECIPES: list[_Recipe] = [
     },
     {
         "output": ItemType.MINER,
-        "inputs": [(ItemType.SENSOR, 1), (ItemType.STEEL, 2)],
+        "inputs": [(ItemType.SENSOR, 1), (ItemType.FRAME, 2)],
         "ticks": 6,
     },
     {
@@ -97,7 +100,7 @@ RECIPES: list[_Recipe] = [
     },
     {
         "output": ItemType.PALLET,
-        "inputs": [(ItemType.STEEL, 2), (ItemType.TIN_PLATE, 1)],
+        "inputs": [(ItemType.FRAME, 2), (ItemType.TIN_PLATE, 1)],
         "ticks": 4,
     },
     {
@@ -137,7 +140,7 @@ RECIPE_NAMES: list[str] = [
     "Copper Plate",
     "Tin Plate",
     "Wafer",
-    "Steel",
+    "Frame",
     "Circuit",
     "Wire",
     "Motor",
@@ -218,17 +221,3 @@ CRAFT_ACTION_TO_RECIPE: jnp.ndarray = jnp.arange(
     NUM_RECIPES,
     dtype=jnp.int32,
 )
-
-# ---------------------------------------------------------------------------
-# Backward-compat aliases (will be removed in Stage 2+)
-# ---------------------------------------------------------------------------
-
-MAX_ASSEMBLER_STACK_SIZE: int = 1000
-NUM_ASSEMBLER_RECIPES: int = NUM_RECIPES
-MAX_ASSEMBLER_RECIPE_INPUTS: int = MAX_RECIPE_INPUTS
-ASSEMBLER_RECIPES = RECIPES
-ASSEMBLER_RECIPE_NAMES: list[str] = RECIPE_NAMES
-ASSEMBLER_RECIPE_OUTPUTS: jnp.ndarray = RECIPE_OUTPUTS
-ASSEMBLER_RECIPE_TICKS: jnp.ndarray = RECIPE_TICKS
-ASSEMBLER_RECIPE_INPUT_ITEMS: jnp.ndarray = RECIPE_INPUT_ITEMS
-ASSEMBLER_RECIPE_INPUT_COUNTS: jnp.ndarray = RECIPE_INPUT_COUNTS

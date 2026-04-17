@@ -37,7 +37,7 @@ class ItemType(IntEnum):
     COPPER_PLATE = 7
     TIN_PLATE = 8
     WAFER = 9
-    STEEL = 10
+    FRAME = 10
     CIRCUIT = 11
     WIRE = 12
     MOTOR = 13
@@ -102,7 +102,7 @@ PLAYER_MAX_STACK = jnp.array(
         1024,  # COPPER_PLATE
         1024,  # TIN_PLATE
         1024,  # WAFER
-        1024,  # STEEL
+        1024,  # FRAME
         1024,  # CIRCUIT
         1024,  # WIRE
         1024,  # MOTOR
@@ -138,7 +138,7 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.COPPER_PLATE: (184, 115, 51),
     ItemType.TIN_PLATE: (200, 200, 190),
     ItemType.WAFER: (80, 90, 140),
-    ItemType.STEEL: (140, 150, 165),
+    ItemType.FRAME: (140, 150, 165),
     ItemType.CIRCUIT: (40, 160, 80),
     ItemType.WIRE: (200, 140, 60),
     ItemType.MOTOR: (100, 100, 180),
@@ -168,16 +168,8 @@ MACHINE_TYPE_NAMES: dict[int, str] = {
 
 # Recipes are defined in factoriax.recipes (single source of truth).
 from factoriax.recipes import (  # noqa: E402, F401
-    ASSEMBLER_RECIPE_INPUT_COUNTS,
-    ASSEMBLER_RECIPE_INPUT_ITEMS,
-    ASSEMBLER_RECIPE_NAMES,
-    ASSEMBLER_RECIPE_OUTPUTS,
-    ASSEMBLER_RECIPE_TICKS,
-    ASSEMBLER_RECIPES,
     CRAFT_ACTION_TO_RECIPE,
-    MAX_ASSEMBLER_RECIPE_INPUTS,
     MAX_RECIPE_INPUTS,
-    NUM_ASSEMBLER_RECIPES,
     NUM_RECIPES,
     OUTPUT_TO_RECIPE,
     RECIPE_INPUT_COUNTS,
@@ -268,7 +260,7 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.NONE,  # COPPER_PLATE
         MachineType.NONE,  # TIN_PLATE
         MachineType.NONE,  # WAFER
-        MachineType.NONE,  # STEEL
+        MachineType.NONE,  # FRAME
         MachineType.NONE,  # CIRCUIT
         MachineType.NONE,  # WIRE
         MachineType.NONE,  # MOTOR
@@ -369,7 +361,7 @@ class Action(IntEnum):
     CRAFT_COPPER_PLATE = 19
     CRAFT_TIN_PLATE = 20
     CRAFT_WAFER = 21
-    CRAFT_STEEL = 22
+    CRAFT_FRAME = 22
     CRAFT_CIRCUIT = 23
     CRAFT_WIRE = 24
     CRAFT_MOTOR = 25
@@ -398,7 +390,7 @@ class Action(IntEnum):
     DEPOSIT_COPPER_PLATE = 44
     DEPOSIT_TIN_PLATE = 45
     DEPOSIT_WAFER = 46
-    DEPOSIT_STEEL = 47
+    DEPOSIT_FRAME = 47
     DEPOSIT_CIRCUIT = 48
     DEPOSIT_WIRE = 49
     DEPOSIT_MOTOR = 50
@@ -423,7 +415,7 @@ class Action(IntEnum):
     WITHDRAW_COPPER_PLATE = 67
     WITHDRAW_TIN_PLATE = 68
     WITHDRAW_WAFER = 69
-    WITHDRAW_STEEL = 70
+    WITHDRAW_FRAME = 70
     WITHDRAW_CIRCUIT = 71
     WITHDRAW_WIRE = 72
     WITHDRAW_MOTOR = 73
@@ -517,18 +509,6 @@ SOLID_BLOCKS = jnp.array(
 
 BLOCK_MAX_RESOURCES = 1000
 
-MACHINE_POWER_CONSUMPTION = jnp.array(
-    [0, 1, 0, 0, 0, 0, 0, 0],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE
-    dtype=jnp.int32,
-)
-
-MACHINE_MINING_RATE = jnp.array(
-    [0, 3, 0, 0, 0, 0, 0, 0],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE
-    dtype=jnp.int32,
-)
-
 OBS_DIM = (64, 64, 3)
 BLOCK_PIXEL_SIZE = 32
 NUM_ACTIONS = len(Action)
@@ -540,18 +520,12 @@ MAX_ACHIEVEMENTS = 64
 # ---------------------------------------------------------------------------
 
 DEFAULT_MACHINE_MAX_HEALTH: int = 100
-DEFAULT_MAX_BITERS: int = 32
-MAX_ASSEMBLER_STACK_SIZE: int = 1000
 NUM_INVENTORY_SLOTS: int = 10
 MAX_MACHINE_INVENTORY_SLOTS: int = 8
 
-TURN_LEFT_MAP = jnp.array([0, 4, 3, 1, 2], dtype=jnp.int32)
 TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
-MACHINE_TO_RECIPE = jnp.array([-1, 0, 1, 4, 2, -1, -1, 0], dtype=jnp.int32)
-TECH_GATES_RECIPE = jnp.array([0, 1], dtype=jnp.int32)
-
-MACHINE_NUM_SLOTS = np.array([0, 2, 1, 3, 1, 0, 0, 3], dtype=np.int32)
+MACHINE_NUM_SLOTS = np.array([0, 1, 1, 3, 1, 0, 0, 3], dtype=np.int32)
 
 
 class SlotRole(IntEnum):
@@ -566,13 +540,14 @@ class SlotRole(IntEnum):
 
 MACHINE_SLOT_ROLES = np.array(
     [
-        [SlotRole.NONE] * 8,
-        [SlotRole.FUEL, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
-        [SlotRole.STORAGE] * 8,
+        [SlotRole.NONE] * 8,  # NONE
+        [SlotRole.OUTPUT] + [SlotRole.NONE] * 7,  # MINER
+        [SlotRole.STORAGE] * 8,  # PALLET
         [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,  # CONVEYOR_BELT
         [SlotRole.NONE] * 8,  # ARM (instant, no buffer)
         [SlotRole.NONE] * 8,  # ROCKET
+        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
     ],
     dtype=np.int32,
 )
