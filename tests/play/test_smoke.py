@@ -162,8 +162,13 @@ class TestEditorSmoke:
         )
 
 
+@pytest.mark.slow
 class TestEnvStepSmoke:
-    """Environment should reset and step at various map sizes."""
+    """Environment should reset and step at various map sizes.
+
+    Every method triggers a fresh JIT compile for the env at a given
+    map size. Slow but load-bearing — gated behind ``-m slow``.
+    """
 
     @pytest.mark.parametrize("size", [16, 32, 64])
     def test_reset_and_step(self, size: int) -> None:

@@ -1,6 +1,7 @@
 """Tests for agentdebugger layout rendering."""
 
 import numpy as np
+import pytest
 
 from factoriax.agentdebugger.layout import (
     STATUS_BAR_HEIGHT,
@@ -26,6 +27,7 @@ class TestComputeDebuggerDimensions:
         assert h == 400 + STATUS_BAR_HEIGHT
 
 
+@pytest.mark.slow
 class TestRenderDebuggerFrame:
     """Tests for render_debugger_frame."""
 

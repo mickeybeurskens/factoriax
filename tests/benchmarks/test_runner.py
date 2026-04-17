@@ -17,6 +17,10 @@ from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
 
+# Runner tests spin up the full benchmark harness (JIT-compiled 10x10
+# env + scan over timesteps) — valuable but slow, gated behind @slow.
+pytestmark = pytest.mark.slow
+
 # ---------------------------------------------------------------------------
 # Shared stub infrastructure
 # ---------------------------------------------------------------------------

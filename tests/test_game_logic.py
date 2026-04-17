@@ -60,8 +60,16 @@ class TestHandlePlayerAction:
             jnp.array([0, 1]),
         )
 
+    @pytest.mark.slow
     def test_movement_sets_facing(self, state_factory) -> None:
-        """Movement actions should set facing to the movement direction."""
+        """Movement actions should set facing to the movement direction.
+
+        Slow because each of the four actions traces through the full
+        ``_handle_player_action`` dispatch (``lax.switch`` + all handlers).
+        Covered more cheaply by ``test_factoriax.py::test_up_moves_north``
+        via direct ``move_player`` calls; this test adds the extra
+        assurance that dispatch wires through correctly.
+        """
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),

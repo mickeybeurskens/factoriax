@@ -25,6 +25,10 @@ from factoriax.analysis.trajectory import Trajectory, states_to_trajectory
 from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
 
+# Replay tests run a real episode through the debugger before
+# exercising the replay UI — slow, gated behind ``@slow``.
+pytestmark = pytest.mark.slow
+
 # ------------------------------------------------------------------
 # Fixtures
 # ------------------------------------------------------------------

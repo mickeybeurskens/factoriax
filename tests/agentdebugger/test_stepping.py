@@ -15,6 +15,10 @@ from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.observations import global_array
 from factoriax.state import EnvParams
 
+# Each test steps a real env through the debugger, triggering the env
+# JIT compile. Gated behind ``@slow`` for the pre-commit inner loop.
+pytestmark = pytest.mark.slow
+
 
 class TestExecuteStep:
     """Tests for Debugger._execute_step."""

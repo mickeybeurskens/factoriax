@@ -8,6 +8,7 @@ environment with random action sequences.
 
 import jax
 import jax.numpy as jnp
+import pytest
 from jax import lax, random
 
 from factoriax.constants import (
@@ -22,6 +23,12 @@ from factoriax.constants import (
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step, mine_block
 from factoriax.state import EnvParams, EnvState
+
+# Every test in this file runs a 100-step random rollout through
+# ``factoriax_step``, which triggers the full env JIT compile. They
+# are the highest-value regression guards (emergent invariants) but
+# too slow for the pre-commit inner loop.
+pytestmark = pytest.mark.slow
 
 # ---------------------------------------------------------------------------
 # Helpers

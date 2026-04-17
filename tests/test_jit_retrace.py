@@ -12,12 +12,17 @@ would invalidate the JIT cache.
 from __future__ import annotations
 
 import jax
+import pytest
 from jax import random
 
 from factoriax.constants import Action
 from factoriax.envs.achievement_wrapper import AchievementWrapper
 from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
+
+# Each test JIT-compiles step_env — necessarily slow, but catches the
+# "game freezes for 5s on first retrace" regression. CI-only.
+pytestmark = pytest.mark.slow
 
 
 def _setup():

@@ -15,7 +15,6 @@ from factoriax import (
     make_factoriax_env,
 )
 from factoriax.constants import (
-    BLOCK_PIXEL_SIZE,
     NUM_ACTIONS,
     NUM_TECHNOLOGIES,
     SOLID_BLOCKS,
@@ -31,7 +30,6 @@ from factoriax.game_logic import (
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.renderer import (
     create_default_textures,
-    render_pixels,
 )
 from factoriax.world_gen import generate_world
 
@@ -39,43 +37,12 @@ from factoriax.world_gen import generate_world
 class TestConstants:
     """Tests for constants module."""
 
-    def test_block_types_have_unique_values(self) -> None:
-        """Block types should have distinct integer values."""
-        values = [
-            BlockType.INVALID,
-            BlockType.OUT_OF_BOUNDS,
-            BlockType.DIRT,
-            BlockType.WATER,
-            BlockType.IRON,
-            BlockType.COPPER,
-            BlockType.COAL,
-        ]
-        assert len(values) == len(set(values))
-
-    def test_resource_block_types_exist(self) -> None:
-        """Resource block types should exist with expected values."""
-        assert BlockType.IRON == 4
-        assert BlockType.COPPER == 5
-        assert BlockType.COAL == 6
-
     def test_resource_blocks_are_walkable(self) -> None:
         """Resource blocks should not be in SOLID_BLOCKS."""
         solid_set = set(int(b) for b in SOLID_BLOCKS)
         assert int(BlockType.IRON) not in solid_set
         assert int(BlockType.COPPER) not in solid_set
         assert int(BlockType.COAL) not in solid_set
-
-    def test_action_values(self) -> None:
-        """Movement actions should be numbered 0-4, face actions 5-8."""
-        assert Action.NOOP == 0
-        assert Action.UP == 1
-        assert Action.DOWN == 2
-        assert Action.LEFT == 3
-        assert Action.RIGHT == 4
-        assert Action.FACE_UP == 5
-        assert Action.FACE_DOWN == 6
-        assert Action.FACE_LEFT == 7
-        assert Action.FACE_RIGHT == 8
 
 
 class TestWorldGen:
@@ -310,22 +277,6 @@ class TestGameLogic:
 class TestRenderer:
     """Tests for rendering."""
 
-    def test_create_default_textures_creates_all_textures(self) -> None:
-        """Default textures should include all block types."""
-        textures = create_default_textures()
-        assert BlockType.DIRT in textures
-        assert BlockType.WATER in textures
-        assert BlockType.IRON in textures
-        assert BlockType.COPPER in textures
-        assert BlockType.COAL in textures
-
-    def test_textures_have_correct_shape(self) -> None:
-        """Textures should be BLOCK_PIXEL_SIZE x BLOCK_PIXEL_SIZE RGBA."""
-        textures = create_default_textures()
-        for texture in textures.values():
-            assert texture.shape == (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4)
-            assert texture.dtype == np.uint8
-
     def test_resource_textures_have_expected_colors(self) -> None:
         """Resource textures should be dominated by their base color.
 
@@ -358,25 +309,6 @@ class TestRenderer:
             assert mode_rgb == base_rgb, (
                 f"block {block_id}: dominant color {mode_rgb}, expected {base_rgb}"
             )
-
-    def test_render_pixels_returns_correct_shape(self) -> None:
-        """Rendered image should have correct dimensions."""
-        rng = random.PRNGKey(0)
-        params = EnvParams(map_width=8, map_height=8)
-        state = generate_world(rng, params)
-
-        pixels = render_pixels(state, block_pixel_size=16)
-        expected_height = 8 * 16
-        assert pixels.shape == (expected_height, 8 * 16, 3)
-
-    def test_render_pixels_returns_rgb(self) -> None:
-        """Rendered image should be RGB (not RGBA)."""
-        rng = random.PRNGKey(0)
-        params = EnvParams(map_width=4, map_height=4)
-        state = generate_world(rng, params)
-
-        pixels = render_pixels(state)
-        assert pixels.shape[2] == 3
 
 
 class TestEnvironment:

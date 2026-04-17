@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import jax
 import numpy as np
+import pytest
 
 from factoriax.benchmarks.skills.mining import MiningSkill, mining_level
 from factoriax.benchmarks.skills.place_miner import (
@@ -90,6 +91,7 @@ class TestPlaceMinerLevel:
 # -----------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestMiningReward:
     """Verify mining skill reward computation."""
 
@@ -104,6 +106,7 @@ class TestMiningReward:
         assert float(reward) == 0.0
 
 
+@pytest.mark.slow
 class TestPlaceMinerReward:
     """Verify place miner skill reward computation."""
 
