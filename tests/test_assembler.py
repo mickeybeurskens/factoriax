@@ -103,7 +103,21 @@ class TestAssemblerStartsCraft:
     """Assembler should consume inputs and start a countdown."""
 
     def test_iron_plate_recipe_starts(self, state_factory) -> None:
-        """Iron plate recipe: 2 iron_ore -> power set, inputs consumed."""
+        """Iron plate recipe: 2 iron_ore + 1 coal -> power set, consumed."""
+        state = _make_assembler_state(
+            state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
+            asm_in_count=[5, 3],
+        )
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+
+        assert int(new.ent_power[eid]) == 2
+        assert int(new.ent_asm_in_count[eid, 0]) == 0
+        assert int(new.ent_asm_in_count[eid, 1]) == 0
+
+    def test_no_start_without_coal(self, state_factory) -> None:
+        """Iron plate needs coal as reductant; no coal means no start."""
         state = _make_assembler_state(
             state_factory,
             asm_in_type=[int(ItemType.IRON_ORE), 0],
@@ -112,21 +126,21 @@ class TestAssemblerStartsCraft:
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
 
-        assert int(new.ent_power[eid]) == 2
-        assert int(new.ent_asm_in_count[eid, 0]) == 0
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 5
 
-    def test_no_start_without_inputs(self, state_factory) -> None:
-        """Assembler with insufficient inputs should remain idle."""
+    def test_no_start_without_ore(self, state_factory) -> None:
+        """Having only coal (no ore) should not start smelting."""
         state = _make_assembler_state(
             state_factory,
-            asm_in_type=[int(ItemType.IRON_ORE), 0],
-            asm_in_count=[1, 0],
+            asm_in_type=[int(ItemType.COAL), 0],
+            asm_in_count=[3, 0],
         )
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
-        assert int(new.ent_asm_in_count[eid, 0]) == 1
+        assert int(new.ent_asm_in_count[eid, 0]) == 3
 
 
 class TestAssemblerCompletesCraft:

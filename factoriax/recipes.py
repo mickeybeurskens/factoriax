@@ -31,25 +31,25 @@ class _Recipe(TypedDict):
 # ---------------------------------------------------------------------------
 
 RECIPES: list[_Recipe] = [
-    # Plates (tier 0.5 — smelting)
+    # Plates (tier 0.5 — smelting, coal acts as a reductant)
     {
         "output": ItemType.IRON_PLATE,
-        "inputs": [(ItemType.IRON_ORE, 2)],
+        "inputs": [(ItemType.IRON_ORE, 2), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.COPPER_PLATE,
-        "inputs": [(ItemType.COPPER_ORE, 2)],
+        "inputs": [(ItemType.COPPER_ORE, 2), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.TIN_PLATE,
-        "inputs": [(ItemType.TIN_ORE, 2)],
+        "inputs": [(ItemType.TIN_ORE, 2), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.WAFER,
-        "inputs": [(ItemType.SILICON, 2)],
+        "inputs": [(ItemType.SILICON, 2), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     # Intermediates (tier 1)
@@ -152,10 +152,12 @@ RECIPE_NAMES: list[str] = [
 # ---------------------------------------------------------------------------
 
 RECIPE_OUTPUTS: jnp.ndarray = jnp.array(
-    [r["output"] for r in RECIPES], dtype=jnp.int32,
+    [r["output"] for r in RECIPES],
+    dtype=jnp.int32,
 )
 RECIPE_TICKS: jnp.ndarray = jnp.array(
-    [r["ticks"] for r in RECIPES], dtype=jnp.int32,
+    [r["ticks"] for r in RECIPES],
+    dtype=jnp.int32,
 )
 RECIPE_INPUT_ITEMS: jnp.ndarray = jnp.array(
     [
@@ -176,14 +178,17 @@ RECIPE_INPUT_COUNTS: jnp.ndarray = jnp.array(
 
 # Reverse lookup: ItemType -> recipe index (-1 if not an output).
 OUTPUT_TO_RECIPE: jnp.ndarray = jnp.full(
-    len(ItemType), -1, dtype=jnp.int32,
+    len(ItemType),
+    -1,
+    dtype=jnp.int32,
 )
 for _i, _r in enumerate(RECIPES):
     OUTPUT_TO_RECIPE = OUTPUT_TO_RECIPE.at[_r["output"]].set(_i)
 
 # Maps CRAFT action offset to recipe index (same order as RECIPES).
 CRAFT_ACTION_TO_RECIPE: jnp.ndarray = jnp.arange(
-    NUM_RECIPES, dtype=jnp.int32,
+    NUM_RECIPES,
+    dtype=jnp.int32,
 )
 
 # ---------------------------------------------------------------------------

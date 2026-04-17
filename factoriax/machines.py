@@ -379,22 +379,14 @@ def run_assemblers(state: EnvState) -> EnvState:
     new_power = jnp.where(progressing, new_power - jnp.int16(1), new_power)
 
     # --- Phase 3: Start new crafts ---
+    # All recipes are uniform 2-input; inputs can land in either slot.
     idle = is_asm & (new_power == 0)
     matched = jnp.int32(-1)
     for r in range(NUM_RECIPES):
-        inputs = RECIPES[r]["inputs"]
-        rt_a, ra_a = inputs[0]
-        rt_b = inputs[1][0] if len(inputs) > 1 else 0
-        ra_b = inputs[1][1] if len(inputs) > 1 else 0
-        if rt_b == 0:
-            m = ((in_t0 == rt_a) & (in_c0 >= ra_a)) | (
-                (in_t1 == rt_a) & (in_c1 >= ra_a)
-            )
-        else:
-            o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)
-            o2 = (in_t0 == rt_b) & (in_c0 >= ra_b) & (in_t1 == rt_a) & (in_c1 >= ra_a)
-            m = o1 | o2
-        matched = jnp.where(m & idle, jnp.int32(r), matched)
+        (rt_a, ra_a), (rt_b, ra_b) = RECIPES[r]["inputs"]
+        o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)
+        o2 = (in_t0 == rt_b) & (in_c0 >= ra_b) & (in_t1 == rt_a) & (in_c1 >= ra_a)
+        matched = jnp.where((o1 | o2) & idle, jnp.int32(r), matched)
 
     can_start = matched >= 0
     ridx = jnp.clip(matched, 0, NUM_RECIPES - 1)
