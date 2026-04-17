@@ -225,6 +225,7 @@ levels/
 checkpoints/
 runs/
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 
 # LaTeX build artifacts
 paper/*.aux
