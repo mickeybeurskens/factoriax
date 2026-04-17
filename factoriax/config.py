@@ -457,7 +457,9 @@ def resolve_event(
         return resolve_controller_button(ctrl_lookup, event.button)
     if event.type == pygame.JOYHATMOTION:
         return resolve_controller_hat(
-            ctrl_lookup, event.hat, event.value,
+            ctrl_lookup,
+            event.hat,
+            event.value,
         )
     return frozenset()
 
@@ -468,9 +470,7 @@ def resolve_event(
 
 # Reverse mapping from pygame key int to attribute name (e.g. 119 -> "K_w").
 _KEY_INT_TO_NAME: dict[int, str] = {
-    getattr(pygame, attr): attr
-    for attr in dir(pygame)
-    if attr.startswith("K_")
+    getattr(pygame, attr): attr for attr in dir(pygame) if attr.startswith("K_")
 }
 
 
@@ -552,7 +552,6 @@ _ENV_PARAM_FIELDS: tuple[str, ...] = (
     "tin_probability",
     "silicon_probability",
     "base_resources",
-    "power_per_coal",
     "miner_mining_rate",
     "max_assembler_stack_size",
 )

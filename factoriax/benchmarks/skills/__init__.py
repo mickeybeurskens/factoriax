@@ -39,25 +39,3 @@ def count_miners_on_ore(state: EnvState) -> jax.Array:
     tile = state.map[y, x]
     on_ore = jnp.isin(tile, MINEABLE_BLOCKS)
     return jnp.sum(active & is_miner & on_ore)
-
-
-def count_fueled_miners_on_ore(state: EnvState) -> jax.Array:
-    """Count active fueled miners sitting on ore tiles.
-
-    Same as :func:`count_miners_on_ore` but additionally requires
-    ``ent_fuel > 0``.
-
-    Args:
-        state: Current environment state.
-
-    Returns:
-        Scalar int32 count of fueled miners on mineable blocks.
-    """
-    active = state.ent_y >= 0
-    is_miner = state.ent_type == MachineType.MINER
-    fueled = state.ent_fuel > 0
-    y = jnp.clip(state.ent_y, 0)
-    x = jnp.clip(state.ent_x, 0)
-    tile = state.map[y, x]
-    on_ore = jnp.isin(tile, MINEABLE_BLOCKS)
-    return jnp.sum(active & is_miner & fueled & on_ore)

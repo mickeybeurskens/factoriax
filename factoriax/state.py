@@ -28,8 +28,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         ent_x: Entity column positions, shape ``(MAX_M,)``, int16.
         ent_type: Entity machine type, shape ``(MAX_M,)``, int8.
         ent_direction: Entity facing, shape ``(MAX_M,)``, int8.
-        ent_power: Power/craft countdown, shape ``(MAX_M,)``, int16.
-        ent_fuel: Coal for miners, shape ``(MAX_M,)``, int16.
+        ent_power: Craft countdown for assemblers, shape ``(MAX_M,)``, int16.
         ent_buf_type: Buffer item type, shape ``(MAX_M,)``, int8.
         ent_buf_count: Buffer item count, shape ``(MAX_M,)``, int16.
         ent_asm_in_type: Assembler input types, shape ``(MAX_M, 2)``, int8.
@@ -58,7 +57,6 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     ent_type: jnp.ndarray
     ent_direction: jnp.ndarray
     ent_power: jnp.ndarray
-    ent_fuel: jnp.ndarray
     ent_buf_type: jnp.ndarray
     ent_buf_count: jnp.ndarray
     ent_asm_in_type: jnp.ndarray
@@ -102,8 +100,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         tin_probability: Tin ore probability.
         silicon_probability: Silicon probability.
         base_resources: Starting ore count per tile.
-        power_per_coal: Power units per coal consumed.
-        miner_mining_rate: Ore extracted per powered tick.
+        miner_mining_rate: Ore extracted per tick.
         max_assembler_stack_size: Max items per assembler slot.
     """
 
@@ -119,7 +116,6 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     tin_probability: float = 0.10
     silicon_probability: float = 0.10
     base_resources: int = 1000
-    power_per_coal: int = 10
     miner_mining_rate: int = 3
     max_assembler_stack_size: int = 1000
 

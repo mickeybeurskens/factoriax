@@ -25,9 +25,9 @@ def state_factory():
     required; all other fields have sensible defaults.
 
     Old grid-based keyword arguments (machine_direction, machine_power,
-    machine_fuel, buffer_type, buffer_count, asm_in_type, asm_in_count,
-    asm_out_type, asm_out_count) are accepted for backward compatibility
-    and translated into entity arrays automatically.
+    buffer_type, buffer_count, asm_in_type, asm_in_count, asm_out_type,
+    asm_out_count) are accepted for backward compatibility and translated
+    into entity arrays automatically.
 
     Example:
         def test_something(state_factory):
@@ -51,7 +51,6 @@ def state_factory():
         machine_types: jnp.ndarray | None = None,
         machine_power: jnp.ndarray | None = None,
         machine_direction: jnp.ndarray | None = None,
-        machine_fuel: jnp.ndarray | None = None,
         buffer_type: jnp.ndarray | None = None,
         buffer_count: jnp.ndarray | None = None,
         asm_in_type: jnp.ndarray | None = None,
@@ -81,7 +80,6 @@ def state_factory():
             machine_types: Machine type per tile.
             machine_power: Power per machine (grid, translated to entities).
             machine_direction: Direction per machine (grid, translated).
-            machine_fuel: Miner coal per tile (grid, translated).
             buffer_type: Buffer item type per tile (grid, translated).
             buffer_count: Buffer item count per tile (grid, translated).
             asm_in_type: Assembler input types (grid, translated).
@@ -149,11 +147,6 @@ def state_factory():
             if machine_power is not None
             else np.zeros(shape, dtype=np.int16)
         )
-        mf_np = (
-            np.asarray(machine_fuel)
-            if machine_fuel is not None
-            else np.zeros(shape, dtype=np.int16)
-        )
         bt_np = (
             np.asarray(buffer_type)
             if buffer_type is not None
@@ -191,7 +184,6 @@ def state_factory():
         ent_type = np.zeros(mm, dtype=np.int8)
         ent_dir = np.zeros(mm, dtype=np.int8)
         ent_power = np.zeros(mm, dtype=np.int16)
-        ent_fuel = np.zeros(mm, dtype=np.int16)
         ent_buf_type = np.zeros(mm, dtype=np.int8)
         ent_buf_count = np.zeros(mm, dtype=np.int16)
         ent_asm_in_type = np.zeros((mm, 2), dtype=np.int8)
@@ -209,7 +201,6 @@ def state_factory():
                     ent_type[idx] = mt_np[y, x]
                     ent_dir[idx] = md_np[y, x]
                     ent_power[idx] = mp_np[y, x]
-                    ent_fuel[idx] = mf_np[y, x]
                     ent_buf_type[idx] = bt_np[y, x]
                     ent_buf_count[idx] = bc_np[y, x]
                     ent_asm_in_type[idx] = ait_np[y, x]
@@ -233,7 +224,6 @@ def state_factory():
             ent_type=jnp.array(ent_type, dtype=jnp.int8),
             ent_direction=jnp.array(ent_dir, dtype=jnp.int8),
             ent_power=jnp.array(ent_power, dtype=jnp.int16),
-            ent_fuel=jnp.array(ent_fuel, dtype=jnp.int16),
             ent_buf_type=jnp.array(ent_buf_type, dtype=jnp.int8),
             ent_buf_count=jnp.array(ent_buf_count, dtype=jnp.int16),
             ent_asm_in_type=jnp.array(ent_asm_in_type, dtype=jnp.int8),

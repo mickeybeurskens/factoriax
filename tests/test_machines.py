@@ -6,10 +6,9 @@ from jax import random
 from factoriax import BlockType, EnvParams, EnvState, ItemType
 from factoriax.constants import (
     MAX_MACHINE_STACK_SIZE,
-    POWER_PER_COAL,
     MachineType,
 )
-from factoriax.machines import refuel_machines, run_miners, update_all_machines
+from factoriax.machines import run_miners, update_all_machines
 from factoriax.world_gen import generate_world
 
 
@@ -39,7 +38,6 @@ class TestMachineInitialization:
         assert jnp.all(state.machine_types == MachineType.NONE)
         assert jnp.all(state.ent_power == 0)
         assert jnp.all(state.ent_buf_count == 0)
-        assert jnp.all(state.ent_fuel == 0)
 
     def test_machine_arrays_match_map_shape(self) -> None:
         """Machine state arrays should have the expected shapes."""
@@ -54,74 +52,15 @@ class TestMachineInitialization:
         assert state.ent_buf_count.shape == (mm,)
 
 
-class TestMachineRefueling:
-    """Tests for machine refueling logic."""
-
-    def test_machine_consumes_coal_when_no_power(self, state_factory) -> None:
-        """Machine with no power and coal should consume coal and gain power."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
-            block_resources=jnp.array([[10]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[0]], dtype=jnp.int32),
-            machine_fuel=jnp.array([[5]], dtype=jnp.int16),
-        )
-        params = EnvParams(map_width=1, map_height=1)
-
-        new_state = refuel_machines(state, params)
-
-        eid = _eid(new_state, 0, 0)
-        assert new_state.ent_fuel[eid] == 4
-        assert new_state.ent_power[eid] == POWER_PER_COAL
-
-    def test_machine_does_not_refuel_with_power(self, state_factory) -> None:
-        """Machine with power should not consume coal."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
-            block_resources=jnp.array([[10]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[5]], dtype=jnp.int32),
-            machine_fuel=jnp.array([[5]], dtype=jnp.int16),
-        )
-        params = EnvParams(map_width=1, map_height=1)
-
-        new_state = refuel_machines(state, params)
-
-        eid = _eid(new_state, 0, 0)
-        assert new_state.ent_fuel[eid] == 5
-        assert new_state.ent_power[eid] == 5
-
-    def test_machine_does_not_refuel_without_coal(self, state_factory) -> None:
-        """Machine without coal cannot refuel."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
-            block_resources=jnp.array([[10]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[0]], dtype=jnp.int32),
-        )
-        params = EnvParams(map_width=1, map_height=1)
-
-        new_state = refuel_machines(state, params)
-
-        eid = _eid(new_state, 0, 0)
-        assert new_state.ent_fuel[eid] == 0
-        assert new_state.ent_power[eid] == 0
-
-    def test_one_coal_gives_10_power(self) -> None:
-        """One coal should provide exactly POWER_PER_COAL (10) power."""
-        assert POWER_PER_COAL == 10
-
-
 class TestMinerOperation:
     """Tests for miner machine behavior."""
 
     def test_miner_extracts_resources(self, state_factory) -> None:
-        """Miner with power should extract resources from block below."""
+        """Miner should extract resources from the block beneath it."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -132,58 +71,12 @@ class TestMinerOperation:
         assert new_state.ent_buf_count[eid] == 3
         assert new_state.ent_buf_type[eid] == ItemType.COAL
 
-    def test_miner_consumes_power_when_mining(self, state_factory) -> None:
-        """Miner should consume 1 power per step when mining."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
-            block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
-        )
-        params = EnvParams(map_width=1, map_height=1)
-
-        new_state = run_miners(state, params)
-
-        eid = _eid(new_state, 0, 0)
-        assert new_state.ent_power[eid] == 9
-
-    def test_miner_does_not_consume_power_when_idle(self, state_factory) -> None:
-        """Miner should not consume power when it cannot mine."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
-        )
-        params = EnvParams(map_width=1, map_height=1)
-
-        new_state = run_miners(state, params)
-
-        eid = _eid(new_state, 0, 0)
-        assert new_state.ent_power[eid] == 10
-
-    def test_miner_stops_when_no_power(self, state_factory) -> None:
-        """Miner without power should not extract resources."""
-        state = state_factory(
-            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
-            block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[0]], dtype=jnp.int32),
-        )
-        params = EnvParams(map_width=1, map_height=1)
-
-        new_state = run_miners(state, params)
-
-        eid = _eid(new_state, 0, 0)
-        assert new_state.block_resources[0, 0] == 50
-        assert new_state.ent_buf_count[eid] == 0
-
     def test_miner_stops_when_output_full(self, state_factory) -> None:
         """Miner should stop when output type is at max stack."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array(
                 [[MAX_MACHINE_STACK_SIZE]],
@@ -197,7 +90,6 @@ class TestMinerOperation:
         eid = _eid(new_state, 0, 0)
         assert new_state.block_resources[0, 0] == 50
         assert new_state.ent_buf_count[eid] == MAX_MACHINE_STACK_SIZE
-        assert new_state.ent_power[eid] == 10  # No power consumed
 
     def test_miner_stops_when_no_resources(self, state_factory) -> None:
         """Miner should stop when block has no resources."""
@@ -205,7 +97,6 @@ class TestMinerOperation:
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[0]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -213,7 +104,6 @@ class TestMinerOperation:
 
         eid = _eid(new_state, 0, 0)
         assert new_state.ent_buf_count[eid] == 0
-        assert new_state.ent_power[eid] == 10
 
     def test_miner_depletes_block_to_dirt(self, state_factory) -> None:
         """Block should become dirt when fully depleted by miner."""
@@ -221,7 +111,6 @@ class TestMinerOperation:
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[2]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
             max_machines=1,
         )
         params = EnvParams(map_width=1, map_height=1)
@@ -242,7 +131,6 @@ class TestMinerOperation:
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[1]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -261,7 +149,6 @@ class TestMinerOperation:
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array([[62]], dtype=jnp.int16),
         )
@@ -293,7 +180,6 @@ class TestMinerDifferentOres:
             world_map=jnp.array([[block_type]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[10]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -325,7 +211,6 @@ class TestMultipleMiners:
                 ],
                 dtype=jnp.int32,
             ),
-            machine_power=jnp.array([[10, 10], [10, 0]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=2, map_height=2)
 
@@ -350,22 +235,17 @@ class TestMultipleMiners:
 class TestUpdateAllMachines:
     """Tests for the combined machine update function."""
 
-    def test_refuel_then_mine_in_same_step(self, state_factory) -> None:
-        """Machine should refuel and then mine in the same step."""
+    def test_miner_runs_via_update_all(self, state_factory) -> None:
+        """update_all_machines should run miners end-to-end."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
-            machine_power=jnp.array([[0]], dtype=jnp.int32),
-            machine_fuel=jnp.array([[5]], dtype=jnp.int16),
         )
         params = EnvParams(map_width=1, map_height=1)
 
         new_state = update_all_machines(state, params)
 
         eid = _eid(new_state, 0, 0)
-        # Refuel: 5 fuel - 1 = 4, power = 10. Mine: 3 coal into buffer.
         assert new_state.ent_buf_count[eid] == 3
-        assert new_state.ent_fuel[eid] == 4
-        assert new_state.ent_power[eid] == POWER_PER_COAL - 1
         assert new_state.block_resources[0, 0] == 47

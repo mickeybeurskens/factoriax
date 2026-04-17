@@ -502,8 +502,6 @@ SOLID_BLOCKS = jnp.array(
 
 BLOCK_MAX_RESOURCES = 1000
 
-POWER_PER_COAL = 10
-
 MACHINE_POWER_CONSUMPTION = jnp.array(
     [0, 1, 0, 0, 0, 0, 0],
     # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET
@@ -556,8 +554,7 @@ MACHINE_SLOT_ROLES = np.array(
         [SlotRole.NONE] * 8,
         [SlotRole.FUEL, SlotRole.OUTPUT] + [SlotRole.NONE] * 6,
         [SlotRole.STORAGE] * 8,
-        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT]
-        + [SlotRole.NONE] * 5,
+        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
         [SlotRole.STORAGE] + [SlotRole.NONE] * 7,
         [SlotRole.NONE] * 8,  # ARM (instant, no buffer)
         [SlotRole.NONE] * 8,  # ROCKET

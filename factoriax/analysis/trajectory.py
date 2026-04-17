@@ -77,7 +77,6 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "ent_type",
     "ent_direction",
     "ent_power",
-    "ent_fuel",
     "ent_buf_type",
     "ent_buf_count",
     "ent_asm_in_type",
@@ -211,7 +210,6 @@ class Trajectory:
     ent_type: np.ndarray | None = None
     ent_direction: np.ndarray | None = None
     ent_power: np.ndarray | None = None
-    ent_fuel: np.ndarray | None = None
     ent_buf_type: np.ndarray | None = None
     ent_buf_count: np.ndarray | None = None
     ent_asm_in_type: np.ndarray | None = None

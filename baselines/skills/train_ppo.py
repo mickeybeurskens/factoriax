@@ -1,9 +1,8 @@
 """Train PPO on factoriax skill benchmarks.
 
 Each skill is a small 5x5 grid task with dense rewards and 200-step
-episodes. The three skills form an increasing difficulty ladder:
-mining (walk + mine), place_miner (navigate + place from inventory),
-and fuel_miner (walk to each pre-placed miner and deposit coal).
+episodes. The two skills form an increasing difficulty ladder:
+mining (walk + mine) and place_miner (navigate + place from inventory).
 
 The entire collect-GAE-update pipeline is fused into a single
 JIT-compiled ``train_step`` to maximize GPU throughput.
@@ -40,10 +39,6 @@ from baselines.ppo.normalization import (
     normalize_obs,
     update_running_stats,
 )
-from factoriax.benchmarks.skills.fuel_miner import (
-    FuelMinerSkill,
-    fuel_miner_level,
-)
 from factoriax.benchmarks.skills.mining import MiningSkill, mining_level
 from factoriax.benchmarks.skills.place_miner import (
     PlaceMinerSkill,
@@ -63,7 +58,6 @@ logger = logging.getLogger(__name__)
 SKILL_ENVS: dict[str, type] = {
     "mining": MiningSkill,
     "place_miner": PlaceMinerSkill,
-    "fuel_miner": FuelMinerSkill,
 }
 
 
@@ -75,7 +69,7 @@ def _make_level(
     """Build a level and env_params for the given skill at the specified scale.
 
     Args:
-        skill_name: One of "mining", "place_miner", "fuel_miner".
+        skill_name: One of "mining", "place_miner".
         map_size: Square map side length.
         max_timesteps: Episode length.
 
@@ -93,13 +87,6 @@ def _make_level(
         return place_miner_level(
             map_size=map_size,
             num_patches=n,
-            num_miners=n,
-            max_timesteps=max_timesteps,
-        )
-    if skill_name == "fuel_miner":
-        n = max(5, map_size * map_size // 8)
-        return fuel_miner_level(
-            map_size=map_size,
             num_miners=n,
             max_timesteps=max_timesteps,
         )

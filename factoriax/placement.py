@@ -21,7 +21,8 @@ from factoriax.state import EnvState
 
 
 def get_tile_in_front(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> tuple[jax.Array, jax.Array]:
     """Get the tile coordinates in front of a player.
 
@@ -52,7 +53,9 @@ def is_placeable_item(item_type: int | jax.Array) -> jax.Array:
 
 
 def is_valid_placement_tile(
-    state: EnvState, tx: jax.Array, ty: jax.Array,
+    state: EnvState,
+    tx: jax.Array,
+    ty: jax.Array,
 ) -> jax.Array:
     """Check if a tile is valid for machine placement.
 
@@ -116,7 +119,9 @@ def place_machine(
 
     new_count = jnp.where(should_place, player_count - 1, player_count)
     new_mt = jnp.where(
-        should_place, mt.astype(jnp.int8), state.machine_types[sy, sx],
+        should_place,
+        mt.astype(jnp.int8),
+        state.machine_types[sy, sx],
     )
 
     # Allocate entity slot.
@@ -150,9 +155,9 @@ def place_machine(
     )
 
     return state.replace(
-        player_inventory=state.player_inventory.at[
-            player_idx, item_type
-        ].set(new_count.astype(jnp.int16)),
+        player_inventory=state.player_inventory.at[player_idx, item_type].set(
+            new_count.astype(jnp.int16)
+        ),
         machine_types=state.machine_types.at[sy, sx].set(new_mt),
         tile_entity=new_tile_entity,
         ent_y=new_ent_y,
@@ -163,7 +168,8 @@ def place_machine(
 
 
 def pickup_machine(
-    state: EnvState, player_idx: int | jax.Array,
+    state: EnvState,
+    player_idx: int | jax.Array,
 ) -> EnvState:
     """Pick up the machine in front of the player.
 
@@ -247,11 +253,6 @@ def pickup_machine(
         state.ent_power.at[eidx].set(jnp.int16(0)),
         state.ent_power,
     )
-    new_ent_fuel = jnp.where(
-        should_pickup,
-        state.ent_fuel.at[eidx].set(jnp.int16(0)),
-        state.ent_fuel,
-    )
     new_ent_buf_type = jnp.where(
         should_pickup,
         state.ent_buf_type.at[eidx].set(jnp.int8(0)),
@@ -296,7 +297,6 @@ def pickup_machine(
         ent_type=new_ent_type,
         ent_direction=new_ent_dir,
         ent_power=new_ent_power,
-        ent_fuel=new_ent_fuel,
         ent_buf_type=new_ent_buf_type,
         ent_buf_count=new_ent_buf_count,
         ent_asm_in_type=new_asm_in_type,
@@ -331,7 +331,9 @@ def set_machine_direction(
     sy = jnp.clip(ty, 0, h - 1)
 
     mt = jnp.where(
-        in_bounds, state.machine_types[sy, sx], MachineType.NONE,
+        in_bounds,
+        state.machine_types[sy, sx],
+        MachineType.NONE,
     )
     has_machine = mt != MachineType.NONE
     should_set = in_bounds & has_machine
@@ -346,6 +348,8 @@ def set_machine_direction(
     )
     return state.replace(
         ent_direction=jnp.where(
-            should_set, updated_dirs, state.ent_direction,
+            should_set,
+            updated_dirs,
+            state.ent_direction,
         ),
     )

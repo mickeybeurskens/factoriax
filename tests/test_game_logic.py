@@ -165,8 +165,8 @@ class TestHandlePlayerAction:
 class TestCompoundDeposit:
     """Tests for typed deposit actions."""
 
-    def test_deposit_coal_into_miner(self, state_factory) -> None:
-        """DEPOSIT_COAL should transfer coal into the miner's fuel."""
+    def test_deposit_into_miner_is_noop(self, state_factory) -> None:
+        """Miners have no input slot; depositing any item is a no-op."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.COAL].set(10)
         state = state_factory(
@@ -187,34 +187,7 @@ class TestCompoundDeposit:
             .set(MachineType.MINER),
         )
         new = deposit_to_adjacent(state, 0, int(ItemType.COAL))
-        eid = int(state.tile_entity[1, 1])
-        assert int(new.ent_fuel[eid]) == 1
-        assert int(new.player_inventory[0, ItemType.COAL]) == 9
-
-    def test_deposit_invalid_item_is_noop(self, state_factory) -> None:
-        """Depositing copper into a miner should be a no-op."""
-        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.COPPER_ORE].set(5)
-        state = state_factory(
-            world_map=jnp.full(
-                (3, 3),
-                BlockType.DIRT,
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 0),
-            player_direction=int(Direction.DOWN),
-            player_inventory=inv,
-            machine_types=jnp.full(
-                (3, 3),
-                MachineType.NONE,
-                dtype=jnp.int32,
-            )
-            .at[1, 1]
-            .set(MachineType.MINER),
-        )
-        new = deposit_to_adjacent(state, 0, int(ItemType.COPPER_ORE))
-        # Copper is not valid fuel for miners.
-        assert int(new.player_inventory[0, ItemType.COPPER_ORE]) == 5
+        assert int(new.player_inventory[0, ItemType.COAL]) == 10
 
 
 class TestCompoundWithdraw:

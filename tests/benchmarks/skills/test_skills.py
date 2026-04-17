@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
-from factoriax.benchmarks.skills import (
-    count_fueled_miners_on_ore,
-    count_miners_on_ore,
-)
-from factoriax.benchmarks.skills.fuel_miner import FuelMinerSkill, fuel_miner_level
 from factoriax.benchmarks.skills.mining import MiningSkill, mining_level
 from factoriax.benchmarks.skills.place_miner import (
     PlaceMinerSkill,
     place_miner_level,
 )
-from factoriax.constants import Action, BlockType, ItemType, MachineType
+from factoriax.constants import Action, BlockType, ItemType
 from factoriax.levels import build_state
 
 # -----------------------------------------------------------------------
@@ -91,36 +85,6 @@ class TestPlaceMinerLevel:
         assert params.max_machines == 9
 
 
-class TestFuelMinerLevel:
-    """Verify fuel_miner_level produces valid levels."""
-
-    def test_coal_in_inventory(self) -> None:
-        """Player should start with 64 coal."""
-        level, params = fuel_miner_level()
-        state = build_state(level, params)
-        coal = int(state.player_inventory[0, int(ItemType.COAL)])
-        assert coal == 64
-
-    def test_miners_preplaced(self) -> None:
-        """Requested number of miners should be on the map."""
-        level, params = fuel_miner_level(num_miners=5)
-        state = build_state(level, params)
-        n_miners = int(jnp.sum(state.ent_type == MachineType.MINER))
-        assert n_miners == 5
-
-    def test_miners_on_ore(self) -> None:
-        """Pre-placed miners should be on ore tiles."""
-        level, params = fuel_miner_level(num_miners=5)
-        state = build_state(level, params)
-        assert int(count_miners_on_ore(state)) == 5
-
-    def test_miners_unfueled_initially(self) -> None:
-        """Pre-placed miners should start unfueled."""
-        level, params = fuel_miner_level(num_miners=5)
-        state = build_state(level, params)
-        assert int(count_fueled_miners_on_ore(state)) == 0
-
-
 # -----------------------------------------------------------------------
 # Reward tests
 # -----------------------------------------------------------------------
@@ -152,19 +116,3 @@ class TestPlaceMinerReward:
         key = jax.random.PRNGKey(0)
         _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)
         assert float(reward) == 0.0
-
-
-class TestFuelMinerReward:
-    """Verify fuel miner skill reward computation."""
-
-    def test_unfueled_miners_give_proximity_reward(self) -> None:
-        """NOOP with unfueled miners yields only proximity bonus."""
-        level, params = fuel_miner_level(num_miners=5)
-        env = FuelMinerSkill()
-        _, state = env.reset_from_level(level, params)
-        step_fn = jax.jit(env.step_env)
-        key = jax.random.PRNGKey(0)
-        _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)
-        # No miners fueled or picked up so fuel_delta=0, penalty=0.
-        # Only the small proximity bonus remains (0.01 * bonus).
-        assert 0.0 < float(reward) < 0.02

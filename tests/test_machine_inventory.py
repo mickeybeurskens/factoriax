@@ -1,7 +1,7 @@
 """Tests for the entity-based machine inventory system.
 
 Covers machine entity state fields, constraints per machine type,
-and basic machine operations (refueling, mining) using entity arrays.
+and basic machine operations using entity arrays.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.levels import generate_state
-from factoriax.machines import refuel_machines, run_miners, update_all_machines
+from factoriax.machines import run_miners, update_all_machines
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -42,7 +42,6 @@ class TestEntityStateFields:
         state = generate_state(jax.random.PRNGKey(0), params)
         assert state.ent_buf_type.dtype == jnp.int8
         assert state.ent_buf_count.dtype == jnp.int16
-        assert state.ent_fuel.dtype == jnp.int16
 
     def test_entity_shapes(self) -> None:
         """Entity arrays should be 1-D with max_machines length."""
@@ -51,7 +50,6 @@ class TestEntityStateFields:
         mm = params.resolved_max_machines()
         assert state.ent_buf_type.shape == (mm,)
         assert state.ent_buf_count.shape == (mm,)
-        assert state.ent_fuel.shape == (mm,)
 
 
 class TestGenerateStateEntityFields:
@@ -70,31 +68,10 @@ class TestGenerateStateEntityFields:
         params = EnvParams(map_width=4, map_height=4, num_players=1)
         state = generate_state(jax.random.PRNGKey(0), params)
         assert jnp.all(state.ent_buf_count == 0)
-        assert jnp.all(state.ent_fuel == 0)
 
 
 class TestMinerInventory:
     """Tests for miner inventory operations using entity buffers."""
-
-    def test_refuel_reads_coal(self, state_factory) -> None:
-        """Refueling should consume coal from the miner's fuel slot."""
-        state = state_factory(
-            world_map=jnp.array(
-                [[BlockType.IRON]],
-                dtype=jnp.int32,
-            ),
-            machine_types=jnp.array(
-                [[MachineType.MINER]],
-                dtype=jnp.int32,
-            ),
-            machine_fuel=jnp.array([[5]], dtype=jnp.int16),
-            machine_power=jnp.array([[0]], dtype=jnp.int32),
-        )
-        params = EnvParams(map_width=1, map_height=1, num_players=1)
-        new = refuel_machines(state, params)
-        eid = _eid(new, 0, 0)
-        assert int(new.ent_fuel[eid]) == 4
-        assert int(new.ent_power[eid]) == params.power_per_coal
 
     def test_run_miners_deposits_ore(self, state_factory) -> None:
         """Miners should deposit ore into their entity buffer."""
@@ -108,7 +85,6 @@ class TestMinerInventory:
                 [[MachineType.MINER]],
                 dtype=jnp.int32,
             ),
-            machine_power=jnp.array([[5]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1, num_players=1)
         new = run_miners(state, params)
@@ -128,7 +104,6 @@ class TestMinerInventory:
                 [[MachineType.MINER]],
                 dtype=jnp.int32,
             ),
-            machine_power=jnp.array([[5]], dtype=jnp.int32),
             buffer_type=jnp.array(
                 [[int(ItemType.IRON_ORE)]],
                 dtype=jnp.int8,

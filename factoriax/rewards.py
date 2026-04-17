@@ -238,7 +238,7 @@ def miner_output_reward(
 
     Counts the total increase in buffer item counts across all
     miner-type entities. This gives a dense signal that fires every
-    tick a fueled miner extracts ore.
+    tick a miner extracts ore.
 
     Args:
         prev_state: State immediately before the step.
@@ -555,32 +555,6 @@ def dense_belt_reward(
     belt_placed = jnp.maximum(new_belts - prev_belts, 0)
     filling = _pallet_filling_delta(prev_state, new_state)
     return 5.0 * belt_placed.astype(jnp.float32) + 5.0 * filling
-
-
-def dense_fuel_collect_reward(
-    prev_state: EnvState, new_state: EnvState, params: EnvParams
-) -> jax.Array:
-    """Dense reward for the fuel_and_collect level.
-
-    Proximity to the miner, bonus for fuel deposited into the miner,
-    and bonus for items withdrawn into inventory.
-
-    Args:
-        prev_state: State immediately before the step.
-        new_state: State immediately after the step.
-        params: Environment parameters.
-
-    Returns:
-        Scalar float32 reward.
-    """
-    miner_prox = _proximity(new_state, new_state.machine_types == MachineType.MINER)
-    # Fuel deposited = coal count increase in miner entities.
-    is_miner = (new_state.ent_type == MachineType.MINER) & (new_state.ent_y >= 0)
-    prev_fuel = jnp.sum(jnp.where(is_miner, prev_state.ent_fuel, 0))
-    new_fuel = jnp.sum(jnp.where(is_miner, new_state.ent_fuel, 0))
-    fuel_delta = jnp.maximum(new_fuel - prev_fuel, 0).astype(jnp.float32)
-    inv_gain = jnp.maximum(_inventory_delta(prev_state, new_state), 0.0)
-    return miner_prox + 5.0 * fuel_delta + 10.0 * inv_gain
 
 
 def dense_assembler_reward(

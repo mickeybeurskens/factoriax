@@ -119,18 +119,16 @@ class TestConditionComputation:
         conditions = core_game_conditions(state)
         assert conditions[_achievement_index("first_ore")]
 
-    def test_fueled_up_condition(self, state_factory) -> None:
-        """A miner with coal satisfies Fueled Up."""
+    def test_coal_gathered_condition(self, state_factory) -> None:
+        """Holding any coal in player inventory satisfies Coal Gathered."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.COAL].set(1)
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
-            machine_types=jnp.array(
-                [[MachineType.MINER]],
-                dtype=jnp.int32,
-            ),
-            machine_fuel=jnp.array([[5]], dtype=jnp.int16),
+            player_inventory=inv,
         )
         conditions = core_game_conditions(state)
-        assert conditions[_achievement_index("fueled_up")]
+        assert conditions[_achievement_index("coal_gathered")]
 
     def test_automated_mining_condition(self, state_factory) -> None:
         """A miner with ore output satisfies Automated Mining."""

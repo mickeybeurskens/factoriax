@@ -55,7 +55,6 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         ent_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_direction=jnp.zeros(mm, dtype=jnp.int8),
         ent_power=jnp.zeros(mm, dtype=jnp.int16),
-        ent_fuel=jnp.zeros(mm, dtype=jnp.int16),
         ent_buf_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_buf_count=jnp.zeros(mm, dtype=jnp.int16),
         ent_asm_in_type=jnp.zeros((mm, 2), dtype=jnp.int8),

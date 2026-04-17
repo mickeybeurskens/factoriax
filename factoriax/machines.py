@@ -42,38 +42,11 @@ def update_all_machines(
     Returns:
         Updated state.
     """
-    state = refuel_machines(state, params)
     state = run_miners(state, params)
     state = run_assemblers(state)
     state = run_conveyor_belts(state)
     state = run_arms(state)
     return state
-
-
-def refuel_machines(
-    state: EnvState,
-    params: EnvParams,
-) -> EnvState:
-    """Consume coal from miner fuel to restore power.
-
-    Args:
-        state: Current environment state.
-        params: Environment parameters.
-
-    Returns:
-        Updated state.
-    """
-    active = state.ent_y >= 0
-    is_miner = (state.ent_type == MachineType.MINER) & active
-    needs_power = state.ent_power <= 0
-    has_fuel = state.ent_fuel > 0
-    should_refuel = is_miner & needs_power & has_fuel
-
-    amt = should_refuel.astype(jnp.int16)
-    new_fuel = state.ent_fuel - amt
-    new_power = state.ent_power + amt * jnp.int16(params.power_per_coal)
-
-    return state.replace(ent_fuel=new_fuel, ent_power=new_power)
 
 
 def run_miners(
@@ -95,7 +68,6 @@ def run_miners(
     h, w = state.map.shape
     active = state.ent_y >= 0
     is_miner = (state.ent_type == MachineType.MINER) & active
-    has_power = state.ent_power > 0
 
     # Gather grid data at miner positions (clipped for safety).
     ey = jnp.clip(state.ent_y, 0, h - 1)
@@ -109,7 +81,7 @@ def run_miners(
     buf_ok = buf_empty | buf_same
     has_space = state.ent_buf_count < jnp.int16(64)
 
-    can_mine = is_miner & has_power & has_resources & buf_ok & has_space
+    can_mine = is_miner & has_resources & buf_ok & has_space
     mine_amt = jnp.where(
         can_mine,
         jnp.int16(params.miner_mining_rate),
@@ -126,7 +98,6 @@ def run_miners(
         state.ent_buf_type,
     )
     new_buf_count = state.ent_buf_count + mine_amt
-    new_power = state.ent_power - mined.astype(jnp.int16)
 
     # Scatter updates back to grid (block_resources, map).
     new_resources = state.block_resources.at[ey, ex].add(
@@ -217,7 +188,6 @@ def run_miners(
         block_resources=new_resources,
         ent_buf_type=new_buf_type,
         ent_buf_count=new_buf_count,
-        ent_power=new_power,
         items_mined=state.items_mined + mined_flat,
     )
 

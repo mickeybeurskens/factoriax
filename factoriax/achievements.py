@@ -8,8 +8,8 @@ achievement teaches one new concept or mechanic:
  2. Stockpile          — mine 10 total (build up resources for crafting)
  3. Apprentice Engineer — craft a machine (teaches crafting UI)
  4. Breaking Ground    — place a machine (teaches placement)
- 5. Fueled Up          — deliver coal to a miner (teaches machine inspection)
- 6. Automated Mining   — miner produces ore (confirms fuel-to-extraction loop)
+ 5. Coal Gathered      — hold any coal in inventory (teaches resource gathering)
+ 6. Automated Mining   — miner produces ore (confirms extraction)
  7. Moving Parts       — place an arm and a pallet (pipeline building blocks)
  8. First Pipeline     — a pallet holds items (full miner-to-arm-to-pallet flow)
  9. Belt Network       — place 5 belts (transport layer)
@@ -69,14 +69,14 @@ ACHIEVEMENT_INFO = [
         hint="Select a machine in your hotbar and press E to place it.",
     ),
     AchievementInfo(
-        id="fueled_up",
-        name="Fueled Up",
-        hint="Inspect a miner (F) and transfer coal into its fuel slot (E).",
+        id="coal_gathered",
+        name="Coal Gathered",
+        hint="Walk onto a coal tile and press SPACE to mine a piece of coal.",
     ),
     AchievementInfo(
         id="automated_mining",
         name="Automated Mining",
-        hint="Place a fueled miner on an ore tile and wait for it to produce.",
+        hint="Place a miner on an ore tile and wait for it to produce.",
     ),
     AchievementInfo(
         id="moving_parts",
@@ -197,21 +197,6 @@ def count_machines(state: EnvState, machine_type: int) -> jax.Array:
     return count
 
 
-def _any_miner_has_fuel(state: EnvState) -> jax.Array:
-    """Check whether any placed miner has coal in its fuel slot.
-
-    Args:
-        state: Current environment state
-
-    Returns:
-        Scalar boolean — True if at least one miner is fueled.
-    """
-    is_miner = state.ent_type == MachineType.MINER
-    is_active = state.ent_y >= 0
-    has_fuel = state.ent_fuel > 0
-    return jnp.any(is_miner & is_active & has_fuel)
-
-
 def _any_miner_has_output(state: EnvState) -> jax.Array:
     """Check whether any placed miner has produced ore in its output slot.
 
@@ -299,8 +284,8 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             machine_items_held >= 1,
             # 3  Breaking Ground — place any machine
             total_machines >= 1,
-            # 4  Fueled Up — deliver coal to a miner
-            _any_miner_has_fuel(state),
+            # 4  Coal Gathered — hold any coal in player inventory
+            count_total_items(state, ItemType.COAL) >= 1,
             # 5  Automated Mining — miner output slot non-empty
             _any_miner_has_output(state),
             # 6  Moving Parts — place a pallet

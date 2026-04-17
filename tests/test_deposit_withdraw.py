@@ -252,10 +252,10 @@ class TestDepositToPallet:
 
 
 class TestDepositToMiner:
-    """Deposit coal into a miner as fuel."""
+    """Miners have no input slot and reject all deposits."""
 
-    def test_deposit_coal_as_fuel(self, state_factory) -> None:
-        """Coal deposited into a miner goes into the fuel slot."""
+    def test_deposit_coal_rejected_by_miner(self, state_factory) -> None:
+        """Coal deposited into a miner should be rejected."""
         p_inv = _player_inv(1, {ItemType.COAL: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -267,12 +267,10 @@ class TestDepositToMiner:
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
-        eidx = _ent_lookup(state, 1, 2)
-        assert int(state.ent_fuel[eidx]) == 1
-        assert int(state.player_inventory[0, ItemType.COAL]) == 4
+        assert int(state.player_inventory[0, ItemType.COAL]) == 5
 
-    def test_deposit_non_fuel_rejected_by_miner(self, state_factory) -> None:
-        """Iron deposited into a miner should be rejected (not fuel)."""
+    def test_deposit_iron_rejected_by_miner(self, state_factory) -> None:
+        """Iron deposited into a miner should be rejected."""
         p_inv = _player_inv(1, {ItemType.IRON_ORE: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -285,8 +283,6 @@ class TestDepositToMiner:
         state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
 
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 5
-        eidx = _ent_lookup(state, 1, 2)
-        assert int(state.ent_fuel[eidx]) == 0
 
 
 class TestDepositToAssembler:

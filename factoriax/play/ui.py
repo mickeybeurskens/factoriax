@@ -111,10 +111,6 @@ def _entity_inventory(state: EnvState, ty: int, tx: int) -> np.ndarray:
     inv = np.zeros(NUM_ITEM_TYPES, dtype=np.int32)
     if eidx < 0:
         return inv
-    # Miner fuel shows as coal in the inventory display.
-    fuel = int(state.ent_fuel[eidx])
-    if fuel > 0:
-        inv[int(ItemType.COAL)] += fuel
     buf_t = int(state.ent_buf_type[eidx])
     buf_c = int(state.ent_buf_count[eidx])
     if buf_t > 0:
@@ -884,9 +880,7 @@ def render_machine_menu(
     player_strip_h = _theme.SEP_H + 8 + line_h + 6 + player_icon + 4 + player_icon
 
     # Matches _draw_section_header offset.
-    header_offset = (
-        _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8
-    )
+    header_offset = _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8
 
     # Fixed overhead: everything except the slot grid itself.
     health_bar_h = 32  # bar (10) + text (~14) + spacing (8)
@@ -964,9 +958,7 @@ def render_machine_menu(
             asm_power = int(state.ent_power[eidx])
             if out_type > 0:
                 recipe_idx = int(OUTPUT_TO_RECIPE[out_type])
-                recipe_name = (
-                    RECIPE_NAMES[recipe_idx] if recipe_idx >= 0 else "Unknown"
-                )
+                recipe_name = RECIPE_NAMES[recipe_idx] if recipe_idx >= 0 else "Unknown"
             else:
                 recipe_name = "Auto"
             status = "Idle" if asm_power == 0 else f"{asm_power} ticks left"
@@ -1549,9 +1541,13 @@ def render_hotbar(
     btn_gap = 4
     slot_area_x = 64 + arrow_w + btn_gap
     slot_area_w = (
-        bar_w - 64 - resource_area_w - 8
+        bar_w
+        - 64
+        - resource_area_w
+        - 8
         - 2 * (arrow_w + btn_gap)
-        - place_btn_w - btn_gap
+        - place_btn_w
+        - btn_gap
     )
     slot_w = slot_area_w // max(n_slots, 1)
     icon_size = min(40, slot_w - 12)
@@ -1572,9 +1568,12 @@ def render_hotbar(
             overlay[arrow_cy + dy, rx:lx, 3] = 255
     regions.append(
         ClickRegion(
-            x=arrow_x, y=pocket_y,
-            w=arrow_w, h=pocket_h,
-            action="cycle_prev", param=0,
+            x=arrow_x,
+            y=pocket_y,
+            w=arrow_w,
+            h=pocket_h,
+            action="cycle_prev",
+            param=0,
         ),
     )
 
@@ -1588,7 +1587,11 @@ def render_hotbar(
         item_color = ITEM_COLORS.get(item_type, (128, 128, 128))
 
         _render_pocket_bg(
-            overlay, pocket_x, pocket_y, icon_size, pocket_h,
+            overlay,
+            pocket_x,
+            pocket_y,
+            icon_size,
+            pocket_h,
             selected=is_selected,
             building_color=item_color if is_selected else None,
             frame_tick=frame_tick,
@@ -1610,13 +1613,22 @@ def render_hotbar(
                 ] = icon_arr
             else:
                 _render_ghost_icon(
-                    overlay, icon_x, icon_iy, icon_s, item_type,
+                    overlay,
+                    icon_x,
+                    icon_iy,
+                    icon_s,
+                    item_type,
                 )
 
         chip_edge_x = pocket_x + icon_size - 1
         _render_chips(
-            overlay, chip_edge_x, pocket_y + 2,
-            pocket_h - 4, count, max_stack, item_color,
+            overlay,
+            chip_edge_x,
+            pocket_y + 2,
+            pocket_h - 4,
+            count,
+            max_stack,
+            item_color,
         )
 
         if count > 0:
@@ -1624,7 +1636,8 @@ def render_hotbar(
                 overlay,
                 pocket_x + icon_size - _CHIP_W - 2,
                 pocket_y + pocket_h - 1,
-                count, hint_font,
+                count,
+                hint_font,
             )
 
         name = _ITEM_NAMES.get(item_type, "")
@@ -1639,14 +1652,20 @@ def render_hotbar(
             tri_y = name_y + name_h + 1
             tri_cx = pocket_x + icon_size // 2
             _render_placement_triangle(
-                overlay, tri_cx, tri_y, item_color,
+                overlay,
+                tri_cx,
+                tri_y,
+                item_color,
             )
 
         regions.append(
             ClickRegion(
-                x=pocket_x, y=pocket_y,
-                w=icon_size, h=pocket_h + name_h + 4,
-                action="select_slot", param=item_type,
+                x=pocket_x,
+                y=pocket_y,
+                w=icon_size,
+                h=pocket_h + name_h + 4,
+                action="select_slot",
+                param=item_type,
             ),
         )
 
@@ -1661,9 +1680,12 @@ def render_hotbar(
             overlay[arrow_cy + dy, lx:rx, 3] = 255
     regions.append(
         ClickRegion(
-            x=arrow_rx, y=pocket_y,
-            w=arrow_w, h=pocket_h,
-            action="cycle_next", param=0,
+            x=arrow_rx,
+            y=pocket_y,
+            w=arrow_w,
+            h=pocket_h,
+            action="cycle_next",
+            param=0,
         ),
     )
 
@@ -1671,26 +1693,23 @@ def render_hotbar(
     place_x = arrow_rx + arrow_w + btn_gap
     place_bg: tuple[int, int, int, int] = (45, 45, 40, 255)
     place_border: tuple[int, int, int, int] = (130, 120, 60, 255)
-    overlay[pocket_y : pocket_y + pocket_h, place_x : place_x + place_btn_w] = (
-        place_bg
-    )
+    overlay[pocket_y : pocket_y + pocket_h, place_x : place_x + place_btn_w] = place_bg
     overlay[pocket_y, place_x : place_x + place_btn_w] = place_border
-    overlay[pocket_y + pocket_h - 1, place_x : place_x + place_btn_w] = (
-        place_border
-    )
+    overlay[pocket_y + pocket_h - 1, place_x : place_x + place_btn_w] = place_border
     overlay[pocket_y : pocket_y + pocket_h, place_x] = place_border
-    overlay[pocket_y : pocket_y + pocket_h, place_x + place_btn_w - 1] = (
-        place_border
-    )
+    overlay[pocket_y : pocket_y + pocket_h, place_x + place_btn_w - 1] = place_border
     place_txt = _render_text_rgba("Place", hint_font, (200, 195, 160))
     ptx = place_x + (place_btn_w - place_txt.shape[1]) // 2
     pty = pocket_y + (pocket_h - place_txt.shape[0]) // 2
     _blit_rgba(overlay, place_txt, pty, ptx)
     regions.append(
         ClickRegion(
-            x=place_x, y=pocket_y,
-            w=place_btn_w, h=pocket_h,
-            action="place_selected", param=0,
+            x=place_x,
+            y=pocket_y,
+            w=place_btn_w,
+            h=pocket_h,
+            action="place_selected",
+            param=0,
         ),
     )
 
@@ -1700,7 +1719,10 @@ def render_hotbar(
     col_w = resource_area_w // 2
 
     overlay[content_y : content_y + content_h, res_x - 3] = (
-        50, 50, 45, 180,
+        50,
+        50,
+        45,
+        180,
     )
 
     ore_items = list(BLOCK_TO_ITEM.values())
@@ -1714,7 +1736,9 @@ def render_hotbar(
         icon_arr = render_item_icon(int(item_type), res_icon_s)
         _blit_rgba(overlay, icon_arr, ry, rx)
         count_arr = _render_text_rgba(
-            str(count), hint_font, res_count_color,
+            str(count),
+            hint_font,
+            res_count_color,
         )
         _blit_rgba(overlay, count_arr, ry, rx + res_icon_s + 3)
 
@@ -1744,9 +1768,7 @@ _BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
 
 # Items that correspond to mineable blocks (re-exported from constants
 # as int keys for the info panel renderer).
-_BLOCK_TO_ITEM: dict[int, int] = {
-    int(bt): int(it) for bt, it in BLOCK_TO_ITEM.items()
-}
+_BLOCK_TO_ITEM: dict[int, int] = {int(bt): int(it) for bt, it in BLOCK_TO_ITEM.items()}
 
 
 def render_info_panel(
@@ -2060,8 +2082,13 @@ def render_inventory_menu(
     body_font = get_pixel_font(_theme.FONT_BODY)
 
     craft_content_y = _draw_section_header(
-        overlay, menu_x, menu_y, menu_w,
-        "CRAFTING", header_font, True,
+        overlay,
+        menu_x,
+        menu_y,
+        menu_w,
+        "CRAFTING",
+        header_font,
+        True,
     )
 
     selected_player = int(state.selected_player)
@@ -2188,8 +2215,10 @@ def render_inventory_menu(
 
     hints = "[W/S] Select | [E] Craft | [ESC] Close"
     _render_control_hints(
-        overlay, hints,
-        menu_x + _theme.BORDER_PX, hint_y,
+        overlay,
+        hints,
+        menu_x + _theme.BORDER_PX,
+        hint_y,
         menu_w - 2 * _theme.BORDER_PX,
     )
 

@@ -49,7 +49,6 @@ from factoriax.constants import (
     NUM_TECHNOLOGIES,
     BlockType,
     Direction,
-    ItemType,
     MachineType,
 )
 from factoriax.state import EnvParams, EnvState
@@ -266,8 +265,7 @@ class LevelBuilder:
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
-                f"Tile ({x}, {y}) is outside the "
-                f"{self._width}x{self._height} map.",
+                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map.",
             )
         if self._machine_inv is None:
             shape = (self._height, self._width, NUM_ITEM_TYPES)
@@ -340,9 +338,7 @@ class LevelBuilder:
         self._machine_directions[y, x] = direction
         return self
 
-    def set_machine_health(
-        self, x: int, y: int, health: int
-    ) -> LevelBuilder:
+    def set_machine_health(self, x: int, y: int, health: int) -> LevelBuilder:
         """Set the health of a placed machine.
 
         Args:
@@ -358,8 +354,7 @@ class LevelBuilder:
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
-                f"Tile ({x}, {y}) is outside the "
-                f"{self._width}x{self._height} map."
+                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
             )
         if self._machine_health is None:
             self._machine_health = np.full(
@@ -388,8 +383,7 @@ class LevelBuilder:
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
-                f"Position ({x}, {y}) is outside the "
-                f"{self._width}x{self._height} map."
+                f"Position ({x}, {y}) is outside the {self._width}x{self._height} map."
             )
         if self._player_positions is None:
             self._player_positions = []
@@ -411,17 +405,14 @@ class LevelBuilder:
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
-                f"Position ({x}, {y}) is outside the "
-                f"{self._width}x{self._height} map."
+                f"Position ({x}, {y}) is outside the {self._width}x{self._height} map."
             )
         if self._biter_positions is None:
             self._biter_positions = []
         self._biter_positions.append((x, y))
         return self
 
-    def set_player_inventory(
-        self, items: list[tuple[int, int]]
-    ) -> LevelBuilder:
+    def set_player_inventory(self, items: list[tuple[int, int]]) -> LevelBuilder:
         """Set starting inventory for all players.
 
         Args:
@@ -461,9 +452,7 @@ class LevelBuilder:
                 else None
             ),
             machine_inventory=(
-                self._machine_inv.copy()
-                if self._machine_inv is not None
-                else None
+                self._machine_inv.copy() if self._machine_inv is not None else None
             ),
             machine_selected_recipe=(
                 self._machine_selected_recipe.copy()
@@ -512,9 +501,7 @@ def default_resources(block_map: np.ndarray) -> np.ndarray:
     return np.where(mineable, BLOCK_MAX_RESOURCES, 0).astype(np.int32)
 
 
-def _build_biter_positions(
-    level: Level, max_biters: int
-) -> jnp.ndarray:
+def _build_biter_positions(level: Level, max_biters: int) -> jnp.ndarray:
     """Build the biter_positions array from level data.
 
     Places biters from ``level.biter_positions`` into a fixed-size
@@ -537,9 +524,7 @@ def _build_biter_positions(
     return positions
 
 
-def _build_biter_health(
-    level: Level, max_biters: int
-) -> jnp.ndarray:
+def _build_biter_health(level: Level, max_biters: int) -> jnp.ndarray:
     """Build the biter_health array from level data.
 
     Each biter from ``level.biter_positions`` starts with 1 HP so
@@ -556,9 +541,7 @@ def _build_biter_health(
     if level.biter_positions is not None:
         n = min(len(level.biter_positions), max_biters)
         if n > 0:
-            health = health.at[:n].set(
-                jnp.full(n, 20, dtype=jnp.int32)
-            )
+            health = health.at[:n].set(jnp.full(n, 20, dtype=jnp.int32))
     return health
 
 
@@ -626,9 +609,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
 
     if level.player_positions is not None:
         block_map = level.block_map.copy()
-        player_positions_np = np.array(
-            level.player_positions, dtype=np.int32
-        )
+        player_positions_np = np.array(level.player_positions, dtype=np.int32)
         # Ensure each spawn tile is walkable.
         for px, py in level.player_positions:
             block_map[py, px] = int(BlockType.DIRT)
@@ -683,7 +664,6 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     tile_ent = jnp.full(map_shape, -1, dtype=jnp.int16)
 
     # Entity inventory arrays (populated from level.machine_inventory).
-    ent_fuel_np = np.zeros(mm, dtype=np.int16)
     ent_buf_type_np = np.zeros(mm, dtype=np.int8)
     ent_buf_count_np = np.zeros(mm, dtype=np.int16)
     ent_asm_in_type_np = np.zeros((mm, 2), dtype=np.int8)
@@ -712,11 +692,8 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             if has_inv:
                 inv_row = level.machine_inventory[y, x]
                 if mt == int(MachineType.MINER):
-                    ent_fuel_np[idx] = int(inv_row[int(ItemType.COAL)])
-                    # First non-coal item goes to buffer (mined ore).
+                    # Miners have one output buffer for mined ore.
                     for it in range(1, NUM_ITEM_TYPES):
-                        if it == int(ItemType.COAL):
-                            continue
                         if int(inv_row[it]) > 0:
                             ent_buf_type_np[idx] = it
                             ent_buf_count_np[idx] = int(inv_row[it])
@@ -750,7 +727,6 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         ent_type=ent_type,
         ent_direction=ent_dir,
         ent_power=jnp.zeros(mm, dtype=jnp.int16),
-        ent_fuel=jnp.array(ent_fuel_np, dtype=jnp.int16),
         ent_buf_type=jnp.array(ent_buf_type_np, dtype=jnp.int8),
         ent_buf_count=jnp.array(ent_buf_count_np, dtype=jnp.int16),
         ent_asm_in_type=jnp.array(ent_asm_in_type_np, dtype=jnp.int8),
@@ -759,7 +735,9 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
         player_positions=jnp.array(player_positions_np, dtype=jnp.int16),
         player_directions=jnp.full(
-            player_shape, int(Direction.DOWN), dtype=jnp.int8,
+            player_shape,
+            int(Direction.DOWN),
+            dtype=jnp.int8,
         ),
         player_inventory=jnp.array(player_inv_np, dtype=jnp.int16),
         selected_player=jnp.int32(0),
@@ -810,7 +788,9 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
 
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
     block_resources = jnp.where(
-        is_mineable, params.base_resources, 0,
+        is_mineable,
+        params.base_resources,
+        0,
     ).astype(jnp.int16)
 
     map_shape = (params.map_height, params.map_width)
@@ -827,7 +807,6 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         ent_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_direction=jnp.zeros(mm, dtype=jnp.int8),
         ent_power=jnp.zeros(mm, dtype=jnp.int16),
-        ent_fuel=jnp.zeros(mm, dtype=jnp.int16),
         ent_buf_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_buf_count=jnp.zeros(mm, dtype=jnp.int16),
         ent_asm_in_type=jnp.zeros((mm, 2), dtype=jnp.int8),
@@ -908,22 +887,34 @@ def _generate_terrain_uniform(
         dtype=jnp.int32,
     )
     terrain = jnp.where(
-        random_values < silicon_threshold, int(BlockType.SILICON), terrain,
+        random_values < silicon_threshold,
+        int(BlockType.SILICON),
+        terrain,
     )
     terrain = jnp.where(
-        random_values < tin_threshold, int(BlockType.TIN), terrain,
+        random_values < tin_threshold,
+        int(BlockType.TIN),
+        terrain,
     )
     terrain = jnp.where(
-        random_values < coal_threshold, int(BlockType.COAL), terrain,
+        random_values < coal_threshold,
+        int(BlockType.COAL),
+        terrain,
     )
     terrain = jnp.where(
-        random_values < copper_threshold, int(BlockType.COPPER), terrain,
+        random_values < copper_threshold,
+        int(BlockType.COPPER),
+        terrain,
     )
     terrain = jnp.where(
-        random_values < iron_threshold, int(BlockType.IRON), terrain,
+        random_values < iron_threshold,
+        int(BlockType.IRON),
+        terrain,
     )
     terrain = jnp.where(
-        random_values < water_threshold, int(BlockType.WATER), terrain,
+        random_values < water_threshold,
+        int(BlockType.WATER),
+        terrain,
     )
 
     return terrain
@@ -994,27 +985,33 @@ def _generate_terrain_patched(
     terrain = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
     terrain = jnp.where(
         noise_silicon < params.silicon_probability,
-        int(BlockType.SILICON), terrain,
+        int(BlockType.SILICON),
+        terrain,
     )
     terrain = jnp.where(
         noise_tin < params.tin_probability,
-        int(BlockType.TIN), terrain,
+        int(BlockType.TIN),
+        terrain,
     )
     terrain = jnp.where(
         noise_coal < params.coal_probability,
-        int(BlockType.COAL), terrain,
+        int(BlockType.COAL),
+        terrain,
     )
     terrain = jnp.where(
         noise_copper < params.copper_probability,
-        int(BlockType.COPPER), terrain,
+        int(BlockType.COPPER),
+        terrain,
     )
     terrain = jnp.where(
         noise_iron < params.iron_probability,
-        int(BlockType.IRON), terrain,
+        int(BlockType.IRON),
+        terrain,
     )
     terrain = jnp.where(
         noise_water < params.water_probability,
-        int(BlockType.WATER), terrain,
+        int(BlockType.WATER),
+        terrain,
     )
 
     return terrain
@@ -1067,9 +1064,7 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "machine_health": (
-            level.machine_health.tolist()
-            if level.machine_health is not None
-            else None
+            level.machine_health.tolist() if level.machine_health is not None else None
         ),
         "player_inventory": level.player_inventory,
         "player_inventories": (
@@ -1115,19 +1110,13 @@ def load_level(path: Path) -> Level:
             else None
         ),
         machine_directions=(
-            np.array(raw_dirs, dtype=np.int32)
-            if raw_dirs is not None
-            else None
+            np.array(raw_dirs, dtype=np.int32) if raw_dirs is not None else None
         ),
         machine_inventory=(
-            np.array(raw_inv, dtype=np.int32)
-            if raw_inv is not None
-            else None
+            np.array(raw_inv, dtype=np.int32) if raw_inv is not None else None
         ),
         machine_selected_recipe=(
-            np.array(raw_recipe, dtype=np.int32)
-            if raw_recipe is not None
-            else None
+            np.array(raw_recipe, dtype=np.int32) if raw_recipe is not None else None
         ),
         machine_health=(
             np.array(raw_health, dtype=np.int32)
