@@ -99,7 +99,7 @@ def test_decode_machine_type_round_trip(
     rocket_initial_state,
     rocket_env_params: EnvParams,
 ) -> None:
-    """Machine grid round-trips (all NONE at initial state)."""
+    """Machine grid round-trips (matches engine state)."""
     obs = _obs_from_state(rocket_initial_state, rocket_env_params)
     view = wm.decode_observation(
         obs,
@@ -109,7 +109,9 @@ def test_decode_machine_type_round_trip(
     )
     expected = np.asarray(rocket_initial_state.machine_types)
     np.testing.assert_array_equal(view.machine_type, expected)
-    assert (view.machine_type == int(MachineType.NONE)).all()
+    # Rocket level pre-places exactly one furnace and one assembler.
+    assert int((view.machine_type == int(MachineType.FURNACE)).sum()) == 1
+    assert int((view.machine_type == int(MachineType.ASSEMBLER)).sum()) == 1
 
 
 def test_decode_block_resources_round_trip(
@@ -207,9 +209,10 @@ def test_walkable_excludes_water_and_machines(
         map_width=rocket_env_params.map_width,
         max_timesteps=rocket_env_params.max_timesteps,
     )
-    # The rocket level has no water or machines placed; expect all tiles
-    # to be walkable. Ore patches are walkable too.
-    assert view.walkable.all()
+    # The rocket level has no water, and exactly 2 machines (furnace +
+    # assembler) pre-placed. Only those 2 tiles should be non-walkable.
+    non_walkable = (~view.walkable).sum()
+    assert int(non_walkable) == 2
 
 
 def test_player_spawn_is_walkable(

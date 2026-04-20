@@ -24,6 +24,7 @@ from collections.abc import Callable
 import numpy as np
 
 from factoriax.constants import Action, ItemType, MachineType
+from factoriax.recipes import RECIPES
 
 from .skills import (
     FaceAndInteract,
@@ -35,6 +36,7 @@ from .skills import (
 from .world_model import (
     WorldView,
     place_action,
+    withdraw_action,
 )
 
 # Signature for "pick a location" callbacks used by :class:`PlaceMachine`.
@@ -388,3 +390,227 @@ class WaitUntil(Goal):
             return Result.FAIL, None
         self._ticks += 1
         return Result.RUNNING, int(Action.NOOP)
+
+
+# ---------------------------------------------------------------------------
+# Machine-based production (furnace / assembler)
+# ---------------------------------------------------------------------------
+
+
+class Wait(Goal):
+    """Emit ``NOOP`` for exactly *ticks* then report DONE.
+
+    Used between deposit and withdraw inside a machine production
+    cycle so the recipe has time to complete.
+    """
+
+    name = "Wait"
+
+    def __init__(self, ticks: int) -> None:
+        self.ticks = ticks
+        self._elapsed = 0
+
+    def step(self, view: WorldView) -> StepReturn:  # noqa: ARG002
+        if self._elapsed >= self.ticks:
+            return Result.DONE, None
+        self._elapsed += 1
+        return Result.RUNNING, int(Action.NOOP)
+
+
+class WithdrawFrom(Goal):
+    """Withdraw one unit of *item_type* from the nearest *machine_type*.
+
+    Retries up to *max_attempts* times if the first withdraw doesn't
+    actually move anything (e.g. recipe hasn't finished yet). Succeeds
+    when the player's inventory of *item_type* grows.
+    """
+
+    name = "WithdrawFrom"
+
+    def __init__(
+        self,
+        machine_type: int | MachineType,
+        item_type: int | ItemType,
+        max_attempts: int = 6,
+    ) -> None:
+        self.machine_type = int(machine_type)
+        self.item_type = int(item_type)
+        self.max_attempts = max_attempts
+        self._active: FaceAndInteract | None = None
+        self._start_inv: int | None = None
+        self._attempts = 0
+
+    def step(self, view: WorldView) -> StepReturn:
+        current_inv = view.player.held(self.item_type)
+        if self._start_inv is not None and current_inv > self._start_inv:
+            return Result.DONE, None
+
+        if self._active is not None:
+            result, action = self._active.step(view)
+            if result is Result.DONE:
+                # Emitted the WITHDRAW action; next tick we check inventory.
+                self._active = None
+                return Result.RUNNING, int(Action.NOOP)
+            if result is Result.FAIL:
+                self._active = None
+                return Result.FAIL, None
+            return Result.RUNNING, action
+
+        if self._attempts >= self.max_attempts:
+            return Result.FAIL, None
+
+        tiles = view.tiles_with_machine(self.machine_type)
+        if not tiles:
+            return Result.FAIL, None
+        px, py = view.player.pos
+        tiles.sort(key=lambda t: abs(t[0] - px) + abs(t[1] - py))
+        target = tiles[0]
+        if self._start_inv is None:
+            self._start_inv = current_inv
+        self._attempts += 1
+        self._active = FaceAndInteract(target, withdraw_action(self.item_type))
+        return self._active.step(view)
+
+
+_FURNACE_OUTPUTS: frozenset[int] = frozenset(
+    {
+        int(ItemType.IRON_PLATE),
+        int(ItemType.COPPER_PLATE),
+        int(ItemType.TIN_PLATE),
+        int(ItemType.WAFER),
+    }
+)
+
+
+def _find_recipe(output_item: int) -> dict | None:
+    """Look up the recipe that produces *output_item*."""
+    for r in RECIPES:
+        if int(r["output"]) == int(output_item):
+            return r
+    return None
+
+
+def _default_machine_for(output_item: int) -> int:
+    """Decide which machine processes this recipe (furnace vs. assembler)."""
+    if int(output_item) in _FURNACE_OUTPUTS:
+        return int(MachineType.FURNACE)
+    return int(MachineType.ASSEMBLER)
+
+
+class ProduceInMachine(Goal):
+    """Run a recipe on a placed machine until inventory holds *count* outputs.
+
+    One production cycle = deposit every input (respecting per-input
+    quantities) → wait for the recipe's ticks → withdraw one output.
+    Inputs are not pre-batched: each cycle deposits exactly one
+    recipe's worth. This is slower but makes the FSM simple and the
+    inventory delta trivial to track.
+
+    Use the :func:`ProduceInFurnace` / :func:`ProduceInAssembler`
+    helpers below for the common case — they auto-pick the right
+    machine type based on the recipe.
+    """
+
+    name = "ProduceInMachine"
+
+    def __init__(
+        self,
+        output_item: int | ItemType,
+        count: int,
+        machine_type: int | MachineType | None = None,
+    ) -> None:
+        self.output_item = int(output_item)
+        self.count = count
+        recipe = _find_recipe(self.output_item)
+        if recipe is None:
+            raise ValueError(
+                f"no recipe produces {ItemType(self.output_item).name}",
+            )
+        self.machine_type = (
+            int(machine_type)
+            if machine_type is not None
+            else _default_machine_for(self.output_item)
+        )
+        self.recipe_inputs: list[tuple[int, int]] = [
+            (int(it), int(q)) for it, q in recipe["inputs"]
+        ]
+        self.wait_ticks: int = int(recipe["ticks"]) + 3
+
+        self._sub: Goal | None = None
+        self._phase: str = "deposit"  # "deposit" | "wait" | "withdraw"
+        self._deposit_input_idx: int = 0
+        self._deposit_count: int = 0
+        self._wait_elapsed: int = 0
+
+    def step(self, view: WorldView) -> StepReturn:
+        if view.player.held(self.output_item) >= self.count:
+            return Result.DONE, None
+
+        if self._sub is not None:
+            result, action = self._sub.step(view)
+            if result is Result.DONE:
+                self._sub = None
+                return Result.RUNNING, int(Action.NOOP)
+            if result is Result.FAIL:
+                self._sub = None
+                return Result.FAIL, None
+            return Result.RUNNING, action
+
+        if self._phase == "deposit":
+            return self._step_deposit(view)
+        if self._phase == "wait":
+            return self._step_wait()
+        if self._phase == "withdraw":
+            return self._step_withdraw(view)
+        raise AssertionError(f"unknown phase: {self._phase}")
+
+    def _step_deposit(self, view: WorldView) -> StepReturn:
+        input_item, required = self.recipe_inputs[self._deposit_input_idx]
+        if self._deposit_count < required:
+            if view.player.held(input_item) < 1:
+                return Result.FAIL, None
+            self._deposit_count += 1
+            self._sub = DepositInto(self.machine_type, input_item)
+            return self._sub.step(view)
+        # All copies of this input are deposited; move to next input.
+        self._deposit_input_idx += 1
+        self._deposit_count = 0
+        if self._deposit_input_idx >= len(self.recipe_inputs):
+            # All inputs deposited — start the wait.
+            self._phase = "wait"
+            self._wait_elapsed = 0
+        return Result.RUNNING, int(Action.NOOP)
+
+    def _step_wait(self) -> StepReturn:
+        if self._wait_elapsed >= self.wait_ticks:
+            self._phase = "withdraw"
+            return Result.RUNNING, int(Action.NOOP)
+        self._wait_elapsed += 1
+        return Result.RUNNING, int(Action.NOOP)
+
+    def _step_withdraw(self, view: WorldView) -> StepReturn:
+        # Reset the phase before delegating to withdraw; when the
+        # withdraw sub-goal finishes we'll loop back to "deposit" for
+        # the next production cycle (or exit via the held >= count
+        # check at the top of step()).
+        self._sub = WithdrawFrom(self.machine_type, self.output_item)
+        self._phase = "deposit"
+        self._deposit_input_idx = 0
+        self._deposit_count = 0
+        return self._sub.step(view)
+
+
+def ProduceInFurnace(  # noqa: N802 - factory mirrors class-style instantiation
+    output_item: int | ItemType,
+    count: int,
+) -> ProduceInMachine:
+    """Produce *count* of *output_item* via the nearest furnace."""
+    return ProduceInMachine(output_item, count, int(MachineType.FURNACE))
+
+
+def ProduceInAssembler(  # noqa: N802 - factory mirrors class-style instantiation
+    output_item: int | ItemType,
+    count: int,
+) -> ProduceInMachine:
+    """Produce *count* of *output_item* via the nearest assembler."""
+    return ProduceInMachine(output_item, count, int(MachineType.ASSEMBLER))

@@ -1,0 +1,64 @@
+# Engine bugs encountered while developing the scripted rocket agent
+
+Tracked as discovered so they can be reviewed / fixed as standalone
+commits per the project's commit hygiene rule.
+
+## 1. `WITHDRAW_*` can't pull output from furnaces or assemblers
+
+**Symptom**: A player who deposited inputs into a pre-placed furnace /
+assembler, waited for the recipe timer, and then emitted the correct
+`WITHDRAW_<item>` action while standing adjacent and facing the
+machine received nothing — inventory didn't change.
+
+**Root cause**: Two code paths get out of sync.
+
+- `factoriax/machines.py::run_combiners` Phase 4 ("Push output to
+  buffer") unconditionally moves any completed recipe output from
+  `ent_asm_out_*` → `ent_buf_*`, every tick, for both furnaces and
+  assemblers. So one tick after the recipe completes, the output
+  lives in `ent_buf_count` / `ent_buf_type`.
+
+- `factoriax/game_logic.py::withdraw_from_adjacent` gates its two
+  withdrawal paths like this:
+
+  ```python
+  is_combiner = (mt == MachineType.ASSEMBLER) | (mt == MachineType.FURNACE)
+  # combiner: only look at asm_out
+  can_withdraw_asm = ... is_combiner & out_match & out_has ...
+  # buffer machines: only look at buf
+  is_buf = ~is_combiner & (mt != MachineType.NONE)
+  can_withdraw_buf = ... is_buf & buf_match & buf_has ...
+  ```
+
+  Because `is_buf = ~is_combiner ...`, combiners can never use the
+  buf-based withdraw. And because Phase 4 always empties `asm_out`,
+  the combiner's asm-based withdraw never has anything to withdraw.
+
+**Reproduction** (confirmed by hand): deposit 2 iron ore + 1 coal into
+the pre-placed furnace of the rocket benchmark, wait 10 ticks, emit
+`WITHDRAW_IRON_PLATE` while facing the furnace — nothing happens. A
+trace of the furnace entity shows:
+
+```
+t=7  out=(IRON_PLATE, 0)  power=2   buf=(EMPTY, 0)
+t=8  out=(IRON_PLATE, 0)  power=1   buf=(EMPTY, 0)
+t=9  out=(EMPTY, 0)       power=0   buf=(IRON_PLATE, 1)   ← Phase 4 fired
+t=10+                                 buf=(IRON_PLATE, 1)   ← still stuck
+```
+
+**Impact**: Without this fix the scripted agent cannot produce
+anything via machines — plates, intermediates, rocket all become
+unreachable unless the agent builds a full arm+pallet extraction
+pipeline first, which is itself blocked on acquiring plates.
+
+**Suggested fix**: Drop the `~is_combiner` gate so the `buf` path is
+available for every machine type. The two paths are still mutually
+exclusive for any given entity because `asm_out` is always empty on
+combiners post-Phase-4, so no double-withdrawal risk.
+
+```diff
+- is_buf = ~is_combiner & (mt != MachineType.NONE)
++ is_buf = mt != MachineType.NONE
+```
+
+## (reserved for further bugs as they surface)
