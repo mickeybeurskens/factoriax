@@ -74,6 +74,11 @@ class LevelResult:
             supplied.  Each row holds the cost vector returned by the
             constraint function after that tick.  Researchers can
             aggregate these however they like (sum, max, threshold).
+        achievements_unlocked: Latched achievement mask at episode end,
+            shape ``(MAX_ACHIEVEMENTS,)`` bool. Populated when the
+            benchmark supplies an ``achievement_fn`` (or one is passed
+            to the runner). ``None`` for benchmarks that do not track
+            achievements.
     """
 
     level_name: str
@@ -83,6 +88,7 @@ class LevelResult:
     actions: np.ndarray
     constraint_costs: np.ndarray | None = None
     final_state: EnvState | None = None
+    achievements_unlocked: np.ndarray | None = None
 
 
 @dataclasses.dataclass

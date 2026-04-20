@@ -25,11 +25,17 @@ from factoriax.benchmarks.core import (
     LevelResult,
     Policy,
 )
-from factoriax.constants import ItemType
+from factoriax.constants import MAX_ACHIEVEMENTS, ItemType
 from factoriax.envs import FactoriaXEnv
+from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
 from factoriax.state import EnvParams, EnvState
+
+# An achievement function maps an EnvState to a bool array of shape
+# (MAX_ACHIEVEMENTS,). Benchmarks that want achievement tracking expose
+# one via an ``achievement_fn`` attribute, or pass one to the runner.
+AchievementFn = Callable[[EnvState], jax.Array]
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +79,129 @@ class BenchmarkRunner:
         seed: Random seed used to initialise the PRNG key for each run.
     """
 
-    def __init__(self, seed: int = 0) -> None:
+    def __init__(
+        self,
+        seed: int = 0,
+        achievement_fn: AchievementFn | None = None,
+    ) -> None:
         """Initialise the runner.
 
         Args:
             seed: Random seed for reproducible episode steps. The key is
                 re-seeded from this value at the start of every ``run()``
                 call, not shared across calls.
+            achievement_fn: Optional achievement condition function with
+                signature ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``. When
+                supplied, the runner wraps the core env with an
+                :class:`AchievementWrapper` and surfaces the latched
+                unlock mask on each :class:`LevelResult`. Benchmarks can
+                also advertise their own function via an
+                ``achievement_fn`` attribute; the explicit argument here
+                takes precedence when both are set.
         """
-        self._env = FactoriaXEnv()
-        self._jit_step = jax.jit(self._env.step_env)
+        self._base_env = FactoriaXEnv()
+        self._achievement_fn: AchievementFn | None = achievement_fn
+        self._current_fn: AchievementFn | None = achievement_fn
+        self._env, self._jit_step = self._build_env(achievement_fn)
         self.seed = seed
+
+    def _build_env(
+        self, achievement_fn: AchievementFn | None
+    ) -> tuple[FactoriaXEnv | AchievementWrapper, Callable]:
+        """Build the environment and its JIT-compiled step function.
+
+        Wraps the base env with :class:`AchievementWrapper` when an
+        achievement function is supplied; otherwise returns the bare
+        env. Keeps the hot path free of wrapper overhead for benchmarks
+        that do not track achievements.
+
+        Args:
+            achievement_fn: Optional achievement condition function.
+
+        Returns:
+            Tuple of ``(env, jit_step)``.
+        """
+        if achievement_fn is None:
+            env: FactoriaXEnv | AchievementWrapper = self._base_env
+        else:
+            env = AchievementWrapper(self._base_env, achievement_fn)
+        return env, jax.jit(env.step_env)
+
+    def _resolve_achievement_fn(self, benchmark: Benchmark) -> AchievementFn | None:
+        """Return the achievement_fn to use for a given run.
+
+        Explicit runner-level fn wins over a benchmark-advertised fn.
+        Rebuilds the cached env and JIT step whenever the resolved
+        function differs from what is currently wrapped, so the runner
+        stays correct across repeated calls with different benchmarks.
+
+        Args:
+            benchmark: Benchmark being run.
+
+        Returns:
+            Resolved achievement function, or ``None`` if neither side
+            advertises one.
+        """
+        resolved = self._achievement_fn or getattr(benchmark, "achievement_fn", None)
+        if resolved is not self._current_fn:
+            self._env, self._jit_step = self._build_env(resolved)
+            self._current_fn = resolved
+        return resolved
+
+    def _wrap_initial_state(
+        self,
+        env_state: EnvState,
+        achievement_fn: AchievementFn | None,
+    ) -> EnvState | AchievementState:
+        """Wrap a bare ``EnvState`` in an ``AchievementState`` when needed.
+
+        Args:
+            env_state: Freshly built environment state.
+            achievement_fn: Resolved achievement function, or ``None``.
+
+        Returns:
+            Either the original ``EnvState`` (when no tracking) or a new
+            ``AchievementState`` with a zero unlock mask.
+        """
+        if achievement_fn is None:
+            return env_state
+        return AchievementState(
+            env_state=env_state,
+            achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
+        )
+
+    @staticmethod
+    def _inner_env_state(
+        state: EnvState | AchievementState,
+    ) -> EnvState:
+        """Return the underlying ``EnvState`` regardless of wrapping."""
+        if isinstance(state, AchievementState):
+            return state.env_state
+        return state
+
+    @staticmethod
+    def _achievements(
+        state: EnvState | AchievementState,
+    ) -> np.ndarray | None:
+        """Return the unlocked-achievement mask as a numpy array, or None."""
+        if isinstance(state, AchievementState):
+            return np.asarray(state.achievements_unlocked)
+        return None
+
+    @staticmethod
+    def _select_player(
+        state: EnvState | AchievementState, player_idx: int
+    ) -> EnvState | AchievementState:
+        """Return a copy of ``state`` with ``selected_player`` set.
+
+        Transparently handles both wrapped and unwrapped states by
+        rewriting ``env_state.selected_player`` on the inner state when
+        wrapping is in use.
+        """
+        if isinstance(state, AchievementState):
+            inner = state.env_state.replace(selected_player=player_idx)
+            return state.replace(env_state=inner)
+        return state.replace(selected_player=player_idx)
 
     def run(
         self,
@@ -126,6 +244,7 @@ class BenchmarkRunner:
                 f"{noun}, got {len(policies)}."
             )
 
+        achievement_fn = self._resolve_achievement_fn(benchmark)
         rng = jax.random.PRNGKey(self.seed)
         level_results: list[LevelResult] = []
 
@@ -138,6 +257,7 @@ class BenchmarkRunner:
                 subkey,
                 _obs_fn,
                 constraint_fn,
+                achievement_fn,
             )
             level_results.append(result)
             logger.info(
@@ -199,23 +319,26 @@ class BenchmarkRunner:
                 f"got num_players={benchmark.num_players}."
             )
         _obs_fn = obs_fn if obs_fn is not None else global_array
+        achievement_fn = self._resolve_achievement_fn(benchmark)
         num_seeds = len(seeds)
         levels = benchmark.levels()
 
         # Per-level batched results: level_name -> (final_states, actions, timesteps)
         level_data: list[
-            tuple[BenchmarkLevel, EnvState, np.ndarray, np.ndarray]
+            tuple[BenchmarkLevel, EnvState | AchievementState, np.ndarray, np.ndarray]
         ] = []
 
         for bench_level in levels:
             params = bench_level.env_params
-            state0 = build_state(bench_level.level, params)
+            env_state0 = build_state(bench_level.level, params)
+            state0 = self._wrap_initial_state(env_state0, achievement_fn)
             max_steps = params.max_timesteps
 
             # Broadcast initial state to (num_seeds, ...).
             states = jax.tree.map(
                 lambda x: jnp.broadcast_to(
-                    jnp.asarray(x)[None], (num_seeds,) + jnp.asarray(x).shape,
+                    jnp.asarray(x)[None],
+                    (num_seeds,) + jnp.asarray(x).shape,
                 ),
                 state0,
             )
@@ -223,18 +346,21 @@ class BenchmarkRunner:
             rngs = jax.vmap(jax.random.PRNGKey)(jnp.array(seeds))
 
             vmap_step = jax.vmap(
-                self._env.step_env, in_axes=(0, 0, 0, None),
+                self._env.step_env,
+                in_axes=(0, 0, 0, None),
             )
+            unwrap = self._inner_env_state
 
-            def _obs_single(s: EnvState) -> jax.Array:
-                return _obs_fn(s, params, 0)
+            def _obs_single(s: EnvState | AchievementState) -> jax.Array:
+                return _obs_fn(unwrap(s), params, 0)
 
             vmap_obs = jax.vmap(_obs_single)
             vmap_policy = jax.vmap(policy_fn, in_axes=(0, 0))
 
             @jax.jit
             def _scan(
-                states: EnvState, rngs: jax.Array,
+                states: EnvState,
+                rngs: jax.Array,
             ) -> tuple[EnvState, jax.Array, jax.Array]:
                 def step(
                     carry: tuple[EnvState, jax.Array, jax.Array, jax.Array],
@@ -249,16 +375,21 @@ class BenchmarkRunner:
                     actions = vmap_policy(obs, act_keys)
 
                     _obs, next_st, _rew, step_done, _info = vmap_step(
-                        step_keys, st, actions, params,
+                        step_keys,
+                        st,
+                        actions,
+                        params,
                     )
 
                     # Freeze states that are already done.
                     next_st = jax.tree.map(
                         lambda o, n: jnp.where(
                             dones.reshape((-1,) + (1,) * (n.ndim - 1)),
-                            o, n,
+                            o,
+                            n,
                         ),
-                        st, next_st,
+                        st,
+                        next_st,
                     )
                     new_dones = dones | step_done
                     t_used = t_used + (~dones).astype(jnp.int32)
@@ -268,8 +399,10 @@ class BenchmarkRunner:
                 init_dones = jnp.zeros(num_seeds, dtype=bool)
                 init_t = jnp.zeros(num_seeds, dtype=jnp.int32)
                 (final_st, _, _, t_used), all_actions = jax.lax.scan(
-                    step, (states, rngs, init_dones, init_t),
-                    None, length=max_steps,
+                    step,
+                    (states, rngs, init_dones, init_t),
+                    None,
+                    length=max_steps,
                 )
                 # all_actions: (T, N)
                 return final_st, all_actions, t_used
@@ -279,9 +412,7 @@ class BenchmarkRunner:
             # Transfer to CPU once.
             all_actions_np = np.asarray(all_actions)  # (T, N)
             timesteps_np = np.asarray(timesteps_used)  # (N,)
-            level_data.append(
-                (bench_level, final_states, all_actions_np, timesteps_np)
-            )
+            level_data.append((bench_level, final_states, all_actions_np, timesteps_np))
 
         # Assemble per-seed BenchmarkResults.
         results: list[BenchmarkResult] = []
@@ -290,32 +421,40 @@ class BenchmarkRunner:
             for bench_level, final_states, all_actions_np, timesteps_np in level_data:
                 t_used = int(timesteps_np[i])
                 fs_i = jax.tree.map(lambda x: x[i], final_states)
+                env_state_i = self._inner_env_state(fs_i)
                 items_mined = {
-                    "coal": int(fs_i.items_mined[ItemType.COAL]),
-                    "iron": int(fs_i.items_mined[ItemType.IRON_ORE]),
-                    "copper": int(fs_i.items_mined[ItemType.COPPER_ORE]),
+                    "coal": int(env_state_i.items_mined[ItemType.COAL]),
+                    "iron": int(env_state_i.items_mined[ItemType.IRON_ORE]),
+                    "copper": int(env_state_i.items_mined[ItemType.COPPER_ORE]),
                 }
                 score = benchmark.score_level(bench_level, items_mined)
-                level_results.append(LevelResult(
-                    level_name=bench_level.name,
-                    items_mined=items_mined,
-                    weighted_score=score,
-                    timesteps_used=t_used,
-                    actions=all_actions_np[:t_used, i],
-                    final_state=fs_i,
-                ))
+                level_results.append(
+                    LevelResult(
+                        level_name=bench_level.name,
+                        items_mined=items_mined,
+                        weighted_score=score,
+                        timesteps_used=t_used,
+                        actions=all_actions_np[:t_used, i],
+                        final_state=env_state_i,
+                        achievements_unlocked=self._achievements(fs_i),
+                    )
+                )
             agg = benchmark.score(level_results)
-            results.append(BenchmarkResult(
-                benchmark_name=benchmark.name,
-                level_results=level_results,
-                aggregate_score=agg,
-            ))
+            results.append(
+                BenchmarkResult(
+                    benchmark_name=benchmark.name,
+                    level_results=level_results,
+                    aggregate_score=agg,
+                )
+            )
 
         agg_scores = [r.aggregate_score for r in results]
         logger.info(
             "Benchmark '%s' batched (%d seeds): mean=%.3f  std=%.3f",
-            benchmark.name, num_seeds,
-            float(np.mean(agg_scores)), float(np.std(agg_scores)),
+            benchmark.name,
+            num_seeds,
+            float(np.mean(agg_scores)),
+            float(np.std(agg_scores)),
         )
         return results
 
@@ -328,6 +467,7 @@ class BenchmarkRunner:
         obs_fn: Callable[[EnvState, EnvParams, int], jax.Array],
         constraint_fn: Callable[[EnvState, EnvState, EnvParams], jax.Array]
         | None = None,
+        achievement_fn: AchievementFn | None = None,
     ) -> LevelResult:
         """Execute one level and return the result.
 
@@ -337,7 +477,9 @@ class BenchmarkRunner:
 
         When *constraint_fn* is provided, it is evaluated once per tick
         (after all players have acted) and the per-step cost vectors are
-        stored in ``LevelResult.constraint_costs``.
+        stored in ``LevelResult.constraint_costs``. When *achievement_fn*
+        is non-``None``, the internal state is an ``AchievementState``
+        and the latched unlock mask is returned on the result.
 
         Args:
             benchmark: Benchmark owning this level (provides per-level scoring).
@@ -346,12 +488,19 @@ class BenchmarkRunner:
             rng: PRNG key for this level's episode steps.
             obs_fn: Observation extraction function.
             constraint_fn: Optional constraint cost function.
+            achievement_fn: Optional achievement function used to
+                initialise the wrapped state. Used only to distinguish
+                wrapped vs. unwrapped state; the function itself is
+                already baked into ``self._jit_step``.
 
         Returns:
             ``LevelResult`` for this level.
         """
         params = bench_level.env_params
-        state = build_state(bench_level.level, params)
+        env_state0 = build_state(bench_level.level, params)
+        state: EnvState | AchievementState = self._wrap_initial_state(
+            env_state0, achievement_fn
+        )
         num_players = params.num_players
         jit_step = self._jit_step
 
@@ -362,8 +511,9 @@ class BenchmarkRunner:
         for _ in range(params.max_timesteps):
             prev_state = state
             for p in range(num_players):
-                state_p = state.replace(selected_player=p)
-                obs = obs_fn(state_p, params, p)
+                state_p = self._select_player(state, p)
+                inner_p = self._inner_env_state(state_p)
+                obs = obs_fn(inner_p, params, p)
                 action = policies[p](obs)
 
                 rng, subkey = jax.random.split(rng)
@@ -378,16 +528,21 @@ class BenchmarkRunner:
                     actions_log.append(int(action))
 
             if constraint_fn is not None:
-                cost = constraint_fn(prev_state, state, params)
+                cost = constraint_fn(
+                    self._inner_env_state(prev_state),
+                    self._inner_env_state(state),
+                    params,
+                )
                 costs_log.append(np.asarray(cost))
 
             if bool(done):
                 break
 
+        final_env_state = self._inner_env_state(state)
         items_mined: dict[str, int] = {
-            "coal": int(state.items_mined[ItemType.COAL]),
-            "iron": int(state.items_mined[ItemType.IRON_ORE]),
-            "copper": int(state.items_mined[ItemType.COPPER_ORE]),
+            "coal": int(final_env_state.items_mined[ItemType.COAL]),
+            "iron": int(final_env_state.items_mined[ItemType.IRON_ORE]),
+            "copper": int(final_env_state.items_mined[ItemType.COPPER_ORE]),
         }
         weighted_score = benchmark.score_level(bench_level, items_mined)
         constraint_costs = np.stack(costs_log) if costs_log else None
@@ -399,5 +554,6 @@ class BenchmarkRunner:
             timesteps_used=len(actions_log),
             actions=np.array(actions_log, dtype=np.int32),
             constraint_costs=constraint_costs,
-            final_state=state,
+            final_state=final_env_state,
+            achievements_unlocked=self._achievements(state),
         )
