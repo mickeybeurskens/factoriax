@@ -47,7 +47,7 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
     rocket_reward,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
+from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action, ItemType
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.levels import build_state
@@ -217,6 +217,32 @@ def _save_final_model(
     )
 
 
+@dataclasses.dataclass
+class _EvalRollout:
+    """Collected artifacts from a single deterministic eval episode.
+
+    Attributes:
+        frames: Rendered RGB frames, length ``T + 1`` (includes the
+            pre-step state so the video starts from the initial state).
+        actions: Actions taken, shape ``(T,)`` int32.
+        env_states: Inner ``EnvState`` at each step, length ``T + 1``.
+            Used by ``factoriax.analysis.states_to_trajectory``.
+        ach_per_step: Per-step achievement masks, shape
+            ``(T + 1, MAX_ACHIEVEMENTS)`` bool. ``ach_per_step[t]`` is
+            the latched mask after step ``t-1`` (row 0 = all False).
+    """
+
+    frames: list[np.ndarray]
+    actions: np.ndarray
+    env_states: list[Any]
+    ach_per_step: np.ndarray
+
+    @property
+    def final_ach_mask(self) -> np.ndarray:
+        """Latched achievement mask at the last recorded step."""
+        return self.ach_per_step[-1]
+
+
 def _render_eval_episode(
     config: Config,
     env: AchievementWrapper,
@@ -225,18 +251,13 @@ def _render_eval_episode(
     network: ActorCritic,
     params: Any,
     obs_stats: RunningStats,
-) -> tuple[list[np.ndarray], np.ndarray, np.ndarray]:
-    """Run one deterministic eval episode and return (frames, actions, ach_mask).
+) -> _EvalRollout:
+    """Run one deterministic eval episode and return collected artifacts.
 
     Uses a Python-side loop (not a JIT-compiled scan) so we can snapshot
-    the underlying ``EnvState`` at every tick for rendering. This is fine
-    because the eval is a one-shot ~2000-step rollout, not a hot path.
-
-    Returns:
-        ``(frames, actions, ach_mask)`` where ``frames`` has length
-        ``max_timesteps + 1`` (pre-step state included), ``actions`` has
-        shape ``(T,)`` int32, and ``ach_mask`` has shape
-        ``(MAX_ACHIEVEMENTS,)`` bool capturing the final latched state.
+    the underlying ``EnvState`` at every tick for rendering and for
+    trajectory-level analysis. This is fine because the eval is a
+    one-shot ~2000-step rollout, not a hot path.
     """
     from factoriax.renderer import render_pixels  # noqa: PLC0415
 
@@ -248,6 +269,8 @@ def _render_eval_episode(
     frames: list[np.ndarray] = [
         np.asarray(render_pixels(state.env_state, block_pixel_size=16))
     ]
+    env_states: list[Any] = [state.env_state]
+    ach_per_step: list[np.ndarray] = [np.asarray(state.achievements_unlocked)]
     actions_log: list[int] = []
 
     for _ in range(env_params.max_timesteps):
@@ -262,11 +285,17 @@ def _render_eval_episode(
         frames.append(
             np.asarray(render_pixels(state.env_state, block_pixel_size=16)),
         )
+        env_states.append(state.env_state)
+        ach_per_step.append(np.asarray(state.achievements_unlocked))
         if bool(done):
             break
 
-    ach_mask = np.asarray(state.achievements_unlocked)
-    return frames, np.asarray(actions_log, dtype=np.int32), ach_mask
+    return _EvalRollout(
+        frames=frames,
+        actions=np.asarray(actions_log, dtype=np.int32),
+        env_states=env_states,
+        ach_per_step=np.stack(ach_per_step, axis=0),
+    )
 
 
 def _write_video(path: Any, frames: list[np.ndarray], fps: int) -> None:
@@ -288,6 +317,150 @@ def _write_video(path: Any, frames: list[np.ndarray], fps: int) -> None:
     )
 
 
+def _plot_item_counts(traj: Any, out_path: Any) -> Any:
+    """Line plot of player item counts over time.
+
+    Draws one line per ``ItemType`` that exceeds zero at some point in
+    the episode. The dense ``player_inventory`` field on the trajectory
+    (shape ``(1, T+1, P, N)``) is already per-item, so no slot-to-item
+    aggregation is needed.
+    """
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    from factoriax.constants import NUM_ITEM_TYPES  # noqa: PLC0415
+
+    if traj.player_inventory is None:
+        raise ValueError("trajectory is missing player_inventory")
+    inv = np.asarray(traj.player_inventory)[0, :, 0, :]  # (T, N)
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.set_xlabel("Timestep")
+    ax.set_ylabel("Item count in inventory")
+    ax.set_title("Final rollout — item counts over time")
+
+    drawn = 0
+    for i in range(1, NUM_ITEM_TYPES):  # skip EMPTY
+        series = inv[:, i]
+        if series.max() == 0:
+            continue
+        ax.plot(series, label=ItemType(i).name, linewidth=1.2)
+        drawn += 1
+
+    if drawn:
+        ncol = 2 if drawn > 8 else 1
+        ax.legend(fontsize="small", ncol=ncol, loc="upper left")
+    ax.set_xlim(0, inv.shape[0] - 1)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+def _plot_action_counts(actions: np.ndarray, out_path: Any) -> Any:
+    """Bar chart of per-action counts over the single eval episode.
+
+    Single-episode action distribution over time is noisy, so we use a
+    simple counts view instead. A moving-average distribution is a
+    better fit for a multi-episode analysis which the eval pipeline
+    doesn't run yet.
+    """
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+
+    counts = np.bincount(actions, minlength=NUM_ACTIONS)
+    order = np.argsort(counts)[::-1]
+    kept = [i for i in order if counts[i] > 0]
+    names = [Action(int(i)).name for i in kept]
+    vals = [int(counts[i]) for i in kept]
+
+    height = max(4.0, 0.25 * len(kept))
+    fig, ax = plt.subplots(figsize=(10, height))
+    ax.barh(range(len(kept)), vals[::-1], color="steelblue", edgecolor="black")
+    ax.set_yticks(range(len(kept)))
+    ax.set_yticklabels(names[::-1], fontsize=8)
+    ax.set_xlabel(f"Count over {len(actions)} episode steps")
+    ax.set_title("Final rollout — action counts")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path
+
+
+def _generate_eval_plots(
+    rollout: _EvalRollout,
+    out_dir: Any,
+) -> dict[str, Any]:
+    """Render inventory, action-count, and achievement-timing plots.
+
+    Reuses :mod:`factoriax.analysis` for the shared bits and adds two
+    rocket-specific presentations: a legend-pruned inventory view and a
+    bar chart of action counts (the stacked-area distribution from
+    :mod:`analysis.actions` is only informative across many episodes
+    with smoothing).
+
+    Returns:
+        Mapping ``{"items": path, "actions": path, "achievements": path}``.
+        Keys are omitted if their plot couldn't be generated.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+
+    from factoriax.analysis.milestones import (  # noqa: PLC0415
+        plot_achievement_timing,
+    )
+    from factoriax.analysis.trajectory import states_to_trajectory  # noqa: PLC0415
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # states_to_trajectory requires len(actions) == len(states); pad the
+    # final step with a dummy action, never read by plots that use action
+    # indices directly.
+    actions_padded = np.concatenate(
+        [rollout.actions, np.zeros((1,), dtype=np.int32)],
+    )
+    base_traj = states_to_trajectory(rollout.env_states, actions=actions_padded)
+    traj = dataclasses.replace(
+        base_traj,
+        achievements=rollout.ach_per_step[np.newaxis, :, :NUM_ROCKET_ACHIEVEMENTS],
+    )
+
+    labels = [info.id for info in ROCKET_ACHIEVEMENT_INFO]
+    paths: dict[str, Any] = {}
+
+    try:
+        paths["items"] = _plot_item_counts(traj, out_dir / "final_items.png")
+    except Exception:  # noqa: BLE001
+        logger.exception("Item count plot failed.")
+
+    try:
+        paths["actions"] = _plot_action_counts(
+            rollout.actions,
+            out_dir / "final_actions.png",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Action count plot failed.")
+
+    try:
+        import matplotlib.pyplot as plt  # noqa: PLC0415
+
+        fig, _ = plot_achievement_timing(
+            traj,
+            achievement_labels=labels,
+            title="Final rollout — achievement unlock timing",
+        )
+        ach_path = out_dir / "final_achievements.png"
+        fig.savefig(ach_path, dpi=150)
+        plt.close(fig)
+        paths["achievements"] = ach_path
+    except Exception:  # noqa: BLE001
+        logger.exception("Achievement timing plot failed.")
+
+    return paths
+
+
 def _finalize_artifacts(
     config: Config,
     env: AchievementWrapper,
@@ -299,12 +472,11 @@ def _finalize_artifacts(
     wandb_run: Any | None,
     current_step: int,
 ) -> None:
-    """Write final model + rollout video locally and (optionally) to wandb.
+    """Write final model + rollout video + analysis plots.
 
     Runs strictly after training completes; never touches the hot loop.
-    Artifacts uploaded to wandb as proper Artifact objects so they can
-    be fetched later via ``wandb artifact get``. The video is also
-    logged as ``wandb.Video`` for in-run playback.
+    Uploads the model, video, and PNGs as wandb Artifacts and inline
+    images when wandb is active.
     """
     out_dir = _resolve_out_dir(config)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -316,10 +488,12 @@ def _finalize_artifacts(
         logger.info("Saved final model: %s", model_path)
 
     video_path = None
+    plot_paths: dict[str, Any] = {}
     ach_mask = None
+
     if config.save_final_video:
         logger.info("Rendering final eval rollout...")
-        frames, actions, ach_mask = _render_eval_episode(
+        rollout = _render_eval_episode(
             config,
             env,
             env_params,
@@ -328,33 +502,39 @@ def _finalize_artifacts(
             params,
             obs_stats,
         )
+        ach_mask = rollout.final_ach_mask
+
         video_path = out_dir / "final_rollout.mp4"
         try:
-            _write_video(video_path, frames, config.video_fps)
+            _write_video(video_path, rollout.frames, config.video_fps)
             logger.info(
                 "Saved final rollout video: %s (%d frames, %d unique actions)",
                 video_path,
-                len(frames),
-                int(np.unique(actions).size),
+                len(rollout.frames),
+                int(np.unique(rollout.actions).size),
             )
         except ImportError:
             logger.error("imageio[ffmpeg] missing; final video skipped.")
             video_path = None
+
+        plot_paths = _generate_eval_plots(rollout, out_dir)
+        for name, path in plot_paths.items():
+            logger.info("Saved %s plot: %s", name, path)
 
     if wandb_run is None:
         return
 
     import wandb  # noqa: PLC0415  # type: ignore[import-untyped]
 
+    run_id = getattr(wandb_run, "id", "run")
+
     if model_path is not None:
-        run_id = getattr(wandb_run, "id", "run")
         artifact = wandb.Artifact(f"rocket-ppo-model-{run_id}", type="model")
         artifact.add_file(str(model_path))
         wandb_run.log_artifact(artifact)
         logger.info("Uploaded model artifact to wandb.")
 
     if video_path is not None:
-        run_id = getattr(wandb_run, "id", "run")
         vid_artifact = wandb.Artifact(f"rocket-ppo-video-{run_id}", type="video")
         vid_artifact.add_file(str(video_path))
         wandb_run.log_artifact(vid_artifact)
@@ -369,6 +549,19 @@ def _finalize_artifacts(
             step=current_step,
         )
         logger.info("Uploaded video artifact + inline video to wandb.")
+
+    if plot_paths:
+        plots_artifact = wandb.Artifact(
+            f"rocket-ppo-plots-{run_id}",
+            type="analysis",
+        )
+        inline: dict[str, Any] = {}
+        for name, path in plot_paths.items():
+            plots_artifact.add_file(str(path))
+            inline[f"final/plots/{name}"] = wandb.Image(str(path))
+        wandb_run.log_artifact(plots_artifact)
+        wandb_run.log(inline, step=current_step)
+        logger.info("Uploaded %d analysis plot(s) to wandb.", len(plot_paths))
 
     if ach_mask is not None:
         unlocked_ids = [
