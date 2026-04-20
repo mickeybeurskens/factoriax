@@ -25,6 +25,7 @@ from factoriax.benchmarks import (
 from factoriax.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
+    Action,
     BlockType,
     ItemType,
     MachineType,
@@ -66,7 +67,7 @@ def test_benchmark_construction() -> None:
     levels = bench.levels()
     assert len(levels) == 1
     params = levels[0].env_params
-    assert params.max_timesteps == 2000
+    assert params.max_timesteps == 8000
     assert params.map_width == 32
     assert params.map_height == 32
     assert params.num_players == 1
@@ -84,6 +85,64 @@ def test_build_rocket_level_has_all_ore_types() -> None:
         BlockType.SILICON,
     ):
         assert int(expected) in present
+
+
+def test_build_rocket_level_preplaces_furnace_and_assembler() -> None:
+    """A furnace and assembler are pre-placed adjacent to spawn."""
+    level = build_rocket_level()
+    mt = np.asarray(level.machine_types)
+    # Spawn at map center (16, 16). Furnace immediately west, assembler east.
+    assert int(mt[16, 15]) == int(MachineType.FURNACE)
+    assert int(mt[16, 17]) == int(MachineType.ASSEMBLER)
+
+
+def test_rocket_benchmark_exposes_blocked_actions() -> None:
+    """The benchmark advertises every CRAFT_* action as blocked."""
+    from factoriax.benchmarks.rocket import ROCKET_BLOCKED_ACTIONS
+
+    bench = RocketBenchmark()
+    # All 18 CRAFT_* actions (IRON_PLATE .. ROCKET) must be blocked.
+    assert len(bench.blocked_actions) == 18
+    assert Action.CRAFT_IRON_PLATE in bench.blocked_actions
+    assert Action.CRAFT_ROCKET in bench.blocked_actions
+    assert Action.CRAFT_BASIC_SCIENCE in bench.blocked_actions
+    # Movement / mining / placement actions must NOT be blocked.
+    for allowed in (
+        Action.NOOP,
+        Action.MINE,
+        Action.UP,
+        Action.PLACE_MINER,
+        Action.WITHDRAW_IRON_PLATE,
+        Action.DEPOSIT_COAL,
+    ):
+        assert int(allowed) not in bench.blocked_actions
+    assert bench.blocked_actions == ROCKET_BLOCKED_ACTIONS
+
+
+def test_action_mask_wrapper_noops_blocked_actions() -> None:
+    """ActionMaskWrapper silently converts blocked actions to NOOP."""
+    from factoriax.benchmarks.rocket import ROCKET_BLOCKED_ACTIONS
+    from factoriax.envs import FactoriaXEnv
+    from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+    from factoriax.levels import build_state
+
+    env = ActionMaskWrapper(FactoriaXEnv(), ROCKET_BLOCKED_ACTIONS)
+    level = build_rocket_level()
+    params = EnvParams(map_width=32, map_height=32, num_players=1, max_timesteps=10)
+    state = build_state(level, params)
+    key = jax.random.PRNGKey(0)
+
+    # Emitting a masked CRAFT_IRON_PLATE should behave exactly like NOOP
+    # — inventory unchanged.
+    inv_before = np.asarray(state.player_inventory[0])
+    _, new_state, _, _, _ = env.step_env(
+        key,
+        state,
+        jnp.int32(int(Action.CRAFT_IRON_PLATE)),
+        params,
+    )
+    inv_after = np.asarray(new_state.player_inventory[0])
+    np.testing.assert_array_equal(inv_before, inv_after)
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -28,6 +29,7 @@ from factoriax.benchmarks.core import (
 from factoriax.constants import MAX_ACHIEVEMENTS, ItemType
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
+from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
 from factoriax.state import EnvParams, EnvState
@@ -102,38 +104,47 @@ class BenchmarkRunner:
         self._base_env = FactoriaXEnv()
         self._achievement_fn: AchievementFn | None = achievement_fn
         self._current_fn: AchievementFn | None = achievement_fn
-        self._env, self._jit_step = self._build_env(achievement_fn)
+        self._current_blocked: frozenset[int] = frozenset()
+        self._env, self._jit_step = self._build_env(achievement_fn, frozenset())
         self.seed = seed
 
     def _build_env(
-        self, achievement_fn: AchievementFn | None
-    ) -> tuple[FactoriaXEnv | AchievementWrapper, Callable]:
+        self,
+        achievement_fn: AchievementFn | None,
+        blocked_actions: frozenset[int],
+    ) -> tuple[Any, Callable]:
         """Build the environment and its JIT-compiled step function.
 
-        Wraps the base env with :class:`AchievementWrapper` when an
-        achievement function is supplied; otherwise returns the bare
-        env. Keeps the hot path free of wrapper overhead for benchmarks
-        that do not track achievements.
+        Layering, outermost to innermost:
+
+        - :class:`ActionMaskWrapper` (if any actions are blocked) —
+          rewrites masked actions to ``NOOP`` before the inner envs
+          see them.
+        - :class:`AchievementWrapper` (if a condition function is
+          supplied) — tracks which achievements have fired.
+        - :class:`FactoriaXEnv` — core simulator.
 
         Args:
             achievement_fn: Optional achievement condition function.
+            blocked_actions: Set of action ints to mask out.
 
         Returns:
             Tuple of ``(env, jit_step)``.
         """
-        if achievement_fn is None:
-            env: FactoriaXEnv | AchievementWrapper = self._base_env
-        else:
-            env = AchievementWrapper(self._base_env, achievement_fn)
+        env: Any = self._base_env
+        if achievement_fn is not None:
+            env = AchievementWrapper(env, achievement_fn)
+        if blocked_actions:
+            env = ActionMaskWrapper(env, blocked_actions)
         return env, jax.jit(env.step_env)
 
     def _resolve_achievement_fn(self, benchmark: Benchmark) -> AchievementFn | None:
         """Return the achievement_fn to use for a given run.
 
         Explicit runner-level fn wins over a benchmark-advertised fn.
-        Rebuilds the cached env and JIT step whenever the resolved
-        function differs from what is currently wrapped, so the runner
-        stays correct across repeated calls with different benchmarks.
+        Rebuilds the cached env + JIT step when either the resolved
+        achievement function or the benchmark's ``blocked_actions``
+        differ from what is currently wrapped.
 
         Args:
             benchmark: Benchmark being run.
@@ -143,9 +154,11 @@ class BenchmarkRunner:
             advertises one.
         """
         resolved = self._achievement_fn or getattr(benchmark, "achievement_fn", None)
-        if resolved is not self._current_fn:
-            self._env, self._jit_step = self._build_env(resolved)
+        blocked = frozenset(getattr(benchmark, "blocked_actions", ()) or ())
+        if resolved is not self._current_fn or blocked != self._current_blocked:
+            self._env, self._jit_step = self._build_env(resolved, blocked)
             self._current_fn = resolved
+            self._current_blocked = blocked
         return resolved
 
     def _wrap_initial_state(

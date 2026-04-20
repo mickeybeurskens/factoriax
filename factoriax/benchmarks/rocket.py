@@ -2,15 +2,23 @@
 
 The benchmark defines 34 achievements tiered Craftax-style (1/3/5/8 points,
 max 120), ordered to teach the game's natural learning path: gather raw ore,
-handcraft basic intermediates, deeper intermediates plus first machines,
-logistics composition and the assembler, then scale and the rocket.
+refine intermediates via a furnace and assembler, build and deploy the rest
+of the factory, then launch the rocket.
 
-The achievement list lives in this module (not in ``factoriax/achievements.py``)
-so the core tutorial achievements stay untouched and future benchmarks can
-ship their own sets. Achievement tracking hooks into the existing
-:class:`~factoriax.envs.achievement_wrapper.AchievementWrapper` via the
-``achievement_fn`` attribute on :class:`RocketBenchmark`, which the
-:class:`~factoriax.benchmarks.runner.BenchmarkRunner` picks up automatically.
+Setup:
+- A **furnace** and **assembler** are pre-placed adjacent to the player's
+  spawn. The agent doesn't need to hand-craft the starter machinery — all
+  crafting goes through these placed machines. Producing a *second*
+  furnace/assembler via the main assembler is how the ``craft_furnace`` /
+  ``craft_assembler`` achievements unlock.
+- All direct player-crafting actions (``CRAFT_IRON_PLATE`` through
+  ``CRAFT_ROCKET``) are **masked** — the env silently replaces them with
+  ``NOOP``. Production must flow through the furnace / assembler pipeline.
+- ``RocketBenchmark`` exposes ``achievement_fn`` and ``blocked_actions``
+  attributes the :class:`~factoriax.benchmarks.runner.BenchmarkRunner`
+  picks up automatically; callers stepping the env directly should wrap
+  with :class:`~factoriax.envs.action_mask_wrapper.ActionMaskWrapper`
+  themselves (see :data:`ROCKET_BLOCKED_ACTIONS`).
 """
 
 from __future__ import annotations
@@ -22,7 +30,9 @@ from factoriax.achievements import AchievementInfo
 from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.constants import (
     MAX_ACHIEVEMENTS,
+    Action,
     BlockType,
+    Direction,
     ItemType,
     MachineType,
 )
@@ -319,11 +329,15 @@ def rocket_reward(
 # ---------------------------------------------------------------------------
 
 # 32x32 map; player spawns at the centre with five 3x3 ore patches
-# placed symmetrically at ~8 tiles radius. The layout is deterministic
-# for reproducible eval.
+# placed symmetrically at ~8 tiles radius. A furnace and an assembler
+# are pre-placed immediately west / east of the spawn so the agent
+# never has to hand-craft to get started.
 _MAP_SIZE: int = 32
 _ORE_PATCH_SIZE: int = 3
 _ORE_RESOURCES_PER_TILE: int = 100
+_SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
+_FURNACE_TILE: tuple[int, int] = (_SPAWN[0] - 1, _SPAWN[1])
+_ASSEMBLER_TILE: tuple[int, int] = (_SPAWN[0] + 1, _SPAWN[1])
 _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
     # (x, y, block) — all coordinates are the top-left corner of the 3x3 patch.
     (7, 7, BlockType.IRON),
@@ -337,10 +351,12 @@ _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
 def build_rocket_level() -> Level:
     """Construct the canonical 32x32 rocket benchmark level.
 
-    Player spawns at (16, 16). Five 3x3 ore patches (iron, copper, coal,
-    tin, silicon) sit roughly eight tiles from spawn in a symmetric
-    layout. Each tile carries ``_ORE_RESOURCES_PER_TILE`` units — enough
-    for a full rocket run without needing to prospect.
+    Player spawns at :data:`_SPAWN`. Five 3x3 ore patches (iron, copper,
+    coal, tin, silicon) sit roughly eight tiles from spawn in a
+    symmetric layout, each tile carrying
+    :data:`_ORE_RESOURCES_PER_TILE` units — plenty for a full rocket
+    run. A furnace and an assembler are pre-placed one tile west and
+    east of spawn respectively.
 
     Returns:
         Deterministic :class:`Level` used as the benchmark's only level.
@@ -355,8 +371,33 @@ def build_rocket_level() -> Level:
             block,
             resources=_ORE_RESOURCES_PER_TILE,
         )
-    builder.set_player_position(_MAP_SIZE // 2, _MAP_SIZE // 2)
+    builder.set_player_position(*_SPAWN)
+    builder.place_machine(
+        _FURNACE_TILE[0],
+        _FURNACE_TILE[1],
+        int(MachineType.FURNACE),
+        direction=int(Direction.DOWN),
+    )
+    builder.place_machine(
+        _ASSEMBLER_TILE[0],
+        _ASSEMBLER_TILE[1],
+        int(MachineType.ASSEMBLER),
+        direction=int(Direction.DOWN),
+    )
     return builder.build("rocket_v1")
+
+
+# ---------------------------------------------------------------------------
+# Action mask
+# ---------------------------------------------------------------------------
+
+# The rocket benchmark forbids all direct player crafting; production
+# must flow through the pre-placed furnace / assembler. The mask covers
+# every CRAFT_* action from IRON_PLATE through ROCKET (recipe actions
+# 18–35).
+ROCKET_BLOCKED_ACTIONS: frozenset[int] = frozenset(
+    range(int(Action.CRAFT_IRON_PLATE), int(Action.CRAFT_ROCKET) + 1)
+)
 
 
 # ---------------------------------------------------------------------------
@@ -380,11 +421,21 @@ class RocketBenchmark:
     name: str = "rocket"
     num_players: int = 1
     achievement_fn = staticmethod(rocket_conditions)
+    # Hand-craft actions are blocked for this benchmark; production
+    # must flow through the pre-placed furnace + assembler. Callers
+    # (e.g. :class:`BenchmarkRunner`) are expected to wrap the env with
+    # :class:`~factoriax.envs.action_mask_wrapper.ActionMaskWrapper`
+    # using this set.
+    blocked_actions: frozenset[int] = ROCKET_BLOCKED_ACTIONS
 
     def levels(self) -> list[BenchmarkLevel]:
         """Return the single canonical rocket level."""
+        # Step budget increased from the original 2000: machine-based
+        # production adds ~10 steps per output item (deposit + wait +
+        # withdraw) so a full rocket build needs substantially more
+        # headroom than a pure hand-craft plan would.
         params = EnvParams(
-            max_timesteps=2000,
+            max_timesteps=8000,
             map_width=_MAP_SIZE,
             map_height=_MAP_SIZE,
             num_players=1,
@@ -393,9 +444,10 @@ class RocketBenchmark:
             BenchmarkLevel(
                 name="rocket_v1",
                 description=(
-                    "From scratch to rocket on a 32x32 map with five ore "
-                    "patches within reach. Episode ends at T=2000 steps; "
-                    "score is the weighted sum of unlocked achievements."
+                    "Rocket from ore patches on a 32x32 map. Furnace and "
+                    "assembler are pre-placed next to spawn; hand-craft "
+                    "actions are masked. Episode ends at T=8000; score "
+                    "is the weighted sum of unlocked achievements."
                 ),
                 level=build_rocket_level(),
                 env_params=params,
