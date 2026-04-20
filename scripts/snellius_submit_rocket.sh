@@ -15,21 +15,24 @@
 #
 # ------------------------------------------------------------------
 # One-time setup on the *login node* (only the first time):
-#   curl -LsSf https://astral.sh/uv/install.sh | sh
-#   source "$HOME/.local/bin/env"
 #   cd "<your factoriax checkout>"
-#   uv sync
-#   uv run wandb login
+#   uv sync                 # creates .venv with pinned deps
+#   .venv/bin/wandb login   # authenticate wandb
 #
 # After that, from inside the factoriax repo on Snellius just run:
 #   ./scripts/snellius_submit_rocket.sh
+#
+# Don't have uv? Any of these work on Snellius:
+#   pip install --user uv                # simplest
+#   curl -LsSf https://astral.sh/uv/install.sh | sh
+#   module load 2025 && module load uv   # if available
 #
 # ------------------------------------------------------------------
 # Everything user-specific is derived or overridable. Override any
 # value on the command line, e.g.:
 #   PARTITION=gpu_h100 WALL_TIME=08:00:00 ./scripts/snellius_submit_rocket.sh
 #   PROJECT_DIR=$HOME/code/factoriax ./scripts/snellius_submit_rocket.sh
-#   UV_CACHE_DIR=/scratch-shared/$USER/uv-cache ./scripts/snellius_submit_rocket.sh
+#   VENV_DIR=$HOME/other_venv ./scripts/snellius_submit_rocket.sh
 # ------------------------------------------------------------------
 
 set -euo pipefail
@@ -63,7 +66,7 @@ if [[ -z "${CPUS_PER_TASK:-}" ]]; then
 fi
 SLURM_OUT_DIR="${SLURM_OUT_DIR:-${HOME}/slurm}"
 WANDB_PROJECT="${WANDB_PROJECT:-factoriax_rocket}"
-UV_ENV_FILE="${UV_ENV_FILE:-${HOME}/.local/bin/env}"
+VENV_DIR="${VENV_DIR:-${PROJECT_DIR}/.venv}"
 
 mkdir -p "${SLURM_OUT_DIR}"
 
@@ -73,14 +76,18 @@ if [[ ! -f "${PROJECT_DIR}/pyproject.toml" ]]; then
     echo "Set PROJECT_DIR to the factoriax checkout root." >&2
     exit 1
 fi
-if [[ ! -f "${UV_ENV_FILE}" ]]; then
-    echo "ERROR: uv env file not found at ${UV_ENV_FILE}." >&2
-    echo "Install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+    echo "ERROR: no Python at ${VENV_DIR}/bin/python." >&2
+    echo "Create the venv first (on the login node, from the repo):" >&2
+    echo "    uv sync" >&2
+    echo "Or point VENV_DIR at an existing venv:" >&2
+    echo "    VENV_DIR=/path/to/.venv ./scripts/snellius_submit_rocket.sh" >&2
     exit 1
 fi
 
 echo "Config:"
 echo "  PROJECT_DIR   = ${PROJECT_DIR}"
+echo "  VENV_DIR      = ${VENV_DIR}"
 echo "  PARTITION     = ${PARTITION}"
 echo "  WALL_TIME     = ${WALL_TIME}"
 echo "  CPUS_PER_TASK = ${CPUS_PER_TASK}"
@@ -112,7 +119,12 @@ for i in "${!seeds[@]}"; do
 set -euo pipefail
 
 # --- environment ---
-source "${UV_ENV_FILE}"
+# Call the venv's python directly. No activation, no uv dependency on
+# the compute node — whatever created the venv on the login node (uv,
+# pip, etc.) is fine as long as .venv/bin/python exists.
+export PATH="${VENV_DIR}/bin:\${PATH}"
+export VIRTUAL_ENV="${VENV_DIR}"
+PY="${VENV_DIR}/bin/python"
 
 # JAX tends to grab all VRAM by default; leave some headroom for the
 # CUDA context. On A100 80GB this is ~72GB usable.
@@ -122,11 +134,9 @@ cd "${PROJECT_DIR}"
 
 echo "=== \$(date) — host \$(hostname) ==="
 nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
-uv --version
+"\${PY}" --version
 
-# uv run uses the already-synced .venv (created via \`uv sync\` on the
-# login node). No network or install happens here on the compute node.
-uv run python -m baselines.rocket.train_ppo \\
+"\${PY}" -m baselines.rocket.train_ppo \\
     --num-envs ${num_envs} \\
     --rollout-steps ${rollout_steps} \\
     --total-steps ${total_steps} \\
