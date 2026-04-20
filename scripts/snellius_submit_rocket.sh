@@ -14,24 +14,22 @@
 #              tests, avoid for real training rollouts.
 #
 # ------------------------------------------------------------------
-# One-time setup on the *login node*:
-#   # Install uv (~10 MB, no module needed).
+# One-time setup on the *login node* (only the first time):
 #   curl -LsSf https://astral.sh/uv/install.sh | sh
-#   source $HOME/.local/bin/env
-#
-#   # Sync the project's dependencies into .venv (CUDA-enabled JAX wheels).
-#   cd /home/mbeurskens/projects/factoriax
+#   source "$HOME/.local/bin/env"
+#   cd "<your factoriax checkout>"
 #   uv sync
-#
-#   # Authenticate wandb once so ~/.netrc is populated.
 #   uv run wandb login
 #
-# After the above, this submit script uses `uv run` on the compute node,
-# which skips re-installation and just activates the existing .venv.
+# After that, from inside the factoriax repo on Snellius just run:
+#   ./scripts/snellius_submit_rocket.sh
 #
-# Optional: if you start hitting your home-directory quota, point uv's
-# cache at scratch:
-#   echo 'export UV_CACHE_DIR=/scratch-shared/$USER/uv-cache' >> ~/.bashrc
+# ------------------------------------------------------------------
+# Everything user-specific is derived or overridable. Override any
+# value on the command line, e.g.:
+#   PARTITION=gpu_h100 WALL_TIME=08:00:00 ./scripts/snellius_submit_rocket.sh
+#   PROJECT_DIR=$HOME/code/factoriax ./scripts/snellius_submit_rocket.sh
+#   UV_CACHE_DIR=/scratch-shared/$USER/uv-cache ./scripts/snellius_submit_rocket.sh
 # ------------------------------------------------------------------
 
 set -euo pipefail
@@ -39,21 +37,55 @@ set -euo pipefail
 # ---- Sweep parameters (edit to add more jobs) --------------------------------
 
 seeds=(0)
-total_steps_list=(100000000)         # 100M for a cheap first testing run.
+total_steps_list=(100000000)         # 100M steps, cheap first test run.
 num_envs_list=(2048)
 rollout_steps_list=(128)
 run_names=("ppo_rocket_100M_a100_test")
 
-# ---- SLURM / environment settings --------------------------------------------
+# ---- SLURM / environment (override via env vars, defaults below) -------------
 
-PARTITION="gpu_a100"                 # cheap partition for testing
-WALL_TIME="02:00:00"                 # 100M steps on an A100 should be well under 1h; 2h is a safety margin.
-CPUS_PER_TASK=18                     # Snellius allocates 18 cores with 1 A100.
-SLURM_OUT_DIR="/home/mbeurskens/slurm"
-PROJECT_DIR="/home/mbeurskens/projects/factoriax"
-WANDB_PROJECT="factoriax_rocket"
+# Resolve the repo root from this script's own location so PROJECT_DIR
+# works no matter whose home directory the checkout lives in.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+PROJECT_DIR="${PROJECT_DIR:-${DEFAULT_PROJECT_DIR}}"
+PARTITION="${PARTITION:-gpu_a100}"
+WALL_TIME="${WALL_TIME:-02:00:00}"
+# Snellius allocates 18 cores with 1 A100 and 16 cores with 1 H100; pick
+# the safe default per partition unless the caller overrides.
+if [[ -z "${CPUS_PER_TASK:-}" ]]; then
+    case "${PARTITION}" in
+        gpu_h100) CPUS_PER_TASK=16 ;;
+        gpu_mig)  CPUS_PER_TASK=9 ;;
+        *)        CPUS_PER_TASK=18 ;;
+    esac
+fi
+SLURM_OUT_DIR="${SLURM_OUT_DIR:-${HOME}/slurm}"
+WANDB_PROJECT="${WANDB_PROJECT:-factoriax_rocket}"
+UV_ENV_FILE="${UV_ENV_FILE:-${HOME}/.local/bin/env}"
 
 mkdir -p "${SLURM_OUT_DIR}"
+
+# Fail fast if the project checkout looks wrong.
+if [[ ! -f "${PROJECT_DIR}/pyproject.toml" ]]; then
+    echo "ERROR: PROJECT_DIR=${PROJECT_DIR} does not contain pyproject.toml." >&2
+    echo "Set PROJECT_DIR to the factoriax checkout root." >&2
+    exit 1
+fi
+if [[ ! -f "${UV_ENV_FILE}" ]]; then
+    echo "ERROR: uv env file not found at ${UV_ENV_FILE}." >&2
+    echo "Install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+    exit 1
+fi
+
+echo "Config:"
+echo "  PROJECT_DIR   = ${PROJECT_DIR}"
+echo "  PARTITION     = ${PARTITION}"
+echo "  WALL_TIME     = ${WALL_TIME}"
+echo "  CPUS_PER_TASK = ${CPUS_PER_TASK}"
+echo "  SLURM_OUT_DIR = ${SLURM_OUT_DIR}"
+echo "  WANDB_PROJECT = ${WANDB_PROJECT}"
 
 # ---- Submit loop -------------------------------------------------------------
 
@@ -80,14 +112,13 @@ for i in "${!seeds[@]}"; do
 set -euo pipefail
 
 # --- environment ---
-# uv installs a shim script that puts its binary on PATH.
-source \$HOME/.local/bin/env
+source "${UV_ENV_FILE}"
 
 # JAX tends to grab all VRAM by default; leave some headroom for the
 # CUDA context. On A100 80GB this is ~72GB usable.
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.90
 
-cd ${PROJECT_DIR}
+cd "${PROJECT_DIR}"
 
 echo "=== \$(date) — host \$(hostname) ==="
 nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
