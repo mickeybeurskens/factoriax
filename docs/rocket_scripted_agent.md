@@ -418,7 +418,79 @@ batch dim) for training-style analysis via `factoriax.analysis`.
 
 ---
 
-## 10. Milestones / sequencing
+## 10. Integration test plan
+
+The scripted agent earns its keep as a **reward-correctness oracle and
+cheese detector** only if an automated test verifies that every
+achievement fires in the expected phase. The test layout mirrors the
+phase FSM so a single failure points directly at the offending phase.
+
+### 10.1 Test staircase
+
+| Test | Achievements covered | Budget | Mark |
+|------|----------------------|--------|------|
+| `test_world_model` | 0 (decoder correctness) | <1s | fast |
+| `test_skills` | collect_iron (via `MineOre`) | <30s | slow |
+| `test_craft_chain_to_wire` | 5 collect_* + 4 smelt_* + craft_wire (10) | <60s | slow |
+| `test_intermediate_crafts` | craft_circuit/frame/motor/sensor (4) | <60s | slow |
+| `test_miner_on_ore` | craft_miner + place_miner + automated_mining (3) | <60s | slow |
+| `test_pallet_and_deposit` | craft_pallet + place_pallet + pallet_filled (3) | <60s | slow |
+| `test_assembler_produces` | craft_assembler + place_assembler + first_assembly (3) | <90s | slow |
+| `test_scale_to_industrialist` | scaling_up + industrialist + belt_network + craft_belt + place_belt (5) | <90s | slow |
+| **`test_full_rocket_agent`** | **all 34 — end-to-end** | <180s | slow |
+
+Each intermediate test constructs a minimal planner with just the
+goals needed for its scope, runs the agent in the real env until done
+(or timeout), and asserts the exact achievement mask.
+
+### 10.2 Failure signatures
+
+When `test_full_rocket_agent` fails, the intermediate tests disambiguate:
+
+- **`test_craft_chain_to_wire` fails** → the handcraft path doesn't work
+  as assumed (plates may require a furnace, not hand-crafting).
+  Fix: reorder phase to build a furnace first.
+- **`test_miner_on_ore` fails** → `PLACE_MINER` on an ore tile isn't
+  accepted, or `automated_mining` doesn't fire after placement. Fix:
+  adjust placement predicate or wait-time; flag as condition bug.
+- **`test_pallet_and_deposit` fails** → `pallet_filled` requires an arm
+  moving items (not direct deposit). Fix: add a miner→arm→pallet
+  pipeline to the phase.
+- **`test_assembler_produces` fails** → input matching is stricter than
+  expected or the recipe-selection mechanic needs a separate action.
+- **`test_scale_to_industrialist` fails** → placement predicates
+  collide; players can't place three machines in a tiny radius. Fix:
+  the predicate should walk further out or loop over free tiles.
+
+Every one of these is a potential finding about the achievement
+conditions or the game mechanics — which is exactly the point.
+
+### 10.3 Reliability sweep (out of scope for v1)
+
+Once the single-seed test is green, extend to a 10-seed sweep under
+`pytest -n auto` with a target ≥95% full-34 success rate. Flaky
+achievements show up as "sometimes fires, sometimes doesn't" — a
+strong hint about race conditions in the engine (e.g. `pallet_filled`
+that depends on arm-tick ordering).
+
+### 10.4 Budget model
+
+Full rocket rollout cost (back-of-envelope on the 32×32 rocket
+benchmark, ~10 tiles between player spawn and nearest ore patch):
+
+| Phase | Cost per op | Ops | Subtotal |
+|-------|-------------|-----|----------|
+| Gather 5 ore types (~120 iron, ~80 copper, ~35 tin, ~120 coal, ~20 silicon) | 1 step per mine, ~15 steps walking per patch | 375 mines + 5 walks | ~450 |
+| Hand-craft all intermediates + machines | 1 step per craft | ~70 | ~70 |
+| Place 13+ machines (3 miner, 1 furnace, 5 belt, 1 pallet, 1 arm, 1 assembler, 1 rocket) | ~10-20 steps per place (nav + face + place) | 13+ | ~260 |
+| Deposit-to-pallet + deposit-to-assembler + waits | ~30 steps total | — | ~30 |
+| Buffer for BFS detours and reselection | — | — | ~200 |
+| **Total** | | | **~1000** |
+
+Fits the `max_timesteps=2000` rocket benchmark envelope with ~1000
+steps of slack for navigation blocking, patch depletion, etc.
+
+## 11. Milestones / sequencing
 
 1. `world_model.py` + unit tests — decode a known state, verify maps
    match.
@@ -434,7 +506,7 @@ batch dim) for training-style analysis via `factoriax.analysis`.
 
 ---
 
-## 11. Non-goals
+## 12. Non-goals
 
 - **Efficiency.** A scripted agent that finishes in 1500 ticks is
   fine. It's not a baseline for wall-clock speed.

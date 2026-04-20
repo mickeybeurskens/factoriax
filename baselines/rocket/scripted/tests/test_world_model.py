@@ -245,7 +245,7 @@ def test_plan_path_to_self_is_empty(
         map_width=rocket_env_params.map_width,
         max_timesteps=rocket_env_params.max_timesteps,
     )
-    path = view.plan_path(view.player.pos, allow_target_occupied=False)
+    path = view.plan_path(view.player.pos, mode="exactly_on")
     assert path == []
 
 
@@ -272,7 +272,7 @@ def test_plan_path_reaches_nearest_ore(
         assert tiles
         # Pick any tile — a path must exist on this mostly-open map.
         target = tiles[0]
-        path = view.plan_path(target, allow_target_occupied=True)
+        path = view.plan_path(target, mode="adjacent_or_on")
         assert path is not None
         # All actions are legal movement actions.
         for a in path:

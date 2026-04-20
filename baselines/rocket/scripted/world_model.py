@@ -233,53 +233,63 @@ class WorldView:
         self,
         goal: tuple[int, int],
         *,
-        allow_target_occupied: bool = True,
+        mode: str = "adjacent_or_on",
     ) -> list[int] | None:
-        """BFS from the player's position to *goal*, returning move actions.
+        """BFS from the player to *goal*, returning movement actions.
 
-        Walkability is gated by :attr:`walkable`; the goal tile itself
-        may be non-walkable when *allow_target_occupied* is True (common
-        for "approach this ore patch to mine it").
+        Three modes control where the player stops:
+
+        - ``"adjacent_or_on"`` — end adjacent OR on the goal. Used
+          when either is fine (e.g. approaching an occupied machine
+          to withdraw items; walkable tile or blocked tile both OK).
+        - ``"adjacent_only"`` — never step onto the goal, always end
+          adjacent. Used when the goal tile needs to remain empty for
+          a subsequent PLACE/DEPOSIT action.
+        - ``"exactly_on"`` — target must be walkable; end on it. Used
+          for MINE, which reads the block under the player's feet.
 
         Args:
             goal: Target ``(x, y)`` in tile coordinates.
-            allow_target_occupied: When True, the player stops on any
-                walkable tile adjacent to *goal* rather than on *goal*
-                itself. When False, *goal* must be walkable and is the
-                stop tile.
+            mode: One of the strings above.
 
         Returns:
-            List of :class:`Action` integers (``UP``/``DOWN``/...). An
-            empty list means the player is already at the goal. ``None``
+            List of :class:`Action` movement ints. An empty list means
+            the player is already at an acceptable stop tile. ``None``
             means no path exists.
         """
         start = self.player.pos
         if not self.is_in_bounds(goal):
             return None
-        if start == goal:
-            return []
+        if mode not in ("adjacent_or_on", "adjacent_only", "exactly_on"):
+            raise ValueError(f"unknown plan_path mode: {mode!r}")
 
-        # Pre-compute the set of acceptable "done" tiles.
-        if allow_target_occupied:
-            target_set = {
+        if mode == "exactly_on":
+            if not self.walkable[goal[1], goal[0]]:
+                return None
+            target_set = {goal}
+            walkable = self.walkable
+        else:
+            adj = {
                 (tx, ty)
                 for (tx, ty) in self.adjacent_tiles(goal)
                 if self.walkable[ty, tx]
             }
-            # The goal itself is also fine if it's walkable.
-            if self.walkable[goal[1], goal[0]]:
-                target_set.add(goal)
-        else:
-            if not self.walkable[goal[1], goal[0]]:
-                return None
-            target_set = {goal}
+            if mode == "adjacent_or_on":
+                if self.walkable[goal[1], goal[0]]:
+                    adj.add(goal)
+                walkable = self.walkable
+            else:  # "adjacent_only"
+                # Block the goal tile so the BFS can't end on it.
+                walkable = self.walkable.copy()
+                walkable[goal[1], goal[0]] = False
+            target_set = adj
 
         if not target_set:
             return None
         if start in target_set:
             return []
 
-        return _bfs(self.walkable, start, target_set)
+        return _bfs(walkable, start, target_set)
 
 
 # ---------------------------------------------------------------------------

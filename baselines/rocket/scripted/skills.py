@@ -61,7 +61,7 @@ class NavigateAdjacent(Skill):
         if self._is_adjacent(view, view.player.pos):
             return Result.DONE, None
 
-        path = view.plan_path(self.target, allow_target_occupied=True)
+        path = view.plan_path(self.target, mode="adjacent_only")
         if path is None:
             return Result.FAIL, None
         if not path:
@@ -90,7 +90,7 @@ class NavigateTo(Skill):
     def step(self, view: WorldView) -> StepReturn:
         if view.player.pos == self.target:
             return Result.DONE, None
-        path = view.plan_path(self.target, allow_target_occupied=False)
+        path = view.plan_path(self.target, mode="exactly_on")
         if path is None or not path:
             return Result.FAIL, None
         return Result.RUNNING, int(path[0])

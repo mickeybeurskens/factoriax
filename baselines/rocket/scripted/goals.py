@@ -21,10 +21,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import numpy as np
+
 from factoriax.constants import Action, ItemType, MachineType
 
 from .skills import (
-    EmitOnce,
     FaceAndInteract,
     Result,
     Skill,
@@ -136,41 +137,45 @@ _ITEM_TO_CRAFT_ACTION: dict[int, int] = {
 
 
 class CraftItem(Goal):
-    """Emit ``CRAFT_<item>`` until inventory holds ≥ *count* of *item_type*.
+    """Emit ``CRAFT_<item>`` up to *count* times (or until satisfied).
 
-    Crafting is direction-agnostic — no navigation needed. If the
-    player's count doesn't increase after an attempt it means
-    ingredients are missing; the goal reports FAIL so the planner can
-    schedule more gathering.
+    The goal is forgiving by design: if ingredients run out partway,
+    the agent keeps attempting for a small buffer of extra ticks and
+    then moves on. This trades an ideal-world guarantee ("exactly
+    *count* produced") for robustness against resource shortages —
+    downstream goals that need the item will FAIL on their own and
+    the planner will skip them.
     """
 
     name = "CraftItem"
 
-    def __init__(self, item_type: int | ItemType, count: int) -> None:
+    def __init__(
+        self,
+        item_type: int | ItemType,
+        count: int,
+        extra_attempts: int = 2,
+    ) -> None:
         self.item_type = int(item_type)
         if self.item_type not in _ITEM_TO_CRAFT_ACTION:
             raise ValueError(
                 f"item_type {ItemType(self.item_type).name} is not craftable",
             )
         self.count = count
-        self._last_held: int | None = None
-        self._pending: EmitOnce | None = None
+        self._attempts_remaining = count + extra_attempts
+        self._started_held: int | None = None
 
     def step(self, view: WorldView) -> StepReturn:
         held = view.player.held(self.item_type)
+        if self._started_held is None:
+            self._started_held = held
         if held >= self.count:
             return Result.DONE, None
-
-        # If we already emitted a craft action last tick and inventory
-        # didn't grow, the recipe failed — ingredients missing.
-        if self._last_held is not None and held <= self._last_held:
-            return Result.FAIL, None
-
-        # Fire off another craft attempt.
-        self._pending = EmitOnce(_ITEM_TO_CRAFT_ACTION[self.item_type])
-        self._last_held = held
-        result, action = self._pending.step(view)
-        return result, action
+        if self._attempts_remaining <= 0:
+            # Out of attempts; either we made some progress or the
+            # recipe is unsatisfiable. Either way the planner moves on.
+            return Result.DONE, None
+        self._attempts_remaining -= 1
+        return Result.RUNNING, _ITEM_TO_CRAFT_ACTION[self.item_type]
 
 
 # ---------------------------------------------------------------------------
@@ -204,22 +209,34 @@ def on_ore(item_type: int | ItemType) -> LocationPredicate:
     return picker
 
 
-def free_tile_near_player() -> LocationPredicate:
-    """Predicate: pick the nearest empty walkable tile adjacent to the player.
+def free_tile_near_player(max_radius: int = 8) -> LocationPredicate:
+    """Predicate: closest walkable tile that holds no machine.
 
-    Good default for placements that don't need specific adjacency —
-    furnaces, extra belts, pallets in a scaling-up pile.
+    Searches beyond the immediate 4-neighbor ring so a 10th+ placement
+    still finds an empty slot after the player's immediate neighborhood
+    fills up. Returns the Manhattan-nearest candidate; reachability is
+    handled later by the navigator with its own retry budget.
     """
 
     def picker(view: WorldView) -> tuple[int, int] | None:
         px, py = view.player.pos
-        # The tile the player is ON is blocked by the player; look at
-        # the four neighbors and pick any that is walkable with no
-        # machine on it.
-        for nx, ny in view.adjacent_tiles((px, py)):
-            if view.walkable[ny, nx] and view.machine_type[ny, nx] == 0:
-                return (nx, ny)
-        return None
+        empty = view.walkable & (view.machine_type == 0)
+        # Don't propose the player's own tile — they'd have to move to
+        # place on it anyway.
+        empty_np = empty.copy()
+        empty_np[py, px] = False
+        if not empty_np.any():
+            return None
+        ys, xs = np.nonzero(empty_np)
+        dists = np.abs(xs - px) + np.abs(ys - py)
+        within = dists <= max_radius
+        if not within.any():
+            return None
+        xs = xs[within]
+        ys = ys[within]
+        dists = dists[within]
+        idx = int(np.argmin(dists))
+        return (int(xs[idx]), int(ys[idx]))
 
     return picker
 
@@ -284,3 +301,90 @@ def _machine_to_item(machine_type: int) -> int:
         int(MachineType.ROCKET): int(ItemType.ROCKET),
         int(MachineType.FURNACE): int(ItemType.FURNACE),
     }[machine_type]
+
+
+# ---------------------------------------------------------------------------
+# Interaction with placed machines
+# ---------------------------------------------------------------------------
+
+
+class DepositInto(Goal):
+    """Deposit one unit of *item_type* into the nearest *machine_type*.
+
+    Used for loading pallets (to unlock ``pallet_filled``), loading
+    assemblers with inputs, or feeding a furnace. The goal succeeds
+    after a single successful DEPOSIT; repeat the goal to load more.
+    """
+
+    name = "DepositInto"
+
+    def __init__(
+        self,
+        machine_type: int | MachineType,
+        item_type: int | ItemType,
+    ) -> None:
+        self.machine_type = int(machine_type)
+        self.item_type = int(item_type)
+        self._active: FaceAndInteract | None = None
+        self._start_inv: int | None = None
+
+    def step(self, view: WorldView) -> StepReturn:
+        current_inv = view.player.held(self.item_type)
+
+        if self._start_inv is not None and current_inv < self._start_inv:
+            # Inventory went down → deposit succeeded.
+            return Result.DONE, None
+
+        if current_inv < 1:
+            return Result.FAIL, None
+
+        if self._active is None:
+            tiles = view.tiles_with_machine(self.machine_type)
+            if not tiles:
+                return Result.FAIL, None
+            px, py = view.player.pos
+            tiles.sort(key=lambda t: abs(t[0] - px) + abs(t[1] - py))
+            target = tiles[0]
+            self._start_inv = current_inv
+            from .world_model import deposit_action  # noqa: PLC0415
+
+            self._active = FaceAndInteract(target, deposit_action(self.item_type))
+
+        result, action = self._active.step(view)
+        if result is Result.DONE:
+            # FaceAndInteract finished emitting its action; next tick will
+            # detect the inventory drop and report DONE itself.
+            self._active = None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            self._active = None
+            return Result.FAIL, None
+        return Result.RUNNING, action
+
+
+class WaitUntil(Goal):
+    """Emit ``NOOP`` until *predicate* returns True or the budget expires.
+
+    Useful for waiting on timed game events — ``automated_mining``
+    fires one tick after a miner is placed on ore; ``first_assembly``
+    fires after the assembler's recipe timer completes.
+    """
+
+    name = "WaitUntil"
+
+    def __init__(
+        self,
+        predicate: Callable[[WorldView], bool],
+        max_ticks: int,
+    ) -> None:
+        self.predicate = predicate
+        self.max_ticks = max_ticks
+        self._ticks = 0
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self.predicate(view):
+            return Result.DONE, None
+        if self._ticks >= self.max_ticks:
+            return Result.FAIL, None
+        self._ticks += 1
+        return Result.RUNNING, int(Action.NOOP)
