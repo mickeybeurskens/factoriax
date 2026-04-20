@@ -15,9 +15,25 @@ if [ -n "$STAGED" ]; then
     uv run ruff format --check $STAGED
 fi
 
-echo "[pre-commit] Running fast tests (skipping @pytest.mark.slow)..."
-echo "[pre-commit] The full suite — including JIT-heavy integration"
-echo "[pre-commit] tests (invariants, smoke, benchmarks, debugger) — runs in CI."
-uv run pytest tests/ -x -q -m "not slow"
+# Skip tests unless a staged file could actually change their outcome:
+# anything under factoriax/ (production code), tests/ (the tests
+# themselves + conftest), or the dependency manifest. Commits that only
+# touch scripts/, baselines/, docs/, paper/, or top-level text files
+# don't need the ~70s test run.
+TEST_RELEVANT=$(
+    git diff --cached --name-only --diff-filter=ACMR \
+        | grep -E '^(factoriax/|tests/|pyproject\.toml$|uv\.lock$)' \
+        || true
+)
+
+if [ -z "$TEST_RELEVANT" ]; then
+    echo "[pre-commit] No staged changes under factoriax/, tests/, or"
+    echo "[pre-commit] dependency manifests; skipping pytest."
+else
+    echo "[pre-commit] Running fast tests (skipping @pytest.mark.slow)..."
+    echo "[pre-commit] The full suite — including JIT-heavy integration"
+    echo "[pre-commit] tests (invariants, smoke, benchmarks, debugger) — runs in CI."
+    uv run pytest tests/ -x -q -m "not slow"
+fi
 
 echo "[pre-commit] All checks passed."
