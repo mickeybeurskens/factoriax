@@ -22,7 +22,6 @@ from factoriax.constants import (
     ROTATE_ACTION_TO_DIR,
     ROTATE_BASE,
     SCIENCE_PACK_TO_TECH,
-    WITHDRAW_BASE,
     Action,
     BlockType,
     Direction,
@@ -349,22 +348,14 @@ def deposit_to_adjacent(
 def withdraw_from_adjacent(
     state: EnvState,
     player_idx: int | jax.Array,
-    item_type: int | jax.Array,
 ) -> EnvState:
-    """Withdraw an item from the machine in front of the player.
+    """Withdraw from the output slot of the machine in front of the player.
 
-    For assemblers: withdraws from asm_out slot.
-    For buffer machines: withdraws from buffer.
-
-    Args:
-        state: Current environment state.
-        player_idx: Player index.
-        item_type: ItemType to withdraw.
-
-    Returns:
-        Updated state.
+    Each machine exposes exactly one output slot at a time
+    (``ent_asm_out`` for combiners mid-cycle, otherwise ``ent_buf``),
+    so the player doesn't specify an item — whatever is there gets
+    pulled. Matches the single-action PICKUP / MINE shape.
     """
-    item_type = jnp.int32(item_type)
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
@@ -372,31 +363,33 @@ def withdraw_from_adjacent(
     sy = jnp.clip(ty, 0, map_h - 1)
 
     mt = jnp.where(in_bounds, state.machine_types[sy, sx], MachineType.NONE)
-    player_count = state.player_inventory[player_idx, item_type]
-    player_max = PLAYER_MAX_STACK[item_type]
-    has_space = player_count < player_max
+    is_machine = in_bounds & (mt != MachineType.NONE)
 
-    # Entity lookup for the target tile.
     max_e = state.ent_y.shape[0]
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    is_combiner = (mt == MachineType.ASSEMBLER) | (mt == MachineType.FURNACE)
-
-    # Withdraw from combiner output.
-    out_match = state.ent_asm_out_type[eidx] == item_type
+    # Prefer ``asm_out`` when populated (combiner mid-cycle); otherwise
+    # read from ``buf``. Phase 4 of ``run_combiners`` drains ``asm_out``
+    # → ``buf`` every tick, so the two slots are mutually exclusive for
+    # any single entity.
     out_has = state.ent_asm_out_count[eidx] > 0
-    can_withdraw_asm = in_bounds & is_combiner & out_match & out_has & has_space
-
-    # Withdraw from buffer. Applies to combiners too: ``run_combiners``
-    # Phase 4 always moves the recipe output from ``ent_asm_out_*`` into
-    # ``ent_buf_*`` on the next tick, so without this path the combiner
-    # branch above finds an empty ``asm_out`` and withdraws nothing.
-    buf_match = state.ent_buf_type[eidx] == item_type
     buf_has = state.ent_buf_count[eidx] > 0
-    is_buf = mt != MachineType.NONE
-    can_withdraw_buf = in_bounds & is_buf & buf_match & buf_has & has_space
+    use_asm = is_machine & out_has
+    use_buf = is_machine & ~out_has & buf_has
 
+    item_type = jnp.where(
+        use_asm,
+        state.ent_asm_out_type[eidx],
+        state.ent_buf_type[eidx],
+    ).astype(jnp.int32)
+
+    player_count = state.player_inventory[player_idx, item_type]
+    player_max = PLAYER_MAX_STACK[item_type]
+    has_space = player_count < player_max
+
+    can_withdraw_asm = use_asm & has_space
+    can_withdraw_buf = use_buf & has_space
     can_withdraw = can_withdraw_asm | can_withdraw_buf
     transfer = jnp.where(can_withdraw, jnp.int16(1), jnp.int16(0))
 
@@ -498,11 +491,6 @@ def _handle_player_action(
         0,
         NUM_ITEM_TYPES - 1,
     )
-    withdraw_item = jnp.clip(
-        action - WITHDRAW_BASE + int(ItemType.COAL),
-        0,
-        NUM_ITEM_TYPES - 1,
-    )
     research_pack = RESEARCH_ACTION_TO_PACK[
         jnp.clip(
             action - Action.RESEARCH_BASIC,
@@ -535,11 +523,7 @@ def _handle_player_action(
         6,
         cat,
     )
-    cat = jnp.where(
-        (action >= Action.WITHDRAW_COAL) & (action <= Action.WITHDRAW_REFRACTORY),
-        7,
-        cat,
-    )
+    cat = jnp.where(action == Action.WITHDRAW, 7, cat)
     cat = jnp.where(
         (action >= Action.RESEARCH_BASIC) & (action <= Action.RESEARCH_ADVANCED),
         8,
@@ -557,7 +541,7 @@ def _handle_player_action(
             lambda s: pickup_machine(s, player_idx),
             lambda s: set_machine_direction(s, player_idx, rotate_dir),
             lambda s: deposit_to_adjacent(s, player_idx, deposit_item),
-            lambda s: withdraw_from_adjacent(s, player_idx, withdraw_item),
+            lambda s: withdraw_from_adjacent(s, player_idx),
             lambda s: apply_research(s, player_idx, research_pack),
         ],
         state,

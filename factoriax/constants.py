@@ -410,44 +410,21 @@ class Action(IntEnum):
     DEPOSIT_FURNACE = 60
     DEPOSIT_REFRACTORY = 61
 
-    # Withdraw — one per non-EMPTY item type (24)
-    WITHDRAW_COAL = 62
-    WITHDRAW_IRON_ORE = 63
-    WITHDRAW_COPPER_ORE = 64
-    WITHDRAW_TIN_ORE = 65
-    WITHDRAW_SILICON = 66
-    WITHDRAW_IRON_PLATE = 67
-    WITHDRAW_COPPER_PLATE = 68
-    WITHDRAW_TIN_PLATE = 69
-    WITHDRAW_WAFER = 70
-    WITHDRAW_FRAME = 71
-    WITHDRAW_CIRCUIT = 72
-    WITHDRAW_WIRE = 73
-    WITHDRAW_MOTOR = 74
-    WITHDRAW_SENSOR = 75
-    WITHDRAW_BELT = 76
-    WITHDRAW_MINER = 77
-    WITHDRAW_ASSEMBLER = 78
-    WITHDRAW_PALLET = 79
-    WITHDRAW_ARM = 80
-    WITHDRAW_BASIC_SCIENCE = 81
-    WITHDRAW_ADV_SCIENCE = 82
-    WITHDRAW_ROCKET = 83
-    WITHDRAW_FURNACE = 84
-    WITHDRAW_REFRACTORY = 85
+    # Withdraw — single action; machines have one output slot so no
+    # per-item selection is needed (mirrors PICKUP / MINE).
+    WITHDRAW = 62
 
     # Machine rotation — absolute direction set (4)
-    ROTATE_LEFT = 86
-    ROTATE_RIGHT = 87
-    ROTATE_UP = 88
-    ROTATE_DOWN = 89
+    ROTATE_LEFT = 63
+    ROTATE_RIGHT = 64
+    ROTATE_UP = 65
+    ROTATE_DOWN = 66
 
 
 # Base offsets for arithmetic dispatch of compound actions.
 PLACE_BASE: int = Action.PLACE_MINER
 CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
 DEPOSIT_BASE: int = Action.DEPOSIT_COAL
-WITHDRAW_BASE: int = Action.WITHDRAW_COAL
 ROTATE_BASE: int = Action.ROTATE_LEFT
 
 # Maps PLACE_* action offset (0..6) to the ItemType of the machine placed.

@@ -132,14 +132,14 @@ class TestDepositAction:
 
 
 class TestWithdrawAction:
-    """CONFIRM in machine menu with machine panel active emits WITHDRAW_*."""
+    """CONFIRM in the machine panel always emits the single WITHDRAW action."""
 
-    def test_withdraw_emits_valid_action(
+    def test_withdraw_emits_single_action(
         self,
         game_ui: GameUI,
         state_factory,
     ) -> None:
-        """Withdrawing coal emits WITHDRAW_COAL."""
+        """Machines have one output slot; CONFIRM emits WITHDRAW regardless of focus."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
             dtype=MACHINE_INVENTORY_COUNT_DTYPE,
@@ -156,41 +156,12 @@ class TestWithdrawAction:
         )
         ps = game_ui.play_state
         ps.machine_open = True
-        ps.machine_panel_active = True  # machine panel active
+        ps.machine_panel_active = True
         ps.machine_tx, ps.machine_ty = 0, 0
         ps.focused_machine_item = int(ItemType.COAL)
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.WITHDRAW_COAL)
-
-    def test_withdraw_copper(
-        self,
-        game_ui: GameUI,
-        state_factory,
-    ) -> None:
-        """Withdrawing copper emits WITHDRAW_COPPER."""
-        machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
-        )
-        machine_inv = machine_inv.at[1, 1, int(ItemType.COPPER_ORE)].set(5)
-        state = state_factory(
-            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
-            machine_types=jnp.full(
-                (4, 4),
-                int(MachineType.MINER),
-                dtype=jnp.int32,
-            ),
-            machine_inventory=machine_inv,
-        )
-        ps = game_ui.play_state
-        ps.machine_open = True
-        ps.machine_panel_active = True
-        ps.machine_tx, ps.machine_ty = 1, 1
-        ps.focused_machine_item = int(ItemType.COPPER_ORE)
-
-        result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.WITHDRAW_COPPER_ORE)
+        assert result.action == int(Action.WITHDRAW)
 
 
 # ---------------------------------------------------------------------------

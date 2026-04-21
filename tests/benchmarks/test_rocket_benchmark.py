@@ -112,7 +112,7 @@ def test_rocket_benchmark_exposes_blocked_actions() -> None:
         Action.MINE,
         Action.UP,
         Action.PLACE_MINER,
-        Action.WITHDRAW_IRON_PLATE,
+        Action.WITHDRAW,
         Action.DEPOSIT_COAL,
     ):
         assert int(allowed) not in bench.blocked_actions

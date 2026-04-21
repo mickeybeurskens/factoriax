@@ -223,7 +223,7 @@ class TestCompoundWithdraw:
             .set(int(ItemType.IRON_ORE)),
             buffer_count=jnp.zeros((3, 3), dtype=jnp.int16).at[1, 1].set(8),
         )
-        new = withdraw_from_adjacent(state, 0, int(ItemType.IRON_ORE))
+        new = withdraw_from_adjacent(state, 0)
         eid = int(state.tile_entity[1, 1])
         assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 1
         assert int(new.ent_buf_count[eid]) == 7
@@ -246,7 +246,7 @@ class TestCompoundWithdraw:
             .at[1, 1]
             .set(MachineType.MINER),
         )
-        new = withdraw_from_adjacent(state, 0, int(ItemType.IRON_ORE))
+        new = withdraw_from_adjacent(state, 0)
         assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 0
 
 

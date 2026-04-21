@@ -351,7 +351,7 @@ class TestWithdrawFromPallet:
             buffer_count=bc,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
+        state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 1
@@ -366,7 +366,7 @@ class TestWithdrawFromPallet:
             machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
+        state = withdraw_from_adjacent(state, 0)
 
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
 
@@ -378,7 +378,7 @@ class TestWithdrawFromPallet:
             player_direction=Direction.RIGHT,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
+        state = withdraw_from_adjacent(state, 0)
 
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
 
@@ -398,7 +398,7 @@ class TestWithdrawFromMiner:
             buffer_count=bc,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
+        state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 1
@@ -420,29 +420,11 @@ class TestWithdrawFromAssembler:
             asm_out_count=aoc,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.FRAME)
+        state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
         assert int(state.player_inventory[0, ItemType.FRAME]) == 1
         assert int(state.ent_asm_out_count[eidx]) == 4
-
-    def test_withdraw_wrong_type_from_assembler_rejected(self, state_factory) -> None:
-        """Withdrawing a type that doesn't match asm_out should fail."""
-        aot, aoc = _asm_out_grids(3, 3, {(1, 2): (ItemType.FRAME, 5)})
-        state = state_factory(
-            world_map=_DIRT_3X3,
-            player_position=(1, 1),
-            player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
-            asm_out_type=aot,
-            asm_out_count=aoc,
-        )
-
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
-
-        eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
-        assert int(state.ent_asm_out_count[eidx]) == 5
 
 
 class TestWithdrawMergesIntoInventory:
@@ -462,7 +444,7 @@ class TestWithdrawMergesIntoInventory:
             buffer_count=bc,
         )
 
-        state = withdraw_from_adjacent(state, 0, ItemType.IRON_ORE)
+        state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 4
@@ -497,7 +479,7 @@ class TestDepositWithdrawViaStep:
         assert int(state.player_inventory[0, ItemType.COAL]) == 4
 
     def test_withdraw_via_step(self, state_factory) -> None:
-        """WITHDRAW_IRON action through the full step pipeline."""
+        """WITHDRAW action pulls from the buffer slot regardless of item."""
         import jax
 
         from factoriax.game_logic import factoriax_step
@@ -515,7 +497,7 @@ class TestDepositWithdrawViaStep:
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         rng = jax.random.PRNGKey(0)
 
-        state = factoriax_step(rng, state, Action.WITHDRAW_IRON_ORE, params)
+        state = factoriax_step(rng, state, Action.WITHDRAW, params)
 
         eidx = _ent_lookup(state, 1, 2)
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 1

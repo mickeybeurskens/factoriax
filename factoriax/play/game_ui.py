@@ -36,7 +36,6 @@ from factoriax.constants import (
     PLACEABLE_ITEMS,
     ROTATE_BASE,
     TURN_RIGHT_MAP,
-    WITHDRAW_BASE,
     Action,
     Direction,
     ItemType,
@@ -434,24 +433,12 @@ class GameUI:
                     ps.machine_panel_active = False
             elif hit.action == "cycle_prev":
                 items = PLACEABLE_ITEM_LIST
-                idx = (
-                    items.index(ps.selected_item)
-                    if ps.selected_item in items
-                    else 0
-                )
-                ps.selected_item = items[
-                    (idx - 1) % len(items)
-                ]
+                idx = items.index(ps.selected_item) if ps.selected_item in items else 0
+                ps.selected_item = items[(idx - 1) % len(items)]
             elif hit.action == "cycle_next":
                 items = PLACEABLE_ITEM_LIST
-                idx = (
-                    items.index(ps.selected_item)
-                    if ps.selected_item in items
-                    else -1
-                )
-                ps.selected_item = items[
-                    (idx + 1) % len(items)
-                ]
+                idx = items.index(ps.selected_item) if ps.selected_item in items else -1
+                ps.selected_item = items[(idx + 1) % len(items)]
             elif hit.action == "place_selected":
                 place_action = _ITEM_TO_PLACE_ACTION.get(
                     ps.selected_item,
@@ -496,7 +483,9 @@ class GameUI:
 
         if event.key == pygame.K_ESCAPE:
             return self._dispatch_actions(
-                frozenset(), state, is_escape=True,
+                frozenset(),
+                state,
+                is_escape=True,
             )
 
         mods = pygame.key.get_mods()
@@ -615,7 +604,9 @@ class GameUI:
             actions = resolve_controller_button(lookup, event.button)
         elif event.type == pygame.JOYHATMOTION:
             actions = resolve_controller_hat(
-                lookup, event.hat, event.value,
+                lookup,
+                event.hat,
+                event.value,
             )
 
         if not actions:
@@ -696,11 +687,12 @@ class GameUI:
                 # Cycle focused_machine_item through non-empty types
                 # in the machine's inventory.
                 machine_inv = _entity_inventory(
-                    state, ps.machine_ty, ps.machine_tx,
+                    state,
+                    ps.machine_ty,
+                    ps.machine_tx,
                 )
                 active = [
-                    i for i in range(1, NUM_ITEM_TYPES)
-                    if int(machine_inv[i]) > 0
+                    i for i in range(1, NUM_ITEM_TYPES) if int(machine_inv[i]) > 0
                 ]
                 if active and ps.focused_machine_item in active:
                     idx = active.index(ps.focused_machine_item)
@@ -715,9 +707,9 @@ class GameUI:
                 ps.selected_item = new_item
         elif PlayerAction.CONFIRM in actions:
             if ps.machine_panel_active:
-                item = ps.focused_machine_item
-                if int(ItemType.COAL) <= item <= int(ItemType.ADVANCED_SCIENCE_PACK):
-                    action = WITHDRAW_BASE + item - int(ItemType.COAL)
+                # Engine withdraws whatever is in the target machine's
+                # output slot — item focus is purely a UI affordance.
+                action = int(Action.WITHDRAW)
             else:
                 item = ps.selected_item
                 if int(ItemType.COAL) <= item <= int(ItemType.ADVANCED_SCIENCE_PACK):
@@ -779,7 +771,6 @@ class GameUI:
             return int(Action.RESEARCH_BASIC) + ps.research_selection
         return None
 
-
     def _handle_crafting_nav(
         self,
         actions: frozenset[str],
@@ -813,7 +804,8 @@ class GameUI:
 
         if PlayerAction.INTERACT in actions:
             action = _handle_world_interact(
-                state, self._ps.selected_item,
+                state,
+                self._ps.selected_item,
             )
         elif PlayerAction.ROTATE in actions:
             action = _rotate_action_for_tile(state)
@@ -839,9 +831,7 @@ class GameUI:
                 return state, action
 
             # Movement (face-then-move).
-            for move_action, (want_dir, move_act, face_act) in (
-                _MOVE_TO_DIR.items()
-            ):
+            for move_action, (want_dir, move_act, face_act) in _MOVE_TO_DIR.items():
                 if move_action in actions:
                     sel = int(state.selected_player)
                     facing = int(state.player_directions[sel])
