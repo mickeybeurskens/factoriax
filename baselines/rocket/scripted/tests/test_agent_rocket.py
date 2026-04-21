@@ -109,12 +109,14 @@ def test_rocket_agent_unlocks_basic_tier() -> None:
 
 
 def test_rocket_agent_unlocks_all_achievements() -> None:
-    """The scripted agent should unlock all 34 rocket achievements.
+    """The scripted agent should unlock all 38 rocket achievements.
 
-    Uses a 8000-step budget because machine-based production is much
-    slower than hand-crafting (deposit + wait + withdraw per item).
+    Uses a 16000-step budget because the factory-scale pipeline
+    requires ~170 smelts, ~80 intermediates, 18 sub-assemblies, 7
+    machine types, and the 300-tick rocket itself — all through one
+    pre-placed furnace + one pre-placed assembler (serial).
     """
-    mask, timing = _run_agent(max_steps=8000)
+    mask, timing = _run_agent(max_steps=16000)
     missing = _missing_names(mask)
     timing_str = ", ".join(
         f"{ROCKET_ACHIEVEMENT_INFO[i].id}@{timing[i]}"

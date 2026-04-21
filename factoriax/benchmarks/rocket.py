@@ -459,12 +459,13 @@ class RocketBenchmark:
 
     def levels(self) -> list[BenchmarkLevel]:
         """Return the single canonical rocket level."""
-        # Step budget increased from the original 2000: machine-based
-        # production adds ~10 steps per output item (deposit + wait +
-        # withdraw) so a full rocket build needs substantially more
-        # headroom than a pure hand-craft plan would.
+        # Step budget scaled for the new pipeline: ~170 smelts +
+        # ~80 intermediates + 18 sub-assemblies + 7 machine types +
+        # the 300-tick rocket. Per-cycle cost is dominated by
+        # deposit → wait → withdraw round-trips (no output buffer),
+        # so we need headroom beyond the raw recipe ticks.
         params = EnvParams(
-            max_timesteps=8000,
+            max_timesteps=16000,
             map_width=_MAP_SIZE,
             map_height=_MAP_SIZE,
             num_players=1,
@@ -475,7 +476,7 @@ class RocketBenchmark:
                 description=(
                     "Rocket from ore patches on a 32x32 map. Furnace and "
                     "assembler are pre-placed next to spawn; hand-craft "
-                    "actions are masked. Episode ends at T=8000; score "
+                    "actions are masked. Episode ends at T=16000; score "
                     "is the weighted sum of unlocked achievements."
                 ),
                 level=build_rocket_level(),

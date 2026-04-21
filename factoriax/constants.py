@@ -425,16 +425,20 @@ class Action(IntEnum):
     DEPOSIT_ROCKET = 59
     DEPOSIT_FURNACE = 60
     DEPOSIT_REFRACTORY = 61
+    DEPOSIT_HULL = 62
+    DEPOSIT_ENGINE_UNIT = 63
+    DEPOSIT_AVIONICS = 64
+    DEPOSIT_ROCKET_CORE = 65
 
     # Withdraw — single action; machines have one output slot so no
     # per-item selection is needed (mirrors PICKUP / MINE).
-    WITHDRAW = 62
+    WITHDRAW = 66
 
     # Machine rotation — absolute direction set (4)
-    ROTATE_LEFT = 63
-    ROTATE_RIGHT = 64
-    ROTATE_UP = 65
-    ROTATE_DOWN = 66
+    ROTATE_LEFT = 67
+    ROTATE_RIGHT = 68
+    ROTATE_UP = 69
+    ROTATE_DOWN = 70
 
 
 # Base offsets for arithmetic dispatch of compound actions.

@@ -77,6 +77,10 @@ _ITEM_TO_DEPOSIT: dict[int, int] = {
     int(ItemType.ROCKET): int(Action.DEPOSIT_ROCKET),
     int(ItemType.FURNACE): int(Action.DEPOSIT_FURNACE),
     int(ItemType.REFRACTORY): int(Action.DEPOSIT_REFRACTORY),
+    int(ItemType.HULL): int(Action.DEPOSIT_HULL),
+    int(ItemType.ENGINE_UNIT): int(Action.DEPOSIT_ENGINE_UNIT),
+    int(ItemType.AVIONICS): int(Action.DEPOSIT_AVIONICS),
+    int(ItemType.ROCKET_CORE): int(Action.DEPOSIT_ROCKET_CORE),
 }
 _MACHINE_TO_PLACE: dict[int, int] = {
     int(MachineType.MINER): int(Action.PLACE_MINER),

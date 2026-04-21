@@ -519,7 +519,7 @@ def _handle_player_action(
         cat,
     )
     cat = jnp.where(
-        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_REFRACTORY),
+        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_ROCKET_CORE),
         6,
         cat,
     )
