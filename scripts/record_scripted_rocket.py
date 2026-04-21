@@ -29,6 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from baselines.rocket.scripted.agent import make_scripted_rocket_agent
+from baselines.rocket.scripted.agent_factory import make_factory_rocket_agent
 from factoriax.analysis.trajectory import states_to_trajectory
 from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
@@ -47,10 +48,17 @@ from factoriax.state import EnvParams
 logger = logging.getLogger(__name__)
 
 
+_AGENTS: dict[str, object] = {
+    "naive": make_scripted_rocket_agent,
+    "factory": make_factory_rocket_agent,
+}
+
+
 def record(
     out_path: Path,
     max_steps: int,
     seed: int,
+    agent_kind: str = "naive",
 ) -> dict[str, object]:
     """Run the scripted agent and save its trajectory.
 
@@ -74,7 +82,11 @@ def record(
 
     env = FactoriaXEnv()
     jit_step = jax.jit(env.step_env)
-    agent = make_scripted_rocket_agent(env_params)
+    if agent_kind not in _AGENTS:
+        raise ValueError(
+            f"unknown agent {agent_kind!r}; choose from {list(_AGENTS)}",
+        )
+    agent = _AGENTS[agent_kind](env_params)
 
     # The unwrapped env emits 0 reward every step — the rocket reward
     # lives on :class:`AchievementWrapper`, which we can't use here
@@ -163,12 +175,18 @@ def main() -> None:
         help="Episode budget (default 8000, matches the integration test).",
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--agent",
+        choices=sorted(_AGENTS.keys()),
+        default="naive",
+        help="Which scripted agent to record (naive or factory).",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    logger.info("Recording scripted agent -> %s", args.out)
+    logger.info("Recording %s agent -> %s", args.agent, args.out)
 
-    summary = record(args.out, args.max_steps, args.seed)
+    summary = record(args.out, args.max_steps, args.seed, args.agent)
 
     logger.info(
         "Recorded %d steps in %.1fs (%d/%d achievements unlocked).",
