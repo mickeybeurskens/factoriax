@@ -1,134 +1,190 @@
 """Factory-oriented variant of the scripted rocket agent.
 
-Contrasts with :mod:`baselines.rocket.scripted.agent` (the "naive"
-agent that runs everything serially through the pre-placed furnace
-+ assembler). This variant:
+Sets up per-ore-node factories before launching the rocket chain:
 
-1. Spends a small starter phase to hand-mine just enough ore to
-   build 2 extra furnaces + 2 extra assemblers via the pre-placed
-   starter machines.
-2. Deploys the extra machines near spawn, giving the map 3 active
-   furnaces and 3 active assemblers.
-3. Uses :class:`PipelinedProduce` to rotate bulk smelting and
-   intermediate assembly across the 3-machine batteries, keeping
-   each one running while the agent services the others.
-4. Continues the rocket sub-assembly chain at one assembler while
-   the other two produce components in parallel.
-5. Wraps up with the same achievement-fill placements (miner, belt,
-   pallet, arm) the naive agent uses.
+- Each non-coal patch (iron, copper, tin, silicon) gets a miner +
+  pallet + local furnace, laid out in a vertical strip just south
+  of the patch. The miner is placed facing DOWN so its per-tick
+  extraction pushes straight into the pallet; the furnace sits one
+  more tile south for the agent to deposit ore and withdraw plates.
+- Coal gets a snake: four miners arranged in an L that feed each
+  other (M1 → M2 → M3 → M4 → pallet), ending at a pallet on the
+  dirt tile east of the patch.
 
-Composed entirely from existing skills — no engine changes. The
-only new piece is :class:`PipelinedProduce` in
-:mod:`baselines.rocket.scripted.goals`.
+Directions are explicit via :class:`PlaceMachineAt`, which picks a
+stand tile opposite the facing direction so the engine's "machine
+faces player's direction" rule lands the miner's push in the right
+tile.
+
+The rest of the plan (bulk intermediates → rocket sub-assemblies →
+rocket) reuses sequential :class:`ProduceInMachine` goals. No
+``PipelinedProduce`` — the cross-goal debris problem isn't worth
+the speedup here.
 """
 
 from __future__ import annotations
 
-from factoriax.constants import ItemType, MachineType
+from factoriax.constants import Direction, ItemType, MachineType
 from factoriax.state import EnvParams
 
-from .agent import (
-    ScriptedAgent,
-    _any_assembler_has_output_predicate,
-    _miner_has_output_predicate,
-)
+from .agent import ScriptedAgent, _miner_has_output_predicate
 from .goals import (
     DepositInto,
     Goal,
     MineOre,
-    PipelinedProduce,
     PlaceMachine,
+    PlaceMachineAt,
     ProduceInAssembler,
     ProduceInFurnace,
     WaitUntil,
     free_tile_near_player,
-    on_ore,
 )
 from .planner import Planner
 
+# ---------------------------------------------------------------------------
+# Node factory layouts. Each non-coal patch is 3×3; the strip below
+# the south edge holds miner → pallet → furnace.
+# ---------------------------------------------------------------------------
+
+
+def _node_factory(
+    patch_x: int,
+    patch_y_bottom: int,
+) -> list[Goal]:
+    """Miner + pallet + furnace strip south of an ore patch.
+
+    Placement order matters: furnace first (furthest south, keeps
+    the tiles above walkable), then pallet, then miner.
+
+    Args:
+        patch_x: X of the patch center (middle column).
+        patch_y_bottom: Y of the patch's south edge (a valid ore tile).
+    """
+    miner_tile = (patch_x, patch_y_bottom)
+    pallet_tile = (patch_x, patch_y_bottom + 1)
+    furnace_tile = (patch_x, patch_y_bottom + 2)
+    return [
+        # Furnace points UP — direction doesn't matter for furnaces,
+        # but we need *some* facing. Stand is two south, face UP.
+        PlaceMachineAt(MachineType.FURNACE, furnace_tile, int(Direction.UP)),
+        # Pallet. Stand on the ore tile just north of the pallet,
+        # face DOWN.
+        PlaceMachineAt(MachineType.PALLET, pallet_tile, int(Direction.DOWN)),
+        # Miner on the patch edge. Stand one tile further north (on
+        # ore, still walkable) facing DOWN. Miner pushes DOWN into
+        # the pallet we just placed.
+        PlaceMachineAt(MachineType.MINER, miner_tile, int(Direction.DOWN)),
+    ]
+
+
+def _coal_snake() -> list[Goal]:
+    """Four coal miners chained into a pallet east of the patch.
+
+    Layout (coal patch at (7-9, 22-24)):
+
+        (7,22) M1↓
+        (7,23) M2→ (8,23) M3→ (9,23) M4→ (10,23) Pallet
+    """
+    return [
+        # Pallet first — the eastern terminus. Stand two east, face
+        # LEFT. Pallet ends up at (10, 23).
+        PlaceMachineAt(MachineType.PALLET, (10, 23), int(Direction.LEFT)),
+        # M4: push east into pallet. Stand at (8, 23) (coal, walkable)
+        # facing RIGHT.
+        PlaceMachineAt(MachineType.MINER, (9, 23), int(Direction.RIGHT)),
+        # M3: push east into M4. Stand at (7, 23) facing RIGHT.
+        PlaceMachineAt(MachineType.MINER, (8, 23), int(Direction.RIGHT)),
+        # M2: push east into M3. Stand at (6, 23) facing RIGHT.
+        PlaceMachineAt(MachineType.MINER, (7, 23), int(Direction.RIGHT)),
+        # M1: push south into M2. Stand at (7, 21) facing DOWN.
+        PlaceMachineAt(MachineType.MINER, (7, 22), int(Direction.DOWN)),
+    ]
+
 
 def build_factory_rocket_goals() -> list[Goal]:
-    """Goal list for the factory-building variant.
+    """Goal list for the node-factory variant.
 
-    Starter budget pays for 2 extra furnaces (2 iron + 2 refractory)
-    and 2 extra assemblers (2 frame + 2 circuit = 2 iron + 2 tin +
-    2 copper + 2 wafer). Plus slack for starter wires/frames used up
-    before the factory is online.
+    Phase layout:
 
-    Bulk targets match the naive agent (see
-    :func:`baselines.rocket.scripted.agent.build_rocket_goals` for
-    the derivation). The speedup — if any — comes from keeping 3
-    furnaces and 3 assemblers running simultaneously instead of one
-    at a time.
+    A. Hand-mine raw ore for the starter infrastructure.
+    B. Hand-smelt starter plates via the pre-placed furnace.
+    C. Assemble the 8 miners + 5 pallets + 4 furnaces.
+    D. Deploy node factories (iron/copper/tin/silicon) and the
+       coal snake with explicit facings so miners push directly
+       into pallets.
+    E. Wait for automation to spin up.
+    F-H. Bulk ore → plates → intermediates → sub-assemblies → rocket.
+    I. Final placements for achievements.
     """
-    _ = _any_assembler_has_output_predicate  # keep import symmetrical
     return [
-        # ---- Phase A — starter mining ----
-        # Enough for 2 extra furnaces + 2 extra assemblers + slack.
-        MineOre(ItemType.IRON_ORE, 8),
-        MineOre(ItemType.COPPER_ORE, 5),
-        MineOre(ItemType.TIN_ORE, 5),
-        MineOre(ItemType.COAL, 3),
-        MineOre(ItemType.SILICON, 3),
-        # ---- Phase B — starter smelts via pre-placed furnace ----
-        ProduceInFurnace(ItemType.IRON_PLATE, 8),
-        ProduceInFurnace(ItemType.COPPER_PLATE, 5),
-        ProduceInFurnace(ItemType.TIN_PLATE, 5),
-        ProduceInFurnace(ItemType.WAFER, 3),
-        ProduceInFurnace(ItemType.REFRACTORY, 3),
-        # ---- Phase C — starter factory components ----
-        # 2 extra furnaces + 2 extra assemblers.
-        ProduceInAssembler(ItemType.WIRE, 2),  # buffer wire
-        ProduceInAssembler(ItemType.FRAME, 2),  # for 2 assemblers
-        ProduceInAssembler(ItemType.CIRCUIT, 2),  # for 2 assemblers
-        ProduceInAssembler(ItemType.FURNACE, 2),
-        ProduceInAssembler(ItemType.ASSEMBLER, 2),
-        # ---- Phase D — deploy extra machines near spawn ----
-        PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
-        PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
-        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
-        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
-        # ---- Phase E — bulk mining (parallel smelting pays off now) ----
-        MineOre(ItemType.IRON_ORE, 55),
-        MineOre(ItemType.COPPER_ORE, 60),
-        MineOre(ItemType.TIN_ORE, 60),
+        # ---- Phase A — starter hand-mining ----
+        # 8 miners (8 iron + 8 wire = 8 iron + 8 copper + 8 tin),
+        # 5 pallets (5 tin + 5 wire = 5 copper + 10 tin),
+        # 4 furnaces (4 iron + 4 refractory = 4 iron + 4 coal).
+        # Totals: iron 12, copper 13, tin 18, coal 4.
+        MineOre(ItemType.IRON_ORE, 15),
+        MineOre(ItemType.COPPER_ORE, 14),
+        MineOre(ItemType.TIN_ORE, 20),
         MineOre(ItemType.COAL, 5),
+        # ---- Phase B — starter smelts ----
+        ProduceInFurnace(ItemType.IRON_PLATE, 12),
+        ProduceInFurnace(ItemType.COPPER_PLATE, 13),
+        ProduceInFurnace(ItemType.TIN_PLATE, 18),
+        ProduceInFurnace(ItemType.REFRACTORY, 4),
+        # ---- Phase C — starter components ----
+        ProduceInAssembler(ItemType.WIRE, 13),
+        ProduceInAssembler(ItemType.MINER, 8),
+        ProduceInAssembler(ItemType.PALLET, 5),
+        ProduceInAssembler(ItemType.FURNACE, 4),
+        # ---- Phase D — deploy factories with explicit facings ----
+        # Iron patch at (7-9, 7-9). Strip: miner (8, 9) DOWN, pallet
+        # (8, 10), furnace (8, 11).
+        *_node_factory(patch_x=8, patch_y_bottom=9),
+        # Copper patch at (22-24, 7-9).
+        *_node_factory(patch_x=23, patch_y_bottom=9),
+        # Tin patch at (22-24, 22-24). Strip south of patch.
+        *_node_factory(patch_x=23, patch_y_bottom=24),
+        # Silicon patch at (14-16, 3-5). Strip south of patch.
+        *_node_factory(patch_x=15, patch_y_bottom=5),
+        # Coal snake on the coal patch (7-9, 22-24).
+        *_coal_snake(),
+        # ---- Phase E — let the automation warm up ----
+        WaitUntil(_miner_has_output_predicate(), max_ticks=30),
+        # ---- Phase F — bulk hand-mining (automation is supplementary) ----
+        # The placed miners push directly into their pallets, but we
+        # can't count on agent timing to drain them promptly. Hand
+        # mining is still the reliable bulk path.
+        MineOre(ItemType.IRON_ORE, 45),
+        MineOre(ItemType.COPPER_ORE, 50),
+        MineOre(ItemType.TIN_ORE, 42),
         MineOre(ItemType.SILICON, 22),
-        # ---- Phase F — pipelined bulk smelting across 3 furnaces ----
-        PipelinedProduce(ItemType.IRON_PLATE, 50, MachineType.FURNACE, k=3),
-        PipelinedProduce(ItemType.COPPER_PLATE, 55, MachineType.FURNACE, k=3),
-        PipelinedProduce(ItemType.TIN_PLATE, 55, MachineType.FURNACE, k=3),
-        PipelinedProduce(ItemType.WAFER, 19, MachineType.FURNACE, k=3),
-        # ---- Phase G — pipelined intermediates across 3 assemblers ----
-        PipelinedProduce(ItemType.FRAME, 23, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.WIRE, 30, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.CIRCUIT, 18, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.MOTOR, 10, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.SENSOR, 10, MachineType.ASSEMBLER, k=3),
-        # ---- Phase H — rocket sub-assemblies (pipelined) ----
-        PipelinedProduce(ItemType.HULL, 6, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.ENGINE_UNIT, 4, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.AVIONICS, 4, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.ROCKET_CORE, 4, MachineType.ASSEMBLER, k=3),
-        # ---- Phase I — final placeables for achievements ----
-        ProduceInAssembler(ItemType.MINER, 3),
-        ProduceInAssembler(ItemType.FURNACE, 1),
+        MineOre(ItemType.COAL, 2),
+        # ---- Phase G — bulk smelts (nearest furnace wins) ----
+        ProduceInFurnace(ItemType.IRON_PLATE, 45),
+        ProduceInFurnace(ItemType.COPPER_PLATE, 50),
+        ProduceInFurnace(ItemType.TIN_PLATE, 42),
+        ProduceInFurnace(ItemType.WAFER, 22),
+        # ---- Phase H — intermediates, components, sub-assemblies ----
+        ProduceInAssembler(ItemType.FRAME, 25),
+        ProduceInAssembler(ItemType.WIRE, 20),
+        ProduceInAssembler(ItemType.CIRCUIT, 20),
+        ProduceInAssembler(ItemType.MOTOR, 10),
+        ProduceInAssembler(ItemType.SENSOR, 10),
+        ProduceInAssembler(ItemType.HULL, 6),
+        ProduceInAssembler(ItemType.ENGINE_UNIT, 4),
+        ProduceInAssembler(ItemType.AVIONICS, 4),
+        ProduceInAssembler(ItemType.ROCKET_CORE, 4),
+        # ---- Phase I — final placeables ----
         ProduceInAssembler(ItemType.CONVEYOR_BELT, 5),
-        ProduceInAssembler(ItemType.PALLET, 1),
         ProduceInAssembler(ItemType.ARM, 1),
         ProduceInAssembler(ItemType.ROCKET, 1),
-        PlaceMachine(MachineType.MINER, on_ore(ItemType.IRON_ORE)),
-        PlaceMachine(MachineType.MINER, on_ore(ItemType.COPPER_ORE)),
-        PlaceMachine(MachineType.MINER, on_ore(ItemType.TIN_ORE)),
-        WaitUntil(_miner_has_output_predicate(), max_ticks=30),
-        PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
-        PlaceMachine(MachineType.PALLET, free_tile_near_player()),
         PlaceMachine(MachineType.ARM, free_tile_near_player()),
+        # pallet_filled: drop any plate into any pallet.
         DepositInto(MachineType.PALLET, ItemType.IRON_PLATE),
         # ---- Phase J — capstone ----
         PlaceMachine(MachineType.ROCKET, free_tile_near_player()),

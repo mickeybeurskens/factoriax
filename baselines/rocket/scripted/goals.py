@@ -28,6 +28,7 @@ from factoriax.recipes import RECIPES
 
 from .skills import (
     FaceAndInteract,
+    PlaceAt,
     Result,
     Skill,
     StandOnAndAct,
@@ -200,13 +201,25 @@ def _first_ore_tile(
 def on_ore(item_type: int | ItemType) -> LocationPredicate:
     """Predicate: pick the nearest ore tile of *item_type*.
 
+    Filters out tiles that already carry a machine so chained
+    :class:`PlaceMachine` calls can cover a patch instead of
+    repeatedly aiming at the same tile.
+
     Miners placed on ore tiles auto-extract from them; the engine
     accepts a ``PLACE_MINER`` action that targets an ore tile even
     though the tile isn't "walkable" in the usual sense.
     """
 
     def picker(view: WorldView) -> tuple[int, int] | None:
-        return _first_ore_tile(view, item_type)
+        tiles = view.ore_tiles(item_type)
+        if not tiles:
+            return None
+        px, py = view.player.pos
+        unoccupied = [t for t in tiles if view.machine_type[t[1], t[0]] == 0]
+        if not unoccupied:
+            return None
+        unoccupied.sort(key=lambda t: abs(t[0] - px) + abs(t[1] - py))
+        return unoccupied[0]
 
     return picker
 
@@ -293,6 +306,56 @@ class PlaceMachine(Goal):
         result, action = self._active.step(view)
         if result is Result.DONE:
             # Let the next tick verify via the total_machines check.
+            self._active = None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            self._active = None
+            return Result.FAIL, None
+        return Result.RUNNING, action
+
+
+class PlaceMachineAt(Goal):
+    """Place a machine at a specific tile facing a specific direction.
+
+    Reuses :class:`PlaceAt` under the hood: navigates the player to
+    ``target - unit_vec(facing)``, turns to ``facing``, then emits
+    ``PLACE_*``. This is how the factory agent aligns miners so
+    their per-tick push lands in the adjacent pallet instead of a
+    dead tile.
+    """
+
+    name = "PlaceMachineAt"
+
+    def __init__(
+        self,
+        machine_type: int | MachineType,
+        target: tuple[int, int],
+        facing: int,
+    ) -> None:
+        self.machine_type = int(machine_type)
+        self.item_type = _machine_to_item(self.machine_type)
+        self.target = target
+        self.facing = int(facing)
+        self._active: PlaceAt | None = None
+        self._start_count: int | None = None
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self._start_count is not None and view.total_machines() > self._start_count:
+            return Result.DONE, None
+
+        if view.player.held(self.item_type) < 1:
+            return Result.FAIL, None
+
+        if self._active is None:
+            self._start_count = view.total_machines()
+            self._active = PlaceAt(
+                self.target,
+                self.facing,
+                place_action(self.machine_type),
+            )
+
+        result, action = self._active.step(view)
+        if result is Result.DONE:
             self._active = None
             return Result.RUNNING, int(Action.NOOP)
         if result is Result.FAIL:

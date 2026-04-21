@@ -162,6 +162,50 @@ class FaceAndInteract(Skill):
         return self.target in view.adjacent_tiles(view.player.pos)
 
 
+class PlaceAt(Skill):
+    """Place a machine at *target* with an explicit facing direction.
+
+    The machine's ``ent_direction`` is set to the player's direction
+    at the moment of placement (see
+    :func:`factoriax.placement.place_machine`). So to land a machine
+    at ``target`` facing direction ``D``, the player must stand at
+    ``target - unit_vec(D)`` and emit ``PLACE_*`` while facing ``D``.
+
+    This matters for miners — their per-tick push is directed by
+    ``ent_direction``. A miner placed without direction control may
+    push into a dead tile instead of the intended pallet.
+    """
+
+    def __init__(
+        self,
+        target: tuple[int, int],
+        direction: int,
+        place_action: int,
+    ) -> None:
+        from .world_model import _DIR_OFFSETS  # lazy: avoids import cycle
+
+        self.target = target
+        self.direction = int(direction)
+        self.place_action = int(place_action)
+        dx, dy = _DIR_OFFSETS[self.direction]
+        self.stand_tile = (target[0] - dx, target[1] - dy)
+        self._navigator = NavigateTo(self.stand_tile)
+        self._fired = False
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self._fired:
+            return Result.DONE, None
+
+        if view.player.pos != self.stand_tile:
+            return self._navigator.step(view)
+
+        if view.player.direction != self.direction:
+            return Result.RUNNING, face_action(self.direction)
+
+        self._fired = True
+        return Result.RUNNING, self.place_action
+
+
 class EmitOnce(Skill):
     """Emit a single action on the next tick, then report DONE.
 
