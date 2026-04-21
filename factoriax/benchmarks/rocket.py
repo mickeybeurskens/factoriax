@@ -363,7 +363,10 @@ def rocket_reward(
 # never has to hand-craft to get started.
 _MAP_SIZE: int = 32
 _ORE_PATCH_SIZE: int = 3
-_ORE_RESOURCES_PER_TILE: int = 100
+# 280 per tile × 9 tiles per patch ≈ 2500 ore per patch. Enough for
+# automated miners to run essentially the whole episode without
+# depleting — the agent doesn't have to re-mine midway.
+_ORE_RESOURCES_PER_TILE: int = 280
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
 _FURNACE_TILE: tuple[int, int] = (_SPAWN[0] - 1, _SPAWN[1])
 _ASSEMBLER_TILE: tuple[int, int] = (_SPAWN[0] + 1, _SPAWN[1])

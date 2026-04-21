@@ -106,16 +106,12 @@ class TestAssemblerStartsCraft:
     """Assembler should consume inputs and start a countdown."""
 
     def test_iron_plate_recipe_starts(self, state_factory) -> None:
-        """Iron plate recipe: 1 iron_ore -> power set, consumed.
-
-        Furnace recipes are 1-input now; the unused second slot must
-        stay empty for the match to fire.
-        """
+        """Iron plate recipe needs IRON_ORE + COAL; both consumed."""
         state = _make_assembler_state(
             state_factory,
             machine_type=int(MachineType.FURNACE),
-            asm_in_type=[int(ItemType.IRON_ORE), 0],
-            asm_in_count=[5, 0],
+            asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
+            asm_in_count=[5, 3],
         )
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
@@ -128,6 +124,22 @@ class TestAssemblerStartsCraft:
         """Assemblers can't run smelting recipes (gated to FURNACE)."""
         state = _make_assembler_state(
             state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
+            asm_in_count=[5, 3],
+        )
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 5
+
+    def test_no_start_without_coal(self, state_factory) -> None:
+        """Smelting needs BOTH ore and coal — ore alone keeps the
+        furnace idle. Coal-only fires the refractory recipe separately
+        (covered elsewhere)."""
+        state = _make_assembler_state(
+            state_factory,
+            machine_type=int(MachineType.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), 0],
             asm_in_count=[5, 0],
         )
@@ -137,21 +149,22 @@ class TestAssemblerStartsCraft:
         assert int(new.ent_power[eid]) == 0
         assert int(new.ent_asm_in_count[eid, 0]) == 5
 
-    def test_polluted_furnace_does_not_smelt(self, state_factory) -> None:
-        """Extra item in the 2nd slot blocks smelting — furnace recipes
-        require a clean single-slot deposit."""
+    def test_refractory_fires_on_coal_alone(self, state_factory) -> None:
+        """Coal in a single slot (slot 1 empty) fires the REFRACTORY
+        recipe. Phase 3 clears the slot fully on cycle start, so any
+        excess over the recipe requirement is wasted — agents deposit
+        exactly-needed counts to avoid this."""
         state = _make_assembler_state(
             state_factory,
             machine_type=int(MachineType.FURNACE),
-            asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
-            asm_in_count=[5, 3],
+            asm_in_type=[int(ItemType.COAL), 0],
+            asm_in_count=[1, 0],
         )
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
 
-        assert int(new.ent_power[eid]) == 0
-        assert int(new.ent_asm_in_count[eid, 0]) == 5
-        assert int(new.ent_asm_in_count[eid, 1]) == 3
+        assert int(new.ent_power[eid]) == 4  # REFRACTORY ticks
+        assert int(new.ent_asm_in_count[eid, 0]) == 0
 
     def test_no_start_without_ore(self, state_factory) -> None:
         """Empty input slot means nothing to smelt."""

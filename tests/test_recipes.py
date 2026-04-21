@@ -2,9 +2,12 @@
 
 The engine's Phase 3 recipe match relies on every recipe having a
 distinct (unordered) set of input item types within its machine
-type. If two recipes share an input type-set (or one's is a subset
-of another's), depositing the larger recipe's inputs can trigger
-the smaller recipe mid-deposit, producing the wrong output.
+type *at the same arity*. 1-input recipes pad their unused slot
+with ``(EMPTY, 0)`` in the derived arrays, so they only fire when
+the machine's second input slot is physically empty — that slot
+gate distinguishes e.g. ``REFRACTORY = {coal}`` from
+``IRON_PLATE = {iron_ore, coal}``. Same-arity duplicates would
+still be ambiguous and are rejected.
 """
 
 from __future__ import annotations
@@ -20,66 +23,47 @@ def _input_type_set(recipe: dict) -> frozenset[int]:
 
 
 def test_every_recipe_has_unique_input_type_set() -> None:
-    """No two recipes on the same machine share an input type-set.
-
-    Recipe matching compares input types by set equality; two
-    recipes with the same input types on the same machine would be
-    ambiguous.
+    """No two recipes on the same machine share an input type-set
+    (at the same arity). Two 2-input recipes with the same pair
+    would be ambiguous; two 1-input recipes with the same item
+    likewise. Different-arity recipes with overlapping items are
+    disambiguated by the slot-emptiness gate in Phase 3.
     """
-    seen: dict[tuple[int, frozenset[int]], int] = {}
+    seen: dict[tuple[int, int, frozenset[int]], int] = {}
     for idx, recipe in enumerate(RECIPES):
-        key = (int(RECIPE_MACHINE_TYPE[idx]), _input_type_set(recipe))
+        key = (
+            int(RECIPE_MACHINE_TYPE[idx]),
+            len(recipe["inputs"]),
+            _input_type_set(recipe),
+        )
         assert key not in seen, (
             f"Recipe {idx} ({recipe['output']}) shares input type-set "
-            f"{set(key[1])} with recipe {seen[key]} on the same machine type "
-            f"{key[0]} — one will always win over the other in Phase 3."
+            f"{set(key[2])} at arity {key[1]} with recipe {seen[key]} "
+            f"on the same machine type {key[0]}."
         )
         seen[key] = idx
 
 
-def test_no_recipe_input_type_set_is_subset_of_another() -> None:
-    """Subset relationships between recipe input type-sets are forbidden.
-
-    If recipe A's inputs are ``{X}`` and recipe B's inputs are
-    ``{X, Y}``, depositing B's inputs one at a time would trigger A
-    on the first deposit (since the machine sees a satisfied A
-    before Y arrives). Keeping all input type-sets pairwise-disjoint
-    avoids this hazard and keeps per-deposit ordering irrelevant.
-    """
-    for i, ri in enumerate(RECIPES):
-        si = _input_type_set(ri)
-        mti = int(RECIPE_MACHINE_TYPE[i])
-        for j, rj in enumerate(RECIPES):
-            if i == j:
-                continue
-            if int(RECIPE_MACHINE_TYPE[j]) != mti:
-                continue
-            sj = _input_type_set(rj)
-            assert not si < sj, (
-                f"Recipe {i} ({ri['output']}) inputs {set(si)} are a "
-                f"strict subset of recipe {j} ({rj['output']}) inputs "
-                f"{set(sj)} on machine type {mti}."
-            )
-
-
 @pytest.mark.parametrize("recipe", RECIPES)
 def test_recipe_has_one_or_two_inputs(recipe: dict) -> None:
-    """Furnace recipes take 1 input; assembler recipes take 2."""
+    """Furnace recipes take 1 or 2 inputs; assembler recipes take 2."""
     assert len(recipe["inputs"]) in (1, 2)
 
 
 @pytest.mark.parametrize("idx", range(len(RECIPES)))
-def test_furnace_recipes_have_one_input(idx: int) -> None:
-    """Every furnace-gated recipe has exactly 1 input type; every
-    assembler-gated recipe has 2. Keeps the machines stubbornly simple
-    — furnaces smelt one thing at a time, assemblers combine two.
+def test_assembler_recipes_have_two_inputs(idx: int) -> None:
+    """Every assembler-gated recipe has exactly 2 input types.
+    Furnace recipes may be 1 or 2 — 2-input furnace recipes use
+    coal as a fuel-like second input (e.g. smelting IRON_ORE +
+    COAL → IRON_PLATE), while a 1-input recipe exists for coal
+    itself (COAL → REFRACTORY).
     """
     from factoriax.constants import MachineType
 
     recipe = RECIPES[idx]
     machine = int(RECIPE_MACHINE_TYPE[idx])
-    expected = 1 if machine == int(MachineType.FURNACE) else 2
-    assert len(recipe["inputs"]) == expected, (
-        f"Recipe {idx} ({recipe['output']}) on machine {machine} has "
-        f"{len(recipe['inputs'])} inputs; expected {expected}."
-    )
+    if machine == int(MachineType.ASSEMBLER):
+        assert len(recipe["inputs"]) == 2, (
+            f"Assembler recipe {idx} ({recipe['output']}) has "
+            f"{len(recipe['inputs'])} inputs; expected 2."
+        )

@@ -46,25 +46,27 @@ class _Recipe(TypedDict):
 # rocket sub-assemblies.
 RECIPES: list[_Recipe] = [
     # -------- CRAFT-addressable slots 0–17 --------
-    # Furnace smelts (1 input each).
+    # Furnace smelts — coal is consumed as fuel for every plate
+    # (1 ore + 1 coal → 1 plate). Refractory stays as a 1-input
+    # recipe (coal only) so coal can still be smelted standalone.
     {
         "output": ItemType.IRON_PLATE,
-        "inputs": [(ItemType.IRON_ORE, 1)],
+        "inputs": [(ItemType.IRON_ORE, 1), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.COPPER_PLATE,
-        "inputs": [(ItemType.COPPER_ORE, 1)],
+        "inputs": [(ItemType.COPPER_ORE, 1), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.TIN_PLATE,
-        "inputs": [(ItemType.TIN_ORE, 1)],
+        "inputs": [(ItemType.TIN_ORE, 1), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.WAFER,
-        "inputs": [(ItemType.SILICON, 1)],
+        "inputs": [(ItemType.SILICON, 1), (ItemType.COAL, 1)],
         "ticks": 2,
     },
     # Assembler: base intermediates.
