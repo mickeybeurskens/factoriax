@@ -86,12 +86,21 @@ path, but since MOTOR / SENSOR / ARM / BELT / MINER / ASSEMBLER /
 ROCKET all transitively depend on WIRE, every late-tier recipe is
 blocked too.
 
-**Fix landed**: iterate ``reversed(range(NUM_RECIPES))`` in
-`run_assemblers`, so the *earliest* (lowest-index) match wins. Aligns
-with the intuitive "more-specific recipe wins" expectation at no
-extra cost. Agents still need to deposit inputs in
-descending-count order so the assembler doesn't fire a sub-recipe
-mid-deposit — see ``ProduceInMachine`` in the scripted agent.
+**Initial fix (reverted)**: iterating ``reversed(range(NUM_RECIPES))``
+in `run_assemblers` made the *earliest* (lowest-index) match win.
+That paid off a small cost at every tick and only papered over the
+ambiguity — recipe lookup still depended on ordering, and agents
+still had to deposit inputs in descending-count order to avoid
+firing a sub-recipe mid-deposit.
+
+**Structural fix landed**: recipes now have pairwise-distinct,
+non-subset input type-sets. To unblock this, a new ``REFRACTORY``
+half-fab (tin plate + coal on the furnace) was introduced and the
+``FURNACE`` recipe switched from ``{iron_plate, copper_plate}`` to
+``{iron_plate, refractory}``, eliminating the WIRE/FURNACE collision
+that motivated the loop-reversal hack. Phase 3 now iterates
+``range(NUM_RECIPES)`` normally and deposit order is irrelevant.
+The uniqueness invariant is guarded by ``tests/test_recipes.py``.
 
 ## 3. `DEPOSIT_FURNACE` and `WITHDRAW_FURNACE` silently dispatch as movement
 
