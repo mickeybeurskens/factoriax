@@ -110,4 +110,35 @@ and become no-ops.
 **Fix landed**: tighten the comparisons to `<= Action.DEPOSIT_FURNACE`
 and `<= Action.WITHDRAW_FURNACE`. Two-line change.
 
+## 4. `PLACE_FURNACE` silently dispatches as movement
+
+**Symptom**: `PLACE_FURNACE` emitted while holding a furnace item and
+facing an empty walkable tile has no effect.
+
+**Root cause**: Same family of bug as #3. `Action.PLACE_FURNACE = 17`
+was added after `Action.PLACE_ROCKET = 16`, but
+`factoriax/game_logic.py::factoriax_step`'s dispatch range stops at
+`PLACE_ROCKET`. So `PLACE_FURNACE` falls out, defaults to `cat=0`
+(movement), no-ops.
+
+**Fix landed**: change the upper bound to `<= Action.PLACE_FURNACE`.
+One-line change.
+
+## 5. `first_assembly` condition watches the wrong slot
+
+**Symptom**: the rocket benchmark's ``first_assembly`` achievement
+never fires even when assemblers are visibly producing outputs.
+
+**Root cause**: ``_any_assembler_has_output`` in
+``factoriax/benchmarks/rocket.py`` checked
+``state.ent_asm_out_count > 0``. But ``run_combiners`` Phase 4
+immediately moves the completed output from ``ent_asm_out_*`` into
+``ent_buf_*`` in the same tick, so by the time the achievement
+condition runs at end-of-tick, ``ent_asm_out_count`` has been
+cleared. The condition never observed a positive value.
+
+**Fix landed**: OR the check with ``ent_buf_count > 0`` — either slot
+having content signals the assembler produced output. Adjacent to an
+engine bug but the fix is in the benchmark condition (which we own).
+
 ## (reserved for further bugs as they surface)

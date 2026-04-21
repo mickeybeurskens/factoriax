@@ -214,11 +214,17 @@ def _any_entity_buf_nonempty(state: EnvState, mt: int) -> jax.Array:
 
 
 def _any_assembler_has_output(state: EnvState) -> jax.Array:
-    """True when any active assembler has items in its output slot."""
+    """True when any active assembler has output available for extraction.
+
+    The engine's ``run_combiners`` Phase 4 moves completed-recipe
+    output from ``ent_asm_out_*`` into ``ent_buf_*`` every tick, so
+    checking only ``ent_asm_out_count`` never observes a non-zero value
+    at end-of-tick. The buffer is the correct stable slot to read.
+    """
     matches = (
         (state.ent_type == MachineType.ASSEMBLER)
         & (state.ent_y >= 0)
-        & (state.ent_asm_out_count > 0)
+        & ((state.ent_asm_out_count > 0) | (state.ent_buf_count > 0))
     )
     return jnp.any(matches)
 
