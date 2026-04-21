@@ -39,6 +39,7 @@ from .goals import (
     ProduceInAssembler,
     ProduceInFurnace,
     WaitUntil,
+    WithdrawUntilHeld,
     free_tile_near_player,
 )
 from .planner import Planner
@@ -140,17 +141,20 @@ def build_factory_rocket_goals() -> list[Goal]:
         PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
         # ---- Phase F — let miners warm up ----
         WaitUntil(_miner_has_output_predicate(), max_ticks=30),
-        # ---- Phase G — bulk mining ----
-        # The node miners push ore into their pallets continuously,
-        # but draining a pallet is still 1 WITHDRAW per tick, so
-        # hand-mining in parallel is the reliable bulk source.
-        # Bulk coal needs: 45+45+42+20 = 152 plate smelts → 152 coal.
-        # Plus slack.
-        MineOre(ItemType.IRON_ORE, 45),
-        MineOre(ItemType.COPPER_ORE, 45),
-        MineOre(ItemType.TIN_ORE, 42),
-        MineOre(ItemType.SILICON, 20),
-        MineOre(ItemType.COAL, 155),
+        # ---- Phase G — harvest from node pallets ----
+        # While Phase A-F ran, the node miners have been pushing ore
+        # into their adjacent pallets. WITHDRAW is now bulk — one
+        # action pulls the whole pallet — so draining is cheap.
+        # Each call walks to the nearest pallet with the matching
+        # item and empties it; it retries with a fresh lookup if
+        # the first pallet is already empty. Totals target the
+        # rocket + achievement chain: iron 45, copper 45, tin 42,
+        # silicon 20, coal 155 (coal feeds every smelt).
+        WithdrawUntilHeld(ItemType.IRON_ORE, 45),
+        WithdrawUntilHeld(ItemType.COPPER_ORE, 45),
+        WithdrawUntilHeld(ItemType.TIN_ORE, 42),
+        WithdrawUntilHeld(ItemType.SILICON, 20),
+        WithdrawUntilHeld(ItemType.COAL, 155),
         # ---- Phase H — pipelined bulk smelts across 3 furnaces ----
         PipelinedProduce(ItemType.IRON_PLATE, 45, MachineType.FURNACE, k=3),
         PipelinedProduce(ItemType.COPPER_PLATE, 45, MachineType.FURNACE, k=3),

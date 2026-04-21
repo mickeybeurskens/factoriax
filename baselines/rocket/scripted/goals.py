@@ -489,6 +489,64 @@ class Wait(Goal):
         return Result.RUNNING, int(Action.NOOP)
 
 
+class WithdrawUntilHeld(Goal):
+    """Withdraw from adjacent pallets until the player holds >= count.
+
+    Finds the nearest :class:`MachineType.PALLET` whose buffered item
+    matches ``item_type``, navigates adjacent, emits ``WITHDRAW``.
+    With the engine's bulk-withdraw semantics (one action transfers
+    the whole slot up to inventory capacity), this usually clears a
+    pallet in a single visit — a 45-ore pallet drain becomes one
+    action instead of 45. Retries with fresh pallet lookups so if the
+    first pallet is empty the agent moves to the next.
+    """
+
+    name = "WithdrawUntilHeld"
+
+    def __init__(
+        self,
+        item_type: int | ItemType,
+        count: int,
+        max_empty_attempts: int = 8,
+    ) -> None:
+        self.item_type = int(item_type)
+        self.count = count
+        self.max_empty_attempts = max_empty_attempts
+        self._active: FaceAndInteract | None = None
+        self._empty_attempts = 0
+
+    def step(self, view: WorldView) -> StepReturn:
+        if view.player.held(self.item_type) >= self.count:
+            return Result.DONE, None
+
+        if self._active is not None:
+            result, action = self._active.step(view)
+            if result is Result.RUNNING:
+                return Result.RUNNING, action
+            self._active = None
+
+        # Find the nearest pallet that currently holds item_type.
+        buffered = view.buffered_tiles(self.item_type)
+        pallet_tiles = [
+            (x, y)
+            for (x, y) in buffered
+            if view.machine_type[y, x] == int(MachineType.PALLET)
+        ]
+        if not pallet_tiles:
+            self._empty_attempts += 1
+            if self._empty_attempts >= self.max_empty_attempts:
+                return Result.FAIL, None
+            return Result.RUNNING, int(Action.NOOP)
+
+        # Reset empty counter on any productive step.
+        self._empty_attempts = 0
+        px, py = view.player.pos
+        pallet_tiles.sort(key=lambda t: abs(t[0] - px) + abs(t[1] - py))
+        target = pallet_tiles[0]
+        self._active = FaceAndInteract(target, int(Action.WITHDRAW))
+        return self._active.step(view)
+
+
 class WithdrawFrom(Goal):
     """Withdraw one unit of *item_type* from the nearest *machine_type*.
 
