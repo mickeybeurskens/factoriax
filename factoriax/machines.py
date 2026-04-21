@@ -29,6 +29,13 @@ from factoriax.state import EnvParams, EnvState
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
 _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
 
+# Miner output slot holds at most one mining cycle's worth. Combined
+# with ``miner_mining_rate`` this means a miner tops up in one tick
+# and idles until something (arm, belt, player) drains it — matching
+# the "no buffering in output slots" rule. Pallets remain the only
+# large-capacity storage.
+MINER_OUTPUT_CAP: int = 3
+
 
 def update_all_machines(
     state: EnvState,
@@ -80,7 +87,7 @@ def run_miners(
     buf_empty = state.ent_buf_count == 0
     buf_same = state.ent_buf_type == block_item.astype(jnp.int8)
     buf_ok = buf_empty | buf_same
-    has_space = state.ent_buf_count < jnp.int16(64)
+    has_space = state.ent_buf_count < jnp.int16(MINER_OUTPUT_CAP)
 
     can_mine = is_miner & has_resources & buf_ok & has_space
     mine_amt = jnp.where(
@@ -89,7 +96,15 @@ def run_miners(
         jnp.int16(0),
     )
     mine_amt = jnp.minimum(mine_amt, resources)
-    mine_amt = jnp.minimum(mine_amt, jnp.int16(64) - state.ent_buf_count)
+    # Buf-space clamp: only meaningful for miners (non-miners have
+    # mine_amt=0 already, and their buf may legitimately exceed
+    # MINER_OUTPUT_CAP — e.g. pallets go up to 1000).
+    slot_left = jnp.where(
+        is_miner,
+        jnp.int16(MINER_OUTPUT_CAP) - state.ent_buf_count,
+        jnp.int16(0),
+    )
+    mine_amt = jnp.minimum(mine_amt, jnp.maximum(slot_left, jnp.int16(0)))
     mined = mine_amt > 0
 
     # Update entity state.
@@ -386,10 +401,14 @@ def run_assemblers(state: EnvState) -> EnvState:
     new_power = jnp.where(progressing, new_power - jnp.int16(1), new_power)
 
     # --- Phase 3: Start new crafts ---
-    # All recipes are uniform 2-input; inputs can land in either slot.
-    # Each recipe is gated to its owning machine type (assembler/furnace)
-    # via RECIPE_MACHINE_TYPE — one int8 equality per recipe per entity.
-    idle = is_combiner & (new_power == 0)
+    # Recipes are 1- or 2-input, with 1-input recipes padded to
+    # (EMPTY, 0) in the second slot. The matcher checks both slot
+    # orderings so inputs can land in either slot. Each recipe is
+    # gated to its owning machine type via RECIPE_MACHINE_TYPE.
+    # ``asm_out_count == 0`` is part of the idle gate: without a
+    # downstream buffer to drain to (no Phase 4), a stuck output
+    # must be withdrawn before the machine can start a new cycle.
+    idle = is_combiner & (new_power == 0) & (new_out_count == 0)
     matched = jnp.int32(-1)
     for r in range(NUM_RECIPES):
         (rt_a, ra_a), (rt_b, ra_b) = RECIPES[r]["inputs"]
@@ -411,12 +430,9 @@ def run_assemblers(state: EnvState) -> EnvState:
     in_t1 = jnp.where(can_start, jnp.int8(0), in_t1)
     in_c1 = jnp.where(can_start, jnp.int16(0), in_c1)
 
-    # --- Phase 4: Push output to buffer ---
-    can_push = is_combiner & (new_out_count > 0) & (buf_count == 0)
-    buf_type = jnp.where(can_push, new_out_type, buf_type)
-    buf_count = jnp.where(can_push, new_out_count, buf_count)
-    new_out_type = jnp.where(can_push, jnp.int8(0), new_out_type)
-    new_out_count = jnp.where(can_push, jnp.int16(0), new_out_count)
+    # NOTE: no Phase 4. The output slot holds the recipe output until
+    # a withdraw (player, arm, or downstream belt/pallet) pulls it
+    # out. Pallets are the only buffering primitive.
 
     return state.replace(
         ent_power=new_power,

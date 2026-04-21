@@ -144,21 +144,27 @@ class TestMinerOperation:
         self,
         state_factory,
     ) -> None:
-        """Miner should extract only what fits in output stack."""
+        """Miner output slot caps at MINER_OUTPUT_CAP (no buffering).
+
+        Full output slot: next tick mines 0 until a withdraw/arm/belt
+        drains it.
+        """
+        from factoriax.machines import MINER_OUTPUT_CAP
+
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
-            buffer_count=jnp.array([[62]], dtype=jnp.int16),
+            buffer_count=jnp.array([[MINER_OUTPUT_CAP - 1]], dtype=jnp.int16),
         )
         params = EnvParams(map_width=1, map_height=1)
 
         new_state = run_miners(state, params)
 
         eid = _eid(new_state, 0, 0)
-        assert new_state.ent_buf_count[eid] == 64
-        assert new_state.block_resources[0, 0] == 48  # 50 - 2
+        assert new_state.ent_buf_count[eid] == MINER_OUTPUT_CAP
+        assert new_state.block_resources[0, 0] == 49  # one ore extracted
 
 
 class TestMinerDifferentOres:
