@@ -624,3 +624,129 @@ def ProduceInAssembler(  # noqa: N802 - factory mirrors class-style instantiatio
 ) -> ProduceInMachine:
     """Produce *count* of *output_item* via the nearest assembler."""
     return ProduceInMachine(output_item, count, int(MachineType.ASSEMBLER))
+
+
+# ---------------------------------------------------------------------------
+# Pipelined production across multiple machines
+# ---------------------------------------------------------------------------
+
+
+class PipelinedProduce(Goal):
+    """Produce ``count`` of ``output_item`` by rotating through *k* machines.
+
+    Unlike :class:`ProduceInMachine`, which parks the agent at one
+    machine during its ``Wait`` phase, this goal keeps *k* machines
+    running in parallel. On each tick the agent picks the highest-
+    priority action across the k-nearest matching machines:
+
+    1. **Withdraw** from any machine whose output slot matches
+       ``output_item`` (the buffer channel of the obs exposes asm_out
+       one tick after the recipe completes).
+    2. **Deposit** the next unmet input into the machine with the
+       fewest deposits so far, provided the player still holds that
+       ingredient.
+    3. Otherwise emit ``NOOP`` — a recipe is in flight and no deposit
+       is pending.
+
+    Per-machine state is tracked in a small dict keyed by tile; it
+    resets when the agent withdraws (the cycle has ended and the next
+    deposit starts a fresh batch).
+
+    Reuses :class:`FaceAndInteract` (via the ``_active`` sub-skill)
+    for navigation + action emission, matching how
+    :class:`DepositInto` / :class:`WithdrawFrom` already work.
+    """
+
+    name = "PipelinedProduce"
+
+    def __init__(
+        self,
+        output_item: int | ItemType,
+        count: int,
+        machine_type: int | MachineType,
+        k: int = 3,
+    ) -> None:
+        self.output_item = int(output_item)
+        self.count = count
+        self.machine_type = int(machine_type)
+        self.k = max(1, k)
+        recipe = _find_recipe(self.output_item)
+        if recipe is None:
+            raise ValueError(
+                f"no recipe produces {ItemType(self.output_item).name}",
+            )
+        # Flatten (item, count) pairs into a deposit sequence so each
+        # element corresponds to one DEPOSIT_* action. Frame: iron +
+        # tin → [iron, tin]. Hull: 2 frame + 2 iron → [frame, frame,
+        # iron, iron].
+        self._deposit_sequence: list[int] = []
+        for item_t, qty in recipe["inputs"]:
+            self._deposit_sequence.extend([int(item_t)] * int(qty))
+
+        self._active: FaceAndInteract | None = None
+        # Per-machine deposit progress. Keyed by ``(x, y)`` tile.
+        self._deposits: dict[tuple[int, int], int] = {}
+
+    def step(self, view: WorldView) -> StepReturn:
+        if view.player.held(self.output_item) >= self.count:
+            return Result.DONE, None
+
+        if self._active is not None:
+            result, action = self._active.step(view)
+            if result is Result.RUNNING:
+                return Result.RUNNING, action
+            self._active = None
+            # fall through — pick the next action this same tick.
+
+        tiles = view.tiles_with_machine(self.machine_type)
+        if not tiles:
+            return Result.FAIL, None
+        px, py = view.player.pos
+        tiles.sort(key=lambda t: abs(t[0] - px) + abs(t[1] - py))
+        candidates = tiles[: self.k]
+
+        # Priority 1: withdraw from any machine whose output channel
+        # matches our target item.
+        for tile in candidates:
+            tx, ty = tile
+            if int(view.buffer_type[ty, tx]) == self.output_item:
+                self._deposits.pop(tile, None)
+                self._active = FaceAndInteract(tile, int(Action.WITHDRAW))
+                return self._active.step(view)
+
+        # Priority 2: deposit the next input into the machine with
+        # the fewest deposits so far (keeps the pipeline balanced).
+        need = len(self._deposit_sequence)
+        best_tile: tuple[int, int] | None = None
+        best_progress = need
+        for tile in candidates:
+            progress = self._deposits.get(tile, 0)
+            if progress >= need:
+                continue
+            next_item = self._deposit_sequence[progress]
+            if view.player.held(next_item) < 1:
+                continue
+            if progress < best_progress:
+                best_progress = progress
+                best_tile = tile
+
+        if best_tile is not None:
+            progress = self._deposits.get(best_tile, 0)
+            next_item = self._deposit_sequence[progress]
+            self._deposits[best_tile] = progress + 1
+            self._active = FaceAndInteract(
+                best_tile,
+                deposit_action_for(next_item),
+            )
+            return self._active.step(view)
+
+        # Nothing to do this tick: all deposits landed, all machines
+        # cooking, no output ready yet. Wait.
+        return Result.RUNNING, int(Action.NOOP)
+
+
+def deposit_action_for(item_type: int) -> int:
+    """Resolve an ItemType to its DEPOSIT_* action id."""
+    from .world_model import deposit_action
+
+    return deposit_action(item_type)
