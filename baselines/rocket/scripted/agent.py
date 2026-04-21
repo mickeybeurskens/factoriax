@@ -22,11 +22,12 @@ from factoriax.constants import Action, ItemType, MachineType
 from factoriax.state import EnvParams
 
 from .goals import (
-    CraftItem,
     DepositInto,
     Goal,
     MineOre,
     PlaceMachine,
+    ProduceInAssembler,
+    ProduceInFurnace,
     WaitUntil,
     free_tile_near_player,
     on_ore,
@@ -105,60 +106,67 @@ def _any_assembler_has_output_predicate() -> Callable[[WorldView], bool]:
 
 
 def build_rocket_goals() -> list[Goal]:
-    """The full goal list for completing every rocket-benchmark achievement.
+    """Full goal list for completing every rocket-benchmark achievement.
 
-    Roughly matches Phases B–H from the design doc. Counts are
-    generous so a single depleted patch or a failed craft doesn't
-    derail the whole plan.
+    Uses only the pre-placed furnace + assembler (plus mining for raw
+    ore + placements for the rest of the factory). Hand-crafting is
+    masked by the benchmark, so every intermediate flows through
+    :func:`ProduceInFurnace` / :func:`ProduceInAssembler`.
+
+    Budgets are provisioned for the full rocket chain with ~30% slack.
+    Raw totals target:
+
+    - Iron ore:  ~200 (→ ~64 iron plates once smelted)
+    - Copper ore: ~140 (→ ~46 copper plates)
+    - Tin ore:   ~60  (→ ~19 tin plates)
+    - Silicon:   ~35  (→ ~11 wafers)
+    - Coal:      ~210 (one per smelt)
+
+    Scaled up to ensure CraftItem's forgiving semantics don't leave
+    downstream recipes short on ingredients.
     """
     return [
         # ---- Phase B — raw ore ----
-        # Budgets are generous (~2x measured need) so every downstream
-        # CraftItem has enough pool to complete its target.
-        MineOre(ItemType.IRON_ORE, 260),
-        MineOre(ItemType.COPPER_ORE, 220),
-        MineOre(ItemType.TIN_ORE, 90),
-        MineOre(ItemType.COAL, 300),
-        MineOre(ItemType.SILICON, 45),
-        # ---- Phase C — basic handcrafts (Basic achievements) ----
-        CraftItem(ItemType.IRON_PLATE, 1),  # smelt_iron
-        CraftItem(ItemType.COPPER_PLATE, 1),  # smelt_copper
-        CraftItem(ItemType.TIN_PLATE, 1),  # smelt_tin
-        CraftItem(ItemType.WAFER, 1),  # smelt_wafer
-        CraftItem(ItemType.WIRE, 1),  # craft_wire
-        # ---- Phase D — deeper intermediates (Intermediate crafts) ----
-        CraftItem(ItemType.CIRCUIT, 1),  # craft_circuit
-        CraftItem(ItemType.FRAME, 1),  # craft_frame
-        CraftItem(ItemType.MOTOR, 1),  # craft_motor
-        CraftItem(ItemType.SENSOR, 1),  # craft_sensor
-        # ---- Bulk production — stock up for the full build ----
-        # Over-provisioned: every downstream recipe (frames, wires, motors…)
-        # draws from these pools, so a tight budget breaks the chain.
-        CraftItem(ItemType.IRON_PLATE, 120),
-        CraftItem(ItemType.COPPER_PLATE, 100),
-        CraftItem(ItemType.TIN_PLATE, 40),
-        CraftItem(ItemType.WAFER, 20),
-        CraftItem(ItemType.WIRE, 30),
-        CraftItem(ItemType.CIRCUIT, 20),
-        CraftItem(ItemType.FRAME, 30),
-        CraftItem(ItemType.MOTOR, 15),
-        CraftItem(ItemType.SENSOR, 12),
-        # ---- Craft every placeable machine type ----
-        CraftItem(ItemType.MINER, 3),  # craft_miner; need 3 for scaling_up
-        CraftItem(ItemType.FURNACE, 1),  # craft_furnace
-        CraftItem(ItemType.CONVEYOR_BELT, 5),  # craft_belt; 5 for belt_network
-        CraftItem(ItemType.PALLET, 1),  # craft_pallet
-        CraftItem(ItemType.ARM, 1),  # craft_arm
-        CraftItem(ItemType.ASSEMBLER, 1),  # craft_assembler
-        CraftItem(ItemType.ROCKET, 1),  # craft_rocket
-        # ---- Place three miners (first on iron, then on copper + tin
-        # ore patches for diversity) → place_miner, automated_mining,
-        # scaling_up when total reaches 3.
+        MineOre(ItemType.IRON_ORE, 200),
+        MineOre(ItemType.COPPER_ORE, 140),
+        MineOre(ItemType.TIN_ORE, 60),
+        MineOre(ItemType.COAL, 210),
+        MineOre(ItemType.SILICON, 35),
+        # ---- Phase C — bulk plate production via the furnace ----
+        # Producing N>=1 of each plate fires the smelt_* achievements
+        # on the first output. We go straight to bulk sizes sized for
+        # the full rocket build so downstream recipes never block on
+        # a missing ingredient.
+        ProduceInFurnace(ItemType.IRON_PLATE, 64),
+        ProduceInFurnace(ItemType.COPPER_PLATE, 46),
+        ProduceInFurnace(ItemType.TIN_PLATE, 19),
+        ProduceInFurnace(ItemType.WAFER, 11),
+        # ---- Phase D — bulk intermediates via the assembler ----
+        # Firing-in-bulk covers the craft_* achievements on the first
+        # output of each recipe. Intentionally ordered so upstream
+        # ingredients exist before downstream recipes run (frames before
+        # motors, circuits/wires before sensors, etc.).
+        ProduceInAssembler(ItemType.FRAME, 17),
+        ProduceInAssembler(ItemType.WIRE, 17),
+        ProduceInAssembler(ItemType.CIRCUIT, 10),
+        ProduceInAssembler(ItemType.MOTOR, 8),
+        ProduceInAssembler(ItemType.SENSOR, 7),
+        # ---- Phase F — craft every placeable machine type ----
+        ProduceInAssembler(ItemType.MINER, 3),  # craft_miner, scaling_up later
+        ProduceInAssembler(ItemType.FURNACE, 1),  # craft_furnace
+        ProduceInAssembler(ItemType.CONVEYOR_BELT, 5),  # craft_belt, belt_network later
+        ProduceInAssembler(ItemType.PALLET, 1),  # craft_pallet
+        ProduceInAssembler(ItemType.ARM, 1),  # craft_arm
+        ProduceInAssembler(ItemType.ASSEMBLER, 1),  # craft_assembler
+        ProduceInAssembler(ItemType.ROCKET, 1),  # craft_rocket
+        # ---- Phase G — placements ----
+        # 3 miners on distinct ore patches → place_miner, automated_mining,
+        # scaling_up.
         PlaceMachine(MachineType.MINER, on_ore(ItemType.IRON_ORE)),
         PlaceMachine(MachineType.MINER, on_ore(ItemType.COPPER_ORE)),
         PlaceMachine(MachineType.MINER, on_ore(ItemType.TIN_ORE)),
         WaitUntil(_miner_has_output_predicate(), max_ticks=30),
-        # ---- Other placements ----
+        # Logistics placements and belt network.
         PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
@@ -168,15 +176,9 @@ def build_rocket_goals() -> list[Goal]:
         PlaceMachine(MachineType.PALLET, free_tile_near_player()),
         PlaceMachine(MachineType.ARM, free_tile_near_player()),
         PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
-        # ---- Load the pallet to unlock pallet_filled ----
+        # ---- Phase H — unlock pallet_filled ----
         DepositInto(MachineType.PALLET, ItemType.IRON_ORE),
-        # ---- Load the assembler with WIRE inputs; wait for output.
-        # WIRE recipe: 1 iron plate + 2 copper plate, 4 ticks.
-        DepositInto(MachineType.ASSEMBLER, ItemType.IRON_PLATE),
-        DepositInto(MachineType.ASSEMBLER, ItemType.COPPER_PLATE),
-        DepositInto(MachineType.ASSEMBLER, ItemType.COPPER_PLATE),
-        WaitUntil(_any_assembler_has_output_predicate(), max_ticks=20),
-        # ---- Capstone ----
+        # ---- Phase I — capstone: place the rocket ----
         PlaceMachine(MachineType.ROCKET, free_tile_near_player()),
     ]
 

@@ -211,32 +211,41 @@ def on_ore(item_type: int | ItemType) -> LocationPredicate:
     return picker
 
 
-def free_tile_near_player(max_radius: int = 8) -> LocationPredicate:
+def free_tile_near_player(
+    max_radius: int = 8,
+    min_distance: int = 2,
+) -> LocationPredicate:
     """Predicate: closest walkable tile that holds no machine.
 
-    Searches beyond the immediate 4-neighbor ring so a 10th+ placement
-    still finds an empty slot after the player's immediate neighborhood
-    fills up. Returns the Manhattan-nearest candidate; reachability is
-    handled later by the navigator with its own retry budget.
+    Picks a tile at least ``min_distance`` Manhattan away from the
+    player and at most ``max_radius``. The minimum distance guards
+    against the player boxing themselves in with machines on their
+    4-neighbors — after placing, the player's immediate neighbors
+    include the targeted tile as a new machine, but the tile they were
+    standing on (one-tile-removed from the target) remains walkable.
+    Without this buffer, sequential placements on each of the four
+    neighbors strand the player on an island.
     """
 
     def picker(view: WorldView) -> tuple[int, int] | None:
         px, py = view.player.pos
         empty = view.walkable & (view.machine_type == 0)
-        # Don't propose the player's own tile — they'd have to move to
-        # place on it anyway.
         empty_np = empty.copy()
         empty_np[py, px] = False
         if not empty_np.any():
             return None
         ys, xs = np.nonzero(empty_np)
         dists = np.abs(xs - px) + np.abs(ys - py)
-        within = dists <= max_radius
-        if not within.any():
+        band = (dists >= min_distance) & (dists <= max_radius)
+        if not band.any():
+            # Fall back to any empty tile if the preferred band is
+            # unavailable (e.g. map is almost full).
+            band = dists <= max_radius
+        if not band.any():
             return None
-        xs = xs[within]
-        ys = ys[within]
-        dists = dists[within]
+        xs = xs[band]
+        ys = ys[band]
+        dists = dists[band]
         idx = int(np.argmin(dists))
         return (int(xs[idx]), int(ys[idx]))
 
