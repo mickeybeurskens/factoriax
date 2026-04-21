@@ -477,7 +477,7 @@ class WithdrawFrom(Goal):
         if self._start_inv is None:
             self._start_inv = current_inv
         self._attempts += 1
-        self._active = FaceAndInteract(target, withdraw_action(self.item_type))
+        self._active = FaceAndInteract(target, withdraw_action())
         return self._active.step(view)
 
 

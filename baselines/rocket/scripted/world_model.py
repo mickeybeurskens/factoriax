@@ -52,35 +52,31 @@ _PLAYER_MAX_STACK_NP: np.ndarray = np.asarray(PLAYER_MAX_STACK, dtype=np.float32
 
 # Action enum offsets for compound actions. Keep as bare ints so tests
 # don't need to re-import the enum.
-_ITEM_TO_WITHDRAW: dict[int, int] = {
-    int(ItemType.COAL): int(Action.WITHDRAW_COAL),
-    int(ItemType.IRON_ORE): int(Action.WITHDRAW_IRON_ORE),
-    int(ItemType.COPPER_ORE): int(Action.WITHDRAW_COPPER_ORE),
-    int(ItemType.TIN_ORE): int(Action.WITHDRAW_TIN_ORE),
-    int(ItemType.SILICON): int(Action.WITHDRAW_SILICON),
-    int(ItemType.IRON_PLATE): int(Action.WITHDRAW_IRON_PLATE),
-    int(ItemType.COPPER_PLATE): int(Action.WITHDRAW_COPPER_PLATE),
-    int(ItemType.TIN_PLATE): int(Action.WITHDRAW_TIN_PLATE),
-    int(ItemType.WAFER): int(Action.WITHDRAW_WAFER),
-    int(ItemType.FRAME): int(Action.WITHDRAW_FRAME),
-    int(ItemType.CIRCUIT): int(Action.WITHDRAW_CIRCUIT),
-    int(ItemType.WIRE): int(Action.WITHDRAW_WIRE),
-    int(ItemType.MOTOR): int(Action.WITHDRAW_MOTOR),
-    int(ItemType.SENSOR): int(Action.WITHDRAW_SENSOR),
-    int(ItemType.CONVEYOR_BELT): int(Action.WITHDRAW_BELT),
-    int(ItemType.MINER): int(Action.WITHDRAW_MINER),
-    int(ItemType.ASSEMBLER): int(Action.WITHDRAW_ASSEMBLER),
-    int(ItemType.PALLET): int(Action.WITHDRAW_PALLET),
-    int(ItemType.ARM): int(Action.WITHDRAW_ARM),
-    int(ItemType.BASIC_SCIENCE_PACK): int(Action.WITHDRAW_BASIC_SCIENCE),
-    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.WITHDRAW_ADV_SCIENCE),
-    int(ItemType.ROCKET): int(Action.WITHDRAW_ROCKET),
-    int(ItemType.FURNACE): int(Action.WITHDRAW_FURNACE),
-    int(ItemType.REFRACTORY): int(Action.WITHDRAW_REFRACTORY),
-}
 _ITEM_TO_DEPOSIT: dict[int, int] = {
-    item: _ITEM_TO_WITHDRAW[item] - int(Action.WITHDRAW_COAL) + int(Action.DEPOSIT_COAL)
-    for item in _ITEM_TO_WITHDRAW
+    int(ItemType.COAL): int(Action.DEPOSIT_COAL),
+    int(ItemType.IRON_ORE): int(Action.DEPOSIT_IRON_ORE),
+    int(ItemType.COPPER_ORE): int(Action.DEPOSIT_COPPER_ORE),
+    int(ItemType.TIN_ORE): int(Action.DEPOSIT_TIN_ORE),
+    int(ItemType.SILICON): int(Action.DEPOSIT_SILICON),
+    int(ItemType.IRON_PLATE): int(Action.DEPOSIT_IRON_PLATE),
+    int(ItemType.COPPER_PLATE): int(Action.DEPOSIT_COPPER_PLATE),
+    int(ItemType.TIN_PLATE): int(Action.DEPOSIT_TIN_PLATE),
+    int(ItemType.WAFER): int(Action.DEPOSIT_WAFER),
+    int(ItemType.FRAME): int(Action.DEPOSIT_FRAME),
+    int(ItemType.CIRCUIT): int(Action.DEPOSIT_CIRCUIT),
+    int(ItemType.WIRE): int(Action.DEPOSIT_WIRE),
+    int(ItemType.MOTOR): int(Action.DEPOSIT_MOTOR),
+    int(ItemType.SENSOR): int(Action.DEPOSIT_SENSOR),
+    int(ItemType.CONVEYOR_BELT): int(Action.DEPOSIT_BELT),
+    int(ItemType.MINER): int(Action.DEPOSIT_MINER),
+    int(ItemType.ASSEMBLER): int(Action.DEPOSIT_ASSEMBLER),
+    int(ItemType.PALLET): int(Action.DEPOSIT_PALLET),
+    int(ItemType.ARM): int(Action.DEPOSIT_ARM),
+    int(ItemType.BASIC_SCIENCE_PACK): int(Action.DEPOSIT_BASIC_SCIENCE),
+    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.DEPOSIT_ADV_SCIENCE),
+    int(ItemType.ROCKET): int(Action.DEPOSIT_ROCKET),
+    int(ItemType.FURNACE): int(Action.DEPOSIT_FURNACE),
+    int(ItemType.REFRACTORY): int(Action.DEPOSIT_REFRACTORY),
 }
 _MACHINE_TO_PLACE: dict[int, int] = {
     int(MachineType.MINER): int(Action.PLACE_MINER),
@@ -510,9 +506,9 @@ def face_action(direction: int) -> int:
     return _DIR_TO_FACE_ACTION[int(direction)]
 
 
-def withdraw_action(item: int | ItemType) -> int:
-    """``WITHDRAW_<item>`` action for the given item type."""
-    return _ITEM_TO_WITHDRAW[int(item)]
+def withdraw_action() -> int:
+    """Single ``WITHDRAW`` action — engine pulls whatever is in the output slot."""
+    return int(Action.WITHDRAW)
 
 
 def deposit_action(item: int | ItemType) -> int:

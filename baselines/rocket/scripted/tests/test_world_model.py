@@ -331,8 +331,7 @@ def test_face_action_maps_to_correct_action() -> None:
 
 
 def test_withdraw_action_matches_enum() -> None:
-    assert wm.withdraw_action(ItemType.IRON_ORE) == int(Action.WITHDRAW_IRON_ORE)
-    assert wm.withdraw_action(ItemType.ROCKET) == int(Action.WITHDRAW_ROCKET)
+    assert wm.withdraw_action() == int(Action.WITHDRAW)
 
 
 def test_deposit_action_matches_enum() -> None:
