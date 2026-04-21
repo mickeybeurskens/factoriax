@@ -61,4 +61,36 @@ combiners post-Phase-4, so no double-withdrawal risk.
 + is_buf = mt != MachineType.NONE
 ```
 
+**Fix landed** in `is_buf = mt != MachineType.NONE` (`game_logic.py`).
+The two withdrawal paths stay mutually exclusive in practice because
+`asm_out` is empty post-Phase-4 on combiners, so no double-deduct.
+
+## 2. Assembler picks the wrong recipe when inputs are a superset
+
+**Symptom**: Depositing the canonical WIRE inputs (1 iron plate + 2
+copper plate) into a placed assembler produces a FURNACE, not a wire.
+Same pattern for any recipe whose inputs are a strict superset of a
+later recipe's inputs.
+
+**Root cause**: `factoriax/machines.py::run_assemblers` Phase 3
+iterates recipes in list order and uses
+``matched = jnp.where(cond, r, matched)`` — so the *last* matching
+recipe's index wins. Combined with the ``>=`` input-count check, a
+recipe with smaller requirements (e.g. FURNACE at index 14, needing
+1 iron + 1 copper) always beats a recipe with larger requirements at
+an earlier index (WIRE at index 6, needing 1 iron + 2 copper) when
+both are satisfiable.
+
+**Impact**: WIRE is the only affected core recipe on the rocket
+path, but since MOTOR / SENSOR / ARM / BELT / MINER / ASSEMBLER /
+ROCKET all transitively depend on WIRE, every late-tier recipe is
+blocked too.
+
+**Fix landed**: iterate ``reversed(range(NUM_RECIPES))`` in
+`run_assemblers`, so the *earliest* (lowest-index) match wins. Aligns
+with the intuitive "more-specific recipe wins" expectation at no
+extra cost. Agents still need to deposit inputs in
+descending-count order so the assembler doesn't fire a sub-recipe
+mid-deposit — see ``ProduceInMachine`` in the scripted agent.
+
 ## (reserved for further bugs as they surface)
