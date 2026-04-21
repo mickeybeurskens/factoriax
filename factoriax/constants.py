@@ -52,6 +52,10 @@ class ItemType(IntEnum):
     ROCKET = 22
     FURNACE = 23
     REFRACTORY = 24
+    HULL = 25
+    ENGINE_UNIT = 26
+    AVIONICS = 27
+    ROCKET_CORE = 28
 
 
 class MachineType(IntEnum):
@@ -118,6 +122,10 @@ PLAYER_MAX_STACK = jnp.array(
         128,  # ROCKET
         128,  # FURNACE
         1024,  # REFRACTORY
+        128,  # HULL
+        128,  # ENGINE_UNIT
+        128,  # AVIONICS
+        128,  # ROCKET_CORE
     ],
     dtype=jnp.int32,
 )
@@ -155,6 +163,10 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.ROCKET: (240, 240, 240),
     ItemType.FURNACE: (120, 60, 40),
     ItemType.REFRACTORY: (210, 170, 120),
+    ItemType.HULL: (150, 160, 170),
+    ItemType.ENGINE_UNIT: (220, 140, 60),
+    ItemType.AVIONICS: (80, 200, 220),
+    ItemType.ROCKET_CORE: (160, 100, 200),
 }
 
 # Human-readable display names for each MachineType.
@@ -278,6 +290,10 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.ROCKET,  # ROCKET
         MachineType.FURNACE,  # FURNACE
         MachineType.NONE,  # REFRACTORY
+        MachineType.NONE,  # HULL
+        MachineType.NONE,  # ENGINE_UNIT
+        MachineType.NONE,  # AVIONICS
+        MachineType.NONE,  # ROCKET_CORE
     ],
     dtype=jnp.int32,
 )
