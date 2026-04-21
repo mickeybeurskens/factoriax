@@ -33,21 +33,29 @@ from factoriax.state import EnvParams, EnvState
 def _reconstruct_buffer_type_grid(state: EnvState) -> jnp.ndarray:
     """Build a (H, W) buffer-type grid from entity arrays.
 
-    Active entities scatter their ``ent_buf_type`` onto the grid at
-    ``(ent_y, ent_x)``. Tiles without an entity remain zero.
+    Active entities scatter a single "what's available to withdraw
+    here?" value. Combiner output (``ent_asm_out``) takes priority
+    when present — with Phase 4 of ``run_combiners`` removed, the
+    asm_out slot holds completed recipe output until withdrawn and
+    ``ent_buf`` stays empty on combiners. For non-combiners (miners,
+    pallets, belts) ``ent_asm_out`` is always empty and the fallback
+    to ``ent_buf_type`` is what shows up.
 
     Args:
         state: Current environment state.
 
     Returns:
-        int8 array of shape ``(H, W)`` with buffer item types.
+        int8 array of shape ``(H, W)`` with withdrawable item types.
     """
     h, w = state.map.shape
     grid = jnp.zeros((h, w), dtype=jnp.int8)
     active = state.ent_y >= 0
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
-    vals = jnp.where(active, state.ent_buf_type, jnp.int8(0))
+    out_has = state.ent_asm_out_count > 0
+    buf_val = jnp.where(active, state.ent_buf_type, jnp.int8(0))
+    out_val = jnp.where(active & out_has, state.ent_asm_out_type, jnp.int8(0))
+    vals = jnp.where(out_val != jnp.int8(0), out_val, buf_val)
     return grid.at[ey, ex].set(vals)
 
 
@@ -55,7 +63,8 @@ _MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(MachineType))
 _DIR_NORM: float = 4.0
 _PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
-    PLAYER_MAX_STACK.astype(jnp.float32), 1.0,
+    PLAYER_MAX_STACK.astype(jnp.float32),
+    1.0,
 )
 
 # Spatial channels shared by global_array and local_array.
@@ -136,36 +145,26 @@ def _player_scalars(
     facing_mt = state.machine_types[sy, sx].astype(jnp.float32) * mask
     facing_bt = state.ent_buf_type[eidx].astype(jnp.float32) * mask
     facing_bc = state.ent_buf_count[eidx].astype(jnp.float32) * mask
-    facing_asm_in0t = (
-        state.ent_asm_in_type[eidx, 0].astype(jnp.float32) * mask
-    )
-    facing_asm_in0c = (
-        state.ent_asm_in_count[eidx, 0].astype(jnp.float32) * mask
-    )
-    facing_asm_in1t = (
-        state.ent_asm_in_type[eidx, 1].astype(jnp.float32) * mask
-    )
-    facing_asm_in1c = (
-        state.ent_asm_in_count[eidx, 1].astype(jnp.float32) * mask
-    )
-    facing_asm_ot = (
-        state.ent_asm_out_type[eidx].astype(jnp.float32) * mask
-    )
-    facing_asm_oc = (
-        state.ent_asm_out_count[eidx].astype(jnp.float32) * mask
-    )
+    facing_asm_in0t = state.ent_asm_in_type[eidx, 0].astype(jnp.float32) * mask
+    facing_asm_in0c = state.ent_asm_in_count[eidx, 0].astype(jnp.float32) * mask
+    facing_asm_in1t = state.ent_asm_in_type[eidx, 1].astype(jnp.float32) * mask
+    facing_asm_in1c = state.ent_asm_in_count[eidx, 1].astype(jnp.float32) * mask
+    facing_asm_ot = state.ent_asm_out_type[eidx].astype(jnp.float32) * mask
+    facing_asm_oc = state.ent_asm_out_count[eidx].astype(jnp.float32) * mask
 
-    facing = jnp.array([
-        facing_mt / _MACHINE_NORM,
-        facing_bt / float(NUM_ITEM_TYPES),
-        facing_bc / 64.0,
-        facing_asm_in0t / float(NUM_ITEM_TYPES),
-        facing_asm_in0c / 64.0,
-        facing_asm_in1t / float(NUM_ITEM_TYPES),
-        facing_asm_in1c / 64.0,
-        facing_asm_ot / float(NUM_ITEM_TYPES),
-        facing_asm_oc / 64.0,
-    ])
+    facing = jnp.array(
+        [
+            facing_mt / _MACHINE_NORM,
+            facing_bt / float(NUM_ITEM_TYPES),
+            facing_bc / 64.0,
+            facing_asm_in0t / float(NUM_ITEM_TYPES),
+            facing_asm_in0c / 64.0,
+            facing_asm_in1t / float(NUM_ITEM_TYPES),
+            facing_asm_in1c / 64.0,
+            facing_asm_ot / float(NUM_ITEM_TYPES),
+            facing_asm_oc / 64.0,
+        ]
+    )
     scalars = jnp.concatenate([scalars, facing])
 
     # Player inventory.
@@ -201,18 +200,12 @@ def global_array(
         + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES,)``.
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
-    flat_machines = (
-        state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
-    )
-    flat_resources = (
-        state.block_resources.flatten().astype(jnp.float32)
-        / float(BLOCK_MAX_RESOURCES)
+    flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
+    flat_resources = state.block_resources.flatten().astype(jnp.float32) / float(
+        BLOCK_MAX_RESOURCES
     )
     buf_grid = _reconstruct_buffer_type_grid(state)
-    flat_buffer = (
-        buf_grid.flatten().astype(jnp.float32)
-        / float(NUM_ITEM_TYPES)
-    )
+    flat_buffer = buf_grid.flatten().astype(jnp.float32) / float(NUM_ITEM_TYPES)
     spatial = jnp.concatenate(
         [flat_blocks, flat_machines, flat_resources, flat_buffer],
     )
@@ -246,33 +239,37 @@ def local_array(
     pw = ((radius, radius), (radius, radius))
 
     padded_map = (
-        jnp.pad(state.map, pw, constant_values=BlockType.OUT_OF_BOUNDS)
-        .astype(jnp.float32) / _MAP_NORM
+        jnp.pad(state.map, pw, constant_values=BlockType.OUT_OF_BOUNDS).astype(
+            jnp.float32
+        )
+        / _MAP_NORM
     )
     padded_machines = (
-        jnp.pad(state.machine_types, pw, constant_values=MachineType.NONE)
-        .astype(jnp.float32) / _MACHINE_NORM
+        jnp.pad(state.machine_types, pw, constant_values=MachineType.NONE).astype(
+            jnp.float32
+        )
+        / _MACHINE_NORM
     )
-    padded_resources = (
-        jnp.pad(state.block_resources, pw, constant_values=0)
-        .astype(jnp.float32) / float(BLOCK_MAX_RESOURCES)
-    )
+    padded_resources = jnp.pad(state.block_resources, pw, constant_values=0).astype(
+        jnp.float32
+    ) / float(BLOCK_MAX_RESOURCES)
     buf_grid = _reconstruct_buffer_type_grid(state)
-    padded_buffer = (
-        jnp.pad(buf_grid, pw, constant_values=0)
-        .astype(jnp.float32) / float(NUM_ITEM_TYPES)
-    )
+    padded_buffer = jnp.pad(buf_grid, pw, constant_values=0).astype(
+        jnp.float32
+    ) / float(NUM_ITEM_TYPES)
 
     pos = state.player_positions[player_idx]
     start = (pos[1], pos[0])
     slice_shape = (size, size)
 
-    spatial = jnp.concatenate([
-        jax.lax.dynamic_slice(padded_map, start, slice_shape).ravel(),
-        jax.lax.dynamic_slice(padded_machines, start, slice_shape).ravel(),
-        jax.lax.dynamic_slice(padded_resources, start, slice_shape).ravel(),
-        jax.lax.dynamic_slice(padded_buffer, start, slice_shape).ravel(),
-    ])
+    spatial = jnp.concatenate(
+        [
+            jax.lax.dynamic_slice(padded_map, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_machines, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_resources, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_buffer, start, slice_shape).ravel(),
+        ]
+    )
     return jnp.concatenate(
         [spatial, _player_scalars(state, params, player_idx)],
     )
