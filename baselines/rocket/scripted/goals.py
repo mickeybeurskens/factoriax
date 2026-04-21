@@ -751,6 +751,11 @@ class PipelinedProduce(Goal):
         self._deposits: dict[tuple[int, int], int] = {}
 
     def step(self, view: WorldView) -> StepReturn:
+        # Exit as soon as the target is met. _deposits tracking can
+        # drift out of sync with physical state (Phase 0 pulls,
+        # adjacent-combiner interactions) so waiting for "pending
+        # cycles to drain" risks deadlock. Any leftover output is
+        # cleaned up by the NEXT goal's broadened priority-1 scan.
         if view.player.held(self.output_item) >= self.count:
             return Result.DONE, None
 
@@ -768,30 +773,33 @@ class PipelinedProduce(Goal):
         tiles.sort(key=lambda t: abs(t[0] - px) + abs(t[1] - py))
         candidates = tiles[: self.k]
 
-        # Priority 1: withdraw from any machine whose output channel
-        # matches our target item.
+        # Priority 1: withdraw ANY non-empty output slot on a
+        # candidate machine. Broadened from "only our output_item"
+        # so that leftovers from a previous goal (e.g. a FRAME still
+        # sitting in asm_out when we start a WIRE goal) don't block
+        # the idle gate on the next cycle.
         for tile in candidates:
             tx, ty = tile
-            if int(view.buffer_type[ty, tx]) == self.output_item:
+            if int(view.buffer_type[ty, tx]) != 0:
                 self._deposits.pop(tile, None)
                 self._active = FaceAndInteract(tile, int(Action.WITHDRAW))
                 return self._active.step(view)
 
-        # Priority 2: deposit the next input into the machine with
-        # the fewest deposits so far (keeps the pipeline balanced).
+        # Priority 2: deposit the next input into the NEAREST
+        # machine that can accept one. Walks to a partial cycle
+        # first if the nearest machine has one; otherwise starts
+        # a fresh cycle at the nearest idle machine.
         need = len(self._deposit_sequence)
         best_tile: tuple[int, int] | None = None
-        best_progress = need
-        for tile in candidates:
+        for tile in candidates:  # already sorted by distance
             progress = self._deposits.get(tile, 0)
             if progress >= need:
                 continue
             next_item = self._deposit_sequence[progress]
             if view.player.held(next_item) < 1:
                 continue
-            if progress < best_progress:
-                best_progress = progress
-                best_tile = tile
+            best_tile = tile
+            break
 
         if best_tile is not None:
             progress = self._deposits.get(best_tile, 0)
@@ -803,8 +811,8 @@ class PipelinedProduce(Goal):
             )
             return self._active.step(view)
 
-        # Nothing to do this tick: all deposits landed, all machines
-        # cooking, no output ready yet. Wait.
+        # Nothing to do this tick: cooking in progress, no output
+        # ready yet, no deposits to make. Wait.
         return Result.RUNNING, int(Action.NOOP)
 
 

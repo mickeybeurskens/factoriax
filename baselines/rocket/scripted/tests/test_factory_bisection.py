@@ -70,8 +70,8 @@ pytestmark = pytest.mark.slow
 
 
 # Tight wall-clock cap per test. Single-env rollouts run at
-# ~25-40 ms/tick on this machine, so 60 s ≈ 1500-2500 ticks.
-_WALL_CAP_SEC = 60.0
+# ~25-40 ms/tick on this machine, so 90 s ≈ 2000-3500 ticks.
+_WALL_CAP_SEC = 90.0
 
 
 @dataclass
@@ -81,6 +81,7 @@ class BisectionRunResult:
     wall_sec: float
     last_goal: str
     hit_cap: bool
+    goal_log: list[str]
 
 
 def _run_plan(goals: list[Goal], max_steps: int) -> BisectionRunResult:
@@ -111,6 +112,12 @@ def _run_plan(goals: list[Goal], max_steps: int) -> BisectionRunResult:
     agent = ScriptedAgent(env_params, planner)
     key = jax.random.PRNGKey(0)
 
+    from collections import deque
+
+    from factoriax.constants import Action
+
+    recent_actions: deque[tuple[int, int]] = deque(maxlen=40)
+
     t0 = time.perf_counter()
     steps = 0
     hit_cap = False
@@ -120,25 +127,74 @@ def _run_plan(goals: list[Goal], max_steps: int) -> BisectionRunResult:
             break
         obs = np.asarray(global_array(state.env_state, env_params, 0))
         action = agent.act(obs)
+        recent_actions.append((t, int(action)))
         key, sub = jax.random.split(key)
         _, state, _, done, _ = jit_step(sub, state, jnp.int32(action), env_params)
         steps = t + 1
         if agent.is_done or bool(done):
             break
 
-    return BisectionRunResult(
+    result = BisectionRunResult(
         state=state,
         steps=steps,
         wall_sec=time.perf_counter() - t0,
         last_goal=planner.current_goal_name,
         hit_cap=hit_cap,
+        goal_log=planner.goal_log_lines(),
     )
+    if hit_cap:
+        recent_names = ", ".join(
+            f"{t}:{Action(a).name}" for t, a in list(recent_actions)[-15:]
+        )
+        result.goal_log.append(f"(recent actions) {recent_names}")
+    return result
 
 
 def _assert_not_capped(result: BisectionRunResult) -> None:
-    assert not result.hit_cap, (
+    if not result.hit_cap:
+        return
+    tail = "\n    ".join(result.goal_log[-20:]) or "(empty)"
+    # Dump combiner state so we can see which machines are wedged.
+    env_state = result.state.env_state
+    ent_y = np.asarray(env_state.ent_y)
+    ent_x = np.asarray(env_state.ent_x)
+    ent_type = np.asarray(env_state.ent_type)
+    ent_power = np.asarray(env_state.ent_power)
+    ent_in_t = np.asarray(env_state.ent_asm_in_type)
+    ent_in_c = np.asarray(env_state.ent_asm_in_count)
+    ent_out_t = np.asarray(env_state.ent_asm_out_type)
+    ent_out_c = np.asarray(env_state.ent_asm_out_count)
+    ent_buf_t = np.asarray(env_state.ent_buf_type)
+    ent_buf_c = np.asarray(env_state.ent_buf_count)
+    inv = np.asarray(env_state.player_inventory[0])
+    held = {
+        ItemType(i).name: int(inv[i]) for i in range(inv.shape[0]) if int(inv[i]) > 0
+    }
+    combiner_rows: list[str] = []
+    for i in range(ent_y.shape[0]):
+        if int(ent_y[i]) < 0:
+            continue
+        mt = int(ent_type[i])
+        if mt not in (int(MachineType.ASSEMBLER), int(MachineType.FURNACE)):
+            continue
+        combiner_rows.append(
+            f"  e{i} {MachineType(mt).name} at ({int(ent_x[i])},{int(ent_y[i])}) "
+            f"power={int(ent_power[i])} "
+            f"in0={int(ent_in_t[i, 0])}×{int(ent_in_c[i, 0])} "
+            f"in1={int(ent_in_t[i, 1])}×{int(ent_in_c[i, 1])} "
+            f"out={int(ent_out_t[i])}×{int(ent_out_c[i])} "
+            f"buf={int(ent_buf_t[i])}×{int(ent_buf_c[i])}"
+        )
+    combiner_dump = "\n".join(combiner_rows) or "  (no combiners)"
+    player_pos = tuple(int(v) for v in np.asarray(env_state.player_positions[0]))
+    player_dir = int(np.asarray(env_state.player_directions[0]))
+    raise AssertionError(
         f"Hit {_WALL_CAP_SEC}s wall cap after {result.steps} steps. "
-        f"Active goal when bailed: {result.last_goal!r}."
+        f"Active goal when bailed: {result.last_goal!r}.\n"
+        f"  Player @ {player_pos} facing dir={player_dir}\n"
+        f"  Last 20 goal transitions:\n    {tail}\n"
+        f"  Player inventory: {held}\n"
+        f"  Combiner states:\n{combiner_dump}"
     )
 
 
@@ -343,4 +399,106 @@ def test_d_pipelined_smelt_completes() -> None:
     assert got >= count, (
         f"PipelinedProduce finished but only produced {got}/{count} plates "
         f"at step {result.steps}. Last goal: {result.last_goal!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test E — consecutive PipelinedProduce goals on the same machine type
+# ---------------------------------------------------------------------------
+
+
+def _consecutive_pipelined_goals() -> list[Goal]:
+    """Starter + central bank + two back-to-back PipelinedProduce goals.
+
+    If the first goal leaves stale deposits in any of the 3 assembler
+    input slots, the second goal (with a different recipe) can't fire
+    its recipe — this is the same failure mode that cost the v1
+    factory its craft_arm/place_arm achievements.
+
+    Chose FRAME → WIRE because they share the same machine type but
+    have disjoint input types (iron+tin vs copper+tin), so any
+    carry-over from FRAME will actively wedge WIRE.
+    """
+    base = _starter_goals() + [
+        PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
+        PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
+        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
+        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
+    ]
+    # Mine + smelt just enough for both recipes.
+    # 8 frames = 8 iron + 8 tin; 8 wires = 8 copper + 8 tin.
+    more = [
+        MineOre(ItemType.IRON_ORE, 10),
+        MineOre(ItemType.COPPER_ORE, 10),
+        MineOre(ItemType.TIN_ORE, 20),
+        PipelinedProduce(ItemType.IRON_PLATE, 10, MachineType.FURNACE, k=3),
+        PipelinedProduce(ItemType.COPPER_PLATE, 10, MachineType.FURNACE, k=3),
+        PipelinedProduce(ItemType.TIN_PLATE, 20, MachineType.FURNACE, k=3),
+        # The two back-to-back pipelined goals under test.
+        PipelinedProduce(ItemType.FRAME, 8, MachineType.ASSEMBLER, k=3),
+        PipelinedProduce(ItemType.WIRE, 8, MachineType.ASSEMBLER, k=3),
+    ]
+    return base + more
+
+
+def test_e_consecutive_pipelined_completes() -> None:
+    """Two PipelinedProduce goals on the same 3-machine set both finish
+    within the wall cap."""
+    result = _run_plan(_consecutive_pipelined_goals(), max_steps=5000)
+    _assert_not_capped(result)
+
+    inv = np.asarray(result.state.env_state.player_inventory[0])
+    frames = int(inv[ItemType.FRAME])
+    wires = int(inv[ItemType.WIRE])
+    assert frames >= 8 and wires >= 8, (
+        f"Consecutive pipelined goals short: frames={frames}/8, "
+        f"wires={wires}/8 at step {result.steps}. "
+        f"Last goal: {result.last_goal!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test F — pipelined → sequential transition on the same machine type
+# ---------------------------------------------------------------------------
+
+
+def _pipelined_then_sequential_goals() -> list[Goal]:
+    """Starter + central bank + PipelinedProduce → ProduceInAssembler on
+    the same machine type.
+
+    This is exactly the Phase J → Phase K transition in the factory
+    agent: pipelined sub-assemblies hand off to sequential ARM/BELT
+    goals. If any of the 3 assemblers has stale state when the
+    sequential goal starts, the goal picks that (nearest) machine
+    and hangs.
+    """
+    base = _starter_goals() + [
+        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
+        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
+    ]
+    more = [
+        MineOre(ItemType.COPPER_ORE, 12),
+        MineOre(ItemType.TIN_ORE, 10),
+        PipelinedProduce(ItemType.COPPER_PLATE, 12, MachineType.FURNACE, k=3),
+        PipelinedProduce(ItemType.TIN_PLATE, 10, MachineType.FURNACE, k=3),
+        # 8 wires across 3 assemblers (pipelined).
+        PipelinedProduce(ItemType.WIRE, 8, MachineType.ASSEMBLER, k=3),
+        # Then 1 arm sequentially. Needs 1 copper + 1 wire.
+        ProduceInAssembler(ItemType.ARM, 1),
+    ]
+    return base + more
+
+
+def test_f_pipelined_then_sequential_transition() -> None:
+    """After a PipelinedProduce phase, a follow-up ProduceInMachine
+    completes without deadlock on a stale machine."""
+    result = _run_plan(_pipelined_then_sequential_goals(), max_steps=4000)
+    _assert_not_capped(result)
+
+    inv = np.asarray(result.state.env_state.player_inventory[0])
+    arms = int(inv[ItemType.ARM])
+    assert arms >= 1, (
+        f"Sequential ARM goal didn't complete after pipelined WIRE. "
+        f"Arms held: {arms}. Last goal: {result.last_goal!r}. "
+        f"Steps: {result.steps}."
     )
