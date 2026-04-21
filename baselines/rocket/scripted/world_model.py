@@ -76,6 +76,7 @@ _ITEM_TO_WITHDRAW: dict[int, int] = {
     int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.WITHDRAW_ADV_SCIENCE),
     int(ItemType.ROCKET): int(Action.WITHDRAW_ROCKET),
     int(ItemType.FURNACE): int(Action.WITHDRAW_FURNACE),
+    int(ItemType.REFRACTORY): int(Action.WITHDRAW_REFRACTORY),
 }
 _ITEM_TO_DEPOSIT: dict[int, int] = {
     item: _ITEM_TO_WITHDRAW[item] - int(Action.WITHDRAW_COAL) + int(Action.DEPOSIT_COAL)

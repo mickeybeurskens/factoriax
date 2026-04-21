@@ -139,8 +139,12 @@ def build_rocket_goals() -> list[Goal]:
         # a missing ingredient.
         ProduceInFurnace(ItemType.IRON_PLATE, 64),
         ProduceInFurnace(ItemType.COPPER_PLATE, 46),
-        ProduceInFurnace(ItemType.TIN_PLATE, 19),
+        ProduceInFurnace(ItemType.TIN_PLATE, 20),
         ProduceInFurnace(ItemType.WAFER, 11),
+        # REFRACTORY is a furnace half-fab (tin plate + coal). Only
+        # needed as input for the FURNACE recipe below, so 1 is enough
+        # to unlock craft_furnace.
+        ProduceInFurnace(ItemType.REFRACTORY, 1),
         # ---- Phase D — bulk intermediates via the assembler ----
         # Firing-in-bulk covers the craft_* achievements on the first
         # output of each recipe. Intentionally ordered so upstream

@@ -487,6 +487,7 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
         int(ItemType.COPPER_PLATE),
         int(ItemType.TIN_PLATE),
         int(ItemType.WAFER),
+        int(ItemType.REFRACTORY),
     }
 )
 
@@ -540,17 +541,9 @@ class ProduceInMachine(Goal):
             if machine_type is not None
             else _default_machine_for(self.output_item)
         )
-        # Deposit inputs in descending count order. With ``in_cX >= ra_X``
-        # recipe matching, a shorter recipe whose inputs are a subset of
-        # this one's can fire before all inputs land if we deposit the
-        # smaller-count input first. Descending order keeps the recipe
-        # un-satisfied until the very last deposit, when the full input
-        # set matches and the engine's Phase 3 loop (with reverse
-        # iteration) picks the correct recipe.
-        self.recipe_inputs: list[tuple[int, int]] = sorted(
-            ((int(it), int(q)) for it, q in recipe["inputs"]),
-            key=lambda t: -t[1],
-        )
+        self.recipe_inputs: list[tuple[int, int]] = [
+            (int(it), int(q)) for it, q in recipe["inputs"]
+        ]
         self.wait_ticks: int = int(recipe["ticks"]) + 3
 
         self._sub: Goal | None = None
