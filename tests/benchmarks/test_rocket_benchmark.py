@@ -67,7 +67,7 @@ def test_benchmark_construction() -> None:
     levels = bench.levels()
     assert len(levels) == 1
     params = levels[0].env_params
-    assert params.max_timesteps == 16000
+    assert params.max_timesteps == 8000
     assert params.map_width == 32
     assert params.map_height == 32
     assert params.num_players == 1
