@@ -388,10 +388,13 @@ def withdraw_from_adjacent(
     out_has = state.ent_asm_out_count[eidx] > 0
     can_withdraw_asm = in_bounds & is_combiner & out_match & out_has & has_space
 
-    # Withdraw from buffer.
+    # Withdraw from buffer. Applies to combiners too: ``run_combiners``
+    # Phase 4 always moves the recipe output from ``ent_asm_out_*`` into
+    # ``ent_buf_*`` on the next tick, so without this path the combiner
+    # branch above finds an empty ``asm_out`` and withdraws nothing.
     buf_match = state.ent_buf_type[eidx] == item_type
     buf_has = state.ent_buf_count[eidx] > 0
-    is_buf = ~is_combiner & (mt != MachineType.NONE)
+    is_buf = mt != MachineType.NONE
     can_withdraw_buf = in_bounds & is_buf & buf_match & buf_has & has_space
 
     can_withdraw = can_withdraw_asm | can_withdraw_buf
