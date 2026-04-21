@@ -93,4 +93,21 @@ extra cost. Agents still need to deposit inputs in
 descending-count order so the assembler doesn't fire a sub-recipe
 mid-deposit — see ``ProduceInMachine`` in the scripted agent.
 
+## 3. `DEPOSIT_FURNACE` and `WITHDRAW_FURNACE` silently dispatch as movement
+
+**Symptom**: `WITHDRAW_FURNACE` emitted while facing a machine holding
+a furnace item has no effect — player inventory stays unchanged.
+
+**Root cause**: `factoriax/game_logic.py::factoriax_step`'s action
+dispatch ranges (around lines 533–540) end at `DEPOSIT_ROCKET` /
+`WITHDRAW_ROCKET`. But `Action` was extended with
+`DEPOSIT_FURNACE = 60` *after* `DEPOSIT_ROCKET = 59`, and
+`WITHDRAW_FURNACE = 83` *after* `WITHDRAW_ROCKET = 82`. So
+`DEPOSIT_FURNACE` and `WITHDRAW_FURNACE` fall outside the compared
+range, don't get `cat=6` / `cat=7`, default to `cat=0` (movement),
+and become no-ops.
+
+**Fix landed**: tighten the comparisons to `<= Action.DEPOSIT_FURNACE`
+and `<= Action.WITHDRAW_FURNACE`. Two-line change.
+
 ## (reserved for further bugs as they surface)
