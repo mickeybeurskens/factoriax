@@ -202,7 +202,7 @@ class TestCompoundWithdraw:
     """Tests for typed withdraw actions."""
 
     def test_withdraw_iron_from_miner(self, state_factory) -> None:
-        """WITHDRAW_IRON should pull iron from the miner's buffer."""
+        """WITHDRAW drains the whole miner buffer in one action."""
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),
@@ -225,8 +225,8 @@ class TestCompoundWithdraw:
         )
         new = withdraw_from_adjacent(state, 0)
         eid = int(state.tile_entity[1, 1])
-        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 1
-        assert int(new.ent_buf_count[eid]) == 7
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 8
+        assert int(new.ent_buf_count[eid]) == 0
 
     def test_withdraw_empty_is_noop(self, state_factory) -> None:
         """Withdrawing an item that isn't there should be a no-op."""

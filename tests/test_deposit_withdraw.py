@@ -340,7 +340,11 @@ class TestWithdrawFromPallet:
     """Withdraw items from a pallet into player inventory."""
 
     def test_withdraw_iron_from_pallet(self, state_factory) -> None:
-        """Should take one item of the specified type from the pallet."""
+        """WITHDRAW pulls the whole stack (up to player capacity).
+
+        Pallet has 10 iron ore; player starts empty with 1024-stack
+        cap, so all 10 transfer in one action.
+        """
         bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.IRON_ORE, 10)})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -354,8 +358,8 @@ class TestWithdrawFromPallet:
         state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 1
-        assert int(state.ent_buf_count[eidx]) == 9
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.ent_buf_count[eidx]) == 0
 
     def test_withdraw_noop_empty_machine(self, state_factory) -> None:
         """Withdraw from empty pallet should be a no-op."""
@@ -387,7 +391,7 @@ class TestWithdrawFromMiner:
     """Withdraw from miners."""
 
     def test_withdraw_ore_from_miner(self, state_factory) -> None:
-        """Should be able to withdraw mined ore from a miner's buffer."""
+        """WITHDRAW pulls the whole miner output in one action."""
         bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.IRON_ORE, 10)})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -401,15 +405,15 @@ class TestWithdrawFromMiner:
         state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 1
-        assert int(state.ent_buf_count[eidx]) == 9
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.ent_buf_count[eidx]) == 0
 
 
 class TestWithdrawFromAssembler:
     """Withdraw from assemblers uses the output slot."""
 
     def test_withdraw_output_from_assembler(self, state_factory) -> None:
-        """Withdrawing the output item type should work."""
+        """WITHDRAW pulls all available output in one action."""
         aot, aoc = _asm_out_grids(3, 3, {(1, 2): (ItemType.FRAME, 5)})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -423,15 +427,16 @@ class TestWithdrawFromAssembler:
         state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.FRAME]) == 1
-        assert int(state.ent_asm_out_count[eidx]) == 4
+        assert int(state.player_inventory[0, ItemType.FRAME]) == 5
+        assert int(state.ent_asm_out_count[eidx]) == 0
 
 
 class TestWithdrawMergesIntoInventory:
     """Withdrawn items should merge with existing player stacks."""
 
     def test_withdraw_merges_with_existing_stack(self, state_factory) -> None:
-        """Items withdrawn should add to existing count in player inv."""
+        """Withdrawn items merge with the existing player stack and
+        the whole pallet drains in one action."""
         p_inv = _player_inv(1, {ItemType.IRON_ORE: 3})
         bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.IRON_ORE, 7)})
         state = state_factory(
@@ -447,8 +452,8 @@ class TestWithdrawMergesIntoInventory:
         state = withdraw_from_adjacent(state, 0)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 4
-        assert int(state.ent_buf_count[eidx]) == 6
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.ent_buf_count[eidx]) == 0
 
 
 class TestDepositWithdrawViaStep:
@@ -500,5 +505,5 @@ class TestDepositWithdrawViaStep:
         state = factoriax_step(rng, state, Action.WITHDRAW, params)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 1
-        assert int(state.ent_buf_count[eidx]) == 9
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.ent_buf_count[eidx]) == 0

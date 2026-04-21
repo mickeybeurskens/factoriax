@@ -352,9 +352,11 @@ def withdraw_from_adjacent(
     """Withdraw from the output slot of the machine in front of the player.
 
     Each machine exposes exactly one output slot at a time
-    (``ent_asm_out`` for combiners mid-cycle, otherwise ``ent_buf``),
-    so the player doesn't specify an item — whatever is there gets
-    pulled. Matches the single-action PICKUP / MINE shape.
+    (``ent_asm_out`` for combiners mid-cycle, otherwise ``ent_buf``).
+    A single WITHDRAW action pulls **as many items as can fit** —
+    the min of what's in the slot and the player's remaining
+    inventory space. That keeps agents from burning 100 ticks
+    emptying a 100-ore pallet one item at a time.
     """
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
@@ -370,9 +372,8 @@ def withdraw_from_adjacent(
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
     # Prefer ``asm_out`` when populated (combiner mid-cycle); otherwise
-    # read from ``buf``. Phase 4 of ``run_combiners`` drains ``asm_out``
-    # → ``buf`` every tick, so the two slots are mutually exclusive for
-    # any single entity.
+    # read from ``buf``. The two slots are mutually exclusive in
+    # practice — combiners only use asm_out, buffer machines only buf.
     out_has = state.ent_asm_out_count[eidx] > 0
     buf_has = state.ent_buf_count[eidx] > 0
     use_asm = is_machine & out_has
@@ -386,15 +387,31 @@ def withdraw_from_adjacent(
 
     player_count = state.player_inventory[player_idx, item_type]
     player_max = PLAYER_MAX_STACK[item_type]
-    has_space = player_count < player_max
+    player_space = jnp.maximum(player_max - player_count, jnp.int32(0))
 
-    can_withdraw_asm = use_asm & has_space
-    can_withdraw_buf = use_buf & has_space
-    can_withdraw = can_withdraw_asm | can_withdraw_buf
-    transfer = jnp.where(can_withdraw, jnp.int16(1), jnp.int16(0))
+    available = jnp.where(
+        use_asm,
+        state.ent_asm_out_count[eidx].astype(jnp.int32),
+        jnp.where(
+            use_buf,
+            state.ent_buf_count[eidx].astype(jnp.int32),
+            jnp.int32(0),
+        ),
+    )
+
+    # Transfer = min(available, player_space). Clamped non-negative
+    # so a full inventory yields a no-op instead of a reverse move.
+    transfer32 = jnp.minimum(available, player_space)
+    transfer = jnp.where(
+        is_machine,
+        transfer32.astype(jnp.int16),
+        jnp.int16(0),
+    )
+    can_withdraw_asm = use_asm & (transfer > 0)
+    can_withdraw_buf = use_buf & (transfer > 0)
 
     new_player_inv = state.player_inventory.at[player_idx, item_type].add(
-        transfer,
+        transfer.astype(state.player_inventory.dtype),
     )
 
     new_asm_out_count = jnp.where(
