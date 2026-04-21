@@ -21,7 +21,9 @@ from factoriax.analysis.actions import (
     DEFAULT_ACTION_LABELS,
 )
 from factoriax.analysis.trajectory import Trajectory
-from factoriax.constants import Action
+from factoriax.constants import ITEM_COLORS, Action, ItemType
+from factoriax.ui.compositing import composite_rgba_over_rgb
+from factoriax.ui.fonts import get_pixel_font, render_text_rgba
 
 __all__ = [
     "build_partial_trajectory",
@@ -30,6 +32,7 @@ __all__ = [
     "render_action_sankey",
     "render_action_strip",
     "render_cost_chart",
+    "render_inventory_panel",
     "render_reward_chart",
 ]
 
@@ -556,3 +559,105 @@ def render_action_sankey(
 
     fig.tight_layout(pad=0.3)
     return _fig_to_rgb(fig, width, height)
+
+
+# ------------------------------------------------------------------
+# Inventory panel
+# ------------------------------------------------------------------
+
+
+# Every non-EMPTY ItemType, ordered by enum value so the layout is stable.
+_INVENTORY_ITEMS: tuple[ItemType, ...] = tuple(
+    it for it in ItemType if it != ItemType.EMPTY
+)
+
+
+def _item_label(item: ItemType) -> str:
+    """Human-readable label for an ``ItemType`` (title-cased, 12 char cap)."""
+    name = item.name.replace("_", " ").title()
+    return name if len(name) <= 14 else name[:13] + "."
+
+
+def render_inventory_panel(
+    inventory: np.ndarray,
+    width: int,
+    height: int,
+    *,
+    title: str = "Inventory",
+) -> np.ndarray:
+    """Render the player inventory as an RGB panel.
+
+    Each non-EMPTY ``ItemType`` is shown on its own row with a color
+    swatch, label, and count. Rows with count 0 are dimmed so the eye
+    can sweep to what the agent is actually holding.
+
+    Args:
+        inventory: 1-D array of per-item counts indexed by ``ItemType``.
+        width: Output width in pixels.
+        height: Output height in pixels.
+        title: Panel heading.
+
+    Returns:
+        RGB uint8 array of shape ``(height, width, 3)``.
+    """
+    img = np.full((height, width, 3), (30, 30, 35), dtype=np.uint8)
+    font = get_pixel_font(11)
+    title_font = get_pixel_font(12)
+
+    # Title bar.
+    title_rgba = render_text_rgba(title, title_font, (210, 210, 200))
+    th = title_rgba.shape[0]
+    pad_x = 6
+    top_pad = 4
+    if top_pad + th <= height and pad_x + title_rgba.shape[1] <= width:
+        composite_rgba_over_rgb(
+            img[top_pad : top_pad + th, pad_x : pad_x + title_rgba.shape[1]],
+            title_rgba,
+        )
+
+    row_top = top_pad + th + 4
+    rows = len(_INVENTORY_ITEMS)
+    avail = max(1, height - row_top - 2)
+    row_h = max(10, min(16, avail // rows))
+    swatch_sz = max(6, row_h - 4)
+
+    for i, item in enumerate(_INVENTORY_ITEMS):
+        y = row_top + i * row_h
+        if y + row_h > height:
+            break
+        count = int(inventory[int(item)]) if int(item) < inventory.shape[0] else 0
+        active = count > 0
+
+        # Color swatch.
+        sx = pad_x
+        sy = y + (row_h - swatch_sz) // 2
+        rgb = ITEM_COLORS.get(int(item), (120, 120, 120))
+        if not active:
+            rgb = tuple(max(0, c // 3) for c in rgb)
+        img[sy : sy + swatch_sz, sx : sx + swatch_sz] = rgb
+
+        # Label.
+        label = _item_label(item)
+        label_color = (220, 220, 210) if active else (110, 110, 110)
+        label_rgba = render_text_rgba(label, font, label_color)
+        lh, lw = label_rgba.shape[:2]
+        lx = sx + swatch_sz + 5
+        ly = y + (row_h - lh) // 2
+        if lx + lw < width - 40 and 0 <= ly and ly + lh <= height:
+            composite_rgba_over_rgb(img[ly : ly + lh, lx : lx + lw], label_rgba)
+
+        # Count, right-aligned.
+        if active:
+            count_str = str(count)
+            count_color = (130, 220, 150)
+        else:
+            count_str = "-"
+            count_color = (90, 90, 95)
+        count_rgba = render_text_rgba(count_str, font, count_color)
+        ch, cw = count_rgba.shape[:2]
+        cx = width - pad_x - cw
+        cy = y + (row_h - ch) // 2
+        if cx >= 0 and 0 <= cy and cy + ch <= height:
+            composite_rgba_over_rgb(img[cy : cy + ch, cx : cx + cw], count_rgba)
+
+    return img

@@ -1,21 +1,23 @@
 """Layout constants and frame composition for the debugger.
 
 The debugger uses a 2x2 quadrant layout with a status bar at the
-bottom. In live mode Q3/Q4 are empty placeholders. In replay mode
-Q3 shows the action strip + legend and Q4 shows the action Sankey.
+bottom. Q1 shows the game view and Q2 the player's inventory in
+both modes. Q3/Q4 switch on mode: live mode leaves Q3 as a cost
+chart placeholder and Q4 holds the reward chart; replay mode shows
+the action strip + legend in Q3 and the reward chart in Q4.
 
 .. code-block:: text
 
     +-------------------+-------------------+
     |                   |                   |
-    |  Q1: Game View    |  Q2: Charts       |
-    |                   |  (reward + cost)  |
+    |  Q1: Game View    |  Q2: Inventory    |
+    |                   |                   |
     |                   |                   |
     +-------------------+-------------------+
     |                   |                   |
-    |  Q3: Action Strip |  Q4: Action       |
-    |  + Legend          |  Sankey           |
-    |  (replay only)    |  (replay only)    |
+    |  Q3: (cost /      |  Q4: Reward       |
+    |       action      |       chart       |
+    |       strip)      |                   |
     +-------------------+-------------------+
     [status bar: mode | step N/M | player P]
 """
@@ -28,9 +30,9 @@ from factoriax.agentdebugger.charts import (
     build_partial_trajectory,
     draw_cursor,
     render_action_legend,
-    render_action_sankey,
     render_action_strip,
     render_cost_chart,
+    render_inventory_panel,
     render_reward_chart,
 )
 from factoriax.agentdebugger.state import DebuggerState
@@ -116,86 +118,72 @@ def render_debugger_frame(
     _blit_game_frame(frame, game_img, 0, 0, quadrant_w, quadrant_h)
 
     # ------------------------------------------------------------------
-    # Q2: Charts (top-right)
+    # Q2: Inventory (top-right) — re-rendered every frame since counts
+    # change on almost every step.
     # ------------------------------------------------------------------
-    chart_x = quadrant_w
-    if has_reward or has_cost:
-        # Split Q2 vertically: reward top, cost bottom.
-        if has_reward and has_cost:
-            reward_h = quadrant_h // 2
-            cost_h = quadrant_h - reward_h
-        elif has_reward:
-            reward_h = quadrant_h
-            cost_h = 0
-        else:
-            reward_h = 0
-            cost_h = quadrant_h
+    inv_panel = render_inventory_panel(
+        np.asarray(current_state.player_inventory[player_idx]),
+        quadrant_w,
+        quadrant_h,
+    )
+    _blit_exact(frame, inv_panel, quadrant_w, 0)
 
-        if has_reward and reward_h > 0:
-            if dbg.reward_chart_cache is None and rewards:
-                traj = build_partial_trajectory(rewards, actions)
-                dbg.reward_chart_cache = render_reward_chart(
-                    traj,
-                    0,
-                    quadrant_w,
-                    reward_h,
-                )
-            if dbg.reward_chart_cache is not None:
-                chart = draw_cursor(
-                    dbg.reward_chart_cache,
-                    dbg.current_step,
-                    total_steps,
-                )
-                _blit_exact(frame, chart, chart_x, 0)
-
-        if has_cost and cost_h > 0:
-            if dbg.cost_chart_cache is None and costs:
-                dbg.cost_chart_cache = render_cost_chart(
-                    costs,
-                    constraint_names,
-                    quadrant_w,
-                    cost_h,
-                )
-            if dbg.cost_chart_cache is not None:
-                chart = draw_cursor(
-                    dbg.cost_chart_cache,
-                    dbg.current_step,
-                    total_steps,
-                )
-                _blit_exact(frame, chart, chart_x, reward_h)
+    # ------------------------------------------------------------------
+    # Q3: cost chart (bottom-left) when configured, else empty.
+    # ------------------------------------------------------------------
+    if has_cost:
+        if dbg.cost_chart_cache is None and costs:
+            dbg.cost_chart_cache = render_cost_chart(
+                costs,
+                constraint_names,
+                quadrant_w,
+                quadrant_h,
+            )
+        if dbg.cost_chart_cache is not None:
+            chart = draw_cursor(
+                dbg.cost_chart_cache,
+                dbg.current_step,
+                total_steps,
+            )
+            _blit_exact(frame, chart, 0, quadrant_h)
     else:
         _draw_quadrant_label(
             frame,
-            chart_x,
             0,
+            quadrant_h,
             quadrant_w,
             quadrant_h,
-            "Q2",
+            "Q3",
         )
 
     # ------------------------------------------------------------------
-    # Q3: empty (bottom-left)
+    # Q4: reward chart (bottom-right) when configured, else empty.
     # ------------------------------------------------------------------
-    _draw_quadrant_label(
-        frame,
-        0,
-        quadrant_h,
-        quadrant_w,
-        quadrant_h,
-        "Q3",
-    )
-
-    # ------------------------------------------------------------------
-    # Q4: empty (bottom-right)
-    # ------------------------------------------------------------------
-    _draw_quadrant_label(
-        frame,
-        quadrant_w,
-        quadrant_h,
-        quadrant_w,
-        quadrant_h,
-        "Q4",
-    )
+    if has_reward:
+        if dbg.reward_chart_cache is None and rewards:
+            traj = build_partial_trajectory(rewards, actions)
+            dbg.reward_chart_cache = render_reward_chart(
+                traj,
+                0,
+                quadrant_w,
+                quadrant_h,
+            )
+        if dbg.reward_chart_cache is not None:
+            chart = draw_cursor(
+                dbg.reward_chart_cache,
+                dbg.current_step,
+                total_steps,
+            )
+            _blit_exact(frame, chart, quadrant_w, quadrant_h)
+    else:
+        _draw_quadrant_label(
+            frame,
+            quadrant_w,
+            quadrant_h,
+            quadrant_w,
+            quadrant_h,
+            "Q4",
+        )
 
     # ------------------------------------------------------------------
     # Dividers
@@ -238,8 +226,8 @@ def render_replay_frame(
     """Compose the full debugger frame for replay mode.
 
     Q1 shows the game world (from pre-rendered frames or grid
-    fallback), Q2 shows the reward chart, Q3 shows the action strip
-    and legend, and Q4 shows the action Sankey heatmap.
+    fallback), Q2 shows the player inventory, Q3 shows the action
+    strip + legend, and Q4 shows the reward chart.
 
     Args:
         dbg: Current debugger state (must have ``replay_mode=True``).
@@ -284,16 +272,13 @@ def render_replay_frame(
         )
 
     # ------------------------------------------------------------------
-    # Q2: Reward chart (top-right)
+    # Q2: Inventory (top-right) — pulled per-step from the trajectory.
     # ------------------------------------------------------------------
     chart_x = quadrant_w
-    if dbg.reward_chart_cache is not None:
-        chart = draw_cursor(
-            dbg.reward_chart_cache,
-            dbg.current_step,
-            total_steps,
-        )
-        _blit_exact(frame, chart, chart_x, 0)
+    inv_vec = _inventory_at_step(traj, dbg)
+    if inv_vec is not None:
+        inv_panel = render_inventory_panel(inv_vec, quadrant_w, quadrant_h)
+        _blit_exact(frame, inv_panel, chart_x, 0)
     else:
         _draw_quadrant_label(
             frame,
@@ -333,10 +318,16 @@ def render_replay_frame(
         )
 
     # ------------------------------------------------------------------
-    # Q4: Action Sankey (bottom-right)
+    # Q4: Reward chart (bottom-right) — moved down from Q2 so the
+    # inventory panel can own the top-right slot.
     # ------------------------------------------------------------------
-    if dbg.sankey_cache is not None:
-        _blit_exact(frame, dbg.sankey_cache, quadrant_w, q3_y)
+    if dbg.reward_chart_cache is not None:
+        chart = draw_cursor(
+            dbg.reward_chart_cache,
+            dbg.current_step,
+            total_steps,
+        )
+        _blit_exact(frame, chart, quadrant_w, q3_y)
     else:
         _draw_quadrant_label(
             frame,
@@ -413,18 +404,32 @@ def rebuild_replay_caches(
         quadrant_w,
         legend_h,
     )
-    dbg.sankey_cache = render_action_sankey(
-        traj,
-        ep,
-        player,
-        quadrant_w,
-        quadrant_h,
-    )
+    # Sankey dropped — Q4 now holds the reward chart.
+    dbg.sankey_cache = None
 
 
 # ------------------------------------------------------------------
 # Shared helpers
 # ------------------------------------------------------------------
+
+
+def _inventory_at_step(traj: object, dbg: DebuggerState) -> np.ndarray | None:
+    """Extract the player inventory at the current replay step.
+
+    Trajectories that lack ``player_inventory`` (e.g. action-only
+    captures) return ``None`` and the caller falls back to the empty
+    quadrant label.
+    """
+    from factoriax.analysis.trajectory import Trajectory
+
+    if not isinstance(traj, Trajectory) or traj.player_inventory is None:
+        return None
+    ep = dbg.selected_episode
+    step = dbg.current_step
+    inv = traj.player_inventory[ep, step]
+    if inv.ndim > 1:
+        inv = inv[dbg.selected_player]
+    return np.asarray(inv)
 
 
 def _tile_px(state: EnvState) -> int:

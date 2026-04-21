@@ -366,13 +366,18 @@ class TestRebuildReplayCaches:
     """Tests for rebuild_replay_caches."""
 
     def test_caches_populated(self, minimal_trajectory: Path) -> None:
-        """All chart caches are non-None after rebuild."""
+        """Reward + action-strip caches are populated after rebuild.
+
+        The Sankey cache is intentionally left ``None``: Q4 now holds
+        the reward chart and the per-step inventory panel is rendered
+        on the fly, so no Sankey image is pre-computed.
+        """
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         rebuild_replay_caches(dbg._dbg, 320, 240)
         assert dbg._dbg.reward_chart_cache is not None
         assert dbg._dbg.action_strip_cache is not None
         assert dbg._dbg.action_legend_cache is not None
-        assert dbg._dbg.sankey_cache is not None
+        assert dbg._dbg.sankey_cache is None
 
 
 # ------------------------------------------------------------------
