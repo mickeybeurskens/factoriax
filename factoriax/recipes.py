@@ -110,7 +110,7 @@ RECIPES: list[_Recipe] = [
     },
     {
         "output": ItemType.FURNACE,
-        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.COPPER_PLATE, 1)],
+        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.REFRACTORY, 1)],
         "ticks": 4,
     },
     # Science packs
@@ -129,6 +129,13 @@ RECIPES: list[_Recipe] = [
         "output": ItemType.ROCKET,
         "inputs": [(ItemType.MOTOR, 2), (ItemType.SENSOR, 2)],
         "ticks": 100,
+    },
+    # Furnace half-fab (separate recipe so FURNACE no longer shares its
+    # input type-set with WIRE — makes recipe matching unambiguous).
+    {
+        "output": ItemType.REFRACTORY,
+        "inputs": [(ItemType.TIN_PLATE, 1), (ItemType.COAL, 1)],
+        "ticks": 4,
     },
 ]
 
@@ -154,6 +161,7 @@ RECIPE_NAMES: list[str] = [
     "Basic Science Pack",
     "Advanced Science Pack",
     "Rocket",
+    "Refractory",
 ]
 
 # ---------------------------------------------------------------------------
@@ -170,6 +178,7 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
         int(ItemType.COPPER_PLATE),
         int(ItemType.TIN_PLATE),
         int(ItemType.WAFER),
+        int(ItemType.REFRACTORY),
     }
 )
 RECIPE_MACHINE_TYPE: jnp.ndarray = jnp.array(

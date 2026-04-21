@@ -391,15 +391,7 @@ def run_assemblers(state: EnvState) -> EnvState:
     # via RECIPE_MACHINE_TYPE — one int8 equality per recipe per entity.
     idle = is_combiner & (new_power == 0)
     matched = jnp.int32(-1)
-    # Iterate high→low so the EARLIEST (lowest-index) matching recipe
-    # wins, not the latest. With `in_cX >= ra_X` semantics, a recipe
-    # whose inputs are a superset of another's (e.g. WIRE=iron+2copper
-    # vs FURNACE=iron+copper) would otherwise always lose to the later
-    # one — making the larger recipe uncraftable by deposit. Reversing
-    # the loop keeps earlier recipes preferred, which aligns with
-    # players' expectation that "WIRE beats FURNACE when you deposit
-    # WIRE's inputs".
-    for r in reversed(range(NUM_RECIPES)):
+    for r in range(NUM_RECIPES):
         (rt_a, ra_a), (rt_b, ra_b) = RECIPES[r]["inputs"]
         rmt = RECIPE_MACHINE_TYPE[r]
         o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)

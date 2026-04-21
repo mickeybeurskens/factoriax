@@ -51,6 +51,7 @@ class ItemType(IntEnum):
     ADVANCED_SCIENCE_PACK = 21
     ROCKET = 22
     FURNACE = 23
+    REFRACTORY = 24
 
 
 class MachineType(IntEnum):
@@ -116,6 +117,7 @@ PLAYER_MAX_STACK = jnp.array(
         1024,  # ADVANCED_SCIENCE_PACK
         128,  # ROCKET
         128,  # FURNACE
+        1024,  # REFRACTORY
     ],
     dtype=jnp.int32,
 )
@@ -152,6 +154,7 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.ADVANCED_SCIENCE_PACK: (50, 50, 200),
     ItemType.ROCKET: (240, 240, 240),
     ItemType.FURNACE: (120, 60, 40),
+    ItemType.REFRACTORY: (210, 170, 120),
 }
 
 # Human-readable display names for each MachineType.
@@ -274,6 +277,7 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.NONE,  # ADVANCED_SCIENCE_PACK
         MachineType.ROCKET,  # ROCKET
         MachineType.FURNACE,  # FURNACE
+        MachineType.NONE,  # REFRACTORY
     ],
     dtype=jnp.int32,
 )
@@ -404,37 +408,39 @@ class Action(IntEnum):
     DEPOSIT_ADV_SCIENCE = 58
     DEPOSIT_ROCKET = 59
     DEPOSIT_FURNACE = 60
+    DEPOSIT_REFRACTORY = 61
 
-    # Withdraw — one per non-EMPTY item type (23)
-    WITHDRAW_COAL = 61
-    WITHDRAW_IRON_ORE = 62
-    WITHDRAW_COPPER_ORE = 63
-    WITHDRAW_TIN_ORE = 64
-    WITHDRAW_SILICON = 65
-    WITHDRAW_IRON_PLATE = 66
-    WITHDRAW_COPPER_PLATE = 67
-    WITHDRAW_TIN_PLATE = 68
-    WITHDRAW_WAFER = 69
-    WITHDRAW_FRAME = 70
-    WITHDRAW_CIRCUIT = 71
-    WITHDRAW_WIRE = 72
-    WITHDRAW_MOTOR = 73
-    WITHDRAW_SENSOR = 74
-    WITHDRAW_BELT = 75
-    WITHDRAW_MINER = 76
-    WITHDRAW_ASSEMBLER = 77
-    WITHDRAW_PALLET = 78
-    WITHDRAW_ARM = 79
-    WITHDRAW_BASIC_SCIENCE = 80
-    WITHDRAW_ADV_SCIENCE = 81
-    WITHDRAW_ROCKET = 82
-    WITHDRAW_FURNACE = 83
+    # Withdraw — one per non-EMPTY item type (24)
+    WITHDRAW_COAL = 62
+    WITHDRAW_IRON_ORE = 63
+    WITHDRAW_COPPER_ORE = 64
+    WITHDRAW_TIN_ORE = 65
+    WITHDRAW_SILICON = 66
+    WITHDRAW_IRON_PLATE = 67
+    WITHDRAW_COPPER_PLATE = 68
+    WITHDRAW_TIN_PLATE = 69
+    WITHDRAW_WAFER = 70
+    WITHDRAW_FRAME = 71
+    WITHDRAW_CIRCUIT = 72
+    WITHDRAW_WIRE = 73
+    WITHDRAW_MOTOR = 74
+    WITHDRAW_SENSOR = 75
+    WITHDRAW_BELT = 76
+    WITHDRAW_MINER = 77
+    WITHDRAW_ASSEMBLER = 78
+    WITHDRAW_PALLET = 79
+    WITHDRAW_ARM = 80
+    WITHDRAW_BASIC_SCIENCE = 81
+    WITHDRAW_ADV_SCIENCE = 82
+    WITHDRAW_ROCKET = 83
+    WITHDRAW_FURNACE = 84
+    WITHDRAW_REFRACTORY = 85
 
     # Machine rotation — absolute direction set (4)
-    ROTATE_LEFT = 84
-    ROTATE_RIGHT = 85
-    ROTATE_UP = 86
-    ROTATE_DOWN = 87
+    ROTATE_LEFT = 86
+    ROTATE_RIGHT = 87
+    ROTATE_UP = 88
+    ROTATE_DOWN = 89
 
 
 # Base offsets for arithmetic dispatch of compound actions.
