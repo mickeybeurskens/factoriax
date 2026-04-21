@@ -73,26 +73,11 @@ def _node_auto_miner(
     ]
 
 
-def _coal_snake() -> list[Goal]:
-    """Four coal miners chained into a pallet east of the patch.
-
-    Layout (coal patch at (7-9, 22-24)):
-
-        (7,22) M1↓
-        (7,23) M2→  (8,23) M3→  (9,23) M4→  (10,23) Pallet
-    """
-    return [
-        # Pallet: stand two east, face LEFT.
-        PlaceMachineAt(MachineType.PALLET, (10, 23), int(Direction.LEFT)),
-        # M4: push east into pallet. Stand at (8, 23) facing RIGHT.
-        PlaceMachineAt(MachineType.MINER, (9, 23), int(Direction.RIGHT)),
-        # M3: push east into M4. Stand at (7, 23) facing RIGHT.
-        PlaceMachineAt(MachineType.MINER, (8, 23), int(Direction.RIGHT)),
-        # M2: push east into M3. Stand at (6, 23) facing RIGHT.
-        PlaceMachineAt(MachineType.MINER, (7, 23), int(Direction.RIGHT)),
-        # M1: push south into M2. Stand at (7, 21) facing DOWN.
-        PlaceMachineAt(MachineType.MINER, (7, 22), int(Direction.DOWN)),
-    ]
+# Coal now works like any other node: miner + pallet south of the
+# patch. Earlier designs chained 4 miners into a snake, but coal
+# demand (1 per smelt, ~200 per rocket) doesn't benefit from that
+# shape — a single miner + 2500-resource patch covers the whole
+# episode.
 
 
 def build_factory_rocket_goals() -> list[Goal]:
@@ -114,35 +99,39 @@ def build_factory_rocket_goals() -> list[Goal]:
     """
     return [
         # ---- Phase A — starter hand-mining ----
-        # Needs (items): 12 iron + 15 copper + 20 tin + 2 silicon +
-        # 2 coal = 51 raw. Plus a small slack per type.
-        MineOre(ItemType.IRON_ORE, 14),
-        MineOre(ItemType.COPPER_ORE, 17),
-        MineOre(ItemType.TIN_ORE, 23),
+        # 5 miners + 5 pallets + 2 extra furnaces + 2 extra assemblers
+        # needed as starter infrastructure. Plate totals: iron 9,
+        # copper 12, tin 17, wafer 2, refractory 2. Coal for smelts:
+        # 9+12+17+2 plates + 2 refractory = 42 coal. Plus slack.
+        MineOre(ItemType.IRON_ORE, 11),
+        MineOre(ItemType.COPPER_ORE, 14),
+        MineOre(ItemType.TIN_ORE, 20),
         MineOre(ItemType.SILICON, 3),
-        MineOre(ItemType.COAL, 3),
+        MineOre(ItemType.COAL, 50),
         # ---- Phase B — starter smelts via pre-placed furnace ----
-        ProduceInFurnace(ItemType.IRON_PLATE, 14),
-        ProduceInFurnace(ItemType.COPPER_PLATE, 17),
-        ProduceInFurnace(ItemType.TIN_PLATE, 23),
+        ProduceInFurnace(ItemType.IRON_PLATE, 11),
+        ProduceInFurnace(ItemType.COPPER_PLATE, 14),
+        ProduceInFurnace(ItemType.TIN_PLATE, 20),
         ProduceInFurnace(ItemType.WAFER, 3),
-        ProduceInFurnace(ItemType.REFRACTORY, 3),
+        ProduceInFurnace(ItemType.REFRACTORY, 2),
         # ---- Phase C — starter factory components ----
-        # 13 wires = 8 miners + 5 pallets. 2 frame + 2 circuit feed
+        # 10 wires = 5 miners + 5 pallets. 2 frame + 2 circuit feed
         # the 2 extra assemblers.
-        ProduceInAssembler(ItemType.WIRE, 13),
+        ProduceInAssembler(ItemType.WIRE, 10),
         ProduceInAssembler(ItemType.FRAME, 2),
         ProduceInAssembler(ItemType.CIRCUIT, 2),
-        ProduceInAssembler(ItemType.MINER, 8),
+        ProduceInAssembler(ItemType.MINER, 5),
         ProduceInAssembler(ItemType.PALLET, 5),
         ProduceInAssembler(ItemType.FURNACE, 2),
         ProduceInAssembler(ItemType.ASSEMBLER, 2),
-        # ---- Phase D — deploy node auto-miners ----
+        # ---- Phase D — deploy node auto-miners (one per ore type) ----
+        # Coal is just another node now — no snake; its 2500-resource
+        # patch sustains the ~200-coal-per-rocket demand on its own.
         *_node_auto_miner(patch_x=8, patch_y_bottom=9),  # iron
         *_node_auto_miner(patch_x=23, patch_y_bottom=9),  # copper
         *_node_auto_miner(patch_x=23, patch_y_bottom=24),  # tin
         *_node_auto_miner(patch_x=15, patch_y_bottom=5),  # silicon
-        *_coal_snake(),
+        *_node_auto_miner(patch_x=8, patch_y_bottom=24),  # coal
         # ---- Phase E — central smelter/assembler bank near spawn ----
         # These support the PipelinedProduce bulk phases below.
         PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
@@ -155,10 +144,13 @@ def build_factory_rocket_goals() -> list[Goal]:
         # The node miners push ore into their pallets continuously,
         # but draining a pallet is still 1 WITHDRAW per tick, so
         # hand-mining in parallel is the reliable bulk source.
+        # Bulk coal needs: 45+45+42+20 = 152 plate smelts → 152 coal.
+        # Plus slack.
         MineOre(ItemType.IRON_ORE, 45),
         MineOre(ItemType.COPPER_ORE, 45),
         MineOre(ItemType.TIN_ORE, 42),
         MineOre(ItemType.SILICON, 20),
+        MineOre(ItemType.COAL, 155),
         # ---- Phase H — pipelined bulk smelts across 3 furnaces ----
         PipelinedProduce(ItemType.IRON_PLATE, 45, MachineType.FURNACE, k=3),
         PipelinedProduce(ItemType.COPPER_PLATE, 45, MachineType.FURNACE, k=3),

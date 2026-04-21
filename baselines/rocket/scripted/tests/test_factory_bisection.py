@@ -205,20 +205,25 @@ def _assert_not_capped(result: BisectionRunResult) -> None:
 
 def _starter_goals() -> list[Goal]:
     """Phases A-C of the factory plan: enough materials + components
-    for the full node-factory + central-bank deployment."""
+    for the full node-factory + central-bank deployment.
+
+    Every smelt now consumes 1 coal in addition to the ore.
+    Starter smelts total 14+17+23+3 = 57 plates → 57 coal + 2
+    for refractory = 59 coal needed.
+    """
     return [
         # A — mining
         MineOre(ItemType.IRON_ORE, 14),
         MineOre(ItemType.COPPER_ORE, 17),
         MineOre(ItemType.TIN_ORE, 23),
         MineOre(ItemType.SILICON, 3),
-        MineOre(ItemType.COAL, 3),
+        MineOre(ItemType.COAL, 62),
         # B — smelts
         ProduceInFurnace(ItemType.IRON_PLATE, 14),
         ProduceInFurnace(ItemType.COPPER_PLATE, 17),
         ProduceInFurnace(ItemType.TIN_PLATE, 23),
         ProduceInFurnace(ItemType.WAFER, 3),
-        ProduceInFurnace(ItemType.REFRACTORY, 3),
+        ProduceInFurnace(ItemType.REFRACTORY, 2),
         # C — components
         ProduceInAssembler(ItemType.WIRE, 13),
         ProduceInAssembler(ItemType.FRAME, 2),
@@ -377,6 +382,7 @@ def _pipelined_smelt_goals(count: int = 15) -> list[Goal]:
         ]
         + [
             MineOre(ItemType.IRON_ORE, count + 2),  # slack
+            MineOre(ItemType.COAL, count + 2),  # 1 coal / smelt
             PipelinedProduce(
                 ItemType.IRON_PLATE,
                 count,
@@ -427,10 +433,12 @@ def _consecutive_pipelined_goals() -> list[Goal]:
     ]
     # Mine + smelt just enough for both recipes.
     # 8 frames = 8 iron + 8 tin; 8 wires = 8 copper + 8 tin.
+    # Smelts also consume 1 coal each (10+10+20 = 40).
     more = [
         MineOre(ItemType.IRON_ORE, 10),
         MineOre(ItemType.COPPER_ORE, 10),
         MineOre(ItemType.TIN_ORE, 20),
+        MineOre(ItemType.COAL, 42),
         PipelinedProduce(ItemType.IRON_PLATE, 10, MachineType.FURNACE, k=3),
         PipelinedProduce(ItemType.COPPER_PLATE, 10, MachineType.FURNACE, k=3),
         PipelinedProduce(ItemType.TIN_PLATE, 20, MachineType.FURNACE, k=3),
@@ -479,6 +487,7 @@ def _pipelined_then_sequential_goals() -> list[Goal]:
     more = [
         MineOre(ItemType.COPPER_ORE, 12),
         MineOre(ItemType.TIN_ORE, 10),
+        MineOre(ItemType.COAL, 22),  # 12 + 10 smelts
         PipelinedProduce(ItemType.COPPER_PLATE, 12, MachineType.FURNACE, k=3),
         PipelinedProduce(ItemType.TIN_PLATE, 10, MachineType.FURNACE, k=3),
         # 8 wires across 3 assemblers (pipelined).

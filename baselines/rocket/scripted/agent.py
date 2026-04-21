@@ -126,18 +126,21 @@ def build_rocket_goals() -> list[Goal]:
     """
     return [
         # ---- Phase B — raw ore ----
+        # Each smelt now consumes 1 coal in addition to the ore, so
+        # coal demand = sum of plate counts + 1 refractory. Plus
+        # slack.
         MineOre(ItemType.IRON_ORE, 55),
         MineOre(ItemType.COPPER_ORE, 60),
         MineOre(ItemType.TIN_ORE, 60),
-        MineOre(ItemType.COAL, 5),
+        MineOre(ItemType.COAL, 205),
         MineOre(ItemType.SILICON, 22),
         # ---- Phase C — bulk plate production via the furnace ----
-        # Furnace recipes are 1-input now: just deposit ore, no coal.
+        # Smelts now consume 1 coal per plate (ore + coal → plate).
         ProduceInFurnace(ItemType.IRON_PLATE, 55),
         ProduceInFurnace(ItemType.COPPER_PLATE, 60),
         ProduceInFurnace(ItemType.TIN_PLATE, 60),
         ProduceInFurnace(ItemType.WAFER, 22),
-        # REFRACTORY (coal) — for the FURNACE machine recipe.
+        # REFRACTORY (coal only) — still a 1-input recipe.
         ProduceInFurnace(ItemType.REFRACTORY, 1),
         # ---- Phase D — bulk intermediates via the assembler ----
         # Ordered so upstream ingredients exist before downstream
