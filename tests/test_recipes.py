@@ -63,6 +63,23 @@ def test_no_recipe_input_type_set_is_subset_of_another() -> None:
 
 
 @pytest.mark.parametrize("recipe", RECIPES)
-def test_recipe_has_exactly_two_inputs(recipe: dict) -> None:
-    """Engine Phase 3 assumes every recipe has exactly 2 input slots."""
-    assert len(recipe["inputs"]) == 2
+def test_recipe_has_one_or_two_inputs(recipe: dict) -> None:
+    """Furnace recipes take 1 input; assembler recipes take 2."""
+    assert len(recipe["inputs"]) in (1, 2)
+
+
+@pytest.mark.parametrize("idx", range(len(RECIPES)))
+def test_furnace_recipes_have_one_input(idx: int) -> None:
+    """Every furnace-gated recipe has exactly 1 input type; every
+    assembler-gated recipe has 2. Keeps the machines stubbornly simple
+    — furnaces smelt one thing at a time, assemblers combine two.
+    """
+    from factoriax.constants import MachineType
+
+    recipe = RECIPES[idx]
+    machine = int(RECIPE_MACHINE_TYPE[idx])
+    expected = 1 if machine == int(MachineType.FURNACE) else 2
+    assert len(recipe["inputs"]) == expected, (
+        f"Recipe {idx} ({recipe['output']}) on machine {machine} has "
+        f"{len(recipe['inputs'])} inputs; expected {expected}."
+    )

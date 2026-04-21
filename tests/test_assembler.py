@@ -106,12 +106,16 @@ class TestAssemblerStartsCraft:
     """Assembler should consume inputs and start a countdown."""
 
     def test_iron_plate_recipe_starts(self, state_factory) -> None:
-        """Iron plate recipe: 2 iron_ore + 1 coal -> power set, consumed."""
+        """Iron plate recipe: 1 iron_ore -> power set, consumed.
+
+        Furnace recipes are 1-input now; the unused second slot must
+        stay empty for the match to fire.
+        """
         state = _make_assembler_state(
             state_factory,
             machine_type=int(MachineType.FURNACE),
-            asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
-            asm_in_count=[5, 3],
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[5, 0],
         )
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
@@ -124,6 +128,21 @@ class TestAssemblerStartsCraft:
         """Assemblers can't run smelting recipes (gated to FURNACE)."""
         state = _make_assembler_state(
             state_factory,
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[5, 0],
+        )
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 5
+
+    def test_polluted_furnace_does_not_smelt(self, state_factory) -> None:
+        """Extra item in the 2nd slot blocks smelting — furnace recipes
+        require a clean single-slot deposit."""
+        state = _make_assembler_state(
+            state_factory,
+            machine_type=int(MachineType.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
             asm_in_count=[5, 3],
         )
@@ -134,40 +153,30 @@ class TestAssemblerStartsCraft:
         assert int(new.ent_asm_in_count[eid, 0]) == 5
         assert int(new.ent_asm_in_count[eid, 1]) == 3
 
-    def test_no_start_without_coal(self, state_factory) -> None:
-        """Iron plate needs coal as reductant; no coal means no start."""
-        state = _make_assembler_state(
-            state_factory,
-            machine_type=int(MachineType.FURNACE),
-            asm_in_type=[int(ItemType.IRON_ORE), 0],
-            asm_in_count=[5, 0],
-        )
-        new = run_assemblers(state)
-        eid = _eid(new, 0, 0)
-
-        assert int(new.ent_power[eid]) == 0
-        assert int(new.ent_asm_in_count[eid, 0]) == 5
-
     def test_no_start_without_ore(self, state_factory) -> None:
-        """Having only coal (no ore) should not start smelting."""
+        """Empty input slot means nothing to smelt."""
         state = _make_assembler_state(
             state_factory,
             machine_type=int(MachineType.FURNACE),
-            asm_in_type=[int(ItemType.COAL), 0],
-            asm_in_count=[3, 0],
+            asm_in_type=[0, 0],
+            asm_in_count=[0, 0],
         )
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
-        assert int(new.ent_asm_in_count[eid, 0]) == 3
 
 
 class TestAssemblerCompletesCraft:
     """Assembler at power == 1 should produce output."""
 
     def test_iron_plate_output_produced(self, state_factory) -> None:
-        """Power == 1 with empty output produces 1 iron_plate."""
+        """Power == 1 completes the craft; output lands in asm_out.
+
+        With Phase 4 removed, the output stays in ``ent_asm_out`` —
+        it does NOT drain into ``ent_buf``. That drain is now the
+        caller's responsibility (withdraw action, arm, or belt).
+        """
         state = _make_assembler_state(
             state_factory,
             power=1,
@@ -177,62 +186,44 @@ class TestAssemblerCompletesCraft:
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
-        # Output goes to asm_out then is pushed to buffer.
-        out_count = int(new.ent_asm_out_count[eid])
-        buf_count = int(new.ent_buf_count[eid])
-        buf_type = int(new.ent_buf_type[eid])
-        total = out_count + buf_count
-        assert total == 1
-        if buf_count > 0:
-            assert buf_type == int(ItemType.IRON_PLATE)
-
-    def test_output_blocked_when_buffer_occupied(
-        self,
-        state_factory,
-    ) -> None:
-        """Output stalls if buffer already holds items."""
-        state = _make_assembler_state(
-            state_factory,
-            power=1,
-            asm_out_type=int(ItemType.IRON_PLATE),
-            buf_type=int(ItemType.COAL),
-            buf_count=5,
-        )
-        new = run_assemblers(state)
-        eid = _eid(new, 0, 0)
-
-        # Craft completes, but buffer is occupied so output stays.
         assert int(new.ent_asm_out_count[eid]) == 1
-        assert int(new.ent_buf_count[eid]) == 5
-        assert int(new.ent_buf_type[eid]) == int(ItemType.COAL)
+        assert int(new.ent_asm_out_type[eid]) == int(ItemType.IRON_PLATE)
+        # Buffer is unrelated — stays untouched.
+        assert int(new.ent_buf_count[eid]) == 0
 
 
 class TestAssemblerStallsOutputFull:
-    """Assembler behavior when output slot is already occupied."""
+    """A machine with an occupied output slot cannot start a new cycle."""
 
-    def test_output_blocked_keeps_item(self, state_factory) -> None:
-        """Existing output stays when buffer is occupied."""
+    def test_idle_gate_blocks_new_cycle_while_output_pending(
+        self,
+        state_factory,
+    ) -> None:
+        """Even with valid inputs sitting in slots, the machine won't
+        start a new craft while ``ent_asm_out_count > 0``. Pressure to
+        withdraw builds naturally."""
         state = _make_assembler_state(
             state_factory,
-            power=2,
+            machine_type=int(MachineType.FURNACE),
+            asm_in_type=[int(ItemType.IRON_ORE), 0],
+            asm_in_count=[5, 0],
             asm_out_type=int(ItemType.IRON_PLATE),
             asm_out_count=1,
-            buf_type=int(ItemType.COAL),
-            buf_count=5,
         )
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
 
-        # Output cannot push to buffer, so it stays.
+        # Output still parked in asm_out; power never ticked up.
         assert int(new.ent_asm_out_count[eid]) == 1
-        assert int(new.ent_buf_count[eid]) == 5
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 5
 
 
 class TestAssemblerTwoInputRecipe:
     """Frame recipe requires two distinct inputs."""
 
     def test_frame_recipe_starts(self, state_factory) -> None:
-        """Frame: 2 iron_plate + 1 tin_plate -> power set, consumed."""
+        """Frame: 1 iron_plate + 1 tin_plate -> power set, consumed."""
         state = _make_assembler_state(
             state_factory,
             asm_in_type=[int(ItemType.IRON_PLATE), int(ItemType.TIN_PLATE)],

@@ -1,15 +1,21 @@
 """Recipe definitions for the FactoriaX environment.
 
 Unified recipe table used by both player crafting (instant) and
-combiner auto-crafting (timed). Each recipe has a unique input
-type-set: the machine determines what to produce from what goes in,
-with no manual recipe selection needed. The ``RECIPE_MACHINE_TYPE``
-array gates each recipe to its owning machine type — smelting
-recipes run on furnaces, everything else on assemblers.
+combiner auto-crafting (timed). Two shapes:
 
-Player crafting consumes materials from inventory and produces one
-output item instantly. Combiners use the ``ticks`` field as a
-production delay.
+- **Furnace recipes** take exactly 1 input type. The recipe table
+  pads the unused slot with ``(EMPTY, 0)`` so the Phase 3 matcher in
+  ``run_combiners`` can treat every recipe as a 2-slot lookup.
+- **Assembler recipes** take exactly 2 input types, and the
+  (unordered) pair is unique across the table. Uniqueness is the
+  invariant that lets Phase 3 forward-match deterministically; see
+  ``tests/test_recipes.py``.
+
+The ``RECIPE_MACHINE_TYPE`` array gates each recipe to its owning
+machine type. Player crafting consumes materials from inventory and
+produces one output item instantly. Combiners use the ``ticks``
+field as a production delay — plus the output slot can't be
+overwritten, so throughput is bounded by withdrawal.
 """
 
 from __future__ import annotations
@@ -34,31 +40,36 @@ class _Recipe(TypedDict):
 # ---------------------------------------------------------------------------
 
 RECIPES: list[_Recipe] = [
-    # Plates (tier 0.5 — smelting, coal acts as a reductant)
+    # -------- Furnace (5 recipes, 1 input each) --------
     {
         "output": ItemType.IRON_PLATE,
-        "inputs": [(ItemType.IRON_ORE, 2), (ItemType.COAL, 1)],
+        "inputs": [(ItemType.IRON_ORE, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.COPPER_PLATE,
-        "inputs": [(ItemType.COPPER_ORE, 2), (ItemType.COAL, 1)],
+        "inputs": [(ItemType.COPPER_ORE, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.TIN_PLATE,
-        "inputs": [(ItemType.TIN_ORE, 2), (ItemType.COAL, 1)],
+        "inputs": [(ItemType.TIN_ORE, 1)],
         "ticks": 2,
     },
     {
         "output": ItemType.WAFER,
-        "inputs": [(ItemType.SILICON, 2), (ItemType.COAL, 1)],
+        "inputs": [(ItemType.SILICON, 1)],
         "ticks": 2,
     },
-    # Intermediates (tier 1)
+    {
+        "output": ItemType.REFRACTORY,
+        "inputs": [(ItemType.COAL, 1)],
+        "ticks": 4,
+    },
+    # -------- Assembler: base intermediates --------
     {
         "output": ItemType.FRAME,
-        "inputs": [(ItemType.IRON_PLATE, 2), (ItemType.TIN_PLATE, 1)],
+        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.TIN_PLATE, 1)],
         "ticks": 4,
     },
     {
@@ -68,10 +79,10 @@ RECIPES: list[_Recipe] = [
     },
     {
         "output": ItemType.WIRE,
-        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.COPPER_PLATE, 2)],
+        "inputs": [(ItemType.COPPER_PLATE, 1), (ItemType.TIN_PLATE, 1)],
         "ticks": 4,
     },
-    # Components (tier 2)
+    # -------- Assembler: components --------
     {
         "output": ItemType.MOTOR,
         "inputs": [(ItemType.FRAME, 1), (ItemType.WIRE, 1)],
@@ -82,38 +93,65 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.CIRCUIT, 1), (ItemType.WIRE, 1)],
         "ticks": 6,
     },
-    # Machines
-    {
-        "output": ItemType.CONVEYOR_BELT,
-        "inputs": [(ItemType.MOTOR, 1), (ItemType.IRON_PLATE, 2)],
-        "ticks": 4,
-    },
+    # -------- Assembler: logistics (placeable machines, cheap) --------
     {
         "output": ItemType.MINER,
-        "inputs": [(ItemType.SENSOR, 1), (ItemType.FRAME, 2)],
+        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.WIRE, 1)],
         "ticks": 6,
     },
     {
-        "output": ItemType.ASSEMBLER,
-        "inputs": [(ItemType.SENSOR, 1), (ItemType.CIRCUIT, 2)],
-        "ticks": 6,
-    },
-    {
-        "output": ItemType.PALLET,
-        "inputs": [(ItemType.FRAME, 2), (ItemType.TIN_PLATE, 1)],
+        "output": ItemType.CONVEYOR_BELT,
+        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.COPPER_PLATE, 1)],
         "ticks": 4,
     },
     {
         "output": ItemType.ARM,
-        "inputs": [(ItemType.WIRE, 1), (ItemType.IRON_PLATE, 1)],
+        "inputs": [(ItemType.COPPER_PLATE, 1), (ItemType.WIRE, 1)],
         "ticks": 4,
+    },
+    {
+        "output": ItemType.PALLET,
+        "inputs": [(ItemType.TIN_PLATE, 1), (ItemType.WIRE, 1)],
+        "ticks": 4,
+    },
+    {
+        "output": ItemType.ASSEMBLER,
+        "inputs": [(ItemType.FRAME, 1), (ItemType.CIRCUIT, 1)],
+        "ticks": 8,
     },
     {
         "output": ItemType.FURNACE,
         "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.REFRACTORY, 1)],
-        "ticks": 4,
+        "ticks": 6,
     },
-    # Science packs
+    # -------- Assembler: rocket sub-assemblies --------
+    {
+        "output": ItemType.HULL,
+        "inputs": [(ItemType.FRAME, 2), (ItemType.IRON_PLATE, 2)],
+        "ticks": 8,
+    },
+    {
+        "output": ItemType.ENGINE_UNIT,
+        "inputs": [(ItemType.MOTOR, 2), (ItemType.WIRE, 1)],
+        "ticks": 8,
+    },
+    {
+        "output": ItemType.AVIONICS,
+        "inputs": [(ItemType.CIRCUIT, 2), (ItemType.SENSOR, 2)],
+        "ticks": 10,
+    },
+    # -------- Assembler: rocket core + capstone --------
+    {
+        "output": ItemType.ROCKET_CORE,
+        "inputs": [(ItemType.ENGINE_UNIT, 1), (ItemType.AVIONICS, 1)],
+        "ticks": 10,
+    },
+    {
+        "output": ItemType.ROCKET,
+        "inputs": [(ItemType.HULL, 6), (ItemType.ROCKET_CORE, 4)],
+        "ticks": 300,
+    },
+    # -------- Assembler: science packs --------
     {
         "output": ItemType.BASIC_SCIENCE_PACK,
         "inputs": [(ItemType.MOTOR, 1), (ItemType.TIN_PLATE, 1)],
@@ -123,19 +161,6 @@ RECIPES: list[_Recipe] = [
         "output": ItemType.ADVANCED_SCIENCE_PACK,
         "inputs": [(ItemType.SENSOR, 1), (ItemType.WAFER, 1)],
         "ticks": 8,
-    },
-    # Goal
-    {
-        "output": ItemType.ROCKET,
-        "inputs": [(ItemType.MOTOR, 2), (ItemType.SENSOR, 2)],
-        "ticks": 100,
-    },
-    # Furnace half-fab (separate recipe so FURNACE no longer shares its
-    # input type-set with WIRE — makes recipe matching unambiguous).
-    {
-        "output": ItemType.REFRACTORY,
-        "inputs": [(ItemType.TIN_PLATE, 1), (ItemType.COAL, 1)],
-        "ticks": 4,
     },
 ]
 
@@ -147,31 +172,33 @@ RECIPE_NAMES: list[str] = [
     "Copper Plate",
     "Tin Plate",
     "Wafer",
+    "Refractory",
     "Frame",
     "Circuit",
     "Wire",
     "Motor",
     "Sensor",
-    "Conveyor Belt",
     "Miner",
-    "Assembler",
-    "Pallet",
+    "Conveyor Belt",
     "Arm",
+    "Pallet",
+    "Assembler",
     "Furnace",
+    "Hull",
+    "Engine Unit",
+    "Avionics",
+    "Rocket Core",
+    "Rocket",
     "Basic Science Pack",
     "Advanced Science Pack",
-    "Rocket",
-    "Refractory",
 ]
 
 # ---------------------------------------------------------------------------
 # Derived JAX arrays — single source of truth from the dicts above.
 # ---------------------------------------------------------------------------
 
-# Per-recipe machine-type gate: first 4 smelting recipes run on
-# FURNACE entities, all others on ASSEMBLER entities. The engine
-# shares a single code path — the gate only restricts which recipes
-# each machine type can match during Phase 3.
+# Per-recipe machine-type gate: smelting recipes run on FURNACE
+# entities, everything else on ASSEMBLER entities.
 _FURNACE_OUTPUTS: frozenset[int] = frozenset(
     {
         int(ItemType.IRON_PLATE),
@@ -199,6 +226,9 @@ RECIPE_TICKS: jnp.ndarray = jnp.array(
     [r["ticks"] for r in RECIPES],
     dtype=jnp.int32,
 )
+# 1-input recipes pad the missing slot with (EMPTY, 0) so the
+# Phase 3 matcher in ``run_combiners`` can treat every recipe as a
+# 2-slot lookup without branching on recipe arity.
 RECIPE_INPUT_ITEMS: jnp.ndarray = jnp.array(
     [
         [item for item, _ in r["inputs"]]

@@ -411,7 +411,15 @@ def run_assemblers(state: EnvState) -> EnvState:
     idle = is_combiner & (new_power == 0) & (new_out_count == 0)
     matched = jnp.int32(-1)
     for r in range(NUM_RECIPES):
-        (rt_a, ra_a), (rt_b, ra_b) = RECIPES[r]["inputs"]
+        # 1-input recipes pad the unused slot with (EMPTY, 0); the
+        # match naturally requires the corresponding slot on the
+        # machine to also be empty (in_tX == 0 & in_cX >= 0).
+        pairs = RECIPES[r]["inputs"]
+        if len(pairs) == 1:
+            (rt_a, ra_a) = pairs[0]
+            rt_b, ra_b = int(ItemType.EMPTY), 0
+        else:
+            (rt_a, ra_a), (rt_b, ra_b) = pairs
         rmt = RECIPE_MACHINE_TYPE[r]
         o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)
         o2 = (in_t0 == rt_b) & (in_c0 >= ra_b) & (in_t1 == rt_a) & (in_c1 >= ra_a)
