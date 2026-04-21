@@ -39,8 +39,14 @@ class _Recipe(TypedDict):
 # Unified recipe table — single source of truth
 # ---------------------------------------------------------------------------
 
+# Recipe order MATTERS: positions 0–17 are the recipes that map to
+# ``Action.CRAFT_IRON_PLATE`` … ``Action.CRAFT_ROCKET`` via
+# ``CRAFT_ACTION_TO_RECIPE = jnp.arange(18)``. Positions 18+ are
+# machine-only (no CRAFT action) — refractory plus the four new
+# rocket sub-assemblies.
 RECIPES: list[_Recipe] = [
-    # -------- Furnace (5 recipes, 1 input each) --------
+    # -------- CRAFT-addressable slots 0–17 --------
+    # Furnace smelts (1 input each).
     {
         "output": ItemType.IRON_PLATE,
         "inputs": [(ItemType.IRON_ORE, 1)],
@@ -61,12 +67,7 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.SILICON, 1)],
         "ticks": 2,
     },
-    {
-        "output": ItemType.REFRACTORY,
-        "inputs": [(ItemType.COAL, 1)],
-        "ticks": 4,
-    },
-    # -------- Assembler: base intermediates --------
+    # Assembler: base intermediates.
     {
         "output": ItemType.FRAME,
         "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.TIN_PLATE, 1)],
@@ -82,7 +83,7 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.COPPER_PLATE, 1), (ItemType.TIN_PLATE, 1)],
         "ticks": 4,
     },
-    # -------- Assembler: components --------
+    # Assembler: components.
     {
         "output": ItemType.MOTOR,
         "inputs": [(ItemType.FRAME, 1), (ItemType.WIRE, 1)],
@@ -93,15 +94,26 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.CIRCUIT, 1), (ItemType.WIRE, 1)],
         "ticks": 6,
     },
-    # -------- Assembler: logistics (placeable machines, cheap) --------
+    # Assembler: logistics machines (cheap). Order matches the
+    # CRAFT_* enum: belt, miner, assembler, pallet, arm, furnace.
+    {
+        "output": ItemType.CONVEYOR_BELT,
+        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.COPPER_PLATE, 1)],
+        "ticks": 4,
+    },
     {
         "output": ItemType.MINER,
         "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.WIRE, 1)],
         "ticks": 6,
     },
     {
-        "output": ItemType.CONVEYOR_BELT,
-        "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.COPPER_PLATE, 1)],
+        "output": ItemType.ASSEMBLER,
+        "inputs": [(ItemType.FRAME, 1), (ItemType.CIRCUIT, 1)],
+        "ticks": 8,
+    },
+    {
+        "output": ItemType.PALLET,
+        "inputs": [(ItemType.TIN_PLATE, 1), (ItemType.WIRE, 1)],
         "ticks": 4,
     },
     {
@@ -110,21 +122,35 @@ RECIPES: list[_Recipe] = [
         "ticks": 4,
     },
     {
-        "output": ItemType.PALLET,
-        "inputs": [(ItemType.TIN_PLATE, 1), (ItemType.WIRE, 1)],
-        "ticks": 4,
-    },
-    {
-        "output": ItemType.ASSEMBLER,
-        "inputs": [(ItemType.FRAME, 1), (ItemType.CIRCUIT, 1)],
-        "ticks": 8,
-    },
-    {
         "output": ItemType.FURNACE,
         "inputs": [(ItemType.IRON_PLATE, 1), (ItemType.REFRACTORY, 1)],
         "ticks": 6,
     },
-    # -------- Assembler: rocket sub-assemblies --------
+    # Assembler: science packs.
+    {
+        "output": ItemType.BASIC_SCIENCE_PACK,
+        "inputs": [(ItemType.MOTOR, 1), (ItemType.TIN_PLATE, 1)],
+        "ticks": 8,
+    },
+    {
+        "output": ItemType.ADVANCED_SCIENCE_PACK,
+        "inputs": [(ItemType.SENSOR, 1), (ItemType.WAFER, 1)],
+        "ticks": 8,
+    },
+    # Assembler: capstone.
+    {
+        "output": ItemType.ROCKET,
+        "inputs": [(ItemType.HULL, 6), (ItemType.ROCKET_CORE, 4)],
+        "ticks": 300,
+    },
+    # -------- Machine-only slots 18+ (no CRAFT action) --------
+    # Furnace half-fab (keeps FURNACE recipe's input type-set unique).
+    {
+        "output": ItemType.REFRACTORY,
+        "inputs": [(ItemType.COAL, 1)],
+        "ticks": 4,
+    },
+    # Rocket sub-assemblies — the four-tier convergence.
     {
         "output": ItemType.HULL,
         "inputs": [(ItemType.FRAME, 2), (ItemType.IRON_PLATE, 2)],
@@ -140,27 +166,10 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.CIRCUIT, 2), (ItemType.SENSOR, 2)],
         "ticks": 10,
     },
-    # -------- Assembler: rocket core + capstone --------
     {
         "output": ItemType.ROCKET_CORE,
         "inputs": [(ItemType.ENGINE_UNIT, 1), (ItemType.AVIONICS, 1)],
         "ticks": 10,
-    },
-    {
-        "output": ItemType.ROCKET,
-        "inputs": [(ItemType.HULL, 6), (ItemType.ROCKET_CORE, 4)],
-        "ticks": 300,
-    },
-    # -------- Assembler: science packs --------
-    {
-        "output": ItemType.BASIC_SCIENCE_PACK,
-        "inputs": [(ItemType.MOTOR, 1), (ItemType.TIN_PLATE, 1)],
-        "ticks": 8,
-    },
-    {
-        "output": ItemType.ADVANCED_SCIENCE_PACK,
-        "inputs": [(ItemType.SENSOR, 1), (ItemType.WAFER, 1)],
-        "ticks": 8,
     },
 ]
 
@@ -172,25 +181,25 @@ RECIPE_NAMES: list[str] = [
     "Copper Plate",
     "Tin Plate",
     "Wafer",
-    "Refractory",
     "Frame",
     "Circuit",
     "Wire",
     "Motor",
     "Sensor",
-    "Miner",
     "Conveyor Belt",
-    "Arm",
-    "Pallet",
+    "Miner",
     "Assembler",
+    "Pallet",
+    "Arm",
     "Furnace",
+    "Basic Science Pack",
+    "Advanced Science Pack",
+    "Rocket",
+    "Refractory",
     "Hull",
     "Engine Unit",
     "Avionics",
     "Rocket Core",
-    "Rocket",
-    "Basic Science Pack",
-    "Advanced Science Pack",
 ]
 
 # ---------------------------------------------------------------------------

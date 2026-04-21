@@ -39,18 +39,18 @@ from factoriax.state import EnvParams
 
 
 def test_catalogue_size_and_weights() -> None:
-    """The catalogue has 34 entries and tiered weights summing to 120."""
-    assert len(ROCKET_ACHIEVEMENT_INFO) == 34
+    """The catalogue has 38 entries and tiered weights summing to 140."""
+    assert len(ROCKET_ACHIEVEMENT_INFO) == 38
     assert ROCKET_ACHIEVEMENT_WEIGHTS.shape == (MAX_ACHIEVEMENTS,)
     weights_np = np.asarray(ROCKET_ACHIEVEMENT_WEIGHTS)
     assert float(weights_np.sum()) == pytest.approx(MAX_ROCKET_SCORE)
-    assert MAX_ROCKET_SCORE == 120
-    # Tier shape: 10 × 1, 11 × 3, 9 × 5, 4 × 8.
+    assert MAX_ROCKET_SCORE == 140
+    # Tier shape: 10 × 1, 11 × 3, 13 × 5, 4 × 8.
     assert list(weights_np[:10]) == [1.0] * 10
     assert list(weights_np[10:21]) == [3.0] * 11
-    assert list(weights_np[21:30]) == [5.0] * 9
-    assert list(weights_np[30:34]) == [8.0] * 4
-    assert float(weights_np[34:].sum()) == 0.0
+    assert list(weights_np[21:34]) == [5.0] * 13
+    assert list(weights_np[34:38]) == [8.0] * 4
+    assert float(weights_np[38:].sum()) == 0.0
 
 
 def test_all_ids_unique() -> None:

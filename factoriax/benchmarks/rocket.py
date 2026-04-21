@@ -1,9 +1,10 @@
 """Rocket benchmark — achievement-based reward signal with the rocket as capstone.
 
-The benchmark defines 34 achievements tiered Craftax-style (1/3/5/8 points,
-max 120), ordered to teach the game's natural learning path: gather raw ore,
+The benchmark defines 38 achievements tiered Craftax-style (1/3/5/8 points,
+max 140), ordered to teach the game's natural learning path: gather raw ore,
 refine intermediates via a furnace and assembler, build and deploy the rest
-of the factory, then launch the rocket.
+of the factory, assemble the three rocket sub-components (hull, engine,
+avionics), then launch the rocket.
 
 Setup:
 - A **furnace** and **assembler** are pre-placed adjacent to the player's
@@ -150,6 +151,26 @@ ROCKET_ACHIEVEMENT_INFO: list[AchievementInfo] = [
         "Belt Network",
         "Place five conveyor belts.",
     ),
+    AchievementInfo(
+        "craft_hull",
+        "Craft Hull",
+        "Assemble a rocket hull (2 frame + 2 iron plate).",
+    ),
+    AchievementInfo(
+        "craft_engine_unit",
+        "Craft Engine Unit",
+        "Assemble a rocket engine (2 motor + 1 wire).",
+    ),
+    AchievementInfo(
+        "craft_avionics",
+        "Craft Avionics",
+        "Assemble an avionics package (2 circuit + 2 sensor).",
+    ),
+    AchievementInfo(
+        "craft_rocket_core",
+        "Craft Rocket Core",
+        "Assemble a rocket core (engine + avionics).",
+    ),
     # Very Advanced (8 pt) — scale + capstone.
     AchievementInfo(
         "scaling_up",
@@ -176,8 +197,8 @@ ROCKET_ACHIEVEMENT_INFO: list[AchievementInfo] = [
 NUM_ROCKET_ACHIEVEMENTS: int = len(ROCKET_ACHIEVEMENT_INFO)
 
 # Tier layout: 10 Basic (1pt) + 11 Intermediate (3pt)
-# + 9 Advanced (5pt) + 4 Very Advanced (8pt).
-_TIER_WEIGHTS: list[int] = [1] * 10 + [3] * 11 + [5] * 9 + [8] * 4
+# + 13 Advanced (5pt) + 4 Very Advanced (8pt).
+_TIER_WEIGHTS: list[int] = [1] * 10 + [3] * 11 + [5] * 13 + [8] * 4
 assert len(_TIER_WEIGHTS) == NUM_ROCKET_ACHIEVEMENTS
 
 ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = (
@@ -186,7 +207,7 @@ ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = (
     .set(jnp.array(_TIER_WEIGHTS, dtype=jnp.float32))
 )
 
-MAX_ROCKET_SCORE: int = int(sum(_TIER_WEIGHTS))  # 120
+MAX_ROCKET_SCORE: int = int(sum(_TIER_WEIGHTS))  # 140
 
 
 # ---------------------------------------------------------------------------
@@ -214,17 +235,15 @@ def _any_entity_buf_nonempty(state: EnvState, mt: int) -> jax.Array:
 
 
 def _any_assembler_has_output(state: EnvState) -> jax.Array:
-    """True when any active assembler has output available for extraction.
+    """True when any active assembler holds a recipe output.
 
-    The engine's ``run_combiners`` Phase 4 moves completed-recipe
-    output from ``ent_asm_out_*`` into ``ent_buf_*`` every tick, so
-    checking only ``ent_asm_out_count`` never observes a non-zero value
-    at end-of-tick. The buffer is the correct stable slot to read.
+    The engine parks completed output in ``ent_asm_out`` until a
+    withdraw pulls it out (no buffer drain), so that's where we check.
     """
     matches = (
         (state.ent_type == MachineType.ASSEMBLER)
         & (state.ent_y >= 0)
-        & ((state.ent_asm_out_count > 0) | (state.ent_buf_count > 0))
+        & (state.ent_asm_out_count > 0)
     )
     return jnp.any(matches)
 
@@ -235,7 +254,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
 
 
 def rocket_conditions(state: EnvState) -> jax.Array:
-    """Compute the 34 rocket-benchmark achievement conditions.
+    """Compute the 38 rocket-benchmark achievement conditions.
 
     Every condition is a pure function of ``state``. The returned array
     is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
@@ -285,6 +304,10 @@ def rocket_conditions(state: EnvState) -> jax.Array:
             _count_machines(state, MachineType.ASSEMBLER) >= 1,
             _any_assembler_has_output(state),
             _count_machines(state, MachineType.CONVEYOR_BELT) >= 5,
+            _holds_item(state, ItemType.HULL),
+            _holds_item(state, ItemType.ENGINE_UNIT),
+            _holds_item(state, ItemType.AVIONICS),
+            _holds_item(state, ItemType.ROCKET_CORE),
             # Very Advanced (8 pt).
             _count_machines(state, MachineType.MINER) >= 3,
             total_machines >= 10,
