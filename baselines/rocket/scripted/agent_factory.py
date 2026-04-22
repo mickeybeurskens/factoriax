@@ -30,9 +30,9 @@ from factoriax.state import EnvParams
 
 from .agent import ScriptedAgent, _miner_has_output_predicate
 from .goals import (
-    DepositInto,
     Goal,
     MineOre,
+    PipelinedProduce,
     PlaceMachine,
     PlaceMachineAt,
     ProduceInAssembler,
@@ -144,33 +144,38 @@ def build_factory_rocket_goals() -> list[Goal]:
         # While Phase A-F ran, the node miners have been pushing ore
         # into their adjacent pallets. WITHDRAW is now bulk — one
         # action pulls the whole pallet — so draining is cheap.
-        # Each call walks to the nearest pallet with the matching
-        # item and empties it; it retries with a fresh lookup if
-        # the first pallet is already empty. Totals target the
-        # rocket + achievement chain: iron 45, copper 45, tin 42,
-        # silicon 20, coal 155 (coal feeds every smelt).
+        # Totals cover the full downstream consumption chain:
+        #   iron 45 → frame/hull/belt
+        #   copper 60 → wire/circuit/belt/arm + 5-unit slack for
+        #     pipelined CIRCUIT's in-flight cycles that complete
+        #     AFTER the target is met (each extra cycle eats 1 copper)
+        #   tin 65 → wire/frame + same pipelined slack
+        #   silicon 20 → wafer
+        #   coal 220 → every smelt (45+60+65+20 plates) + slack
         WithdrawUntilHeld(ItemType.IRON_ORE, 45),
-        WithdrawUntilHeld(ItemType.COPPER_ORE, 45),
-        WithdrawUntilHeld(ItemType.TIN_ORE, 42),
+        WithdrawUntilHeld(ItemType.COPPER_ORE, 60),
+        WithdrawUntilHeld(ItemType.TIN_ORE, 65),
         WithdrawUntilHeld(ItemType.SILICON, 20),
-        WithdrawUntilHeld(ItemType.COAL, 155),
-        # ---- Phase H — bulk smelts (nearest furnace) ----
-        # Three furnaces exist (pre-placed + 2 central-bank), but the
-        # agent uses the nearest one for each sequential batch —
-        # PipelinedProduce's _deposits tracking drifts out of sync
-        # with physical machine state across recipe transitions, so
-        # the robust sequential path wins here.
-        ProduceInFurnace(ItemType.IRON_PLATE, 45),
-        ProduceInFurnace(ItemType.COPPER_PLATE, 45),
-        ProduceInFurnace(ItemType.TIN_PLATE, 42),
-        ProduceInFurnace(ItemType.WAFER, 20),
-        # ---- Phase I — intermediates (nearest assembler) ----
-        ProduceInAssembler(ItemType.FRAME, 25),
-        ProduceInAssembler(ItemType.WIRE, 30),
-        ProduceInAssembler(ItemType.CIRCUIT, 18),
+        WithdrawUntilHeld(ItemType.COAL, 220),
+        # ---- Phase H — bulk smelts (pipelined across 3 furnaces) ----
+        # High-volume recipes (45×plate etc.) amortise the navigation
+        # overhead of rotating 3 furnaces — the engine bug-fix in
+        # withdraw_from_adjacent means PipelinedProduce's slot-driven
+        # scheduler is now safe.
+        PipelinedProduce(ItemType.IRON_PLATE, 45, MachineType.FURNACE, k=3),
+        PipelinedProduce(ItemType.COPPER_PLATE, 60, MachineType.FURNACE, k=3),
+        PipelinedProduce(ItemType.TIN_PLATE, 65, MachineType.FURNACE, k=3),
+        PipelinedProduce(ItemType.WAFER, 20, MachineType.FURNACE, k=3),
+        # ---- Phase I — bulk intermediates (pipelined) ----
+        # Wire/frame/circuit also have enough cycles to amortise.
+        PipelinedProduce(ItemType.FRAME, 25, MachineType.ASSEMBLER, k=3),
+        PipelinedProduce(ItemType.WIRE, 30, MachineType.ASSEMBLER, k=3),
+        PipelinedProduce(ItemType.CIRCUIT, 18, MachineType.ASSEMBLER, k=3),
+        # ---- Phase J — small-batch finals (sequential) ----
+        # 4-10 cycle recipes don't repay the multi-machine round-trip;
+        # sequential against the nearest assembler wins.
         ProduceInAssembler(ItemType.MOTOR, 10),
         ProduceInAssembler(ItemType.SENSOR, 10),
-        # ---- Phase J — rocket sub-assemblies ----
         ProduceInAssembler(ItemType.HULL, 6),
         ProduceInAssembler(ItemType.ENGINE_UNIT, 4),
         ProduceInAssembler(ItemType.AVIONICS, 4),
@@ -185,7 +190,12 @@ def build_factory_rocket_goals() -> list[Goal]:
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
         PlaceMachine(MachineType.ARM, free_tile_near_player()),
-        DepositInto(MachineType.PALLET, ItemType.IRON_PLATE),
+        # Note: ``pallet_filled`` is already unlocked by the node
+        # miners auto-filling their pallets in Phase D-F, so no
+        # manual DepositInto is needed here. A manual deposit would
+        # also silently fail — node pallets hold ore, not plates,
+        # and deposit_to_adjacent rejects mismatched types — which
+        # would wedge the plan in an infinite retry.
         # ---- Phase L — capstone ----
         PlaceMachine(MachineType.ROCKET, free_tile_near_player()),
     ]
