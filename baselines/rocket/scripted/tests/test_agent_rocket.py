@@ -59,13 +59,14 @@ def _run_agent(max_steps: int, seed: int = 0):
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
+    jit_obs = jax.jit(lambda s: global_array(s, env_params, 0))
     agent = make_scripted_rocket_agent(env_params)
 
     unlock_timestep = np.full((NUM_ROCKET_ACHIEVEMENTS,), -1, dtype=np.int32)
     key = jax.random.PRNGKey(seed)
 
     for t in range(max_steps):
-        obs = np.asarray(global_array(state.env_state, env_params, 0))
+        obs = np.asarray(jit_obs(state.env_state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
         _, state, _, done, _ = jit_step(

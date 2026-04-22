@@ -52,9 +52,27 @@ def jit_step():
     return env, jax.jit(env.step_env)
 
 
+_JIT_OBS_CACHE: dict[tuple[int, int, int], object] = {}
+
+
+def _jit_obs(env_params: EnvParams):
+    """Memoize JIT-compiled obs per unique env_params shape.
+
+    Rebuilding a fresh ``jax.jit`` every call would re-trace every tick,
+    defeating the point. Tests reuse a handful of param shapes, so a
+    tiny keyed cache keeps each shape's compiled function alive.
+    """
+    key = (env_params.map_width, env_params.map_height, env_params.max_timesteps)
+    fn = _JIT_OBS_CACHE.get(key)
+    if fn is None:
+        fn = jax.jit(lambda s: global_array(s, env_params, 0))
+        _JIT_OBS_CACHE[key] = fn
+    return fn
+
+
 def _view(state, env_params: EnvParams):
     """Decode a fresh WorldView from the current state."""
-    obs = np.asarray(global_array(state.env_state, env_params, 0))
+    obs = np.asarray(_jit_obs(env_params)(state.env_state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,

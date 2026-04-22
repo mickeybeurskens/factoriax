@@ -82,6 +82,8 @@ def record(
 
     env = FactoriaXEnv()
     jit_step = jax.jit(env.step_env)
+    # Without JIT, global_array pays ~50 ms/tick on the 10-channel obs.
+    jit_obs = jax.jit(lambda s: global_array(s, env_params, 0))
     if agent_kind not in _AGENTS:
         raise ValueError(
             f"unknown agent {agent_kind!r}; choose from {list(_AGENTS)}",
@@ -104,7 +106,7 @@ def record(
     key = jax.random.PRNGKey(seed)
     t0 = time.perf_counter()
     for t in range(max_steps):
-        obs = np.asarray(global_array(state, env_params, 0))
+        obs = np.asarray(jit_obs(state))
         raw = int(agent.act(obs))
         # Replicate the ActionMaskWrapper: masked actions become NOOP.
         action = int(Action.NOOP) if raw in ROCKET_BLOCKED_ACTIONS else raw

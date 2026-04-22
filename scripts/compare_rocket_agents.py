@@ -82,6 +82,9 @@ def _run(
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
+    # JIT the obs too — without this, every tick pays ~50ms for the
+    # 10-channel scatter-based global_array.
+    jit_obs = jax.jit(lambda s: global_array(s, env_params, 0))
     agent = agent_factory(env_params)
 
     unlock_step = np.full((NUM_ROCKET_ACHIEVEMENTS,), -1, dtype=np.int32)
@@ -89,7 +92,7 @@ def _run(
     t0 = time.perf_counter()
 
     for t in range(max_steps):
-        obs = np.asarray(global_array(state.env_state, env_params, 0))
+        obs = np.asarray(jit_obs(state.env_state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
         _, state, _, done, _ = jit_step(

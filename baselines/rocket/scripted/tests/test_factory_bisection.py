@@ -107,6 +107,10 @@ def _run_plan(goals: list[Goal], max_steps: int) -> BisectionRunResult:
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
+    # JIT the observation too — without this, every tick pays a ~50 ms
+    # eager-mode dispatch cost (10 spatial channels worth of scatters),
+    # which alone burns the wall cap long before any deadlock surfaces.
+    jit_obs = jax.jit(lambda es: global_array(es, env_params, 0))
 
     planner = Planner(goals, debug_log=True)
     agent = ScriptedAgent(env_params, planner)
@@ -125,7 +129,7 @@ def _run_plan(goals: list[Goal], max_steps: int) -> BisectionRunResult:
         if time.perf_counter() - t0 > _WALL_CAP_SEC:
             hit_cap = True
             break
-        obs = np.asarray(global_array(state.env_state, env_params, 0))
+        obs = np.asarray(jit_obs(state.env_state))
         action = agent.act(obs)
         recent_actions.append((t, int(action)))
         key, sub = jax.random.split(key)

@@ -59,8 +59,21 @@ def _setup_env(starting_inventory: dict[int, int]):
     return jax.jit(env.step_env), state, env_params
 
 
+_JIT_OBS_CACHE: dict[tuple[int, int, int], object] = {}
+
+
+def _jit_obs(env_params: EnvParams):
+    """Memoize JIT-compiled obs per env_params shape (see test_skills)."""
+    key = (env_params.map_width, env_params.map_height, env_params.max_timesteps)
+    fn = _JIT_OBS_CACHE.get(key)
+    if fn is None:
+        fn = jax.jit(lambda s: global_array(s, env_params, 0))
+        _JIT_OBS_CACHE[key] = fn
+    return fn
+
+
 def _view(state, env_params: EnvParams):
-    obs = np.asarray(global_array(state.env_state, env_params, 0))
+    obs = np.asarray(_jit_obs(env_params)(state.env_state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,

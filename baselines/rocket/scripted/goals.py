@@ -760,22 +760,22 @@ class PipelinedProduce(Goal):
     running in parallel. On each tick the agent picks the highest-
     priority action across the k-nearest matching machines:
 
-    1. **Withdraw** from any machine whose output slot matches
-       ``output_item`` (the buffer channel of the obs exposes asm_out
-       one tick after the recipe completes).
-    2. **Deposit** the next unmet input into the machine with the
-       fewest deposits so far, provided the player still holds that
-       ingredient.
-    3. Otherwise emit ``NOOP`` — a recipe is in flight and no deposit
+    1. **Withdraw** any non-empty output slot (slot 2 in the
+       observation). Broadened from "only our output_item" so that
+       leftovers from a previous goal don't block the deposit gate.
+    2. **Deposit** the next missing input, computed per-machine from
+       the current physical slot state: slot 0 and slot 1 hold
+       assembler/furnace inputs, and the observation surfaces their
+       item type + count directly. For each candidate tile, figure
+       out which input is under-filled relative to the recipe and
+       deposit it — no software ``_deposits`` counter to drift.
+    3. Otherwise emit ``NOOP`` — a cycle is cooking and no deposit
        is pending.
 
-    Per-machine state is tracked in a small dict keyed by tile; it
-    resets when the agent withdraws (the cycle has ended and the next
-    deposit starts a fresh batch).
-
-    Reuses :class:`FaceAndInteract` (via the ``_active`` sub-skill)
-    for navigation + action emission, matching how
-    :class:`DepositInto` / :class:`WithdrawFrom` already work.
+    The physical-slot read fully replaces the earlier ``_deposits``
+    dict: Phase 0 pulls from adjacent buffers, engine-side cycle
+    transitions, and aborted deposits all remain visible through
+    the observation, so the FSM can never disagree with the engine.
     """
 
     name = "PipelinedProduce"
@@ -796,24 +796,15 @@ class PipelinedProduce(Goal):
             raise ValueError(
                 f"no recipe produces {ItemType(self.output_item).name}",
             )
-        # Flatten (item, count) pairs into a deposit sequence so each
-        # element corresponds to one DEPOSIT_* action. Frame: iron +
-        # tin → [iron, tin]. Hull: 2 frame + 2 iron → [frame, frame,
-        # iron, iron].
-        self._deposit_sequence: list[int] = []
-        for item_t, qty in recipe["inputs"]:
-            self._deposit_sequence.extend([int(item_t)] * int(qty))
+        # Store recipe inputs aligned with the physical asm_in layout:
+        # index 0 → slot 0, index 1 → slot 1 (if present).
+        self._recipe_inputs: list[tuple[int, int]] = [
+            (int(it), int(qty)) for it, qty in recipe["inputs"]
+        ]
 
         self._active: FaceAndInteract | None = None
-        # Per-machine deposit progress. Keyed by ``(x, y)`` tile.
-        self._deposits: dict[tuple[int, int], int] = {}
 
     def step(self, view: WorldView) -> StepReturn:
-        # Exit as soon as the target is met. _deposits tracking can
-        # drift out of sync with physical state (Phase 0 pulls,
-        # adjacent-combiner interactions) so waiting for "pending
-        # cycles to drain" risks deadlock. Any leftover output is
-        # cleaned up by the NEXT goal's broadened priority-1 scan.
         if view.player.held(self.output_item) >= self.count:
             return Result.DONE, None
 
@@ -822,7 +813,7 @@ class PipelinedProduce(Goal):
             if result is Result.RUNNING:
                 return Result.RUNNING, action
             self._active = None
-            # fall through — pick the next action this same tick.
+            # Fall through — pick the next action this same tick.
 
         tiles = view.tiles_with_machine(self.machine_type)
         if not tiles:
@@ -832,39 +823,25 @@ class PipelinedProduce(Goal):
         candidates = tiles[: self.k]
 
         # Priority 1: withdraw ANY non-empty output slot on a
-        # candidate machine. Broadened from "only our output_item"
-        # so that leftovers from a previous goal (e.g. a FRAME still
-        # sitting in asm_out when we start a WIRE goal) don't block
-        # the idle gate on the next cycle.
+        # candidate machine. Slot 2 is the uniform output projection.
         for tile in candidates:
             tx, ty = tile
-            if int(view.buffer_type[ty, tx]) != 0:
-                self._deposits.pop(tile, None)
+            if int(view.slot2_count[ty, tx]) > 0:
                 self._active = FaceAndInteract(tile, int(Action.WITHDRAW))
                 return self._active.step(view)
 
-        # Priority 2: deposit the next input into the NEAREST
-        # machine that can accept one. Walks to a partial cycle
-        # first if the nearest machine has one; otherwise starts
-        # a fresh cycle at the nearest idle machine.
-        need = len(self._deposit_sequence)
-        best_tile: tuple[int, int] | None = None
+        # Priority 2: deposit the next missing input into the nearest
+        # candidate that can accept one. For each candidate, compare
+        # the recipe's input requirements against the current physical
+        # slot contents (type + count) read straight from the obs.
         for tile in candidates:  # already sorted by distance
-            progress = self._deposits.get(tile, 0)
-            if progress >= need:
+            next_item = self._missing_input(view, tile)
+            if next_item is None:
                 continue
-            next_item = self._deposit_sequence[progress]
             if view.player.held(next_item) < 1:
                 continue
-            best_tile = tile
-            break
-
-        if best_tile is not None:
-            progress = self._deposits.get(best_tile, 0)
-            next_item = self._deposit_sequence[progress]
-            self._deposits[best_tile] = progress + 1
             self._active = FaceAndInteract(
-                best_tile,
+                tile,
                 deposit_action_for(next_item),
             )
             return self._active.step(view)
@@ -872,6 +849,39 @@ class PipelinedProduce(Goal):
         # Nothing to do this tick: cooking in progress, no output
         # ready yet, no deposits to make. Wait.
         return Result.RUNNING, int(Action.NOOP)
+
+    def _missing_input(
+        self,
+        view: WorldView,
+        tile: tuple[int, int],
+    ) -> int | None:
+        """Next required-but-missing input item at *tile*, or None.
+
+        Reads the physical slot state from the observation:
+
+        - Slot is empty (count 0, type 0): needs all of ``req_qty``
+          deposits of the recipe input type.
+        - Slot already matches the recipe type: need
+          ``req_qty - slot_count`` more.
+        - Slot holds a different type (stale cycle, wrong recipe):
+          skip this machine entirely — the engine's type-gate will
+          reject our deposit anyway.
+
+        Returns the first input item (in recipe order) that this
+        machine still needs, or ``None`` if every slot is at or above
+        its quota.
+        """
+        tx, ty = tile
+        slot_types = (view.slot0_type, view.slot1_type)
+        slot_counts = (view.slot0_count, view.slot1_count)
+        for slot_idx, (req_type, req_qty) in enumerate(self._recipe_inputs):
+            have_type = int(slot_types[slot_idx][ty, tx])
+            have_count = int(slot_counts[slot_idx][ty, tx])
+            if have_type not in (0, req_type):
+                return None
+            if have_count < req_qty:
+                return req_type
+        return None
 
 
 def deposit_action_for(item_type: int) -> int:
