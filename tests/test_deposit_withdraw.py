@@ -431,6 +431,75 @@ class TestWithdrawFromAssembler:
         assert int(state.ent_asm_out_count[eidx]) == 0
 
 
+class TestWithdrawDoesNotClobberOtherEntities:
+    """Regression: withdraw must not zero unrelated entities' slot metadata.
+
+    ``run_combiners`` writes ``ent_asm_out_type`` at Phase 3 (cycle start)
+    so an in-flight cycle can be identified as ``type=recipe_output,
+    count=0``. Phase 1 only completes the cycle when ``asm_out_type != 0``.
+
+    Before this regression, ``withdraw_from_adjacent`` cleared
+    ``ent_asm_out_type`` elementwise for every entity whose count was
+    zero — including unrelated cooking assemblers. The next tick's Phase
+    1 then saw ``type=0`` on those and refused to write the output,
+    silently consuming inputs without producing anything.
+    """
+
+    def test_withdraw_preserves_other_cooking_assembler_type(
+        self,
+        state_factory,
+    ) -> None:
+        """Two assemblers. A has a finished wire; B is cooking (type set,
+        count 0). Withdrawing from A must leave B's out_type intact so B's
+        cycle can complete next tick.
+        """
+        # Machine A at (2, 1): cycle done → out=(WIRE, 1).
+        # Machine B at (2, 2): cycle cooking → out=(WIRE, 0), power=1.
+        aot, aoc = _asm_out_grids(
+            4,
+            4,
+            {
+                (1, 2): (ItemType.WIRE, 1),
+                (2, 2): (ItemType.WIRE, 0),
+            },
+        )
+        world = jnp.full((4, 4), BlockType.DIRT, dtype=jnp.int32)
+        state = state_factory(
+            world_map=world,
+            player_position=(1, 1),
+            player_direction=Direction.RIGHT,
+            machine_types=_machine_types(
+                4,
+                4,
+                {
+                    (2, 1): MachineType.ASSEMBLER,
+                    (2, 2): MachineType.ASSEMBLER,
+                },
+            ),
+            asm_out_type=aot,
+            asm_out_count=aoc,
+        )
+
+        state = withdraw_from_adjacent(state, 0)
+
+        e_a = _ent_lookup(state, 1, 2)
+        e_b = _ent_lookup(state, 2, 2)
+
+        # Player got the wire; A's slot is empty and its type cleared.
+        assert int(state.player_inventory[0, ItemType.WIRE]) == 1
+        assert int(state.ent_asm_out_count[e_a]) == 0
+        assert int(state.ent_asm_out_type[e_a]) == 0
+
+        # B is untouched — still cooking. Its count stays 0, but its
+        # out_type MUST still mark the in-flight recipe as WIRE so
+        # Phase 1 can complete the cycle next tick.
+        assert int(state.ent_asm_out_count[e_b]) == 0
+        assert int(state.ent_asm_out_type[e_b]) == int(ItemType.WIRE), (
+            "withdraw_from_adjacent clobbered another assembler's out_type; "
+            "its in-flight cycle will never complete"
+        )
+
+
 class TestWithdrawMergesIntoInventory:
     """Withdrawn items should merge with existing player stacks."""
 

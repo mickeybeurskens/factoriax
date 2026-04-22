@@ -414,14 +414,21 @@ def withdraw_from_adjacent(
         transfer.astype(state.player_inventory.dtype),
     )
 
+    # Decrement only the targeted entity's count.
     new_asm_out_count = jnp.where(
         can_withdraw_asm,
         state.ent_asm_out_count.at[eidx].add(-transfer),
         state.ent_asm_out_count,
     )
+    # Type clear must also be scoped to the targeted entity — an
+    # elementwise ``new_count == 0`` would clobber the recipe-output
+    # marker on every other assembler whose cycle is mid-flight
+    # (Phase 3 sets out_type at cycle start, before Phase 1 writes
+    # count), killing those cycles on the next tick.
+    clear_asm_type = can_withdraw_asm & (new_asm_out_count[eidx] == 0)
     new_asm_out_type = jnp.where(
-        new_asm_out_count == 0,
-        jnp.int8(0),
+        clear_asm_type,
+        state.ent_asm_out_type.at[eidx].set(jnp.int8(0)),
         state.ent_asm_out_type,
     )
 
@@ -430,9 +437,10 @@ def withdraw_from_adjacent(
         state.ent_buf_count.at[eidx].add(-transfer),
         state.ent_buf_count,
     )
+    clear_buf_type = can_withdraw_buf & (new_buf_count[eidx] == 0)
     new_buf_type = jnp.where(
-        new_buf_count == 0,
-        jnp.int8(0),
+        clear_buf_type,
+        state.ent_buf_type.at[eidx].set(jnp.int8(0)),
         state.ent_buf_type,
     )
 
