@@ -578,6 +578,68 @@ def _item_label(item: ItemType) -> str:
     return name if len(name) <= 14 else name[:13] + "."
 
 
+def _inventory_slot_positions(
+    width: int,
+    height: int,
+    num_items: int,
+    *,
+    row_top: int,
+    min_row_h: int = 10,
+    max_row_h: int = 16,
+    pad_x: int = 6,
+) -> list[tuple[int, int, int, int]]:
+    """Compute ``(x, y, col_w, row_h)`` for each inventory item.
+
+    Picks a single-column layout when the quadrant is tall enough; else
+    splits into two columns so every item has a visible slot. The return
+    list length always equals ``num_items`` — items in the right column
+    are at indices ``ceil(num_items / 2)`` onward.
+
+    Args:
+        width: Panel width in pixels.
+        height: Panel height in pixels.
+        num_items: Number of inventory rows to place.
+        row_top: Y offset after the title bar.
+        min_row_h: Minimum per-row height that still fits the label font.
+        max_row_h: Maximum per-row height (single-column keeps rows
+            readable when the quadrant is oversized).
+        pad_x: Left/right padding in pixels.
+
+    Returns:
+        List of ``(x, y, col_w, row_h)`` tuples in item order.
+    """
+    if num_items <= 0:
+        return []
+    avail = max(1, height - row_top - 2)
+    one_col_row_h = min(max_row_h, max(min_row_h, avail // num_items))
+    if one_col_row_h * num_items <= avail:
+        # Single column fits.
+        col_w = width - 2 * pad_x
+        return [
+            (pad_x, row_top + i * one_col_row_h, col_w, one_col_row_h)
+            for i in range(num_items)
+        ]
+    # Two columns. Split items into left/right halves so column 0 holds
+    # the first ceil(n/2) items and column 1 the rest.
+    left_n = (num_items + 1) // 2
+    right_n = num_items - left_n
+    rows_per_col = max(left_n, right_n)
+    two_col_row_h = min(max_row_h, max(min_row_h, avail // rows_per_col))
+    col_w = (width - 3 * pad_x) // 2
+    left_x = pad_x
+    right_x = pad_x + col_w + pad_x
+    positions: list[tuple[int, int, int, int]] = []
+    for i in range(num_items):
+        if i < left_n:
+            col_x = left_x
+            row_i = i
+        else:
+            col_x = right_x
+            row_i = i - left_n
+        positions.append((col_x, row_top + row_i * two_col_row_h, col_w, two_col_row_h))
+    return positions
+
+
 def render_inventory_panel(
     inventory: np.ndarray,
     width: int,
@@ -616,20 +678,25 @@ def render_inventory_panel(
         )
 
     row_top = top_pad + th + 4
-    rows = len(_INVENTORY_ITEMS)
-    avail = max(1, height - row_top - 2)
-    row_h = max(10, min(16, avail // rows))
-    swatch_sz = max(6, row_h - 4)
+    positions = _inventory_slot_positions(
+        width,
+        height,
+        len(_INVENTORY_ITEMS),
+        row_top=row_top,
+        pad_x=pad_x,
+    )
 
-    for i, item in enumerate(_INVENTORY_ITEMS):
-        y = row_top + i * row_h
+    for item, (slot_x, y, col_w, row_h) in zip(
+        _INVENTORY_ITEMS, positions, strict=True
+    ):
         if y + row_h > height:
-            break
+            continue
+        swatch_sz = max(6, row_h - 4)
         count = int(inventory[int(item)]) if int(item) < inventory.shape[0] else 0
         active = count > 0
 
         # Color swatch.
-        sx = pad_x
+        sx = slot_x
         sy = y + (row_h - swatch_sz) // 2
         rgb = ITEM_COLORS.get(int(item), (120, 120, 120))
         if not active:
@@ -643,10 +710,12 @@ def render_inventory_panel(
         lh, lw = label_rgba.shape[:2]
         lx = sx + swatch_sz + 5
         ly = y + (row_h - lh) // 2
-        if lx + lw < width - 40 and 0 <= ly and ly + lh <= height:
+        # Count area is ~20 px from the right edge of this slot's column.
+        col_right = slot_x + col_w
+        if lx + lw < col_right - 20 and 0 <= ly and ly + lh <= height:
             composite_rgba_over_rgb(img[ly : ly + lh, lx : lx + lw], label_rgba)
 
-        # Count, right-aligned.
+        # Count, right-aligned inside this slot's column.
         if active:
             count_str = str(count)
             count_color = (130, 220, 150)
@@ -655,7 +724,7 @@ def render_inventory_panel(
             count_color = (90, 90, 95)
         count_rgba = render_text_rgba(count_str, font, count_color)
         ch, cw = count_rgba.shape[:2]
-        cx = width - pad_x - cw
+        cx = col_right - cw
         cy = y + (row_h - ch) // 2
         if cx >= 0 and 0 <= cy and cy + ch <= height:
             composite_rgba_over_rgb(img[cy : cy + ch, cx : cx + cw], count_rgba)
