@@ -43,6 +43,7 @@ from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_ACHIEVEMENT_WEIGHTS,
+    ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,
     rocket_conditions,
     rocket_reward,
@@ -50,6 +51,7 @@ from factoriax.benchmarks.rocket import (
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action, ItemType
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
+from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.state import EnvParams
 
@@ -70,7 +72,10 @@ class Config:
     """
 
     map_size: int = 32
-    max_timesteps: int = 2000
+    # 8000 matches the scripted-agent benchmark. Naive needs 5907 ticks
+    # to reach 38/38; 2000 (the Apr-20 default) caps the policy well
+    # short of the rocket chain.
+    max_timesteps: int = 8000
     hidden_dims: tuple[int, ...] = (256, 256)
     num_envs: int = 512
     rollout_steps: int = 128
@@ -142,10 +147,20 @@ def _ppo_loss(
 
 def _make_env_and_state(
     config: Config,
-) -> tuple[AchievementWrapper, AchievementState, EnvParams]:
-    """Build the wrapped env, initial AchievementState, and EnvParams."""
+) -> tuple[ActionMaskWrapper, AchievementState, EnvParams]:
+    """Build the wrapped env, initial AchievementState, and EnvParams.
+
+    Action mask matches the scripted benchmark: ``CRAFT_*`` actions are
+    blocked so the policy has to produce intermediates through machines
+    (furnaces/assemblers) rather than handcrafting. Without the mask the
+    PPO task would be strictly easier than what the scripted agents
+    solve, making the numbers incomparable.
+    """
     base_env = FactoriaXEnv()
-    env = AchievementWrapper(base_env, rocket_conditions)
+    env = ActionMaskWrapper(
+        AchievementWrapper(base_env, rocket_conditions),
+        ROCKET_BLOCKED_ACTIONS,
+    )
     env_params = EnvParams(
         map_width=config.map_size,
         map_height=config.map_size,
@@ -245,7 +260,7 @@ class _EvalRollout:
 
 def _render_eval_episode(
     config: Config,
-    env: AchievementWrapper,
+    env: ActionMaskWrapper,
     env_params: EnvParams,
     initial_state: AchievementState,
     network: ActorCritic,
@@ -463,7 +478,7 @@ def _generate_eval_plots(
 
 def _finalize_artifacts(
     config: Config,
-    env: AchievementWrapper,
+    env: ActionMaskWrapper,
     env_params: EnvParams,
     initial_state: AchievementState,
     network: ActorCritic,
@@ -951,7 +966,7 @@ def main() -> None:
     parser.add_argument("--num-envs", type=int, default=512)
     parser.add_argument("--rollout-steps", type=int, default=128)
     parser.add_argument("--total-steps", type=int, default=3_000_000)
-    parser.add_argument("--max-timesteps", type=int, default=2000)
+    parser.add_argument("--max-timesteps", type=int, default=8000)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4)
     parser.add_argument("--entropy-coef", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=0)
