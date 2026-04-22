@@ -46,6 +46,10 @@ _MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(MachineType))
 _DIR_NORM: float = 4.0
 _BUF_COUNT_NORM: float = 64.0
+# Slot counts on the 10-channel obs are normalized by a larger constant
+# than ``_BUF_COUNT_NORM`` so assembler-input and pallet storage (which
+# can exceed 64) round-trip cleanly.
+_SLOT_COUNT_NORM: float = 1024.0
 # Player inventory is per-item normalized by PLAYER_MAX_STACK[i]; convert
 # once to a plain numpy array.
 _PLAYER_MAX_STACK_NP: np.ndarray = np.asarray(PLAYER_MAX_STACK, dtype=np.float32)
@@ -146,13 +150,28 @@ class PlayerScalars:
 class WorldView:
     """Immutable snapshot of the world derived from one observation.
 
+    The machine slot layout is uniform across machine types:
+
+    - Slot 0: first input (assembler/furnace ingredient A). Zero elsewhere.
+    - Slot 1: second input (assembler/furnace ingredient B). Zero elsewhere.
+    - Slot 2: output — assembler/furnace output or the ``ent_buf`` of
+      buffer machines (miner/pallet/belt).
+
+    ``buffer_type`` is kept as an alias for ``slot2_type`` so existing
+    callers that only care about the output-facing slot keep working.
+
     Attributes:
         block_type: ``(H, W)`` int32, values from :class:`BlockType`.
         machine_type: ``(H, W)`` int32, values from :class:`MachineType`.
             ``NONE`` where no machine is placed.
         block_resources: ``(H, W)`` int32, ore remaining on each tile.
-        buffer_type: ``(H, W)`` int32, item type currently held in the
-            machine on that tile, or 0.
+        slot0_type/slot0_count: ``(H, W)`` int32, input-A slot contents.
+        slot1_type/slot1_count: ``(H, W)`` int32, input-B slot contents.
+        slot2_type/slot2_count: ``(H, W)`` int32, output/buffer slot.
+        buffer_type: Alias of ``slot2_type`` — item in the output-facing
+            slot on that tile, or 0.
+        machine_direction: ``(H, W)`` int32, compass direction each
+            placed machine is facing. 0 on empty tiles.
         player: Decoded player scalars.
         walkable: ``(H, W)`` bool, True where the player can stand.
     """
@@ -160,6 +179,13 @@ class WorldView:
     block_type: np.ndarray
     machine_type: np.ndarray
     block_resources: np.ndarray
+    slot0_type: np.ndarray
+    slot0_count: np.ndarray
+    slot1_type: np.ndarray
+    slot1_count: np.ndarray
+    slot2_type: np.ndarray
+    slot2_count: np.ndarray
+    machine_direction: np.ndarray
     buffer_type: np.ndarray
     player: PlayerScalars
     walkable: np.ndarray
@@ -371,7 +397,17 @@ def decode_observation(
     block_resources = np.round(spatial[2] * float(BLOCK_MAX_RESOURCES)).astype(
         np.int32,
     )
-    buffer_type = np.round(spatial[3] * float(NUM_ITEM_TYPES)).astype(np.int32)
+    item_norm = float(NUM_ITEM_TYPES)
+    slot0_type = np.round(spatial[3] * item_norm).astype(np.int32)
+    slot0_count = np.round(spatial[4] * _SLOT_COUNT_NORM).astype(np.int32)
+    slot1_type = np.round(spatial[5] * item_norm).astype(np.int32)
+    slot1_count = np.round(spatial[6] * _SLOT_COUNT_NORM).astype(np.int32)
+    slot2_type = np.round(spatial[7] * item_norm).astype(np.int32)
+    slot2_count = np.round(spatial[8] * _SLOT_COUNT_NORM).astype(np.int32)
+    machine_direction = np.round(spatial[9] * _DIR_NORM).astype(np.int32)
+    # Legacy alias: callers that check the "buffer" of a machine tile
+    # read the output-facing slot.
+    buffer_type = slot2_type
 
     scalars = obs[expected_spatial:]
 
@@ -410,6 +446,13 @@ def decode_observation(
         block_type=block_type,
         machine_type=machine_type,
         block_resources=block_resources,
+        slot0_type=slot0_type,
+        slot0_count=slot0_count,
+        slot1_type=slot1_type,
+        slot1_count=slot1_count,
+        slot2_type=slot2_type,
+        slot2_count=slot2_count,
+        machine_direction=machine_direction,
         buffer_type=buffer_type,
         player=player,
         walkable=walkable,

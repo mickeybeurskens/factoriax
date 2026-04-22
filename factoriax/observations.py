@@ -4,7 +4,18 @@ Each function maps ``(state, params, player_idx) -> jax.Array`` and is
 JAX-native and JIT-compatible. ``rgb`` is the exception: it returns a
 NumPy RGB image via the pixel renderer and cannot be JIT'd.
 
-Spatial channels: block_type, machine_type, block_resources, buffer_type.
+Spatial channels (10 total):
+- ``block_type`` — terrain.
+- ``machine_type`` — ``MachineType`` at each tile (or NONE).
+- ``block_resources`` — ore count under the tile.
+- ``slot{0,1,2}_type`` / ``slot{0,1,2}_count`` — a uniform 3-slot
+  projection of every machine's contents. Combiners map
+  ``ent_asm_in[0] → slot 0``, ``ent_asm_in[1] → slot 1``,
+  ``ent_asm_out → slot 2``. Buffer machines (miner, pallet, belt)
+  leave slots 0/1 at zero and write ``ent_buf`` into slot 2. Lets
+  agents read machine state at any tile without navigating there.
+- ``machine_direction`` — ``ent_direction`` per tile (1..4 or 0).
+
 Player scalars: position, direction, timestep, recipe affordability,
 facing-machine state, player inventory, research state.
 """
@@ -29,50 +40,129 @@ from factoriax.recipes import NUM_RECIPES
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
+_MAP_NORM: float = float(max(BlockType))
+_MACHINE_NORM: float = float(max(MachineType))
+_DIR_NORM: float = 4.0
+# Count normalisation for slot channels. Big enough to keep pallet
+# counts (up to 1000) finite, small enough that tiny buffers still
+# register visibly. 1024 matches PLAYER_MAX_STACK for common items.
+_SLOT_COUNT_NORM: float = 1024.0
+_PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
+    PLAYER_MAX_STACK.astype(jnp.float32),
+    1.0,
+)
 
-def _reconstruct_buffer_type_grid(state: EnvState) -> jnp.ndarray:
-    """Build a (H, W) buffer-type grid from entity arrays.
 
-    Active entities scatter a single "what's available to withdraw
-    here?" value. Combiner output (``ent_asm_out``) takes priority
-    when present — with Phase 4 of ``run_combiners`` removed, the
-    asm_out slot holds completed recipe output until withdrawn and
-    ``ent_buf`` stays empty on combiners. For non-combiners (miners,
-    pallets, belts) ``ent_asm_out`` is always empty and the fallback
-    to ``ent_buf_type`` is what shows up.
+_SlotGrids = tuple[
+    jnp.ndarray,
+    jnp.ndarray,
+    jnp.ndarray,
+    jnp.ndarray,
+    jnp.ndarray,
+    jnp.ndarray,
+]
 
-    Args:
-        state: Current environment state.
 
-    Returns:
-        int8 array of shape ``(H, W)`` with withdrawable item types.
+def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
+    """Project every machine's contents onto uniform 3-slot grids.
+
+    Returns
+    -------
+    ``(s0_type, s0_count, s1_type, s1_count, s2_type, s2_count)``
+    — six ``(H, W)`` arrays. For combiners, slots 0 and 1 hold the
+    two ``ent_asm_in`` slots and slot 2 holds ``ent_asm_out``. For
+    buffer machines (miner, pallet, belt) slots 0 and 1 are always
+    zero and slot 2 holds ``ent_buf``. Arms have no inventory at
+    all and appear as zeros everywhere.
+    """
+    h, w = state.map.shape
+    active = state.ent_y >= 0
+    ey = jnp.clip(state.ent_y, 0, h - 1)
+    ex = jnp.clip(state.ent_x, 0, w - 1)
+
+    is_combiner = (state.ent_type == MachineType.ASSEMBLER) | (
+        state.ent_type == MachineType.FURNACE
+    )
+    is_buffer_machine = (
+        (state.ent_type == MachineType.MINER)
+        | (state.ent_type == MachineType.PALLET)
+        | (state.ent_type == MachineType.CONVEYOR_BELT)
+    )
+
+    # Slots 0 and 1: asm_in for combiners, else zero.
+    in0_t = jnp.where(
+        active & is_combiner,
+        state.ent_asm_in_type[..., 0],
+        jnp.int8(0),
+    )
+    in0_c = jnp.where(
+        active & is_combiner,
+        state.ent_asm_in_count[..., 0],
+        jnp.int16(0),
+    )
+    in1_t = jnp.where(
+        active & is_combiner,
+        state.ent_asm_in_type[..., 1],
+        jnp.int8(0),
+    )
+    in1_c = jnp.where(
+        active & is_combiner,
+        state.ent_asm_in_count[..., 1],
+        jnp.int16(0),
+    )
+
+    # Slot 2: asm_out for combiners, ent_buf for buffer machines.
+    out_t = jnp.where(
+        active & is_combiner,
+        state.ent_asm_out_type,
+        jnp.where(active & is_buffer_machine, state.ent_buf_type, jnp.int8(0)),
+    )
+    out_c = jnp.where(
+        active & is_combiner,
+        state.ent_asm_out_count,
+        jnp.where(active & is_buffer_machine, state.ent_buf_count, jnp.int16(0)),
+    )
+
+    zero_t = jnp.zeros((h, w), dtype=jnp.int8)
+    zero_c = jnp.zeros((h, w), dtype=jnp.int16)
+    return (
+        zero_t.at[ey, ex].set(in0_t),
+        zero_c.at[ey, ex].set(in0_c),
+        zero_t.at[ey, ex].set(in1_t),
+        zero_c.at[ey, ex].set(in1_c),
+        zero_t.at[ey, ex].set(out_t),
+        zero_c.at[ey, ex].set(out_c),
+    )
+
+
+def _reconstruct_machine_direction_grid(state: EnvState) -> jnp.ndarray:
+    """Per-tile ``ent_direction`` for active machines.
+
+    Values are :class:`Direction` ints (0 where no machine is
+    placed). Lets agents plan push chains (miner → pallet, arm →
+    furnace) from the obs alone.
     """
     h, w = state.map.shape
     grid = jnp.zeros((h, w), dtype=jnp.int8)
     active = state.ent_y >= 0
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
-    out_has = state.ent_asm_out_count > 0
-    buf_val = jnp.where(active, state.ent_buf_type, jnp.int8(0))
-    out_val = jnp.where(active & out_has, state.ent_asm_out_type, jnp.int8(0))
-    vals = jnp.where(out_val != jnp.int8(0), out_val, buf_val)
+    vals = jnp.where(active, state.ent_direction, jnp.int8(0))
     return grid.at[ey, ex].set(vals)
 
-
-_MAP_NORM: float = float(max(BlockType))
-_MACHINE_NORM: float = float(max(MachineType))
-_DIR_NORM: float = 4.0
-_PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
-    PLAYER_MAX_STACK.astype(jnp.float32),
-    1.0,
-)
 
 # Spatial channels shared by global_array and local_array.
 _SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
     "block_type",
     "machine_type",
     "block_resources",
-    "buffer_type",
+    "slot0_type",
+    "slot0_count",
+    "slot1_type",
+    "slot1_count",
+    "slot2_type",
+    "slot2_count",
+    "machine_direction",
 )
 NUM_SPATIAL_CHANNELS: int = len(_SPATIAL_CHANNEL_NAMES)
 
@@ -204,10 +294,29 @@ def global_array(
     flat_resources = state.block_resources.flatten().astype(jnp.float32) / float(
         BLOCK_MAX_RESOURCES
     )
-    buf_grid = _reconstruct_buffer_type_grid(state)
-    flat_buffer = buf_grid.flatten().astype(jnp.float32) / float(NUM_ITEM_TYPES)
+    s0t, s0c, s1t, s1c, s2t, s2c = _reconstruct_slot_grids(state)
+    item_norm = float(NUM_ITEM_TYPES)
+    flat_s0t = s0t.flatten().astype(jnp.float32) / item_norm
+    flat_s0c = s0c.flatten().astype(jnp.float32) / _SLOT_COUNT_NORM
+    flat_s1t = s1t.flatten().astype(jnp.float32) / item_norm
+    flat_s1c = s1c.flatten().astype(jnp.float32) / _SLOT_COUNT_NORM
+    flat_s2t = s2t.flatten().astype(jnp.float32) / item_norm
+    flat_s2c = s2c.flatten().astype(jnp.float32) / _SLOT_COUNT_NORM
+    dir_grid = _reconstruct_machine_direction_grid(state)
+    flat_direction = dir_grid.flatten().astype(jnp.float32) / _DIR_NORM
     spatial = jnp.concatenate(
-        [flat_blocks, flat_machines, flat_resources, flat_buffer],
+        [
+            flat_blocks,
+            flat_machines,
+            flat_resources,
+            flat_s0t,
+            flat_s0c,
+            flat_s1t,
+            flat_s1c,
+            flat_s2t,
+            flat_s2c,
+            flat_direction,
+        ],
     )
     return jnp.concatenate(
         [spatial, _player_scalars(state, params, player_idx)],
@@ -253,10 +362,24 @@ def local_array(
     padded_resources = jnp.pad(state.block_resources, pw, constant_values=0).astype(
         jnp.float32
     ) / float(BLOCK_MAX_RESOURCES)
-    buf_grid = _reconstruct_buffer_type_grid(state)
-    padded_buffer = jnp.pad(buf_grid, pw, constant_values=0).astype(
-        jnp.float32
-    ) / float(NUM_ITEM_TYPES)
+    s0t, s0c, s1t, s1c, s2t, s2c = _reconstruct_slot_grids(state)
+    item_norm = float(NUM_ITEM_TYPES)
+    padded_s0t = jnp.pad(s0t, pw, constant_values=0).astype(jnp.float32) / item_norm
+    padded_s0c = (
+        jnp.pad(s0c, pw, constant_values=0).astype(jnp.float32) / _SLOT_COUNT_NORM
+    )
+    padded_s1t = jnp.pad(s1t, pw, constant_values=0).astype(jnp.float32) / item_norm
+    padded_s1c = (
+        jnp.pad(s1c, pw, constant_values=0).astype(jnp.float32) / _SLOT_COUNT_NORM
+    )
+    padded_s2t = jnp.pad(s2t, pw, constant_values=0).astype(jnp.float32) / item_norm
+    padded_s2c = (
+        jnp.pad(s2c, pw, constant_values=0).astype(jnp.float32) / _SLOT_COUNT_NORM
+    )
+    dir_grid = _reconstruct_machine_direction_grid(state)
+    padded_direction = (
+        jnp.pad(dir_grid, pw, constant_values=0).astype(jnp.float32) / _DIR_NORM
+    )
 
     pos = state.player_positions[player_idx]
     start = (pos[1], pos[0])
@@ -267,7 +390,13 @@ def local_array(
             jax.lax.dynamic_slice(padded_map, start, slice_shape).ravel(),
             jax.lax.dynamic_slice(padded_machines, start, slice_shape).ravel(),
             jax.lax.dynamic_slice(padded_resources, start, slice_shape).ravel(),
-            jax.lax.dynamic_slice(padded_buffer, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_s0t, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_s0c, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_s1t, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_s1c, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_s2t, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_s2c, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_direction, start, slice_shape).ravel(),
         ]
     )
     return jnp.concatenate(

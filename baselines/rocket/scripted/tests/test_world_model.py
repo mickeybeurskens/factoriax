@@ -73,10 +73,22 @@ def test_decode_shape_and_dtypes(
     assert view.machine_type.shape == shape
     assert view.block_resources.shape == shape
     assert view.buffer_type.shape == shape
+    assert view.slot0_type.shape == shape
+    assert view.slot0_count.shape == shape
+    assert view.slot1_type.shape == shape
+    assert view.slot1_count.shape == shape
+    assert view.slot2_type.shape == shape
+    assert view.slot2_count.shape == shape
+    assert view.machine_direction.shape == shape
     assert view.walkable.shape == shape
     assert view.block_type.dtype == np.int32
     assert view.machine_type.dtype == np.int32
+    assert view.slot0_type.dtype == np.int32
+    assert view.slot0_count.dtype == np.int32
+    assert view.machine_direction.dtype == np.int32
     assert view.walkable.dtype == bool
+    # buffer_type aliases slot2_type — same underlying object.
+    assert view.buffer_type is view.slot2_type
 
 
 def test_decode_block_type_round_trip(
@@ -347,6 +359,34 @@ def test_place_action_matches_enum() -> None:
 # ---------------------------------------------------------------------------
 # Integration: stepping the env through the decoder
 # ---------------------------------------------------------------------------
+
+
+def test_fresh_state_has_zero_slots_and_direction(
+    rocket_initial_state,
+    rocket_env_params: EnvParams,
+) -> None:
+    """Rocket level starts with empty furnace + assembler; all slots zero."""
+    obs = _obs_from_state(rocket_initial_state, rocket_env_params)
+    view = wm.decode_observation(
+        obs,
+        map_height=rocket_env_params.map_height,
+        map_width=rocket_env_params.map_width,
+        max_timesteps=rocket_env_params.max_timesteps,
+    )
+    for name in (
+        "slot0_type",
+        "slot0_count",
+        "slot1_type",
+        "slot1_count",
+        "slot2_type",
+        "slot2_count",
+    ):
+        grid = getattr(view, name)
+        assert int(grid.sum()) == 0, f"{name} non-zero on fresh level"
+    # Pre-placed furnace/assembler use direction UP by default (non-zero
+    # allowed); but NONE tiles must stay at 0.
+    none_mask = view.machine_type == int(MachineType.NONE)
+    assert int(view.machine_direction[none_mask].sum()) == 0
 
 
 def test_decode_tracks_player_movement(
