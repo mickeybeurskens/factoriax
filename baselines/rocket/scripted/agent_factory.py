@@ -33,7 +33,6 @@ from .goals import (
     DepositInto,
     Goal,
     MineOre,
-    PipelinedProduce,
     PlaceMachine,
     PlaceMachineAt,
     ProduceInAssembler,
@@ -155,22 +154,27 @@ def build_factory_rocket_goals() -> list[Goal]:
         WithdrawUntilHeld(ItemType.TIN_ORE, 42),
         WithdrawUntilHeld(ItemType.SILICON, 20),
         WithdrawUntilHeld(ItemType.COAL, 155),
-        # ---- Phase H — pipelined bulk smelts across 3 furnaces ----
-        PipelinedProduce(ItemType.IRON_PLATE, 45, MachineType.FURNACE, k=3),
-        PipelinedProduce(ItemType.COPPER_PLATE, 45, MachineType.FURNACE, k=3),
-        PipelinedProduce(ItemType.TIN_PLATE, 42, MachineType.FURNACE, k=3),
-        PipelinedProduce(ItemType.WAFER, 20, MachineType.FURNACE, k=3),
-        # ---- Phase I — pipelined intermediates across 3 assemblers ----
-        PipelinedProduce(ItemType.FRAME, 25, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.WIRE, 30, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.CIRCUIT, 18, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.MOTOR, 10, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.SENSOR, 10, MachineType.ASSEMBLER, k=3),
+        # ---- Phase H — bulk smelts (nearest furnace) ----
+        # Three furnaces exist (pre-placed + 2 central-bank), but the
+        # agent uses the nearest one for each sequential batch —
+        # PipelinedProduce's _deposits tracking drifts out of sync
+        # with physical machine state across recipe transitions, so
+        # the robust sequential path wins here.
+        ProduceInFurnace(ItemType.IRON_PLATE, 45),
+        ProduceInFurnace(ItemType.COPPER_PLATE, 45),
+        ProduceInFurnace(ItemType.TIN_PLATE, 42),
+        ProduceInFurnace(ItemType.WAFER, 20),
+        # ---- Phase I — intermediates (nearest assembler) ----
+        ProduceInAssembler(ItemType.FRAME, 25),
+        ProduceInAssembler(ItemType.WIRE, 30),
+        ProduceInAssembler(ItemType.CIRCUIT, 18),
+        ProduceInAssembler(ItemType.MOTOR, 10),
+        ProduceInAssembler(ItemType.SENSOR, 10),
         # ---- Phase J — rocket sub-assemblies ----
-        PipelinedProduce(ItemType.HULL, 6, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.ENGINE_UNIT, 4, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.AVIONICS, 4, MachineType.ASSEMBLER, k=3),
-        PipelinedProduce(ItemType.ROCKET_CORE, 4, MachineType.ASSEMBLER, k=3),
+        ProduceInAssembler(ItemType.HULL, 6),
+        ProduceInAssembler(ItemType.ENGINE_UNIT, 4),
+        ProduceInAssembler(ItemType.AVIONICS, 4),
+        ProduceInAssembler(ItemType.ROCKET_CORE, 4),
         # ---- Phase K — final placeables (sequential to dodge debris) ----
         ProduceInAssembler(ItemType.CONVEYOR_BELT, 5),
         ProduceInAssembler(ItemType.ARM, 1),
