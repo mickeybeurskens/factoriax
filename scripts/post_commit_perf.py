@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import logging
 import subprocess
+import threading
 import time
 
 import jax
@@ -70,6 +71,179 @@ def _get_device_name() -> str:
         Device description string.
     """
     return str(jax.devices()[0])
+
+
+class _GpuStateSampler:
+    """Background sampler that captures the GPU's peak load state.
+
+    Polling ``nvidia-smi`` once after the benchmark is misleading:
+    the driver drops back to P8 (idle) within milliseconds of the
+    compute kernels finishing, so the snapshot nearly always reads
+    P8 regardless of what the benchmark actually ran under. Instead,
+    this sampler polls in a background thread at 500 ms cadence and
+    tracks the highest-performance state observed (smallest P-number)
+    plus the maximum SM clock / power / temperature. Those are the
+    numbers that matter when comparing run-to-run throughput.
+    """
+
+    def __init__(self, interval_sec: float = 0.5) -> None:
+        self._interval = interval_sec
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._best_pstate_num: int | None = None  # lower = faster
+        self._peak: dict[str, float] = {}
+
+    def _poll_once(self) -> dict[str, str] | None:
+        try:
+            out = subprocess.check_output(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=pstate,clocks.current.sm,"
+                    "power.draw,temperature.gpu,utilization.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                text=True,
+                timeout=2,
+            ).strip()
+        except (
+            subprocess.CalledProcessError,
+            FileNotFoundError,
+            subprocess.TimeoutExpired,
+        ):
+            return None
+        parts = [p.strip() for p in out.split("\n", 1)[0].split(",")]
+        if len(parts) < 5:
+            return None
+        return {
+            "pstate": parts[0],
+            "sm_clock_mhz": parts[1],
+            "power_w": parts[2],
+            "temp_c": parts[3],
+            "utilization_pct": parts[4],
+        }
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            sample = self._poll_once()
+            if sample is not None:
+                # P-state is "P" followed by a digit; lower digit = better.
+                try:
+                    pnum = int(sample["pstate"].lstrip("pP"))
+                except ValueError:
+                    pnum = 9
+                if self._best_pstate_num is None or pnum < self._best_pstate_num:
+                    self._best_pstate_num = pnum
+                for key in (
+                    "sm_clock_mhz",
+                    "power_w",
+                    "temp_c",
+                    "utilization_pct",
+                ):
+                    try:
+                        v = float(sample[key])
+                    except (ValueError, KeyError):
+                        continue
+                    if v > self._peak.get(key, float("-inf")):
+                        self._peak[key] = v
+            self._stop.wait(self._interval)
+
+    def __enter__(self) -> _GpuStateSampler:
+        self._thread = threading.Thread(
+            target=self._run,
+            name="gpu-state-sampler",
+            daemon=True,
+        )
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def summary(self) -> dict[str, str]:
+        """Return the peak-load GPU state as strings, ``'unknown'`` if unseen.
+
+        On some consumer GPUs ``pstate`` sticks at P8 regardless of load
+        (NVIDIA driver quirk). ``utilization_pct`` and ``sm_clock_mhz``
+        are more reliable load indicators — log both so the wandb entry
+        is interpretable on any hardware.
+        """
+        if self._best_pstate_num is None:
+            return {
+                "pstate": "unknown",
+                "sm_clock_mhz": "unknown",
+                "power_w": "unknown",
+                "temp_c": "unknown",
+                "utilization_pct": "unknown",
+            }
+        return {
+            "pstate": f"P{self._best_pstate_num}",
+            "sm_clock_mhz": (
+                f"{self._peak['sm_clock_mhz']:.0f}"
+                if "sm_clock_mhz" in self._peak
+                else "unknown"
+            ),
+            "power_w": (
+                f"{self._peak['power_w']:.1f}" if "power_w" in self._peak else "unknown"
+            ),
+            "temp_c": (
+                f"{self._peak['temp_c']:.0f}" if "temp_c" in self._peak else "unknown"
+            ),
+            "utilization_pct": (
+                f"{self._peak['utilization_pct']:.0f}"
+                if "utilization_pct" in self._peak
+                else "unknown"
+            ),
+        }
+
+
+def _get_gpu_perf_state() -> dict[str, str]:
+    """Query nvidia-smi for GPU perf state, SM clock, power, temperature.
+
+    The P-state (P0-P8) is the most useful: P0 is "max performance",
+    P8 is "min / idle". A benchmark that thinks it's measuring peak
+    throughput while the GPU is sitting at P5 is measuring the wrong
+    thing — so we log it alongside the throughput numbers so the wandb
+    history is interpretable even when the GPU clocked down between
+    runs.
+
+    Returns:
+        Dict with keys pstate, sm_clock_mhz, power_w, temp_c. Values
+        default to "unknown" when nvidia-smi isn't available.
+    """
+    try:
+        out = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=pstate,clocks.current.sm,power.draw,temperature.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+            timeout=5,
+        ).strip()
+        # First line / first GPU only.
+        line = out.split("\n", 1)[0]
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 4:
+            return {
+                "pstate": parts[0],
+                "sm_clock_mhz": parts[1],
+                "power_w": parts[2],
+                "temp_c": parts[3],
+            }
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
+        pass
+    return {
+        "pstate": "unknown",
+        "sm_clock_mhz": "unknown",
+        "power_w": "unknown",
+        "temp_c": "unknown",
+    }
 
 
 def _measure_config(
@@ -329,6 +503,7 @@ def _print_results(
     results: list[dict],
     info: dict[str, str],
     device: str,
+    gpu_state: dict[str, str],
 ) -> None:
     """Print benchmark results table to stdout.
 
@@ -336,10 +511,19 @@ def _print_results(
         results: List of result dicts from run_benchmark.
         info: Commit metadata.
         device: JAX device name.
+        gpu_state: Dict from :func:`_get_gpu_perf_state`. The P-state
+            clarifies whether the GPU was clocked up during the run.
     """
     print(f"\n{'=' * 80}")
     print(f"  Commit: {info['commit']} - {info['message']}")
     print(f"  Device: {device}")
+    print(
+        f"  GPU:    pstate={gpu_state['pstate']}  "
+        f"util={gpu_state['utilization_pct']}%  "
+        f"sm_clock={gpu_state['sm_clock_mhz']} MHz  "
+        f"power={gpu_state['power_w']} W  "
+        f"temp={gpu_state['temp_c']} C"
+    )
     steps_desc = ", ".join(f"{ms}x{ms}={ns}" for ms, ns in STEPS_PER_MAP.items())
     print(f"  Steps per env: {steps_desc}")
     print(f"{'=' * 80}")
@@ -392,6 +576,7 @@ def _log_wandb(
     results: list[dict],
     info: dict[str, str],
     device: str,
+    gpu_state: dict[str, str],
 ) -> None:
     """Log benchmark results to WandB.
 
@@ -399,6 +584,9 @@ def _log_wandb(
         results: List of result dicts.
         info: Commit metadata.
         device: JAX device name.
+        gpu_state: Snapshot from :func:`_get_gpu_perf_state`. Logged as
+            both config (for filtering) and summary (for quick scan in
+            the run list).
     """
     try:
         import wandb  # type: ignore[import-untyped]
@@ -409,12 +597,22 @@ def _log_wandb(
     run = wandb.init(
         project="factoriax-benchmarks",
         name=f"{info['commit']} - {info['message'][:50]}",
-        tags=[info["commit"], device.split(":")[0], "post-commit"],
+        tags=[
+            info["commit"],
+            device.split(":")[0],
+            "post-commit",
+            f"gpu_{gpu_state['pstate']}",
+        ],
         config={
             "commit_hash": info["commit"],
             "commit_message": info["message"],
             "commit_date": info["date"],
             "device": device,
+            "gpu_pstate": gpu_state["pstate"],
+            "gpu_utilization_pct": gpu_state["utilization_pct"],
+            "gpu_sm_clock_mhz": gpu_state["sm_clock_mhz"],
+            "gpu_power_w": gpu_state["power_w"],
+            "gpu_temp_c": gpu_state["temp_c"],
             "map_sizes": MAP_SIZES,
             "batch_sizes": BATCH_SIZES,
             "steps_per_map": STEPS_PER_MAP,
@@ -450,6 +648,9 @@ def _log_wandb(
     run.log({"perf_matrix": table})
 
     run.summary["commit_hash"] = info["commit"]
+    run.summary["gpu_pstate"] = gpu_state["pstate"]
+    run.summary["gpu_utilization_pct"] = gpu_state["utilization_pct"]
+    run.summary["gpu_sm_clock_mhz"] = gpu_state["sm_clock_mhz"]
     for r in results:
         if r.get("skipped"):
             continue
@@ -587,11 +788,13 @@ def main() -> None:
     )
     print()
 
-    results = run_benchmark()
-    _print_results(results, info, device)
+    with _GpuStateSampler() as sampler:
+        results = run_benchmark()
+    gpu_state = sampler.summary()
+    _print_results(results, info, device, gpu_state)
 
     if not args.no_wandb:
-        _log_wandb(results, info, device)
+        _log_wandb(results, info, device, gpu_state)
 
     if not args.no_history:
         _print_history()
