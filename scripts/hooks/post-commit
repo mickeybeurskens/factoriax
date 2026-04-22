@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# Post-commit hook: optionally runs performance benchmark after commit.
-# Install with: make install-hooks
+# Post-commit hook: runs the performance benchmark after every commit
+# and logs results to wandb (project "factoriax-benchmarks"). This gives
+# a continuous per-commit record of throughput / ceiling / VRAM so
+# regressions are visible in wandb history without relying on the dev
+# remembering to opt in. Install with: make install-hooks.
+#
+# Skips in non-interactive contexts (CI, rebase, etc.) so amend/rebase
+# sessions aren't slowed by a multi-minute benchmark on each step.
+# Set FACTORIAX_SKIP_PERF=1 to skip ad hoc.
 
-# Skip in non-interactive contexts (CI, rebase, etc.).
 if [ ! -t 0 ]; then
     exit 0
 fi
-
-printf "[post-commit] Run performance benchmark? [y/N] "
-read -r answer </dev/tty
-if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
-    uv run python scripts/post_commit_perf.py
+if [ "${FACTORIAX_SKIP_PERF:-}" = "1" ]; then
+    echo "[post-commit] FACTORIAX_SKIP_PERF=1 — skipping benchmark."
+    exit 0
 fi
+
+echo "[post-commit] Running perf benchmark (logs to wandb). Set"
+echo "              FACTORIAX_SKIP_PERF=1 to skip on future commits."
+uv run python scripts/post_commit_perf.py
 
 exit 0

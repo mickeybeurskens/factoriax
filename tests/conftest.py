@@ -1,10 +1,20 @@
 """Shared test fixtures and utilities."""
 
-import jax.numpy as jnp
-import numpy as np
-import pytest
+# Force headless rendering for every test in the suite. Setting these
+# BEFORE pygame is imported anywhere is what keeps test runs from
+# popping a window on the developer's desktop. Any conftest that later
+# calls pygame.display.init() will get the dummy driver, which is
+# side-effect-free but still supports Surface.blit and font rendering.
+import os
 
-from factoriax import EnvState
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+import jax.numpy as jnp  # noqa: E402
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
+
+from factoriax import EnvState  # noqa: E402
 from factoriax.constants import (
     BLOCK_RESOURCE_DTYPE,
     NUM_ITEM_TYPES,
