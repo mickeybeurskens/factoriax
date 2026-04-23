@@ -389,10 +389,17 @@ def render_action_strip(
         if 0 <= a < num_actions:
             strip[0, t] = color_lut[a]
 
-    # Scale to output dimensions.
+    # Scale to output dimensions. The column→step mapping is the
+    # inverse of the one :func:`draw_cursor` uses when converting step
+    # index to column (``x = step * (w-1) / (T-1)``). Keeping the two
+    # formulas consistent means the cursor always falls on the column
+    # that renders the current step — if they diverge, the cursor
+    # drifts relative to the colored step columns toward the end of
+    # the strip (visible as an offset near the last step).
     img = np.zeros((height, width, 3), dtype=np.uint8)
+    denom = max(1, width - 1)
     for x in range(width):
-        t = min(int(x * total_steps / width), total_steps - 1)
+        t = min(int(x * (total_steps - 1) / denom), total_steps - 1)
         img[:, x] = strip[0, t]
 
     return img

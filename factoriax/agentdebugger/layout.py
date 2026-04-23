@@ -49,6 +49,62 @@ BG_COLOR = (20, 20, 25)
 MIN_QUADRANT_W = 200
 MIN_QUADRANT_H = 150
 
+# In replay mode, Q3 is split vertically: action strip on top,
+# legend below. The strip gets 3/5 of the quadrant height. Promoted
+# to a module constant so both the renderer and the click-to-seek
+# hit-test share one source of truth.
+_ACTION_STRIP_HEIGHT_NUM = 3
+_ACTION_STRIP_HEIGHT_DEN = 5
+
+
+def action_strip_height(quadrant_h: int) -> int:
+    """Height in pixels reserved for the action strip in Q3."""
+    return quadrant_h * _ACTION_STRIP_HEIGHT_NUM // _ACTION_STRIP_HEIGHT_DEN
+
+
+def action_strip_step_from_click(
+    click_x: int,
+    click_y: int,
+    win_ox: int,
+    win_oy: int,
+    win_scale: int,
+    quadrant_w: int,
+    quadrant_h: int,
+    total_steps: int,
+) -> int | None:
+    """Map a mouse click in window coords to a step index in the strip.
+
+    Returns ``None`` when the click falls outside the strip rectangle,
+    so the caller can ignore it without touching ``current_step``. When
+    inside, returns a step in ``[0, total_steps - 1]`` using the *same*
+    ``x → step`` mapping that :func:`render_action_strip` uses when
+    drawing, so clicking on the column visually aligned with a step
+    seeks exactly to that step.
+
+    Args:
+        click_x: Mouse x in window pixels (``event.pos[0]``).
+        click_y: Mouse y in window pixels (``event.pos[1]``).
+        win_ox: Horizontal offset of the base frame inside the window.
+        win_oy: Vertical offset of the base frame inside the window.
+        win_scale: Integer window scale factor.
+        quadrant_w: Width of a single quadrant in base-frame pixels.
+        quadrant_h: Height of a single quadrant in base-frame pixels.
+        total_steps: Trajectory length in steps.
+
+    Returns:
+        Step index the user clicked, or ``None`` if the click is not
+        inside the action-strip rectangle.
+    """
+    if win_scale < 1 or total_steps <= 0:
+        return None
+    x_b = (click_x - win_ox) // win_scale
+    y_b = (click_y - win_oy) // win_scale
+    strip_h = action_strip_height(quadrant_h)
+    if not (0 <= x_b < quadrant_w and quadrant_h <= y_b < quadrant_h + strip_h):
+        return None
+    step = int(x_b * (total_steps - 1) / max(1, quadrant_w - 1))
+    return max(0, min(step, total_steps - 1))
+
 
 def compute_debugger_dimensions(
     quadrant_w: int = MIN_QUADRANT_W,
@@ -293,7 +349,7 @@ def render_replay_frame(
     # Q3: Action strip + legend (bottom-left)
     # ------------------------------------------------------------------
     q3_y = quadrant_h
-    strip_h = quadrant_h * 3 // 5
+    strip_h = action_strip_height(quadrant_h)
 
     if dbg.action_strip_cache is not None:
         strip = draw_cursor(
@@ -387,7 +443,7 @@ def rebuild_replay_caches(
         quadrant_h,
     )
 
-    strip_h = quadrant_h * 3 // 5
+    strip_h = action_strip_height(quadrant_h)
     legend_h = quadrant_h - strip_h
 
     dbg.action_strip_cache = render_action_strip(

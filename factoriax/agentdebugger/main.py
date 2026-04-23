@@ -28,6 +28,7 @@ from jax import random
 from factoriax.agentdebugger.layout import (
     MIN_QUADRANT_H,
     MIN_QUADRANT_W,
+    action_strip_step_from_click,
     compute_debugger_dimensions,
     rebuild_replay_caches,
     render_debugger_frame,
@@ -262,6 +263,26 @@ class Debugger:
                     win_oy = (window_h - base_h * win_scale) // 2
                     if ui is not None:
                         ui.set_window_transform(win_ox, win_oy, win_scale)
+                    continue
+                if (
+                    event.type == pygame.MOUSEBUTTONDOWN
+                    and event.button == 1
+                    and self._dbg.replay_mode
+                    and self._dbg.trajectory is not None
+                ):
+                    step = action_strip_step_from_click(
+                        event.pos[0],
+                        event.pos[1],
+                        win_ox,
+                        win_oy,
+                        win_scale,
+                        quadrant_w,
+                        quadrant_h,
+                        self._dbg.trajectory.episode_length,
+                    )
+                    if step is not None:
+                        self._dbg.current_step = step
+                        self._dbg.playing = False
                     continue
                 if event.type != pygame.KEYDOWN:
                     continue
