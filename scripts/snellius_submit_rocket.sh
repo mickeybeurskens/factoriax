@@ -44,8 +44,9 @@ total_steps_list=(100000000)         # 100M steps, cheap first test run.
 num_envs_list=(2048)
 rollout_steps_list=(128)
 # Tag run names with the benchmark config that defines the task: 8000-tick
-# episodes + masked CRAFT_* actions (matches the scripted-agent benchmark).
-run_names=("ppo_rocket_100M_ep8k_craftmask")
+# episodes + masked CRAFT_* actions + 7x7 local obs (matches the scripted-
+# agent benchmark, and avoids the quadratic-in-map-size global obs cost).
+run_names=("ppo_rocket_100M_ep8k_craftmask_r3")
 
 # ---- SLURM / environment (override via env vars, defaults below) -------------
 
@@ -143,6 +144,7 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     --rollout-steps ${rollout_steps} \\
     --total-steps ${total_steps} \\
     --max-timesteps 8000 \\
+    --obs-radius 3 \\
     --seed ${seed} \\
     --log-interval 32 \\
     --use-wandb \\

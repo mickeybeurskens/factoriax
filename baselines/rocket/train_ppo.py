@@ -50,7 +50,11 @@ from factoriax.benchmarks.rocket import (
 )
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action, ItemType
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
+from factoriax.envs.achievement_wrapper import (
+    AchievementState,
+    AchievementWrapper,
+    LocalObservationWrapper,
+)
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.state import EnvParams
@@ -76,6 +80,11 @@ class Config:
     # to reach 38/38; 2000 (the Apr-20 default) caps the policy well
     # short of the rocket chain.
     max_timesteps: int = 8000
+    # Half-width of the local obs window. ``radius=3`` → 7x7 tiles.
+    # The full-map global obs scales quadratically with map size and
+    # dominates the first FC layer; radius=3 is plenty for navigation +
+    # local machine interaction.
+    obs_radius: int = 3
     hidden_dims: tuple[int, ...] = (256, 256)
     num_envs: int = 512
     rollout_steps: int = 128
@@ -155,10 +164,19 @@ def _make_env_and_state(
     (furnaces/assemblers) rather than handcrafting. Without the mask the
     PPO task would be strictly easier than what the scripted agents
     solve, making the numbers incomparable.
+
+    Observations are a local ``(2r+1) x (2r+1)`` window centered on the
+    player (``config.obs_radius``). The global full-map obs scales
+    quadratically with ``map_size`` and dominates the first FC layer of
+    the policy; switching to a local window keeps throughput flat as the
+    map grows.
     """
     base_env = FactoriaXEnv()
     env = ActionMaskWrapper(
-        AchievementWrapper(base_env, rocket_conditions),
+        AchievementWrapper(
+            LocalObservationWrapper(base_env, radius=config.obs_radius),
+            rocket_conditions,
+        ),
         ROCKET_BLOCKED_ACTIONS,
     )
     env_params = EnvParams(
@@ -627,7 +645,13 @@ def train(config: Config) -> dict[str, float]:
                 project=config.wandb_project,
                 name=run_name,
                 config=dataclasses.asdict(config),
-                tags=["rocket", "ppo", "achievement"],
+                tags=[
+                    "rocket",
+                    "ppo",
+                    "achievement",
+                    "local_observation",
+                    f"obs_radius_{config.obs_radius}",
+                ],
             )
         except ImportError:
             logger.error("wandb not installed. Run: uv add wandb")
@@ -967,6 +991,12 @@ def main() -> None:
     parser.add_argument("--rollout-steps", type=int, default=128)
     parser.add_argument("--total-steps", type=int, default=3_000_000)
     parser.add_argument("--max-timesteps", type=int, default=8000)
+    parser.add_argument(
+        "--obs-radius",
+        type=int,
+        default=3,
+        help="Half-width of the local obs window (default 3 → 7x7 tiles).",
+    )
     parser.add_argument("--learning-rate", type=float, default=2.5e-4)
     parser.add_argument("--entropy-coef", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=0)
@@ -1002,6 +1032,7 @@ def main() -> None:
         rollout_steps=args.rollout_steps,
         total_steps=args.total_steps,
         max_timesteps=args.max_timesteps,
+        obs_radius=args.obs_radius,
         learning_rate=args.learning_rate,
         entropy_coef=args.entropy_coef,
         seed=args.seed,

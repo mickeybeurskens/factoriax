@@ -558,6 +558,149 @@ class TestSlotProjection:
             assert g[2, 2] == 0
 
 
+class TestLocalGlobalEquivalence:
+    """Local window must match global obs tile-for-tile at the player.
+
+    Invariant: ``local_array(state, params, p, radius=R)`` is a pure
+    spatial crop of ``global_array(state, params, p)``. For every
+    (y, x) inside the window, the per-channel value in the local obs
+    must equal the corresponding tile in the global obs. The player
+    scalars + research tail appended after the spatial block must be
+    identical between the two. If this test fails, either ``local_array``
+    and ``global_array`` have drifted in channel ordering / normalisation,
+    or the window indexing is off — both of which silently corrupt
+    training without obvious symptoms.
+    """
+
+    @pytest.mark.parametrize("radius", [1, 3, 5])
+    def test_spatial_channels_match_global_window(
+        self,
+        state_factory,
+        radius: int,
+    ) -> None:
+        """Every local-window tile equals the global tile at (py±r, px±r)."""
+        from factoriax.constants import Direction, ItemType
+
+        h = w = 16
+        # Sprinkle content that exercises every spatial channel:
+        # terrain, machines, resources, all 3 slots, direction.
+        world_map = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+        world_map = world_map.at[4, 6].set(int(BlockType.COAL))
+        world_map = world_map.at[9, 2].set(int(BlockType.WATER))
+        world_map = world_map.at[11, 12].set(int(BlockType.IRON))
+
+        mt = jnp.full((h, w), int(MachineType.NONE), dtype=jnp.int32)
+        mt = mt.at[7, 7].set(int(MachineType.ASSEMBLER))
+        mt = mt.at[8, 9].set(int(MachineType.MINER))
+        mt = mt.at[5, 10].set(int(MachineType.PALLET))
+
+        md = jnp.zeros((h, w), dtype=jnp.int8)
+        md = md.at[7, 7].set(int(Direction.RIGHT))
+        md = md.at[8, 9].set(int(Direction.UP))
+        md = md.at[5, 10].set(int(Direction.LEFT))
+
+        ait = jnp.zeros((h, w, 2), dtype=jnp.int32)
+        ait = ait.at[7, 7, 0].set(int(ItemType.IRON_PLATE))
+        ait = ait.at[7, 7, 1].set(int(ItemType.TIN_PLATE))
+        aic = jnp.zeros((h, w, 2), dtype=jnp.int32)
+        aic = aic.at[7, 7, 0].set(3)
+        aic = aic.at[7, 7, 1].set(2)
+        aot = jnp.zeros((h, w), dtype=jnp.int32).at[7, 7].set(int(ItemType.FRAME))
+        aoc = jnp.zeros((h, w), dtype=jnp.int32).at[7, 7].set(1)
+
+        bt = jnp.zeros((h, w), dtype=jnp.int32)
+        bt = bt.at[8, 9].set(int(ItemType.IRON_ORE))
+        bt = bt.at[5, 10].set(int(ItemType.COAL))
+        bc = jnp.zeros((h, w), dtype=jnp.int32)
+        bc = bc.at[8, 9].set(7)
+        bc = bc.at[5, 10].set(42)
+
+        resources = jnp.zeros((h, w), dtype=jnp.int16)
+        resources = resources.at[4, 6].set(BLOCK_MAX_RESOURCES)
+        resources = resources.at[11, 12].set(BLOCK_MAX_RESOURCES // 2)
+
+        # Place the player far enough from every edge that the whole
+        # window is in-bounds; OOB padding behaviour is covered by
+        # test_oob_padding_at_corner above.
+        px, py = 7, 8
+        assert px - radius >= 0 and px + radius < w
+        assert py - radius >= 0 and py + radius < h
+
+        state = state_factory(
+            world_map=world_map,
+            player_position=(px, py),
+            machine_types=mt,
+            machine_direction=md,
+            buffer_type=bt,
+            buffer_count=bc,
+            asm_in_type=ait,
+            asm_in_count=aic,
+            asm_out_type=aot,
+            asm_out_count=aoc,
+            block_resources=resources,
+        )
+
+        params = EnvParams(
+            map_width=w,
+            map_height=h,
+            num_players=1,
+            max_timesteps=100,
+        )
+        global_obs = np.array(global_array(state, params, 0))
+        local_obs = np.array(local_array(state, params, 0, radius=radius))
+
+        window = 2 * radius + 1
+        tile_count = h * w
+        for ch_idx, ch_name in enumerate(_SPATIAL_CHANNEL_NAMES):
+            global_channel = global_obs[
+                ch_idx * tile_count : (ch_idx + 1) * tile_count
+            ].reshape(h, w)
+            local_channel = local_obs[
+                ch_idx * window * window : (ch_idx + 1) * window * window
+            ].reshape(window, window)
+            expected = global_channel[
+                py - radius : py + radius + 1,
+                px - radius : px + radius + 1,
+            ]
+            np.testing.assert_allclose(
+                local_channel,
+                expected,
+                atol=0.0,
+                err_msg=(
+                    f"channel '{ch_name}' diverges between local "
+                    f"(r={radius}) and global at player ({px}, {py})"
+                ),
+            )
+
+    def test_scalar_tail_matches_global(self, state_factory) -> None:
+        """Player scalars + research tail is byte-for-byte identical."""
+        from factoriax.constants import ItemType
+
+        radius = _RADIUS
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.IRON_ORE].set(11)
+        state = state_factory(
+            world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
+            player_position=(4, 4),
+            timestep=37,
+            player_inventory=inv,
+        )
+        global_obs = np.array(global_array(state, _DEFAULT_PARAMS, 0))
+        local_obs = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=radius))
+
+        global_spatial = (
+            NUM_SPATIAL_CHANNELS
+            * _DEFAULT_PARAMS.map_width
+            * _DEFAULT_PARAMS.map_height
+        )
+        window = 2 * radius + 1
+        local_spatial = NUM_SPATIAL_CHANNELS * window * window
+        np.testing.assert_array_equal(
+            global_obs[global_spatial:],
+            local_obs[local_spatial:],
+        )
+
+
 class TestMachineDirectionChannel:
     """Direction channel mirrors ``ent_direction`` for active machines."""
 
