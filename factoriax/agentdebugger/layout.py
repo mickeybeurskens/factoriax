@@ -189,17 +189,20 @@ def render_debugger_frame(
     # ------------------------------------------------------------------
     if has_cost:
         if dbg.cost_chart_cache is None and costs:
-            dbg.cost_chart_cache = render_cost_chart(
+            img, bounds = render_cost_chart(
                 costs,
                 constraint_names,
                 quadrant_w,
                 quadrant_h,
             )
+            dbg.cost_chart_cache = img
+            dbg.cost_chart_plot_bounds = bounds
         if dbg.cost_chart_cache is not None:
             chart = draw_cursor(
                 dbg.cost_chart_cache,
                 dbg.current_step,
                 total_steps,
+                plot_bounds=dbg.cost_chart_plot_bounds,
             )
             _blit_exact(frame, chart, 0, quadrant_h)
     else:
@@ -218,17 +221,20 @@ def render_debugger_frame(
     if has_reward:
         if dbg.reward_chart_cache is None and rewards:
             traj = build_partial_trajectory(rewards, actions)
-            dbg.reward_chart_cache = render_reward_chart(
+            img, bounds = render_reward_chart(
                 traj,
                 0,
                 quadrant_w,
                 quadrant_h,
             )
+            dbg.reward_chart_cache = img
+            dbg.reward_chart_plot_bounds = bounds
         if dbg.reward_chart_cache is not None:
             chart = draw_cursor(
                 dbg.reward_chart_cache,
                 dbg.current_step,
                 total_steps,
+                plot_bounds=dbg.reward_chart_plot_bounds,
             )
             _blit_exact(frame, chart, quadrant_w, quadrant_h)
     else:
@@ -382,6 +388,7 @@ def render_replay_frame(
             dbg.reward_chart_cache,
             dbg.current_step,
             total_steps,
+            plot_bounds=dbg.reward_chart_plot_bounds,
         )
         _blit_exact(frame, chart, quadrant_w, q3_y)
     else:
@@ -436,12 +443,14 @@ def rebuild_replay_caches(
     ep = dbg.selected_episode
     player = dbg.selected_player
 
-    dbg.reward_chart_cache = render_reward_chart(
+    img, bounds = render_reward_chart(
         traj,
         ep,
         quadrant_w,
         quadrant_h,
     )
+    dbg.reward_chart_cache = img
+    dbg.reward_chart_plot_bounds = bounds
 
     strip_h = action_strip_height(quadrant_h)
     legend_h = quadrant_h - strip_h
@@ -604,6 +613,9 @@ def _render_replay_status_bar(
         parts.append(f"P{dbg.selected_player}")
     if dbg.playback_speed > 1:
         parts.append(f"x{dbg.playback_speed}")
+    # Show direction whenever reversed, so the user notices after pressing B.
+    if dbg.playback_direction < 0:
+        parts.append("REV")
     parts.append("PLAYING" if dbg.playing else "PAUSED")
 
     text = "  |  ".join(parts)

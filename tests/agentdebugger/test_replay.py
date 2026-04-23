@@ -418,9 +418,10 @@ class TestActionCharts:
         assert img.shape == (120, 200, 3)
 
     def test_reward_chart_shape(self, traj: Trajectory) -> None:
-        """Reward chart has correct output shape."""
-        img = render_reward_chart(traj, 0, 200, 100)
+        """Reward chart returns image + plot bounds at requested size."""
+        img, (x0, x1) = render_reward_chart(traj, 0, 200, 100)
         assert img.shape == (100, 200, 3)
+        assert 0 <= x0 < x1 < 200
 
 
 # ------------------------------------------------------------------

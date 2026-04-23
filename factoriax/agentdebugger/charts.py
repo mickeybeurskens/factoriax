@@ -139,8 +139,16 @@ def render_reward_chart(
     episode: int,
     width: int,
     height: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, tuple[int, int]]:
     """Render a cumulative reward line chart as an RGB image.
+
+    Returns both the RGB image and the plot-area bounds so the caller
+    can pass them to :func:`draw_cursor`. Previously these bounds were
+    encoded into pixels ``(0, 0)`` and ``(0, 1)`` of the image — that
+    worked for the reward chart but collided with the first two columns
+    of the action strip whenever those pixels happened to match the
+    encoding's pattern, so the strip's cursor appeared to have symmetric
+    margins. Returning bounds explicitly removes the ambiguity.
 
     Args:
         traj: Loaded trajectory (may have rewards=None).
@@ -149,7 +157,9 @@ def render_reward_chart(
         height: Output height in pixels.
 
     Returns:
-        RGB uint8 array of shape ``(height, width, 3)``.
+        ``(img, (plot_x0, plot_x1))`` — RGB uint8 array of shape
+        ``(height, width, 3)`` plus the horizontal column range of
+        the matplotlib plot area inside the image.
     """
     fig, ax = plt.subplots(dpi=100)
     fig.patch.set_facecolor("#1e1e1e")
@@ -203,14 +213,10 @@ def render_reward_chart(
     fig.canvas.draw()
 
     bbox = ax.get_position()
-    frac_x0 = int(bbox.x0 * 255)
-    frac_x1 = int(bbox.x1 * 255)
-
     img = _fig_to_rgb(fig, width, height)
-    # Embed plot-area bounds for cursor positioning.
-    img[0, 0, 0] = min(max(frac_x0, 1), 255)
-    img[0, 1, 0] = min(max(frac_x1, 1), 255)
-    return img
+    plot_x0 = max(0, min(int(bbox.x0 * width), width - 1))
+    plot_x1 = max(plot_x0 + 1, min(int(bbox.x1 * width), width - 1))
+    return img, (plot_x0, plot_x1)
 
 
 # ------------------------------------------------------------------
@@ -223,7 +229,7 @@ def render_cost_chart(
     names: list[str],
     width: int,
     height: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, tuple[int, int]]:
     """Render constraint costs over time as a multi-line chart.
 
     One line per constraint dimension, colored distinctly. Uses the
@@ -236,7 +242,11 @@ def render_cost_chart(
         height: Output height in pixels.
 
     Returns:
-        RGB uint8 array of shape ``(height, width, 3)``.
+        ``(img, (plot_x0, plot_x1))`` — RGB uint8 array of shape
+        ``(height, width, 3)`` plus the horizontal column range of
+        the matplotlib plot area. Pass the bounds to
+        :func:`draw_cursor` so the cursor sits above the plotted
+        lines instead of the axis gutter.
     """
     fig, ax = plt.subplots(dpi=100)
     fig.patch.set_facecolor("#1e1e1e")
@@ -286,13 +296,10 @@ def render_cost_chart(
     fig.canvas.draw()
 
     bbox = ax.get_position()
-    frac_x0 = int(bbox.x0 * 255)
-    frac_x1 = int(bbox.x1 * 255)
-
     img = _fig_to_rgb(fig, width, height)
-    img[0, 0, 0] = min(max(frac_x0, 1), 255)
-    img[0, 1, 0] = min(max(frac_x1, 1), 255)
-    return img
+    plot_x0 = max(0, min(int(bbox.x0 * width), width - 1))
+    plot_x1 = max(plot_x0 + 1, min(int(bbox.x1 * width), width - 1))
+    return img, (plot_x0, plot_x1)
 
 
 # ------------------------------------------------------------------
@@ -305,19 +312,25 @@ def draw_cursor(
     step: int,
     total_steps: int,
     color: tuple[int, int, int] = (255, 255, 255),
+    *,
+    plot_bounds: tuple[int, int] | None = None,
 ) -> np.ndarray:
     """Draw a vertical cursor line on a chart image (returns a copy).
 
-    If the image has plot area bounds embedded in pixels (0,0) and
-    (0,1) by :func:`render_reward_chart`, the cursor is mapped to the
-    plot area. Otherwise falls back to full-width mapping (correct for
-    the action strip which has no margins).
+    When ``plot_bounds`` is ``None`` the cursor maps across the full
+    image width — correct for the action strip and cost chart which
+    paint every pixel column. When a ``(x0, x1)`` pair is supplied
+    (as the reward chart does, because matplotlib adds axis margins)
+    the cursor is confined to those columns so it stays above the
+    plotted line instead of the axis gutter.
 
     Args:
         img: Source RGB image.
         step: Current step index.
         total_steps: Total number of steps in the episode.
         color: RGB cursor color.
+        plot_bounds: Optional ``(plot_x0, plot_x1)`` column range to
+            confine the cursor to. ``None`` means full width.
 
     Returns:
         New RGB array with cursor drawn.
@@ -326,15 +339,10 @@ def draw_cursor(
     if total_steps <= 0:
         return result
 
-    frac_x0 = int(img[0, 0, 0])
-    frac_x1 = int(img[0, 1, 0])
     w = img.shape[1]
-    if frac_x0 > 0 and frac_x1 > frac_x0:
-        plot_x0 = int(frac_x0 / 255.0 * w)
-        plot_x1 = int(frac_x1 / 255.0 * w)
-        x = plot_x0 + int(
-            step * (plot_x1 - plot_x0) / max(1, total_steps - 1),
-        )
+    if plot_bounds is not None:
+        plot_x0, plot_x1 = plot_bounds
+        x = plot_x0 + int(step * (plot_x1 - plot_x0) / max(1, total_steps - 1))
     else:
         x = int(step * (w - 1) / max(1, total_steps - 1))
 

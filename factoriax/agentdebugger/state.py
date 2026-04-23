@@ -28,8 +28,15 @@ class DebuggerState:
         mode: Stepping mode, either ``"human"`` or ``"ai"``.
         reward_chart_cache: Pre-rendered reward chart RGB image, or
             ``None`` when invalidated.
+        reward_chart_plot_bounds: ``(plot_x0, plot_x1)`` column range of
+            the matplotlib plot area inside ``reward_chart_cache``, used
+            by :func:`draw_cursor` to place the cursor on the plot line
+            rather than in the axis gutter. ``None`` when no cache.
         cost_chart_cache: Pre-rendered cost chart RGB image, or
             ``None`` when invalidated.
+        cost_chart_plot_bounds: ``(plot_x0, plot_x1)`` column range for
+            the cost chart's matplotlib plot area. See
+            ``reward_chart_plot_bounds``.
         show_help: Whether the help overlay is visible.
         frame_tick: Frame counter for animation timing.
         done: Whether the environment returned ``done=True``.
@@ -51,7 +58,9 @@ class DebuggerState:
     current_step: int = 0
     mode: str = "ai"
     reward_chart_cache: np.ndarray | None = None
+    reward_chart_plot_bounds: tuple[int, int] | None = None
     cost_chart_cache: np.ndarray | None = None
+    cost_chart_plot_bounds: tuple[int, int] | None = None
     show_help: bool = False
     frame_tick: int = 0
     done: bool = False
@@ -60,6 +69,9 @@ class DebuggerState:
     replay_mode: bool = False
     playing: bool = False
     playback_speed: int = 1
+    # Direction of auto-advance during ``playing``. +1 = forward,
+    # -1 = backward. Toggled with the ``B`` key.
+    playback_direction: int = 1
     selected_episode: int = 0
     selected_player: int = 0
     action_strip_cache: np.ndarray | None = None

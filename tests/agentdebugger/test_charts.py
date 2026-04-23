@@ -70,29 +70,26 @@ class TestRenderCostChart:
     """Tests for render_cost_chart."""
 
     def test_output_shape_and_dtype(self) -> None:
-        """Returns RGB uint8 array of requested dimensions."""
+        """Returns (RGB uint8 image, (x0, x1)) of requested dimensions."""
         costs = [np.array([0.5, 0.1]), np.array([0.3, 0.2])]
-        img = render_cost_chart(costs, ["a", "b"], 200, 100)
+        img, _bounds = render_cost_chart(costs, ["a", "b"], 200, 100)
         assert img.shape == (100, 200, 3)
         assert img.dtype == np.uint8
 
     def test_empty_costs(self) -> None:
         """Empty cost list produces a valid placeholder image."""
-        img = render_cost_chart([], [], 200, 100)
+        img, _bounds = render_cost_chart([], [], 200, 100)
         assert img.shape == (100, 200, 3)
         assert img.dtype == np.uint8
 
     def test_not_all_black(self) -> None:
         """Chart with data should have non-zero pixels."""
         costs = [np.array([1.0]) for _ in range(10)]
-        img = render_cost_chart(costs, ["x"], 200, 100)
+        img, _bounds = render_cost_chart(costs, ["x"], 200, 100)
         assert img.sum() > 0
 
-    def test_plot_bounds_embedded(self) -> None:
-        """Plot area fractions are encoded in the top-left pixels."""
+    def test_returns_plot_bounds_inside_image(self) -> None:
+        """``(plot_x0, plot_x1)`` is within image width and ascending."""
         costs = [np.array([0.5]) for _ in range(5)]
-        img = render_cost_chart(costs, ["x"], 300, 150)
-        frac_x0 = int(img[0, 0, 0])
-        frac_x1 = int(img[0, 1, 0])
-        assert frac_x0 > 0
-        assert frac_x1 > frac_x0
+        _img, (x0, x1) = render_cost_chart(costs, ["x"], 300, 150)
+        assert 0 <= x0 < x1 < 300

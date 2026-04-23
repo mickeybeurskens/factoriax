@@ -312,15 +312,19 @@ class Debugger:
                 else:
                     running = self._handle_keydown(event, ui)
 
-            # Playback auto-advance (replay mode).
+            # Playback auto-advance (replay mode). ``playback_direction``
+            # is ±1 — same playback_speed applies in both directions.
             if self._dbg.replay_mode and self._dbg.playing:
                 traj = self._dbg.trajectory
                 total = traj.episode_length if traj is not None else 1
-                self._dbg.current_step = min(
-                    self._dbg.current_step + self._dbg.playback_speed,
-                    total - 1,
-                )
-                if self._dbg.current_step >= total - 1:
+                step_delta = self._dbg.playback_speed * self._dbg.playback_direction
+                new_step = self._dbg.current_step + step_delta
+                self._dbg.current_step = max(0, min(new_step, total - 1))
+                # Stop when the bound in the current direction is hit.
+                if (
+                    self._dbg.playback_direction > 0
+                    and self._dbg.current_step >= total - 1
+                ) or (self._dbg.playback_direction < 0 and self._dbg.current_step <= 0):
                     self._dbg.playing = False
 
             # Render.
@@ -590,6 +594,10 @@ class Debugger:
                 pattern="**/*.npz",
             )
             return True, dialog
+
+        elif key == pygame.K_b:
+            # Flip playback direction; same speed applies in reverse.
+            self._dbg.playback_direction = -self._dbg.playback_direction
 
         elif key == pygame.K_o:
             self._dbg.show_obs_overlay = not self._dbg.show_obs_overlay
@@ -945,6 +953,7 @@ def _render_replay_help_overlay(
         "REPLAY CONTROLS",
         "",
         "Space       Play / Pause",
+        "B           Reverse playback direction",
         "Left/Right  Step backward / forward",
         "[  /  ]     Step backward / forward",
         "N           Step forward",
@@ -954,6 +963,7 @@ def _render_replay_help_overlay(
         ",  /  .     Previous / next episode",
         "Tab         Cycle player",
         "L           Load trajectory file",
+        "Click       Seek on action strip",
         "O           Toggle fog-of-war overlay",
         "S           Save screenshot (PNG)",
         "V           Export video (MP4)",

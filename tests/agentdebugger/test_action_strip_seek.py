@@ -26,6 +26,7 @@ from factoriax.agentdebugger.layout import (
     action_strip_height,
     action_strip_step_from_click,
 )
+from factoriax.agentdebugger.state import DebuggerState
 from factoriax.analysis.trajectory import Trajectory
 from factoriax.constants import Action
 
@@ -193,6 +194,132 @@ class TestClickToSeek:
             # Sanity: the strip column carries a non-zero color for
             # this action (zero would mean the renderer dropped it).
             assert strip_color != (0, 0, 0) or expected_action == 0
+
+
+class TestDrawCursorNoMarginHack:
+    """Regression: ``draw_cursor`` must not read column 0/1 as plot bounds.
+
+    The old implementation embedded plot-area fractions into ``img[0,0,0]``
+    and ``img[0,1,0]`` of the reward/cost charts and sniffed them back
+    out inside ``draw_cursor``. On the action strip those pixels are real
+    data (step 0 and step 1 colors) — whenever the red-channel of step 1
+    was greater than the red-channel of step 0 AND step 0's red was > 0,
+    the heuristic misfired and the cursor got confined to a sub-range
+    of the strip. That's the "same margin on both sides" bug.
+    """
+
+    def test_action_strip_cursor_at_step_zero_is_column_zero(self) -> None:
+        """Even when column 0 and column 1 have rising red channels."""
+        img = np.zeros((8, 100, 3), dtype=np.uint8)
+        # Seed values that would have triggered the old heuristic:
+        # col0 red=189 (NOOP-grey), col1 red=190 (slightly brighter).
+        img[:, 0] = (189, 189, 189)
+        img[:, 1] = (190, 119, 180)
+
+        cursor_img = draw_cursor(img, step=0, total_steps=100)
+        diff = np.any(cursor_img != img, axis=(0, 2))
+        cols = np.where(diff)[0]
+        # Step 0 must place the cursor at column 0 (or 0-1 since cursor
+        # is 2 px wide), never at some plot-area inset.
+        assert cols.size > 0
+        assert int(cols[0]) == 0, (
+            f"cursor at step 0 should be at column 0, got {cols.tolist()}"
+        )
+
+    def test_cursor_with_explicit_plot_bounds(self) -> None:
+        """When ``plot_bounds`` is supplied, cursor respects them."""
+        img = np.zeros((8, 300, 3), dtype=np.uint8)
+        cursor_at_start = draw_cursor(
+            img, step=0, total_steps=100, plot_bounds=(40, 200)
+        )
+        cursor_at_end = draw_cursor(
+            img, step=99, total_steps=100, plot_bounds=(40, 200)
+        )
+        start_col = int(np.where(np.any(cursor_at_start != img, axis=(0, 2)))[0][0])
+        end_col = int(np.where(np.any(cursor_at_end != img, axis=(0, 2)))[0][0])
+        assert start_col == 40
+        assert end_col == 200
+
+
+class TestReversePlayback:
+    """``playback_direction`` drives auto-advance in either direction.
+
+    These tests exercise the same arithmetic the main loop runs per
+    frame (see main.py playback auto-advance), without spinning up a
+    pygame window.
+    """
+
+    @staticmethod
+    def _tick(dbg: DebuggerState, total: int) -> None:
+        """One simulated auto-advance tick, mirroring main.py's logic."""
+        if not dbg.playing:
+            return
+        step_delta = dbg.playback_speed * dbg.playback_direction
+        new_step = dbg.current_step + step_delta
+        dbg.current_step = max(0, min(new_step, total - 1))
+        if (dbg.playback_direction > 0 and dbg.current_step >= total - 1) or (
+            dbg.playback_direction < 0 and dbg.current_step <= 0
+        ):
+            dbg.playing = False
+
+    def test_forward_advance_unchanged(self) -> None:
+        dbg = DebuggerState(
+            replay_mode=True, playing=True, current_step=5, playback_speed=1
+        )
+        self._tick(dbg, total=100)
+        assert dbg.current_step == 6
+        assert dbg.playing is True
+
+    def test_backward_advance(self) -> None:
+        dbg = DebuggerState(
+            replay_mode=True,
+            playing=True,
+            current_step=5,
+            playback_speed=1,
+            playback_direction=-1,
+        )
+        self._tick(dbg, total=100)
+        assert dbg.current_step == 4
+        assert dbg.playing is True
+
+    def test_backward_stops_at_start(self) -> None:
+        dbg = DebuggerState(
+            replay_mode=True,
+            playing=True,
+            current_step=1,
+            playback_speed=1,
+            playback_direction=-1,
+        )
+        self._tick(dbg, total=100)
+        assert dbg.current_step == 0
+        assert dbg.playing is False, "playback should stop at step 0"
+
+    def test_forward_stops_at_end(self) -> None:
+        dbg = DebuggerState(
+            replay_mode=True,
+            playing=True,
+            current_step=98,
+            playback_speed=1,
+        )
+        self._tick(dbg, total=100)
+        assert dbg.current_step == 99
+        assert dbg.playing is False
+
+    def test_reverse_at_speed(self) -> None:
+        """Same ``playback_speed`` applies regardless of direction."""
+        dbg = DebuggerState(
+            replay_mode=True,
+            playing=True,
+            current_step=50,
+            playback_speed=5,
+            playback_direction=-1,
+        )
+        self._tick(dbg, total=100)
+        assert dbg.current_step == 45
+
+    def test_default_direction_is_forward(self) -> None:
+        """New DebuggerState starts forward so existing behavior is unchanged."""
+        assert DebuggerState().playback_direction == 1
 
 
 class TestClickToSeekScaling:
