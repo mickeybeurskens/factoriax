@@ -27,9 +27,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-
 from factoriax.benchmarks.basic_skills.benchmark import REWARD_FNS
 from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+
 from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.constants import NUM_ACTIONS
 from factoriax.envs import FactoriaXEnv
@@ -219,9 +219,7 @@ def _make_collector(
     vmap_reward = jax.vmap(reward_fn, in_axes=(0, 0, None))
 
     def _obs(state: EnvState) -> jax.Array:
-        return local_array(
-            state, env_params, state.selected_player, config.obs_radius
-        )
+        return local_array(state, env_params, state.selected_player, config.obs_radius)
 
     vmap_obs = jax.vmap(_obs)
 
@@ -235,12 +233,8 @@ def _make_collector(
         """Return initial batched states and observations."""
         return fixed_states, vmap_obs(fixed_states)
 
-    def _normalize(
-        obs: jax.Array, mean: jax.Array, var: jax.Array
-    ) -> jax.Array:
-        return jnp.clip(
-            (obs - mean) / jnp.sqrt(var + 1e-8), -10.0, 10.0
-        )
+    def _normalize(obs: jax.Array, mean: jax.Array, var: jax.Array) -> jax.Array:
+        return jnp.clip((obs - mean) / jnp.sqrt(var + 1e-8), -10.0, 10.0)
 
     @jax.jit
     def collect(
@@ -269,9 +263,7 @@ def _make_collector(
         def rollout_step(
             carry: tuple[EnvState, jax.Array, jax.Array],
             _: None,
-        ) -> tuple[
-            tuple[EnvState, jax.Array, jax.Array], Transition
-        ]:
+        ) -> tuple[tuple[EnvState, jax.Array, jax.Array], Transition]:
             states, cur_obs, rng = carry
             rng, key_act, key_step = jax.random.split(rng, 3)
 
@@ -279,9 +271,7 @@ def _make_collector(
                 net_params, _normalize(cur_obs, obs_mean, obs_var)
             )
             actions = jax.random.categorical(key_act, logits)
-            log_probs = jax.nn.log_softmax(logits)[
-                jnp.arange(config.num_envs), actions
-            ]
+            log_probs = jax.nn.log_softmax(logits)[jnp.arange(config.num_envs), actions]
 
             keys_step = jax.random.split(key_step, config.num_envs)
             prev_states = states
@@ -294,9 +284,7 @@ def _make_collector(
                 pad = dones.reshape((-1,) + (1,) * (s.ndim - 1))
                 return jnp.where(pad, r, s)
 
-            next_states = jax.tree_util.tree_map(
-                _where, fixed_states, next_states
-            )
+            next_states = jax.tree_util.tree_map(_where, fixed_states, next_states)
             next_obs = vmap_obs(next_states)
 
             return (next_states, next_obs, rng), Transition(
@@ -347,18 +335,17 @@ def train(config: Config) -> None:
     # Derive obs_dim.
     sample_state = build_state(mine_level.level, mine_level.env_params)
     obs_dim = int(
-        local_array(
-            sample_state, mine_level.env_params, 0, config.obs_radius
-        ).shape[0]
+        local_array(sample_state, mine_level.env_params, 0, config.obs_radius).shape[0]
     )
     logger.info(
         "obs_dim=%d  num_actions=%d  num_envs=%d/level  levels=%d",
-        obs_dim, NUM_ACTIONS, config.num_envs, len(levels),
+        obs_dim,
+        NUM_ACTIONS,
+        config.num_envs,
+        len(levels),
     )
 
-    network = ActorCritic(
-        hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS
-    )
+    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS)
     rng = jax.random.PRNGKey(config.seed)
     rng, key_init = jax.random.split(rng)
     params = network.init(key_init, jnp.zeros(obs_dim))
@@ -372,21 +359,15 @@ def train(config: Config) -> None:
     obs_var = jnp.ones(obs_dim, dtype=jnp.float32)
     obs_count = jnp.array(0, dtype=jnp.int32)
 
-    def _normalize(
-        obs: jax.Array, mean: jax.Array, var: jax.Array
-    ) -> jax.Array:
-        return jnp.clip(
-            (obs - mean) / jnp.sqrt(var + 1e-8), -10.0, 10.0
-        )
+    def _normalize(obs: jax.Array, mean: jax.Array, var: jax.Array) -> jax.Array:
+        return jnp.clip((obs - mean) / jnp.sqrt(var + 1e-8), -10.0, 10.0)
 
     # Build per-level collectors.
     collectors: list[Callable] = []
     level_states: list[EnvState] = []
     level_obs: list[jax.Array] = []
     for bl, rfn in zip(levels, reward_fns):
-        collect_fn, init_fn = _make_collector(
-            env, bl, rfn, network, config
-        )
+        collect_fn, init_fn = _make_collector(env, bl, rfn, network, config)
         states, obs = init_fn()
         collectors.append(collect_fn)
         level_states.append(states)
@@ -422,26 +403,20 @@ def train(config: Config) -> None:
             ratio = jnp.exp(lp - mb_old_lp)
             pg_loss = -jnp.minimum(
                 ratio * adv_n,
-                jnp.clip(
-                    ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps
-                ) * adv_n,
+                jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv_n,
             ).mean()
             v_loss = 0.5 * ((values - mb_rets) ** 2).mean()
-            total = (
-                pg_loss
-                + config.value_coef * v_loss
-                - config.entropy_coef * entropy
-            )
+            total = pg_loss + config.value_coef * v_loss - config.entropy_coef * entropy
             return total, {
-                "loss": total, "pg": pg_loss,
-                "vf": v_loss, "ent": entropy,
+                "loss": total,
+                "pg": pg_loss,
+                "vf": v_loss,
+                "ent": entropy,
             }
 
         def _mb_step(carry, mb):
             p, o = carry
-            (_, m), grads = jax.value_and_grad(_loss, has_aux=True)(
-                p, *mb
-            )
+            (_, m), grads = jax.value_and_grad(_loss, has_aux=True)(p, *mb)
             updates, new_o = optimizer.update(grads, o, p)
             return (optax.apply_updates(p, updates), new_o), m
 
@@ -451,20 +426,22 @@ def train(config: Config) -> None:
             perm = jax.random.permutation(key_perm, batch_size)
 
             def _reshape(x):
-                return x[perm].reshape(
-                    (config.num_minibatches, mb_size) + x.shape[1:]
-                )
+                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
 
             mbs = (
-                _reshape(flat_obs), _reshape(flat_actions),
-                _reshape(flat_log_probs), _reshape(flat_advantages),
+                _reshape(flat_obs),
+                _reshape(flat_actions),
+                _reshape(flat_log_probs),
+                _reshape(flat_advantages),
                 _reshape(flat_returns),
             )
             (p, o), metrics = jax.lax.scan(_mb_step, (p, o), mbs)
             return (p, o, epoch_rng), metrics
 
         (net_params, os, update_rng), metrics = jax.lax.scan(
-            _epoch, (net_params, os, update_rng), None,
+            _epoch,
+            (net_params, os, update_rng),
+            None,
             length=config.update_epochs,
         )
         metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
@@ -492,15 +469,16 @@ def train(config: Config) -> None:
 
     logger.info(
         "%d steps/iter (%d/level x %d levels), %d iters",
-        steps_per_iter, steps_per_level, len(levels), num_iters,
+        steps_per_iter,
+        steps_per_level,
+        len(levels),
+        num_iters,
     )
 
     per_level_returns: dict[str, deque[float]] = {
         bl.name: deque(maxlen=500) for bl in levels
     }
-    running_return = np.zeros(
-        config.num_envs * len(levels), dtype=np.float32
-    )
+    running_return = np.zeros(config.num_envs * len(levels), dtype=np.float32)
     current_step = 0
     t_start = time.time()
 
@@ -513,20 +491,24 @@ def train(config: Config) -> None:
         all_adv: list[jax.Array] = []
         all_ret: list[jax.Array] = []
 
-        for l_idx, (collect_fn, bl) in enumerate(
-            zip(collectors, levels)
-        ):
+        for l_idx, (collect_fn, bl) in enumerate(zip(collectors, levels)):
             rng, key_l = jax.random.split(rng)
-            traj, level_states[l_idx], level_obs[l_idx], last_vals, _ = (
-                collect_fn(
-                    params, level_states[l_idx], level_obs[l_idx],
-                    key_l, obs_mean, obs_var,
-                )
+            traj, level_states[l_idx], level_obs[l_idx], last_vals, _ = collect_fn(
+                params,
+                level_states[l_idx],
+                level_obs[l_idx],
+                key_l,
+                obs_mean,
+                obs_var,
             )
 
             adv, ret = compute_gae(
-                traj.reward, traj.value, traj.done, last_vals,
-                config.gamma, config.gae_lambda,
+                traj.reward,
+                traj.value,
+                traj.done,
+                last_vals,
+                config.gamma,
+                config.gae_lambda,
             )
 
             all_obs.append(traj.obs.reshape(-1, obs_dim))
@@ -540,13 +522,9 @@ def train(config: Config) -> None:
             dones_np = np.array(traj.done)
             offset = l_idx * config.num_envs
             for t in range(rewards_np.shape[0]):
-                running_return[offset:offset + config.num_envs] += (
-                    rewards_np[t]
-                )
+                running_return[offset : offset + config.num_envs] += rewards_np[t]
                 for n in np.where(dones_np[t])[0]:
-                    per_level_returns[bl.name].append(
-                        float(running_return[offset + n])
-                    )
+                    per_level_returns[bl.name].append(float(running_return[offset + n]))
                     running_return[offset + n] = 0.0
 
         flat_obs = jnp.concatenate(all_obs)
@@ -559,20 +537,21 @@ def train(config: Config) -> None:
         delta = batch_mean - obs_mean
         obs_mean = obs_mean + delta * (n / total)
         obs_var = (
-            obs_var * obs_count + batch_var * n
-            + delta**2 * obs_count * n / total
+            obs_var * obs_count + batch_var * n + delta**2 * obs_count * n / total
         ) / total
         obs_count = total
 
         params, opt_state, metrics, _ = update(
-            params, opt_state,
+            params,
+            opt_state,
             flat_obs,
             jnp.concatenate(all_actions),
             jnp.concatenate(all_log_probs),
             jnp.concatenate(all_adv),
             jnp.concatenate(all_ret),
             key_update,
-            obs_mean, obs_var,
+            obs_mean,
+            obs_var,
         )
         current_step += steps_per_iter
 
@@ -583,25 +562,23 @@ def train(config: Config) -> None:
             log_data: dict[str, float] = {
                 "train/step": float(current_step),
                 "train/sps": sps,
-                **{
-                    f"train/{k}": float(v)
-                    for k, v in metrics.items()
-                },
+                **{f"train/{k}": float(v) for k, v in metrics.items()},
             }
             for bl in levels:
                 rets = per_level_returns[bl.name]
-                mean_r = (
-                    float(np.mean(list(rets))) if rets else 0.0
-                )
+                mean_r = float(np.mean(list(rets))) if rets else 0.0
                 log_data[f"train/{bl.name}/mean_ep_return"] = mean_r
                 ret_parts.append(f"{bl.name}={mean_r:.2f}")
 
             logger.info(
-                "iter=%d/%d  step=%dk  sps=%.0f  %s"
-                "  loss=%.4f  ent=%.4f",
-                it + 1, num_iters, current_step // 1000, sps,
+                "iter=%d/%d  step=%dk  sps=%.0f  %s  loss=%.4f  ent=%.4f",
+                it + 1,
+                num_iters,
+                current_step // 1000,
+                sps,
                 "  ".join(ret_parts),
-                float(metrics["loss"]), float(metrics["ent"]),
+                float(metrics["loss"]),
+                float(metrics["ent"]),
             )
             if wandb_run is not None:
                 wandb_run.log(log_data, step=current_step)
@@ -609,7 +586,9 @@ def train(config: Config) -> None:
     elapsed = time.time() - t_start
     logger.info(
         "Done. %dk steps in %.1fs (%.0f sps).",
-        current_step // 1000, elapsed, current_step / elapsed,
+        current_step // 1000,
+        elapsed,
+        current_step / elapsed,
     )
 
     if wandb_run is not None:
@@ -624,36 +603,46 @@ def train(config: Config) -> None:
 def main() -> None:
     """Parse arguments and run parallel training."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Train PPO on mining and crafting simultaneously."
-        ),
+        description=("Train PPO on mining and crafting simultaneously."),
     )
     parser.add_argument(
-        "--num-envs", type=int, default=64,
+        "--num-envs",
+        type=int,
+        default=64,
         help="Parallel envs per level (default: 64).",
     )
     parser.add_argument(
-        "--total-steps", type=int, default=10_000_000,
+        "--total-steps",
+        type=int,
+        default=10_000_000,
         help="Total env steps across both levels (default: 10M).",
     )
     parser.add_argument(
-        "--seed", type=int, default=0,
+        "--seed",
+        type=int,
+        default=0,
         help="Random seed (default: 0).",
     )
     parser.add_argument(
-        "--log-interval", type=int, default=10,
+        "--log-interval",
+        type=int,
+        default=10,
         help="Iterations between log lines (default: 10).",
     )
     parser.add_argument(
-        "--use-wandb", action="store_true",
+        "--use-wandb",
+        action="store_true",
         help="Log to Weights and Biases.",
     )
     parser.add_argument(
-        "--wandb-project", type=str,
+        "--wandb-project",
+        type=str,
         default="factoriax-basic-skills",
     )
     parser.add_argument(
-        "--wandb-run-name", type=str, default=None,
+        "--wandb-run-name",
+        type=str,
+        default=None,
     )
     args = parser.parse_args()
 

@@ -246,9 +246,7 @@ class RolloutRecorder:
             episodes_actions = episodes_actions[: self.max_episodes]
             episodes_rewards = episodes_rewards[: self.max_episodes]
             for fname in episodes_states:
-                episodes_states[fname] = episodes_states[fname][
-                    : self.max_episodes
-                ]
+                episodes_states[fname] = episodes_states[fname][: self.max_episodes]
 
         # Pad to uniform length
         max_len = max(ep.shape[0] for ep in episodes_actions)
@@ -271,9 +269,7 @@ class RolloutRecorder:
             if not ep_list:
                 continue
             extra_shape = ep_list[0].shape[1:]
-            padded = np.zeros(
-                (B, max_len, *extra_shape), dtype=ep_list[0].dtype
-            )
+            padded = np.zeros((B, max_len, *extra_shape), dtype=ep_list[0].dtype)
             for i, arr in enumerate(ep_list):
                 L = arr.shape[0]
                 padded[i, :L] = arr

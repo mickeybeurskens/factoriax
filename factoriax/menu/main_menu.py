@@ -257,10 +257,7 @@ def run_main_menu(
             elif PlayerAction.NAV_UP in actions:
                 focus_idx = (focus_idx - 1) % len(regions)
             # Keep Tab as a direct key for convenience.
-            if (
-                event.type == pygame.KEYDOWN
-                and event.key == pygame.K_TAB
-            ):
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
                 focus_idx = (focus_idx + 1) % len(regions)
 
         # -- Draw to canvas --------------------------------------------------

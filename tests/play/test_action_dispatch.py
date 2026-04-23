@@ -169,42 +169,6 @@ class TestWithdrawAction:
 # ---------------------------------------------------------------------------
 
 
-class TestResearchAction:
-    """CONFIRM in research menu emits RESEARCH_BASIC + selection offset."""
-
-    def test_research_basic(
-        self,
-        game_ui: GameUI,
-        state_factory,
-    ) -> None:
-        """First research option emits RESEARCH_BASIC."""
-        state = state_factory(
-            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
-        )
-        ps = game_ui.play_state
-        ps.research_open = True
-        ps.research_selection = 0
-
-        result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.RESEARCH_BASIC)
-
-    def test_research_advanced(
-        self,
-        game_ui: GameUI,
-        state_factory,
-    ) -> None:
-        """Second research option emits RESEARCH_ADVANCED."""
-        state = state_factory(
-            world_map=jnp.zeros((4, 4), dtype=jnp.int32),
-        )
-        ps = game_ui.play_state
-        ps.research_open = True
-        ps.research_selection = 1
-
-        result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        assert result.action == int(Action.RESEARCH_ADVANCED)
-
-
 # ---------------------------------------------------------------------------
 # Crafting
 # ---------------------------------------------------------------------------

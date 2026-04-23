@@ -598,26 +598,6 @@ def dense_assembler_reward(
     return asm_prox + 2.0 * input_delta + 10.0 * pack_delta
 
 
-def dense_research_reward(
-    prev_state: EnvState, new_state: EnvState, params: EnvParams
-) -> jax.Array:
-    """Dense reward for the research_tech level.
-
-    Bonus proportional to research progress increase. No proximity
-    component (no spatial navigation needed).
-
-    Args:
-        prev_state: State immediately before the step.
-        new_state: State immediately after the step.
-        params: Environment parameters.
-
-    Returns:
-        Scalar float32 reward.
-    """
-    delta = jnp.sum(new_state.research_progress - prev_state.research_progress)
-    return 10.0 * delta.astype(jnp.float32)
-
-
 def dense_repair_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:

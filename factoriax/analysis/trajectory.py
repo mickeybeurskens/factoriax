@@ -87,8 +87,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "selected_player",
     "achievements",
     "items_mined",
-    "research_progress",
-    "research_unlocked",
+    "science_consumed_step",
     "machine_health",
     "biter_positions",
     "biter_health",
@@ -221,8 +220,7 @@ class Trajectory:
     selected_player: np.ndarray | None = None
     achievements: np.ndarray | None = None
     items_mined: np.ndarray | None = None
-    research_progress: np.ndarray | None = None
-    research_unlocked: np.ndarray | None = None
+    science_consumed_step: np.ndarray | None = None
     machine_health: np.ndarray | None = None  # deprecated
     biter_positions: np.ndarray | None = None  # deprecated
     biter_health: np.ndarray | None = None  # deprecated

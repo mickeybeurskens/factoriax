@@ -123,8 +123,14 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     ctrl_lookup = build_controller_lookup(config.controller)
     pygame.display.set_caption("FactoriaX")
     _play_loop(
-        env, state, params, None, screen, rng,
-        kb_lookup=kb_lookup, ctrl_lookup=ctrl_lookup,
+        env,
+        state,
+        params,
+        None,
+        screen,
+        rng,
+        kb_lookup=kb_lookup,
+        ctrl_lookup=ctrl_lookup,
     )
 
 

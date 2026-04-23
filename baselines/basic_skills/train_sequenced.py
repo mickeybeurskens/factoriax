@@ -275,18 +275,12 @@ def _train_phase(
     vmap_reward = jax.vmap(reward_fn, in_axes=(0, 0, None))
 
     def _obs(state: EnvState) -> jax.Array:
-        return local_array(
-            state, env_params, state.selected_player, config.obs_radius
-        )
+        return local_array(state, env_params, state.selected_player, config.obs_radius)
 
     vmap_obs = jax.vmap(_obs)
 
-    def _normalize(
-        obs: jax.Array, mean: jax.Array, var: jax.Array
-    ) -> jax.Array:
-        return jnp.clip(
-            (obs - mean) / jnp.sqrt(var + 1e-8), -10.0, 10.0
-        )
+    def _normalize(obs: jax.Array, mean: jax.Array, var: jax.Array) -> jax.Array:
+        return jnp.clip((obs - mean) / jnp.sqrt(var + 1e-8), -10.0, 10.0)
 
     @jax.jit
     def collect(
@@ -310,9 +304,7 @@ def _train_phase(
                 net_params, _normalize(cur_obs, cur_obs_mean, cur_obs_var)
             )
             actions = jax.random.categorical(key_act, logits)
-            log_probs = jax.nn.log_softmax(logits)[
-                jnp.arange(config.num_envs), actions
-            ]
+            log_probs = jax.nn.log_softmax(logits)[jnp.arange(config.num_envs), actions]
 
             keys_step = jax.random.split(key_step, config.num_envs)
             prev_states = states
@@ -325,9 +317,7 @@ def _train_phase(
                 pad = dones.reshape((-1,) + (1,) * (s.ndim - 1))
                 return jnp.where(pad, r, s)
 
-            next_states = jax.tree_util.tree_map(
-                _where, fixed_states, next_states
-            )
+            next_states = jax.tree_util.tree_map(_where, fixed_states, next_states)
             next_obs = vmap_obs(next_states)
 
             return (next_states, next_obs, step_rng_), Transition(
@@ -380,16 +370,10 @@ def _train_phase(
             ratio = jnp.exp(lp - mb_old_lp)
             pg_loss = -jnp.minimum(
                 ratio * adv_n,
-                jnp.clip(
-                    ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps
-                ) * adv_n,
+                jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv_n,
             ).mean()
             v_loss = 0.5 * ((values - mb_rets) ** 2).mean()
-            total = (
-                pg_loss
-                + config.value_coef * v_loss
-                - config.entropy_coef * entropy
-            )
+            total = pg_loss + config.value_coef * v_loss - config.entropy_coef * entropy
             return total, {"loss": total, "pg": pg_loss, "vf": v_loss, "ent": entropy}
 
         def _mb_step(carry, mb):
@@ -404,20 +388,22 @@ def _train_phase(
             perm = jax.random.permutation(key_perm, batch_size)
 
             def _reshape(x):
-                return x[perm].reshape(
-                    (config.num_minibatches, mb_size) + x.shape[1:]
-                )
+                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
 
             mbs = (
-                _reshape(flat_obs), _reshape(flat_actions),
-                _reshape(flat_log_probs), _reshape(flat_advantages),
+                _reshape(flat_obs),
+                _reshape(flat_actions),
+                _reshape(flat_log_probs),
+                _reshape(flat_advantages),
                 _reshape(flat_returns),
             )
             (p, o), metrics = jax.lax.scan(_mb_step, (p, o), mbs)
             return (p, o, epoch_rng), metrics
 
         (net_params, os, update_rng), metrics = jax.lax.scan(
-            _epoch, (net_params, os, update_rng), None,
+            _epoch,
+            (net_params, os, update_rng),
+            None,
             length=config.update_epochs,
         )
         metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
@@ -446,13 +432,21 @@ def _train_phase(
         rng, key_collect, key_update = jax.random.split(rng, 3)
 
         traj, env_states, obs, last_vals, _ = collect(
-            params, env_states, obs, key_collect,
-            obs_mean, obs_var,
+            params,
+            env_states,
+            obs,
+            key_collect,
+            obs_mean,
+            obs_var,
         )
 
         adv, ret = compute_gae(
-            traj.reward, traj.value, traj.done, last_vals,
-            config.gamma, config.gae_lambda,
+            traj.reward,
+            traj.value,
+            traj.done,
+            last_vals,
+            config.gamma,
+            config.gae_lambda,
         )
 
         flat_obs = traj.obs.reshape(-1, obs_dim)
@@ -465,16 +459,21 @@ def _train_phase(
         delta = batch_mean - obs_mean
         obs_mean = obs_mean + delta * (n / total)
         obs_var = (
-            obs_var * obs_count + batch_var * n
-            + delta**2 * obs_count * n / total
+            obs_var * obs_count + batch_var * n + delta**2 * obs_count * n / total
         ) / total
         obs_count = total
 
         params, opt_state, metrics, _ = update(
-            params, opt_state,
-            flat_obs, traj.action.reshape(-1), traj.log_prob.reshape(-1),
-            adv.reshape(-1), ret.reshape(-1), key_update,
-            obs_mean, obs_var,
+            params,
+            opt_state,
+            flat_obs,
+            traj.action.reshape(-1),
+            traj.log_prob.reshape(-1),
+            adv.reshape(-1),
+            ret.reshape(-1),
+            key_update,
+            obs_mean,
+            obs_var,
         )
         phase_steps += steps_per_iter
         global_step = global_step_offset + phase_steps
@@ -494,11 +493,15 @@ def _train_phase(
             elapsed = time.time() - t_start
             sps = phase_steps / elapsed
             logger.info(
-                "[%s] iter=%d/%d  step=%dk  sps=%.0f"
-                "  ret=%.2f  loss=%.4f  ent=%.4f",
-                phase_name, it + 1, num_iters,
-                global_step // 1000, sps, mean_ret,
-                float(metrics["loss"]), float(metrics["ent"]),
+                "[%s] iter=%d/%d  step=%dk  sps=%.0f  ret=%.2f  loss=%.4f  ent=%.4f",
+                phase_name,
+                it + 1,
+                num_iters,
+                global_step // 1000,
+                sps,
+                mean_ret,
+                float(metrics["loss"]),
+                float(metrics["ent"]),
             )
             if wandb_run is not None:
                 wandb_run.log(
@@ -506,10 +509,7 @@ def _train_phase(
                         "train/step": float(global_step),
                         "train/sps": sps,
                         f"train/{phase_name}/mean_ep_return": mean_ret,
-                        **{
-                            f"train/{k}": float(v)
-                            for k, v in metrics.items()
-                        },
+                        **{f"train/{k}": float(v) for k, v in metrics.items()},
                     },
                     step=global_step,
                 )
@@ -522,22 +522,24 @@ def _train_phase(
         ):
             logger.info(
                 "[%s] Converged: mean return %.2f >= %.2f after %dk steps",
-                phase_name, mean_ret, convergence_threshold,
+                phase_name,
+                mean_ret,
+                convergence_threshold,
                 phase_steps // 1000,
             )
             break
 
     elapsed = time.time() - t_start
     logger.info(
-        "[%s] Phase done. %dk steps in %.1fs (%.0f sps). "
-        "Final mean return: %.2f",
-        phase_name, phase_steps // 1000, elapsed,
-        phase_steps / elapsed if elapsed > 0 else 0, mean_ret,
+        "[%s] Phase done. %dk steps in %.1fs (%.0f sps). Final mean return: %.2f",
+        phase_name,
+        phase_steps // 1000,
+        elapsed,
+        phase_steps / elapsed if elapsed > 0 else 0,
+        mean_ret,
     )
 
-    return (
-        params, opt_state, obs_mean, obs_var, obs_count, rng, phase_steps
-    )
+    return (params, opt_state, obs_mean, obs_var, obs_count, rng, phase_steps)
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +577,7 @@ def _evaluate(
     from pathlib import Path
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from factoriax.benchmarks.single_agent_mining.analysis import (
@@ -597,9 +600,7 @@ def _evaluate(
     _mean, _var = obs_mean, obs_var
 
     def _norm(obs: jax.Array) -> jax.Array:
-        return jnp.clip(
-            (obs - _mean) / jnp.sqrt(_var + 1e-8), -10.0, 10.0
-        )
+        return jnp.clip((obs - _mean) / jnp.sqrt(_var + 1e-8), -10.0, 10.0)
 
     def _make_policy(s: int) -> Callable:
         holder = {"rng": jax.random.PRNGKey(s + 1000)}
@@ -647,17 +648,24 @@ def _evaluate(
     )
     traj = states_to_trajectory(states_log, actions=act_arr, rewards=rew_arr)
     traj = dc_replace(
-        traj, observation_scheme={"type": 2, "radius": obs_radius},
+        traj,
+        observation_scheme={"type": 2, "radius": obs_radius},
     )
     traj_path = out_dir / f"{phase_name}_trajectory.npz"
     traj.save(str(traj_path))
     logger.info(
         "[%s] Saved trajectory: %s (%d steps, reward=%.1f)",
-        phase_name, traj_path, len(actions_log), sum(rewards_log),
+        phase_name,
+        traj_path,
+        len(actions_log),
+        sum(rewards_log),
     )
 
     frames = render_level_video(
-        bench_level, _make_policy(0), seed=seed, obs_fn=_obs_fn,
+        bench_level,
+        _make_policy(0),
+        seed=seed,
+        obs_fn=_obs_fn,
     )
     mp4_path = out_dir / f"{phase_name}.mp4"
     save_mp4(frames, mp4_path)
@@ -668,17 +676,22 @@ def _evaluate(
 
     if traj.rewards is not None:
         fig_r, _ = plot_episode_rewards(
-            traj, episode=0, title=f"{phase_name} -- rewards",
+            traj,
+            episode=0,
+            title=f"{phase_name} -- rewards",
         )
         figs["rewards"] = fig_r
 
     fig_ar, _ = action_raster(
-        traj, title=f"{phase_name} -- action raster",
+        traj,
+        title=f"{phase_name} -- action raster",
     )
     figs["action_raster"] = fig_ar
 
     fig_ng, _ = plot_ngram_sweep(
-        traj, n_range=(2, 5), top_k=5,
+        traj,
+        n_range=(2, 5),
+        top_k=5,
         title=f"{phase_name} -- n-grams",
     )
     figs["ngram_sweep"] = fig_ng
@@ -696,7 +709,9 @@ def _evaluate(
                 f"eval/{phase_name}/total_reward": sum(rewards_log),
                 f"eval/{phase_name}/episode_length": len(actions_log),
                 f"videos/{phase_name}": wandb.Video(
-                    str(mp4_path), fps=10, format="mp4",
+                    str(mp4_path),
+                    fps=10,
+                    format="mp4",
                 ),
             }
             for plot_name, fig in figs.items():
@@ -735,9 +750,7 @@ def _parse_phase(spec: str) -> Phase:
 
     if name not in _LEVEL_MAP:
         available = ", ".join(_LEVEL_MAP.keys())
-        raise ValueError(
-            f"Unknown level {name!r}. Choose from: {available}"
-        )
+        raise ValueError(f"Unknown level {name!r}. Choose from: {available}")
     return Phase(level_name=name, threshold=threshold)
 
 
@@ -759,24 +772,21 @@ def train(config: Config) -> None:
     first_level = _LEVEL_MAP[config.phases[0].level_name]
     sample_state = build_state(first_level.level, first_level.env_params)
     obs_dim = int(
-        local_array(
-            sample_state, first_level.env_params, 0, config.obs_radius
-        ).shape[0]
+        local_array(sample_state, first_level.env_params, 0, config.obs_radius).shape[0]
     )
 
     phase_desc = " -> ".join(
-        f"{p.level_name}(>={p.threshold})" if p.threshold is not None
-        else p.level_name
+        f"{p.level_name}(>={p.threshold})" if p.threshold is not None else p.level_name
         for p in config.phases
     )
     logger.info(
         "Sequenced training: %s  obs_dim=%d  num_actions=%d",
-        phase_desc, obs_dim, NUM_ACTIONS,
+        phase_desc,
+        obs_dim,
+        NUM_ACTIONS,
     )
 
-    network = ActorCritic(
-        hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS
-    )
+    network = ActorCritic(hidden_dims=config.hidden_dims, num_actions=NUM_ACTIONS)
     rng, key_init = jax.random.split(rng)
     params = network.init(key_init, jnp.zeros(obs_dim))
     optimizer = optax.chain(
@@ -795,9 +805,7 @@ def train(config: Config) -> None:
         try:
             import wandb  # type: ignore[import-untyped]
 
-            phase_names = "_".join(
-                p.level_name for p in config.phases
-            )
+            phase_names = "_".join(p.level_name for p in config.phases)
             run_name = config.wandb_run_name or f"seq_{phase_names}"
             wandb_run = wandb.init(
                 project=config.wandb_project,
@@ -817,8 +825,13 @@ def train(config: Config) -> None:
 
         rng, key_phase = jax.random.split(rng)
         (
-            params, opt_state, obs_mean, obs_var, obs_count,
-            _, phase_steps,
+            params,
+            opt_state,
+            obs_mean,
+            obs_var,
+            obs_count,
+            _,
+            phase_steps,
         ) = _train_phase(
             phase_name=f"{i + 1}_{phase.level_name}",
             bench_level=bench_level,
@@ -841,17 +854,21 @@ def train(config: Config) -> None:
 
         _evaluate(
             f"{i + 1}_{phase.level_name}",
-            bench_level, reward_fn,
-            network, params, obs_mean, obs_var,
-            config.obs_radius, config.seed, wandb_run,
+            bench_level,
+            reward_fn,
+            network,
+            params,
+            obs_mean,
+            obs_var,
+            config.obs_radius,
+            config.seed,
+            wandb_run,
         )
 
         global_steps += phase_steps
         phase_steps_log.append((phase.level_name, phase_steps))
 
-    summary = "  ".join(
-        f"{name}: {steps // 1000}k" for name, steps in phase_steps_log
-    )
+    summary = "  ".join(f"{name}: {steps // 1000}k" for name, steps in phase_steps_log)
     logger.info("Sequenced training complete. %s", summary)
 
     if wandb_run is not None:
@@ -862,42 +879,55 @@ def main() -> None:
     """Parse arguments and run sequenced training."""
     parser = argparse.ArgumentParser(
         description=(
-            "Sequenced PPO curriculum. Specify phases as "
-            "level_name:threshold pairs."
+            "Sequenced PPO curriculum. Specify phases as level_name:threshold pairs."
         ),
     )
     parser.add_argument(
-        "phases", nargs="+",
+        "phases",
+        nargs="+",
         help=(
             "Training phases as level:threshold pairs. "
             "Example: mine_resources:16 craft_pallets"
         ),
     )
     parser.add_argument(
-        "--max-steps-per-phase", type=int, default=10_000_000,
+        "--max-steps-per-phase",
+        type=int,
+        default=10_000_000,
         help="Max steps per phase (default: 10M).",
     )
     parser.add_argument(
-        "--num-envs", type=int, default=64,
+        "--num-envs",
+        type=int,
+        default=64,
         help="Parallel environments (default: 64).",
     )
     parser.add_argument(
-        "--seed", type=int, default=0,
+        "--seed",
+        type=int,
+        default=0,
         help="Random seed (default: 0).",
     )
     parser.add_argument(
-        "--log-interval", type=int, default=10,
+        "--log-interval",
+        type=int,
+        default=10,
         help="Iterations between log lines (default: 10).",
     )
     parser.add_argument(
-        "--use-wandb", action="store_true",
+        "--use-wandb",
+        action="store_true",
         help="Log to Weights and Biases.",
     )
     parser.add_argument(
-        "--wandb-project", type=str, default="factoriax-basic-skills",
+        "--wandb-project",
+        type=str,
+        default="factoriax-basic-skills",
     )
     parser.add_argument(
-        "--wandb-run-name", type=str, default=None,
+        "--wandb-run-name",
+        type=str,
+        default=None,
     )
     args = parser.parse_args()
 

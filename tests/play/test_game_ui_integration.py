@@ -235,15 +235,6 @@ class TestEscapeAndPause:
         ui.handle_event(_key(pygame.K_ESCAPE), state)
         assert ui.play_state.achievement_open is False
 
-    def test_escape_closes_research(self, ui, state_factory) -> None:
-        """Escape closes research."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        ui.play_state.research_open = True
-        ui.handle_event(_key(pygame.K_ESCAPE), state)
-        assert ui.play_state.research_open is False
-
     def test_escape_closes_machine(self, ui, state_factory) -> None:
         """Escape closes machine menu."""
         state = state_factory(
@@ -394,38 +385,6 @@ class TestMachineContext:
 # -------------------------------------------------------------------
 
 
-class TestResearchContext:
-    """Keys in the research menu."""
-
-    def test_open_research(self, ui, state_factory) -> None:
-        """T key opens research."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        ui.handle_event(_key(pygame.K_t), state)
-        assert ui.play_state.research_open is True
-
-    def test_research_nav(self, ui, state_factory) -> None:
-        """S key in research navigates down."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        ui.play_state.research_open = True
-        ui.play_state.research_selection = 0
-        ui.handle_event(_key(pygame.K_s), state)
-        assert ui.play_state.research_selection == 1
-
-    def test_research_confirm(self, ui, state_factory) -> None:
-        """E in research emits a research action."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        ui.play_state.research_open = True
-        ui.play_state.research_selection = 0
-        result = ui.handle_event(_key(pygame.K_e), state)
-        assert result.action == int(Action.RESEARCH_BASIC)
-
-
 # -------------------------------------------------------------------
 # Achievement context
 # -------------------------------------------------------------------
@@ -574,22 +533,6 @@ class TestRenderFrame:
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
         )
         ui.play_state.pause_open = True
-        frame, regions = ui.render_frame(
-            state,
-            256,
-            256,
-            32,
-            0,
-            0,
-        )
-        assert frame.shape == (256, 256, 3)
-
-    def test_render_with_research(self, ui, state_factory) -> None:
-        """Render with research menu open."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-        )
-        ui.play_state.research_open = True
         frame, regions = ui.render_frame(
             state,
             256,

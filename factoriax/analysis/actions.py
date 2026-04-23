@@ -487,10 +487,10 @@ def plot_ngram_sweep(
         fig.text(0.5, 0.995, title, ha="center", fontsize=11)
 
     # Layout columns (in figure fraction).
-    col_n = 0.04       # "n=N"
-    col_boxes = 0.08   # start of colored boxes
+    col_n = 0.04  # "n=N"
+    col_boxes = 0.08  # start of colored boxes
     col_text = col_boxes + (n_max + 1) * (sq_size + sq_gap) + 0.01
-    col_count = 0.92    # right-aligned count
+    col_count = 0.92  # right-aligned count
 
     y_cursor = 1.0 - legend_h - header_h
 
@@ -506,32 +506,53 @@ def plot_ngram_sweep(
             # n=N label (only on first entry per group).
             if idx == 0:
                 fig.text(
-                    col_n, y, f"n={n}", fontsize=9, fontweight="bold",
-                    va="center", ha="left",
+                    col_n,
+                    y,
+                    f"n={n}",
+                    fontsize=9,
+                    fontweight="bold",
+                    va="center",
+                    ha="left",
                 )
 
             # Colored boxes.
             for j, a in enumerate(gram):
                 a_idx = int(a)
                 bx = col_boxes + j * (sq_size + sq_gap)
-                fig.add_artist(Rectangle(
-                    (bx, y - sq_size / 2), sq_size, sq_size,
-                    facecolor=colors[min(a_idx, len(colors) - 1)],
-                    edgecolor="white", linewidth=0.3,
-                    transform=fig.transFigure, clip_on=False,
-                ))
+                fig.add_artist(
+                    Rectangle(
+                        (bx, y - sq_size / 2),
+                        sq_size,
+                        sq_size,
+                        facecolor=colors[min(a_idx, len(colors) - 1)],
+                        edgecolor="white",
+                        linewidth=0.3,
+                        transform=fig.transFigure,
+                        clip_on=False,
+                    )
+                )
 
             # Action name sequence.
             label = " ".join(action_labels[int(a)] for a in gram)
             fig.text(
-                col_text, y, label, fontsize=7, family="monospace",
-                va="center", ha="left",
+                col_text,
+                y,
+                label,
+                fontsize=7,
+                family="monospace",
+                va="center",
+                ha="left",
             )
 
             # Count on the right.
             fig.text(
-                col_count, y, f"x{count}", fontsize=7,
-                va="center", ha="right", color="gray",
+                col_count,
+                y,
+                f"x{count}",
+                fontsize=7,
+                va="center",
+                ha="right",
+                color="gray",
             )
 
         y_cursor -= top_k * row_h + 0.01

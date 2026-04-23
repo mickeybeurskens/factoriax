@@ -31,7 +31,6 @@ from factoriax.constants import (
     CRAFT_BASE,
     DEPOSIT_BASE,
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
     PLACEABLE_ITEM_LIST,
     PLACEABLE_ITEMS,
     ROTATE_BASE,
@@ -52,7 +51,6 @@ from factoriax.play.ui import (
     render_inventory_menu,
     render_machine_menu,
     render_pause_menu,
-    render_research_menu,
     render_victory_screen,
 )
 from factoriax.recipes import NUM_RECIPES
@@ -70,6 +68,8 @@ _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
     int(ItemType.ARM): int(Action.PLACE_ARM),
     int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
+    int(ItemType.FURNACE): int(Action.PLACE_FURNACE),
+    int(ItemType.SCIENCE_LAB): int(Action.PLACE_SCIENCE_LAB),
 }
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).
@@ -212,7 +212,6 @@ class GameUI:
         return (
             ps.inventory_open
             or ps.achievement_open
-            or ps.research_open
             or ps.machine_open
             or ps.pause_open
             or ps.help_open
@@ -372,15 +371,6 @@ class GameUI:
             )
             composite_rgba_over_rgb(ui_frame, ach_overlay)
 
-        if ps.research_open:
-            research_overlay = render_research_menu(
-                state,
-                ui_w,
-                ui_h,
-                ps.research_selection,
-            )
-            composite_rgba_over_rgb(ui_frame, research_overlay)
-
         if ps.pause_open:
             pause_overlay, pause_regions = render_pause_menu(
                 ui_w,
@@ -529,8 +519,6 @@ class GameUI:
                 ps.held_item = None
             elif ps.achievement_open:
                 ps.achievement_open = False
-            elif ps.research_open:
-                ps.research_open = False
             elif ps.machine_open:
                 ps.machine_open = False
             else:
@@ -562,14 +550,6 @@ class GameUI:
                 ps.achievement_selection = 0
         elif ps.achievement_open:
             self._handle_achievement_keys(actions)
-        elif PlayerAction.OPEN_RESEARCH in actions and not ps.inventory_open:
-            ps.research_open = not ps.research_open
-            if ps.research_open:
-                ps.inventory_open = False
-                ps.achievement_open = False
-                ps.research_selection = 0
-        elif ps.research_open:
-            action = self._handle_research_keys(actions)
         elif ps.inventory_open:
             action = self._handle_crafting_nav(actions)
         else:
@@ -749,27 +729,6 @@ class GameUI:
             ps.achievement_scroll = sel_top
         elif sel_bot > ps.achievement_scroll + 8 * row_h:
             ps.achievement_scroll = sel_bot - 8 * row_h
-
-    def _handle_research_keys(
-        self,
-        actions: frozenset[str],
-    ) -> int | None:
-        """Handle keys in the research menu.
-
-        Returns:
-            Action integer, or ``None`` if no action.
-        """
-        ps = self._ps
-        if PlayerAction.NAV_UP in actions:
-            ps.research_selection = max(0, ps.research_selection - 1)
-        elif PlayerAction.NAV_DOWN in actions:
-            ps.research_selection = min(
-                NUM_TECHNOLOGIES - 1,
-                ps.research_selection + 1,
-            )
-        elif PlayerAction.CONFIRM in actions:
-            return int(Action.RESEARCH_BASIC) + ps.research_selection
-        return None
 
     def _handle_crafting_nav(
         self,

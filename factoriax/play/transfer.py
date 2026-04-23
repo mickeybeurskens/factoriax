@@ -38,8 +38,9 @@ def swap_inventory_slots(
     count_a = state.player_inventory[player_idx, type_a]
     count_b = state.player_inventory[player_idx, type_b]
     new_inv = (
-        state.player_inventory
-        .at[player_idx, type_a].set(count_b)
-        .at[player_idx, type_b].set(count_a)
+        state.player_inventory.at[player_idx, type_a]
+        .set(count_b)
+        .at[player_idx, type_b]
+        .set(count_a)
     )
     return state.replace(player_inventory=new_inv)

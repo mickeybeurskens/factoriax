@@ -30,7 +30,6 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
-    RESEARCH_COST,
     BlockType,
     MachineType,
 )
@@ -200,8 +199,7 @@ def _player_scalars(
         player_idx: Index of the player.
 
     Returns:
-        Float32 array of shape ``(NUM_PLAYER_SCALARS
-        + 2 * NUM_TECHNOLOGIES,)``.
+        Float32 array of shape ``(NUM_PLAYER_SCALARS,)``.
     """
     pos = state.player_positions[player_idx]
     afford = jax.vmap(
@@ -262,12 +260,7 @@ def _player_scalars(
         state.player_inventory[player_idx].astype(jnp.float32) / _PLAYER_MAX_STACK_F
     )
 
-    # Research state.
-    research_unlocked = state.research_unlocked.astype(jnp.float32)
-    research_progress = state.research_progress.astype(jnp.float32) / RESEARCH_COST
-    return jnp.concatenate(
-        [scalars, player_inv, research_unlocked, research_progress],
-    )
+    return jnp.concatenate([scalars, player_inv])
 
 
 def global_array(
@@ -287,7 +280,7 @@ def global_array(
 
     Returns:
         Float32 array of shape ``(NUM_SPATIAL_CHANNELS * H * W
-        + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES,)``.
+        + NUM_PLAYER_SCALARS,)``.
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
     flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
@@ -342,7 +335,7 @@ def local_array(
 
     Returns:
         Float32 array of shape ``(NUM_SPATIAL_CHANNELS * (2r+1)^2
-        + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES,)``.
+        + NUM_PLAYER_SCALARS,)``.
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))

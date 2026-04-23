@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import NUM_ACTIONS, NUM_TECHNOLOGIES
+from factoriax.constants import NUM_ACTIONS
 from factoriax.game_logic import factoriax_step, is_game_over
 from factoriax.jax_renderer import JaxRenderer
 from factoriax.levels import Level, build_state, generate_state
@@ -164,9 +164,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """
         return global_array(state, params, state.selected_player)
 
-    def is_terminal(
-        self, state: EnvState, params: EnvParams
-    ) -> jax.Array:
+    def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.
 
         Args:
@@ -201,7 +199,6 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         obs_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
-            + NUM_TECHNOLOGIES * 2  # research_unlocked + research_progress
         )
         return spaces.Box(
             low=0.0,

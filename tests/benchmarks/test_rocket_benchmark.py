@@ -378,8 +378,7 @@ def _dummy_env_state():
         selected_player=jnp.int32(0),
         timestep=jnp.int32(0),
         items_mined=jnp.zeros((NUM_ITEM_TYPES,), dtype=jnp.int32),
-        research_progress=jnp.zeros((2,), dtype=jnp.int16),
-        research_unlocked=jnp.zeros((2,), dtype=jnp.bool_),
+        science_consumed_step=jnp.zeros((2,), dtype=jnp.int32),
     )
 
 

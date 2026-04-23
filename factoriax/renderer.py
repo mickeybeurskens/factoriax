@@ -1027,6 +1027,85 @@ def _draw_furnace_body(
     icon[cy - core : cy + core + 1, cx - core : cx + core + 1, :3] = ember
 
 
+def _draw_science_lab_body(
+    icon: np.ndarray,
+    base_rgb: tuple[int, int, int],
+) -> None:
+    """Draw a geodesic dome, top-down.
+
+    Palette C: violet body + lavender ribs + pale apex. The active
+    interior glow (amber fill when the lab consumed a pack this tick)
+    is layered on by the caller via :func:`apply_activity_tint`.
+
+    The silhouette is an inset square rim with four diagonal ribs
+    meeting at a central apex, plus four small window panels tucked
+    between the ribs. At tile sizes below ~8 px the inner detail
+    degrades gracefully — only rim + apex remain.
+
+    Args:
+        icon: RGBA array modified in place. Pre-filled with the body
+            color by the caller; we overwrite the internal structure.
+        base_rgb: Dome body color (palette C ``#4c1d95``).
+    """
+    s = icon.shape[0]
+    if s < 4:
+        return
+    rib = (196, 181, 253)  # palette C bars: #c4b5fd
+    apex = (237, 233, 254)  # palette C apex: #ede9fe
+    window = (253, 230, 138)  # warm lit pane, reads as interior light
+    body = base_rgb
+    # Re-fill the body so the caller's square backdrop becomes the
+    # dome interior (inset by 1 from the edge).
+    icon[1 : s - 1, 1 : s - 1, :3] = body
+
+    cx = cy = s // 2
+    # Four diagonal ribs from the rim to the apex. Draw as a line
+    # per rib, thickness 1 at small sizes, 2 at >=12 px.
+    t = 1 if s < 12 else 2
+
+    def _line(y0: int, x0: int, y1: int, x1: int) -> None:
+        steps = max(abs(y1 - y0), abs(x1 - x0))
+        if steps == 0:
+            return
+        for k in range(steps + 1):
+            y = y0 + (y1 - y0) * k // steps
+            x = x0 + (x1 - x0) * k // steps
+            for dy in range(t):
+                for dx in range(t):
+                    yy, xx = y + dy, x + dx
+                    if 0 <= yy < s and 0 <= xx < s:
+                        icon[yy, xx, :3] = rib
+
+    # Ribs from the four inner corners to the apex.
+    inset = 1
+    _line(inset, inset, cy, cx)
+    _line(inset, s - 1 - inset, cy, cx)
+    _line(s - 1 - inset, inset, cy, cx)
+    _line(s - 1 - inset, s - 1 - inset, cy, cx)
+
+    # Four small window panes tucked between ribs (up/down/left/right
+    # of the apex), if there's room.
+    if s >= 10:
+        win_sz = max(1, s // 6)
+        offset = max(2, s // 4)
+        for oy, ox in (
+            (cy - offset, cx - win_sz // 2),
+            (cy + offset - win_sz, cx - win_sz // 2),
+            (cy - win_sz // 2, cx - offset),
+            (cy - win_sz // 2, cx + offset - win_sz),
+        ):
+            if 0 <= oy < s - win_sz and 0 <= ox < s - win_sz:
+                icon[oy : oy + win_sz, ox : ox + win_sz, :3] = window
+
+    # Apex highlight (2x2 or 1x1).
+    apex_sz = 2 if s >= 10 else 1
+    icon[
+        cy - apex_sz // 2 : cy + (apex_sz + 1) // 2,
+        cx - apex_sz // 2 : cx + (apex_sz + 1) // 2,
+        :3,
+    ] = apex
+
+
 def _draw_pallet_slats(
     icon: np.ndarray,
     base_rgb: tuple[int, int, int],
@@ -1255,6 +1334,8 @@ def render_item_icon(
             _draw_assembler_body(icon, rgb)
         elif item_type == int(ItemType.FURNACE) and size >= 6:
             _draw_furnace_body(icon, rgb)
+        elif item_type == int(ItemType.SCIENCE_LAB) and size >= 4:
+            _draw_science_lab_body(icon, rgb)
         _draw_machine_frame(icon)
         # Knock the four corner pixels transparent so placed machines
         # read as "objects on terrain" rather than square tiles.

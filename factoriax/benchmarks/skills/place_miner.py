@@ -18,7 +18,6 @@ from gymnax.environments import environment, spaces  # type: ignore[import-untyp
 from factoriax.benchmarks.skills import count_miners_on_ore
 from factoriax.constants import (
     NUM_ACTIONS,
-    NUM_TECHNOLOGIES,
     BlockType,
     ItemType,
 )
@@ -82,7 +81,10 @@ class PlaceMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ig
             Tuple of (observation, new_state, reward, done, info).
         """
         obs, new_state, _, done, info = self._inner.step_env(
-            key, state, action, params,
+            key,
+            state,
+            action,
+            params,
         )
         reward = count_miners_on_ore(new_state).astype(jnp.float32)
         return obs, new_state, reward, done, info
@@ -127,9 +129,7 @@ class PlaceMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ig
         """
         return self._inner.get_obs(state, params)
 
-    def is_terminal(
-        self, state: EnvState, params: EnvParams
-    ) -> jax.Array:
+    def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.
 
         Args:
@@ -164,7 +164,6 @@ class PlaceMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ig
         obs_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
-            + NUM_TECHNOLOGIES * 2
         )
         return spaces.Box(0.0, 1.0, shape=(obs_size,), dtype=jnp.float32)
 

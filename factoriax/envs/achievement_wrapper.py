@@ -20,7 +20,7 @@ import jax.numpy as jnp
 from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import MAX_ACHIEVEMENTS, NUM_TECHNOLOGIES
+from factoriax.constants import MAX_ACHIEVEMENTS
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import Level
 from factoriax.observations import (
@@ -306,16 +306,10 @@ class LocalObservationWrapper(environment.Environment[EnvState, EnvParams]):  # 
     def observation_space(self, params: EnvParams) -> spaces.Box:
         """Return the local observation space.
 
-        Shape is ``(NUM_SPATIAL_CHANNELS * (2r+1)^2 + NUM_PLAYER_SCALARS
-        + 2 * NUM_TECHNOLOGIES,)``. The ``2 * NUM_TECHNOLOGIES`` tail
-        is ``research_unlocked`` concatenated with ``research_progress``.
+        Shape is ``(NUM_SPATIAL_CHANNELS * (2r+1)^2 + NUM_PLAYER_SCALARS,)``.
         """
         size = 2 * self._radius + 1
-        obs_size = (
-            NUM_SPATIAL_CHANNELS * size * size
-            + NUM_PLAYER_SCALARS
-            + NUM_TECHNOLOGIES * 2
-        )
+        obs_size = NUM_SPATIAL_CHANNELS * size * size + NUM_PLAYER_SCALARS
         return spaces.Box(
             low=0.0,
             high=1.0,

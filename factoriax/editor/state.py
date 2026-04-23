@@ -172,6 +172,7 @@ def editor_state_from_level(level: Level) -> EditorState:
     if level.machine_inventory is not None:
         # Convert pouch (H, W, NUM_ITEM_TYPES) to slot-based for editor.
         from factoriax.constants import NUM_ITEM_TYPES as _NIT
+
         pouch = level.machine_inventory
         inv_items = np.zeros(inv_shape, dtype=np.int32)
         inv_counts = np.zeros(inv_shape, dtype=np.int32)
@@ -247,6 +248,7 @@ def editor_state_to_level(state: EditorState) -> Level:
 
     # Convert slot-based editor inventory back to pouch for Level.
     from factoriax.constants import NUM_ITEM_TYPES as _NIT
+
     machine_inv: np.ndarray | None = None
     if not (
         np.all(state.machine_inventory_items == 0)
@@ -269,10 +271,7 @@ def editor_state_to_level(state: EditorState) -> Level:
 
     pp: list[tuple[int, int]] | None = None
     if state.player_positions:
-        pp = [
-            state.player_positions[k]
-            for k in sorted(state.player_positions)
-        ]
+        pp = [state.player_positions[k] for k in sorted(state.player_positions)]
     bp: list[tuple[int, int]] | None = (
         list(state.biter_positions) if state.biter_positions else None
     )
@@ -599,9 +598,7 @@ def _clip_entities(state: EditorState) -> None:
     ]
 
 
-def set_player_position(
-    state: EditorState, player_idx: int, x: int, y: int
-) -> None:
+def set_player_position(state: EditorState, player_idx: int, x: int, y: int) -> None:
     """Place or move a player start position.
 
     If player *player_idx* already has a position it is moved.
@@ -657,9 +654,7 @@ def remove_biters_at(state: EditorState, x: int, y: int) -> None:
     """
     before = len(state.biter_positions)
     state.biter_positions = [
-        (bx, by)
-        for bx, by in state.biter_positions
-        if (bx, by) != (x, y)
+        (bx, by) for bx, by in state.biter_positions if (bx, by) != (x, y)
     ]
     if len(state.biter_positions) < before:
         state.dirty = True
@@ -682,9 +677,7 @@ def erase_entity(state: EditorState, x: int, y: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_inventory_slots(
-    state: EditorState, target: InvTarget
-) -> list[tuple[int, int]]:
+def get_inventory_slots(state: EditorState, target: InvTarget) -> list[tuple[int, int]]:
     """Return the inventory as a list of ``(ItemType, count)`` pairs.
 
     Args:
@@ -700,9 +693,9 @@ def get_inventory_slots(
     if kind == "player":
         player_idx = target[1]
         slots = state.player_inventories.get(player_idx, [])
-        padded = list(slots) + [
-            (int(ItemType.EMPTY), 0)
-        ] * (NUM_INVENTORY_SLOTS - len(slots))
+        padded = list(slots) + [(int(ItemType.EMPTY), 0)] * (
+            NUM_INVENTORY_SLOTS - len(slots)
+        )
         return padded[:NUM_INVENTORY_SLOTS]
     x, y = target[1], target[2]
     items = state.machine_inventory_items[y, x]
@@ -747,9 +740,7 @@ def set_inventory_slot(
     kind = target[0]
     if kind == "player":
         player_idx = target[1]
-        slots = list(
-            state.player_inventories.get(player_idx, [])
-        )
+        slots = list(state.player_inventories.get(player_idx, []))
         while len(slots) < NUM_INVENTORY_SLOTS:
             slots.append((int(ItemType.EMPTY), 0))
         slots[slot] = (item_type, count)
@@ -761,9 +752,7 @@ def set_inventory_slot(
     state.dirty = True
 
 
-def clear_inventory_slot(
-    state: EditorState, target: InvTarget, slot: int
-) -> None:
+def clear_inventory_slot(state: EditorState, target: InvTarget, slot: int) -> None:
     """Clear an inventory slot to empty.
 
     Args:

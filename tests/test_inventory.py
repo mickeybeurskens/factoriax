@@ -7,7 +7,6 @@ from factoriax import ItemType, make_factoriax_env
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
     PLAYER_MAX_STACK,
 )
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
@@ -81,7 +80,6 @@ class TestInventoryObservation:
         expected_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
-            + NUM_TECHNOLOGIES * 2
         )
         assert obs.shape == (expected_size,)
 

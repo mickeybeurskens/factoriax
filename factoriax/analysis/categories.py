@@ -80,13 +80,6 @@ ACTION_GROUPS: OrderedDict[str, tuple[str, list[int]]] = OrderedDict(
             ),
         ),
         (
-            "Research",
-            (
-                "#bcbd22",
-                [Action.RESEARCH_BASIC, Action.RESEARCH_ADVANCED],
-            ),
-        ),
-        (
             "Deposit",
             (
                 "#17becf",

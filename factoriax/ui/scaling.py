@@ -64,7 +64,8 @@ class ScaledCanvas:
             window_h: New window height in pixels.
         """
         self._scale = max(
-            1, min(window_w // self._width, window_h // self._height),
+            1,
+            min(window_w // self._width, window_h // self._height),
         )
         self._ox = (window_w - self._width * self._scale) // 2
         self._oy = (window_h - self._height * self._scale) // 2

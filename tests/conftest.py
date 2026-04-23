@@ -18,7 +18,7 @@ from factoriax import EnvState  # noqa: E402
 from factoriax.constants import (
     BLOCK_RESOURCE_DTYPE,
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
+    NUM_SCIENCE_PACK_TYPES,
     Direction,
     MachineType,
 )
@@ -68,8 +68,7 @@ def state_factory():
         asm_out_type: jnp.ndarray | None = None,
         asm_out_count: jnp.ndarray | None = None,
         items_mined: jnp.ndarray | None = None,
-        research_progress: jnp.ndarray | None = None,
-        research_unlocked: jnp.ndarray | None = None,
+        science_consumed_step: jnp.ndarray | None = None,
         max_machines: int = _TEST_MAX_MACHINES,
         # Backward-compat kwargs (ignored in new state)
         **_kwargs: object,
@@ -97,8 +96,8 @@ def state_factory():
             asm_out_type: Assembler output type (grid, translated).
             asm_out_count: Assembler output count (grid, translated).
             items_mined: Lifetime mined counts.
-            research_progress: Per-technology progress.
-            research_unlocked: Per-technology flags.
+            science_consumed_step: Per-step science pack consumption
+                delta (from SCIENCE_LAB entities).
             max_machines: Entity array capacity.
 
         Returns:
@@ -254,15 +253,10 @@ def state_factory():
                 if items_mined is not None
                 else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
             ),
-            research_progress=(
-                research_progress
-                if research_progress is not None
-                else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.int16)
-            ),
-            research_unlocked=(
-                research_unlocked
-                if research_unlocked is not None
-                else jnp.zeros(NUM_TECHNOLOGIES, dtype=jnp.bool_)
+            science_consumed_step=(
+                science_consumed_step
+                if science_consumed_step is not None
+                else jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32)
             ),
         )
 

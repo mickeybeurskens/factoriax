@@ -295,9 +295,7 @@ def _cached_biter_texture(size: int) -> np.ndarray:
     return create_biter_texture(size)
 
 
-def _render_entities(
-    canvas: np.ndarray, es: EditorState, vp: Viewport
-) -> None:
+def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
     """Draw player start markers and biters on the canvas.
 
     Biters are drawn first so player markers appear on top when

@@ -39,9 +39,9 @@ class _Recipe(TypedDict):
 # Unified recipe table — single source of truth
 # ---------------------------------------------------------------------------
 
-# Recipe order MATTERS: positions 0–17 are the recipes that map to
-# ``Action.CRAFT_IRON_PLATE`` … ``Action.CRAFT_ROCKET`` via
-# ``CRAFT_ACTION_TO_RECIPE = jnp.arange(18)``. Positions 18+ are
+# Recipe order MATTERS: positions 0–18 are the recipes that map to
+# ``Action.CRAFT_IRON_PLATE`` … ``Action.CRAFT_SCIENCE_LAB`` via
+# ``CRAFT_ACTION_TO_RECIPE = jnp.arange(19)``. Positions 19+ are
 # machine-only (no CRAFT action) — refractory plus the four new
 # rocket sub-assemblies.
 RECIPES: list[_Recipe] = [
@@ -145,7 +145,15 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.HULL, 6), (ItemType.ROCKET_CORE, 4)],
         "ticks": 300,
     },
-    # -------- Machine-only slots 18+ (no CRAFT action) --------
+    # Assembler: science lab (pairs with CRAFT_SCIENCE_LAB). Inputs
+    # chosen from an unused pair so the recipe-uniqueness invariant
+    # (see tests/test_recipes.py) holds.
+    {
+        "output": ItemType.SCIENCE_LAB,
+        "inputs": [(ItemType.CIRCUIT, 2), (ItemType.MOTOR, 2)],
+        "ticks": 8,
+    },
+    # -------- Machine-only slots 19+ (no CRAFT action) --------
     # Furnace half-fab (keeps FURNACE recipe's input type-set unique).
     {
         "output": ItemType.REFRACTORY,
@@ -197,6 +205,7 @@ RECIPE_NAMES: list[str] = [
     "Basic Science Pack",
     "Advanced Science Pack",
     "Rocket",
+    "Science Lab",
     "Refractory",
     "Hull",
     "Engine Unit",

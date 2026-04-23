@@ -11,7 +11,7 @@ import pytest
 
 from factoriax.constants import (
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
+    NUM_SCIENCE_PACK_TYPES,
     BlockType,
     Direction,
     MachineType,
@@ -73,14 +73,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         selected_player=0,
         timestep=0,
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
-        research_progress=jnp.zeros(
-            NUM_TECHNOLOGIES,
-            dtype=jnp.int16,
-        ),
-        research_unlocked=jnp.zeros(
-            NUM_TECHNOLOGIES,
-            dtype=jnp.bool_,
-        ),
+        science_consumed_step=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
     )
 
 

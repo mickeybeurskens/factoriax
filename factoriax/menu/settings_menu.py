@@ -401,7 +401,6 @@ def _init_rebind_actions() -> list[tuple[str | None, list[tuple[str, str]]]]:
             [
                 (PlayerAction.OPEN_INVENTORY, "Inventory"),
                 (PlayerAction.OPEN_ACHIEVEMENTS, "Achievements"),
-                (PlayerAction.OPEN_RESEARCH, "Research"),
                 (PlayerAction.OPEN_MACHINE, "Inspect Machine"),
                 (PlayerAction.OPEN_HELP, "Help"),
                 (PlayerAction.TOGGLE_HOTBAR, "Hotbar Page"),

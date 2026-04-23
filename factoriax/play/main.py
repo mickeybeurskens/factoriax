@@ -200,7 +200,9 @@ def _poll_stick_actions(
     for axis in range(joystick.get_numaxes()):
         value = joystick.get_axis(axis)
         result = result | resolve_controller_axis(
-            ctrl_lookup, axis, value,
+            ctrl_lookup,
+            axis,
+            value,
         )
     return result
 
@@ -350,7 +352,8 @@ def _play_loop(
     joystick = _init_joystick()
 
     ui = GameUI(
-        params, kb_lookup,
+        params,
+        kb_lookup,
         ctrl_lookup=ctrl_lookup,
         welcome_open=True,
     )
@@ -369,8 +372,14 @@ def _play_loop(
                 joystick = None
             elif ps.welcome_open:
                 ps, state = _handle_welcome_event(
-                    event, ps, state,
-                    win_ox, win_oy, win_scale, ui_w, ui_h,
+                    event,
+                    ps,
+                    state,
+                    win_ox,
+                    win_oy,
+                    win_scale,
+                    ui_w,
+                    ui_h,
                 )
                 continue
             elif ps.victory_open:
@@ -413,7 +422,8 @@ def _play_loop(
             stick_actions = _poll_stick_actions(joystick, ctrl_lookup)
             if stick_actions:
                 result = ui._dispatch_actions(
-                    stick_actions, state.env_state,
+                    stick_actions,
+                    state.env_state,
                 )
                 if result.state is not None:
                     state = state.replace(env_state=result.state)
@@ -429,7 +439,10 @@ def _play_loop(
             # IntEnum or jnp.int32 would cause a JIT retrace.
             action = int(action)
             obs, state, reward, done, info = step_fn(
-                step_key, state, action, params,
+                step_key,
+                state,
+                action,
+                params,
             )
             if ps.record_enabled:
                 ps.recorded_actions.append(int(action))
@@ -451,14 +464,21 @@ def _play_loop(
                     ps.victory_shown = True
 
         ui_frame, ps.click_regions = ui.render_frame(
-            state.env_state, ui_w, ui_h, tile_px, world_ox, world_oy,
+            state.env_state,
+            ui_w,
+            ui_h,
+            tile_px,
+            world_ox,
+            world_oy,
             achievements=state.achievements_unlocked,
         )
 
         # Welcome screen overlay (managed outside GameUI).
         if ps.welcome_open:
             welcome_overlay, _ = render_welcome_screen(
-                ui_w, ui_h, ps.record_enabled,
+                ui_w,
+                ui_h,
+                ps.record_enabled,
             )
             composite_rgba_over_rgb(ui_frame, welcome_overlay)
 
@@ -466,7 +486,8 @@ def _play_loop(
             np.transpose(ui_frame, (1, 0, 2)),
         )
         scaled_surface = pygame.transform.scale(
-            final_surface, (ui_w * win_scale, ui_h * win_scale),
+            final_surface,
+            (ui_w * win_scale, ui_h * win_scale),
         )
         screen.fill((0, 0, 0))
         screen.blit(scaled_surface, (win_ox, win_oy))

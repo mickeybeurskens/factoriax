@@ -17,7 +17,6 @@ import pytest
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
     BlockType,
     MachineType,
 )
@@ -46,7 +45,6 @@ _DEFAULT_PARAMS = EnvParams(
 _GLOBAL_OBS_SIZE = (
     NUM_SPATIAL_CHANNELS * _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
     + NUM_PLAYER_SCALARS
-    + 2 * NUM_TECHNOLOGIES
 )
 
 
@@ -64,7 +62,7 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
         out = _player_scalars(state, _DEFAULT_PARAMS, 0)
-        expected = NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
+        expected = NUM_PLAYER_SCALARS
         assert out.shape == (expected,)
 
     def test_values_in_range(self, state_factory) -> None:
@@ -209,9 +207,7 @@ class TestGlobalArray:
 
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
-_LOCAL_OBS_SIZE = (
-    NUM_SPATIAL_CHANNELS * _WINDOW**2 + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
-)
+_LOCAL_OBS_SIZE = NUM_SPATIAL_CHANNELS * _WINDOW**2 + NUM_PLAYER_SCALARS
 
 
 class TestLocalArray:
@@ -221,9 +217,7 @@ class TestLocalArray:
         """Output shape is correct for radius=10 (default)."""
         radius = 10
         window = 2 * radius + 1
-        expected = (
-            NUM_SPATIAL_CHANNELS * window**2 + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
-        )
+        expected = NUM_SPATIAL_CHANNELS * window**2 + NUM_PLAYER_SCALARS
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),

@@ -28,7 +28,6 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
     NUM_ITEM_TYPES,
-    NUM_TECHNOLOGIES,
     PLAYER_MAX_STACK,
     Action,
     BlockType,
@@ -328,8 +327,7 @@ def _scalar_sections() -> dict[str, slice]:
     """Return the scalar-field layout used by ``_player_scalars``.
 
     Sections in order: fixed (pos_x, pos_y, dir, timestep, affords),
-    facing (9), player inventory (NUM_ITEM_TYPES), research unlocked
-    (NUM_TECHNOLOGIES), research progress (NUM_TECHNOLOGIES).
+    facing (9), player inventory (NUM_ITEM_TYPES).
     """
     i = 0
     sections: dict[str, slice] = {}
@@ -346,10 +344,6 @@ def _scalar_sections() -> dict[str, slice]:
     sections["facing"] = slice(i, i + 9)
     i += 9  # 9 facing fields
     sections["inventory"] = slice(i, i + NUM_ITEM_TYPES)
-    i += NUM_ITEM_TYPES
-    sections["research_unlocked"] = slice(i, i + NUM_TECHNOLOGIES)
-    i += NUM_TECHNOLOGIES
-    sections["research_progress"] = slice(i, i + NUM_TECHNOLOGIES)
     return sections
 
 
@@ -379,7 +373,7 @@ def decode_observation(
     """
     obs = np.asarray(obs, dtype=np.float32)
     expected_spatial = NUM_SPATIAL_CHANNELS * map_height * map_width
-    expected_total = expected_spatial + NUM_PLAYER_SCALARS + 2 * NUM_TECHNOLOGIES
+    expected_total = expected_spatial + NUM_PLAYER_SCALARS
     if obs.shape != (expected_total,):
         raise ValueError(
             f"Expected obs shape ({expected_total},) for map "

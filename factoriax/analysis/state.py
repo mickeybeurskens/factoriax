@@ -380,9 +380,7 @@ def plot_episode_rewards(
         ValueError: If the trajectory has no ``rewards`` field.
     """
     if traj.rewards is None:
-        raise ValueError(
-            "plot_episode_rewards requires the rewards field."
-        )
+        raise ValueError("plot_episode_rewards requires the rewards field.")
 
     r = traj.rewards[episode].astype(np.float64)
     cumulative = np.cumsum(r)
@@ -398,7 +396,11 @@ def plot_episode_rewards(
 
     ax_cum.plot(steps, cumulative, color="darkorange", linewidth=1.5)
     ax_cum.fill_between(
-        steps, 0, cumulative, color="darkorange", alpha=0.2,
+        steps,
+        0,
+        cumulative,
+        color="darkorange",
+        alpha=0.2,
     )
     ax_cum.set_xlabel("Timestep")
     ax_cum.set_ylabel("Cumulative reward")

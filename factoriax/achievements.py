@@ -139,19 +139,9 @@ ACHIEVEMENT_INFO = [
         hint="Produce a science pack in an assembler.",
     ),
     AchievementInfo(
-        id="first_research",
-        name="First Research",
-        hint="Use science packs to unlock a technology.",
-    ),
-    AchievementInfo(
         id="advanced_science",
         name="Advanced Science",
         hint="Produce an advanced science pack.",
-    ),
-    AchievementInfo(
-        id="full_research",
-        name="Full Research",
-        hint="Unlock all technologies.",
     ),
 ]
 
@@ -316,12 +306,8 @@ def core_game_conditions(state: EnvState) -> jax.Array:
                 + count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK)
             )
             >= 1,
-            # 18 First Research — any technology unlocked
-            jnp.any(state.research_unlocked),
-            # 19 Advanced Science — hold an advanced science pack
+            # 18 Advanced Science — hold an advanced science pack
             count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK) >= 1,
-            # 20 Full Research — all technologies unlocked
-            jnp.all(state.research_unlocked),
         ],
         dtype=jnp.bool_,
     )

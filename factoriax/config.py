@@ -94,7 +94,6 @@ class PlayerAction(StrEnum):
 
     OPEN_INVENTORY = "open_inventory"
     OPEN_ACHIEVEMENTS = "open_achievements"
-    OPEN_RESEARCH = "open_research"
     OPEN_MACHINE = "open_machine"
     OPEN_HELP = "open_help"
     TOGGLE_HOTBAR = "toggle_hotbar"
@@ -185,7 +184,6 @@ def default_keyboard() -> Bindings:
         # Navigation: toggles
         PlayerAction.OPEN_INVENTORY: ["K_i"],
         PlayerAction.OPEN_ACHIEVEMENTS: ["K_p"],
-        PlayerAction.OPEN_RESEARCH: ["K_t"],
         PlayerAction.OPEN_MACHINE: ["K_f"],
         PlayerAction.OPEN_HELP: ["K_QUESTION", "SHIFT+K_SLASH"],
         PlayerAction.TOGGLE_HOTBAR: ["K_q"],
@@ -230,7 +228,6 @@ def default_controller() -> Bindings:
         PlayerAction.CYCLE_RECIPE: ["BUTTON_4"],
         PlayerAction.OPEN_MACHINE: ["BUTTON_9"],
         PlayerAction.OPEN_ACHIEVEMENTS: [],
-        PlayerAction.OPEN_RESEARCH: [],
         PlayerAction.OPEN_HELP: ["BUTTON_6"],
     }
 

@@ -14,14 +14,13 @@ from factoriax.constants import (
     DIRECTIONS,
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
+    NUM_SCIENCE_PACK_TYPES,
     PLACE_ACTION_TO_ITEM,
     PLACE_BASE,
     PLAYER_MAX_STACK,
-    RESEARCH_ACTION_TO_PACK,
-    RESEARCH_COST,
     ROTATE_ACTION_TO_DIR,
     ROTATE_BASE,
-    SCIENCE_PACK_TO_TECH,
+    SCIENCE_PACK_INDEX,
     Action,
     BlockType,
     Direction,
@@ -453,40 +452,41 @@ def withdraw_from_adjacent(
     )
 
 
-def apply_research(
-    state: EnvState,
-    player_idx: int | jax.Array,
-    science_pack_type: int | jax.Array,
-) -> EnvState:
-    """Consume a science pack to advance research.
+def run_labs(state: EnvState) -> EnvState:
+    """Consume every science pack sitting in any SCIENCE_LAB input slot.
+
+    Greedy: whatever's in a lab's two input slots this tick is fully
+    consumed. The per-type delta goes into ``science_consumed_step``
+    for wrappers (e.g. :class:`ScienceTallyWrapper`) to integrate.
+
+    Vectorised over all entities: one mask, one gather, one
+    :func:`jax.ops.segment_sum`. No scatter — touches the
+    scatter-free pattern the rest of the engine is converging toward.
 
     Args:
         state: Current environment state.
-        player_idx: Player index.
-        science_pack_type: ItemType of the science pack.
 
     Returns:
-        Updated state.
+        State with lab input slots zeroed (where they held packs) and
+        ``science_consumed_step`` populated with the summed counts.
     """
-    has_pack = state.player_inventory[player_idx, science_pack_type] > 0
-    tech_idx = SCIENCE_PACK_TO_TECH[science_pack_type]
-    already_unlocked = state.research_unlocked[tech_idx]
-    should_research = has_pack & ~already_unlocked
-
-    new_inv = state.player_inventory.at[player_idx, science_pack_type].add(
-        jnp.where(should_research, jnp.int16(-1), jnp.int16(0)),
-    )
-    new_progress = state.research_progress.at[tech_idx].add(
-        jnp.where(should_research, jnp.int16(1), jnp.int16(0)),
-    )
-    new_unlocked = state.research_unlocked.at[tech_idx].set(
-        state.research_unlocked[tech_idx] | (new_progress[tech_idx] >= RESEARCH_COST),
-    )
-
+    is_lab = (state.ent_type == MachineType.SCIENCE_LAB) & (state.ent_y >= 0)
+    # Shape (E, 2) after broadcasting.
+    lab_mask = is_lab[:, None]
+    slot_types = state.ent_asm_in_type
+    slot_counts = state.ent_asm_in_count
+    pack_idx = SCIENCE_PACK_INDEX[slot_types]  # (E, 2), -1 for non-packs.
+    slot_is_pack = lab_mask & (pack_idx >= 0)
+    counts_to_consume = jnp.where(slot_is_pack, slot_counts, 0).astype(jnp.int32)
+    flat_idx = jnp.where(slot_is_pack, pack_idx, 0).reshape(-1)
+    flat_cnt = counts_to_consume.reshape(-1)
+    delta = jax.ops.segment_sum(flat_cnt, flat_idx, num_segments=NUM_SCIENCE_PACK_TYPES)
+    new_in_types = jnp.where(slot_is_pack, jnp.int8(0), slot_types)
+    new_in_counts = jnp.where(slot_is_pack, jnp.int16(0), slot_counts)
     return state.replace(
-        player_inventory=new_inv,
-        research_progress=new_progress,
-        research_unlocked=new_unlocked,
+        ent_asm_in_type=new_in_types,
+        ent_asm_in_count=new_in_counts,
+        science_consumed_step=delta.astype(jnp.int32),
     )
 
 
@@ -516,24 +516,17 @@ def _handle_player_action(
         0,
         NUM_ITEM_TYPES - 1,
     )
-    research_pack = RESEARCH_ACTION_TO_PACK[
-        jnp.clip(
-            action - Action.RESEARCH_BASIC,
-            0,
-            len(RESEARCH_ACTION_TO_PACK) - 1,
-        )
-    ]
 
-    # Map action to handler category (0-8).
+    # Map action to handler category (0-7).
     cat = jnp.int32(0)  # default: movement
     cat = jnp.where(action == Action.MINE, 1, cat)
     cat = jnp.where(
-        (action >= Action.CRAFT_IRON_PLATE) & (action <= Action.CRAFT_ROCKET),
+        (action >= Action.CRAFT_IRON_PLATE) & (action <= Action.CRAFT_SCIENCE_LAB),
         2,
         cat,
     )
     cat = jnp.where(
-        (action >= Action.PLACE_MINER) & (action <= Action.PLACE_FURNACE),
+        (action >= Action.PLACE_MINER) & (action <= Action.PLACE_SCIENCE_LAB),
         3,
         cat,
     )
@@ -544,16 +537,11 @@ def _handle_player_action(
         cat,
     )
     cat = jnp.where(
-        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_ROCKET_CORE),
+        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_SCIENCE_LAB),
         6,
         cat,
     )
     cat = jnp.where(action == Action.WITHDRAW, 7, cat)
-    cat = jnp.where(
-        (action >= Action.RESEARCH_BASIC) & (action <= Action.RESEARCH_ADVANCED),
-        8,
-        cat,
-    )
 
     # Single-dispatch: only the matching handler executes at runtime.
     return jax.lax.switch(
@@ -567,12 +555,9 @@ def _handle_player_action(
             lambda s: set_machine_direction(s, player_idx, rotate_dir),
             lambda s: deposit_to_adjacent(s, player_idx, deposit_item),
             lambda s: withdraw_from_adjacent(s, player_idx),
-            lambda s: apply_research(s, player_idx, research_pack),
         ],
         state,
     )
-
-    return state
 
 
 def factoriax_step(
@@ -593,8 +578,14 @@ def factoriax_step(
         Updated environment state.
     """
     player_idx = state.selected_player
+    # Reset the per-step science-lab delta before the action runs. Any
+    # consumption this tick is written by ``run_labs`` below.
+    state = state.replace(
+        science_consumed_step=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
+    )
     state = _handle_player_action(state, action, player_idx)
     state = update_all_machines(state, params)
+    state = run_labs(state)
     return state.replace(timestep=state.timestep + 1)
 
 

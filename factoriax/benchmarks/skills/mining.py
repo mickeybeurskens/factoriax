@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import NUM_ACTIONS, NUM_TECHNOLOGIES, BlockType
+from factoriax.constants import NUM_ACTIONS, BlockType
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import Level, LevelBuilder
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
@@ -75,7 +75,10 @@ class MiningSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore
         """
         prev_mined = state.items_mined
         obs, new_state, _, done, info = self._inner.step_env(
-            key, state, action, params,
+            key,
+            state,
+            action,
+            params,
         )
         delta = jnp.sum(new_state.items_mined - prev_mined)
         reward = delta.astype(jnp.float32)
@@ -121,9 +124,7 @@ class MiningSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore
         """
         return self._inner.get_obs(state, params)
 
-    def is_terminal(
-        self, state: EnvState, params: EnvParams
-    ) -> jax.Array:
+    def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.
 
         Args:
@@ -158,7 +159,6 @@ class MiningSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore
         obs_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
             + NUM_PLAYER_SCALARS
-            + NUM_TECHNOLOGIES * 2
         )
         return spaces.Box(0.0, 1.0, shape=(obs_size,), dtype=jnp.float32)
 

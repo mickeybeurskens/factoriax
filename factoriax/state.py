@@ -41,8 +41,11 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         selected_player: Active player index, scalar.
         timestep: Current step, scalar.
         items_mined: Lifetime mined per type, shape ``(N,)``, int32.
-        research_progress: Science consumed, shape ``(T,)``, int16.
-        research_unlocked: Tech flags, shape ``(T,)``, bool.
+        science_consumed_step: Per-step signal from SCIENCE_LAB entities,
+            shape ``(NUM_SCIENCE_PACK_TYPES,)``, int32. Summed over every
+            lab's input slots during each step, reset to zero at the next
+            step. Read by :class:`ScienceTallyWrapper` to accumulate
+            total research consumption without touching the engine.
     """
 
     # Grid (terrain + spatial lookup)
@@ -73,8 +76,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     # Progress
     timestep: int
     items_mined: jnp.ndarray
-    research_progress: jnp.ndarray
-    research_unlocked: jnp.ndarray
+    science_consumed_step: jnp.ndarray
 
 
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]

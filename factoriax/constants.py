@@ -56,6 +56,7 @@ class ItemType(IntEnum):
     ENGINE_UNIT = 26
     AVIONICS = 27
     ROCKET_CORE = 28
+    SCIENCE_LAB = 29
 
 
 class MachineType(IntEnum):
@@ -69,6 +70,7 @@ class MachineType(IntEnum):
     ARM = 5
     ROCKET = 6
     FURNACE = 7
+    SCIENCE_LAB = 8
 
 
 NUM_ITEM_TYPES = len(ItemType)
@@ -82,15 +84,15 @@ BLOCK_RESOURCE_DTYPE = jnp.int16
 
 # Max distinct item types a machine can hold simultaneously.
 MACHINE_MAX_TYPES = jnp.array(
-    [0, 2, 1, 4, 1, 1, 0, 2],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE
+    [0, 2, 1, 4, 1, 1, 0, 2, 2],
+    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB
     dtype=jnp.int32,
 )
 
 # Max stack count per item type per machine type.
 MACHINE_MAX_STACK = jnp.array(
-    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE
+    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000, 1000],
+    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB
     dtype=jnp.int16,
 )
 
@@ -126,6 +128,7 @@ PLAYER_MAX_STACK = jnp.array(
         128,  # ENGINE_UNIT
         128,  # AVIONICS
         128,  # ROCKET_CORE
+        128,  # SCIENCE_LAB
     ],
     dtype=jnp.int32,
 )
@@ -167,6 +170,9 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.ENGINE_UNIT: (220, 140, 60),
     ItemType.AVIONICS: (80, 200, 220),
     ItemType.ROCKET_CORE: (160, 100, 200),
+    # Science lab: deep violet body. Bars/apex/active glow are drawn
+    # by the renderer using palette C (see renderer._draw_science_lab_body).
+    ItemType.SCIENCE_LAB: (76, 29, 149),
 }
 
 # Human-readable display names for each MachineType.
@@ -179,6 +185,7 @@ MACHINE_TYPE_NAMES: dict[int, str] = {
     int(MachineType.ARM): "Arm",
     int(MachineType.ROCKET): "Rocket",
     int(MachineType.FURNACE): "Furnace",
+    int(MachineType.SCIENCE_LAB): "Science Lab",
 }
 
 # Recipes are defined in factoriax.recipes (single source of truth).
@@ -196,23 +203,31 @@ from factoriax.recipes import (  # noqa: E402, F401
 )
 
 # ---------------------------------------------------------------------------
-# Technology / research tree
+# Science packs
 # ---------------------------------------------------------------------------
 
-NUM_TECHNOLOGIES: int = 2
-RESEARCH_COST: int = 10  # science packs per unlock
+# Tracked per-type by SCIENCE_LAB entities. The per-step delta vector
+# in EnvState.science_consumed_step is sized to NUM_SCIENCE_PACK_TYPES
+# and indexed by position in SCIENCE_PACK_TYPES.
+NUM_SCIENCE_PACK_TYPES: int = 2
+SCIENCE_PACK_TYPES: tuple[int, ...] = (
+    int(ItemType.BASIC_SCIENCE_PACK),
+    int(ItemType.ADVANCED_SCIENCE_PACK),
+)
 
-# Maps science pack item type -> technology index.
-SCIENCE_PACK_TO_TECH = (
-    jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+# Inverse lookup: ItemType -> index in SCIENCE_PACK_TYPES (0 or 1),
+# or -1 for non-pack items. Used by lab consumption logic to bucket
+# arbitrary slot contents into the delta vector.
+SCIENCE_PACK_INDEX = (
+    jnp.full(NUM_ITEM_TYPES, -1, dtype=jnp.int8)
     .at[ItemType.BASIC_SCIENCE_PACK]
     .set(0)
     .at[ItemType.ADVANCED_SCIENCE_PACK]
     .set(1)
 )
 
-# Whether an item type is a science pack that can be used for research.
-IS_RESEARCH_ITEM = (
+# Whether an item type is a science pack that a lab will consume.
+IS_SCIENCE_PACK = (
     jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.bool_)
     .at[ItemType.BASIC_SCIENCE_PACK]
     .set(True)
@@ -233,6 +248,7 @@ PLACEABLE_ITEMS = jnp.array(
         ItemType.ARM,
         ItemType.ROCKET,
         ItemType.FURNACE,
+        ItemType.SCIENCE_LAB,
     ],
     dtype=jnp.int32,
 )
@@ -245,6 +261,7 @@ PLACEABLE_ITEM_LIST: tuple[int, ...] = (
     int(ItemType.ARM),
     int(ItemType.ROCKET),
     int(ItemType.FURNACE),
+    int(ItemType.SCIENCE_LAB),
 )
 
 PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
@@ -261,6 +278,7 @@ ITEM_TO_MACHINE = {
     ItemType.ARM: MachineType.ARM,
     ItemType.ROCKET: MachineType.ROCKET,
     ItemType.FURNACE: MachineType.FURNACE,
+    ItemType.SCIENCE_LAB: MachineType.SCIENCE_LAB,
 }
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
@@ -294,6 +312,7 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.NONE,  # ENGINE_UNIT
         MachineType.NONE,  # AVIONICS
         MachineType.NONE,  # ROCKET_CORE
+        MachineType.SCIENCE_LAB,  # SCIENCE_LAB
     ],
     dtype=jnp.int32,
 )
@@ -308,6 +327,7 @@ MACHINE_TO_ITEM_ARRAY = jnp.array(
         ItemType.ARM,  # ARM
         ItemType.ROCKET,  # ROCKET
         ItemType.FURNACE,  # FURNACE
+        ItemType.SCIENCE_LAB,  # SCIENCE_LAB
     ],
     dtype=jnp.int32,
 )
@@ -352,7 +372,7 @@ class Action(IntEnum):
     facing without moving.
     """
 
-    # Movement (11)
+    # Movement (9)
     NOOP = 0
     UP = 1
     DOWN = 2
@@ -367,7 +387,7 @@ class Action(IntEnum):
     MINE = 9
     PICKUP = 10
 
-    # Placement — one per placeable machine type (7)
+    # Placement — one per placeable machine type (8)
     PLACE_MINER = 11
     PLACE_PALLET = 12
     PLACE_BELT = 13
@@ -375,32 +395,30 @@ class Action(IntEnum):
     PLACE_ARM = 15
     PLACE_ROCKET = 16
     PLACE_FURNACE = 17
+    PLACE_SCIENCE_LAB = 18
 
-    # Crafting — one per recipe output (18)
-    CRAFT_IRON_PLATE = 18
-    CRAFT_COPPER_PLATE = 19
-    CRAFT_TIN_PLATE = 20
-    CRAFT_WAFER = 21
-    CRAFT_FRAME = 22
-    CRAFT_CIRCUIT = 23
-    CRAFT_WIRE = 24
-    CRAFT_MOTOR = 25
-    CRAFT_SENSOR = 26
-    CRAFT_BELT = 27
-    CRAFT_MINER = 28
-    CRAFT_ASSEMBLER = 29
-    CRAFT_PALLET = 30
-    CRAFT_ARM = 31
-    CRAFT_FURNACE = 32
-    CRAFT_BASIC_SCIENCE = 33
-    CRAFT_ADV_SCIENCE = 34
-    CRAFT_ROCKET = 35
+    # Crafting — one per recipe output (19)
+    CRAFT_IRON_PLATE = 19
+    CRAFT_COPPER_PLATE = 20
+    CRAFT_TIN_PLATE = 21
+    CRAFT_WAFER = 22
+    CRAFT_FRAME = 23
+    CRAFT_CIRCUIT = 24
+    CRAFT_WIRE = 25
+    CRAFT_MOTOR = 26
+    CRAFT_SENSOR = 27
+    CRAFT_BELT = 28
+    CRAFT_MINER = 29
+    CRAFT_ASSEMBLER = 30
+    CRAFT_PALLET = 31
+    CRAFT_ARM = 32
+    CRAFT_FURNACE = 33
+    CRAFT_BASIC_SCIENCE = 34
+    CRAFT_ADV_SCIENCE = 35
+    CRAFT_ROCKET = 36
+    CRAFT_SCIENCE_LAB = 37
 
-    # Research (2)
-    RESEARCH_BASIC = 36
-    RESEARCH_ADVANCED = 37
-
-    # Deposit — one per non-EMPTY item type (23)
+    # Deposit — one per non-EMPTY item type (29)
     DEPOSIT_COAL = 38
     DEPOSIT_IRON_ORE = 39
     DEPOSIT_COPPER_ORE = 40
@@ -429,16 +447,17 @@ class Action(IntEnum):
     DEPOSIT_ENGINE_UNIT = 63
     DEPOSIT_AVIONICS = 64
     DEPOSIT_ROCKET_CORE = 65
+    DEPOSIT_SCIENCE_LAB = 66
 
     # Withdraw — single action; machines have one output slot so no
     # per-item selection is needed (mirrors PICKUP / MINE).
-    WITHDRAW = 66
+    WITHDRAW = 67
 
     # Machine rotation — absolute direction set (4)
-    ROTATE_LEFT = 67
-    ROTATE_RIGHT = 68
-    ROTATE_UP = 69
-    ROTATE_DOWN = 70
+    ROTATE_LEFT = 68
+    ROTATE_RIGHT = 69
+    ROTATE_UP = 70
+    ROTATE_DOWN = 71
 
 
 # Base offsets for arithmetic dispatch of compound actions.
@@ -447,7 +466,7 @@ CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
 DEPOSIT_BASE: int = Action.DEPOSIT_COAL
 ROTATE_BASE: int = Action.ROTATE_LEFT
 
-# Maps PLACE_* action offset (0..6) to the ItemType of the machine placed.
+# Maps PLACE_* action offset (0..7) to the ItemType of the machine placed.
 PLACE_ACTION_TO_ITEM = jnp.array(
     [
         ItemType.MINER,
@@ -457,6 +476,7 @@ PLACE_ACTION_TO_ITEM = jnp.array(
         ItemType.ARM,
         ItemType.ROCKET,
         ItemType.FURNACE,
+        ItemType.SCIENCE_LAB,
     ],
     dtype=jnp.int32,
 )
@@ -464,15 +484,6 @@ PLACE_ACTION_TO_ITEM = jnp.array(
 # Maps ROTATE_* action offset (0..3) to Direction values.
 ROTATE_ACTION_TO_DIR = jnp.array(
     [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
-    dtype=jnp.int32,
-)
-
-# Maps RESEARCH_* action offset (0..1) to the science pack item type.
-RESEARCH_ACTION_TO_PACK = jnp.array(
-    [
-        ItemType.BASIC_SCIENCE_PACK,
-        ItemType.ADVANCED_SCIENCE_PACK,
-    ],
     dtype=jnp.int32,
 )
 
@@ -528,7 +539,9 @@ MAX_MACHINE_INVENTORY_SLOTS: int = 8
 
 TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
-MACHINE_NUM_SLOTS = np.array([0, 1, 1, 3, 1, 0, 0, 3], dtype=np.int32)
+# Per-MachineType slot counts (indexed by MachineType value).
+# SCIENCE_LAB: 2 input slots (one per pack type), no output.
+MACHINE_NUM_SLOTS = np.array([0, 1, 1, 3, 1, 0, 0, 3, 2], dtype=np.int32)
 
 
 class SlotRole(IntEnum):
@@ -551,6 +564,7 @@ MACHINE_SLOT_ROLES = np.array(
         [SlotRole.NONE] * 8,  # ARM (instant, no buffer)
         [SlotRole.NONE] * 8,  # ROCKET
         [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
+        [SlotRole.INPUT, SlotRole.INPUT] + [SlotRole.NONE] * 6,  # SCIENCE_LAB
     ],
     dtype=np.int32,
 )
