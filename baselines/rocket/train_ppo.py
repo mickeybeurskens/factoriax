@@ -57,7 +57,12 @@ from factoriax.envs.achievement_wrapper import (
 )
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
+
+# Width in pixels of the inventory side-panel concatenated onto each
+# eval-video frame. 192 matches the debugger's two-column layout floor
+# and keeps the MP4 aspect ratio ~4:3 on the default 32x32 map.
+_EVAL_INV_PANEL_W: int = 192
 
 logging.basicConfig(
     level=logging.INFO,
@@ -292,17 +297,28 @@ def _render_eval_episode(
     the underlying ``EnvState`` at every tick for rendering and for
     trajectory-level analysis. This is fine because the eval is a
     one-shot ~2000-step rollout, not a hot path.
+
+    Each frame is the map render horizontally concatenated with an
+    inventory side-panel rendered from the same ``EnvState`` — the same
+    panel the debugger shows in its top-right quadrant.
     """
+    from factoriax.analysis.inventory import render_inventory_panel  # noqa: PLC0415
     from factoriax.renderer import render_pixels  # noqa: PLC0415
+
+    def _compose_frame(s: EnvState) -> np.ndarray:
+        """Map render + inventory side-panel, concatenated horizontally."""
+        map_img = np.asarray(render_pixels(s, block_pixel_size=16))
+        panel_h = int(map_img.shape[0])
+        inv_vec = np.asarray(s.player_inventory[int(s.selected_player)])
+        panel = render_inventory_panel(inv_vec, width=_EVAL_INV_PANEL_W, height=panel_h)
+        return np.concatenate([map_img, panel], axis=1)
 
     jit_step = jax.jit(env.step_env)
     jit_apply = jax.jit(network.apply)
     rng = jax.random.PRNGKey(config.seed + 4242)
     state = initial_state
 
-    frames: list[np.ndarray] = [
-        np.asarray(render_pixels(state.env_state, block_pixel_size=16))
-    ]
+    frames: list[np.ndarray] = [_compose_frame(state.env_state)]
     env_states: list[Any] = [state.env_state]
     ach_per_step: list[np.ndarray] = [np.asarray(state.achievements_unlocked)]
     actions_log: list[int] = []
@@ -316,9 +332,7 @@ def _render_eval_episode(
         rng, k_step = jax.random.split(rng)
         _, state, _, done, _ = jit_step(k_step, state, action, env_params)
         actions_log.append(int(action))
-        frames.append(
-            np.asarray(render_pixels(state.env_state, block_pixel_size=16)),
-        )
+        frames.append(_compose_frame(state.env_state))
         env_states.append(state.env_state)
         ach_per_step.append(np.asarray(state.achievements_unlocked))
         if bool(done):

@@ -32,10 +32,10 @@ from factoriax.agentdebugger.charts import (
     render_action_legend,
     render_action_strip,
     render_cost_chart,
-    render_inventory_panel,
     render_reward_chart,
 )
 from factoriax.agentdebugger.state import DebuggerState
+from factoriax.analysis.inventory import render_inventory_panel
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb

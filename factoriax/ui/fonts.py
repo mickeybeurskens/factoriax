@@ -17,8 +17,9 @@ def get_pixel_font(size: int) -> pygame.font.Font:
     """Return a pixel-style monospace font at the requested size.
 
     Results are cached so font objects are created at most once per unique
-    size, regardless of how many frames are rendered.  Requires
-    ``pygame.font`` to be initialised before the first call.
+    size, regardless of how many frames are rendered. Self-initialises
+    :mod:`pygame.font` on first call — callers don't need to know about
+    pygame init order.
 
     Args:
         size: Desired font height in pixels.
@@ -26,6 +27,8 @@ def get_pixel_font(size: int) -> pygame.font.Font:
     Returns:
         A ``pygame.font.Font`` instance.
     """
+    if not pygame.font.get_init():
+        pygame.font.init()
     font = pygame.font.SysFont(_PIXEL_FONT_PREFERENCE, size)
     if font is not None:
         return font

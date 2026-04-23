@@ -1,15 +1,15 @@
-"""Tests for agentdebugger chart rendering."""
+"""Tests for agentdebugger chart rendering.
+
+Inventory-panel tests moved to :mod:`tests.test_inventory_panel` once
+``render_inventory_panel`` was promoted to :mod:`factoriax.analysis`.
+"""
 
 import numpy as np
 
 from factoriax.agentdebugger.charts import (
-    _INVENTORY_ITEMS,
-    _inventory_slot_positions,
     build_partial_trajectory,
     render_cost_chart,
-    render_inventory_panel,
 )
-from factoriax.constants import ItemType
 
 
 class TestBuildPartialTrajectory:
@@ -96,112 +96,3 @@ class TestRenderCostChart:
         frac_x1 = int(img[0, 1, 0])
         assert frac_x0 > 0
         assert frac_x1 > frac_x0
-
-
-class TestInventorySlotPositions:
-    """Layout helper must place every item within bounds at realistic sizes.
-
-    Regression: at the default 320x240 quadrant the old single-column
-    layout clipped the last 7 items (rocket, furnace, refractory, hull,
-    engine_unit, avionics, rocket_core) because the rows couldn't fit
-    vertically. The helper now falls back to two columns when needed.
-    """
-
-    def test_single_column_when_tall(self) -> None:
-        """A tall panel uses one column per item."""
-        positions = _inventory_slot_positions(
-            width=320,
-            height=800,
-            num_items=28,
-            row_top=25,
-        )
-        assert len(positions) == 28
-        xs = {x for (x, _y, _w, _h) in positions}
-        assert len(xs) == 1, "expected all slots to share a single column x"
-
-    def test_two_columns_at_default_quadrant_320x240(self) -> None:
-        """At the default 320x240 quadrant, 28 items fit via two columns."""
-        height = 240
-        positions = _inventory_slot_positions(
-            width=320,
-            height=height,
-            num_items=28,
-            row_top=25,
-        )
-        assert len(positions) == 28
-        # Two distinct column x-origins.
-        xs = sorted({x for (x, _y, _w, _h) in positions})
-        assert len(xs) == 2, f"expected two columns, got x-origins {xs}"
-        # Every slot lands inside the panel.
-        for x, y, w, h in positions:
-            assert 0 <= x
-            assert 0 <= y
-            assert x + w <= 320
-            assert y + h <= height, f"slot at y={y} h={h} exceeds panel height {height}"
-
-    def test_all_items_including_rocket_intermediates_are_placed(self) -> None:
-        """Every rocket-intermediate item has a slot at the default size."""
-        positions = _inventory_slot_positions(
-            width=320,
-            height=240,
-            num_items=len(_INVENTORY_ITEMS),
-            row_top=25,
-        )
-        # Build a map from item to its slot.
-        by_item = dict(zip(_INVENTORY_ITEMS, positions, strict=True))
-        for item in (
-            ItemType.ROCKET,
-            ItemType.FURNACE,
-            ItemType.REFRACTORY,
-            ItemType.HULL,
-            ItemType.ENGINE_UNIT,
-            ItemType.AVIONICS,
-            ItemType.ROCKET_CORE,
-        ):
-            assert item in by_item, f"{item.name} missing from layout"
-            x, y, w, h = by_item[item]
-            assert y + h <= 240, f"{item.name} slot clipped (y={y}, h={h}, panel_h=240)"
-
-    def test_empty_input(self) -> None:
-        """Zero items yields an empty list, not a crash."""
-        positions = _inventory_slot_positions(
-            width=320,
-            height=240,
-            num_items=0,
-            row_top=25,
-        )
-        assert positions == []
-
-
-class TestRenderInventoryPanel:
-    """Rendering integration: all item color swatches visible at 320x240."""
-
-    def test_every_rocket_intermediate_renders_a_color_swatch(self) -> None:
-        """At the default quadrant size, HULL/ENGINE_UNIT/AVIONICS/
-        ROCKET_CORE each paint their color swatch somewhere on the panel.
-
-        We give every item a non-zero count so active rendering (full
-        brightness swatch) is used, then scan the panel for each item's
-        signature RGB.
-        """
-        from factoriax.constants import ITEM_COLORS, NUM_ITEM_TYPES
-
-        inv = np.ones(NUM_ITEM_TYPES, dtype=np.int32)
-        img = render_inventory_panel(inv, width=320, height=240)
-        assert img.shape == (240, 320, 3)
-
-        missing: list[str] = []
-        for item in (
-            ItemType.ROCKET,
-            ItemType.FURNACE,
-            ItemType.REFRACTORY,
-            ItemType.HULL,
-            ItemType.ENGINE_UNIT,
-            ItemType.AVIONICS,
-            ItemType.ROCKET_CORE,
-        ):
-            rgb = ITEM_COLORS.get(int(item), (120, 120, 120))
-            match = np.all(img == np.asarray(rgb, dtype=np.uint8), axis=-1)
-            if not bool(match.any()):
-                missing.append(item.name)
-        assert not missing, f"items missing from rendered panel: {missing}"
