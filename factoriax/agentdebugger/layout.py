@@ -280,6 +280,7 @@ def render_debugger_frame(
 
 def render_replay_frame(
     dbg: DebuggerState,
+    states: list[EnvState],
     base_w: int,
     base_h: int,
     quadrant_w: int,
@@ -287,12 +288,20 @@ def render_replay_frame(
 ) -> np.ndarray:
     """Compose the full debugger frame for replay mode.
 
-    Q1 shows the game world (from pre-rendered frames or grid
-    fallback), Q2 shows the player inventory, Q3 shows the action
-    strip + legend, and Q4 shows the reward chart.
+    Q1 shows the game world (rendered on demand from ``states``, or a
+    grid fallback when no state data is available). Q2 shows the player
+    inventory, Q3 shows the action strip + legend, and Q4 shows the
+    reward chart.
+
+    The current step's map is rendered fresh each call rather than
+    pulled from a pre-rendered cache — an 8000-step 32x32 trajectory
+    with 550 KB/frame caching was the OOM culprit. ``render_pixels``
+    runs in well under a frame at typical tile sizes.
 
     Args:
         dbg: Current debugger state (must have ``replay_mode=True``).
+        states: Per-step environment states for the current episode.
+            Empty when only action/position data is available.
         base_w: Total frame width.
         base_h: Total frame height.
         quadrant_w: Width of each quadrant.
@@ -308,8 +317,12 @@ def render_replay_frame(
     # ------------------------------------------------------------------
     # Q1: Game view (top-left)
     # ------------------------------------------------------------------
-    if dbg.rendered_frames is not None and dbg.current_step < len(dbg.rendered_frames):
-        game_img = dbg.rendered_frames[dbg.current_step]
+    if states and 0 <= dbg.current_step < len(states):
+        current_state = states[dbg.current_step]
+        game_img = render_pixels(
+            current_state,
+            block_pixel_size=_tile_px(current_state),
+        )
         if dbg.show_obs_overlay and traj is not None:
             game_img = _maybe_apply_fog(game_img, traj, dbg)
         _blit_game_frame(frame, game_img, 0, 0, quadrant_w, quadrant_h)

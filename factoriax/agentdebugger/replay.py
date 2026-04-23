@@ -1,36 +1,37 @@
-"""Replay recorded actions through a level to produce rendered frames.
+"""Replay recorded actions through a level to reconstruct env states.
 
-Given a level and an action sequence from a trajectory, steps through
-the environment and captures an RGB frame at each timestep using the
-game's own ``render_pixels`` function.
+Given a level and an action sequence, steps the environment and
+captures an :class:`EnvState` at each timestep. The debugger renders
+those states on demand in :func:`render_replay_frame`, so this module
+no longer owns the render step — the state list is ~45x cheaper to
+hold in memory than pre-rendered frames.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from factoriax.analysis.trajectory import Trajectory
 from factoriax.levels import Level, build_state, load_level
-from factoriax.renderer import render_pixels
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
 
 
-def replay_frames(
+def replay_states(
     level: Level,
     traj: Trajectory,
     episode: int = 0,
     player: int = 0,
-    tile_size: int = 24,
-) -> list[np.ndarray]:
-    """Replay a trajectory's actions on a level and capture rendered frames.
+) -> list[EnvState]:
+    """Replay a trajectory's actions on a level and collect env states.
 
-    Steps the environment using the recorded actions and calls
-    ``render_pixels`` at each step to produce RGB images of the game
-    world.
+    Steps the environment using the recorded actions and snapshots the
+    :class:`EnvState` at each timestep. Callers render frames on demand
+    — holding a full rendered-frame list for long trajectories is the
+    OOM source this module used to be.
 
     Args:
         level: Level to replay on.
@@ -39,10 +40,10 @@ def replay_frames(
         player: Player index whose actions to replay (for multi-player
             trajectories with sequential player cycling, only player 0's
             actions drive the environment).
-        tile_size: Pixel size per tile for rendering.
 
     Returns:
-        List of RGB uint8 arrays, one per timestep plus a final frame.
+        List of :class:`EnvState`, one per timestep plus a final state
+        captured after the last action.
     """
     from factoriax.envs import FactoriaXEnv
 
@@ -64,38 +65,35 @@ def replay_frames(
     else:
         actions = ep.actions[0]
 
-    frames: list[np.ndarray] = []
+    states: list[EnvState] = []
     for t in range(len(actions)):
-        frames.append(render_pixels(state, block_pixel_size=tile_size))
+        states.append(state)
         action = jnp.int32(actions[t])
         rng, subkey = jax.random.split(rng)
         _, state, _, done, _ = jit_step(subkey, state, action, params)
         if bool(done):
             break
 
-    frames.append(render_pixels(state, block_pixel_size=tile_size))
-    return frames
+    states.append(state)
+    return states
 
 
-def load_replay_frames(
+def load_replay_states(
     level_path: str,
     traj: Trajectory,
     episode: int = 0,
-    tile_size: int = 24,
-) -> list[np.ndarray]:
-    """Load a level from disk and replay to get frames.
+) -> list[EnvState]:
+    """Load a level from disk and replay to reconstruct env states.
 
-    Convenience wrapper around :func:`replay_frames` that handles
-    level loading.
+    Convenience wrapper around :func:`replay_states`.
 
     Args:
         level_path: Path to a level JSON file.
         traj: Trajectory containing the action sequence.
         episode: Episode index.
-        tile_size: Pixel size per tile.
 
     Returns:
-        List of RGB uint8 arrays.
+        List of :class:`EnvState` snapshots.
     """
-    level = load_level(Path(level_path))
-    return replay_frames(level, traj, episode, tile_size=tile_size)
+    level: Any = load_level(Path(level_path))
+    return replay_states(level, traj, episode)

@@ -50,7 +50,6 @@ class DebuggerState:
         sankey_cache: Pre-rendered Sankey heatmap RGB image.
         show_obs_overlay: Whether fog-of-war overlay is active.
         trajectory_path: File path of the loaded trajectory.
-        rendered_frames: Pre-rendered game world frames (replay only).
         trajectory: Reference to the loaded Trajectory (replay only).
     """
 
@@ -79,5 +78,4 @@ class DebuggerState:
     sankey_cache: np.ndarray | None = None
     show_obs_overlay: bool = True
     trajectory_path: str | None = None
-    rendered_frames: list[np.ndarray] | None = None
     trajectory: Trajectory | None = None

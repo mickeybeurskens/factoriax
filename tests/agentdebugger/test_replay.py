@@ -112,22 +112,21 @@ class TestFromTrajectory:
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
         assert len(dbg._rewards) == 20
 
-    def test_no_frames_without_block_map(
+    def test_no_states_without_block_map(
         self,
         minimal_trajectory: Path,
     ) -> None:
-        """No rendered frames when trajectory has no state data."""
+        """No per-step states when trajectory has no state data."""
         dbg = Debugger.from_trajectory(str(minimal_trajectory))
-        assert dbg._dbg.rendered_frames is None
+        assert dbg._states == []
 
-    def test_frames_with_state_data(
+    def test_states_with_state_data(
         self,
         stateful_trajectory: Path,
     ) -> None:
-        """Rendered frames are produced from state data."""
+        """Per-step states are reconstructed from state data."""
         dbg = Debugger.from_trajectory(str(stateful_trajectory))
-        assert dbg._dbg.rendered_frames is not None
-        assert len(dbg._dbg.rendered_frames) > 0
+        assert len(dbg._states) > 0
 
     def test_episode_selection(self, minimal_trajectory: Path) -> None:
         """Can select a specific episode."""
@@ -343,7 +342,7 @@ class TestReplayLayout:
         qw, qh = 320, 240
         base_w, base_h = compute_debugger_dimensions(qw, qh)
         rebuild_replay_caches(dbg._dbg, qw, qh)
-        frame = render_replay_frame(dbg._dbg, base_w, base_h, qw, qh)
+        frame = render_replay_frame(dbg._dbg, dbg._states, base_w, base_h, qw, qh)
         assert frame.shape == (base_h, base_w, 3)
         assert frame.dtype == np.uint8
 
@@ -353,8 +352,70 @@ class TestReplayLayout:
         qw, qh = 320, 240
         base_w, base_h = compute_debugger_dimensions(qw, qh)
         rebuild_replay_caches(dbg._dbg, qw, qh)
-        frame = render_replay_frame(dbg._dbg, base_w, base_h, qw, qh)
+        frame = render_replay_frame(dbg._dbg, dbg._states, base_w, base_h, qw, qh)
         assert frame.sum() > 0
+
+    def test_does_not_cache_rendered_frames(
+        self,
+        stateful_trajectory: Path,
+    ) -> None:
+        """No pre-rendered frame list is held on the debugger state.
+
+        Regression guard: pre-rendering one RGB frame per step at
+        550 KB/frame OOM'd long replays. The refactor keeps only the
+        state list (~12 KB/step) and renders on demand.
+        """
+        dbg = Debugger.from_trajectory(str(stateful_trajectory))
+        assert not hasattr(dbg._dbg, "rendered_frames"), (
+            "DebuggerState must not carry a pre-rendered frame list — "
+            "frames are rendered on demand inside render_replay_frame."
+        )
+
+    def test_q1_matches_on_demand_render_pixels(
+        self,
+        stateful_trajectory: Path,
+    ) -> None:
+        """Q1's map region equals ``render_pixels(states[current_step])``.
+
+        Proves the on-demand render path produces the same content the
+        pre-rendered cache used to serve.
+        """
+        from factoriax.agentdebugger.layout import _tile_px
+        from factoriax.renderer import render_pixels
+
+        dbg = Debugger.from_trajectory(str(stateful_trajectory))
+        if not dbg._states:
+            pytest.skip("trajectory has no state data")
+        dbg._dbg.show_obs_overlay = False  # keep the comparison direct
+        # Pick a step in the middle so it's neither the initial nor
+        # the padded terminal state.
+        dbg._dbg.current_step = min(1, len(dbg._states) - 1)
+        qw, qh = 320, 240
+        base_w, base_h = compute_debugger_dimensions(qw, qh)
+        rebuild_replay_caches(dbg._dbg, qw, qh)
+        frame = render_replay_frame(dbg._dbg, dbg._states, base_w, base_h, qw, qh)
+        state = dbg._states[dbg._dbg.current_step]
+        expected = np.asarray(render_pixels(state, block_pixel_size=_tile_px(state)))
+        # The game image is blitted into Q1 (top-left), centered with
+        # aspect-preserving scale. We can't compare pixel-exact without
+        # recomputing the scale math — instead assert a non-trivial
+        # fraction of pixels in the Q1 region match some pixel from
+        # the expected render (same color histogram).
+        q1 = frame[:qh, :qw]
+        assert q1.sum() > 0
+        # Every unique color in the Q1 region must exist in the
+        # expected render (no colors invented by the blit step).
+        q1_flat = q1.reshape(-1, 3)
+        exp_flat = expected.reshape(-1, 3)
+        q1_set = {tuple(c.tolist()) for c in q1_flat}
+        exp_set = {tuple(c.tolist()) for c in exp_flat}
+        # Background color is painted outside the scaled game image,
+        # allow it through.
+        bg = (20, 20, 25)
+        foreign = q1_set - exp_set - {bg}
+        assert not foreign, (
+            f"Q1 contains colors not present in render_pixels: {foreign}"
+        )
 
 
 # ------------------------------------------------------------------

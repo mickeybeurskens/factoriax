@@ -150,11 +150,7 @@ class Debugger:
         from factoriax.analysis.trajectory import Trajectory
 
         traj = Trajectory.load(path)
-        states, frames = _load_trajectory_data(
-            traj,
-            episode,
-            level_path,
-        )
+        states = _load_trajectory_data(traj, episode, level_path)
 
         # Extract actions and rewards for the selected episode.
         ep_data = traj.episode(episode)
@@ -196,7 +192,6 @@ class Debugger:
         self._dbg = DebuggerState(
             replay_mode=True,
             trajectory=traj,
-            rendered_frames=frames,
             trajectory_path=path,
             selected_episode=episode,
             selected_player=player_idx,
@@ -331,6 +326,7 @@ class Debugger:
             if self._dbg.replay_mode:
                 frame = render_replay_frame(
                     self._dbg,
+                    self._states,
                     base_w,
                     base_h,
                     quadrant_w,
@@ -711,9 +707,7 @@ class Debugger:
         ep = self._dbg.selected_episode
         level_path = getattr(self, "_level_path", None)
 
-        states, frames = _load_trajectory_data(traj, ep, level_path)
-        self._states = states
-        self._dbg.rendered_frames = frames
+        self._states = _load_trajectory_data(traj, ep, level_path)
         self._dbg.current_step = 0
         self._dbg.playing = False
 
@@ -764,9 +758,7 @@ class Debugger:
         self._dbg.playing = False
 
         level_path = getattr(self, "_level_path", None)
-        states, frames = _load_trajectory_data(traj, 0, level_path)
-        self._states = states
-        self._dbg.rendered_frames = frames
+        self._states = _load_trajectory_data(traj, 0, level_path)
 
         ep_data = traj.episode(0)
         if ep_data.is_multi_player:
@@ -803,12 +795,14 @@ class Debugger:
         pygame.display.set_caption("  ".join(parts))
 
     def _export_png(self) -> None:
-        """Save the current rendered frame as PNG."""
-        frames = self._dbg.rendered_frames
-        if frames is None or self._dbg.current_step >= len(frames):
+        """Save the current frame as PNG (rendered on demand)."""
+        if not self._states or self._dbg.current_step >= len(self._states):
             print("No frame to export.")
             return
-        frame = frames[self._dbg.current_step]
+        from factoriax.renderer import render_pixels
+
+        state = self._states[self._dbg.current_step]
+        frame = np.asarray(render_pixels(state, block_pixel_size=24))
         path = self._dbg.trajectory_path or "trajectory"
         out = Path(path).stem + f"_step{self._dbg.current_step}.png"
         try:
@@ -820,11 +814,17 @@ class Debugger:
             print("imageio required for PNG export.")
 
     def _export_mp4(self) -> None:
-        """Export the game world frames as an MP4 video."""
-        frames = self._dbg.rendered_frames
-        if frames is None or not frames:
+        """Export the episode as an MP4, rendering each frame on demand.
+
+        Renders once per export rather than relying on a cached frame
+        list; export is a one-shot user action, so the few-second
+        render cost is preferable to keeping a multi-GB cache in RAM.
+        """
+        if not self._states:
             print("No frames to export.")
             return
+        from factoriax.renderer import render_pixels
+
         path = self._dbg.trajectory_path or "trajectory"
         out = Path(path).stem + f"_ep{self._dbg.selected_episode}.mp4"
         try:
@@ -834,6 +834,13 @@ class Debugger:
 
             out_path = Path(out)
             out_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"Rendering {len(self._states)} frames for export...")
+            rendered = np.stack(
+                [
+                    np.asarray(render_pixels(s, block_pixel_size=24), dtype=np.uint8)
+                    for s in self._states
+                ]
+            )
             with warnings.catch_warnings():
                 warnings.filterwarnings(
                     "ignore",
@@ -842,7 +849,7 @@ class Debugger:
                 )
                 iio.imwrite(
                     str(out_path),
-                    np.stack([f.astype(np.uint8) for f in frames]),
+                    rendered,
                     plugin="FFMPEG",
                     fps=10,
                     codec="libx264",
@@ -862,39 +869,42 @@ def _load_trajectory_data(
     traj: object,
     episode: int,
     level_path: str | None,
-) -> tuple[list[EnvState], list[np.ndarray] | None]:
-    """Load states and frames from a trajectory.
+) -> list[EnvState]:
+    """Load per-step environment states from a trajectory.
+
+    Returns states only — frames are rendered on demand inside
+    :func:`render_replay_frame`. Pre-rendering the whole frame list
+    upfront at ~550 KB per frame caused multi-GB RAM spikes on long
+    trajectories; the state list is ~45x smaller and render_pixels
+    is fast enough (~0.3 ms at 24 px / 32x32) to redo per frame.
 
     Args:
         traj: :class:`~factoriax.analysis.trajectory.Trajectory`.
         episode: Episode index.
-        level_path: Optional level JSON for action replay.
+        level_path: Optional level JSON for action replay (when the
+            trajectory only has actions, not state snapshots).
 
     Returns:
-        ``(states, frames)`` where states is a list of
-        :class:`EnvState` (possibly empty) and frames is a list of
-        RGB arrays or None.
+        List of :class:`EnvState` (empty when neither a level nor a
+        block_map is available — callers then fall back to the
+        grid-world view in layout.py).
     """
     from factoriax.analysis.trajectory import Trajectory
 
     if not isinstance(traj, Trajectory):
-        return [], None
+        return []
 
     if level_path is not None:
-        from factoriax.agentdebugger.replay import load_replay_frames
+        from factoriax.agentdebugger.replay import load_replay_states
 
-        frames = load_replay_frames(level_path, traj, episode)
-        return [], frames
+        return load_replay_states(level_path, traj, episode)
 
     if traj.block_map is not None:
         from factoriax.analysis.trajectory import trajectory_to_states
-        from factoriax.renderer import render_pixels
 
-        states = trajectory_to_states(traj, episode=episode)
-        frames = [render_pixels(s, block_pixel_size=24) for s in states]
-        return states, frames
+        return trajectory_to_states(traj, episode=episode)
 
-    return [], None
+    return []
 
 
 # ------------------------------------------------------------------
