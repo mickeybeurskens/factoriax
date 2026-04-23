@@ -80,11 +80,12 @@ class Config:
     # to reach 38/38; 2000 (the Apr-20 default) caps the policy well
     # short of the rocket chain.
     max_timesteps: int = 8000
-    # Half-width of the local obs window. ``radius=3`` → 7x7 tiles.
+    # Half-width of the local obs window. ``radius=7`` → 15x15 tiles.
     # The full-map global obs scales quadratically with map size and
-    # dominates the first FC layer; radius=3 is plenty for navigation +
-    # local machine interaction.
-    obs_radius: int = 3
+    # dominates the first FC layer; a 15x15 window covers the agent's
+    # immediate factory footprint (furnace + assembler + pallet strips)
+    # without paying the 32x32 cost.
+    obs_radius: int = 7
     hidden_dims: tuple[int, ...] = (256, 256)
     num_envs: int = 512
     rollout_steps: int = 128
@@ -994,8 +995,8 @@ def main() -> None:
     parser.add_argument(
         "--obs-radius",
         type=int,
-        default=3,
-        help="Half-width of the local obs window (default 3 → 7x7 tiles).",
+        default=7,
+        help="Half-width of the local obs window (default 7 → 15x15 tiles).",
     )
     parser.add_argument("--learning-rate", type=float, default=2.5e-4)
     parser.add_argument("--entropy-coef", type=float, default=0.01)

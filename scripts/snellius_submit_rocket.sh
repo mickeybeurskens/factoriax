@@ -1,4 +1,4 @@
-sw!/bin/bash
+#!/bin/bash
 # Submit rocket-benchmark PPO training jobs to Snellius.
 #
 # Edit the arrays below to run a sweep; each combination submits one
@@ -143,7 +143,7 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     --rollout-steps ${rollout_steps} \\
     --total-steps ${total_steps} \\
     --max-timesteps 8000 \\
-    --obs-radius 3 \\
+    --obs-radius 7 \\
     --seed ${seed} \\
     --log-interval 32 \\
     --use-wandb \\
