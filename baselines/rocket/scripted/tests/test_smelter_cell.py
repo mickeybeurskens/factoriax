@@ -1,0 +1,278 @@
+"""Tests for :class:`baselines.rocket.scripted.goals.BuildSmelterCell`.
+
+The smelter cell is Module 1 of the advanced factory: one miner
+sitting on the south edge of an ore patch, an ore pallet south of
+it, a furnace south of the pallet, and an arm pushing the smelt
+output east into a plate pallet. Coal supply lives in Phase 3 (the
+coal trunk); these tests exercise placement only and a short
+production check with hand-injected coal.
+"""
+
+from __future__ import annotations
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from baselines.rocket.scripted import goals, skills
+from baselines.rocket.scripted.world_model import decode_observation
+from factoriax.benchmarks.rocket import (
+    ROCKET_BLOCKED_ACTIONS,
+    rocket_conditions,
+)
+from factoriax.constants import (
+    MAX_ACHIEVEMENTS,
+    Action,
+    BlockType,
+    Direction,
+    ItemType,
+    MachineType,
+)
+from factoriax.envs import FactoriaXEnv
+from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
+from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.levels import LevelBuilder, build_state
+from factoriax.observations import global_array
+from factoriax.state import EnvParams
+
+pytestmark = pytest.mark.slow
+
+_MAP_SIZE = 16
+_PATCH_X = 5
+_PATCH_Y = 5
+_PATCH_SIZE = 3
+_SPAWN = (8, 12)
+
+_JIT_STEP_CACHE: dict[tuple[int, int, int], object] = {}
+_JIT_OBS_CACHE: dict[tuple[int, int, int], object] = {}
+
+
+def _shared_jit_step(env_params: EnvParams):
+    key = (env_params.map_width, env_params.map_height, env_params.max_timesteps)
+    fn = _JIT_STEP_CACHE.get(key)
+    if fn is None:
+        env = ActionMaskWrapper(
+            AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+            ROCKET_BLOCKED_ACTIONS,
+        )
+        fn = jax.jit(env.step_env)
+        _JIT_STEP_CACHE[key] = fn
+    return fn
+
+
+def _jit_obs(env_params: EnvParams):
+    key = (env_params.map_width, env_params.map_height, env_params.max_timesteps)
+    fn = _JIT_OBS_CACHE.get(key)
+    if fn is None:
+        fn = jax.jit(lambda s: global_array(s, env_params, 0))
+        _JIT_OBS_CACHE[key] = fn
+    return fn
+
+
+def _view(state, env_params: EnvParams):
+    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    return decode_observation(
+        obs,
+        map_height=env_params.map_height,
+        map_width=env_params.map_width,
+        max_timesteps=env_params.max_timesteps,
+    )
+
+
+def _rollout(state, goal, jit_step, env_params, max_steps: int = 400):
+    key = jax.random.PRNGKey(0)
+    for _ in range(max_steps):
+        view = _view(state, env_params)
+        result, action = goal.step(view)
+        if result is skills.Result.DONE:
+            return state, "done"
+        if result is skills.Result.FAIL:
+            return state, "fail"
+        assert action is not None
+        key, sub = jax.random.split(key)
+        _, state, _, _, _ = jit_step(sub, state, jnp.int32(int(action)), env_params)
+    return state, "timeout"
+
+
+def _build_iron_level(
+    *,
+    prebuild_cell: bool = False,
+    coal_feeder: bool = False,
+) -> tuple[object, object, EnvParams]:
+    """Build a 16x16 level with one 3x3 IRON patch.
+
+    Args:
+        prebuild_cell: When true, the cell's machines are placed at
+            level-build time (not by the goal under test) so we can
+            isolate post-construction behaviour. The miner pallet is
+            *not* preloaded; the engine's miner reduction does that.
+        coal_feeder: When true, a pallet preloaded with 200 coal is
+            placed south of the furnace. The furnace auto-pulls one
+            coal per tick into its input slot — same role the Phase
+            3 coal trunk will play, but without depending on the
+            trunk module.
+
+    Returns:
+        ``(jit_step_fn, AchievementState, env_params)``.
+    """
+    builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
+    builder.fill_rect(
+        _PATCH_X, _PATCH_Y, _PATCH_SIZE, _PATCH_SIZE, BlockType.IRON, resources=280
+    )
+    builder.set_player_position(*_SPAWN)
+
+    if prebuild_cell:
+        # Coordinates must mirror BuildSmelterCell's layout exactly.
+        mx = _PATCH_X + _PATCH_SIZE // 2
+        my_se = _PATCH_Y + _PATCH_SIZE - 1
+        builder.place_machine(mx, my_se, int(MachineType.MINER), int(Direction.DOWN))
+        builder.place_machine(
+            mx, my_se + 1, int(MachineType.PALLET), int(Direction.DOWN)
+        )
+        builder.place_machine(
+            mx, my_se + 2, int(MachineType.FURNACE), int(Direction.DOWN)
+        )
+        builder.place_machine(
+            mx + 1,
+            my_se + 2,
+            int(MachineType.ARM),
+            int(Direction.RIGHT),
+        )
+        builder.place_machine(
+            mx + 2,
+            my_se + 2,
+            int(MachineType.PALLET),
+            int(Direction.DOWN),
+        )
+        if coal_feeder:
+            # Coal pallet south of the furnace. Engine quirk: an
+            # assembler's recipe-start phase zeroes the *entire*
+            # input slot, so injecting coal directly into slot 0 is
+            # destructive (200 coal → 1 plate). Feeding via an
+            # adjacent buffer instead lets the assembler pull one
+            # coal per tick, which is exactly what the trunk will
+            # do in Phase 3.
+            builder.place_machine(
+                mx,
+                my_se + 3,
+                int(MachineType.PALLET),
+                int(Direction.DOWN),
+            )
+            builder.set_machine_inventory(
+                mx,
+                my_se + 3,
+                int(ItemType.COAL),
+                200,
+            )
+
+    level = builder.build("smelter_cell_test")
+    env_params = EnvParams(
+        map_width=_MAP_SIZE,
+        map_height=_MAP_SIZE,
+        num_players=1,
+        max_timesteps=400,
+    )
+    env_state = build_state(level, env_params)
+
+    # Player gets the bootstrap inventory: 1 MINER, 2 PALLET, 1 FURNACE, 1 ARM.
+    inv = np.asarray(env_state.player_inventory).copy()
+    inv[0, int(ItemType.MINER)] = 1
+    inv[0, int(ItemType.PALLET)] = 2
+    inv[0, int(ItemType.FURNACE)] = 1
+    inv[0, int(ItemType.ARM)] = 1
+    env_state = env_state.replace(player_inventory=jnp.asarray(inv))
+
+    state = AchievementState(
+        env_state=env_state,
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
+    )
+    return _shared_jit_step(env_params), state, env_params
+
+
+def test_build_smelter_cell_places_all_five_entities() -> None:
+    """The goal places miner + 2 pallets + furnace + arm at expected tiles."""
+    jit_step, state, env_params = _build_iron_level()
+    goal = goals.BuildSmelterCell(_PATCH_X, _PATCH_Y, patch_size=_PATCH_SIZE)
+    final_state, verdict = _rollout(state, goal, jit_step, env_params, max_steps=400)
+
+    assert verdict == "done", f"got {verdict}"
+
+    mx = _PATCH_X + _PATCH_SIZE // 2
+    my_se = _PATCH_Y + _PATCH_SIZE - 1
+    mt = np.asarray(final_state.env_state.machine_types)
+    # Note: machine_types is indexed [y, x].
+    assert mt[my_se, mx] == int(MachineType.MINER)
+    assert mt[my_se + 1, mx] == int(MachineType.PALLET)
+    assert mt[my_se + 2, mx] == int(MachineType.FURNACE)
+    assert mt[my_se + 2, mx + 1] == int(MachineType.ARM)
+    assert mt[my_se + 2, mx + 2] == int(MachineType.PALLET)
+
+
+def test_build_smelter_cell_consumes_bootstrap_inventory() -> None:
+    """After building, the player's inventory has zero machines left."""
+    jit_step, state, env_params = _build_iron_level()
+    goal = goals.BuildSmelterCell(_PATCH_X, _PATCH_Y, patch_size=_PATCH_SIZE)
+    final_state, verdict = _rollout(state, goal, jit_step, env_params, max_steps=400)
+    assert verdict == "done"
+    inv = np.asarray(final_state.env_state.player_inventory[0])
+    assert int(inv[int(ItemType.MINER)]) == 0
+    assert int(inv[int(ItemType.PALLET)]) == 0
+    assert int(inv[int(ItemType.FURNACE)]) == 0
+    assert int(inv[int(ItemType.ARM)]) == 0
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Engine limitation: run_arms (factoriax/machines.py) only "
+        "reads ent_buf_*; it never drains ent_asm_out, so an arm "
+        "adjacent to a furnace can't pull the recipe output. The "
+        "comment at machines.py:451 says 'a withdraw (player, arm, "
+        "or downstream belt/pallet) pulls it out' — but the arm "
+        "implementation doesn't yet match that intent. Required "
+        "for the advanced factory's tier-to-tier flow; tracked as "
+        "a Phase 2 blocker."
+    ),
+    strict=True,
+)
+def test_smelter_cell_produces_iron_plate_when_fed_coal() -> None:
+    """A pre-built cell + adjacent coal pallet accumulates iron plates.
+
+    Bypasses the goal under test by hand-placing the cell at level
+    build time, then feeds coal via an adjacent pallet so we can
+    validate the layout's *output* behaviour without depending on
+    the still-to-come coal trunk (Phase 3). The adjacent-pallet
+    feed mirrors the trunk's eventual role — one coal pulled per
+    tick into the furnace's input slot.
+    """
+    jit_step, state, env_params = _build_iron_level(
+        prebuild_cell=True,
+        coal_feeder=True,
+    )
+
+    mx = _PATCH_X + _PATCH_SIZE // 2
+    my_se = _PATCH_Y + _PATCH_SIZE - 1
+    plate_pallet_tile = (mx + 2, my_se + 2)
+
+    # Run NOOPs for ~150 ticks; that's plenty for several smelt cycles
+    # (recipe ticks=2, plus arm transfers and miner pushes).
+    key = jax.random.PRNGKey(0)
+    for _ in range(150):
+        key, sub = jax.random.split(key)
+        _, state, _, _, _ = jit_step(
+            sub,
+            state,
+            jnp.int32(int(Action.NOOP)),
+            env_params,
+        )
+
+    pallet_eid = int(
+        state.env_state.tile_entity[plate_pallet_tile[1], plate_pallet_tile[0]]
+    )
+    assert pallet_eid >= 0
+    plate_buf = int(state.env_state.ent_buf_count[pallet_eid])
+    plate_type = int(state.env_state.ent_buf_type[pallet_eid])
+    assert plate_type == int(ItemType.IRON_PLATE), (
+        f"expected IRON_PLATE in plate pallet, got ItemType={plate_type}"
+    )
+    assert plate_buf > 0, f"plate pallet empty after 150 ticks; buf={plate_buf}"

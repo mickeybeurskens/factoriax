@@ -61,10 +61,20 @@ def run_miners(
     state: EnvState,
     params: EnvParams,
 ) -> EnvState:
-    """Extract ore into miner buffers.
+    """Extract ore from the tile a miner is standing on.
 
-    Reads block_resources from the grid at each miner's position.
-    Writes to entity buffer arrays.
+    Miners mine the tile **directly underneath them** — they read
+    ``state.block_resources`` at their own ``(ent_y, ent_x)``, never
+    at an adjacent tile. To start a node, place the miner ON an
+    ore-patch tile (typically the south-edge tile, with its facing
+    direction pointing at an adjacent pallet to receive the push).
+
+    Per tick, the miner extracts ``params.miner_mining_rate`` ore,
+    capped by the tile's remaining ``block_resources`` and the
+    miner's ``MINER_OUTPUT_CAP`` buffer slot. The miner stops once
+    its tile is depleted, even if other tiles of the same patch
+    still hold ore — covering a full patch needs one miner per
+    tile, or moving the miner.
 
     Args:
         state: Current environment state.

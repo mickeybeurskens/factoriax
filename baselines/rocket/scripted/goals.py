@@ -23,7 +23,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from factoriax.constants import Action, ItemType, MachineType
+from factoriax.constants import Action, Direction, ItemType, MachineType
 from factoriax.recipes import RECIPES
 
 from .skills import (
@@ -1064,6 +1064,125 @@ class CraftFromBus(Goal):
     def step(self, view: WorldView) -> StepReturn:
         if self._steps is None:
             self._steps = self._build_steps(view)
+        if self._idx >= len(self._steps):
+            return Result.DONE, None
+        result, action = self._steps[self._idx].step(view)
+        if result is Result.DONE:
+            self._idx += 1
+            if self._idx >= len(self._steps):
+                return Result.DONE, None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            return Result.FAIL, None
+        return Result.RUNNING, action
+
+
+# ---------------------------------------------------------------------------
+# Tier 1 — smelter cell (Module 1)
+# ---------------------------------------------------------------------------
+
+
+class BuildSmelterCell(Goal):
+    """Build one smelter cell at the south edge of an ore patch.
+
+    Layout (top-down view, ``mx = patch_x + 1`` = patch's center
+    column, ``my_se = patch_y_top + 2`` = south edge of a 3x3 patch).
+    All coordinates are ``(x, y)``::
+
+           O   O   O                       (patch)
+           ... patch_y_top + 0 ...
+           O   O   O
+           ... patch_y_top + 1 ...
+           O   M   O                       (miner ON south-edge ore tile)
+           ... my_se ...
+           .   P_ore   .                   ore pallet receives miner push
+           ... my_se + 1 ...
+           .   F     >    P_plate          furnace + east arm + plate pallet
+           ... my_se + 2 ...
+           .   =coal_trunk_segment=        added by Phase 3
+
+    Engine semantics that the layout relies on:
+
+    - Miner reads ``block_resources`` at its own tile, so it must
+      sit ON an ore tile. Direction DOWN means the miner pushes its
+      output one tile south — into the ore pallet.
+    - Furnace and assembler ``run_assemblers`` auto-pulls from any
+      adjacent buffer, matching empty/same input slots by item
+      type. With ore pallet north and the coal trunk south, the
+      furnace satisfies both inputs without arm orchestration.
+    - Arm at ``(mx+1, my_se+2)`` facing EAST has the furnace as its
+      "behind" tile and the plate pallet as its "front" tile, so
+      each tick it pulls one plate from the furnace's output buffer
+      and pushes it into the plate pallet.
+
+    Bootstrap cost (must be in player inventory before this goal
+    starts): ``1 MINER + 2 PALLET + 1 FURNACE + 1 ARM``. The order
+    of placement — plate-pallet → arm → furnace → ore-pallet → miner
+    — keeps every stand tile walkable. The arm is placed *before*
+    the furnace because the arm's stand tile (one west of the arm,
+    facing east) is the tile that will become the furnace.
+
+    Args:
+        patch_x: Top-left column of the 3x3 ore patch.
+        patch_y_top: Top-left row of the 3x3 ore patch.
+        patch_size: Side length of the patch in tiles. Defaults to 3
+            (rocket benchmark). Other sizes shift the miner tile
+            accordingly.
+
+    Sub-goals run sequentially via the same Goal-of-goals pattern as
+    :class:`CraftFromBus`; any sub-goal failure bubbles up.
+    """
+
+    name = "BuildSmelterCell"
+
+    def __init__(
+        self,
+        patch_x: int,
+        patch_y_top: int,
+        patch_size: int = 3,
+    ) -> None:
+        self.patch_x = patch_x
+        self.patch_y_top = patch_y_top
+        self.patch_size = patch_size
+        mx = patch_x + patch_size // 2
+        my_se = patch_y_top + patch_size - 1
+        self.miner_tile = (mx, my_se)
+        self.ore_pallet_tile = (mx, my_se + 1)
+        self.furnace_tile = (mx, my_se + 2)
+        self.arm_tile = (mx + 1, my_se + 2)
+        self.plate_pallet_tile = (mx + 2, my_se + 2)
+        self.coal_belt_tile = (mx, my_se + 3)
+
+        self._steps: list[Goal] = [
+            PlaceMachineAt(
+                MachineType.PALLET,
+                self.plate_pallet_tile,
+                int(Direction.DOWN),
+            ),
+            PlaceMachineAt(
+                MachineType.ARM,
+                self.arm_tile,
+                int(Direction.RIGHT),
+            ),
+            PlaceMachineAt(
+                MachineType.FURNACE,
+                self.furnace_tile,
+                int(Direction.DOWN),
+            ),
+            PlaceMachineAt(
+                MachineType.PALLET,
+                self.ore_pallet_tile,
+                int(Direction.DOWN),
+            ),
+            PlaceMachineAt(
+                MachineType.MINER,
+                self.miner_tile,
+                int(Direction.DOWN),
+            ),
+        ]
+        self._idx = 0
+
+    def step(self, view: WorldView) -> StepReturn:
         if self._idx >= len(self._steps):
             return Result.DONE, None
         result, action = self._steps[self._idx].step(view)
