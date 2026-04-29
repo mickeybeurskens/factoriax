@@ -889,3 +889,189 @@ def deposit_action_for(item_type: int) -> int:
     from .world_model import deposit_action
 
     return deposit_action(item_type)
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap-feedback: withdraw from a known bus pallet, then craft from it
+# ---------------------------------------------------------------------------
+
+
+class WithdrawFromBusAt(Goal):
+    """Withdraw from a *specific* pallet tile until inventory is full enough.
+
+    Drains a fixed pallet location — typically a Tier-N bus pallet whose
+    coordinates the planner controls. Differs from
+    :class:`WithdrawUntilHeld`, which auto-picks the nearest matching
+    pallet: in a bus design with one assembler per recipe each item
+    has exactly one canonical source pallet, and explicit targeting
+    keeps the planner's intent legible.
+
+    If the pallet is mid-production and currently holds fewer items
+    than needed, the goal keeps emitting WITHDRAW. It fails only when
+    the player's inventory has not advanced for ``max_idle_attempts``
+    consecutive ticks — long enough that something upstream is
+    genuinely stuck.
+
+    Args:
+        tile: ``(x, y)`` of the source pallet.
+        item_type: Expected item type in the pallet.
+        count: Stop once ``view.player.held(item_type) >= count``.
+        max_idle_attempts: Consecutive idle ticks tolerated before
+            giving up. 24 covers a full assembler cycle (8 ticks at
+            recipe ``ticks=8``) plus a couple of arm transfers, so a
+            single missed handoff doesn't FAIL the goal.
+    """
+
+    name = "WithdrawFromBusAt"
+
+    def __init__(
+        self,
+        tile: tuple[int, int],
+        item_type: int | ItemType,
+        count: int,
+        max_idle_attempts: int = 24,
+    ) -> None:
+        self.tile = tile
+        self.item_type = int(item_type)
+        self.count = count
+        self.max_idle_attempts = max_idle_attempts
+        self._active: FaceAndInteract | None = None
+        self._idle_attempts = 0
+        self._last_held: int | None = None
+
+    def step(self, view: WorldView) -> StepReturn:
+        held = view.player.held(self.item_type)
+        if held >= self.count:
+            return Result.DONE, None
+
+        if self._last_held is not None:
+            if held > self._last_held:
+                self._idle_attempts = 0
+            else:
+                self._idle_attempts += 1
+        self._last_held = held
+
+        if self._idle_attempts >= self.max_idle_attempts:
+            return Result.FAIL, None
+
+        if self._active is not None:
+            result, action = self._active.step(view)
+            if result is Result.RUNNING:
+                return Result.RUNNING, action
+            self._active = None
+            return Result.RUNNING, int(Action.NOOP)
+
+        x, y = self.tile
+        if view.machine_type[y, x] != int(MachineType.PALLET):
+            return Result.FAIL, None
+
+        self._active = FaceAndInteract(self.tile, int(Action.WITHDRAW))
+        return self._active.step(view)
+
+
+class CraftFromBus(Goal):
+    """Withdraw recipe inputs from named bus pallets, then run them
+    through a placed machine.
+
+    Implements the bootstrap-feedback pattern: instead of mining ore
+    for every machine the agent needs to build, draw the necessary
+    plates / intermediates from already-running bus pallets and run
+    them through a furnace or assembler. Once Tier 1 (smelting) is
+    online, every later machine — arms, belts, assemblers — comes
+    from this goal, which is what makes "ever-increasing chunks"
+    actually pay off.
+
+    The goal expands into a sequence of sub-goals:
+
+    1. One :class:`WithdrawFromBusAt` per recipe input, sized to leave
+       the player with exactly enough material for ``count`` crafts.
+    2. One :class:`ProduceInMachine` cycle for the actual production
+       (deposit inputs into the nearest furnace/assembler, wait for
+       the recipe ticks, withdraw the output). The rocket benchmark
+       masks every ``CRAFT_*`` action, so production must flow
+       through a placed machine — hand-crafting in player inventory
+       isn't an option.
+
+    Args:
+        output_item: Recipe output (e.g. ``ItemType.ARM``).
+        count: Number to craft.
+        bus_tiles: Mapping ``input_item_id -> (x, y)`` pallet location
+            for every input of the recipe. Items not in the recipe
+            are ignored; missing recipe inputs raise ``ValueError``.
+        machine_type: Override the default machine. ``None`` (the
+            default) auto-picks furnace for smelt recipes and
+            assembler for everything else, matching
+            :func:`ProduceInFurnace` / :func:`ProduceInAssembler`.
+
+    Raises:
+        ValueError: If no recipe produces ``output_item`` or if
+            ``bus_tiles`` is missing a pallet for one of the recipe's
+            inputs.
+    """
+
+    name = "CraftFromBus"
+
+    def __init__(
+        self,
+        output_item: int | ItemType,
+        count: int,
+        bus_tiles: dict[int | ItemType, tuple[int, int]],
+        machine_type: int | MachineType | None = None,
+    ) -> None:
+        self.output_item = int(output_item)
+        self.count = count
+        self.bus_tiles = {int(k): v for k, v in bus_tiles.items()}
+        recipe = _find_recipe(self.output_item)
+        if recipe is None:
+            raise ValueError(
+                f"no recipe for {ItemType(self.output_item).name}",
+            )
+        for input_item, _per_craft in recipe["inputs"]:
+            if int(input_item) not in self.bus_tiles:
+                raise ValueError(
+                    f"CraftFromBus({ItemType(self.output_item).name}, "
+                    f"count={self.count}) missing bus tile for input "
+                    f"{ItemType(int(input_item)).name}",
+                )
+        self.recipe = recipe
+        self.machine_type = machine_type
+        self._steps: list[Goal] | None = None
+        self._idx = 0
+
+    def _build_steps(self, view: WorldView) -> list[Goal]:
+        """Build the sub-goal sequence given the current inventory."""
+        steps: list[Goal] = []
+        for input_item, per_craft in self.recipe["inputs"]:
+            input_id = int(input_item)
+            need_total = self.count * int(per_craft)
+            target_held = view.player.held(input_id) + need_total
+            steps.append(
+                WithdrawFromBusAt(
+                    self.bus_tiles[input_id],
+                    input_id,
+                    target_held,
+                ),
+            )
+        steps.append(
+            ProduceInMachine(
+                self.output_item,
+                self.count,
+                machine_type=self.machine_type,
+            ),
+        )
+        return steps
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self._steps is None:
+            self._steps = self._build_steps(view)
+        if self._idx >= len(self._steps):
+            return Result.DONE, None
+        result, action = self._steps[self._idx].step(view)
+        if result is Result.DONE:
+            self._idx += 1
+            if self._idx >= len(self._steps):
+                return Result.DONE, None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            return Result.FAIL, None
+        return Result.RUNNING, action
