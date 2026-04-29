@@ -367,6 +367,12 @@ _ORE_PATCH_SIZE: int = 3
 # automated miners to run essentially the whole episode without
 # depleting — the agent doesn't have to re-mine midway.
 _ORE_RESOURCES_PER_TILE: int = 280
+# Coal is consumed by every smelt and every refractory craft, so the
+# coal patch needs ~10x the throughput of any other ore. 2800 per tile
+# × 9 tiles per patch ≈ 25 000 coal per patch — enough to sustain a
+# fully-automated factory through the whole rocket chain without
+# refueling. Requires ``BLOCK_MAX_RESOURCES`` to be at least 2800.
+_COAL_RESOURCES_PER_TILE: int = 2800
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
 _FURNACE_TILE: tuple[int, int] = (_SPAWN[0] - 1, _SPAWN[1])
 _ASSEMBLER_TILE: tuple[int, int] = (_SPAWN[0] + 1, _SPAWN[1])
@@ -395,13 +401,18 @@ def build_rocket_level() -> Level:
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     for x, y, block in _PATCH_OFFSETS:
+        per_tile = (
+            _COAL_RESOURCES_PER_TILE
+            if block == BlockType.COAL
+            else _ORE_RESOURCES_PER_TILE
+        )
         builder.fill_rect(
             x,
             y,
             _ORE_PATCH_SIZE,
             _ORE_PATCH_SIZE,
             block,
-            resources=_ORE_RESOURCES_PER_TILE,
+            resources=per_tile,
         )
     builder.set_player_position(*_SPAWN)
     builder.place_machine(

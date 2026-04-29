@@ -196,7 +196,7 @@ class TestItemConservation:
         buf_after = int(state.ent_buf_count[eid])
         assert inv_after + buf_after == initial_total
 
-        state = withdraw_from_adjacent(state, 0, int(ItemType.COAL))
+        state = withdraw_from_adjacent(state, 0)
         inv_after2 = int(state.player_inventory[0, ItemType.COAL])
         buf_after2 = int(state.ent_buf_count[eid])
         assert inv_after2 + buf_after2 == initial_total

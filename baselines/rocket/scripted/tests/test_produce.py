@@ -110,11 +110,16 @@ def test_produce_in_furnace_makes_iron_plate() -> None:
 
 
 def test_produce_in_assembler_makes_wire() -> None:
-    """Feed the pre-placed assembler iron + copper plates → withdraw wire."""
+    """Feed the pre-placed assembler copper + tin plates → withdraw wire.
+
+    The WIRE recipe is ``COPPER_PLATE + TIN_PLATE`` (recipes.py); the
+    earlier ``IRON_PLATE`` fixture was orphaned by the science-lab
+    recipe rework that re-paired plate inputs.
+    """
     jit_step, state, env_params = _setup_env(
         {
-            int(ItemType.IRON_PLATE): 2,
-            int(ItemType.COPPER_PLATE): 3,
+            int(ItemType.COPPER_PLATE): 2,
+            int(ItemType.TIN_PLATE): 2,
         },
     )
     goal = goals.ProduceInAssembler(ItemType.WIRE, count=1)
