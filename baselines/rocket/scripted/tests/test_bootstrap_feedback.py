@@ -266,3 +266,74 @@ def test_craft_from_bus_rejects_unknown_recipe() -> None:
             count=1,
             bus_tiles={},
         )
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap-feedback chain — Tier 1 plates -> Tier 2 WIRE -> ARM
+# ---------------------------------------------------------------------------
+
+
+def test_chained_craft_plates_to_wire_to_arm() -> None:
+    """Two CraftFromBus calls in sequence cascade plates -> WIRE -> ARM.
+
+    This is the bootstrap-feedback pattern in real use. The agent
+    starts with raw plates on the bus (output of the Tier-1 smelter
+    cells in a full factory) and crafts up two levels:
+
+    1. ``CraftFromBus(WIRE, 2)`` — withdraws COPPER_PLATE + TIN_PLATE
+       from their bus pallets and runs them through the assembler.
+       The 2 WIRE land in the player's inventory.
+    2. ``CraftFromBus(ARM, 2)`` — needs 2 COPPER_PLATE + 2 WIRE.
+       The 2 WIRE from step 1 are still in the player's pouch, so
+       :class:`WithdrawFromBusAt` short-circuits on the WIRE input.
+       Only the COPPER_PLATE withdraw runs.
+
+    The wire bus tile is just a placeholder — empty pallet, never
+    drained — proving the chain does not depend on a populated
+    intermediate bus to work. In a real factory the WIRE pallet
+    would also be filled by a Tier-2 module's output arm; this
+    test deliberately leaves it empty to isolate the
+    inventory-shortcut path.
+    """
+    copper_tile = (6, 8)
+    tin_tile = (10, 8)
+    wire_tile = (8, 10)
+    jit_step, state, env_params = _build_test_env(
+        pallet_seeds={
+            copper_tile: (int(ItemType.COPPER_PLATE), 20),
+            tin_tile: (int(ItemType.TIN_PLATE), 20),
+            wire_tile: (int(ItemType.WIRE), 0),
+        },
+    )
+
+    wire_goal = goals.CraftFromBus(
+        ItemType.WIRE,
+        count=2,
+        bus_tiles={
+            ItemType.COPPER_PLATE: copper_tile,
+            ItemType.TIN_PLATE: tin_tile,
+        },
+    )
+    state, verdict = _rollout(state, wire_goal, jit_step, env_params, max_steps=200)
+    assert verdict == "done", f"WIRE craft got {verdict}"
+    view = _view(state, env_params)
+    assert view.player.held(ItemType.WIRE) >= 2, (
+        f"after WIRE craft, player has {view.player.held(ItemType.WIRE)} WIRE"
+    )
+
+    arm_goal = goals.CraftFromBus(
+        ItemType.ARM,
+        count=2,
+        bus_tiles={
+            ItemType.COPPER_PLATE: copper_tile,
+            ItemType.WIRE: wire_tile,
+        },
+    )
+    final_state, verdict = _rollout(
+        state, arm_goal, jit_step, env_params, max_steps=200
+    )
+    assert verdict == "done", f"ARM craft got {verdict}"
+    view = _view(final_state, env_params)
+    assert view.player.held(ItemType.ARM) >= 2, (
+        f"after ARM craft, player has {view.player.held(ItemType.ARM)} ARM"
+    )

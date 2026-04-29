@@ -1040,16 +1040,19 @@ class CraftFromBus(Goal):
 
     def _build_steps(self, view: WorldView) -> list[Goal]:
         """Build the sub-goal sequence given the current inventory."""
+        # ``view`` is unused now that target_held doesn't depend on
+        # current inventory; kept on the signature so the call site
+        # in :meth:`step` can pass it without branching.
+        del view
         steps: list[Goal] = []
         for input_item, per_craft in self.recipe["inputs"]:
             input_id = int(input_item)
             need_total = self.count * int(per_craft)
-            target_held = view.player.held(input_id) + need_total
             steps.append(
                 WithdrawFromBusAt(
                     self.bus_tiles[input_id],
                     input_id,
-                    target_held,
+                    need_total,
                 ),
             )
         steps.append(
