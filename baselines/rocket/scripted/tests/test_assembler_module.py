@@ -478,3 +478,86 @@ def test_two_assembler_modules_compose_without_collision() -> None:
     assert int(inv[int(ItemType.ASSEMBLER)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
     assert int(inv[int(ItemType.PALLET)]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Tier 4 recipes — rocket sub-assemblies. Multi-quantity inputs.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("recipe_inputs", "expected_output", "wait_ticks"),
+    [
+        # HULL = FRAME(2) + IRON_PLATE(2), 8 ticks. Pallets need
+        # >=2 each so the assembler's Phase 0 can fill both
+        # asm_in slots over two pull cycles before the recipe
+        # idle gate satisfies.
+        (
+            ((int(ItemType.FRAME), 4), (int(ItemType.IRON_PLATE), 4)),
+            int(ItemType.HULL),
+            120,
+        ),
+        # ENGINE_UNIT = MOTOR(2) + WIRE(1), 8 ticks.
+        (
+            ((int(ItemType.MOTOR), 4), (int(ItemType.WIRE), 4)),
+            int(ItemType.ENGINE_UNIT),
+            120,
+        ),
+        # AVIONICS = CIRCUIT(2) + SENSOR(2), 10 ticks.
+        (
+            ((int(ItemType.CIRCUIT), 4), (int(ItemType.SENSOR), 4)),
+            int(ItemType.AVIONICS),
+            150,
+        ),
+        # ROCKET_CORE = ENGINE_UNIT(1) + AVIONICS(1), 10 ticks.
+        (
+            ((int(ItemType.ENGINE_UNIT), 4), (int(ItemType.AVIONICS), 4)),
+            int(ItemType.ROCKET_CORE),
+            150,
+        ),
+    ],
+    ids=["hull", "engine_unit", "avionics", "rocket_core"],
+)
+def test_assembler_module_produces_tier4_recipes(
+    recipe_inputs: tuple[tuple[int, int], tuple[int, int]],
+    expected_output: int,
+    wait_ticks: int,
+) -> None:
+    """The same module shape covers every tier-4 rocket sub-assembly.
+
+    Tier-4 recipes (HULL, ENGINE_UNIT, AVIONICS, ROCKET_CORE) have
+    multi-quantity inputs (typically 2 of each, plus a 10-tick recipe
+    for AVIONICS / ROCKET_CORE). ``run_assemblers`` Phase 0 pulls
+    one item per tick per direction so each ``asm_in`` slot fills
+    over multiple pulls before the recipe idle gate satisfies.
+
+    Pre-loads each input pallet with 4 (an over-provision so multiple
+    cycles can complete inside the wait window) and asserts the
+    expected output accumulates in the downstream pallet. The wait
+    windows budget for: ``per_craft`` pull cycles + ``recipe_ticks``
+    progress + arm-transfer + JIT noise.
+    """
+    jit_step, state, env_params = _build_module_level(
+        prebuild_module=True,
+        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_inputs=recipe_inputs,
+    )
+
+    key = jax.random.PRNGKey(0)
+    for _ in range(wait_ticks):
+        key, sub = jax.random.split(key)
+        _, state, _, _, _ = jit_step(
+            sub,
+            state,
+            jnp.int32(int(Action.NOOP)),
+            env_params,
+        )
+
+    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    assert out_eid >= 0
+    out_buf = int(state.env_state.ent_buf_count[out_eid])
+    out_type = int(state.env_state.ent_buf_type[out_eid])
+    assert out_type == expected_output, (
+        f"expected {ItemType(expected_output).name} in output, got ItemType={out_type}"
+    )
+    assert out_buf > 0, f"output empty after {wait_ticks} ticks; buf={out_buf}"
