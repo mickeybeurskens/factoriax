@@ -14,15 +14,19 @@ Submodules
 - ``multiagent`` — Multi-player coordination (role divergence, spatial overlap)
 - ``state`` — State evolution (inventory, movement heatmaps)
 - ``milestones`` — Achievement timing and first-action analysis
+- ``video`` — Frame composition + MP4 encoding for episode rollouts
+- ``eval`` — :class:`EvalRollout` container and summary plots
 """
 
-from . import actions, milestones, multiagent, state
+from . import actions, eval, milestones, multiagent, state, video
 from .trajectory import Trajectory
 
 __all__ = [
     "Trajectory",
     "actions",
+    "eval",
     "milestones",
     "multiagent",
     "state",
+    "video",
 ]

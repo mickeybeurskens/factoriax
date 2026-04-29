@@ -38,6 +38,8 @@ from baselines.ppo.normalization import (
     normalize_obs,
     update_running_stats,
 )
+from factoriax.analysis.eval import EvalRollout, generate_eval_plots
+from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.benchmarks.rocket import (
     MAX_ROCKET_SCORE,
     NUM_ROCKET_ACHIEVEMENTS,
@@ -48,7 +50,7 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
     rocket_reward,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action, ItemType
+from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.achievement_wrapper import (
     AchievementState,
@@ -57,12 +59,7 @@ from factoriax.envs.achievement_wrapper import (
 )
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
-from factoriax.state import EnvParams, EnvState
-
-# Width in pixels of the inventory side-panel concatenated onto each
-# eval-video frame. 192 matches the debugger's two-column layout floor
-# and keeps the MP4 aspect ratio ~4:3 on the default 32x32 map.
-_EVAL_INV_PANEL_W: int = 192
+from factoriax.state import EnvParams
 
 logging.basicConfig(
     level=logging.INFO,
@@ -256,32 +253,6 @@ def _save_final_model(
     )
 
 
-@dataclasses.dataclass
-class _EvalRollout:
-    """Collected artifacts from a single deterministic eval episode.
-
-    Attributes:
-        frames: Rendered RGB frames, length ``T + 1`` (includes the
-            pre-step state so the video starts from the initial state).
-        actions: Actions taken, shape ``(T,)`` int32.
-        env_states: Inner ``EnvState`` at each step, length ``T + 1``.
-            Used by ``factoriax.analysis.states_to_trajectory``.
-        ach_per_step: Per-step achievement masks, shape
-            ``(T + 1, MAX_ACHIEVEMENTS)`` bool. ``ach_per_step[t]`` is
-            the latched mask after step ``t-1`` (row 0 = all False).
-    """
-
-    frames: list[np.ndarray]
-    actions: np.ndarray
-    env_states: list[Any]
-    ach_per_step: np.ndarray
-
-    @property
-    def final_ach_mask(self) -> np.ndarray:
-        """Latched achievement mask at the last recorded step."""
-        return self.ach_per_step[-1]
-
-
 def _render_eval_episode(
     config: Config,
     env: ActionMaskWrapper,
@@ -290,7 +261,7 @@ def _render_eval_episode(
     network: ActorCritic,
     params: Any,
     obs_stats: RunningStats,
-) -> _EvalRollout:
+) -> EvalRollout:
     """Run one deterministic eval episode and return collected artifacts.
 
     Uses a Python-side loop (not a JIT-compiled scan) so we can snapshot
@@ -298,27 +269,17 @@ def _render_eval_episode(
     trajectory-level analysis. This is fine because the eval is a
     one-shot ~2000-step rollout, not a hot path.
 
-    Each frame is the map render horizontally concatenated with an
-    inventory side-panel rendered from the same ``EnvState`` — the same
-    panel the debugger shows in its top-right quadrant.
+    Each frame is composed by
+    :func:`factoriax.analysis.video.compose_frame_with_inventory` —
+    the map render horizontally concatenated with an inventory
+    side-panel rendered from the same ``EnvState``.
     """
-    from factoriax.analysis.inventory import render_inventory_panel  # noqa: PLC0415
-    from factoriax.renderer import render_pixels  # noqa: PLC0415
-
-    def _compose_frame(s: EnvState) -> np.ndarray:
-        """Map render + inventory side-panel, concatenated horizontally."""
-        map_img = np.asarray(render_pixels(s, block_pixel_size=16))
-        panel_h = int(map_img.shape[0])
-        inv_vec = np.asarray(s.player_inventory[int(s.selected_player)])
-        panel = render_inventory_panel(inv_vec, width=_EVAL_INV_PANEL_W, height=panel_h)
-        return np.concatenate([map_img, panel], axis=1)
-
     jit_step = jax.jit(env.step_env)
     jit_apply = jax.jit(network.apply)
     rng = jax.random.PRNGKey(config.seed + 4242)
     state = initial_state
 
-    frames: list[np.ndarray] = [_compose_frame(state.env_state)]
+    frames: list[np.ndarray] = [compose_frame_with_inventory(state.env_state)]
     env_states: list[Any] = [state.env_state]
     ach_per_step: list[np.ndarray] = [np.asarray(state.achievements_unlocked)]
     actions_log: list[int] = []
@@ -332,181 +293,18 @@ def _render_eval_episode(
         rng, k_step = jax.random.split(rng)
         _, state, _, done, _ = jit_step(k_step, state, action, env_params)
         actions_log.append(int(action))
-        frames.append(_compose_frame(state.env_state))
+        frames.append(compose_frame_with_inventory(state.env_state))
         env_states.append(state.env_state)
         ach_per_step.append(np.asarray(state.achievements_unlocked))
         if bool(done):
             break
 
-    return _EvalRollout(
+    return EvalRollout(
         frames=frames,
         actions=np.asarray(actions_log, dtype=np.int32),
         env_states=env_states,
         ach_per_step=np.stack(ach_per_step, axis=0),
     )
-
-
-def _write_video(path: Any, frames: list[np.ndarray], fps: int) -> None:
-    """Encode *frames* to an MP4 at *path* using imageio / FFMPEG."""
-    from pathlib import Path  # noqa: PLC0415
-
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    import imageio.v3 as iio  # noqa: PLC0415
-
-    iio.imwrite(
-        str(path),
-        np.stack([f.astype(np.uint8) for f in frames]),
-        plugin="FFMPEG",
-        fps=fps,
-        codec="libx264",
-        pixelformat="yuv420p",
-    )
-
-
-def _plot_item_counts(traj: Any, out_path: Any) -> Any:
-    """Line plot of player item counts over time.
-
-    Draws one line per ``ItemType`` that exceeds zero at some point in
-    the episode. The dense ``player_inventory`` field on the trajectory
-    (shape ``(1, T+1, P, N)``) is already per-item, so no slot-to-item
-    aggregation is needed.
-    """
-    import matplotlib.pyplot as plt  # noqa: PLC0415
-
-    from factoriax.constants import NUM_ITEM_TYPES  # noqa: PLC0415
-
-    if traj.player_inventory is None:
-        raise ValueError("trajectory is missing player_inventory")
-    inv = np.asarray(traj.player_inventory)[0, :, 0, :]  # (T, N)
-
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.set_xlabel("Timestep")
-    ax.set_ylabel("Item count in inventory")
-    ax.set_title("Final rollout — item counts over time")
-
-    drawn = 0
-    for i in range(1, NUM_ITEM_TYPES):  # skip EMPTY
-        series = inv[:, i]
-        if series.max() == 0:
-            continue
-        ax.plot(series, label=ItemType(i).name, linewidth=1.2)
-        drawn += 1
-
-    if drawn:
-        ncol = 2 if drawn > 8 else 1
-        ax.legend(fontsize="small", ncol=ncol, loc="upper left")
-    ax.set_xlim(0, inv.shape[0] - 1)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
-    plt.close(fig)
-    return out_path
-
-
-def _plot_action_counts(actions: np.ndarray, out_path: Any) -> Any:
-    """Bar chart of per-action counts over the single eval episode.
-
-    Single-episode action distribution over time is noisy, so we use a
-    simple counts view instead. A moving-average distribution is a
-    better fit for a multi-episode analysis which the eval pipeline
-    doesn't run yet.
-    """
-    import matplotlib.pyplot as plt  # noqa: PLC0415
-
-    counts = np.bincount(actions, minlength=NUM_ACTIONS)
-    order = np.argsort(counts)[::-1]
-    kept = [i for i in order if counts[i] > 0]
-    names = [Action(int(i)).name for i in kept]
-    vals = [int(counts[i]) for i in kept]
-
-    height = max(4.0, 0.25 * len(kept))
-    fig, ax = plt.subplots(figsize=(10, height))
-    ax.barh(range(len(kept)), vals[::-1], color="steelblue", edgecolor="black")
-    ax.set_yticks(range(len(kept)))
-    ax.set_yticklabels(names[::-1], fontsize=8)
-    ax.set_xlabel(f"Count over {len(actions)} episode steps")
-    ax.set_title("Final rollout — action counts")
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
-    plt.close(fig)
-    return out_path
-
-
-def _generate_eval_plots(
-    rollout: _EvalRollout,
-    out_dir: Any,
-) -> dict[str, Any]:
-    """Render inventory, action-count, and achievement-timing plots.
-
-    Reuses :mod:`factoriax.analysis` for the shared bits and adds two
-    rocket-specific presentations: a legend-pruned inventory view and a
-    bar chart of action counts (the stacked-area distribution from
-    :mod:`analysis.actions` is only informative across many episodes
-    with smoothing).
-
-    Returns:
-        Mapping ``{"items": path, "actions": path, "achievements": path}``.
-        Keys are omitted if their plot couldn't be generated.
-    """
-    from pathlib import Path  # noqa: PLC0415
-
-    import matplotlib  # noqa: PLC0415
-
-    matplotlib.use("Agg")
-
-    from factoriax.analysis.milestones import (  # noqa: PLC0415
-        plot_achievement_timing,
-    )
-    from factoriax.analysis.trajectory import states_to_trajectory  # noqa: PLC0415
-
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # states_to_trajectory requires len(actions) == len(states); pad the
-    # final step with a dummy action, never read by plots that use action
-    # indices directly.
-    actions_padded = np.concatenate(
-        [rollout.actions, np.zeros((1,), dtype=np.int32)],
-    )
-    base_traj = states_to_trajectory(rollout.env_states, actions=actions_padded)
-    traj = dataclasses.replace(
-        base_traj,
-        achievements=rollout.ach_per_step[np.newaxis, :, :NUM_ROCKET_ACHIEVEMENTS],
-    )
-
-    labels = [info.id for info in ROCKET_ACHIEVEMENT_INFO]
-    paths: dict[str, Any] = {}
-
-    try:
-        paths["items"] = _plot_item_counts(traj, out_dir / "final_items.png")
-    except Exception:  # noqa: BLE001
-        logger.exception("Item count plot failed.")
-
-    try:
-        paths["actions"] = _plot_action_counts(
-            rollout.actions,
-            out_dir / "final_actions.png",
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception("Action count plot failed.")
-
-    try:
-        import matplotlib.pyplot as plt  # noqa: PLC0415
-
-        fig, _ = plot_achievement_timing(
-            traj,
-            achievement_labels=labels,
-            title="Final rollout — achievement unlock timing",
-        )
-        ach_path = out_dir / "final_achievements.png"
-        fig.savefig(ach_path, dpi=150)
-        plt.close(fig)
-        paths["achievements"] = ach_path
-    except Exception:  # noqa: BLE001
-        logger.exception("Achievement timing plot failed.")
-
-    return paths
 
 
 def _finalize_artifacts(
@@ -554,7 +352,8 @@ def _finalize_artifacts(
 
         video_path = out_dir / "final_rollout.mp4"
         try:
-            _write_video(video_path, rollout.frames, config.video_fps)
+            assert rollout.frames is not None  # PPO eval always buffers
+            write_video(video_path, rollout.frames, config.video_fps)
             logger.info(
                 "Saved final rollout video: %s (%d frames, %d unique actions)",
                 video_path,
@@ -565,7 +364,13 @@ def _finalize_artifacts(
             logger.error("imageio[ffmpeg] missing; final video skipped.")
             video_path = None
 
-        plot_paths = _generate_eval_plots(rollout, out_dir)
+        plot_paths = generate_eval_plots(
+            rollout,
+            out_dir,
+            achievement_labels=[info.id for info in ROCKET_ACHIEVEMENT_INFO],
+            num_achievements=NUM_ROCKET_ACHIEVEMENTS,
+            title_prefix="Final rollout",
+        )
         for name, path in plot_paths.items():
             logger.info("Saved %s plot: %s", name, path)
 
