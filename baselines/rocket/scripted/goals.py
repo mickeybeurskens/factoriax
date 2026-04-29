@@ -1283,3 +1283,126 @@ class BuildCoalTrunk(Goal):
         if result is Result.FAIL:
             return Result.FAIL, None
         return Result.RUNNING, action
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 — assembler/furnace production module
+# ---------------------------------------------------------------------------
+
+
+class BuildAssemblerModule(Goal):
+    """Place a 1- or 2-input production module around a center machine.
+
+    The module is a generic "production cell" used for every tier-2
+    intermediate (WIRE, FRAME, WAFER, REFRACTORY) and reused at higher
+    tiers. Layout (top-down view, all coordinates ``(x, y)``)::
+
+                          P_in_a            (asm.x,    asm.y - 1)
+        P_in_b   Center   Arm     P_out     (asm.x-1)..(asm.x+2, asm.y)
+                          .                 (asm.x,    asm.y + 1)  free
+
+    Engine semantics relied on:
+
+    - The center machine (assembler or furnace) auto-pulls one item
+      per tick from each adjacent buffer in ``run_assemblers`` Phase 0,
+      matching empty/same-type input slots. With pallets at the north
+      and west neighbours both inputs land in ``ent_asm_in`` without
+      any arm orchestration.
+    - The east-facing arm reads from the center machine's
+      ``ent_asm_out`` (engine fix in commit 61ff84a) and pushes east
+      into the output pallet's ``ent_buf``.
+    - For 1-input recipes (REFRACTORY uses COAL only), pass
+      ``input_b_tile=None``; only one input pallet is placed and the
+      bootstrap cost drops by one PALLET.
+
+    Bootstrap cost in player inventory:
+
+    - 2-input (default): ``1 ASSEMBLER|FURNACE + 3 PALLET + 1 ARM``
+    - 1-input: ``1 ASSEMBLER|FURNACE + 2 PALLET + 1 ARM``
+
+    Place order (output -> P_in_b -> arm -> center -> P_in_a) keeps
+    every stand tile walkable. The center machine is placed *before*
+    P_in_a because the center's stand tile (north, facing DOWN) is
+    exactly P_in_a's tile — same trick as
+    :class:`BuildSmelterCell` placing the furnace before the ore
+    pallet. P_in_b uses facing LEFT so its stand tile is the (still
+    empty) center tile.
+
+    Args:
+        center_tile: ``(x, y)`` for the assembler or furnace.
+        center_machine: :class:`MachineType.ASSEMBLER` or
+            :class:`MachineType.FURNACE`.
+        input_a_tile: ``(x, y)`` for the north input pallet
+            (always required).
+        input_b_tile: ``(x, y)`` for the west input pallet, or
+            ``None`` for a 1-input recipe.
+        output_pallet_tile: ``(x, y)`` for the output pallet
+            (east of the arm).
+    """
+
+    name = "BuildAssemblerModule"
+
+    def __init__(
+        self,
+        center_tile: tuple[int, int],
+        center_machine: int | MachineType,
+        input_a_tile: tuple[int, int],
+        input_b_tile: tuple[int, int] | None,
+        output_pallet_tile: tuple[int, int],
+    ) -> None:
+        self.center_tile = center_tile
+        self.center_machine = int(center_machine)
+        self.input_a_tile = input_a_tile
+        self.input_b_tile = input_b_tile
+        self.output_pallet_tile = output_pallet_tile
+        self.arm_tile = (center_tile[0] + 1, center_tile[1])
+
+        steps: list[Goal] = [
+            PlaceMachineAt(
+                MachineType.PALLET,
+                output_pallet_tile,
+                int(Direction.DOWN),
+            ),
+        ]
+        if input_b_tile is not None:
+            steps.append(
+                PlaceMachineAt(
+                    MachineType.PALLET,
+                    input_b_tile,
+                    int(Direction.LEFT),
+                )
+            )
+        steps.extend(
+            [
+                PlaceMachineAt(
+                    MachineType.ARM,
+                    self.arm_tile,
+                    int(Direction.RIGHT),
+                ),
+                PlaceMachineAt(
+                    self.center_machine,
+                    center_tile,
+                    int(Direction.DOWN),
+                ),
+                PlaceMachineAt(
+                    MachineType.PALLET,
+                    input_a_tile,
+                    int(Direction.DOWN),
+                ),
+            ]
+        )
+        self._steps: list[Goal] = steps
+        self._idx = 0
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self._idx >= len(self._steps):
+            return Result.DONE, None
+        result, action = self._steps[self._idx].step(view)
+        if result is Result.DONE:
+            self._idx += 1
+            if self._idx >= len(self._steps):
+                return Result.DONE, None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            return Result.FAIL, None
+        return Result.RUNNING, action
