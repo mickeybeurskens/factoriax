@@ -457,14 +457,22 @@ def _compute_walkable(block_type: np.ndarray, machine_type: np.ndarray) -> np.nd
     """Tiles a player can stand on.
 
     Water, out-of-bounds markers, and machine-occupied tiles are
-    blocked. DIRT + ore tiles are walkable (the engine lets the player
-    stand on ore; mining is the primary way it drops).
+    blocked. Belts are the one exception — the engine's
+    :func:`factoriax.game_logic.is_position_walkable` treats
+    ``MachineType.CONVEYOR_BELT`` as walkable so items can flow
+    through tiles the agent later walks across, and the planner has
+    to match that to plan paths through laid trunks. DIRT + ore tiles
+    are walkable (the engine lets the player stand on ore; mining is
+    the primary way it drops).
     """
+    blocked_machines = (machine_type != int(MachineType.NONE)) & (
+        machine_type != int(MachineType.CONVEYOR_BELT)
+    )
     blocked = (
         (block_type == int(BlockType.WATER))
         | (block_type == int(BlockType.OUT_OF_BOUNDS))
         | (block_type == int(BlockType.INVALID))
-        | (machine_type != int(MachineType.NONE))
+        | blocked_machines
     )
     return ~blocked
 

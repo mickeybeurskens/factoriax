@@ -1194,3 +1194,92 @@ class BuildSmelterCell(Goal):
         if result is Result.FAIL:
             return Result.FAIL, None
         return Result.RUNNING, action
+
+
+# ---------------------------------------------------------------------------
+# Tier 1 — coal trunk (Module 2)
+# ---------------------------------------------------------------------------
+
+
+class BuildCoalTrunk(Goal):
+    """Lay a coal trunk: feeder arm + chain of belts.
+
+    The trunk consists of one feeder arm pulling from an existing
+    coal source pallet, plus a chain of belts that carry the coal
+    from the arm's push tile to wherever the planner wants it
+    delivered (typically a tile adjacent to a furnace, where the
+    furnace's run_assemblers Phase 0 auto-pulls from the belt's
+    buffer).
+
+    **Placement-order constraint.** The feeder arm's stand tile is
+    ``feeder_arm_tile - unit(feeder_arm_dir)`` — same as the arm's
+    "behind" tile, which is exactly where the coal source pallet
+    has to live. To place the arm, that tile must be walkable; to
+    place the pallet, it must not be. The clean resolution is to
+    place the arm *before* the pallet:
+
+    1. Caller has the arm's behind tile as dirt at goal start.
+    2. ``BuildCoalTrunk`` places the arm there.
+    3. Caller follows up with a pallet placement on the (now-arm's-
+       behind) tile via a different stand tile.
+
+    For the rocket benchmark this means the coal-extraction cell
+    (miner + pallet on the coal patch) is built *after* the trunk's
+    arm, with the pallet's PlaceMachineAt using a non-default facing
+    direction so its stand tile sits on the patch instead of on the
+    arm.
+
+    Args:
+        feeder_arm_tile: ``(x, y)`` for the feeder arm.
+        feeder_arm_dir: Facing direction of the feeder arm. The arm
+            pulls from its "behind" tile (=
+            ``feeder_arm_tile - unit(feeder_arm_dir)``).
+        belt_specs: List of ``((x, y), direction)`` for belt segments
+            in placement order. Each belt's stand tile must be
+            reachable when its turn comes; belts are walkable so
+            placing the chain in forward order is safe — the agent
+            stands on the previous belt to place the next.
+
+    Bootstrap cost: ``1 ARM + len(belt_specs) BELTs`` in the player's
+    inventory before the goal starts.
+    """
+
+    name = "BuildCoalTrunk"
+
+    def __init__(
+        self,
+        feeder_arm_tile: tuple[int, int],
+        feeder_arm_dir: int,
+        belt_specs: list[tuple[tuple[int, int], int]],
+    ) -> None:
+        self.feeder_arm_tile = feeder_arm_tile
+        self.feeder_arm_dir = int(feeder_arm_dir)
+        self.belt_specs = list(belt_specs)
+        self._steps: list[Goal] = [
+            PlaceMachineAt(
+                MachineType.ARM,
+                feeder_arm_tile,
+                int(feeder_arm_dir),
+            ),
+        ] + [
+            PlaceMachineAt(
+                MachineType.CONVEYOR_BELT,
+                tile,
+                int(direction),
+            )
+            for tile, direction in belt_specs
+        ]
+        self._idx = 0
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self._idx >= len(self._steps):
+            return Result.DONE, None
+        result, action = self._steps[self._idx].step(view)
+        if result is Result.DONE:
+            self._idx += 1
+            if self._idx >= len(self._steps):
+                return Result.DONE, None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            return Result.FAIL, None
+        return Result.RUNNING, action
