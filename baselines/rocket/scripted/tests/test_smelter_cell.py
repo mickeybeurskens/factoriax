@@ -222,19 +222,6 @@ def test_build_smelter_cell_consumes_bootstrap_inventory() -> None:
     assert int(inv[int(ItemType.ARM)]) == 0
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Engine limitation: run_arms (factoriax/machines.py) only "
-        "reads ent_buf_*; it never drains ent_asm_out, so an arm "
-        "adjacent to a furnace can't pull the recipe output. The "
-        "comment at machines.py:451 says 'a withdraw (player, arm, "
-        "or downstream belt/pallet) pulls it out' — but the arm "
-        "implementation doesn't yet match that intent. Required "
-        "for the advanced factory's tier-to-tier flow; tracked as "
-        "a Phase 2 blocker."
-    ),
-    strict=True,
-)
 def test_smelter_cell_produces_iron_plate_when_fed_coal() -> None:
     """A pre-built cell + adjacent coal pallet accumulates iron plates.
 

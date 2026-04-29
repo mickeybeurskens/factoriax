@@ -223,8 +223,19 @@ def run_arms(state: EnvState) -> EnvState:
 
     Arms perform instant pass-through: no internal buffer. Each tick
     an arm looks at the entity behind it (opposite of facing), takes
-    one item from its buffer, and deposits it into the entity it
-    faces (if that entity has space).
+    one item from it, and deposits it into the entity it faces (if
+    that entity has space).
+
+    The source slot picks ``ent_asm_out`` over ``ent_buf``: when an
+    assembler/furnace finishes a recipe its output sits in
+    ``ent_asm_out``, and an adjacent arm pulls from there to free
+    the slot for the next cycle. Buffer machines (miner, pallet,
+    belt) keep their items in ``ent_buf``, so the same arm can
+    drain those too. Pre-fix, arms only saw ``ent_buf`` — recipe
+    outputs got stuck in ``asm_out`` with no automated way out, and
+    the docstring intent at the bottom of ``run_assemblers`` ("a
+    withdraw (player, arm, or downstream belt/pallet) pulls it
+    out") didn't match the code.
 
     Args:
         state: Current environment state.
@@ -241,12 +252,17 @@ def run_arms(state: EnvState) -> EnvState:
 
     buf_type = state.ent_buf_type
     buf_count = state.ent_buf_count
+    out_type = state.ent_asm_out_type
+    out_count = state.ent_asm_out_count
 
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
         facing_d = (state.ent_direction == d) & is_arm
 
-        # Source = behind (opposite of facing).
+        # Source = behind (opposite of facing). Read asm_out first
+        # (assembler/furnace recipe output) so adjacent arms can
+        # drain the output slot; fall back to buf for everything
+        # else (miners, pallets, belts).
         src_y = jnp.clip(ey - dy, 0, h - 1)
         src_x = jnp.clip(ex - dx, 0, w - 1)
         src_eidx = state.tile_entity[src_y, src_x]
@@ -254,11 +270,18 @@ def run_arms(state: EnvState) -> EnvState:
         src_diff = (src_y != ey) | (src_x != ex)
         src_safe = jnp.clip(src_eidx, 0, buf_type.shape[0] - 1)
 
-        src_bt = buf_type[src_safe]
-        src_bc = buf_count[src_safe]
+        src_out_t = out_type[src_safe]
+        src_out_c = out_count[src_safe]
+        src_buf_t = buf_type[src_safe]
+        src_buf_c = buf_count[src_safe]
+        src_use_out = src_out_c > 0
+        src_bt = jnp.where(src_use_out, src_out_t, src_buf_t)
+        src_bc = jnp.where(src_use_out, src_out_c, src_buf_c)
         src_has = src_valid & src_diff & (src_bc > 0)
 
-        # Destination = in front (facing direction).
+        # Destination = in front (facing direction). Always writes
+        # to buf — the receiving entity's asm_out slot is reserved
+        # for its own recipe output.
         dst_y = jnp.clip(ey + dy, 0, h - 1)
         dst_x = jnp.clip(ex + dx, 0, w - 1)
         dst_eidx = state.tile_entity[dst_y, dst_x]
@@ -303,6 +326,9 @@ def run_arms(state: EnvState) -> EnvState:
 
         # -- Source side: look at tile (ey + dy, ex + dx). If an arm
         #    there faces d and can_xfer, this entity loses 1 item.
+        #    Decrement asm_out first if it has stuff (matches the
+        #    arm's read decision via ``src_use_out``); otherwise
+        #    decrement buf.
         giv_y = jnp.clip(ey + dy, 0, h - 1)
         giv_x = jnp.clip(ex + dx, 0, w - 1)
         giv_diff = (giv_y != ey) | (giv_x != ex)
@@ -310,11 +336,31 @@ def run_arms(state: EnvState) -> EnvState:
         giv_safe = jnp.clip(giv_eidx, 0, buf_type.shape[0] - 1)
         giving = can_xfer[giv_safe] & (giv_eidx >= 0) & giv_diff
 
-        new_c = buf_count - jnp.where(giving, jnp.int16(1), jnp.int16(0))
-        buf_type = jnp.where(giving & (new_c == 0), jnp.int8(0), buf_type)
-        buf_count = jnp.where(giving, new_c, buf_count)
+        gave_out = giving & (out_count > 0)
+        gave_buf = giving & ~(out_count > 0)
 
-    return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)
+        new_out_c = out_count - jnp.where(gave_out, jnp.int16(1), jnp.int16(0))
+        out_type = jnp.where(
+            gave_out & (new_out_c == 0),
+            jnp.int8(0),
+            out_type,
+        )
+        out_count = jnp.where(gave_out, new_out_c, out_count)
+
+        new_buf_c = buf_count - jnp.where(gave_buf, jnp.int16(1), jnp.int16(0))
+        buf_type = jnp.where(
+            gave_buf & (new_buf_c == 0),
+            jnp.int8(0),
+            buf_type,
+        )
+        buf_count = jnp.where(gave_buf, new_buf_c, buf_count)
+
+    return state.replace(
+        ent_buf_type=buf_type,
+        ent_buf_count=buf_count,
+        ent_asm_out_type=out_type,
+        ent_asm_out_count=out_count,
+    )
 
 
 def run_assemblers(state: EnvState) -> EnvState:
