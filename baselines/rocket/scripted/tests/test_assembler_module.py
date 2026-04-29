@@ -325,3 +325,156 @@ def test_build_assembler_module_one_input_variant() -> None:
     assert int(inv[int(ItemType.PALLET)]) == 1
     assert int(inv[int(ItemType.FURNACE)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Tier 3 recipes — proves BuildAssemblerModule generalises beyond WIRE.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("recipe_inputs", "expected_output", "wait_ticks"),
+    [
+        # MOTOR = FRAME + WIRE (assembler, 6 ticks)
+        (
+            ((int(ItemType.FRAME), 1), (int(ItemType.WIRE), 1)),
+            int(ItemType.MOTOR),
+            80,
+        ),
+        # SENSOR = CIRCUIT + WIRE (assembler, 6 ticks)
+        (
+            ((int(ItemType.CIRCUIT), 1), (int(ItemType.WIRE), 1)),
+            int(ItemType.SENSOR),
+            80,
+        ),
+        # CIRCUIT = COPPER_PLATE + WAFER (assembler, 4 ticks)
+        (
+            ((int(ItemType.COPPER_PLATE), 1), (int(ItemType.WAFER), 1)),
+            int(ItemType.CIRCUIT),
+            60,
+        ),
+    ],
+    ids=["motor", "sensor", "circuit"],
+)
+def test_assembler_module_produces_tier3_recipes(
+    recipe_inputs: tuple[tuple[int, int], tuple[int, int]],
+    expected_output: int,
+    wait_ticks: int,
+) -> None:
+    """The same module shape produces every 2-input assembler recipe.
+
+    Proves :class:`BuildAssemblerModule` is recipe-agnostic — the
+    engine's ``run_assemblers`` matches whichever recipe fits the
+    inputs that land in ``ent_asm_in``, so MOTOR (FRAME+WIRE),
+    SENSOR (CIRCUIT+WIRE) and CIRCUIT (COPPER_PLATE+WAFER) all flow
+    through the exact same input-pallet -> assembler -> arm ->
+    output-pallet topology with no goal changes. The wait window is
+    longer than for WIRE because some tier-3 recipes have ``ticks=6``.
+    """
+    jit_step, state, env_params = _build_module_level(
+        prebuild_module=True,
+        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_inputs=recipe_inputs,
+    )
+
+    key = jax.random.PRNGKey(0)
+    for _ in range(wait_ticks):
+        key, sub = jax.random.split(key)
+        _, state, _, _, _ = jit_step(
+            sub,
+            state,
+            jnp.int32(int(Action.NOOP)),
+            env_params,
+        )
+
+    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    assert out_eid >= 0
+    out_buf = int(state.env_state.ent_buf_count[out_eid])
+    out_type = int(state.env_state.ent_buf_type[out_eid])
+    assert out_type == expected_output, (
+        f"expected {ItemType(expected_output).name} in output, got ItemType={out_type}"
+    )
+    assert out_buf > 0, f"output empty after {wait_ticks} ticks; buf={out_buf}"
+
+
+# ---------------------------------------------------------------------------
+# Composition — two adjacent modules built sequentially on the same map.
+# ---------------------------------------------------------------------------
+
+
+def test_two_assembler_modules_compose_without_collision() -> None:
+    """Two BuildAssemblerModule calls on disjoint tiles both succeed.
+
+    The advanced factory drops a chain of modules side by side along
+    a bus. This test runs two BuildAssemblerModule goals back to back
+    on a 16x16 map: module A is the canonical (5,5) layout from the
+    other tests, module B sits four tiles further east. The point is
+    to catch any cross-module interference — e.g. a stand tile used
+    by module B that became unwalkable because of module A's
+    placement.
+    """
+    map_size = 16
+    builder = LevelBuilder(map_size, map_size)
+    builder.set_player_position(1, 1)
+    level = builder.build("two_modules_test")
+    env_params = EnvParams(
+        map_width=map_size,
+        map_height=map_size,
+        num_players=1,
+        max_timesteps=600,
+    )
+    env_state = build_state(level, env_params)
+    inv = np.asarray(env_state.player_inventory).copy()
+    inv[0, int(ItemType.ASSEMBLER)] = 2
+    inv[0, int(ItemType.ARM)] = 2
+    inv[0, int(ItemType.PALLET)] = 6
+    env_state = env_state.replace(player_inventory=jnp.asarray(inv))
+    state = AchievementState(
+        env_state=env_state,
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
+    )
+    jit_step = _shared_jit_step(env_params)
+
+    # Module A — the canonical layout.
+    goal_a = goals.BuildAssemblerModule(
+        center_tile=_CENTER,
+        center_machine=MachineType.ASSEMBLER,
+        input_a_tile=_INPUT_A,
+        input_b_tile=_INPUT_B,
+        output_pallet_tile=_OUTPUT,
+    )
+    state, verdict = _rollout(state, goal_a, jit_step, env_params, max_steps=400)
+    assert verdict == "done", f"module A got {verdict}"
+
+    # Module B — shifted east by 5 tiles. Center at (10, 5).
+    center_b = (10, 5)
+    input_a_b = (10, 4)
+    input_b_b = (9, 5)
+    output_b = (12, 5)
+    arm_b = (11, 5)
+    goal_b = goals.BuildAssemblerModule(
+        center_tile=center_b,
+        center_machine=MachineType.ASSEMBLER,
+        input_a_tile=input_a_b,
+        input_b_tile=input_b_b,
+        output_pallet_tile=output_b,
+    )
+    state, verdict = _rollout(state, goal_b, jit_step, env_params, max_steps=400)
+    assert verdict == "done", f"module B got {verdict}"
+
+    mt = np.asarray(state.env_state.machine_types)
+    # Both modules' centers + arms exist.
+    assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.ASSEMBLER)
+    assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
+    assert mt[center_b[1], center_b[0]] == int(MachineType.ASSEMBLER)
+    assert mt[arm_b[1], arm_b[0]] == int(MachineType.ARM)
+    # Both modules' input + output pallets exist.
+    for tile in (_INPUT_A, _INPUT_B, _OUTPUT, input_a_b, input_b_b, output_b):
+        assert mt[tile[1], tile[0]] == int(MachineType.PALLET), (
+            f"missing pallet at {tile}"
+        )
+    # Bootstrap inventory fully consumed.
+    inv = np.asarray(state.env_state.player_inventory[0])
+    assert int(inv[int(ItemType.ASSEMBLER)]) == 0
+    assert int(inv[int(ItemType.ARM)]) == 0
+    assert int(inv[int(ItemType.PALLET)]) == 0
