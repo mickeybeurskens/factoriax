@@ -121,6 +121,7 @@ def _build_module_level(
     prebuild_machine: int = int(MachineType.ASSEMBLER),
     prebuild_inputs: tuple[tuple[int, int], ...] = (),
     one_input: bool = False,
+    max_timesteps: int = 400,
 ):
     """Build a 12x12 level for the module test.
 
@@ -182,7 +183,7 @@ def _build_module_level(
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
         num_players=1,
-        max_timesteps=400,
+        max_timesteps=max_timesteps,
     )
     env_state = build_state(level, env_params)
 
@@ -561,3 +562,57 @@ def test_assembler_module_produces_tier4_recipes(
         f"expected {ItemType(expected_output).name} in output, got ItemType={out_type}"
     )
     assert out_buf > 0, f"output empty after {wait_ticks} ticks; buf={out_buf}"
+
+
+# ---------------------------------------------------------------------------
+# Tier 5 — the rocket sink. ROCKET = HULL(6) + ROCKET_CORE(4), 300 ticks.
+# ---------------------------------------------------------------------------
+
+
+def test_assembler_module_produces_rocket_when_fed_subassemblies() -> None:
+    """The rocket sink: a single assembler module crafts a ROCKET.
+
+    ROCKET is the terminal recipe in the rocket benchmark — a single
+    craft consumes 6 HULL + 4 ROCKET_CORE and runs for 300 ticks. It
+    sits on top of the entire factory chain (ore -> plates ->
+    intermediates -> sub-assemblies -> rocket) and is what the
+    "factory wins" by producing.
+
+    Engine timing: ``run_assemblers`` Phase 0 pulls one item per
+    tick per direction. After 6 ticks the input slot holding HULL
+    hits 6 (the limiting input — ROCKET only needs 4 ROCKET_CORE so
+    the other slot is over-filled by then). Recipe starts at tick 6,
+    runs 300 ticks, completes at ~tick 306, arm transfers to output
+    pallet at ~tick 307. Allocates a 360-tick wait window for JIT
+    noise + arm scheduling.
+
+    Bumps max_timesteps so the env doesn't truncate mid-recipe.
+    """
+    jit_step, state, env_params = _build_module_level(
+        prebuild_module=True,
+        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_inputs=(
+            (int(ItemType.HULL), 8),
+            (int(ItemType.ROCKET_CORE), 8),
+        ),
+        max_timesteps=500,
+    )
+
+    key = jax.random.PRNGKey(0)
+    for _ in range(360):
+        key, sub = jax.random.split(key)
+        _, state, _, _, _ = jit_step(
+            sub,
+            state,
+            jnp.int32(int(Action.NOOP)),
+            env_params,
+        )
+
+    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    assert out_eid >= 0
+    out_buf = int(state.env_state.ent_buf_count[out_eid])
+    out_type = int(state.env_state.ent_buf_type[out_eid])
+    assert out_type == int(ItemType.ROCKET), (
+        f"expected ROCKET in output pallet, got ItemType={out_type}"
+    )
+    assert out_buf > 0, f"output empty after 360 ticks; buf={out_buf}"
