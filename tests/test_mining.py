@@ -160,9 +160,10 @@ class TestMiningEdgeCases:
         assert jnp.all(new.player_inventory[0] == 0)
         assert new.map[0, 0] == BlockType.DIRT
 
-    def test_max_resources_constant_is_3000(self) -> None:
+    def test_max_resources_constant_is_30000(self) -> None:
         """BLOCK_MAX_RESOURCES should accommodate the rocket-benchmark
-        coal patch, which carries 2800 per tile so the factory has
-        enough fuel for the entire automated rocket chain.
+        coal patch, which carries 28000 per tile (10x the other ore
+        patches at 2800/tile) so four parallel smelter cells have
+        enough fuel for the full 8000-tick rocket chain.
         """
-        assert BLOCK_MAX_RESOURCES == 3000
+        assert BLOCK_MAX_RESOURCES == 30000

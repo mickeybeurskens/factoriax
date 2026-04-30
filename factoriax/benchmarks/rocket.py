@@ -366,13 +366,14 @@ _ORE_PATCH_SIZE: int = 3
 # 280 per tile × 9 tiles per patch ≈ 2500 ore per patch. Enough for
 # automated miners to run essentially the whole episode without
 # depleting — the agent doesn't have to re-mine midway.
-_ORE_RESOURCES_PER_TILE: int = 280
+_ORE_RESOURCES_PER_TILE: int = 2800
 # Coal is consumed by every smelt and every refractory craft, so the
-# coal patch needs ~10x the throughput of any other ore. 2800 per tile
-# × 9 tiles per patch ≈ 25 000 coal per patch — enough to sustain a
-# fully-automated factory through the whole rocket chain without
-# refueling. Requires ``BLOCK_MAX_RESOURCES`` to be at least 2800.
-_COAL_RESOURCES_PER_TILE: int = 2800
+# coal patch needs ~10x the throughput of any other ore. 28 000 per
+# tile × 9 tiles per patch ≈ 250 000 coal per patch — enough to
+# sustain a fully-automated factory through the whole rocket chain
+# without refueling. Requires ``BLOCK_MAX_RESOURCES`` to be at least
+# 28 000.
+_COAL_RESOURCES_PER_TILE: int = 28000
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
 _FURNACE_TILE: tuple[int, int] = (_SPAWN[0] - 1, _SPAWN[1])
 _ASSEMBLER_TILE: tuple[int, int] = (_SPAWN[0] + 1, _SPAWN[1])

@@ -35,8 +35,8 @@ def test_coal_patch_holds_ten_times_other_ores() -> None:
     coal_per_tile = int(jnp.unique(resources[coal_tiles])[0])
     iron_per_tile = int(jnp.unique(resources[iron_tiles])[0])
 
-    assert iron_per_tile == 280
-    assert coal_per_tile == 2800
+    assert iron_per_tile == 2800
+    assert coal_per_tile == 28000
     assert coal_per_tile == 10 * iron_per_tile
 
 

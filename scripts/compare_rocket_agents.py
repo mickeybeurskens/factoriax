@@ -1,6 +1,6 @@
-"""Run both scripted rocket agents and compare their episode timings.
+"""Run scripted rocket agents and compare their episode timings.
 
-Both agents share the same rocket benchmark level (pre-placed
+All agents share the same rocket benchmark level (pre-placed
 furnace + assembler, five ore patches). The difference is the plan:
 
 - ``naive``   — :mod:`baselines.rocket.scripted.agent` runs every
@@ -9,8 +9,14 @@ furnace + assembler, five ore patches). The difference is the plan:
   spends a starter phase to place two extra furnaces and two extra
   assemblers, then uses :class:`PipelinedProduce` to rotate bulk
   work across the 3-machine batteries.
+- ``advanced_factory`` —
+  :mod:`baselines.rocket.scripted.agent_advanced_factory` builds a
+  full :class:`BuildSmelterCell` on every non-coal patch so each
+  patch auto-mines + auto-smelts its own plates locally; the agent
+  then ferries coal in and uses :class:`CraftFromBus` to chain the
+  bus-pallet plates into rocket-chain intermediates.
 
-Both agents are deterministic, so the comparison is reproducible
+All agents are deterministic, so the comparison is reproducible
 from a single seed.
 """
 
@@ -28,6 +34,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from baselines.rocket.scripted.agent import make_scripted_rocket_agent
+from baselines.rocket.scripted.agent_advanced_factory import (
+    make_advanced_factory_rocket_agent,
+)
 from baselines.rocket.scripted.agent_factory import make_factory_rocket_agent
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import (
@@ -469,6 +478,14 @@ def main() -> None:
         help="Skip rendering the rollout video and analysis plots. "
         "Per-step metrics are still logged when --use-wandb is set.",
     )
+    parser.add_argument(
+        "--agents",
+        nargs="+",
+        choices=["naive", "factory", "advanced_factory"],
+        default=None,
+        help="Subset of agents to run. Defaults to all three. "
+        "Example: --agents advanced_factory.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -504,21 +521,24 @@ def main() -> None:
             save_video=save_video,
         )
 
-    print("Running NAIVE agent...")
-    naive = _go("naive", make_scripted_rocket_agent)
-    print(
-        f"  -> {naive.steps} ticks, "
-        f"{naive.unlocked}/{NUM_ROCKET_ACHIEVEMENTS} unlocked.",
-    )
+    all_agents: dict[str, Any] = {
+        "naive": make_scripted_rocket_agent,
+        "factory": make_factory_rocket_agent,
+        "advanced_factory": make_advanced_factory_rocket_agent,
+    }
+    selected = args.agents or list(all_agents.keys())
 
-    print("Running FACTORY agent...")
-    factory = _go("factory", make_factory_rocket_agent)
-    print(
-        f"  -> {factory.steps} ticks, "
-        f"{factory.unlocked}/{NUM_ROCKET_ACHIEVEMENTS} unlocked.",
-    )
+    results: list[RunResult] = []
+    for label in selected:
+        print(f"Running {label.upper()} agent...")
+        result = _go(label, all_agents[label])
+        print(
+            f"  -> {result.steps} ticks, "
+            f"{result.unlocked}/{NUM_ROCKET_ACHIEVEMENTS} unlocked.",
+        )
+        results.append(result)
 
-    _print_summary([naive, factory])
+    _print_summary(results)
 
 
 if __name__ == "__main__":

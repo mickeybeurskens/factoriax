@@ -364,6 +364,107 @@ class PlaceMachineAt(Goal):
         return Result.RUNNING, action
 
 
+def place_belt_path(
+    waypoints: list[tuple[int, int]],
+    *,
+    occupied: set[tuple[int, int]] | None = None,
+) -> list[Goal]:
+    """Lay a chain of belts along an axis-aligned waypoint path.
+
+    Each consecutive pair of waypoints defines an axis-aligned segment;
+    the helper enumerates every tile from the first waypoint up to (but
+    not including) the last, places a belt on each one with direction
+    pointing toward the next tile in the chain, and treats the final
+    waypoint as the sink (the receiver of the trunk's items, e.g. a
+    coal-buffer pallet placed elsewhere).
+
+    Belt directions are inferred from the path: a belt with the next
+    tile to its east faces RIGHT, north → UP, and so on. The belt at a
+    corner waypoint (e.g. ``(10, 12)`` between a UP segment and a LEFT
+    segment) takes the *outgoing* segment's direction so its push lands
+    on the first tile of the next segment.
+
+    Args:
+        waypoints: ``(x, y)`` tiles in path order. Must contain at
+            least two entries (start and sink). Consecutive entries
+            must differ in exactly one axis (segments are pure
+            horizontal or vertical).
+        occupied: Optional set of tiles already occupied by other
+            machines. If any path tile (other than the sink) is in
+            this set, the helper raises ``ValueError`` so the caller
+            can fix the route before issuing the goals — catches
+            collisions at goal-construction time instead of at
+            placement time. Belts walked over twice are likewise
+            rejected.
+
+    Returns:
+        A list of :class:`PlaceMachineAt` goals, one per belt. The
+        agent must hold ``len(returned_list)`` ``CONVEYOR_BELT`` items
+        before issuing them; per-tile inventory shortage still surfaces
+        at runtime via :class:`PlaceMachineAt`'s ``held >= 1`` check.
+
+    Raises:
+        ValueError: ``waypoints`` is shorter than 2, a segment is not
+            axis-aligned, two consecutive waypoints are equal, the path
+            self-intersects, or any non-sink tile collides with the
+            ``occupied`` set.
+    """
+    if len(waypoints) < 2:
+        raise ValueError(
+            f"place_belt_path needs >=2 waypoints, got {len(waypoints)}",
+        )
+    blocked = set(occupied or ())
+
+    path: list[tuple[int, int]] = [waypoints[0]]
+    for i in range(len(waypoints) - 1):
+        a = waypoints[i]
+        b = waypoints[i + 1]
+        if a == b:
+            raise ValueError(f"degenerate segment {a}->{b} (waypoints equal)")
+        if a[0] != b[0] and a[1] != b[1]:
+            raise ValueError(
+                f"segment {a}->{b} is not axis-aligned",
+            )
+        dx = 0 if a[0] == b[0] else (1 if b[0] > a[0] else -1)
+        dy = 0 if a[1] == b[1] else (1 if b[1] > a[1] else -1)
+        cur = a
+        while cur != b:
+            cur = (cur[0] + dx, cur[1] + dy)
+            path.append(cur)
+
+    sink = path[-1]
+    seen: set[tuple[int, int]] = set()
+    goals: list[Goal] = []
+    for i, tile in enumerate(path[:-1]):
+        if tile in seen:
+            raise ValueError(f"path self-intersects at {tile}")
+        if tile in blocked:
+            raise ValueError(
+                f"belt at {tile} collides with occupied tile",
+            )
+        seen.add(tile)
+        nx, ny = path[i + 1]
+        ddx, ddy = nx - tile[0], ny - tile[1]
+        if ddx == 1:
+            direction = Direction.RIGHT
+        elif ddx == -1:
+            direction = Direction.LEFT
+        elif ddy == 1:
+            direction = Direction.DOWN
+        else:
+            direction = Direction.UP
+        goals.append(
+            PlaceMachineAt(
+                MachineType.CONVEYOR_BELT,
+                tile,
+                int(direction),
+            ),
+        )
+    if sink in seen:
+        raise ValueError(f"sink {sink} already on belt path")
+    return goals
+
+
 def _machine_to_item(machine_type: int) -> int:
     """Item type corresponding to a placeable machine."""
     return {
@@ -434,6 +535,75 @@ class DepositInto(Goal):
             self._active = None
             return Result.FAIL, None
         return Result.RUNNING, action
+
+
+class DepositIntoAt(Goal):
+    """Deposit ``count`` units of *item_type* into a specific pallet tile.
+
+    Differs from :class:`DepositInto` in two ways:
+
+    1. **Targets a specific tile** — the planner controls the bus
+       coordinates, so an explicit tile avoids the ambiguity of
+       "nearest matching pallet" when multiple pallets exist.
+    2. **Bulk** — repeats the face-and-deposit cycle ``count`` times
+       or until the player runs out of the item. Each deposit
+       transfers one item per tick (engine cap).
+
+    Counting is done via the player's inventory drop, not the
+    pallet's current load. When the pallet sits next to a furnace
+    the furnace's ``run_assemblers`` Phase 0 drains the pallet at
+    one item per tick, so the pallet's buffer count never actually
+    grows past zero — but the deposits still flow through. Tracking
+    "items I successfully shed" instead of "items in the pallet"
+    captures the throughput correctly.
+
+    Args:
+        tile: ``(x, y)`` of the target pallet.
+        item_type: Item to deposit (used for the
+            ``DEPOSIT_<item>`` action selector).
+        count: Number of successful deposits to execute. Default 1.
+    """
+
+    name = "DepositIntoAt"
+
+    def __init__(
+        self,
+        tile: tuple[int, int],
+        item_type: int | ItemType,
+        count: int = 1,
+    ) -> None:
+        self.tile = tile
+        self.item_type = int(item_type)
+        self.count = count
+        self._active: FaceAndInteract | None = None
+        self._start_inv: int | None = None
+
+    def step(self, view: WorldView) -> StepReturn:
+        x, y = self.tile
+        if view.machine_type[y, x] != int(MachineType.PALLET):
+            return Result.FAIL, None
+
+        current_inv = view.player.held(self.item_type)
+        if self._start_inv is None:
+            self._start_inv = current_inv
+        deposited = self._start_inv - current_inv
+        if deposited >= self.count:
+            return Result.DONE, None
+
+        if current_inv < 1:
+            return Result.FAIL, None
+
+        if self._active is not None:
+            result, action = self._active.step(view)
+            if result is Result.RUNNING:
+                return Result.RUNNING, action
+            self._active = None
+            return Result.RUNNING, int(Action.NOOP)
+
+        from .world_model import deposit_action  # noqa: PLC0415
+
+        self._active = FaceAndInteract(self.tile, deposit_action(self.item_type))
+        return self._active.step(view)
 
 
 class WaitUntil(Goal):
