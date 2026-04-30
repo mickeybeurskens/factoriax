@@ -465,6 +465,158 @@ def place_belt_path(
     return goals
 
 
+# Per-item bootstrap cost of one smelter cell built via
+# :func:`build_smelter_cell_at`: two pallets (coal-buffer south of the
+# furnace + plate-output bus east of the arm), one arm (plate
+# extractor), one furnace.
+_SMELTER_CELL_INVENTORY: tuple[tuple[int, int], ...] = (
+    (int(ItemType.PALLET), 2),
+    (int(ItemType.ARM), 1),
+    (int(ItemType.FURNACE), 1),
+)
+
+
+def smelter_cell_inventory() -> dict[int, int]:
+    """Return the bootstrap inventory cost of one smelter cell.
+
+    Maps :class:`ItemType` integer ids to the count required in the
+    player's inventory before issuing the goals from
+    :func:`build_smelter_cell_at`. Use this to size the Phase-A craft
+    list (e.g. ``ProduceInAssembler(ItemType.PALLET, 2 * num_cells)``)
+    so a typo in the per-cell counts surfaces as a one-place change.
+    """
+    return dict(_SMELTER_CELL_INVENTORY)
+
+
+def build_smelter_cell_at(
+    furnace_tile: tuple[int, int],
+    *,
+    occupied: set[tuple[int, int]] | None = None,
+    map_size: tuple[int, int] | None = None,
+) -> list[Goal]:
+    """Place a 4-piece smelter cell anchored at ``furnace_tile``.
+
+    Layout (the only orientation currently supported — furnace facing
+    RIGHT, ore pallet pre-existing one tile north from Phase A)::
+
+           ore_pallet  (fx,   fy-1)  pre-existing, NOT placed here
+                furnace(fx,   fy)    facing RIGHT
+                  arm  (fx+1, fy)    facing RIGHT
+                plate_bus(fx+2, fy)  facing DOWN — output sink
+        coal_buffer    (fx,   fy+1)  facing UP   — coal trunk delivers here
+
+    The ore pallet to the north is assumed to be placed separately
+    (Phase A's auto-miner pattern in the rocket benchmark): the
+    furnace's :func:`run_assemblers` Phase 0 auto-pulls one ore per
+    tick from that pallet and one coal per tick from the coal buffer
+    south, so no extra arm orchestration is needed.
+
+    Placement order: coal_buffer -> plate_bus -> arm -> furnace. The
+    arm is placed *before* the furnace because the arm's stand tile
+    (one west of arm, computed from facing RIGHT) is exactly the
+    furnace's eventual tile — at arm-place time that tile must be
+    walkable dirt, and once the furnace lands it becomes the arm's
+    "behind" tile so :func:`run_arms` can pull plates out of the
+    furnace's ``ent_asm_out``.
+
+    The helper checks every layout invariant at goal-construction
+    time so configuration mistakes (a typo in ``furnace_tile``, a
+    cell that overlaps an existing trunk, or a cell that runs off
+    the map) surface synchronously instead of as opaque
+    ``FAIL_GIVEUP`` events 5000 ticks into a rollout. Per-tile
+    inventory shortage at *runtime* still surfaces via
+    :class:`PlaceMachineAt`'s own ``held >= 1`` check; consult
+    :func:`smelter_cell_inventory` to size the bootstrap craft list.
+
+    Args:
+        furnace_tile: ``(fx, fy)`` where the furnace will land. The
+            three other cell tiles are derived: arm at ``(fx+1, fy)``,
+            plate-bus at ``(fx+2, fy)``, coal-buffer at
+            ``(fx, fy+1)``.
+        occupied: Optional set of tiles already taken by other
+            machines. Each of the four cell tiles is checked against
+            it; the first collision raises ``ValueError`` with the
+            offending tile and its role (e.g. "arm tile (24, 11)
+            collides with an occupied tile").
+        map_size: Optional ``(width, height)``. When supplied, every
+            cell tile must fit inside ``[0, width) x [0, height)``;
+            otherwise ``ValueError``.
+
+    Returns:
+        A list of four :class:`PlaceMachineAt` goals in placement
+        order. Bootstrap cost: see :func:`smelter_cell_inventory`.
+
+    Raises:
+        ValueError: any cell tile is out of ``map_size`` bounds; any
+            cell tile is in ``occupied``; or the derived tiles are
+            not all distinct (only happens for an absurd
+            ``furnace_tile`` like ``(x, x-1)`` mapping coal-buffer
+            on top of the arm — not reachable in the rocket
+            benchmark, but the check makes the helper safe to reuse
+            on smaller maps).
+    """
+    fx, fy = furnace_tile
+    arm_tile = (fx + 1, fy)
+    plate_bus_tile = (fx + 2, fy)
+    coal_buffer_tile = (fx, fy + 1)
+
+    pieces: tuple[tuple[str, tuple[int, int]], ...] = (
+        ("furnace", furnace_tile),
+        ("arm", arm_tile),
+        ("plate_bus", plate_bus_tile),
+        ("coal_buffer", coal_buffer_tile),
+    )
+
+    if map_size is not None:
+        width, height = map_size
+        for label, (x, y) in pieces:
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"smelter cell {label} tile {(x, y)} is out of "
+                    f"map bounds (width={width}, height={height})",
+                )
+
+    seen: dict[tuple[int, int], str] = {}
+    for label, tile in pieces:
+        if tile in seen:
+            raise ValueError(
+                f"smelter cell {label} tile {tile} duplicates "
+                f"{seen[tile]} (check furnace_tile)",
+            )
+        seen[tile] = label
+
+    if occupied is not None:
+        blocked = frozenset(occupied)
+        for label, tile in pieces:
+            if tile in blocked:
+                raise ValueError(
+                    f"smelter cell {label} tile {tile} collides with an occupied tile",
+                )
+
+    return [
+        PlaceMachineAt(
+            MachineType.PALLET,
+            coal_buffer_tile,
+            int(Direction.UP),
+        ),
+        PlaceMachineAt(
+            MachineType.PALLET,
+            plate_bus_tile,
+            int(Direction.DOWN),
+        ),
+        PlaceMachineAt(
+            MachineType.ARM,
+            arm_tile,
+            int(Direction.RIGHT),
+        ),
+        PlaceMachineAt(
+            MachineType.FURNACE,
+            furnace_tile,
+            int(Direction.RIGHT),
+        ),
+    ]
+
+
 def _machine_to_item(machine_type: int) -> int:
     """Item type corresponding to a placeable machine."""
     return {
