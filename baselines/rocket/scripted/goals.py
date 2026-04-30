@@ -364,6 +364,354 @@ class PlaceMachineAt(Goal):
         return Result.RUNNING, action
 
 
+class BeltPath:
+    """One axis-aligned belt path in a :func:`place_belt_network` plan.
+
+    Attributes:
+        waypoints: ``(x, y)`` tiles in path order. Same shape as the
+            input to :func:`place_belt_path` — at least two entries,
+            consecutive entries differ in exactly one axis, and the
+            last waypoint is the sink (not itself a belt).
+        label: Optional human-readable string used in the error
+            messages emitted by :func:`place_belt_network`. Bare
+            integer indices work too, but a name like ``"iron coal"``
+            makes goal-construction-time failures easier to triage.
+    """
+
+    __slots__ = ("waypoints", "label")
+
+    def __init__(
+        self,
+        waypoints: list[tuple[int, int]],
+        label: str = "",
+    ) -> None:
+        self.waypoints = waypoints
+        self.label = label
+
+
+def _belt_path_label(paths: list[BeltPath], idx: int) -> str:
+    """Format a path's label for inclusion in a ValueError message."""
+    label = paths[idx].label
+    return f"'{label}'" if label else f"#{idx}"
+
+
+# (vert_out_dir, horiz_out_dir) -> packed crossing encoding (1..4).
+# Mirrors :data:`factoriax.belts.CROSSING_AXIS_DIRS`. The vertical
+# axis maps UP/DOWN flow; horizontal maps LEFT/RIGHT flow.
+_CROSSING_ENCODINGS: dict[tuple[int, int], int] = {
+    (int(Direction.DOWN), int(Direction.RIGHT)): 1,
+    (int(Direction.DOWN), int(Direction.LEFT)): 2,
+    (int(Direction.UP), int(Direction.RIGHT)): 3,
+    (int(Direction.UP), int(Direction.LEFT)): 4,
+}
+
+_VERTICAL_DIRECTIONS = frozenset({int(Direction.UP), int(Direction.DOWN)})
+
+
+def _expand_belt_path_tiles(
+    waypoints: list[tuple[int, int]],
+    label: str,
+) -> list[tuple[int, int]]:
+    """Expand a waypoint list into a per-tile path (sink included).
+
+    Shares the segment-validation rules with :func:`place_belt_path`
+    but raises errors prefixed with ``label`` so multi-path callers can
+    pinpoint which path is malformed.
+    """
+    if len(waypoints) < 2:
+        raise ValueError(
+            f"belt network: path {label} needs >=2 waypoints, got {len(waypoints)}",
+        )
+    tiles: list[tuple[int, int]] = [waypoints[0]]
+    for i in range(len(waypoints) - 1):
+        a = waypoints[i]
+        b = waypoints[i + 1]
+        if a == b:
+            raise ValueError(
+                f"belt network: degenerate segment {a}->{b} "
+                f"(waypoints equal) in path {label}",
+            )
+        if a[0] != b[0] and a[1] != b[1]:
+            raise ValueError(
+                f"belt network: segment {a}->{b} is not axis-aligned in path {label}",
+            )
+        dx = 0 if a[0] == b[0] else (1 if b[0] > a[0] else -1)
+        dy = 0 if a[1] == b[1] else (1 if b[1] > a[1] else -1)
+        cur = a
+        while cur != b:
+            cur = (cur[0] + dx, cur[1] + dy)
+            tiles.append(cur)
+    return tiles
+
+
+def place_belt_network(
+    paths: list[BeltPath],
+    *,
+    occupied: set[tuple[int, int]] | None = None,
+    map_size: tuple[int, int] | None = None,
+) -> list[Goal]:
+    """Plan a set of belt paths sharing perpendicular intersection tiles.
+
+    For every tile used by exactly one path, emit a CONVEYOR_BELT.
+    For every tile used by two paths whose flow directions are
+    perpendicular (one of {UP, DOWN}, one of {LEFT, RIGHT}), emit a
+    CROSSING with the encoding implied by ``(vert_dir, horiz_dir)``.
+
+    Any conflict that a CROSSING cannot resolve raises ``ValueError``
+    at goal-construction time so the agent author sees the failure
+    while building the goal list, not 5000 ticks into the rollout:
+
+    * **parallel collision** — both paths push the *same* direction
+      through the tile (items would mix into the same belt).
+    * **anti-parallel collision** — the two paths push opposite
+      directions on the same axis (a U-turn that no crossing
+      encoding represents).
+    * **3-way (or more) junction** — a CROSSING supports two axes
+      only; T- and X-junctions of three or more paths must be
+      decomposed into multiple crossings by hand.
+    * **belt passes through another path's sink** — sinks are
+      destinations, not pass-throughs; the route would dump items
+      into the wrong receiver.
+
+    Placement order is computed by topological sort: each tile is
+    emitted only once its forced stand-tile constraint is satisfied
+    (BELT facing ``d`` needs the tile at ``-d`` to be walkable;
+    CROSSING needs at least one of its four neighbours walkable).
+    Walkable means dirt (any tile not in our plan and not in
+    ``occupied``) or an already-emitted belt/crossing — both of
+    which the runtime treats as walkable for the player.
+
+    The single-path case
+    ``place_belt_network([BeltPath(waypoints)])`` is equivalent to
+    :func:`place_belt_path(waypoints)`. Callers with a single path
+    should keep using :func:`place_belt_path` for clarity.
+
+    Args:
+        paths: One :class:`BeltPath` per logical trunk. Order does
+            not matter — the topological sort handles dependencies.
+        occupied: Tiles already taken by other machines. Crossings
+            and belts in our plan must not collide with these.
+        map_size: Optional ``(width, height)`` for in-bounds checks
+            on every tile (belts, crossings, and sinks).
+
+    Returns:
+        A flat list of :class:`PlaceMachineAt` goals: one per
+        belt/crossing, in placement order. Sinks are *not* emitted —
+        they are the responsibility of the caller (a pallet, an
+        assembler input, the receiving end of a belt path elsewhere).
+
+    Raises:
+        ValueError: any of the conflict categories above, or a path
+            self-intersects, or the topological sort cannot find an
+            ordering (every remaining tile's stand tile is itself in
+            the unplaced set — typically a cycle in the belt graph).
+    """
+    if not paths:
+        return []
+
+    occupied_set = set(occupied or ())
+    # tile -> [(path_idx, segment_idx_in_path, direction), ...]
+    tile_uses: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
+    sink_owner: dict[tuple[int, int], int] = {}
+
+    for path_idx, path_obj in enumerate(paths):
+        label = _belt_path_label(paths, path_idx)
+        tiles = _expand_belt_path_tiles(path_obj.waypoints, label)
+        seen_in_path: set[tuple[int, int]] = set()
+        for tile in tiles:
+            if tile in seen_in_path:
+                raise ValueError(
+                    f"belt network: path {label} self-intersects at {tile}",
+                )
+            seen_in_path.add(tile)
+        for i, tile in enumerate(tiles[:-1]):
+            nx, ny = tiles[i + 1]
+            ddx, ddy = nx - tile[0], ny - tile[1]
+            if ddx == 1:
+                direction = int(Direction.RIGHT)
+            elif ddx == -1:
+                direction = int(Direction.LEFT)
+            elif ddy == 1:
+                direction = int(Direction.DOWN)
+            else:
+                direction = int(Direction.UP)
+            tile_uses.setdefault(tile, []).append(
+                (path_idx, i, direction),
+            )
+        sink_tile = tiles[-1]
+        if sink_tile in sink_owner:
+            raise ValueError(
+                f"belt network: tile {sink_tile} is the sink of paths "
+                f"{_belt_path_label(paths, sink_owner[sink_tile])} and "
+                f"{label} — sinks must be unique",
+            )
+        sink_owner[sink_tile] = path_idx
+
+    # Sinks cannot be passed through by another path's belt cell.
+    for sink_tile, owner_idx in sink_owner.items():
+        if sink_tile in tile_uses:
+            other = tile_uses[sink_tile][0][0]
+            raise ValueError(
+                f"belt network: tile {sink_tile} is the sink of path "
+                f"{_belt_path_label(paths, owner_idx)} and a belt-cell of "
+                f"path {_belt_path_label(paths, other)} — sinks cannot "
+                f"be passed through",
+            )
+
+    if map_size is not None:
+        width, height = map_size
+        all_tiles: set[tuple[int, int]] = set(tile_uses) | set(sink_owner)
+        for tile in all_tiles:
+            x, y = tile
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"belt network: tile {tile} is out of map bounds "
+                    f"(width={width}, height={height})",
+                )
+    for tile in tile_uses:
+        if tile in occupied_set:
+            raise ValueError(
+                f"belt network: tile {tile} collides with an occupied tile",
+            )
+
+    # Classify every used tile: BELT(direction) or CROSSING(encoding).
+    tile_kind: dict[tuple[int, int], tuple[str, int]] = {}
+    for tile, uses in tile_uses.items():
+        if len(uses) == 1:
+            tile_kind[tile] = ("BELT", uses[0][2])
+            continue
+        if len(uses) == 2:
+            d1, d2 = uses[0][2], uses[1][2]
+            if d1 == d2:
+                raise ValueError(
+                    f"belt network: parallel collision at {tile}; paths "
+                    f"{_belt_path_label(paths, uses[0][0])} and "
+                    f"{_belt_path_label(paths, uses[1][0])} both push "
+                    f"{Direction(d1).name} through this tile",
+                )
+            d1_vert = d1 in _VERTICAL_DIRECTIONS
+            d2_vert = d2 in _VERTICAL_DIRECTIONS
+            if d1_vert == d2_vert:
+                # Same axis but different direction = anti-parallel.
+                raise ValueError(
+                    f"belt network: anti-parallel collision at {tile}; "
+                    f"path {_belt_path_label(paths, uses[0][0])} pushes "
+                    f"{Direction(d1).name} and "
+                    f"{_belt_path_label(paths, uses[1][0])} pushes "
+                    f"{Direction(d2).name}",
+                )
+            if d1_vert:
+                vert_dir, horiz_dir = d1, d2
+            else:
+                vert_dir, horiz_dir = d2, d1
+            tile_kind[tile] = ("CROSSING", _CROSSING_ENCODINGS[(vert_dir, horiz_dir)])
+            continue
+        labels = [_belt_path_label(paths, u[0]) for u in uses]
+        raise ValueError(
+            f"belt network: {len(uses)}-way junction at {tile}; "
+            f"a CROSSING supports 2 axes only "
+            f"(paths involved: {', '.join(labels)})",
+        )
+
+    # Topological sort.
+    direction_offset = {
+        int(Direction.UP): (0, -1),
+        int(Direction.DOWN): (0, 1),
+        int(Direction.LEFT): (-1, 0),
+        int(Direction.RIGHT): (1, 0),
+    }
+    placed: set[tuple[int, int]] = set()
+    pending = set(tile_kind)
+    emit_order: list[tuple[int, int]] = []
+
+    def _walkable(tile: tuple[int, int]) -> bool:
+        if tile in placed:
+            return True
+        if tile in pending:
+            return False
+        return tile not in occupied_set
+
+    while pending:
+        progressed = False
+        # Sorted iteration so the emit order is deterministic across
+        # Python set-iteration tweaks. Cheap; pending is at most a
+        # few hundred tiles.
+        for tile in sorted(pending):
+            kind, payload = tile_kind[tile]
+            if kind == "BELT":
+                dx, dy = direction_offset[payload]
+                if _walkable((tile[0] - dx, tile[1] - dy)):
+                    placed.add(tile)
+                    pending.remove(tile)
+                    emit_order.append(tile)
+                    progressed = True
+            else:
+                for dx, dy in direction_offset.values():
+                    if _walkable((tile[0] + dx, tile[1] + dy)):
+                        placed.add(tile)
+                        pending.remove(tile)
+                        emit_order.append(tile)
+                        progressed = True
+                        break
+        if not progressed:
+            stuck = sorted(pending)
+            raise ValueError(
+                f"belt network: could not order placement; "
+                f"{len(pending)} tiles have no walkable stand tile "
+                f"(first few: {stuck[:3]}). The belt graph likely "
+                f"contains a cycle.",
+            )
+
+    goals: list[Goal] = []
+    for tile in emit_order:
+        kind, payload = tile_kind[tile]
+        if kind == "BELT":
+            goals.append(
+                PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, payload),
+            )
+        else:
+            goals.append(
+                PlaceMachineAt(MachineType.CROSSING, tile, payload),
+            )
+    return goals
+
+
+def belt_network_inventory(paths: list[BeltPath]) -> dict[int, int]:
+    """Return the inventory cost of a :func:`place_belt_network` plan.
+
+    Re-runs the path expansion + tile classification and counts BELTs
+    and CROSSINGs. Calling this during goal construction also acts as
+    a pre-flight: any of the conflict ValueErrors that
+    :func:`place_belt_network` would raise propagate out here too, so
+    a typo in the path geometry surfaces while writing the bootstrap
+    inventory rather than half-way through Phase B.
+
+    Args:
+        paths: One :class:`BeltPath` per logical trunk.
+
+    Returns:
+        ``{ItemType.CONVEYOR_BELT: n_belts, ItemType.CROSSING:
+        n_crossings}``. Keys are omitted when their count is zero so a
+        crossing-free plan returns ``{ItemType.CONVEYOR_BELT: n}``
+        only.
+    """
+    goals = place_belt_network(paths)
+    n_belts = 0
+    n_crossings = 0
+    for goal in goals:
+        assert isinstance(goal, PlaceMachineAt)
+        if goal.machine_type == int(MachineType.CONVEYOR_BELT):
+            n_belts += 1
+        elif goal.machine_type == int(MachineType.CROSSING):
+            n_crossings += 1
+    cost: dict[int, int] = {}
+    if n_belts:
+        cost[int(ItemType.CONVEYOR_BELT)] = n_belts
+    if n_crossings:
+        cost[int(ItemType.CROSSING)] = n_crossings
+    return cost
+
+
 def place_belt_path(
     waypoints: list[tuple[int, int]],
     *,
@@ -467,8 +815,8 @@ def place_belt_path(
 
 # Per-item bootstrap cost of one smelter cell built via
 # :func:`build_smelter_cell_at`. Two pallets (coal-buffer south + plate
-# bus to one side), one cell arm, one furnace; an extra ARM is added
-# when ``extract_facing`` is set.
+# bus to one side), one cell arm, one furnace; extras are added by the
+# kwargs (``with_extractor``, ``output_split``).
 _SMELTER_CELL_INVENTORY: tuple[tuple[int, int], ...] = (
     (int(ItemType.PALLET), 2),
     (int(ItemType.ARM), 1),
@@ -476,7 +824,11 @@ _SMELTER_CELL_INVENTORY: tuple[tuple[int, int], ...] = (
 )
 
 
-def smelter_cell_inventory(*, with_extractor: bool = False) -> dict[int, int]:
+def smelter_cell_inventory(
+    *,
+    with_extractor: bool = False,
+    output_split: bool = False,
+) -> dict[int, int]:
     """Return the bootstrap inventory cost of one smelter cell.
 
     Maps :class:`ItemType` integer ids to the count required in the
@@ -490,10 +842,29 @@ def smelter_cell_inventory(*, with_extractor: bool = False) -> dict[int, int]:
             extractor arm that :func:`build_smelter_cell_at` places
             when its ``extract_facing`` argument is set — adds one
             more ARM to the cost.
+        output_split: When ``True``, the plate_bus PALLET is replaced
+            by a SPLITTER feeding a manual-stash PALLET on the cell's
+            north output and an automation BELT on the south output.
+            Net per cell: same 2 PALLETs (was coal_buffer +
+            plate_bus, now coal_buffer + manual_stash), +1 SPLITTER,
+            +1 CONVEYOR_BELT vs the canonical layout.
+
+    Raises:
+        ValueError: ``output_split`` and ``with_extractor`` together —
+            the splitter's south output already drives the automation
+            lane, no extractor is needed.
     """
+    if output_split and with_extractor:
+        raise ValueError(
+            "smelter_cell_inventory: output_split and with_extractor are "
+            "mutually exclusive (the splitter replaces the extractor)",
+        )
     cost = dict(_SMELTER_CELL_INVENTORY)
     if with_extractor:
         cost[int(ItemType.ARM)] += 1
+    if output_split:
+        cost[int(ItemType.SPLITTER)] = 1
+        cost[int(ItemType.CONVEYOR_BELT)] = 1
     return cost
 
 
@@ -513,6 +884,7 @@ def build_smelter_cell_at(
     *,
     facing: int = int(Direction.RIGHT),
     extract_facing: int | None = None,
+    output_split: bool = False,
     occupied: set[tuple[int, int]] | None = None,
     map_size: tuple[int, int] | None = None,
 ) -> list[Goal]:
@@ -544,6 +916,26 @@ def build_smelter_cell_at(
     and pushes onto the tile in ``extract_facing`` from the bus —
     typically the first belt of a downstream plate trunk.
 
+    When ``output_split=True`` the plate_bus PALLET is swapped for a
+    SPLITTER at the same tile (facing the cell's ``facing`` so its
+    input is the arm-side west/east face). The splitter's two
+    perpendicular outputs feed:
+
+    * **manual_stash** — a PALLET to the *north* of the splitter
+      (smaller y), where the player-agent withdraws plates for
+      hand-crafting.
+    * **automation_belt** — a CONVEYOR_BELT to the *south* of the
+      splitter (larger y), facing DOWN, that carries plates onward
+      to a downstream :func:`place_belt_path` /
+      :func:`place_belt_network` route.
+
+    With ``output_split=True``, the cell emits 6 placements instead
+    of 4. Placement order: coal_buffer → manual_stash →
+    automation_belt → splitter → arm → furnace, so every stand tile
+    is dirt or an already-placed walkable belt at the moment of
+    placement. ``extract_facing`` is rejected in this mode (the
+    splitter is the extractor).
+
     The ore pallet to the north is assumed to be placed separately
     (Phase A's auto-miner pattern in the rocket benchmark): the
     furnace's :func:`run_assemblers` Phase 0 auto-pulls one ore per
@@ -573,23 +965,35 @@ def build_smelter_cell_at(
             ``extract_facing``, pulling plates out of the bus and
             pushing them onto the tile two further out. Must not be
             the *opposite* of ``facing`` (that would put the
-            extractor on top of the cell-arm).
+            extractor on top of the cell-arm). Mutually exclusive
+            with ``output_split``.
+        output_split: When ``True``, swap the plate_bus PALLET for a
+            SPLITTER + manual_stash PALLET (north) +
+            automation_belt CONVEYOR_BELT (south). Mutually
+            exclusive with ``extract_facing``.
         occupied: Optional set of tiles already taken. Every cell
             tile (and the extractor when present) is checked.
         map_size: Optional ``(width, height)`` for in-bounds checks.
 
     Returns:
-        4 :class:`PlaceMachineAt` goals (5 when ``extract_facing`` is
-        set), in placement order. See
-        :func:`smelter_cell_inventory` for the matching bootstrap
-        inventory.
+        4 :class:`PlaceMachineAt` goals by default (5 with
+        ``extract_facing``, 6 with ``output_split``), in placement
+        order. See :func:`smelter_cell_inventory` for the matching
+        bootstrap inventory.
 
     Raises:
         ValueError: ``facing`` is not LEFT or RIGHT; ``extract_facing``
             is not a cardinal direction; ``extract_facing`` is the
-            opposite of ``facing``; any tile is out of bounds, in
-            ``occupied``, or duplicates another piece.
+            opposite of ``facing``; ``extract_facing`` and
+            ``output_split`` are both set; any tile is out of bounds,
+            in ``occupied``, or duplicates another piece.
     """
+    if output_split and extract_facing is not None:
+        raise ValueError(
+            "build_smelter_cell_at: output_split is mutually exclusive with "
+            "extract_facing (the splitter's south output replaces the "
+            "extractor arm)",
+        )
     if int(facing) not in _HORIZONTAL_FACINGS:
         raise ValueError(
             f"build_smelter_cell_at facing must be LEFT or RIGHT, got {facing}",
@@ -608,6 +1012,16 @@ def build_smelter_cell_at(
         ("plate_bus", plate_bus_tile),
         ("coal_buffer", coal_buffer_tile),
     ]
+
+    manual_stash_tile: tuple[int, int] | None = None
+    automation_belt_tile: tuple[int, int] | None = None
+    if output_split:
+        # plate_bus tile is reused as the SPLITTER tile; the manual
+        # stash hangs north of it, the automation belt south.
+        manual_stash_tile = (plate_bus_tile[0], plate_bus_tile[1] - 1)
+        automation_belt_tile = (plate_bus_tile[0], plate_bus_tile[1] + 1)
+        pieces.append(("manual_stash", manual_stash_tile))
+        pieces.append(("automation_belt", automation_belt_tile))
 
     extractor_tile: tuple[int, int] | None = None
     if extract_facing is not None:
@@ -668,23 +1082,56 @@ def build_smelter_cell_at(
             int(Direction.UP),
         ),
     ]
-    if extractor_tile is not None:
-        # Extractor arm before the bus pallet — its stand tile is
-        # the bus's eventual location, currently dirt.
+    if output_split:
+        # manual_stash and automation_belt before the splitter so the
+        # splitter's stand tile (the arm's eventual location, west or
+        # east of it) is still the only walkable adjacency we depend on
+        # — the splitter itself never has to stand on either output
+        # neighbour. manual_stash facing DOWN and automation_belt
+        # facing DOWN share the convention with plate_bus (which faces
+        # DOWN today): both have their stand tile on the south side,
+        # which is dirt at place time.
         goals.append(
             PlaceMachineAt(
-                MachineType.ARM,
-                extractor_tile,
-                int(extract_facing),
+                MachineType.PALLET,
+                manual_stash_tile,
+                int(Direction.DOWN),
             ),
         )
-    goals.extend(
-        [
+        goals.append(
+            PlaceMachineAt(
+                MachineType.CONVEYOR_BELT,
+                automation_belt_tile,
+                int(Direction.DOWN),
+            ),
+        )
+        goals.append(
+            PlaceMachineAt(
+                MachineType.SPLITTER,
+                plate_bus_tile,
+                facing,
+            ),
+        )
+    else:
+        if extractor_tile is not None:
+            # Extractor arm before the bus pallet — its stand tile is
+            # the bus's eventual location, currently dirt.
+            goals.append(
+                PlaceMachineAt(
+                    MachineType.ARM,
+                    extractor_tile,
+                    int(extract_facing),
+                ),
+            )
+        goals.append(
             PlaceMachineAt(
                 MachineType.PALLET,
                 plate_bus_tile,
                 int(Direction.DOWN),
             ),
+        )
+    goals.extend(
+        [
             PlaceMachineAt(MachineType.ARM, arm_tile, facing),
             PlaceMachineAt(MachineType.FURNACE, furnace_tile, facing),
         ]
@@ -1152,6 +1599,8 @@ def _machine_to_item(machine_type: int) -> int:
         int(MachineType.ARM): int(ItemType.ARM),
         int(MachineType.ROCKET): int(ItemType.ROCKET),
         int(MachineType.FURNACE): int(ItemType.FURNACE),
+        int(MachineType.SPLITTER): int(ItemType.SPLITTER),
+        int(MachineType.CROSSING): int(ItemType.CROSSING),
     }[machine_type]
 
 

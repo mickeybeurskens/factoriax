@@ -204,3 +204,154 @@ def test_inventory_with_extractor_adds_one_arm() -> None:
     assert cost[int(ItemType.PALLET)] == 2
     assert cost[int(ItemType.ARM)] == 2  # cell arm + extractor
     assert cost[int(ItemType.FURNACE)] == 1
+
+
+# ---------------------------------------------------------------------------
+# output_split=True — splitter + manual stash + automation belt
+# ---------------------------------------------------------------------------
+
+
+def test_output_split_inventory_adds_splitter_and_belt() -> None:
+    """Inventory drops 0 PALLETs (one swapped from plate_bus to
+    manual_stash) but gains 1 SPLITTER and 1 CONVEYOR_BELT."""
+    cost = smelter_cell_inventory(output_split=True)
+    assert cost[int(ItemType.PALLET)] == 2  # coal_buffer + manual_stash
+    assert cost[int(ItemType.ARM)] == 1  # cell arm only
+    assert cost[int(ItemType.FURNACE)] == 1
+    assert cost[int(ItemType.SPLITTER)] == 1
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 1
+
+
+def test_output_split_emits_six_placements_in_order() -> None:
+    """Layout for facing=RIGHT, output_split=True: coal_buffer →
+    manual_stash → automation_belt → splitter → arm → furnace.
+    Stand tiles must be walkable at each placement step."""
+    goals = build_smelter_cell_at((8, 11), output_split=True)
+    placements = _placements(goals)
+    assert placements == [
+        # coal_buffer south of furnace, faces UP toward the furnace
+        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),
+        # manual_stash north of splitter (smaller y)
+        (int(MachineType.PALLET), (10, 10), int(Direction.DOWN)),
+        # automation_belt south of splitter (larger y), facing DOWN
+        (int(MachineType.CONVEYOR_BELT), (10, 12), int(Direction.DOWN)),
+        # splitter at the plate_bus location, facing the cell's facing
+        # so its W input is the arm tile
+        (int(MachineType.SPLITTER), (10, 11), int(Direction.RIGHT)),
+        # arm east of furnace, facing RIGHT
+        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
+        # furnace last — its stand tile is one west, kept walkable
+        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+    ]
+
+
+def test_output_split_facing_left_mirrors_horizontal_axis() -> None:
+    """For a facing=LEFT cell, the splitter, arm, and furnace mirror
+    east → west of the furnace. The N/S manual_stash + automation_belt
+    placement convention is independent of facing."""
+    goals = build_smelter_cell_at(
+        (24, 11),
+        facing=int(Direction.LEFT),
+        output_split=True,
+    )
+    placements = _placements(goals)
+    # Coal buffer south of the furnace.
+    assert placements[0] == (
+        int(MachineType.PALLET),
+        (24, 12),
+        int(Direction.UP),
+    )
+    # Manual stash N (above) and automation belt S (below) of the
+    # splitter — same N/S regardless of facing.
+    assert placements[1] == (
+        int(MachineType.PALLET),
+        (22, 10),
+        int(Direction.DOWN),
+    )
+    assert placements[2] == (
+        int(MachineType.CONVEYOR_BELT),
+        (22, 12),
+        int(Direction.DOWN),
+    )
+    # Splitter faces LEFT so its E (input) face is the arm.
+    assert placements[3] == (
+        int(MachineType.SPLITTER),
+        (22, 11),
+        int(Direction.LEFT),
+    )
+    # Arm and furnace mirrored to the west.
+    assert placements[4] == (
+        int(MachineType.ARM),
+        (23, 11),
+        int(Direction.LEFT),
+    )
+    assert placements[5] == (
+        int(MachineType.FURNACE),
+        (24, 11),
+        int(Direction.LEFT),
+    )
+
+
+def test_output_split_with_extract_facing_raises() -> None:
+    """``extract_facing`` and ``output_split`` are mutually exclusive."""
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        build_smelter_cell_at(
+            (8, 11),
+            output_split=True,
+            extract_facing=int(Direction.DOWN),
+        )
+
+
+def test_output_split_inventory_with_extractor_raises() -> None:
+    """The inventory helper enforces the same constraint."""
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        smelter_cell_inventory(output_split=True, with_extractor=True)
+
+
+def test_output_split_collision_at_manual_stash_tile_raises() -> None:
+    """Manual_stash collisions surface with the role label so the
+    bug report is greppable."""
+    occupied = {(10, 10)}
+    with pytest.raises(ValueError, match="manual_stash"):
+        build_smelter_cell_at(
+            (8, 11),
+            output_split=True,
+            occupied=occupied,
+        )
+
+
+def test_output_split_collision_at_automation_belt_tile_raises() -> None:
+    occupied = {(10, 12)}
+    with pytest.raises(ValueError, match="automation_belt"):
+        build_smelter_cell_at(
+            (8, 11),
+            output_split=True,
+            occupied=occupied,
+        )
+
+
+def test_output_split_out_of_bounds_manual_stash_raises() -> None:
+    """A cell anchored at fy=0 puts manual_stash at y=-1 which is out
+    of bounds for any positive map_size."""
+    with pytest.raises(ValueError, match="manual_stash"):
+        build_smelter_cell_at(
+            (8, 0),
+            output_split=True,
+            map_size=(32, 32),
+        )
+
+
+def test_output_split_two_cells_compose_via_occupied_set() -> None:
+    """Two output_split cells side-by-side must not collide. Iron-
+    style cell at (8, 11) and a hypothetical second cell at (16, 11)."""
+    iron = build_smelter_cell_at((8, 11), output_split=True)
+    iron_tiles: set[tuple[int, int]] = set()
+    for goal in iron:
+        assert isinstance(goal, PlaceMachineAt)
+        iron_tiles.add(goal.target)
+    second = build_smelter_cell_at(
+        (16, 11),
+        output_split=True,
+        occupied=iron_tiles,
+    )
+    assert len(second) == 6  # six pieces, no collision raised
