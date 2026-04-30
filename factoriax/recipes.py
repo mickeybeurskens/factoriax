@@ -42,10 +42,11 @@ class _Recipe(TypedDict):
 # Unified recipe table — single source of truth
 # ---------------------------------------------------------------------------
 
-# Recipe order MATTERS: positions 0–18 are the recipes that map to
-# ``Action.CRAFT_IRON_PLATE`` … ``Action.CRAFT_SCIENCE_LAB`` via
-# ``CRAFT_ACTION_TO_RECIPE = jnp.arange(19)``. Positions 19+ are
-# machine-only (no CRAFT action) — refractory plus the four new
+# Recipe order MATTERS: positions 0–20 are the recipes that map to
+# ``Action.CRAFT_IRON_PLATE`` … ``Action.CRAFT_CROSSING`` via
+# ``CRAFT_ACTION_TO_RECIPE = jnp.arange(NUM_RECIPES)`` (the dispatcher
+# in ``execute_action`` uses ``action - CRAFT_BASE`` directly). Positions
+# 21+ are machine-only (no CRAFT action) — refractory plus the four
 # rocket sub-assemblies.
 RECIPES: list[_Recipe] = [
     # -------- CRAFT-addressable slots 0–17 --------
@@ -158,7 +159,21 @@ RECIPES: list[_Recipe] = [
         "inputs": [(ItemType.CIRCUIT, 2), (ItemType.MOTOR, 2)],
         "ticks": 8,
     },
-    # -------- Machine-only slots 19+ (no CRAFT action) --------
+    # Belt-network pieces — same logistical tier as CONVEYOR_BELT.
+    # Pair each with COAL so the type-sets {TIN_PLATE, COAL} and
+    # {COPPER_PLATE, COAL} stay unique (the four ore+COAL pairs are
+    # all FURNACE-gated, so they don't collide on the ASSEMBLER side).
+    {
+        "output": ItemType.SPLITTER,
+        "inputs": [(ItemType.TIN_PLATE, 1), (ItemType.COAL, 1)],
+        "ticks": 4,
+    },
+    {
+        "output": ItemType.CROSSING,
+        "inputs": [(ItemType.COPPER_PLATE, 1), (ItemType.COAL, 1)],
+        "ticks": 4,
+    },
+    # -------- Machine-only slots 21+ (no CRAFT action) --------
     # Furnace half-fab — limestone calcined with coal heat. Two
     # inputs, so the (input-type-set) uniqueness invariant in
     # tests/test_recipes.py still holds and the recipe shares the
@@ -214,6 +229,8 @@ RECIPE_NAMES: list[str] = [
     "Advanced Science Pack",
     "Rocket",
     "Science Lab",
+    "Splitter",
+    "Crossing",
     "Refractory",
     "Hull",
     "Engine Unit",

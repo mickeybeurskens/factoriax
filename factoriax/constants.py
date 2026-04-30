@@ -62,6 +62,13 @@ class ItemType(IntEnum):
     # CRAFT_ACTION_TO_RECIPE slot ordering stay stable. Pairs with COAL
     # in the REFRACTORY recipe so every furnace recipe takes two inputs.
     LIMESTONE = 30
+    # Belt-network pieces — the same logistical tier as CONVEYOR_BELT.
+    # Appended at the end of ItemType so existing ids stay stable; the
+    # corresponding CRAFT_SPLITTER / CRAFT_CROSSING actions extend the
+    # CRAFT-addressable range (recipe indices 19, 20 — between
+    # SCIENCE_LAB at 18 and the legacy machine-only REFRACTORY at 21).
+    SPLITTER = 31
+    CROSSING = 32
 
 
 class MachineType(IntEnum):
@@ -76,6 +83,13 @@ class MachineType(IntEnum):
     ROCKET = 6
     FURNACE = 7
     SCIENCE_LAB = 8
+    # Belt-network pieces. SPLITTER reuses ent_buf (stack=2) and outputs
+    # to the two perpendicular sides of its facing direction. CROSSING
+    # reuses ent_asm_in[0..1] for two independent per-axis buffers so
+    # the vertical and horizontal streams can co-exist on one tile
+    # without mixing.
+    SPLITTER = 9
+    CROSSING = 10
 
 
 NUM_ITEM_TYPES = len(ItemType)
@@ -88,16 +102,23 @@ MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
 BLOCK_RESOURCE_DTYPE = jnp.int16
 
 # Max distinct item types a machine can hold simultaneously.
+# SPLITTER holds one type (its stack-of-2 buffer); CROSSING holds two
+# (one per axis slot in ent_asm_in[0..1]).
 MACHINE_MAX_TYPES = jnp.array(
-    [0, 2, 1, 4, 1, 1, 0, 2, 2],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB
+    [0, 2, 1, 4, 1, 1, 0, 2, 2, 1, 2],
+    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB,
+    # SPLITTER, CROSSING
     dtype=jnp.int32,
 )
 
 # Max stack count per item type per machine type.
+# SPLITTER buffer caps at 2 (the user-specified stack-of-2 splitter).
+# CROSSING per-axis stack caps at 1; each axis slot holds at most one
+# in-transit item, mirroring a single belt cell.
 MACHINE_MAX_STACK = jnp.array(
-    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000, 1000],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB
+    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000, 1000, 2, 1],
+    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB,
+    # SPLITTER, CROSSING
     dtype=jnp.int16,
 )
 
@@ -135,6 +156,8 @@ PLAYER_MAX_STACK = jnp.array(
         128,  # ROCKET_CORE
         128,  # SCIENCE_LAB
         1024,  # LIMESTONE
+        128,  # SPLITTER
+        128,  # CROSSING
     ],
     dtype=jnp.int32,
 )
@@ -182,6 +205,10 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.SCIENCE_LAB: (76, 29, 149),
     # Limestone: pale calcareous beige; distinct from iron-ore tan.
     ItemType.LIMESTONE: (215, 200, 165),
+    # Belt-network pieces — same warm-yellow family as CONVEYOR_BELT
+    # so the family is visually grouped on the inventory bar.
+    ItemType.SPLITTER: (240, 195, 70),
+    ItemType.CROSSING: (200, 165, 60),
 }
 
 # Human-readable display names for each MachineType.
@@ -195,6 +222,8 @@ MACHINE_TYPE_NAMES: dict[int, str] = {
     int(MachineType.ROCKET): "Rocket",
     int(MachineType.FURNACE): "Furnace",
     int(MachineType.SCIENCE_LAB): "Science Lab",
+    int(MachineType.SPLITTER): "Splitter",
+    int(MachineType.CROSSING): "Crossing",
 }
 
 # Recipes are defined in factoriax.recipes (single source of truth).
@@ -258,6 +287,8 @@ PLACEABLE_ITEMS = jnp.array(
         ItemType.ROCKET,
         ItemType.FURNACE,
         ItemType.SCIENCE_LAB,
+        ItemType.SPLITTER,
+        ItemType.CROSSING,
     ],
     dtype=jnp.int32,
 )
@@ -271,6 +302,8 @@ PLACEABLE_ITEM_LIST: tuple[int, ...] = (
     int(ItemType.ROCKET),
     int(ItemType.FURNACE),
     int(ItemType.SCIENCE_LAB),
+    int(ItemType.SPLITTER),
+    int(ItemType.CROSSING),
 )
 
 PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
@@ -288,6 +321,8 @@ ITEM_TO_MACHINE = {
     ItemType.ROCKET: MachineType.ROCKET,
     ItemType.FURNACE: MachineType.FURNACE,
     ItemType.SCIENCE_LAB: MachineType.SCIENCE_LAB,
+    ItemType.SPLITTER: MachineType.SPLITTER,
+    ItemType.CROSSING: MachineType.CROSSING,
 }
 
 ITEM_TO_MACHINE_ARRAY = jnp.array(
@@ -322,6 +357,9 @@ ITEM_TO_MACHINE_ARRAY = jnp.array(
         MachineType.NONE,  # AVIONICS
         MachineType.NONE,  # ROCKET_CORE
         MachineType.SCIENCE_LAB,  # SCIENCE_LAB
+        MachineType.NONE,  # LIMESTONE
+        MachineType.SPLITTER,  # SPLITTER
+        MachineType.CROSSING,  # CROSSING
     ],
     dtype=jnp.int32,
 )
@@ -337,6 +375,8 @@ MACHINE_TO_ITEM_ARRAY = jnp.array(
         ItemType.ROCKET,  # ROCKET
         ItemType.FURNACE,  # FURNACE
         ItemType.SCIENCE_LAB,  # SCIENCE_LAB
+        ItemType.SPLITTER,  # SPLITTER
+        ItemType.CROSSING,  # CROSSING
     ],
     dtype=jnp.int32,
 )
@@ -396,7 +436,7 @@ class Action(IntEnum):
     MINE = 9
     PICKUP = 10
 
-    # Placement — one per placeable machine type (8)
+    # Placement — one per placeable machine type (10)
     PLACE_MINER = 11
     PLACE_PALLET = 12
     PLACE_BELT = 13
@@ -405,68 +445,74 @@ class Action(IntEnum):
     PLACE_ROCKET = 16
     PLACE_FURNACE = 17
     PLACE_SCIENCE_LAB = 18
+    PLACE_SPLITTER = 19
+    PLACE_CROSSING = 20
 
-    # Crafting — one per recipe output (19)
-    CRAFT_IRON_PLATE = 19
-    CRAFT_COPPER_PLATE = 20
-    CRAFT_TIN_PLATE = 21
-    CRAFT_WAFER = 22
-    CRAFT_FRAME = 23
-    CRAFT_CIRCUIT = 24
-    CRAFT_WIRE = 25
-    CRAFT_MOTOR = 26
-    CRAFT_SENSOR = 27
-    CRAFT_BELT = 28
-    CRAFT_MINER = 29
-    CRAFT_ASSEMBLER = 30
-    CRAFT_PALLET = 31
-    CRAFT_ARM = 32
-    CRAFT_FURNACE = 33
-    CRAFT_BASIC_SCIENCE = 34
-    CRAFT_ADV_SCIENCE = 35
-    CRAFT_ROCKET = 36
-    CRAFT_SCIENCE_LAB = 37
+    # Crafting — one per recipe output (21)
+    CRAFT_IRON_PLATE = 21
+    CRAFT_COPPER_PLATE = 22
+    CRAFT_TIN_PLATE = 23
+    CRAFT_WAFER = 24
+    CRAFT_FRAME = 25
+    CRAFT_CIRCUIT = 26
+    CRAFT_WIRE = 27
+    CRAFT_MOTOR = 28
+    CRAFT_SENSOR = 29
+    CRAFT_BELT = 30
+    CRAFT_MINER = 31
+    CRAFT_ASSEMBLER = 32
+    CRAFT_PALLET = 33
+    CRAFT_ARM = 34
+    CRAFT_FURNACE = 35
+    CRAFT_BASIC_SCIENCE = 36
+    CRAFT_ADV_SCIENCE = 37
+    CRAFT_ROCKET = 38
+    CRAFT_SCIENCE_LAB = 39
+    CRAFT_SPLITTER = 40
+    CRAFT_CROSSING = 41
 
-    # Deposit — one per non-EMPTY item type (29)
-    DEPOSIT_COAL = 38
-    DEPOSIT_IRON_ORE = 39
-    DEPOSIT_COPPER_ORE = 40
-    DEPOSIT_TIN_ORE = 41
-    DEPOSIT_SILICON = 42
-    DEPOSIT_IRON_PLATE = 43
-    DEPOSIT_COPPER_PLATE = 44
-    DEPOSIT_TIN_PLATE = 45
-    DEPOSIT_WAFER = 46
-    DEPOSIT_FRAME = 47
-    DEPOSIT_CIRCUIT = 48
-    DEPOSIT_WIRE = 49
-    DEPOSIT_MOTOR = 50
-    DEPOSIT_SENSOR = 51
-    DEPOSIT_BELT = 52
-    DEPOSIT_MINER = 53
-    DEPOSIT_ASSEMBLER = 54
-    DEPOSIT_PALLET = 55
-    DEPOSIT_ARM = 56
-    DEPOSIT_BASIC_SCIENCE = 57
-    DEPOSIT_ADV_SCIENCE = 58
-    DEPOSIT_ROCKET = 59
-    DEPOSIT_FURNACE = 60
-    DEPOSIT_REFRACTORY = 61
-    DEPOSIT_HULL = 62
-    DEPOSIT_ENGINE_UNIT = 63
-    DEPOSIT_AVIONICS = 64
-    DEPOSIT_ROCKET_CORE = 65
-    DEPOSIT_SCIENCE_LAB = 66
+    # Deposit — one per non-EMPTY item type (31)
+    DEPOSIT_COAL = 42
+    DEPOSIT_IRON_ORE = 43
+    DEPOSIT_COPPER_ORE = 44
+    DEPOSIT_TIN_ORE = 45
+    DEPOSIT_SILICON = 46
+    DEPOSIT_IRON_PLATE = 47
+    DEPOSIT_COPPER_PLATE = 48
+    DEPOSIT_TIN_PLATE = 49
+    DEPOSIT_WAFER = 50
+    DEPOSIT_FRAME = 51
+    DEPOSIT_CIRCUIT = 52
+    DEPOSIT_WIRE = 53
+    DEPOSIT_MOTOR = 54
+    DEPOSIT_SENSOR = 55
+    DEPOSIT_BELT = 56
+    DEPOSIT_MINER = 57
+    DEPOSIT_ASSEMBLER = 58
+    DEPOSIT_PALLET = 59
+    DEPOSIT_ARM = 60
+    DEPOSIT_BASIC_SCIENCE = 61
+    DEPOSIT_ADV_SCIENCE = 62
+    DEPOSIT_ROCKET = 63
+    DEPOSIT_FURNACE = 64
+    DEPOSIT_REFRACTORY = 65
+    DEPOSIT_HULL = 66
+    DEPOSIT_ENGINE_UNIT = 67
+    DEPOSIT_AVIONICS = 68
+    DEPOSIT_ROCKET_CORE = 69
+    DEPOSIT_SCIENCE_LAB = 70
+    DEPOSIT_SPLITTER = 71
+    DEPOSIT_CROSSING = 72
 
     # Withdraw — single action; machines have one output slot so no
     # per-item selection is needed (mirrors PICKUP / MINE).
-    WITHDRAW = 67
+    WITHDRAW = 73
 
     # Machine rotation — absolute direction set (4)
-    ROTATE_LEFT = 68
-    ROTATE_RIGHT = 69
-    ROTATE_UP = 70
-    ROTATE_DOWN = 71
+    ROTATE_LEFT = 74
+    ROTATE_RIGHT = 75
+    ROTATE_UP = 76
+    ROTATE_DOWN = 77
 
 
 # Base offsets for arithmetic dispatch of compound actions.
@@ -475,7 +521,7 @@ CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
 DEPOSIT_BASE: int = Action.DEPOSIT_COAL
 ROTATE_BASE: int = Action.ROTATE_LEFT
 
-# Maps PLACE_* action offset (0..7) to the ItemType of the machine placed.
+# Maps PLACE_* action offset (0..9) to the ItemType of the machine placed.
 PLACE_ACTION_TO_ITEM = jnp.array(
     [
         ItemType.MINER,
@@ -486,6 +532,8 @@ PLACE_ACTION_TO_ITEM = jnp.array(
         ItemType.ROCKET,
         ItemType.FURNACE,
         ItemType.SCIENCE_LAB,
+        ItemType.SPLITTER,
+        ItemType.CROSSING,
     ],
     dtype=jnp.int32,
 )
@@ -553,7 +601,9 @@ TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
 # Per-MachineType slot counts (indexed by MachineType value).
 # SCIENCE_LAB: 2 input slots (one per pack type), no output.
-MACHINE_NUM_SLOTS = np.array([0, 1, 1, 3, 1, 0, 0, 3, 2], dtype=np.int32)
+# SPLITTER: 1 buffer slot (the stack-of-2 ent_buf).
+# CROSSING: 2 axis slots (vertical = ent_asm_in[0], horizontal = ent_asm_in[1]).
+MACHINE_NUM_SLOTS = np.array([0, 1, 1, 3, 1, 0, 0, 3, 2, 1, 2], dtype=np.int32)
 
 
 class SlotRole(IntEnum):
@@ -577,6 +627,8 @@ MACHINE_SLOT_ROLES = np.array(
         [SlotRole.NONE] * 8,  # ROCKET
         [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
         [SlotRole.INPUT, SlotRole.INPUT] + [SlotRole.NONE] * 6,  # SCIENCE_LAB
+        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,  # SPLITTER (stack-of-2 buf)
+        [SlotRole.STORAGE, SlotRole.STORAGE] + [SlotRole.NONE] * 6,  # CROSSING
     ],
     dtype=np.int32,
 )

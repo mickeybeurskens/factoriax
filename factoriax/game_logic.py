@@ -521,12 +521,12 @@ def _handle_player_action(
     cat = jnp.int32(0)  # default: movement
     cat = jnp.where(action == Action.MINE, 1, cat)
     cat = jnp.where(
-        (action >= Action.CRAFT_IRON_PLATE) & (action <= Action.CRAFT_SCIENCE_LAB),
+        (action >= Action.CRAFT_IRON_PLATE) & (action <= Action.CRAFT_CROSSING),
         2,
         cat,
     )
     cat = jnp.where(
-        (action >= Action.PLACE_MINER) & (action <= Action.PLACE_SCIENCE_LAB),
+        (action >= Action.PLACE_MINER) & (action <= Action.PLACE_CROSSING),
         3,
         cat,
     )
@@ -537,7 +537,7 @@ def _handle_player_action(
         cat,
     )
     cat = jnp.where(
-        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_SCIENCE_LAB),
+        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_CROSSING),
         6,
         cat,
     )
