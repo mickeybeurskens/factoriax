@@ -10,6 +10,11 @@ a grid position, then gather that entity's state.
 
 import jax.numpy as jnp
 
+from factoriax.belts import (
+    CROSSING_AXIS_DIRS,
+    CROSSING_HORIZ_SLOT,
+    CROSSING_VERT_SLOT,
+)
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
     MACHINE_MAX_STACK,
@@ -510,9 +515,9 @@ def run_assemblers(state: EnvState) -> EnvState:
 
 
 def run_conveyor_belts(state: EnvState) -> EnvState:
-    """Advance the belt network one tick — belts and splitters together.
+    """Advance the belt network one tick — belts, splitters, crossings.
 
-    Two tile types share this pass:
+    Three tile types share this pass:
 
     * **CONVEYOR_BELT** — pushes its buffer in the single direction it
       faces (1 item every tick, capped by destination space).
@@ -522,13 +527,23 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
       pre-pass receptivity decides whether the splitter commits, so a
       half-blocked splitter holds the full pair instead of leaking one
       item and stranding the other.
+    * **CROSSING** — two independent per-axis flows. Slot
+      ``ent_asm_in[idx, 0]`` is the vertical buffer (UP/DOWN flow),
+      slot ``ent_asm_in[idx, 1]`` is the horizontal buffer (LEFT/RIGHT
+      flow). Streams cannot mix because they live in disjoint slots
+      and each axis only fires in its own direction. A push from a
+      belt or splitter onto a crossing's *output* side is rejected
+      (the crossing has well-defined input and output sides per axis).
+      Per-axis cap is 2 — one cell of slack so a saturated chain
+      fed at one tile per tick can also drain at one tile per tick
+      without a separate look-ahead pass: the gather puts incoming +
+      old (= 2) into the slot, the scatter subtracts the outgoing
+      (= 1), leaving 1 in steady state.
 
-    Folding both tile types into a single 4-iteration scatter-gather
-    loop saves 4 directional iterations of work per tick versus running
-    them as separate passes (the splitter's receptivity computations
-    naturally reuse the belt loop's machinery). Behaviour is identical
-    to running belts and splitters as two passes; this is a perf
-    optimisation, not a semantic change.
+    Folding all three tile types into a single 4-iteration
+    scatter-gather loop shares the receptivity work (one pass instead
+    of three). The branching per entity is constant-time and remains
+    XLA-friendly because every branch is a ``jnp.where`` over masks.
 
     Args:
         state: Current environment state.
@@ -540,12 +555,15 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     active = state.ent_y >= 0
     is_belt = (state.ent_type == MachineType.CONVEYOR_BELT) & active
     is_splitter = (state.ent_type == MachineType.SPLITTER) & active
+    is_crossing = (state.ent_type == MachineType.CROSSING) & active
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
 
     buf_type = state.ent_buf_type
     buf_count = state.ent_buf_count
+    asm_in_type = state.ent_asm_in_type
+    asm_in_count = state.ent_asm_in_count
 
     # Splitter group masks: vertical-facing (UP/DOWN) splitters output
     # LEFT/RIGHT; horizontal-facing (LEFT/RIGHT) output UP/DOWN.
@@ -557,10 +575,23 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
         (state.ent_direction == 1) | (state.ent_direction == 2)
     )
 
+    # Crossing per-axis output directions — decoded from the packed
+    # ent_direction (1..4 maps the four flow combinations). Indexing
+    # the (5, 2) lookup yields a (N, 2) per-entity table.
+    crossing_axes = CROSSING_AXIS_DIRS[state.ent_direction.astype(jnp.int32)]
+    crossing_vert_dir = crossing_axes[:, 0]  # output direction of vertical axis
+    crossing_horiz_dir = crossing_axes[:, 1]  # output direction of horizontal axis
+
     def _receptive_pre(d: int) -> jnp.ndarray:
         """Pre-pass receptivity of the d-neighbour for each entity,
         evaluated against ``buf_type[entity]`` (the entity's own item
-        type — relevant for splitters; belts don't read this value)."""
+        type — relevant for splitters; belts don't read this value).
+
+        Crossing destinations are always non-receptive in the pre-pass
+        because pushes into a crossing are routed to ``ent_asm_in``,
+        not ``ent_buf`` — the in-loop check below handles that route
+        correctly with the full will-drain logic.
+        """
         dy, dx = _DY[d], _DX[d]
         dn_y = jnp.clip(ey + dy, 0, h - 1)
         dn_x = jnp.clip(ex + dx, 0, w - 1)
@@ -568,12 +599,14 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
         dn_valid = dn_eidx >= 0
         dn_diff = (dn_y != ey) | (dn_x != ex)
         dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
+        dn_is_crossing = state.ent_type[dn_safe] == MachineType.CROSSING
         dn_bt = buf_type[dn_safe]
         dn_bc = buf_count[dn_safe]
         dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
         return (
             dn_valid
             & dn_diff
+            & ~dn_is_crossing
             & ((dn_bc == 0) | ((dn_bt == buf_type) & (dn_bc < dn_max)))
         )
 
@@ -584,7 +617,10 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
     has_pair = buf_count >= 2
     # Atomic both-or-nothing: a vertical-facing splitter only commits if
-    # *both* horizontal outputs were receptive at snapshot time.
+    # *both* horizontal outputs were receptive at snapshot time. Crossing
+    # destinations are excluded from rec_*, so a splitter facing a
+    # crossing will hold rather than fire — splitters route into pallets
+    # / belts / other splitters; crossings receive from belts directly.
     can_fire_vert = is_vert_split & has_pair & rec_left & rec_right
     can_fire_horiz = is_horiz_split & has_pair & rec_up & rec_down
 
@@ -598,60 +634,146 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
+
+        # Crossings push: vert axis fires when d == vert_axis_dir; horiz
+        # axis fires when d == horiz_axis_dir. The two axes are
+        # independent — a single crossing can fire in two iterations
+        # (one per axis), but never twice in the same iteration.
+        # ``axis`` is the slot that this iteration's crossing pushes
+        # *and receives* read/write from.
+        if d in (3, 4):  # UP, DOWN — vertical axis
+            axis = CROSSING_VERT_SLOT
+            crossing_pusher_d = is_crossing & (crossing_vert_dir == d)
+            crossing_dst_axis_dir = crossing_vert_dir  # used dest-side
+        else:  # LEFT, RIGHT — horizontal axis
+            axis = CROSSING_HORIZ_SLOT
+            crossing_pusher_d = is_crossing & (crossing_horiz_dir == d)
+            crossing_dst_axis_dir = crossing_horiz_dir
+
         belt_pusher_d = (state.ent_direction == d) & is_belt
         splitter_pusher_d = splitter_pushers_by_dir[d]
-        # Combined pusher mask: belts and splitters firing in dir d.
-        # No entity is in both because is_belt and is_splitter are
-        # disjoint by MachineType, so the union below is also disjoint.
-        pusher_d = belt_pusher_d | splitter_pusher_d
 
+        # Combined pusher mask. The three sub-masks are pairwise disjoint
+        # because their underlying machine types are disjoint.
+        pusher_d = belt_pusher_d | splitter_pusher_d | crossing_pusher_d
+        is_axis_pusher = crossing_pusher_d
+        is_buf_pusher = belt_pusher_d | splitter_pusher_d
+
+        # Per-entity source: for crossings, the axis slot; for belts and
+        # splitters, ent_buf.
+        axis_slot_count = asm_in_count[:, axis]
+        axis_slot_type = asm_in_type[:, axis]
+        src_count = jnp.where(is_axis_pusher, axis_slot_count, buf_count)
+        src_type = jnp.where(is_axis_pusher, axis_slot_type, buf_type)
+
+        # Destination side.
         dn_y = jnp.clip(ey + dy, 0, h - 1)
         dn_x = jnp.clip(ex + dx, 0, w - 1)
         dn_eidx = state.tile_entity[dn_y, dn_x]
         dn_valid = dn_eidx >= 0
-        dn_diff = (dn_y != ey) | (dn_x != ex)  # not pushing to self
+        dn_diff = (dn_y != ey) | (dn_x != ex)
         dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
 
-        dn_bt = buf_type[dn_safe]
-        dn_bc = buf_count[dn_safe]
-        dn_empty = dn_bc == 0
-        dn_same = dn_bt == buf_type
+        dn_is_crossing = state.ent_type[dn_safe] == MachineType.CROSSING
+        # Crossing destination only accepts pushes that align with the
+        # *input direction* for the relevant axis. The input direction is
+        # the same as the axis output direction (a flow N→S takes inputs
+        # from the N side and outputs to the S side; a belt pushing DOWN
+        # is correctly entering the N face).
+        dn_axis_dir = crossing_dst_axis_dir[dn_safe]
+        crossing_accepts_d = dn_is_crossing & (dn_axis_dir == d)
+
+        # Read the destination's buffer track. For non-crossing dests we
+        # use ent_buf; for crossings we use the axis slot picked above.
+        dn_bt_buf = buf_type[dn_safe]
+        dn_bc_buf = buf_count[dn_safe]
+        dn_bt_axis = axis_slot_type[dn_safe]
+        dn_bc_axis = axis_slot_count[dn_safe]
+        dn_bt = jnp.where(dn_is_crossing, dn_bt_axis, dn_bt_buf)
+        dn_bc = jnp.where(dn_is_crossing, dn_bc_axis, dn_bc_buf)
         dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
+
+        dn_empty = dn_bc == 0
+        dn_same = dn_bt == src_type
         dn_space = dn_bc < dn_max
 
-        has_item = buf_count > 0
+        # Crossing destinations enforce wrong-side rejection: a push in
+        # direction d must align with the destination's input direction
+        # for the relevant axis.
+        dn_accepts = (~dn_is_crossing) | crossing_accepts_d
+
+        has_item = src_count > 0
         can_push = (
-            pusher_d & has_item & dn_valid & dn_diff & (dn_empty | (dn_same & dn_space))
+            pusher_d
+            & has_item
+            & dn_valid
+            & dn_diff
+            & dn_accepts
+            & (dn_empty | (dn_same & dn_space))
         )
 
-        # Belts push as much as fits (up to buf_count); splitters push
-        # exactly 1 per output. ``buf_count`` is correct for belts (the
-        # subsequent ``minimum(xfer, dn_max - dn_bc)`` caps to room).
-        push_target = jnp.where(splitter_pusher_d, jnp.int16(1), buf_count)
+        # Belts push everything that fits; splitters and crossings push
+        # exactly one per axis-fire.
+        push_target = jnp.where(
+            is_axis_pusher | splitter_pusher_d, jnp.int16(1), src_count
+        )
         xfer = jnp.where(can_push, push_target, jnp.int16(0))
         xfer = jnp.minimum(xfer, dn_max - dn_bc)
 
         # Gather: each entity checks if a pusher in direction d (located
-        # at -d) is targeting it.
+        # at -d) is targeting it. Receivers split into two tracks: the
+        # ent_buf track for belt/splitter/pallet receivers, and the
+        # ent_asm_in[*, axis] track for crossing receivers (the axis is
+        # the same constant the iteration's pushers use).
         up_y = jnp.clip(ey - dy, 0, h - 1)
         up_x = jnp.clip(ex - dx, 0, w - 1)
         up_diff = (up_y != ey) | (up_x != ex)
         up_eidx = state.tile_entity[up_y, up_x]
         up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
         incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
-        in_type = buf_type[up_safe]
+        in_type = src_type[up_safe]
         in_xfer = xfer[up_safe]
 
-        buf_type = jnp.where(incoming, in_type, buf_type)
-        buf_count = jnp.where(incoming, buf_count + in_xfer, buf_count)
+        # Buf-track gather: receivers that are not crossings.
+        receives_buf = incoming & ~is_crossing
+        buf_type = jnp.where(receives_buf, in_type, buf_type)
+        buf_count = jnp.where(receives_buf, buf_count + in_xfer, buf_count)
 
-        # Subtract sent items from source.
-        new_c = buf_count - xfer
-        buf_type = jnp.where(
-            can_push & (new_c == 0),
-            jnp.int8(0),
-            buf_type,
+        # Axis-track gather: crossing receivers, into the iteration's
+        # axis slot.
+        receives_axis = incoming & is_crossing
+        axis_slot_type_after = jnp.where(receives_axis, in_type, axis_slot_type)
+        axis_slot_count_after = jnp.where(
+            receives_axis, axis_slot_count + in_xfer, axis_slot_count
         )
-        buf_count = jnp.where(can_push, new_c, buf_count)
 
-    return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)
+        # Scatter (subtract from source). The post-gather buf/axis values
+        # are what we subtract from — same chain semantics as the
+        # original belt loop (an entity that both received and pushed
+        # in the same iteration ends with old + in_xfer - xfer).
+        new_buf_c = buf_count - xfer
+        buf_type = jnp.where(
+            can_push & is_buf_pusher & (new_buf_c == 0), jnp.int8(0), buf_type
+        )
+        buf_count = jnp.where(can_push & is_buf_pusher, new_buf_c, buf_count)
+
+        new_axis_c = axis_slot_count_after - xfer
+        axis_slot_type_after = jnp.where(
+            can_push & is_axis_pusher & (new_axis_c == 0),
+            jnp.int8(0),
+            axis_slot_type_after,
+        )
+        axis_slot_count_after = jnp.where(
+            can_push & is_axis_pusher, new_axis_c, axis_slot_count_after
+        )
+
+        # Persist axis-slot updates back into the (N, 2) ent_asm_in arrays.
+        asm_in_type = asm_in_type.at[:, axis].set(axis_slot_type_after)
+        asm_in_count = asm_in_count.at[:, axis].set(axis_slot_count_after)
+
+    return state.replace(
+        ent_buf_type=buf_type,
+        ent_buf_count=buf_count,
+        ent_asm_in_type=asm_in_type,
+        ent_asm_in_count=asm_in_count,
+    )

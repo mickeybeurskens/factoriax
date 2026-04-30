@@ -113,10 +113,12 @@ MACHINE_MAX_TYPES = jnp.array(
 
 # Max stack count per item type per machine type.
 # SPLITTER buffer caps at 2 (the user-specified stack-of-2 splitter).
-# CROSSING per-axis stack caps at 1; each axis slot holds at most one
-# in-transit item, mirroring a single belt cell.
+# CROSSING per-axis stack caps at 2: one cell of slack lets a fed
+# crossing both drain to its output and accept from its input on the
+# same tick, giving full one-tile-per-tick throughput in saturated
+# chains without a separate look-ahead pass.
 MACHINE_MAX_STACK = jnp.array(
-    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000, 1000, 2, 1],
+    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000, 1000, 2, 2],
     # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB,
     # SPLITTER, CROSSING
     dtype=jnp.int16,
