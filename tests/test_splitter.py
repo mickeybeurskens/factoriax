@@ -1,4 +1,11 @@
-"""Tests for :func:`run_splitters`.
+"""Tests for SPLITTER push semantics.
+
+Splitter logic lives inside :func:`run_conveyor_belts` (folded from
+the original standalone ``run_splitters`` pass for performance — the
+4-iteration scatter-gather is shared with belts). These tests target
+the splitter behaviour specifically by populating only splitter +
+pallet entities; belts can run alongside in the same pass without
+affecting these assertions.
 
 Splitter semantics under test:
 
@@ -23,8 +30,11 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
-from factoriax.machines import run_splitters
+from factoriax.machines import run_conveyor_belts
 from factoriax.state import EnvState
+
+# Splitter behaviour is exercised through the merged belt-network pass.
+run_splitters = run_conveyor_belts
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:

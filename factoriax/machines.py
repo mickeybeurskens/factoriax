@@ -53,7 +53,6 @@ def update_all_machines(
     state = run_miners(state, params)
     state = run_assemblers(state)
     state = run_conveyor_belts(state)
-    state = run_splitters(state)
     state = run_arms(state)
     return state
 
@@ -511,11 +510,25 @@ def run_assemblers(state: EnvState) -> EnvState:
 
 
 def run_conveyor_belts(state: EnvState) -> EnvState:
-    """Push items along belts into the entity they face.
+    """Advance the belt network one tick — belts and splitters together.
 
-    Each belt pushes its buffer into the downstream entity (belt,
-    pallet, or any machine with buffer space). This replaces the
-    old pull-from-upstream model so belts naturally feed into pallets.
+    Two tile types share this pass:
+
+    * **CONVEYOR_BELT** — pushes its buffer in the single direction it
+      faces (1 item every tick, capped by destination space).
+    * **SPLITTER** — buffers up to 2 items in ``ent_buf`` and, when
+      full, fires one item to each of the two perpendicular output
+      sides simultaneously. Atomic both-or-nothing: a snapshot of
+      pre-pass receptivity decides whether the splitter commits, so a
+      half-blocked splitter holds the full pair instead of leaking one
+      item and stranding the other.
+
+    Folding both tile types into a single 4-iteration scatter-gather
+    loop saves 4 directional iterations of work per tick versus running
+    them as separate passes (the splitter's receptivity computations
+    naturally reuse the belt loop's machinery). Behaviour is identical
+    to running belts and splitters as two passes; this is a perf
+    optimisation, not a semantic change.
 
     Args:
         state: Current environment state.
@@ -526,106 +539,6 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     h, w = state.map.shape
     active = state.ent_y >= 0
     is_belt = (state.ent_type == MachineType.CONVEYOR_BELT) & active
-
-    ey = jnp.clip(state.ent_y, 0, h - 1)
-    ex = jnp.clip(state.ent_x, 0, w - 1)
-
-    buf_type = state.ent_buf_type
-    buf_count = state.ent_buf_count
-
-    for d in range(1, 5):
-        dy, dx = _DY[d], _DX[d]
-        facing_d = (state.ent_direction == d) & is_belt
-
-        dn_y = jnp.clip(ey + dy, 0, h - 1)
-        dn_x = jnp.clip(ex + dx, 0, w - 1)
-
-        dn_eidx = state.tile_entity[dn_y, dn_x]
-        dn_valid = dn_eidx >= 0
-        dn_diff = (dn_y != ey) | (dn_x != ex)  # not pushing to self
-        dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
-
-        dn_bt = buf_type[dn_safe]
-        dn_bc = buf_count[dn_safe]
-        dn_empty = dn_bc == 0
-        dn_same = dn_bt == buf_type
-        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
-        dn_space = dn_bc < dn_max
-
-        has_item = buf_count > 0
-        can_push = (
-            facing_d & has_item & dn_valid & dn_diff & (dn_empty | (dn_same & dn_space))
-        )
-
-        xfer = jnp.where(can_push, buf_count, jnp.int16(0))
-        xfer = jnp.minimum(xfer, dn_max - dn_bc)
-
-        # Gather: for each entity, check if a pusher targets it.
-        # Look at the tile opposite to direction d; if an entity there
-        # is pushing (facing d), this entity is the destination.
-        up_y = jnp.clip(ey - dy, 0, h - 1)
-        up_x = jnp.clip(ex - dx, 0, w - 1)
-        up_diff = (up_y != ey) | (up_x != ex)
-        up_eidx = state.tile_entity[up_y, up_x]
-        up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
-        incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
-        in_type = buf_type[up_safe]
-        in_xfer = xfer[up_safe]
-
-        buf_type = jnp.where(incoming, in_type, buf_type)
-        buf_count = jnp.where(incoming, buf_count + in_xfer, buf_count)
-
-        # Subtract sent items from source.
-        new_c = buf_count - xfer
-        buf_type = jnp.where(
-            can_push & (new_c == 0),
-            jnp.int8(0),
-            buf_type,
-        )
-        buf_count = jnp.where(can_push, new_c, buf_count)
-
-    return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)
-
-
-def run_splitters(state: EnvState) -> EnvState:
-    """Push items from splitters to their two perpendicular outputs.
-
-    A splitter buffers up to 2 items in ``ent_buf`` (matching
-    ``MACHINE_MAX_STACK[SPLITTER] = 2``) and, when full, fires *one*
-    item to each of its two perpendicular output sides simultaneously.
-    The "fire" decision is made against a snapshot of the pre-pass
-    state — both outputs must be receptive at that moment for the
-    splitter to commit. If either output is full at snapshot time the
-    splitter holds, guaranteeing even-split throughput.
-
-    Splitter facing convention matches the belt convention: a splitter
-    with ``ent_direction == d`` is "oriented along axis d". Its two
-    outputs are perpendicular to d:
-
-    * facing UP / DOWN  → outputs LEFT, RIGHT
-    * facing LEFT / RIGHT → outputs UP, DOWN
-
-    Receivers are any entity using ``ent_buf`` (belt, splitter, pallet,
-    etc.). The CROSSING destination case is handled in step 3 — until
-    then a splitter pushing into a crossing tile sees an unmodified
-    ``ent_buf`` slot and treats it like any other receiver, which is
-    fine because step 1 also doesn't construct any crossings.
-
-    The skeleton mirrors :func:`run_conveyor_belts`: a 4-iteration
-    direction loop with scatter-gather per direction. Each splitter
-    contributes a push in *two* of those iterations (its two
-    perpendicular outputs), with the decision to push gated by a
-    pre-pass ``can_fire`` mask so iteration order can't trigger a
-    half-fire while leaving the other output stuck.
-
-    Args:
-        state: Current environment state.
-
-    Returns:
-        Updated state.
-    """
-    h, w = state.map.shape
-    active = state.ent_y >= 0
     is_splitter = (state.ent_type == MachineType.SPLITTER) & active
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
@@ -634,16 +547,20 @@ def run_splitters(state: EnvState) -> EnvState:
     buf_type = state.ent_buf_type
     buf_count = state.ent_buf_count
 
-    # Splitters group by output axis: vertical-facing (UP/DOWN) splitters
-    # output LEFT/RIGHT, horizontal-facing (LEFT/RIGHT) output UP/DOWN.
-    # Direction values: LEFT=1, RIGHT=2, UP=3, DOWN=4 (see Direction enum).
-    is_vert = is_splitter & ((state.ent_direction == 3) | (state.ent_direction == 4))
-    is_horiz = is_splitter & ((state.ent_direction == 1) | (state.ent_direction == 2))
+    # Splitter group masks: vertical-facing (UP/DOWN) splitters output
+    # LEFT/RIGHT; horizontal-facing (LEFT/RIGHT) output UP/DOWN.
+    # Direction values: LEFT=1, RIGHT=2, UP=3, DOWN=4 (Direction enum).
+    is_vert_split = is_splitter & (
+        (state.ent_direction == 3) | (state.ent_direction == 4)
+    )
+    is_horiz_split = is_splitter & (
+        (state.ent_direction == 1) | (state.ent_direction == 2)
+    )
 
     def _receptive_pre(d: int) -> jnp.ndarray:
-        """Pre-pass receptivity of the d-neighbour for *each* entity,
-        evaluated against ``buf_type[entity]`` (the splitter's own item
-        type). Returns the bool vector entity-indexed."""
+        """Pre-pass receptivity of the d-neighbour for each entity,
+        evaluated against ``buf_type[entity]`` (the entity's own item
+        type — relevant for splitters; belts don't read this value)."""
         dy, dx = _DY[d], _DX[d]
         dn_y = jnp.clip(ey + dy, 0, h - 1)
         dn_x = jnp.clip(ex + dx, 0, w - 1)
@@ -666,48 +583,56 @@ def run_splitters(state: EnvState) -> EnvState:
     rec_down = _receptive_pre(4)
 
     has_pair = buf_count >= 2
-    can_fire_vert = is_vert & has_pair & rec_left & rec_right
-    can_fire_horiz = is_horiz & has_pair & rec_up & rec_down
+    # Atomic both-or-nothing: a vertical-facing splitter only commits if
+    # *both* horizontal outputs were receptive at snapshot time.
+    can_fire_vert = is_vert_split & has_pair & rec_left & rec_right
+    can_fire_horiz = is_horiz_split & has_pair & rec_up & rec_down
 
-    # Per-direction pusher mask: which splitters fire in this direction.
-    # Vertical splitters fire LEFT and RIGHT; horizontal fire UP and DOWN.
-    pushers_by_dir = (
+    splitter_pushers_by_dir = (
         None,  # 0 — unused
-        can_fire_vert,  # LEFT
+        can_fire_vert,  # LEFT  — vert-facing splitters output here
         can_fire_vert,  # RIGHT
-        can_fire_horiz,  # UP
+        can_fire_horiz,  # UP   — horiz-facing splitters output here
         can_fire_horiz,  # DOWN
     )
 
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
-        pusher = pushers_by_dir[d]
+        belt_pusher_d = (state.ent_direction == d) & is_belt
+        splitter_pusher_d = splitter_pushers_by_dir[d]
+        # Combined pusher mask: belts and splitters firing in dir d.
+        # No entity is in both because is_belt and is_splitter are
+        # disjoint by MachineType, so the union below is also disjoint.
+        pusher_d = belt_pusher_d | splitter_pusher_d
 
         dn_y = jnp.clip(ey + dy, 0, h - 1)
         dn_x = jnp.clip(ex + dx, 0, w - 1)
         dn_eidx = state.tile_entity[dn_y, dn_x]
         dn_valid = dn_eidx >= 0
-        dn_diff = (dn_y != ey) | (dn_x != ex)
+        dn_diff = (dn_y != ey) | (dn_x != ex)  # not pushing to self
         dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
 
         dn_bt = buf_type[dn_safe]
         dn_bc = buf_count[dn_safe]
-        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
         dn_empty = dn_bc == 0
         dn_same = dn_bt == buf_type
+        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
         dn_space = dn_bc < dn_max
 
-        # Re-checking receptivity inside the loop catches the rare case
-        # where a previous iteration's push filled this destination —
-        # in which case xfer caps to 0 and the source keeps its item
-        # for next tick. Matches run_conveyor_belts contention semantics.
-        can_push = pusher & dn_valid & dn_diff & (dn_empty | (dn_same & dn_space))
+        has_item = buf_count > 0
+        can_push = (
+            pusher_d & has_item & dn_valid & dn_diff & (dn_empty | (dn_same & dn_space))
+        )
 
-        xfer = jnp.where(can_push, jnp.int16(1), jnp.int16(0))
+        # Belts push as much as fits (up to buf_count); splitters push
+        # exactly 1 per output. ``buf_count`` is correct for belts (the
+        # subsequent ``minimum(xfer, dn_max - dn_bc)`` caps to room).
+        push_target = jnp.where(splitter_pusher_d, jnp.int16(1), buf_count)
+        xfer = jnp.where(can_push, push_target, jnp.int16(0))
         xfer = jnp.minimum(xfer, dn_max - dn_bc)
 
-        # Gather: any entity whose ``-d`` neighbour is firing in
-        # direction d into this entity.
+        # Gather: each entity checks if a pusher in direction d (located
+        # at -d) is targeting it.
         up_y = jnp.clip(ey - dy, 0, h - 1)
         up_x = jnp.clip(ex - dx, 0, w - 1)
         up_diff = (up_y != ey) | (up_x != ex)
@@ -720,6 +645,7 @@ def run_splitters(state: EnvState) -> EnvState:
         buf_type = jnp.where(incoming, in_type, buf_type)
         buf_count = jnp.where(incoming, buf_count + in_xfer, buf_count)
 
+        # Subtract sent items from source.
         new_c = buf_count - xfer
         buf_type = jnp.where(
             can_push & (new_c == 0),
