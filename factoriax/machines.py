@@ -53,6 +53,7 @@ def update_all_machines(
     state = run_miners(state, params)
     state = run_assemblers(state)
     state = run_conveyor_belts(state)
+    state = run_splitters(state)
     state = run_arms(state)
     return state
 
@@ -575,6 +576,150 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
         buf_count = jnp.where(incoming, buf_count + in_xfer, buf_count)
 
         # Subtract sent items from source.
+        new_c = buf_count - xfer
+        buf_type = jnp.where(
+            can_push & (new_c == 0),
+            jnp.int8(0),
+            buf_type,
+        )
+        buf_count = jnp.where(can_push, new_c, buf_count)
+
+    return state.replace(ent_buf_type=buf_type, ent_buf_count=buf_count)
+
+
+def run_splitters(state: EnvState) -> EnvState:
+    """Push items from splitters to their two perpendicular outputs.
+
+    A splitter buffers up to 2 items in ``ent_buf`` (matching
+    ``MACHINE_MAX_STACK[SPLITTER] = 2``) and, when full, fires *one*
+    item to each of its two perpendicular output sides simultaneously.
+    The "fire" decision is made against a snapshot of the pre-pass
+    state — both outputs must be receptive at that moment for the
+    splitter to commit. If either output is full at snapshot time the
+    splitter holds, guaranteeing even-split throughput.
+
+    Splitter facing convention matches the belt convention: a splitter
+    with ``ent_direction == d`` is "oriented along axis d". Its two
+    outputs are perpendicular to d:
+
+    * facing UP / DOWN  → outputs LEFT, RIGHT
+    * facing LEFT / RIGHT → outputs UP, DOWN
+
+    Receivers are any entity using ``ent_buf`` (belt, splitter, pallet,
+    etc.). The CROSSING destination case is handled in step 3 — until
+    then a splitter pushing into a crossing tile sees an unmodified
+    ``ent_buf`` slot and treats it like any other receiver, which is
+    fine because step 1 also doesn't construct any crossings.
+
+    The skeleton mirrors :func:`run_conveyor_belts`: a 4-iteration
+    direction loop with scatter-gather per direction. Each splitter
+    contributes a push in *two* of those iterations (its two
+    perpendicular outputs), with the decision to push gated by a
+    pre-pass ``can_fire`` mask so iteration order can't trigger a
+    half-fire while leaving the other output stuck.
+
+    Args:
+        state: Current environment state.
+
+    Returns:
+        Updated state.
+    """
+    h, w = state.map.shape
+    active = state.ent_y >= 0
+    is_splitter = (state.ent_type == MachineType.SPLITTER) & active
+
+    ey = jnp.clip(state.ent_y, 0, h - 1)
+    ex = jnp.clip(state.ent_x, 0, w - 1)
+
+    buf_type = state.ent_buf_type
+    buf_count = state.ent_buf_count
+
+    # Splitters group by output axis: vertical-facing (UP/DOWN) splitters
+    # output LEFT/RIGHT, horizontal-facing (LEFT/RIGHT) output UP/DOWN.
+    # Direction values: LEFT=1, RIGHT=2, UP=3, DOWN=4 (see Direction enum).
+    is_vert = is_splitter & ((state.ent_direction == 3) | (state.ent_direction == 4))
+    is_horiz = is_splitter & ((state.ent_direction == 1) | (state.ent_direction == 2))
+
+    def _receptive_pre(d: int) -> jnp.ndarray:
+        """Pre-pass receptivity of the d-neighbour for *each* entity,
+        evaluated against ``buf_type[entity]`` (the splitter's own item
+        type). Returns the bool vector entity-indexed."""
+        dy, dx = _DY[d], _DX[d]
+        dn_y = jnp.clip(ey + dy, 0, h - 1)
+        dn_x = jnp.clip(ex + dx, 0, w - 1)
+        dn_eidx = state.tile_entity[dn_y, dn_x]
+        dn_valid = dn_eidx >= 0
+        dn_diff = (dn_y != ey) | (dn_x != ex)
+        dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
+        dn_bt = buf_type[dn_safe]
+        dn_bc = buf_count[dn_safe]
+        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
+        return (
+            dn_valid
+            & dn_diff
+            & ((dn_bc == 0) | ((dn_bt == buf_type) & (dn_bc < dn_max)))
+        )
+
+    rec_left = _receptive_pre(1)
+    rec_right = _receptive_pre(2)
+    rec_up = _receptive_pre(3)
+    rec_down = _receptive_pre(4)
+
+    has_pair = buf_count >= 2
+    can_fire_vert = is_vert & has_pair & rec_left & rec_right
+    can_fire_horiz = is_horiz & has_pair & rec_up & rec_down
+
+    # Per-direction pusher mask: which splitters fire in this direction.
+    # Vertical splitters fire LEFT and RIGHT; horizontal fire UP and DOWN.
+    pushers_by_dir = (
+        None,  # 0 — unused
+        can_fire_vert,  # LEFT
+        can_fire_vert,  # RIGHT
+        can_fire_horiz,  # UP
+        can_fire_horiz,  # DOWN
+    )
+
+    for d in range(1, 5):
+        dy, dx = _DY[d], _DX[d]
+        pusher = pushers_by_dir[d]
+
+        dn_y = jnp.clip(ey + dy, 0, h - 1)
+        dn_x = jnp.clip(ex + dx, 0, w - 1)
+        dn_eidx = state.tile_entity[dn_y, dn_x]
+        dn_valid = dn_eidx >= 0
+        dn_diff = (dn_y != ey) | (dn_x != ex)
+        dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
+
+        dn_bt = buf_type[dn_safe]
+        dn_bc = buf_count[dn_safe]
+        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
+        dn_empty = dn_bc == 0
+        dn_same = dn_bt == buf_type
+        dn_space = dn_bc < dn_max
+
+        # Re-checking receptivity inside the loop catches the rare case
+        # where a previous iteration's push filled this destination —
+        # in which case xfer caps to 0 and the source keeps its item
+        # for next tick. Matches run_conveyor_belts contention semantics.
+        can_push = pusher & dn_valid & dn_diff & (dn_empty | (dn_same & dn_space))
+
+        xfer = jnp.where(can_push, jnp.int16(1), jnp.int16(0))
+        xfer = jnp.minimum(xfer, dn_max - dn_bc)
+
+        # Gather: any entity whose ``-d`` neighbour is firing in
+        # direction d into this entity.
+        up_y = jnp.clip(ey - dy, 0, h - 1)
+        up_x = jnp.clip(ex - dx, 0, w - 1)
+        up_diff = (up_y != ey) | (up_x != ex)
+        up_eidx = state.tile_entity[up_y, up_x]
+        up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
+        incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
+        in_type = buf_type[up_safe]
+        in_xfer = xfer[up_safe]
+
+        buf_type = jnp.where(incoming, in_type, buf_type)
+        buf_count = jnp.where(incoming, buf_count + in_xfer, buf_count)
+
         new_c = buf_count - xfer
         buf_type = jnp.where(
             can_push & (new_c == 0),
