@@ -4,10 +4,12 @@ The engine's Phase 3 recipe match relies on every recipe having a
 distinct (unordered) set of input item types within its machine
 type *at the same arity*. 1-input recipes pad their unused slot
 with ``(EMPTY, 0)`` in the derived arrays, so they only fire when
-the machine's second input slot is physically empty — that slot
-gate distinguishes e.g. ``REFRACTORY = {coal}`` from
-``IRON_PLATE = {iron_ore, coal}``. Same-arity duplicates would
-still be ambiguous and are rejected.
+the machine's second input slot is physically empty — the slot
+gate disambiguates them from any 2-input recipe whose input set
+is a superset. Same-arity duplicates would still be ambiguous and
+are rejected. As of the LIMESTONE addition every furnace recipe
+is 2-input (REFRACTORY = {LIMESTONE, COAL}), but the 1-input
+support stays in place for forward compatibility.
 """
 
 from __future__ import annotations
@@ -53,10 +55,11 @@ def test_recipe_has_one_or_two_inputs(recipe: dict) -> None:
 @pytest.mark.parametrize("idx", range(len(RECIPES)))
 def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     """Every assembler-gated recipe has exactly 2 input types.
-    Furnace recipes may be 1 or 2 — 2-input furnace recipes use
-    coal as a fuel-like second input (e.g. smelting IRON_ORE +
-    COAL → IRON_PLATE), while a 1-input recipe exists for coal
-    itself (COAL → REFRACTORY).
+    Furnace recipes may be 1 or 2 — every shipped furnace recipe
+    is currently 2-input with coal as the second (fuel-like) slot
+    (IRON_ORE + COAL → IRON_PLATE, …, LIMESTONE + COAL →
+    REFRACTORY). The 1-input branch in run_combiners is exercised
+    only by the slot-emptiness gate test below.
     """
     from factoriax.constants import MachineType
 
@@ -67,3 +70,19 @@ def test_assembler_recipes_have_two_inputs(idx: int) -> None:
             f"Assembler recipe {idx} ({recipe['output']}) has "
             f"{len(recipe['inputs'])} inputs; expected 2."
         )
+
+
+def test_every_furnace_recipe_is_two_input() -> None:
+    """After the LIMESTONE addition every furnace recipe takes two
+    inputs. This is a load-bearing structural property the rocket
+    benchmark's belt-logistics layout relies on (no single-input
+    outliers that would need a special-case feeder shape).
+    """
+    from factoriax.constants import MachineType
+
+    for idx, recipe in enumerate(RECIPES):
+        if int(RECIPE_MACHINE_TYPE[idx]) == int(MachineType.FURNACE):
+            assert len(recipe["inputs"]) == 2, (
+                f"Furnace recipe {idx} ({recipe['output']}) has "
+                f"{len(recipe['inputs'])} inputs; expected 2."
+            )

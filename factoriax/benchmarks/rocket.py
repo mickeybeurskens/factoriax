@@ -357,10 +357,12 @@ def rocket_reward(
 # Level construction
 # ---------------------------------------------------------------------------
 
-# 32x32 map; player spawns at the centre with five 3x3 ore patches
+# 32x32 map; player spawns at the centre with six 3x3 ore patches
 # placed symmetrically at ~8 tiles radius. A furnace and an assembler
 # are pre-placed immediately west / east of the spawn so the agent
-# never has to hand-craft to get started.
+# never has to hand-craft to get started. The sixth patch (LIMESTONE)
+# was added so REFRACTORY can take two inputs (LIMESTONE + COAL)
+# matching every other furnace recipe — see factoriax.recipes.
 _MAP_SIZE: int = 32
 _ORE_PATCH_SIZE: int = 3
 # 280 per tile × 9 tiles per patch ≈ 2500 ore per patch. Enough for
@@ -384,18 +386,22 @@ _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
     (7, 22, BlockType.COAL),
     (22, 22, BlockType.TIN),
     (14, 3, BlockType.SILICON),
+    # Limestone: south-centre, well clear of the iron/copper/tin/coal
+    # patches and the spawn corridor. Covers (13..15, 28..30).
+    (13, 28, BlockType.LIMESTONE),
 ]
 
 
 def build_rocket_level() -> Level:
     """Construct the canonical 32x32 rocket benchmark level.
 
-    Player spawns at :data:`_SPAWN`. Five 3x3 ore patches (iron, copper,
-    coal, tin, silicon) sit roughly eight tiles from spawn in a
-    symmetric layout, each tile carrying
-    :data:`_ORE_RESOURCES_PER_TILE` units — plenty for a full rocket
-    run. A furnace and an assembler are pre-placed one tile west and
-    east of spawn respectively.
+    Player spawns at :data:`_SPAWN`. Six 3x3 ore patches (iron, copper,
+    coal, tin, silicon, limestone) sit at varying radii from spawn in
+    a roughly-symmetric layout, each tile carrying
+    :data:`_ORE_RESOURCES_PER_TILE` units (or
+    :data:`_COAL_RESOURCES_PER_TILE` for coal) — plenty for a full
+    rocket run. A furnace and an assembler are pre-placed one tile
+    west and east of spawn respectively.
 
     Returns:
         Deterministic :class:`Level` used as the benchmark's only level.

@@ -22,6 +22,7 @@ class BlockType(IntEnum):
     TIN = 7
     SILICON = 8
     NEST = 9  # Temporary backward-compat (Stage 1)
+    LIMESTONE = 10  # Refractory feedstock; pairs with COAL in furnace
 
 
 class ItemType(IntEnum):
@@ -57,6 +58,10 @@ class ItemType(IntEnum):
     AVIONICS = 27
     ROCKET_CORE = 28
     SCIENCE_LAB = 29
+    # LIMESTONE is appended at the end so existing ItemType ids and the
+    # CRAFT_ACTION_TO_RECIPE slot ordering stay stable. Pairs with COAL
+    # in the REFRACTORY recipe so every furnace recipe takes two inputs.
+    LIMESTONE = 30
 
 
 class MachineType(IntEnum):
@@ -129,6 +134,7 @@ PLAYER_MAX_STACK = jnp.array(
         128,  # AVIONICS
         128,  # ROCKET_CORE
         128,  # SCIENCE_LAB
+        1024,  # LIMESTONE
     ],
     dtype=jnp.int32,
 )
@@ -139,6 +145,7 @@ BLOCK_TO_ITEM: dict[int, int] = {
     BlockType.COPPER: ItemType.COPPER_ORE,
     BlockType.TIN: ItemType.TIN_ORE,
     BlockType.SILICON: ItemType.SILICON,
+    BlockType.LIMESTONE: ItemType.LIMESTONE,
 }
 
 ITEM_COLORS: dict[int, tuple[int, int, int]] = {
@@ -173,6 +180,8 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     # Science lab: deep violet body. Bars/apex/active glow are drawn
     # by the renderer using palette C (see renderer._draw_science_lab_body).
     ItemType.SCIENCE_LAB: (76, 29, 149),
+    # Limestone: pale calcareous beige; distinct from iron-ore tan.
+    ItemType.LIMESTONE: (215, 200, 165),
 }
 
 # Human-readable display names for each MachineType.
@@ -498,6 +507,7 @@ MINEABLE_BLOCKS = jnp.array(
         BlockType.COPPER,
         BlockType.TIN,
         BlockType.SILICON,
+        BlockType.LIMESTONE,
     ],
 )
 
@@ -512,6 +522,8 @@ BLOCK_TO_ITEM_ARRAY = jnp.array(
         ItemType.COAL,  # COAL
         ItemType.TIN_ORE,  # TIN
         ItemType.SILICON,  # SILICON
+        ItemType.EMPTY,  # NEST (not a mineable block)
+        ItemType.LIMESTONE,  # LIMESTONE
     ],
     dtype=jnp.int32,
 )
@@ -620,6 +632,7 @@ def load_all_textures() -> dict[int, np.ndarray]:
         BlockType.COAL: "coal",
         BlockType.TIN: "tin",
         BlockType.SILICON: "silicon",
+        BlockType.LIMESTONE: "limestone",
     }
     for block_type, name in texture_names.items():
         textures[int(block_type)] = load_texture(name)

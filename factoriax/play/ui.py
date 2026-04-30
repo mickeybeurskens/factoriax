@@ -88,6 +88,7 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.ROCKET: "Rocket",
     ItemType.BASIC_SCIENCE_PACK: "Basic Sci",
     ItemType.ADVANCED_SCIENCE_PACK: "Adv Sci",
+    ItemType.LIMESTONE: "Limestone",
 }
 
 # ---------------------------------------------------------------------------

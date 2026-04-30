@@ -135,8 +135,9 @@ class TestAssemblerStartsCraft:
 
     def test_no_start_without_coal(self, state_factory) -> None:
         """Smelting needs BOTH ore and coal — ore alone keeps the
-        furnace idle. Coal-only fires the refractory recipe separately
-        (covered elsewhere)."""
+        furnace idle. After the LIMESTONE addition every furnace
+        recipe is two-input (no coal-alone refractory shortcut), so
+        a single populated slot never fires."""
         state = _make_assembler_state(
             state_factory,
             machine_type=int(MachineType.FURNACE),
@@ -149,11 +150,28 @@ class TestAssemblerStartsCraft:
         assert int(new.ent_power[eid]) == 0
         assert int(new.ent_asm_in_count[eid, 0]) == 5
 
-    def test_refractory_fires_on_coal_alone(self, state_factory) -> None:
-        """Coal in a single slot (slot 1 empty) fires the REFRACTORY
-        recipe. Phase 3 clears the slot fully on cycle start, so any
-        excess over the recipe requirement is wasted — agents deposit
-        exactly-needed counts to avoid this."""
+    def test_refractory_fires_on_limestone_plus_coal(self, state_factory) -> None:
+        """REFRACTORY is now LIMESTONE + COAL in two slots. The
+        slot-emptiness gate that used to fire it on coal-alone is no
+        longer reachable for any shipped recipe — every furnace
+        recipe needs both slots populated."""
+        state = _make_assembler_state(
+            state_factory,
+            machine_type=int(MachineType.FURNACE),
+            asm_in_type=[int(ItemType.LIMESTONE), int(ItemType.COAL)],
+            asm_in_count=[1, 1],
+        )
+        new = run_assemblers(state)
+        eid = _eid(new, 0, 0)
+
+        assert int(new.ent_power[eid]) == 4  # REFRACTORY ticks
+        assert int(new.ent_asm_in_count[eid, 0]) == 0
+        assert int(new.ent_asm_in_count[eid, 1]) == 0
+
+    def test_refractory_does_not_fire_on_coal_alone(self, state_factory) -> None:
+        """Coal-alone used to fire the old 1-input REFRACTORY recipe.
+        After the LIMESTONE addition the recipe needs both inputs;
+        coal-alone keeps the furnace idle."""
         state = _make_assembler_state(
             state_factory,
             machine_type=int(MachineType.FURNACE),
@@ -163,8 +181,8 @@ class TestAssemblerStartsCraft:
         new = run_assemblers(state)
         eid = _eid(new, 0, 0)
 
-        assert int(new.ent_power[eid]) == 4  # REFRACTORY ticks
-        assert int(new.ent_asm_in_count[eid, 0]) == 0
+        assert int(new.ent_power[eid]) == 0
+        assert int(new.ent_asm_in_count[eid, 0]) == 1
 
     def test_no_start_without_ore(self, state_factory) -> None:
         """Empty input slot means nothing to smelt."""

@@ -3,9 +3,12 @@
 Unified recipe table used by both player crafting (instant) and
 combiner auto-crafting (timed). Two shapes:
 
-- **Furnace recipes** take exactly 1 input type. The recipe table
-  pads the unused slot with ``(EMPTY, 0)`` so the Phase 3 matcher in
-  ``run_combiners`` can treat every recipe as a 2-slot lookup.
+- **Furnace recipes** take 1 or 2 input types. As of the LIMESTONE
+  addition every shipped furnace recipe is 2-input (the four plate
+  smelts pair their ore with COAL, REFRACTORY pairs LIMESTONE with
+  COAL). The 1-input branch is still supported by the table — the
+  unused slot is padded with ``(EMPTY, 0)`` so the Phase 3 matcher
+  in ``run_combiners`` can treat every recipe as a 2-slot lookup.
 - **Assembler recipes** take exactly 2 input types, and the
   (unordered) pair is unique across the table. Uniqueness is the
   invariant that lets Phase 3 forward-match deterministically; see
@@ -47,8 +50,10 @@ class _Recipe(TypedDict):
 RECIPES: list[_Recipe] = [
     # -------- CRAFT-addressable slots 0–17 --------
     # Furnace smelts — coal is consumed as fuel for every plate
-    # (1 ore + 1 coal → 1 plate). Refractory stays as a 1-input
-    # recipe (coal only) so coal can still be smelted standalone.
+    # (1 ore + 1 coal → 1 plate). Refractory pairs LIMESTONE with
+    # COAL so every furnace recipe is shaped the same — two inputs
+    # with COAL as fuel — and downstream belt logistics never have
+    # to special-case a single-input outlier.
     {
         "output": ItemType.IRON_PLATE,
         "inputs": [(ItemType.IRON_ORE, 1), (ItemType.COAL, 1)],
@@ -154,10 +159,13 @@ RECIPES: list[_Recipe] = [
         "ticks": 8,
     },
     # -------- Machine-only slots 19+ (no CRAFT action) --------
-    # Furnace half-fab (keeps FURNACE recipe's input type-set unique).
+    # Furnace half-fab — limestone calcined with coal heat. Two
+    # inputs, so the (input-type-set) uniqueness invariant in
+    # tests/test_recipes.py still holds and the recipe shares the
+    # same 2-slot shape as every plate smelt.
     {
         "output": ItemType.REFRACTORY,
-        "inputs": [(ItemType.COAL, 1)],
+        "inputs": [(ItemType.LIMESTONE, 1), (ItemType.COAL, 1)],
         "ticks": 4,
     },
     # Rocket sub-assemblies — the four-tier convergence.
