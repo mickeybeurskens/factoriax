@@ -114,3 +114,93 @@ def test_overlapping_cells_via_occupied_set_raises() -> None:
     a_tiles = {g.target for g in cell_a}
     with pytest.raises(ValueError, match=r"furnace tile \(10, 11\)"):
         build_smelter_cell_at((10, 11), occupied=a_tiles)
+
+
+def test_facing_left_mirrors_arm_and_plate_bus_to_west() -> None:
+    """``facing=LEFT`` flips the arm and plate-bus to the *west* side
+    while keeping the coal-buffer south."""
+    goals = build_smelter_cell_at((23, 11), facing=int(Direction.LEFT))
+    placements = _placements(goals)
+    assert placements == [
+        # coal_buffer south, unchanged from RIGHT case
+        (int(MachineType.PALLET), (23, 12), int(Direction.UP)),
+        # plate_bus two tiles WEST of furnace, still facing DOWN
+        (int(MachineType.PALLET), (21, 11), int(Direction.DOWN)),
+        # arm one tile WEST of furnace, facing LEFT
+        (int(MachineType.ARM), (22, 11), int(Direction.LEFT)),
+        # furnace facing LEFT
+        (int(MachineType.FURNACE), (23, 11), int(Direction.LEFT)),
+    ]
+
+
+def test_facing_other_than_left_or_right_raises() -> None:
+    with pytest.raises(ValueError, match="facing must be LEFT or RIGHT"):
+        build_smelter_cell_at((8, 11), facing=int(Direction.UP))
+
+
+def test_extract_facing_adds_extractor_arm_before_plate_bus() -> None:
+    """Extractor arm sits at plate_bus + unit(extract_facing) and
+    is placed *between* coal_buffer and plate_bus so its stand tile
+    (= plate_bus's eventual location) is still walkable dirt."""
+    goals = build_smelter_cell_at(
+        (8, 11),
+        facing=int(Direction.RIGHT),
+        extract_facing=int(Direction.RIGHT),
+    )
+    placements = _placements(goals)
+    assert placements == [
+        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),  # coal
+        # Extractor at (11, 11) facing RIGHT — plate_bus is (10, 11),
+        # extractor sits one step further east.
+        (int(MachineType.ARM), (11, 11), int(Direction.RIGHT)),
+        (int(MachineType.PALLET), (10, 11), int(Direction.DOWN)),
+        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
+        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+    ]
+
+
+def test_extract_facing_for_mirrored_copper_cell() -> None:
+    """Mirrored copper cell with extractor: extractor is one tile
+    further WEST of the plate-bus."""
+    goals = build_smelter_cell_at(
+        (23, 11),
+        facing=int(Direction.LEFT),
+        extract_facing=int(Direction.LEFT),
+    )
+    placements = _placements(goals)
+    # Order: coal -> extractor -> plate_bus -> arm -> furnace
+    assert placements[0][1] == (23, 12)  # coal
+    assert placements[1] == (
+        int(MachineType.ARM),
+        (20, 11),
+        int(Direction.LEFT),
+    )  # extractor
+    assert placements[2][1] == (21, 11)  # plate_bus
+    assert placements[3][1] == (22, 11)  # cell arm
+    assert placements[4][1] == (23, 11)  # furnace
+
+
+def test_extract_facing_opposite_of_facing_raises() -> None:
+    """Extracting in the opposite direction would put the extractor
+    on top of the cell arm — rejected."""
+    with pytest.raises(ValueError, match="opposite"):
+        build_smelter_cell_at(
+            (8, 11),
+            facing=int(Direction.RIGHT),
+            extract_facing=int(Direction.LEFT),
+        )
+
+
+def test_extract_facing_invalid_direction_raises() -> None:
+    with pytest.raises(ValueError, match="UP/DOWN/LEFT/RIGHT"):
+        build_smelter_cell_at(
+            (8, 11),
+            extract_facing=99,
+        )
+
+
+def test_inventory_with_extractor_adds_one_arm() -> None:
+    cost = smelter_cell_inventory(with_extractor=True)
+    assert cost[int(ItemType.PALLET)] == 2
+    assert cost[int(ItemType.ARM)] == 2  # cell arm + extractor
+    assert cost[int(ItemType.FURNACE)] == 1

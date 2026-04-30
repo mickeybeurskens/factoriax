@@ -466,9 +466,9 @@ def place_belt_path(
 
 
 # Per-item bootstrap cost of one smelter cell built via
-# :func:`build_smelter_cell_at`: two pallets (coal-buffer south of the
-# furnace + plate-output bus east of the arm), one arm (plate
-# extractor), one furnace.
+# :func:`build_smelter_cell_at`. Two pallets (coal-buffer south + plate
+# bus to one side), one cell arm, one furnace; an extra ARM is added
+# when ``extract_facing`` is set.
 _SMELTER_CELL_INVENTORY: tuple[tuple[int, int], ...] = (
     (int(ItemType.PALLET), 2),
     (int(ItemType.ARM), 1),
@@ -476,7 +476,7 @@ _SMELTER_CELL_INVENTORY: tuple[tuple[int, int], ...] = (
 )
 
 
-def smelter_cell_inventory() -> dict[int, int]:
+def smelter_cell_inventory(*, with_extractor: bool = False) -> dict[int, int]:
     """Return the bootstrap inventory cost of one smelter cell.
 
     Maps :class:`ItemType` integer ids to the count required in the
@@ -484,20 +484,42 @@ def smelter_cell_inventory() -> dict[int, int]:
     :func:`build_smelter_cell_at`. Use this to size the Phase-A craft
     list (e.g. ``ProduceInAssembler(ItemType.PALLET, 2 * num_cells)``)
     so a typo in the per-cell counts surfaces as a one-place change.
+
+    Args:
+        with_extractor: When ``True``, accounts for the extra
+            extractor arm that :func:`build_smelter_cell_at` places
+            when its ``extract_facing`` argument is set — adds one
+            more ARM to the cost.
     """
-    return dict(_SMELTER_CELL_INVENTORY)
+    cost = dict(_SMELTER_CELL_INVENTORY)
+    if with_extractor:
+        cost[int(ItemType.ARM)] += 1
+    return cost
+
+
+_HORIZONTAL_FACINGS: frozenset[int] = frozenset(
+    {int(Direction.LEFT), int(Direction.RIGHT)}
+)
+_DIRECTION_OFFSETS: dict[int, tuple[int, int]] = {
+    int(Direction.UP): (0, -1),
+    int(Direction.DOWN): (0, 1),
+    int(Direction.LEFT): (-1, 0),
+    int(Direction.RIGHT): (1, 0),
+}
 
 
 def build_smelter_cell_at(
     furnace_tile: tuple[int, int],
     *,
+    facing: int = int(Direction.RIGHT),
+    extract_facing: int | None = None,
     occupied: set[tuple[int, int]] | None = None,
     map_size: tuple[int, int] | None = None,
 ) -> list[Goal]:
-    """Place a 4-piece smelter cell anchored at ``furnace_tile``.
+    """Place a smelter cell anchored at ``furnace_tile``.
 
-    Layout (the only orientation currently supported — furnace facing
-    RIGHT, ore pallet pre-existing one tile north from Phase A)::
+    Layout for the default ``facing=RIGHT`` (the one used by the
+    rocket benchmark's iron, tin, and silicon cells)::
 
            ore_pallet  (fx,   fy-1)  pre-existing, NOT placed here
                 furnace(fx,   fy)    facing RIGHT
@@ -505,67 +527,113 @@ def build_smelter_cell_at(
                 plate_bus(fx+2, fy)  facing DOWN — output sink
         coal_buffer    (fx,   fy+1)  facing UP   — coal trunk delivers here
 
+    Setting ``facing=LEFT`` mirrors the cell across the y-axis (the
+    arm and plate-bus move to the *west* of the furnace). The rocket
+    benchmark's copper cell uses this orientation so its plate
+    output sits on the same row 11 as iron's, between the two
+    patches, instead of east of the copper patch where it would
+    require routing belts back across the map.
+
+    When ``extract_facing`` is set, an additional extractor arm is
+    woven into the placement order: it is placed *between* the
+    coal_buffer and the plate_bus so that its stand tile (= the
+    plate_bus's eventual location) is still walkable dirt at the
+    moment of placement. Once the plate_bus lands afterward, the
+    extractor's "behind" tile becomes the bus and its
+    :func:`run_arms` cycle pulls one plate per tick out of the bus
+    and pushes onto the tile in ``extract_facing`` from the bus —
+    typically the first belt of a downstream plate trunk.
+
     The ore pallet to the north is assumed to be placed separately
     (Phase A's auto-miner pattern in the rocket benchmark): the
     furnace's :func:`run_assemblers` Phase 0 auto-pulls one ore per
     tick from that pallet and one coal per tick from the coal buffer
-    south, so no extra arm orchestration is needed.
+    south, so no extra arm orchestration is needed for the inputs.
 
-    Placement order: coal_buffer -> plate_bus -> arm -> furnace. The
-    arm is placed *before* the furnace because the arm's stand tile
-    (one west of arm, computed from facing RIGHT) is exactly the
+    The arm is placed *before* the furnace because the arm's stand
+    tile (one tile back from the arm in ``facing``) is exactly the
     furnace's eventual tile — at arm-place time that tile must be
     walkable dirt, and once the furnace lands it becomes the arm's
     "behind" tile so :func:`run_arms` can pull plates out of the
     furnace's ``ent_asm_out``.
 
-    The helper checks every layout invariant at goal-construction
-    time so configuration mistakes (a typo in ``furnace_tile``, a
-    cell that overlaps an existing trunk, or a cell that runs off
-    the map) surface synchronously instead of as opaque
-    ``FAIL_GIVEUP`` events 5000 ticks into a rollout. Per-tile
-    inventory shortage at *runtime* still surfaces via
-    :class:`PlaceMachineAt`'s own ``held >= 1`` check; consult
-    :func:`smelter_cell_inventory` to size the bootstrap craft list.
-
     Args:
         furnace_tile: ``(fx, fy)`` where the furnace will land. The
-            three other cell tiles are derived: arm at ``(fx+1, fy)``,
-            plate-bus at ``(fx+2, fy)``, coal-buffer at
-            ``(fx, fy+1)``.
-        occupied: Optional set of tiles already taken by other
-            machines. Each of the four cell tiles is checked against
-            it; the first collision raises ``ValueError`` with the
-            offending tile and its role (e.g. "arm tile (24, 11)
-            collides with an occupied tile").
-        map_size: Optional ``(width, height)``. When supplied, every
-            cell tile must fit inside ``[0, width) x [0, height)``;
-            otherwise ``ValueError``.
+            cell-arm and plate-bus tiles are derived in
+            ``facing``; the coal-buffer always sits south of the
+            furnace.
+        facing: ``Direction.RIGHT`` (default) or ``Direction.LEFT``
+            — the cell's plate-output side. Other directions raise
+            ``ValueError`` (UP/DOWN would put the plate-bus on the
+            ore-pallet column or the coal-buffer column, both
+            non-walkable in the rocket benchmark layout).
+        extract_facing: Optional one of UP/DOWN/LEFT/RIGHT. When
+            set, places an extractor arm at
+            ``plate_bus + unit(extract_facing)`` facing
+            ``extract_facing``, pulling plates out of the bus and
+            pushing them onto the tile two further out. Must not be
+            the *opposite* of ``facing`` (that would put the
+            extractor on top of the cell-arm).
+        occupied: Optional set of tiles already taken. Every cell
+            tile (and the extractor when present) is checked.
+        map_size: Optional ``(width, height)`` for in-bounds checks.
 
     Returns:
-        A list of four :class:`PlaceMachineAt` goals in placement
-        order. Bootstrap cost: see :func:`smelter_cell_inventory`.
+        4 :class:`PlaceMachineAt` goals (5 when ``extract_facing`` is
+        set), in placement order. See
+        :func:`smelter_cell_inventory` for the matching bootstrap
+        inventory.
 
     Raises:
-        ValueError: any cell tile is out of ``map_size`` bounds; any
-            cell tile is in ``occupied``; or the derived tiles are
-            not all distinct (only happens for an absurd
-            ``furnace_tile`` like ``(x, x-1)`` mapping coal-buffer
-            on top of the arm — not reachable in the rocket
-            benchmark, but the check makes the helper safe to reuse
-            on smaller maps).
+        ValueError: ``facing`` is not LEFT or RIGHT; ``extract_facing``
+            is not a cardinal direction; ``extract_facing`` is the
+            opposite of ``facing``; any tile is out of bounds, in
+            ``occupied``, or duplicates another piece.
     """
+    if int(facing) not in _HORIZONTAL_FACINGS:
+        raise ValueError(
+            f"build_smelter_cell_at facing must be LEFT or RIGHT, got {facing}",
+        )
+    facing = int(facing)
+    side = 1 if facing == int(Direction.RIGHT) else -1
+
     fx, fy = furnace_tile
-    arm_tile = (fx + 1, fy)
-    plate_bus_tile = (fx + 2, fy)
+    arm_tile = (fx + side, fy)
+    plate_bus_tile = (fx + 2 * side, fy)
     coal_buffer_tile = (fx, fy + 1)
 
-    pieces: tuple[tuple[str, tuple[int, int]], ...] = (
+    pieces: list[tuple[str, tuple[int, int]]] = [
         ("furnace", furnace_tile),
         ("arm", arm_tile),
         ("plate_bus", plate_bus_tile),
         ("coal_buffer", coal_buffer_tile),
-    )
+    ]
+
+    extractor_tile: tuple[int, int] | None = None
+    if extract_facing is not None:
+        extract_facing_int = int(extract_facing)
+        if extract_facing_int not in _DIRECTION_OFFSETS:
+            raise ValueError(
+                f"extract_facing must be UP/DOWN/LEFT/RIGHT, got {extract_facing}",
+            )
+        if extract_facing_int == int(Direction.LEFT) and side == 1:
+            opposite_of_facing = True
+        elif extract_facing_int == int(Direction.RIGHT) and side == -1:
+            opposite_of_facing = True
+        else:
+            opposite_of_facing = False
+        if opposite_of_facing:
+            raise ValueError(
+                f"extract_facing {extract_facing} is the opposite of "
+                f"facing {facing}; the extractor would land on the "
+                f"cell arm",
+            )
+        edx, edy = _DIRECTION_OFFSETS[extract_facing_int]
+        extractor_tile = (
+            plate_bus_tile[0] + edx,
+            plate_bus_tile[1] + edy,
+        )
+        pieces.append(("extractor", extractor_tile))
 
     if map_size is not None:
         width, height = map_size
@@ -581,7 +649,7 @@ def build_smelter_cell_at(
         if tile in seen:
             raise ValueError(
                 f"smelter cell {label} tile {tile} duplicates "
-                f"{seen[tile]} (check furnace_tile)",
+                f"{seen[tile]} (check furnace_tile + facing)",
             )
         seen[tile] = label
 
@@ -593,28 +661,192 @@ def build_smelter_cell_at(
                     f"smelter cell {label} tile {tile} collides with an occupied tile",
                 )
 
-    return [
+    goals: list[Goal] = [
         PlaceMachineAt(
             MachineType.PALLET,
             coal_buffer_tile,
             int(Direction.UP),
         ),
+    ]
+    if extractor_tile is not None:
+        # Extractor arm before the bus pallet — its stand tile is
+        # the bus's eventual location, currently dirt.
+        goals.append(
+            PlaceMachineAt(
+                MachineType.ARM,
+                extractor_tile,
+                int(extract_facing),
+            ),
+        )
+    goals.extend(
+        [
+            PlaceMachineAt(
+                MachineType.PALLET,
+                plate_bus_tile,
+                int(Direction.DOWN),
+            ),
+            PlaceMachineAt(MachineType.ARM, arm_tile, facing),
+            PlaceMachineAt(MachineType.FURNACE, furnace_tile, facing),
+        ]
+    )
+    return goals
+
+
+# Per-item bootstrap cost of one 2-input assembler module placed via
+# :func:`build_assembler_module_at`: 1 assembler + 3 pallets
+# (input_a, input_b, output) + 1 arm (east-side plate extractor).
+_ASSEMBLER_MODULE_INVENTORY: tuple[tuple[int, int], ...] = (
+    (int(ItemType.ASSEMBLER), 1),
+    (int(ItemType.PALLET), 3),
+    (int(ItemType.ARM), 1),
+)
+
+
+def assembler_module_inventory(*, input_b: bool = True) -> dict[int, int]:
+    """Return the bootstrap inventory cost of one assembler module.
+
+    Args:
+        input_b: When ``True`` (default), accounts for both north and
+            west input pallets (3 pallets total: input_a, input_b,
+            output). When ``False``, drops one pallet for a 1-input
+            module.
+    """
+    cost = dict(_ASSEMBLER_MODULE_INVENTORY)
+    if not input_b:
+        cost[int(ItemType.PALLET)] -= 1
+    return cost
+
+
+def build_assembler_module_at(
+    center_tile: tuple[int, int],
+    *,
+    input_b: bool = True,
+    occupied: set[tuple[int, int]] | None = None,
+    map_size: tuple[int, int] | None = None,
+) -> list[Goal]:
+    """Place a 1- or 2-input assembler production module.
+
+    Layout (top-down, ``(cx, cy) = center_tile``)::
+
+                       input_a   (cx,   cy-1)  facing DOWN
+        input_b Center  Arm  Output  (cx-1..cx+2, cy)
+                          .          (cx,   cy+1)  free
+
+    Engine semantics relied on:
+
+    - The assembler at ``center_tile`` auto-pulls from any adjacent
+      buffer in :func:`run_assemblers` Phase 0, matching empty /
+      same-type input slots. With pallets at the north and west
+      neighbours both inputs land in ``ent_asm_in`` without arm
+      orchestration; downstream goals can deposit into either pallet
+      manually or feed them via belts ending in those tiles.
+    - The east-facing arm reads from the assembler's ``ent_asm_out``
+      and pushes east into the output pallet's ``ent_buf``.
+
+    Placement order (output -> input_b -> arm -> center -> input_a)
+    keeps every stand tile walkable. Input_a is placed last because
+    its stand tile (one tile north of input_a) was unaffected by the
+    earlier placements; the center is placed *before* input_a since
+    the center's stand tile (one tile north = input_a's eventual
+    location) must be dirt at center-place time.
+
+    Args:
+        center_tile: ``(cx, cy)`` for the assembler. The four other
+            module tiles are derived around it.
+        input_b: When ``True`` (default), place the west input
+            pallet for a 2-input recipe (e.g. CONVEYOR_BELT needs
+            IRON_PLATE + COPPER_PLATE). Set ``False`` for 1-input
+            recipes; only one input pallet is placed.
+        occupied: Optional set of tiles already taken; each module
+            tile is checked.
+        map_size: Optional ``(width, height)`` for in-bounds checks.
+
+    Returns:
+        A list of 4 (1-input) or 5 (2-input) :class:`PlaceMachineAt`
+        goals in placement order. See
+        :func:`assembler_module_inventory` for the bootstrap cost.
+
+    Raises:
+        ValueError: any module tile is out of bounds, in
+            ``occupied``, or duplicates another piece.
+    """
+    cx, cy = center_tile
+    input_a_tile = (cx, cy - 1)
+    arm_tile = (cx + 1, cy)
+    output_tile = (cx + 2, cy)
+    input_b_tile = (cx - 1, cy)
+
+    pieces: list[tuple[str, tuple[int, int]]] = [
+        ("center", center_tile),
+        ("input_a", input_a_tile),
+        ("arm", arm_tile),
+        ("output", output_tile),
+    ]
+    if input_b:
+        pieces.append(("input_b", input_b_tile))
+
+    if map_size is not None:
+        width, height = map_size
+        for label, (x, y) in pieces:
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"assembler module {label} tile {(x, y)} is out "
+                    f"of map bounds (width={width}, height={height})",
+                )
+
+    seen: dict[tuple[int, int], str] = {}
+    for label, tile in pieces:
+        if tile in seen:
+            raise ValueError(
+                f"assembler module {label} tile {tile} duplicates "
+                f"{seen[tile]} (check center_tile)",
+            )
+        seen[tile] = label
+
+    if occupied is not None:
+        blocked = frozenset(occupied)
+        for label, tile in pieces:
+            if tile in blocked:
+                raise ValueError(
+                    f"assembler module {label} tile {tile} collides "
+                    f"with an occupied tile",
+                )
+
+    goals: list[Goal] = [
         PlaceMachineAt(
             MachineType.PALLET,
-            plate_bus_tile,
+            output_tile,
             int(Direction.DOWN),
         ),
-        PlaceMachineAt(
-            MachineType.ARM,
-            arm_tile,
-            int(Direction.RIGHT),
-        ),
-        PlaceMachineAt(
-            MachineType.FURNACE,
-            furnace_tile,
-            int(Direction.RIGHT),
-        ),
     ]
+    if input_b:
+        goals.append(
+            PlaceMachineAt(
+                MachineType.PALLET,
+                input_b_tile,
+                int(Direction.LEFT),
+            ),
+        )
+    goals.extend(
+        [
+            PlaceMachineAt(
+                MachineType.ARM,
+                arm_tile,
+                int(Direction.RIGHT),
+            ),
+            PlaceMachineAt(
+                MachineType.ASSEMBLER,
+                center_tile,
+                int(Direction.DOWN),
+            ),
+            PlaceMachineAt(
+                MachineType.PALLET,
+                input_a_tile,
+                int(Direction.DOWN),
+            ),
+        ]
+    )
+    return goals
 
 
 # Per-item bootstrap cost of one ore-extraction node placed via
