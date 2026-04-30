@@ -617,6 +617,299 @@ def build_smelter_cell_at(
     ]
 
 
+# Per-item bootstrap cost of one ore-extraction node placed via
+# :func:`place_ore_node_at`. The pallet is optional (set
+# ``with_pallet=False`` for the rocket benchmark's coal node, which
+# pushes directly onto a belt instead of a buffer pallet); when
+# omitted, only the miner is needed.
+_ORE_NODE_INVENTORY_WITH_PALLET: tuple[tuple[int, int], ...] = (
+    (int(ItemType.MINER), 1),
+    (int(ItemType.PALLET), 1),
+)
+_ORE_NODE_INVENTORY_MINER_ONLY: tuple[tuple[int, int], ...] = (
+    (int(ItemType.MINER), 1),
+)
+
+
+def ore_node_inventory(*, with_pallet: bool = True) -> dict[int, int]:
+    """Return the bootstrap inventory cost of one ore-extraction node.
+
+    Maps :class:`ItemType` integer ids to the count required in the
+    player's inventory before issuing the goals from
+    :func:`place_ore_node_at`. Pass ``with_pallet=False`` for the
+    rocket benchmark's coal node, where the miner pushes onto the
+    coal trunk's first belt instead of into a holding pallet.
+    """
+    src = (
+        _ORE_NODE_INVENTORY_WITH_PALLET
+        if with_pallet
+        else _ORE_NODE_INVENTORY_MINER_ONLY
+    )
+    return dict(src)
+
+
+def place_ore_node(
+    miner_tile: tuple[int, int],
+    *,
+    direction: int = int(Direction.DOWN),
+    with_pallet: bool = True,
+    occupied: set[tuple[int, int]] | None = None,
+    map_size: tuple[int, int] | None = None,
+) -> list[Goal]:
+    """Place an auto-mining node: a miner and (optionally) a pallet.
+
+    The miner is placed on ``miner_tile`` facing ``direction``; its
+    per-tick output pushes one tile in that direction. When
+    ``with_pallet=True`` (default), a pallet is placed on the push
+    tile to buffer the output; downstream goals (a smelter cell, a
+    withdraw goal, a coal trunk) drain it from there. When
+    ``with_pallet=False``, no pallet is placed — useful when the
+    miner pushes directly onto a belt, as the rocket benchmark's
+    coal node does to feed the iron trunk.
+
+    Bootstrap inventory: ``1 MINER + 1 PALLET`` (or just ``1 MINER``
+    when ``with_pallet=False``). See :func:`ore_node_inventory`.
+
+    Placement order: pallet first (if requested), then miner. With
+    a DOWN-facing node on a 3x3 ore patch, the pallet's stand tile
+    is two tiles south of the patch (dirt) and the miner's stand
+    tile is one tile back into the patch interior (walkable ore),
+    so placing the pallet first never invalidates the miner's stand
+    tile.
+
+    Args:
+        miner_tile: ``(x, y)`` for the miner. For the rocket
+            benchmark's south-edge pattern this is
+            ``(patch_x + 1, patch_y + 2)`` — the south-edge
+            centre of a 3x3 patch starting at ``(patch_x, patch_y)``.
+        direction: Push direction. Must be one of ``Direction.UP``,
+            ``DOWN``, ``LEFT``, ``RIGHT``. The miner faces this
+            direction and pushes one tile that way each tick; the
+            pallet (if any) sits on that adjacent tile.
+        with_pallet: When ``True`` (default), place a pallet on the
+            miner's push tile. When ``False``, only place the miner.
+        occupied: Optional set of tiles already occupied. The miner
+            tile and (when applicable) the pallet tile are checked
+            against it; the first collision raises ``ValueError``
+            with the offending tile and its role.
+        map_size: Optional ``(width, height)``; both placement tiles
+            must fit inside ``[0, width) x [0, height)``.
+
+    Returns:
+        A list of one or two :class:`PlaceMachineAt` goals
+        (pallet then miner if ``with_pallet=True``, else just miner).
+
+    Raises:
+        ValueError: ``direction`` is not one of UP/DOWN/LEFT/RIGHT;
+            either placement tile is out of ``map_size`` bounds or
+            in ``occupied``.
+    """
+    direction_to_offset = {
+        int(Direction.UP): (0, -1),
+        int(Direction.DOWN): (0, 1),
+        int(Direction.LEFT): (-1, 0),
+        int(Direction.RIGHT): (1, 0),
+    }
+    if int(direction) not in direction_to_offset:
+        raise ValueError(
+            f"direction must be UP/DOWN/LEFT/RIGHT, got {direction}",
+        )
+    direction = int(direction)
+    dx, dy = direction_to_offset[direction]
+    pallet_tile = (miner_tile[0] + dx, miner_tile[1] + dy)
+
+    pieces: list[tuple[str, tuple[int, int]]] = [("miner", miner_tile)]
+    if with_pallet:
+        pieces.append(("pallet", pallet_tile))
+
+    if map_size is not None:
+        width, height = map_size
+        for label, (x, y) in pieces:
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"ore node {label} tile {(x, y)} is out of "
+                    f"map bounds (width={width}, height={height})",
+                )
+
+    if occupied is not None:
+        blocked = frozenset(occupied)
+        for label, tile in pieces:
+            if tile in blocked:
+                raise ValueError(
+                    f"ore node {label} tile {tile} collides with an occupied tile",
+                )
+
+    goals: list[Goal] = []
+    if with_pallet:
+        goals.append(
+            PlaceMachineAt(MachineType.PALLET, pallet_tile, direction),
+        )
+    goals.append(PlaceMachineAt(MachineType.MINER, miner_tile, direction))
+    return goals
+
+
+def wire_coal_feed(
+    *,
+    miner_tile: tuple[int, int],
+    miner_facing: int,
+    trunk_waypoints: list[tuple[int, int]],
+    occupied: set[tuple[int, int]] | None = None,
+    map_size: tuple[int, int] | None = None,
+) -> list[Goal]:
+    """Place a coal miner and the belt trunk it feeds.
+
+    Combines :func:`place_ore_node` (with no pallet — the miner
+    pushes onto the trunk's first belt instead of into a buffer) and
+    :func:`place_belt_path` (the trunk itself), in the order that
+    keeps every stand tile walkable when the corresponding placement
+    happens.
+
+    The miner pushes one tile per tick into ``miner_tile +
+    unit(miner_facing)``, which must equal ``trunk_waypoints[0]`` —
+    otherwise the miner's output would land on dirt instead of the
+    trunk and the helper raises ``ValueError`` so the typo surfaces
+    synchronously.
+
+    Placement order: if the trunk's first belt's stand tile equals
+    ``miner_tile``, the trunk is placed *before* the miner (placing
+    the miner first would block the belt's only legal stand tile).
+    Otherwise the miner is placed first so it starts pushing as
+    soon as the first belt arrives. The two cases that hit the
+    trunk-first branch in the rocket benchmark are tin's
+    ``(7, 24) DOWN`` miner with trunk starting at ``(7, 25) DOWN``
+    (belt stand = ``(7, 24)``) and silicon's ``(7, 22) UP`` miner
+    with trunk starting at ``(7, 21) UP`` (belt stand = ``(7, 22)``).
+
+    Args:
+        miner_tile: ``(x, y)`` for the coal miner.
+        miner_facing: One of ``Direction.UP/DOWN/LEFT/RIGHT``. The
+            miner pushes one tile in this direction each tick.
+        trunk_waypoints: Path from the miner's push tile through any
+            corners to the sink (typically a coal-buffer pallet
+            placed elsewhere). See :func:`place_belt_path` for the
+            waypoint semantics.
+        occupied: Optional set of tiles already occupied. Both the
+            miner tile and every non-sink trunk tile are checked.
+        map_size: Optional ``(width, height)`` for in-bounds checks.
+
+    Returns:
+        A list of :class:`PlaceMachineAt` goals: one for the miner
+        plus ``len(trunk) - 1`` for the belts, in placement order.
+
+    Raises:
+        ValueError: ``miner_facing`` is not a cardinal direction;
+            ``trunk_waypoints[0]`` does not equal the miner's push
+            tile; any tile is out of bounds; any tile collides with
+            ``occupied``; or the trunk itself is malformed (see
+            :func:`place_belt_path`).
+    """
+    direction_to_offset = {
+        int(Direction.UP): (0, -1),
+        int(Direction.DOWN): (0, 1),
+        int(Direction.LEFT): (-1, 0),
+        int(Direction.RIGHT): (1, 0),
+    }
+    facing = int(miner_facing)
+    if facing not in direction_to_offset:
+        raise ValueError(
+            f"miner_facing must be UP/DOWN/LEFT/RIGHT, got {miner_facing}",
+        )
+    if len(trunk_waypoints) < 2:
+        raise ValueError(
+            "wire_coal_feed needs at least 2 trunk waypoints (start + sink)",
+        )
+
+    push_dx, push_dy = direction_to_offset[facing]
+    push_tile = (miner_tile[0] + push_dx, miner_tile[1] + push_dy)
+    if push_tile != trunk_waypoints[0]:
+        raise ValueError(
+            f"miner at {miner_tile} facing {miner_facing} pushes onto "
+            f"{push_tile}, but trunk starts at {trunk_waypoints[0]}",
+        )
+
+    second = trunk_waypoints[1]
+    if second[0] == trunk_waypoints[0][0]:
+        first_belt_dy = 1 if second[1] > trunk_waypoints[0][1] else -1
+        first_belt_dx = 0
+    else:
+        first_belt_dx = 1 if second[0] > trunk_waypoints[0][0] else -1
+        first_belt_dy = 0
+    first_belt_stand = (
+        trunk_waypoints[0][0] - first_belt_dx,
+        trunk_waypoints[0][1] - first_belt_dy,
+    )
+    miner_blocks_first_belt = first_belt_stand == miner_tile
+
+    # Validate the miner tile against occupied / map bounds eagerly
+    # (place_ore_node handles this internally too, but we also need
+    # the check before the trunk's collision pass).
+    miner_goals = place_ore_node(
+        miner_tile,
+        direction=facing,
+        with_pallet=False,
+        occupied=occupied,
+        map_size=map_size,
+    )
+
+    trunk_occupied: set[tuple[int, int]] = (
+        set(occupied) if occupied is not None else set()
+    )
+    if not miner_blocks_first_belt:
+        # The miner is placed before the trunk in this branch, so
+        # the trunk must avoid the miner tile. Treat it as occupied
+        # for the trunk's collision pass — even when the caller
+        # didn't supply an ``occupied`` argument, since the miner
+        # itself is a known obstacle once it lands.
+        trunk_occupied.add(miner_tile)
+    trunk_goals = place_belt_path(
+        trunk_waypoints,
+        occupied=trunk_occupied,
+    )
+
+    if map_size is not None:
+        width, height = map_size
+        for tile in trunk_waypoints:
+            x, y = tile
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"coal trunk waypoint {tile} is out of map "
+                    f"bounds (width={width}, height={height})",
+                )
+
+    if miner_blocks_first_belt:
+        return [*trunk_goals, *miner_goals]
+    return [*miner_goals, *trunk_goals]
+
+
+def coal_feed_inventory(
+    trunk_waypoints: list[tuple[int, int]],
+) -> dict[int, int]:
+    """Return the bootstrap inventory cost of one coal feed.
+
+    A coal feed is one MINER plus one CONVEYOR_BELT per non-sink
+    tile in the trunk. The trunk's tile count is computed from the
+    waypoint list the same way :func:`place_belt_path` does, so this
+    helper and the placement helper always agree on the belt count.
+    """
+    if len(trunk_waypoints) < 2:
+        raise ValueError(
+            "coal_feed_inventory needs at least 2 waypoints",
+        )
+    # Total path length in tiles is 1 + sum of segment Manhattan
+    # distances (start tile + one tile per step). The last tile is
+    # the sink — no belt placed there — so the belt count is exactly
+    # the sum of distances.
+    belts = sum(
+        abs(trunk_waypoints[i + 1][0] - trunk_waypoints[i][0])
+        + abs(trunk_waypoints[i + 1][1] - trunk_waypoints[i][1])
+        for i in range(len(trunk_waypoints) - 1)
+    )
+    return {
+        int(ItemType.MINER): 1,
+        int(ItemType.CONVEYOR_BELT): belts,
+    }
+
+
 def _machine_to_item(machine_type: int) -> int:
     """Item type corresponding to a placeable machine."""
     return {

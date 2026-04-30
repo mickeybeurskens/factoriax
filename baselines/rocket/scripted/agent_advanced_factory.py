@@ -86,21 +86,21 @@ across Phase A and the four Phase B sub-phases as each cell needs them.
 
 from __future__ import annotations
 
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType
 from factoriax.state import EnvParams
 
 from .agent import ScriptedAgent, _miner_has_output_predicate
 from .goals import (
     Goal,
     MineOre,
-    PlaceMachineAt,
     ProduceInAssembler,
     ProduceInFurnace,
     Wait,
     WaitUntil,
     WithdrawFromBusAt,
     build_smelter_cell_at,
-    place_belt_path,
+    place_ore_node,
+    wire_coal_feed,
 )
 from .planner import Planner
 
@@ -112,6 +112,8 @@ _IRON_PLATE_BUS = (10, 11)
 _COPPER_PLATE_BUS = (25, 11)
 _TIN_PLATE_BUS = (25, 26)
 _SILICON_PLATE_BUS = (17, 7)
+
+_MAP_SIZE: tuple[int, int] = (32, 32)
 
 
 # ---------------------------------------------------------------------------
@@ -144,26 +146,22 @@ def _phase_a_bootstrap_mine_and_smelt() -> list[Goal]:
 
 
 def _phase_a_craft_and_place() -> list[Goal]:
-    """Craft Phase A's 10 WIRE + 5 MINER + 5 PALLET, then place them."""
+    """Craft Phase A's 10 WIRE + 5 MINER + 5 PALLET, then place them.
+
+    Each non-coal patch gets a south-edge DOWN-facing miner pushing
+    into a buffer pallet. The fifth crafted miner is consumed by
+    :func:`_phase_b_iron` via :func:`wire_coal_feed` as the iron
+    cell's coal feed — no coal miner is placed in Phase A; the
+    cells own their coal feeds end-to-end.
+    """
     return [
         ProduceInAssembler(ItemType.WIRE, 10),
         ProduceInAssembler(ItemType.MINER, 5),
         ProduceInAssembler(ItemType.PALLET, 5),
-        # Iron node
-        PlaceMachineAt(MachineType.PALLET, (8, 10), int(Direction.DOWN)),
-        PlaceMachineAt(MachineType.MINER, (8, 9), int(Direction.DOWN)),
-        # Copper node
-        PlaceMachineAt(MachineType.PALLET, (23, 10), int(Direction.DOWN)),
-        PlaceMachineAt(MachineType.MINER, (23, 9), int(Direction.DOWN)),
-        # Tin node
-        PlaceMachineAt(MachineType.PALLET, (23, 25), int(Direction.DOWN)),
-        PlaceMachineAt(MachineType.MINER, (23, 24), int(Direction.DOWN)),
-        # Silicon node
-        PlaceMachineAt(MachineType.PALLET, (15, 6), int(Direction.DOWN)),
-        PlaceMachineAt(MachineType.MINER, (15, 5), int(Direction.DOWN)),
-        # Coal — east-edge miner facing RIGHT, no pallet (Phase B
-        # places a belt at (10, 24) which the miner pushes onto).
-        PlaceMachineAt(MachineType.MINER, (9, 24), int(Direction.RIGHT)),
+        *place_ore_node((8, 9), map_size=_MAP_SIZE),  # iron
+        *place_ore_node((23, 9), map_size=_MAP_SIZE),  # copper
+        *place_ore_node((23, 24), map_size=_MAP_SIZE),  # tin
+        *place_ore_node((15, 5), map_size=_MAP_SIZE),  # silicon
         WaitUntil(_miner_has_output_predicate(), max_ticks=30),
     ]
 
@@ -175,16 +173,13 @@ def _phase_a_craft_and_place() -> list[Goal]:
 # ---------------------------------------------------------------------------
 
 
-_MAP_SIZE: tuple[int, int] = (32, 32)
-
-
 def _phase_b_iron() -> list[Goal]:
-    """Iron smelter cell + 14-belt coal trunk (col 10 north, bend west).
+    """Iron smelter cell + coal feed (RIGHT-facing miner + 14-belt trunk).
 
-    Cell anchored at furnace tile (8, 11): coal_buffer (8, 12) UP,
-    plate-bus (10, 11) DOWN, arm (9, 11) RIGHT, furnace (8, 11) RIGHT.
-    Trunk waypoints: (10, 24) coal-miner output → (10, 12) corner →
-    (8, 12) sink (the cell's coal-buffer pallet).
+    Cell anchored at furnace tile (8, 11). Coal miner at (9, 24)
+    facing RIGHT pushes onto trunk (10, 24) → (10, 12) → (8, 12)
+    sink (the cell's coal-buffer pallet). The fifth miner crafted
+    in Phase A is consumed here; iron Phase B doesn't craft another.
     """
     return [
         ProduceInAssembler(ItemType.WIRE, 3),
@@ -193,17 +188,20 @@ def _phase_b_iron() -> list[Goal]:
         ProduceInAssembler(ItemType.FURNACE, 1),
         ProduceInAssembler(ItemType.CONVEYOR_BELT, 14),
         *build_smelter_cell_at((8, 11), map_size=_MAP_SIZE),
-        *place_belt_path([(10, 24), (10, 12), (8, 12)]),
+        *wire_coal_feed(
+            miner_tile=(9, 24),
+            miner_facing=int(Direction.RIGHT),
+            trunk_waypoints=[(10, 24), (10, 12), (8, 12)],
+            map_size=_MAP_SIZE,
+        ),
     ]
 
 
 def _phase_b_copper() -> list[Goal]:
-    """Copper smelter cell + 28-belt trunk via row 25 / col 11 / row 12.
+    """Copper smelter cell + coal feed via row 25 / col 11 / row 12.
 
-    Cell anchored at (23, 11): coal_buffer (23, 12), plate-bus (25, 11),
-    arm (24, 11), furnace (23, 11). New coal miner (8, 24) DOWN pushes
-    onto (8, 25). Trunk waypoints: (8, 25) → (11, 25) → (11, 12) →
-    (23, 12) sink.
+    Cell anchored at (23, 11). Coal miner at (8, 24) DOWN pushes onto
+    trunk (8, 25) → (11, 25) → (11, 12) → (23, 12) sink.
 
     Iron plates come from the iron cell's bus pallet (10, 11); copper
     + tin + refractory were pre-smelted in Phase A bootstrap.
@@ -216,21 +214,24 @@ def _phase_b_copper() -> list[Goal]:
         ProduceInAssembler(ItemType.FURNACE, 1),
         ProduceInAssembler(ItemType.MINER, 1),
         ProduceInAssembler(ItemType.CONVEYOR_BELT, 28),
-        # New coal miner — stand (8, 23) is coal ore (walkable).
-        PlaceMachineAt(MachineType.MINER, (8, 24), int(Direction.DOWN)),
         *build_smelter_cell_at((23, 11), map_size=_MAP_SIZE),
-        *place_belt_path([(8, 25), (11, 25), (11, 12), (23, 12)]),
+        *wire_coal_feed(
+            miner_tile=(8, 24),
+            miner_facing=int(Direction.DOWN),
+            trunk_waypoints=[(8, 25), (11, 25), (11, 12), (23, 12)],
+            map_size=_MAP_SIZE,
+        ),
     ]
 
 
 def _phase_b_tin() -> list[Goal]:
-    """Tin smelter cell + 18-belt trunk via row 26 east + (22, 27) east.
+    """Tin smelter cell + coal feed via row 26 east + (22, 27) east.
 
-    Cell anchored at (23, 26): coal_buffer (23, 27), plate-bus (25, 26),
-    arm (24, 26), furnace (23, 26). Coal miner (7, 24) DOWN pushes
-    south to (7, 25). Trunk waypoints: (7, 25) → (7, 26) → (22, 26) →
-    (22, 27) → (23, 27) sink. The trunk detours south at col 22
-    because (23, 26) is the tin furnace.
+    Cell anchored at (23, 26). Coal miner at (7, 24) DOWN pushes onto
+    trunk (7, 25) → (7, 26) → (22, 26) → (22, 27) → (23, 27) sink.
+    The trunk detours south at col 22 because (23, 26) is the tin
+    furnace itself; ``wire_coal_feed`` places the trunk before the
+    miner because the first belt's stand tile is the miner's tile.
 
     Iron from iron cell, copper from copper cell, tin pre-smelted.
     """
@@ -244,29 +245,29 @@ def _phase_b_tin() -> list[Goal]:
         ProduceInAssembler(ItemType.MINER, 1),
         ProduceInAssembler(ItemType.CONVEYOR_BELT, 18),
         *build_smelter_cell_at((23, 26), map_size=_MAP_SIZE),
-        # Belts placed BEFORE coal miner — belt (7, 25) DOWN's stand
-        # tile (7, 24) is the miner's eventual position. Place belts
-        # while the miner tile is still walkable coal ore.
-        *place_belt_path([(7, 25), (7, 26), (22, 26), (22, 27), (23, 27)]),
-        PlaceMachineAt(MachineType.MINER, (7, 24), int(Direction.DOWN)),
+        *wire_coal_feed(
+            miner_tile=(7, 24),
+            miner_facing=int(Direction.DOWN),
+            trunk_waypoints=[(7, 25), (7, 26), (22, 26), (22, 27), (23, 27)],
+            map_size=_MAP_SIZE,
+        ),
     ]
 
 
 def _phase_b_silicon() -> list[Goal]:
-    """Silicon smelter cell + 21-belt trunk via row 8 across iron ore.
+    """Silicon smelter cell + coal feed via row 8 across iron ore.
 
-    Cell anchored at (15, 7): coal_buffer (15, 8), plate-bus (17, 7),
-    arm (16, 7), furnace (15, 7). Coal miner (7, 22) UP pushes coal
-    into (7, 21). Trunk waypoints: (7, 21) → (7, 8) → (14, 8) →
-    (15, 8) sink. The mid-segment crosses iron ore tiles — placement
-    on ore is valid (the engine's
+    Cell anchored at (15, 7). Coal miner at (7, 22) UP pushes onto
+    trunk (7, 21) → (7, 8) → (14, 8) → (15, 8) sink. The mid-segment
+    crosses iron ore tiles — placement on ore is valid (the engine's
     :func:`factoriax.placement.is_valid_placement_tile` only rejects
     ``WATER``/``OUT_OF_BOUNDS``/already-occupied tiles), so cutting
     straight across row 8 above the iron cell saves 6 belts vs. the
-    earlier detour through col 6.
+    earlier detour through col 6. As with tin, ``wire_coal_feed``
+    detects that the first belt's stand tile is the miner's tile
+    and emits trunk before miner.
 
     Iron from iron cell, copper from copper cell, tin from tin cell.
-    Belt budget: 21 (down from the earlier 27-belt detour).
     """
     return [
         WithdrawFromBusAt(_IRON_PLATE_BUS, ItemType.IRON_PLATE, 23),
@@ -279,11 +280,12 @@ def _phase_b_silicon() -> list[Goal]:
         ProduceInAssembler(ItemType.MINER, 1),
         ProduceInAssembler(ItemType.CONVEYOR_BELT, 21),
         *build_smelter_cell_at((15, 7), map_size=_MAP_SIZE),
-        # Belts BEFORE coal miner — (7, 21) UP's stand tile (7, 22) is
-        # the miner's position. Place trunk while (7, 22) is walkable
-        # coal ore, then place the miner last.
-        *place_belt_path([(7, 21), (7, 8), (14, 8), (15, 8)]),
-        PlaceMachineAt(MachineType.MINER, (7, 22), int(Direction.UP)),
+        *wire_coal_feed(
+            miner_tile=(7, 22),
+            miner_facing=int(Direction.UP),
+            trunk_waypoints=[(7, 21), (7, 8), (14, 8), (15, 8)],
+            map_size=_MAP_SIZE,
+        ),
     ]
 
 
