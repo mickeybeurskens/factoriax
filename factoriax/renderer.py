@@ -1169,6 +1169,92 @@ def _draw_belt_edges(icon: np.ndarray, direction: int) -> None:
         icon[:, s - 1, :3] = edge
 
 
+def _draw_splitter_body(icon: np.ndarray, direction: int) -> None:
+    """Draw a T-shape splitter glyph: a single thick line down the input
+    axis and two chevrons fanning out to the perpendicular output sides.
+
+    A vertical-facing splitter (``Direction.UP`` / ``Direction.DOWN``)
+    splits to LEFT and RIGHT, so the trunk runs vertically and the
+    chevrons point W and E. A horizontal-facing splitter does the
+    opposite. The trunk is a darker-tone band so the orientation reads
+    instantly even at small icon sizes.
+
+    Args:
+        icon: RGBA array modified in place.
+        direction: ``Direction`` value the splitter faces.
+    """
+    s = icon.shape[0]
+    if s < 6:
+        return
+    base = tuple(int(c) for c in icon[s // 2, s // 2, :3])
+    trunk = _shade(base, -50)  # type: ignore[arg-type]
+    mid = s // 2
+    half = max(1, s // 8)
+
+    if direction in (Direction.UP, Direction.DOWN):
+        # Vertical trunk; outputs LEFT and RIGHT.
+        icon[1 : s - 1, mid - half : mid + half + 1, :3] = trunk
+        arrow_size = max(1, s // 7)
+        _draw_chevron(icon, mid, max(arrow_size, s // 4), arrow_size, Direction.LEFT)
+        _draw_chevron(
+            icon, mid, s - 1 - max(arrow_size, s // 4), arrow_size, Direction.RIGHT
+        )
+    else:
+        # Horizontal trunk; outputs UP and DOWN.
+        icon[mid - half : mid + half + 1, 1 : s - 1, :3] = trunk
+        arrow_size = max(1, s // 7)
+        _draw_chevron(icon, max(arrow_size, s // 4), mid, arrow_size, Direction.UP)
+        _draw_chevron(
+            icon, s - 1 - max(arrow_size, s // 4), mid, arrow_size, Direction.DOWN
+        )
+
+
+def _draw_crossing_body(icon: np.ndarray, direction: int) -> None:
+    """Draw a single diagonal stripe from the input-corner to the
+    output-corner of the crossing.
+
+    The four crossing encodings map (input-pair, output-pair) to a
+    diagonal:
+
+    * ``1`` (inputs N+W, outputs S+E) → ``\\`` (NW → SE)
+    * ``2`` (inputs N+E, outputs S+W) → ``/`` (NE → SW)
+    * ``3`` (inputs S+W, outputs N+E) → ``/`` (SW → NE)
+    * ``4`` (inputs S+E, outputs N+W) → ``\\`` (SE → NW)
+
+    The stripe is anti-aliased with a thicker dark band over a thin
+    light highlight so the diagonal reads clearly against the base
+    fill. Inactive direction (encoding 0) leaves the icon untouched
+    so unset crossings render as a solid block — useful for inventory
+    icons where the in-flight axes are not yet decided.
+
+    Args:
+        icon: RGBA array modified in place.
+        direction: Packed crossing direction (1..4); 0 → no-op.
+    """
+    s = icon.shape[0]
+    if s < 6 or direction == 0:
+        return
+    base = tuple(int(c) for c in icon[s // 2, s // 2, :3])
+    dark = _shade(base, -65)  # type: ignore[arg-type]
+    light = _shade(base, 55)  # type: ignore[arg-type]
+    band = max(1, s // 10)
+
+    # Use the diagonal glyph implied by the encoding.
+    backslash = direction in (1, 4)
+    coords = np.arange(s)
+    for offset in range(-band, band + 1):
+        if backslash:
+            ys = coords
+            xs = coords + offset
+        else:
+            ys = coords
+            xs = (s - 1) - coords + offset
+        valid = (xs >= 0) & (xs < s)
+        ys, xs = ys[valid], xs[valid]
+        color = light if offset == 0 else dark
+        icon[ys, xs, :3] = color
+
+
 def _draw_miner_bore(icon: np.ndarray) -> None:
     """Draw a central dark circular bore on a miner icon.
 
@@ -1337,6 +1423,12 @@ def render_item_icon(
             _draw_furnace_body(icon, rgb)
         elif item_type == int(ItemType.SCIENCE_LAB) and size >= 4:
             _draw_science_lab_body(icon, rgb)
+        elif item_type == int(ItemType.SPLITTER) and size >= 6:
+            split_dir = direction if direction is not None else int(Direction.RIGHT)
+            _draw_splitter_body(icon, split_dir)
+        elif item_type == int(ItemType.CROSSING) and size >= 6:
+            cross_dir = direction if direction is not None else 1
+            _draw_crossing_body(icon, cross_dir)
         _draw_machine_frame(icon)
         # Knock the four corner pixels transparent so placed machines
         # read as "objects on terrain" rather than square tiles.
@@ -1643,12 +1735,18 @@ def draw_belt_cargo(
     tile_entity = np.array(state.tile_entity)
     ent_buf_type = np.array(state.ent_buf_type)
     ent_buf_count = np.array(state.ent_buf_count)
+    ent_asm_in_type = np.array(state.ent_asm_in_type)
+    ent_asm_in_count = np.array(state.ent_asm_in_count)
+    ent_direction = np.array(state.ent_direction)
 
-    show_cargo = (machine_types == MachineType.CONVEYOR_BELT) | (
-        machine_types == MachineType.PALLET
+    show_cargo = (
+        (machine_types == MachineType.CONVEYOR_BELT)
+        | (machine_types == MachineType.PALLET)
+        | (machine_types == MachineType.SPLITTER)
     )
     belt_ys, belt_xs = np.nonzero(show_cargo)
-    if belt_ys.size == 0:
+    cross_ys, cross_xs = np.nonzero(machine_types == MachineType.CROSSING)
+    if belt_ys.size == 0 and cross_ys.size == 0:
         return
 
     dot_size = max(4, block_pixel_size // 4)
@@ -1656,6 +1754,24 @@ def draw_belt_cargo(
     outer = dot_size + 2 * border
     half_outer = outer // 2
     mid = block_pixel_size // 2
+    h, w = image.shape[:2]
+
+    def _stamp_dot(py0: int, px0: int, color: tuple[int, int, int]) -> None:
+        """Draw an outlined coloured dot at ``(py0, px0)`` (top-left)."""
+        oy0 = max(0, py0)
+        ox0 = max(0, px0)
+        oy1 = min(h, py0 + outer)
+        ox1 = min(w, px0 + outer)
+        if oy0 < oy1 and ox0 < ox1:
+            image[oy0:oy1, ox0:ox1, :3] = (20, 20, 20)
+            image[oy0:oy1, ox0:ox1, 3] = 255
+        iy0 = max(0, py0 + border)
+        ix0 = max(0, px0 + border)
+        iy1 = min(h, py0 + border + dot_size)
+        ix1 = min(w, px0 + border + dot_size)
+        if iy0 < iy1 and ix0 < ix1:
+            image[iy0:iy1, ix0:ix1, :3] = color
+            image[iy0:iy1, ix0:ix1, 3] = 255
 
     for idx in range(belt_ys.size):
         y, x = int(belt_ys[idx]), int(belt_xs[idx])
@@ -1666,30 +1782,50 @@ def draw_belt_cargo(
         item_count = int(ent_buf_count[eidx])
         if item_type == 0 or item_count <= 0:
             continue
-
         color = ITEM_COLORS.get(item_type, (128, 128, 128))
-
         py0 = y * block_pixel_size + mid - half_outer
         px0 = x * block_pixel_size + mid - half_outer
+        _stamp_dot(py0, px0, color)
 
-        h, w = image.shape[:2]
-        # Dark outline
-        oy0 = max(0, py0)
-        ox0 = max(0, px0)
-        oy1 = min(h, py0 + outer)
-        ox1 = min(w, px0 + outer)
-        if oy0 < oy1 and ox0 < ox1:
-            image[oy0:oy1, ox0:ox1, :3] = (20, 20, 20)
-            image[oy0:oy1, ox0:ox1, 3] = 255
+    # Crossings hold their two in-flight items in ent_asm_in slots
+    # (vert = slot 0, horiz = slot 1). Each item is drawn near its
+    # *input* edge — a flow facing direction ``d`` enters from the
+    # opposite side, so the dot sits flush to that side.
+    cross_offset = mid - half_outer
+    edge_inset = max(2, block_pixel_size // 6)
+    for idx in range(cross_ys.size):
+        y, x = int(cross_ys[idx]), int(cross_xs[idx])
+        eidx = int(tile_entity[y, x])
+        if eidx < 0:
+            continue
+        enc = int(ent_direction[eidx])
+        if enc < 1 or enc > 4:
+            continue
+        # Same decoding as factoriax.belts.CROSSING_AXIS_DIRS but in
+        # plain Python so the renderer doesn't need a JAX device hop.
+        vert_out = Direction.DOWN if enc in (1, 2) else Direction.UP
+        horiz_out = Direction.RIGHT if enc in (1, 3) else Direction.LEFT
 
-        # Inner fill
-        iy0 = max(0, py0 + border)
-        ix0 = max(0, px0 + border)
-        iy1 = min(h, py0 + border + dot_size)
-        ix1 = min(w, px0 + border + dot_size)
-        if iy0 < iy1 and ix0 < ix1:
-            image[iy0:iy1, ix0:ix1, :3] = color
-            image[iy0:iy1, ix0:ix1, 3] = 255
+        for slot, out_dir in ((0, vert_out), (1, horiz_out)):
+            it = int(ent_asm_in_type[eidx, slot])
+            cnt = int(ent_asm_in_count[eidx, slot])
+            if it == 0 or cnt <= 0:
+                continue
+            # Input edge is opposite of the output direction.
+            if out_dir == Direction.DOWN:  # input N (top edge)
+                py0 = y * block_pixel_size + edge_inset
+                px0 = x * block_pixel_size + cross_offset
+            elif out_dir == Direction.UP:  # input S (bottom edge)
+                py0 = y * block_pixel_size + block_pixel_size - edge_inset - outer
+                px0 = x * block_pixel_size + cross_offset
+            elif out_dir == Direction.RIGHT:  # input W (left edge)
+                py0 = y * block_pixel_size + cross_offset
+                px0 = x * block_pixel_size + edge_inset
+            else:  # LEFT — input E (right edge)
+                py0 = y * block_pixel_size + cross_offset
+                px0 = x * block_pixel_size + block_pixel_size - edge_inset - outer
+            color = ITEM_COLORS.get(it, (128, 128, 128))
+            _stamp_dot(py0, px0, color)
 
 
 def is_miner_active(state: EnvState, y: int, x: int) -> bool:

@@ -9,15 +9,18 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from factoriax.belts import CROSSING_HORIZ_SLOT, CROSSING_VERT_SLOT
 from factoriax.constants import (
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     BlockType,
     Direction,
+    ItemType,
     MachineType,
 )
 from factoriax.renderer import (
     build_texture_lookup,
+    render_item_icon,
     render_pixels,
 )
 from factoriax.state import EnvState
@@ -242,3 +245,159 @@ def test_tile_rendering_uniform_map(block_pixel_size: int) -> None:
                 expected_tile,
                 err_msg=(f"Tile ({y},{x}) differs from expected texture at size={s}."),
             )
+
+
+# ---------------------------------------------------------------------------
+# Splitter / crossing visual smoke tests.
+# ---------------------------------------------------------------------------
+
+
+def _place_machine(
+    state: EnvState,
+    y: int,
+    x: int,
+    machine_type: int,
+    direction: int,
+    *,
+    asm_slot0_item: int = 0,
+    asm_slot0_count: int = 0,
+    asm_slot1_item: int = 0,
+    asm_slot1_count: int = 0,
+) -> EnvState:
+    """Add a single placed machine to ``state`` at ``(y, x)``.
+
+    Inserts the machine into the first empty entity slot. Used by the
+    splitter/crossing smoke tests to produce a state the renderer can
+    actually draw without booting the full env.
+    """
+    eid = int(np.array(state.ent_y).tolist().index(-1))
+    return state.replace(
+        machine_types=state.machine_types.at[y, x].set(machine_type),
+        tile_entity=state.tile_entity.at[y, x].set(eid),
+        ent_y=state.ent_y.at[eid].set(y),
+        ent_x=state.ent_x.at[eid].set(x),
+        ent_type=state.ent_type.at[eid].set(machine_type),
+        ent_direction=state.ent_direction.at[eid].set(direction),
+        ent_asm_in_type=state.ent_asm_in_type.at[eid, 0]
+        .set(asm_slot0_item)
+        .at[eid, 1]
+        .set(asm_slot1_item),
+        ent_asm_in_count=state.ent_asm_in_count.at[eid, 0]
+        .set(asm_slot0_count)
+        .at[eid, 1]
+        .set(asm_slot1_count),
+    )
+
+
+def test_splitter_icon_changes_with_facing() -> None:
+    """The splitter glyph rotates 90° between vertical-facing and
+    horizontal-facing directions; the two icons must not be pixel-equal."""
+    icon_up = render_item_icon(int(ItemType.SPLITTER), 24, int(Direction.UP))
+    icon_left = render_item_icon(int(ItemType.SPLITTER), 24, int(Direction.LEFT))
+    assert icon_up.shape == (24, 24, 4)
+    assert not np.array_equal(icon_up, icon_left), (
+        "Splitter icon did not change between UP and LEFT facings."
+    )
+
+
+@pytest.mark.parametrize("encoding", [1, 2, 3, 4])
+def test_crossing_icon_renders_for_each_encoding(encoding: int) -> None:
+    """All four crossing encodings produce a non-uniform icon (the
+    diagonal stripe is drawn). Encoding 0 leaves the icon flat."""
+    icon = render_item_icon(int(ItemType.CROSSING), 24, encoding)
+    assert icon.shape == (24, 24, 4)
+    # The diagonal must paint at least some pixels different from the
+    # uniform fill colour.
+    base_pixel = icon[icon.shape[0] // 2, 0, :3]
+    assert not np.all(icon[..., :3] == base_pixel), (
+        f"Crossing icon for encoding={encoding} is uniformly coloured — "
+        "the diagonal stripe was not drawn."
+    )
+
+
+def test_crossing_icon_diagonals_match_glyph_table() -> None:
+    """Encodings 1+4 share the ``\\`` diagonal; 2+3 share ``/``. Same-
+    glyph encodings must render to pixel-identical icons (the visual
+    is purely a function of the diagonal direction)."""
+    cr1 = render_item_icon(int(ItemType.CROSSING), 24, 1)
+    cr2 = render_item_icon(int(ItemType.CROSSING), 24, 2)
+    cr3 = render_item_icon(int(ItemType.CROSSING), 24, 3)
+    cr4 = render_item_icon(int(ItemType.CROSSING), 24, 4)
+    np.testing.assert_array_equal(cr1, cr4)  # both \
+    np.testing.assert_array_equal(cr2, cr3)  # both /
+    assert not np.array_equal(cr1, cr2), "Backslash and slash icons match."
+
+
+def test_render_pixels_with_splitter_and_crossing_differs_from_empty(
+    state_factory,
+) -> None:
+    """Placing a splitter and a crossing on a DIRT map must produce a
+    rendered image that differs from the same map with no machines —
+    the smoke test for end-to-end rendering pipeline integration."""
+    h, w = 4, 4
+    world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+
+    empty = state_factory(world_map=world)
+    placed = _place_machine(empty, 1, 1, int(MachineType.SPLITTER), int(Direction.UP))
+    placed = _place_machine(placed, 2, 2, int(MachineType.CROSSING), 1)  # \ diagonal
+
+    s = 16
+    img_empty = render_pixels(empty, block_pixel_size=s)
+    img_placed = render_pixels(placed, block_pixel_size=s)
+    assert not np.array_equal(img_empty, img_placed), (
+        "Placing a splitter + crossing did not change the rendered image."
+    )
+
+
+def test_crossing_input_dot_drawn_when_axis_slot_holds_item(
+    state_factory,
+) -> None:
+    """A crossing with the vertical slot pre-loaded should produce a
+    coloured dot near the input-side edge (top edge for vert_dir=DOWN
+    encoding 1). The output-side edge stays unchanged from the bare
+    diagonal stripe."""
+    h, w = 3, 3
+    world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+    empty = state_factory(world_map=world)
+    bare = _place_machine(empty, 1, 1, int(MachineType.CROSSING), 1)
+    loaded = _place_machine(
+        empty,
+        1,
+        1,
+        int(MachineType.CROSSING),
+        1,
+        asm_slot0_item=int(ItemType.IRON_PLATE),
+        asm_slot0_count=1,
+    )
+    assert CROSSING_VERT_SLOT == 0  # sanity-check the slot index used above
+    assert CROSSING_HORIZ_SLOT == 1
+
+    s = 16
+    img_bare = render_pixels(bare, block_pixel_size=s)
+    img_loaded = render_pixels(loaded, block_pixel_size=s)
+    # The full image must differ when an item is in flight.
+    assert not np.array_equal(img_bare, img_loaded), (
+        "Vert-axis item dot was not drawn on the loaded crossing."
+    )
+    # The input edge for vert_dir=DOWN is the *north* (top) edge of the
+    # crossing's tile. The strip just below the top edge of tile (1, 1)
+    # must have changed; the strip at the south edge of the same tile
+    # should still match the bare render (no horiz item).
+    cell_y0 = 1 * s
+    top_band = (slice(cell_y0, cell_y0 + s // 3), slice(s, 2 * s))
+    bottom_band = (
+        slice(cell_y0 + 2 * s // 3, cell_y0 + s),
+        slice(s, 2 * s),
+    )
+    assert not np.array_equal(
+        img_bare[top_band[0], top_band[1]],
+        img_loaded[top_band[0], top_band[1]],
+    ), "Top (input) band of crossing tile did not change with loaded vert axis."
+    np.testing.assert_array_equal(
+        img_bare[bottom_band[0], bottom_band[1]],
+        img_loaded[bottom_band[0], bottom_band[1]],
+        err_msg=(
+            "Bottom (output) band of crossing tile changed even though only "
+            "the vert axis was loaded."
+        ),
+    )
