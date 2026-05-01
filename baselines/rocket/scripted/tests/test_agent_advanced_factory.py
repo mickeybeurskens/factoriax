@@ -27,7 +27,12 @@ from baselines.rocket.scripted.agent_advanced_factory import (
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
-from baselines.rocket.scripted.goals import MineOre, PlaceMachineAt, ProduceInMachine
+from baselines.rocket.scripted.goals import (
+    MineOre,
+    PlaceMachineAt,
+    ProduceInMachine,
+    WithdrawFromBusAt,
+)
 from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -47,6 +52,9 @@ from factoriax.state import EnvParams
 _MAP_SIZE = 32
 _IRON_MANUAL_STASH_TILE = (10, 10)
 _IRON_SPLITTER_TILE = (10, 11)
+_COPPER_SPLITTER_TILE = (21, 11)
+_TIN_MANUAL_STASH_TILE = (25, 25)
+_TIN_SPLITTER_TILE = (25, 26)
 
 _EXPECTED_UNLOCKS: tuple[str, ...] = (
     "collect_iron",
@@ -108,6 +116,75 @@ def test_advanced_factory_goal_list_structural() -> None:
         f"expected 0 CROSSINGs (copper coal trunk reroutes through row "
         f"13 so no path-collision occurs), got {crossing_count} at "
         f"{crossing_tiles}"
+    )
+
+
+def test_iterative_bootstrap_phase_order() -> None:
+    """Verify the iterative bootstrap structure: iron + copper cells
+    are fully built (both SPLITTERs placed) before any
+    ``WithdrawFromBusAt`` goal targeting IRON_PLATE / COPPER_PLATE
+    fires, and before any tin / silicon SPLITTER is placed.
+
+    This is the load-bearing structural property of the iterative
+    bootstrap: Phase 2's plate withdrawals only make sense if the
+    iron + copper cells have already been producing plates for some
+    time, which in turn requires their splitters to exist.
+    """
+    goals = build_advanced_factory_goals()
+
+    iron_splitter_idx: int | None = None
+    copper_splitter_idx: int | None = None
+    tin_splitter_idx: int | None = None
+    silicon_splitter_idx: int | None = None
+    iron_withdraw_idx: int | None = None
+    copper_withdraw_idx: int | None = None
+
+    for i, g in enumerate(goals):
+        if isinstance(g, PlaceMachineAt) and g.machine_type == int(
+            MachineType.SPLITTER
+        ):
+            if g.target == _IRON_SPLITTER_TILE:
+                iron_splitter_idx = i
+            elif g.target == _COPPER_SPLITTER_TILE:
+                copper_splitter_idx = i
+            elif g.target == _TIN_SPLITTER_TILE:
+                tin_splitter_idx = i
+            else:
+                silicon_splitter_idx = i
+        elif isinstance(g, WithdrawFromBusAt):
+            if g.item_type == int(ItemType.IRON_PLATE):
+                iron_withdraw_idx = i
+            elif g.item_type == int(ItemType.COPPER_PLATE):
+                copper_withdraw_idx = i
+
+    assert iron_splitter_idx is not None, "no iron splitter found"
+    assert copper_splitter_idx is not None, "no copper splitter found"
+    assert tin_splitter_idx is not None, "no tin splitter found"
+    assert silicon_splitter_idx is not None, "no silicon splitter found"
+    assert iron_withdraw_idx is not None, (
+        "iterative bootstrap should withdraw IRON_PLATE from the "
+        "running iron cell stash in Phase 2"
+    )
+    assert copper_withdraw_idx is not None, (
+        "iterative bootstrap should withdraw COPPER_PLATE from the "
+        "running copper cell stash in Phase 2"
+    )
+
+    assert iron_splitter_idx < iron_withdraw_idx, (
+        f"iron cell must be built before its plate withdrawal: "
+        f"splitter@{iron_splitter_idx}, withdraw@{iron_withdraw_idx}"
+    )
+    assert copper_splitter_idx < copper_withdraw_idx, (
+        f"copper cell must be built before its plate withdrawal: "
+        f"splitter@{copper_splitter_idx}, withdraw@{copper_withdraw_idx}"
+    )
+    assert iron_splitter_idx < tin_splitter_idx, (
+        f"iron cell must be built before tin cell: "
+        f"iron@{iron_splitter_idx}, tin@{tin_splitter_idx}"
+    )
+    assert copper_splitter_idx < silicon_splitter_idx, (
+        f"copper cell must be built before silicon cell: "
+        f"copper@{copper_splitter_idx}, silicon@{silicon_splitter_idx}"
     )
 
 
@@ -223,13 +300,17 @@ def test_slack_kwarg_overrides_default() -> None:
 
     no_slack_iron_ore = _mine_count(no_slack_goals, ItemType.IRON_ORE)
     default_iron_ore = _mine_count(default_goals, ItemType.IRON_ORE)
-    # Default slack adds 2 to IRON_ORE.
+    # IRON_ORE only mined in Phase 1 (Phase 2 withdraws plates from
+    # the running iron cell stash). Default slack adds 2.
     assert default_iron_ore - no_slack_iron_ore == 2
 
     no_slack_coal = _mine_count(no_slack_goals, ItemType.COAL)
     default_coal = _mine_count(default_goals, ItemType.COAL)
-    # Default slack adds 5 to COAL.
-    assert default_coal - no_slack_coal == 5
+    # COAL is mined in *both* Phase 1 and Phase 2 (each phase smelts
+    # its own plates / refractory + needs cell coal-trunk feed). Default
+    # COAL slack=5 is applied to each phase's mine call independently,
+    # so the delta is 2 * 5 = 10.
+    assert default_coal - no_slack_coal == 10
 
 
 @pytest.mark.slow
@@ -313,6 +394,23 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
     )
     assert int(ent_buf_type[ent_idx]) == int(ItemType.IRON_PLATE), (
         f"manual stash holds wrong item: type={int(ent_buf_type[ent_idx])}"
+    )
+
+    # Tin cell must also have built and produced — this is the
+    # iterative-bootstrap proof: tin cell construction in Phase 2
+    # used IRON_PLATE / COPPER_PLATE withdrawn from the running
+    # iron + copper cells, not freshly mined ore.
+    tx, ty = _TIN_SPLITTER_TILE
+    assert int(machine_types[ty, tx]) == int(MachineType.SPLITTER), (
+        f"tin splitter missing at {_TIN_SPLITTER_TILE}; tin cell did "
+        f"not build — Phase 2 likely failed to withdraw plates from "
+        f"the running iron/copper cells. machine_type="
+        f"{int(machine_types[ty, tx])}"
+    )
+    tmx, tmy = _TIN_MANUAL_STASH_TILE
+    assert int(machine_types[tmy, tmx]) == int(MachineType.PALLET), (
+        f"tin manual stash missing at {_TIN_MANUAL_STASH_TILE}; "
+        f"got machine_type={int(machine_types[tmy, tmx])}"
     )
 
     mask = np.asarray(last_state.achievements_unlocked)[:NUM_ROCKET_ACHIEVEMENTS]

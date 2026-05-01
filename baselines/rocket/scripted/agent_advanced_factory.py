@@ -1,32 +1,42 @@
-"""Advanced-factory rocket agent — Phase A + full Phase B (4 cells).
+"""Advanced-factory rocket agent — iterative bootstrap (4 cells).
 
-Two high-level phases:
+Two-phase iterative bootstrap. Phase 1 sizes mining + pre-smelting
+for *just* the iron + copper cells, builds those, then Phase 2
+runs while the iron + copper cells are already producing plates:
 
-- **Phase A** drops a miner + pallet on every non-coal patch (iron,
-  copper, tin, silicon) and pre-smelts every plate the rest of the
-  run will consume. The four coal-feed miners are deferred to Phase
-  B because their push tiles are the south end of each coal trunk,
-  which doesn't exist yet.
+- **Phase 1** drops a miner + pallet on every non-coal patch (iron,
+  copper, tin, silicon — even though tin/silicon won't be used until
+  Phase 2, dropping their miners now means the patches accumulate
+  ore for free). It then places the iron + copper coal miners +
+  trunks and finally builds the iron + copper splitter cells. Phase
+  1's mine + smelt totals are sized for *only* what's needed to
+  build those two cells + their trunks + the four ore-nodes.
 
-- **Phase B** builds a full splitter smelter cell on each of the
-  four ore patches and lays the four coal trunks via a single
-  :func:`place_belt_network` call. Each cell has the new T1 output
-  design (``output_split=True``):
+- **Phase 2** builds the tin + silicon cells. By the time Phase 2
+  starts, the iron + copper cells have been producing plates for
+  ~60+ ticks, so Phase 2 *withdraws* IRON_PLATE / COPPER_PLATE from
+  the running cells' manual stashes via ``WithdrawFromBusAt``
+  instead of mining + smelting more ore. Only TIN_PLATE +
+  REFRACTORY get pre-smelted at the idle pre-placed furnace at
+  (15, 16) (using ``ProduceInFurnaceAt`` so the deposit isn't
+  routed to a flowing iron / copper cell furnace by the closest-
+  machine heuristic).
+
+Each cell has the T1 output design (``output_split=True``):
 
   * a SPLITTER replaces the old plate-bus PALLET at the same tile;
   * a *manual_stash* PALLET sits north of the splitter — the agent
     withdraws plates from here for hand-crafting;
   * an *automation belt* (south of the splitter) carries the
-    splitter's other half-stream into a *sink* PALLET that Phase B
-    places at the automation lane's downstream tile. The sink is
-    just a drain so the splitter's both-or-nothing fire condition
-    is met whenever the manual stash has space.
+    splitter's other half-stream into a *sink* PALLET. The sink is
+    a drain so the splitter's both-or-nothing fire condition is
+    met whenever the manual stash has space.
 
-  The copper cell uses ``automation_belt=False`` because the
-  splitter's south output drops directly onto a sink PALLET at
-  (21, 12). The copper coal trunk is rerouted through row 13 (one
-  row south of the original row-12 segment) so it never crosses
-  (21, 12) — no CROSSING is needed for the four-cell layout.
+The copper cell uses ``automation_belt=False`` because the
+splitter's south output drops directly onto a sink PALLET at
+(21, 12). The copper coal trunk is rerouted through row 13 (one
+row south of the original row-12 segment) so it never crosses
+(21, 12) — no CROSSING is needed for the four-cell layout.
 
 Recipe-driven bootstrap. The mine / smelt / craft *quantities* are
 no longer hand-typed; they're computed from the active
@@ -75,12 +85,14 @@ ASSEMBLER (17, 16))::
         trunk)
 
 Pre-smelt strategy. ``ProduceInMachine`` picks the *nearest*
-furnace/assembler each cycle, so once a cell's furnace is placed
-post-Phase-A, any further ``ProduceInFurnace`` would land ore in
-the wrong furnace. Phase A pre-smelts every plate the entire run
-needs (computed from the production schedule) before any cell
-exists. Phase B sub-phases only run ``ProduceInAssembler`` against
-the pre-placed assembler at (17, 16).
+furnace / assembler each cycle, so once a cell furnace is placed,
+any further ``ProduceInFurnace`` would land ore in the wrong
+furnace. Phase 1 pre-smelts before any cell exists, so its
+``ProduceInFurnace`` calls all route to the pre-placed (15, 16)
+furnace. Phase 2 (running while the iron + copper cells exist)
+uses :class:`ProduceInFurnaceAt` pinned to (15, 16) for its
+TIN_PLATE / REFRACTORY smelts so deposits never get redirected to
+the cell furnaces.
 """
 
 from __future__ import annotations
@@ -97,6 +109,7 @@ from .goals import (
     PlaceMachineAt,
     ProduceInAssembler,
     ProduceInFurnace,
+    ProduceInFurnaceAt,
     Wait,
     WaitUntil,
     WithdrawFromBusAt,
@@ -110,6 +123,7 @@ from .goals import (
 from .planner import Planner
 from .recipe_planning import (
     bill_of_materials,
+    book_without_recipes_for,
     production_schedule,
     scale_inventory,
     sum_inventories,
@@ -160,19 +174,43 @@ def _belt_paths() -> list[BeltPath]:
 # Per-phase craft targets — derived from the inventory helpers
 # ---------------------------------------------------------------------------
 
-# Phase A places one ore-node per non-coal patch (4 patches).
-_PHASE_A_TARGETS: dict[int, int] = scale_inventory(
+# Phase 1 places one ore-node per non-coal patch (4 patches).
+_PHASE_1_ORE_NODE_TARGETS: dict[int, int] = scale_inventory(
     ore_node_inventory(with_pallet=True), 4
 )
 
 
-def _belt_network_targets() -> dict[int, int]:
-    """Items the belt-network phase crafts: 4 coal miners, 4 sink
-    pallets, and the BELT count derived from the four trunks."""
+def _phase_1_belt_paths() -> list[BeltPath]:
+    return [
+        BeltPath(_IRON_COAL_WAYPOINTS, label="iron coal"),
+        BeltPath(_COPPER_COAL_WAYPOINTS, label="copper coal"),
+    ]
+
+
+def _phase_2_belt_paths() -> list[BeltPath]:
+    return [
+        BeltPath(_TIN_COAL_WAYPOINTS, label="tin coal"),
+        BeltPath(_SILICON_COAL_WAYPOINTS, label="silicon coal"),
+    ]
+
+
+def _phase_1_belt_network_targets() -> dict[int, int]:
+    """Items the Phase 1 belt-network crafts: 2 coal miners, 2 sink
+    pallets, and the BELT count from iron + copper trunks."""
     return sum_inventories(
-        belt_network_inventory(_belt_paths()),
-        scale_inventory(ore_node_inventory(with_pallet=False), 4),
-        {int(ItemType.PALLET): 4},
+        belt_network_inventory(_phase_1_belt_paths()),
+        scale_inventory(ore_node_inventory(with_pallet=False), 2),
+        {int(ItemType.PALLET): 2},
+    )
+
+
+def _phase_2_belt_network_targets() -> dict[int, int]:
+    """Items the Phase 2 belt-network crafts: 2 coal miners, 2 sink
+    pallets, and the BELT count from tin + silicon trunks."""
+    return sum_inventories(
+        belt_network_inventory(_phase_2_belt_paths()),
+        scale_inventory(ore_node_inventory(with_pallet=False), 2),
+        {int(ItemType.PALLET): 2},
     )
 
 
@@ -187,24 +225,37 @@ def _cell_targets_no_belt() -> dict[int, int]:
     return smelter_cell_inventory(output_split=True, automation_belt=False)
 
 
-def _bootstrap_targets() -> dict[int, int]:
-    """Total items the bootstrap will craft.
-
-    Sum of every per-phase craft target. Used by
-    :func:`bill_of_materials` to size the MineOre goals and by
-    :func:`production_schedule` to size the Phase A pre-smelt and
-    every per-phase craft list.
-
-    Edit the per-phase target helpers (or the inventory helpers in
-    :mod:`baselines.rocket.scripted.goals`) to scale the bootstrap
-    automatically — the BOM walk picks up the new totals.
+def _phase_1_targets() -> dict[int, int]:
+    """Items Phase 1 builds: 4 ore-nodes, iron + copper cells + their
+    coal trunks. Phase 1's mining + pre-smelting is sized for these.
     """
     return sum_inventories(
-        _PHASE_A_TARGETS,
-        _belt_network_targets(),
-        scale_inventory(_cell_targets_with_belt(), 3),  # iron, tin, silicon
-        _cell_targets_no_belt(),  # copper
+        _PHASE_1_ORE_NODE_TARGETS,
+        _phase_1_belt_network_targets(),
+        _cell_targets_with_belt(),  # iron cell
+        _cell_targets_no_belt(),  # copper cell
     )
+
+
+def _phase_2_targets() -> dict[int, int]:
+    """Items Phase 2 builds: tin + silicon cells + their coal trunks.
+
+    Phase 2 sources IRON_PLATE / COPPER_PLATE from the running iron +
+    copper manual stashes (via WithdrawFromBusAt), not by smelting,
+    so the BOM is computed against a book where the IRON_PLATE and
+    COPPER_PLATE recipes are dropped. Only TIN_PLATE and REFRACTORY
+    get pre-smelted (at the idle pre-placed furnace at (15, 16)).
+    """
+    return sum_inventories(
+        _phase_2_belt_network_targets(),
+        scale_inventory(_cell_targets_with_belt(), 2),  # tin + silicon cells
+    )
+
+
+_RUNNING_CELLS_SUPPLY: set[int] = {
+    int(ItemType.IRON_PLATE),
+    int(ItemType.COPPER_PLATE),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -282,96 +333,56 @@ def _craft_goals_for(
 
 
 # ---------------------------------------------------------------------------
-# Phase A — bootstrap (mine + pre-smelt + craft + place ore nodes)
+# Phase 1 — pre-cells: bootstrap iron + copper cells + their coal trunks
 # ---------------------------------------------------------------------------
 
+# Pre-placed furnace tile (rocket benchmark scenario).
+_PRE_PLACED_FURNACE = (15, 16)
 
-def _phase_a(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
-    """Mine all leaf resources, pre-smelt all plates, craft + place
-    the 4 patch miners and their buffer pallets.
 
-    The 4 coal-feed miners are deferred to the belt-network phase —
-    their push tiles are the south end of each coal trunk, which
-    doesn't exist yet.
+def _phase_1(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
+    """Bootstrap mining + smelting sized only for iron + copper cells.
+
+    Mines every leaf resource Phase 1 will consume, pre-smelts the
+    plates needed for iron + copper cells + their two trunks + the
+    four ore-node placements, places the 4 patch miners, lays the
+    iron + copper coal trunks, places the matching coal miners +
+    sink pallets, and finally builds the iron + copper cells.
+
+    Tin + silicon mining and smelting is deferred to Phase 2 so the
+    iron + copper cells can produce plates passively while Phase 2
+    runs.
     """
-    targets = _bootstrap_targets()
+    targets = _phase_1_targets()
     return [
+        # Phase 1 mining — every leaf the BOM needs.
         *_mine_goals_for(targets, book, slack),
+        # Phase 1 pre-smelt — plates the iron + copper cell crafts
+        # will consume. Routes to (15, 16) since no cells exist yet.
         *_smelt_goals_for(targets, book),
-        *_craft_goals_for(_PHASE_A_TARGETS, book),
+        # Phase A craft + place — 4 patch miners + 4 buffer pallets.
+        *_craft_goals_for(_PHASE_1_ORE_NODE_TARGETS, book),
         *place_ore_node((8, 9), map_size=_MAP_SIZE),  # iron
         *place_ore_node((23, 9), map_size=_MAP_SIZE),  # copper
         *place_ore_node((23, 24), map_size=_MAP_SIZE),  # tin
         *place_ore_node((15, 5), map_size=_MAP_SIZE),  # silicon
         WaitUntil(_miner_has_output_predicate(), max_ticks=30),
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Phase B — coal-trunk network + four splitter cells
-# ---------------------------------------------------------------------------
-
-
-def _phase_b_belt_network(book: RecipeBook) -> list[Goal]:
-    """Lay the four coal trunks + place the four coal miners + sinks.
-
-    Trunks (sink = each cell's coal_buffer pallet, placed by the cell
-    helper afterwards):
-
-    * **Iron coal** (14 belts): col 10 north with a westward bend at
-      row 14 to sidestep iron's automation belt at (10, 12).
-    * **Copper coal** (28 belts): col 11 + row 13 east instead of row
-      12 so it sidesteps (21, 12), the copper splitter's S-output
-      sink. The trunk's last belt at (23, 13) UP feeds the copper
-      coal_buffer at (23, 12) from the south.
-    * **Tin coal** (18 belts): drops south from (7, 24) DOWN coal
-      miner, runs row 27 east. No collisions with iron/copper.
-    * **Silicon coal** (21 belts): (7, 22) UP coal miner pushes north
-      into (7, 21); trunk runs col 7 north past iron-patch tiles
-      (7, 7..9) (belts on ore are valid placements) then row 8 east
-      into the silicon coal_buffer at (15, 8).
-
-    Trunks go down *before* the four coal miners so the silicon
-    miner at (7, 22) UP — whose stand tile is (7, 23), still coal —
-    doesn't block the silicon trunk's first belt at (7, 21) UP, whose
-    stand tile is (7, 22). After the trunk is placed, the miner
-    lands on its coal tile and pushes north into the existing belt.
-    """
-    return [
-        *_craft_goals_for(_belt_network_targets(), book),
+        # Iron + copper coal trunks — uses _phase_1_belt_paths.
+        *_craft_goals_for(_phase_1_belt_network_targets(), book),
         *place_belt_network(
-            _belt_paths(),
+            _phase_1_belt_paths(),
             map_size=_MAP_SIZE,
-            # Seed the proximity walk near spawn so the first trunk
-            # placed is whichever has its first ready belt closest
-            # to (16, 16) — keeps the agent from crossing the whole
-            # map to start at the lex-smallest tile.
             start_near=(16, 16),
         ),
-        # Then the four coal miners. Each pushes into the trunk's
-        # first belt (iron east into (10, 24) UP; copper south into
-        # (8, 25) RIGHT; tin south into (7, 25) DOWN; silicon north
-        # into (7, 21) UP).
+        # Iron + copper coal miners.
         PlaceMachineAt(MachineType.MINER, (9, 24), int(Direction.RIGHT)),
         PlaceMachineAt(MachineType.MINER, (8, 24), int(Direction.DOWN)),
-        PlaceMachineAt(MachineType.MINER, (7, 24), int(Direction.DOWN)),
-        PlaceMachineAt(MachineType.MINER, (7, 22), int(Direction.UP)),
-        # Sink pallets — drain each splitter's S output so the atomic-
-        # fire condition is met whenever the manual stash has space.
+        # Iron + copper sink pallets.
         PlaceMachineAt(MachineType.PALLET, _IRON_AUTOMATION_SINK, int(Direction.DOWN)),
         PlaceMachineAt(
             MachineType.PALLET, _COPPER_AUTOMATION_SINK, int(Direction.DOWN)
         ),
-        PlaceMachineAt(MachineType.PALLET, _TIN_AUTOMATION_SINK, int(Direction.DOWN)),
-        PlaceMachineAt(
-            MachineType.PALLET, _SILICON_AUTOMATION_SINK, int(Direction.DOWN)
-        ),
-    ]
-
-
-def _phase_b_iron(book: RecipeBook) -> list[Goal]:
-    """Iron splitter cell at furnace (8, 11) RIGHT."""
-    return [
+        # Build iron + copper cells.
         *_craft_goals_for(_cell_targets_with_belt(), book),
         *build_smelter_cell_at(
             (8, 11),
@@ -379,20 +390,7 @@ def _phase_b_iron(book: RecipeBook) -> list[Goal]:
             output_split=True,
             map_size=_MAP_SIZE,
         ),
-    ]
-
-
-def _phase_b_copper(book: RecipeBook) -> list[Goal]:
-    """Copper splitter cell mirrored across y axis at furnace (23, 11) LEFT.
-
-    ``automation_belt=False`` because the splitter's south output
-    drops *directly* onto a sink PALLET at (21, 12) — placed by
-    :func:`_phase_b_belt_network`. The copper coal trunk is rerouted
-    through row 13 so it never crosses (21, 12), so no CROSSING is
-    needed for this layout.
-    """
-    return [
-        WithdrawFromBusAt(_IRON_MANUAL_STASH, ItemType.IRON_PLATE, 6),
+        Wait(60),
         *_craft_goals_for(_cell_targets_no_belt(), book),
         *build_smelter_cell_at(
             (23, 11),
@@ -404,23 +402,97 @@ def _phase_b_copper(book: RecipeBook) -> list[Goal]:
     ]
 
 
-def _phase_b_tin(book: RecipeBook) -> list[Goal]:
-    """Tin splitter cell at furnace (23, 26) RIGHT.
+# ---------------------------------------------------------------------------
+# Phase 2 — post-cells: tin + silicon built using running cells' output
+# ---------------------------------------------------------------------------
 
-    Layout::
 
-           tin_pallet (23, 25)  ← Phase A
-              furnace(23, 26) RIGHT
-                arm  (24, 26) RIGHT
-              splitter(25, 26) RIGHT
-        coal_buffer (23, 27) UP   ← tin coal trunk sink
-        manual_stash(25, 25) DOWN
-        automation_belt(25, 27) DOWN
-                sink (25, 28) DOWN ← placed by belt-network phase
+def _phase_2(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
+    """Build tin + silicon cells while iron + copper cells run.
+
+    IRON_PLATE and COPPER_PLATE for tin/silicon cell construction
+    come from the iron + copper manual stashes via WithdrawFromBusAt
+    — no smelting needed for those plates. TIN_PLATE and any extra
+    REFRACTORY get pre-smelted at the idle pre-placed furnace at
+    (15, 16) using ProduceInFurnaceAt, so the deposit can't be
+    misrouted to a cell furnace whose input pallet is full of
+    flowing ore.
+
+    Mining excludes IRON_ORE and COPPER_ORE entirely — the running
+    cells supply those plates. Only TIN_ORE, LIMESTONE, and the
+    extra COAL needed for tin + silicon construction get mined.
     """
+    targets = _phase_2_targets()
+
+    # Running iron + copper cells supply IRON_PLATE / COPPER_PLATE.
+    # Drop their recipes from the book so the BOM treats those plates
+    # as leaves and the production schedule omits them.
+    trimmed_book = book_without_recipes_for(book, _RUNNING_CELLS_SUPPLY)
+    bom = bill_of_materials(targets, trimmed_book)
+
+    # Strip the plate "leaves" — those become withdrawals, not mines.
+    iron_plate_qty = bom.pop(int(ItemType.IRON_PLATE), 0)
+    copper_plate_qty = bom.pop(int(ItemType.COPPER_PLATE), 0)
+
+    # Phase 2 slack: same per-leaf amounts but only on leaves that are
+    # actually mined this phase. Skip iron / copper ore entirely.
+    phase_2_slack = {
+        item: qty
+        for item, qty in slack.items()
+        if item in bom or item in (int(ItemType.LIMESTONE), int(ItemType.COAL))
+    }
+    for item, qty in phase_2_slack.items():
+        bom[int(item)] = bom.get(int(item), 0) + int(qty)
+
+    mine_goals: list[Goal] = [MineOre(item, qty) for item, qty in sorted(bom.items())]
+
+    # Pre-smelt at the pre-placed (15, 16) furnace — TIN_PLATE +
+    # REFRACTORY only (the trimmed book has no IRON_PLATE /
+    # COPPER_PLATE recipes left).
+    smelt_goals: list[Goal] = [
+        ProduceInFurnaceAt(_PRE_PLACED_FURNACE, item, qty, book=book)
+        for item, qty, machine in production_schedule(targets, trimmed_book)
+        if machine == int(MachineType.FURNACE)
+    ]
+
+    # Withdraw plates from the running cells' manual stashes. The cells
+    # have been firing since Phase 1 ended; by the time Phase 2 mining
+    # finishes, the stashes hold many plates (~1 plate per ~5 ticks
+    # per cell, vs ~50+ ticks of Phase 2 mining).
+    withdraw_goals: list[Goal] = []
+    if iron_plate_qty > 0:
+        withdraw_goals.append(
+            WithdrawFromBusAt(_IRON_MANUAL_STASH, ItemType.IRON_PLATE, iron_plate_qty)
+        )
+    if copper_plate_qty > 0:
+        withdraw_goals.append(
+            WithdrawFromBusAt(
+                _COPPER_MANUAL_STASH, ItemType.COPPER_PLATE, copper_plate_qty
+            )
+        )
+
     return [
-        WithdrawFromBusAt(_IRON_MANUAL_STASH, ItemType.IRON_PLATE, 4),
-        WithdrawFromBusAt(_COPPER_MANUAL_STASH, ItemType.COPPER_PLATE, 4),
+        *mine_goals,
+        *smelt_goals,
+        *withdraw_goals,
+        # Tin + silicon coal trunks.
+        *_craft_goals_for(_phase_2_belt_network_targets(), book),
+        *place_belt_network(
+            _phase_2_belt_paths(),
+            map_size=_MAP_SIZE,
+            start_near=(16, 16),
+        ),
+        # Tin + silicon coal miners.
+        PlaceMachineAt(MachineType.MINER, (7, 24), int(Direction.DOWN)),
+        PlaceMachineAt(MachineType.MINER, (7, 22), int(Direction.UP)),
+        # Tin + silicon sink pallets.
+        PlaceMachineAt(MachineType.PALLET, _TIN_AUTOMATION_SINK, int(Direction.DOWN)),
+        PlaceMachineAt(
+            MachineType.PALLET, _SILICON_AUTOMATION_SINK, int(Direction.DOWN)
+        ),
+        # Build tin + silicon cells. Their craft goals craft against
+        # the pre-placed assembler at (17, 16); no cell has an
+        # assembler so routing is unambiguous.
         *_craft_goals_for(_cell_targets_with_belt(), book),
         *build_smelter_cell_at(
             (23, 26),
@@ -428,30 +500,6 @@ def _phase_b_tin(book: RecipeBook) -> list[Goal]:
             output_split=True,
             map_size=_MAP_SIZE,
         ),
-    ]
-
-
-def _phase_b_silicon(book: RecipeBook) -> list[Goal]:
-    """Silicon splitter cell at furnace (15, 7) RIGHT.
-
-    Layout::
-
-           silicon_pallet (15, 6)  ← Phase A
-              furnace(15, 7) RIGHT
-                arm  (16, 7) RIGHT
-              splitter(17, 7) RIGHT
-        coal_buffer (15, 8) UP   ← silicon coal trunk sink
-        manual_stash(17, 6) DOWN
-        automation_belt(17, 8) DOWN
-                sink (17, 9) DOWN ← placed by belt-network phase
-
-    Silicon ore + COAL → WAFER (the cell auto-pulls coal from the
-    coal_buffer just like every other cell; the recipe gate switches
-    on the ore type in the north-pallet).
-    """
-    return [
-        WithdrawFromBusAt(_IRON_MANUAL_STASH, ItemType.IRON_PLATE, 4),
-        WithdrawFromBusAt(_COPPER_MANUAL_STASH, ItemType.COPPER_PLATE, 4),
         *_craft_goals_for(_cell_targets_with_belt(), book),
         *build_smelter_cell_at(
             (15, 7),
@@ -473,11 +521,13 @@ def build_advanced_factory_goals(
 ) -> list[Goal]:
     """Build the flat goal list for the advanced-factory rocket agent.
 
-    Phase A pre-smelts every plate the entire run will consume.
-    Phase B builds the coal-trunk belt network *first* (so coal
-    flows the moment each cell's coal_buffer drops in), then the
-    four splitter cells, then a final wait for production to fill
-    the manual stashes.
+    Phase 1 mines + pre-smelts only what iron + copper cells (and
+    their coal trunks) need, then places those two cells. Phase 2
+    runs while the iron + copper cells are passively producing
+    plates: it withdraws plates from those manual stashes (instead
+    of mining + smelting more iron / copper ore) and uses them to
+    build the tin + silicon cells. A final wait lets the manual
+    stashes accumulate measurable plates before episode end.
 
     Args:
         book: :class:`~factoriax.recipes.RecipeBook` whose recipes
@@ -501,13 +551,8 @@ def build_advanced_factory_goals(
     if slack is None:
         slack = _DEFAULT_SLACK
     return [
-        *_phase_a(book, slack),
-        *_phase_b_belt_network(book),
-        *_phase_b_iron(book),
-        Wait(60),
-        *_phase_b_copper(book),
-        *_phase_b_tin(book),
-        *_phase_b_silicon(book),
+        *_phase_1(book, slack),
+        *_phase_2(book, slack),
         # Final wait: cells ramp up their splitter fire rate (~1
         # plate per ~5 ticks per cell) so the manual stashes
         # accumulate measurable plates before episode end.
