@@ -192,6 +192,61 @@ def production_schedule(
     return [(item, needed[item], by_output[item].machine_type) for item in ordered]
 
 
+def schedule_qty(
+    targets: dict[int, int],
+    item: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
+) -> int:
+    """Return the produced qty for *item* in the schedule, or 0.
+
+    Convenience wrapper around :func:`production_schedule` for the
+    common case of "how many WIRE / IRON_PLATE / etc. does this
+    target set imply?". Returns 0 if *item* is not in the schedule
+    (either a leaf resource or not consumed at all).
+
+    Args:
+        targets: Required item counts.
+        item: ``ItemType`` to look up in the schedule.
+        book: :class:`RecipeBook` driving the schedule.
+
+    Returns:
+        The qty for *item* in the schedule (cycles * output_count),
+        or 0 if absent.
+    """
+    for s_item, qty, _ in production_schedule(targets, book):
+        if s_item == int(item):
+            return qty
+    return 0
+
+
+def book_without_recipes_for(
+    book: RecipeBook,
+    items: set[int],
+) -> RecipeBook:
+    """Return a new book with the recipes producing *items* dropped.
+
+    Used to mark certain outputs as "leaves" for the purposes of
+    :func:`bill_of_materials` and :func:`production_schedule` —
+    e.g. when the agent will withdraw those items from already-
+    running cells rather than craft them itself. The dropped
+    recipes are not consumed by the BOM walk, so any inputs they
+    would have required (ore, coal) drop out of the leaf demand.
+
+    Args:
+        book: Source :class:`RecipeBook`.
+        items: Output ``ItemType`` integers whose recipes should
+            be removed.
+
+    Returns:
+        New :class:`RecipeBook` with the matching recipes dropped.
+        The remaining recipes are re-validated through the standard
+        ``__post_init__`` checks.
+    """
+    return RecipeBook(
+        recipes=tuple(r for r in book.recipes if r.output not in items),
+    )
+
+
 def sum_inventories(*inventories: dict[int, int]) -> dict[int, int]:
     """Sum any number of ``{item: count}`` dicts into one.
 
