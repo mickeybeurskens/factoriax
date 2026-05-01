@@ -24,7 +24,7 @@ from collections.abc import Callable
 import numpy as np
 
 from factoriax.constants import Action, Direction, ItemType, MachineType
-from factoriax.recipes import BASE_RECIPES, Recipe
+from factoriax.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
 
 from .skills import (
     FaceAndInteract,
@@ -1970,16 +1970,43 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
 )
 
 
-def _find_recipe(output_item: int) -> Recipe | None:
-    """Look up the recipe that produces *output_item*."""
-    for r in BASE_RECIPES:
+def _find_recipe(
+    output_item: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
+) -> Recipe | None:
+    """Look up the recipe that produces *output_item*.
+
+    Args:
+        output_item: ``ItemType`` integer to look up.
+        book: :class:`RecipeBook` to search. Defaults to
+            :data:`~factoriax.recipes.BASE_RECIPE_BOOK` so existing
+            call sites that don't thread an env-specific book
+            keep working unchanged.
+    """
+    for r in book.recipes:
         if int(r.output) == int(output_item):
             return r
     return None
 
 
-def _default_machine_for(output_item: int) -> int:
-    """Decide which machine processes this recipe (furnace vs. assembler)."""
+def _default_machine_for(
+    output_item: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
+) -> int:
+    """Decide which machine processes this recipe.
+
+    Reads the ``machine_type`` of the matching recipe in *book* so
+    a balance overlay that re-shapes a recipe's identity (it
+    can't currently — RecipeOverride only tunes balance numbers,
+    not the output item — but the seam is here for future use)
+    flows through. Falls back to the curated ``_FURNACE_OUTPUTS``
+    set when no recipe is found, which preserves the legacy
+    behaviour for the rare call sites that pass an output without
+    a recipe (notably the ``BuildSmelterCell`` smoke tests).
+    """
+    recipe = _find_recipe(int(output_item), book)
+    if recipe is not None:
+        return int(recipe.machine_type)
     if int(output_item) in _FURNACE_OUTPUTS:
         return int(MachineType.FURNACE)
     return int(MachineType.ASSEMBLER)
@@ -2006,10 +2033,11 @@ class ProduceInMachine(Goal):
         output_item: int | ItemType,
         count: int,
         machine_type: int | MachineType | None = None,
+        book: RecipeBook = BASE_RECIPE_BOOK,
     ) -> None:
         self.output_item = int(output_item)
         self.count = count
-        recipe = _find_recipe(self.output_item)
+        recipe = _find_recipe(self.output_item, book)
         if recipe is None:
             raise ValueError(
                 f"no recipe produces {ItemType(self.output_item).name}",
@@ -2017,7 +2045,7 @@ class ProduceInMachine(Goal):
         self.machine_type = (
             int(machine_type)
             if machine_type is not None
-            else _default_machine_for(self.output_item)
+            else _default_machine_for(self.output_item, book)
         )
         self.recipe_inputs: list[tuple[int, int]] = [
             (int(it), int(q)) for it, q in recipe.inputs
@@ -2091,17 +2119,19 @@ class ProduceInMachine(Goal):
 def ProduceInFurnace(  # noqa: N802 - factory mirrors class-style instantiation
     output_item: int | ItemType,
     count: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
 ) -> ProduceInMachine:
     """Produce *count* of *output_item* via the nearest furnace."""
-    return ProduceInMachine(output_item, count, int(MachineType.FURNACE))
+    return ProduceInMachine(output_item, count, int(MachineType.FURNACE), book=book)
 
 
 def ProduceInAssembler(  # noqa: N802 - factory mirrors class-style instantiation
     output_item: int | ItemType,
     count: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
 ) -> ProduceInMachine:
     """Produce *count* of *output_item* via the nearest assembler."""
-    return ProduceInMachine(output_item, count, int(MachineType.ASSEMBLER))
+    return ProduceInMachine(output_item, count, int(MachineType.ASSEMBLER), book=book)
 
 
 # ---------------------------------------------------------------------------
@@ -2143,12 +2173,13 @@ class PipelinedProduce(Goal):
         count: int,
         machine_type: int | MachineType,
         k: int = 3,
+        book: RecipeBook = BASE_RECIPE_BOOK,
     ) -> None:
         self.output_item = int(output_item)
         self.count = count
         self.machine_type = int(machine_type)
         self.k = max(1, k)
-        recipe = _find_recipe(self.output_item)
+        recipe = _find_recipe(self.output_item, book)
         if recipe is None:
             raise ValueError(
                 f"no recipe produces {ItemType(self.output_item).name}",
@@ -2374,11 +2405,12 @@ class CraftFromBus(Goal):
         count: int,
         bus_tiles: dict[int | ItemType, tuple[int, int]],
         machine_type: int | MachineType | None = None,
+        book: RecipeBook = BASE_RECIPE_BOOK,
     ) -> None:
         self.output_item = int(output_item)
         self.count = count
         self.bus_tiles = {int(k): v for k, v in bus_tiles.items()}
-        recipe = _find_recipe(self.output_item)
+        recipe = _find_recipe(self.output_item, book)
         if recipe is None:
             raise ValueError(
                 f"no recipe for {ItemType(self.output_item).name}",
@@ -2392,6 +2424,7 @@ class CraftFromBus(Goal):
                 )
         self.recipe = recipe
         self.machine_type = machine_type
+        self.book = book
         self._steps: list[Goal] | None = None
         self._idx = 0
 
@@ -2417,6 +2450,7 @@ class CraftFromBus(Goal):
                 self.output_item,
                 self.count,
                 machine_type=self.machine_type,
+                book=self.book,
             ),
         )
         return steps
