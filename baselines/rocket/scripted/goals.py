@@ -24,7 +24,7 @@ from collections.abc import Callable
 import numpy as np
 
 from factoriax.constants import Action, Direction, ItemType, MachineType
-from factoriax.recipes import RECIPES
+from factoriax.recipes import BASE_RECIPES, Recipe
 
 from .skills import (
     FaceAndInteract,
@@ -1970,10 +1970,10 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
 )
 
 
-def _find_recipe(output_item: int) -> dict | None:
+def _find_recipe(output_item: int) -> Recipe | None:
     """Look up the recipe that produces *output_item*."""
-    for r in RECIPES:
-        if int(r["output"]) == int(output_item):
+    for r in BASE_RECIPES:
+        if int(r.output) == int(output_item):
             return r
     return None
 
@@ -2020,9 +2020,9 @@ class ProduceInMachine(Goal):
             else _default_machine_for(self.output_item)
         )
         self.recipe_inputs: list[tuple[int, int]] = [
-            (int(it), int(q)) for it, q in recipe["inputs"]
+            (int(it), int(q)) for it, q in recipe.inputs
         ]
-        self.wait_ticks: int = int(recipe["ticks"]) + 3
+        self.wait_ticks: int = int(recipe.ticks) + 3
 
         self._sub: Goal | None = None
         self._phase: str = "deposit"  # "deposit" | "wait" | "withdraw"
@@ -2156,7 +2156,7 @@ class PipelinedProduce(Goal):
         # Store recipe inputs aligned with the physical asm_in layout:
         # index 0 → slot 0, index 1 → slot 1 (if present).
         self._recipe_inputs: list[tuple[int, int]] = [
-            (int(it), int(qty)) for it, qty in recipe["inputs"]
+            (int(it), int(qty)) for it, qty in recipe.inputs
         ]
 
         self._active: FaceAndInteract | None = None
@@ -2383,7 +2383,7 @@ class CraftFromBus(Goal):
             raise ValueError(
                 f"no recipe for {ItemType(self.output_item).name}",
             )
-        for input_item, _per_craft in recipe["inputs"]:
+        for input_item, _per_craft in recipe.inputs:
             if int(input_item) not in self.bus_tiles:
                 raise ValueError(
                     f"CraftFromBus({ItemType(self.output_item).name}, "
@@ -2402,7 +2402,7 @@ class CraftFromBus(Goal):
         # in :meth:`step` can pass it without branching.
         del view
         steps: list[Goal] = []
-        for input_item, per_craft in self.recipe["inputs"]:
+        for input_item, per_craft in self.recipe.inputs:
             input_id = int(input_item)
             need_total = self.count * int(per_craft)
             steps.append(

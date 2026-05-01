@@ -16,17 +16,19 @@ from __future__ import annotations
 
 import pytest
 
+from factoriax.constants import MachineType
 from factoriax.recipes import (
+    BASE_RECIPES,
     NUM_RECIPES,
     RECIPE_MACHINE_TYPE,
     RECIPE_OUTPUT_COUNTS,
-    RECIPES,
+    Recipe,
 )
 
 
-def _input_type_set(recipe: dict) -> frozenset[int]:
+def _input_type_set(recipe: Recipe) -> frozenset[int]:
     """Return the unordered set of input item types for a recipe."""
-    return frozenset(int(it) for it, _ in recipe["inputs"])
+    return frozenset(int(it) for it, _ in recipe.inputs)
 
 
 def test_every_recipe_has_unique_input_type_set() -> None:
@@ -37,27 +39,27 @@ def test_every_recipe_has_unique_input_type_set() -> None:
     disambiguated by the slot-emptiness gate in Phase 3.
     """
     seen: dict[tuple[int, int, frozenset[int]], int] = {}
-    for idx, recipe in enumerate(RECIPES):
+    for idx, recipe in enumerate(BASE_RECIPES):
         key = (
             int(RECIPE_MACHINE_TYPE[idx]),
-            len(recipe["inputs"]),
+            len(recipe.inputs),
             _input_type_set(recipe),
         )
         assert key not in seen, (
-            f"Recipe {idx} ({recipe['output']}) shares input type-set "
+            f"Recipe {idx} ({recipe.output}) shares input type-set "
             f"{set(key[2])} at arity {key[1]} with recipe {seen[key]} "
             f"on the same machine type {key[0]}."
         )
         seen[key] = idx
 
 
-@pytest.mark.parametrize("recipe", RECIPES)
-def test_recipe_has_one_or_two_inputs(recipe: dict) -> None:
+@pytest.mark.parametrize("recipe", BASE_RECIPES)
+def test_recipe_has_one_or_two_inputs(recipe: Recipe) -> None:
     """Furnace recipes take 1 or 2 inputs; assembler recipes take 2."""
-    assert len(recipe["inputs"]) in (1, 2)
+    assert len(recipe.inputs) in (1, 2)
 
 
-@pytest.mark.parametrize("idx", range(len(RECIPES)))
+@pytest.mark.parametrize("idx", range(len(BASE_RECIPES)))
 def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     """Every assembler-gated recipe has exactly 2 input types.
     Furnace recipes may be 1 or 2 — every shipped furnace recipe
@@ -66,14 +68,12 @@ def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     REFRACTORY). The 1-input branch in run_combiners is exercised
     only by the slot-emptiness gate test below.
     """
-    from factoriax.constants import MachineType
-
-    recipe = RECIPES[idx]
+    recipe = BASE_RECIPES[idx]
     machine = int(RECIPE_MACHINE_TYPE[idx])
     if machine == int(MachineType.ASSEMBLER):
-        assert len(recipe["inputs"]) == 2, (
-            f"Assembler recipe {idx} ({recipe['output']}) has "
-            f"{len(recipe['inputs'])} inputs; expected 2."
+        assert len(recipe.inputs) == 2, (
+            f"Assembler recipe {idx} ({recipe.output}) has "
+            f"{len(recipe.inputs)} inputs; expected 2."
         )
 
 
@@ -84,12 +84,11 @@ def test_recipe_output_counts_defaults_to_one() -> None:
     ``run_assemblers`` indexes safely.
     """
     assert RECIPE_OUTPUT_COUNTS.shape == (NUM_RECIPES,)
-    for idx, recipe in enumerate(RECIPES):
-        expected = recipe.get("output_count", 1)
+    for idx, recipe in enumerate(BASE_RECIPES):
         actual = int(RECIPE_OUTPUT_COUNTS[idx])
-        assert actual == expected, (
-            f"Recipe {idx} ({recipe['output']}) output_count: expected "
-            f"{expected}, got {actual}"
+        assert actual == recipe.output_count, (
+            f"Recipe {idx} ({recipe.output}) output_count: expected "
+            f"{recipe.output_count}, got {actual}"
         )
 
 
@@ -99,11 +98,9 @@ def test_every_furnace_recipe_is_two_input() -> None:
     benchmark's belt-logistics layout relies on (no single-input
     outliers that would need a special-case feeder shape).
     """
-    from factoriax.constants import MachineType
-
-    for idx, recipe in enumerate(RECIPES):
+    for idx, recipe in enumerate(BASE_RECIPES):
         if int(RECIPE_MACHINE_TYPE[idx]) == int(MachineType.FURNACE):
-            assert len(recipe["inputs"]) == 2, (
-                f"Furnace recipe {idx} ({recipe['output']}) has "
-                f"{len(recipe['inputs'])} inputs; expected 2."
+            assert len(recipe.inputs) == 2, (
+                f"Furnace recipe {idx} ({recipe.output}) has "
+                f"{len(recipe.inputs)} inputs; expected 2."
             )

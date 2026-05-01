@@ -23,13 +23,13 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.recipes import (
+    BASE_RECIPES,
     NUM_RECIPES,
     OUTPUT_TO_RECIPE,
     RECIPE_MACHINE_TYPE,
     RECIPE_OUTPUT_COUNTS,
     RECIPE_OUTPUTS,
     RECIPE_TICKS,
-    RECIPES,
 )
 from factoriax.state import EnvParams, EnvState
 
@@ -485,7 +485,7 @@ def run_assemblers(state: EnvState) -> EnvState:
         # 1-input recipes pad the unused slot with (EMPTY, 0); the
         # match naturally requires the corresponding slot on the
         # machine to also be empty (in_tX == 0 & in_cX >= 0).
-        pairs = RECIPES[r]["inputs"]
+        pairs = BASE_RECIPES[r].inputs
         if len(pairs) == 1:
             (rt_a, ra_a) = pairs[0]
             rt_b, ra_b = int(ItemType.EMPTY), 0

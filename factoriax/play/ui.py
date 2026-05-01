@@ -33,7 +33,12 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.recipes import NUM_RECIPES, OUTPUT_TO_RECIPE, RECIPE_NAMES, RECIPES
+from factoriax.recipes import (
+    BASE_RECIPES,
+    NUM_RECIPES,
+    OUTPUT_TO_RECIPE,
+    RECIPE_NAMES,
+)
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvState
 
@@ -1967,7 +1972,7 @@ def render_inventory_menu(
     recipe_regions: list[ClickRegion] = []
 
     for recipe_idx in range(NUM_RECIPES):
-        recipe = RECIPES[recipe_idx]
+        recipe = BASE_RECIPES[recipe_idx]
         is_selected_recipe = recipe_idx == selected_recipe
         can_afford = bool(can_afford_recipe(state, selected_player, recipe_idx))
         ry = recipe_idx * recipe_h
@@ -1991,7 +1996,7 @@ def render_inventory_menu(
             recipe_content[ry : ry + recipe_h - 4, 0] = white
             recipe_content[ry : ry + recipe_h - 4, vp_w_craft - 1] = white
 
-        out_item = recipe["output"]
+        out_item = recipe.output
         out_s = min(out_icon, vp_w_craft - craft_pad)
         if out_s > 0:
             out_icon_arr = render_item_icon(out_item, out_s)
@@ -2008,7 +2013,7 @@ def render_inventory_menu(
         inp_y = ry + craft_pad + out_icon + craft_pad
         inp_x = craft_pad
 
-        for item_type, required in recipe["inputs"]:
+        for item_type, required in recipe.inputs:
             have = int(count_item_in_inventory(state, selected_player, item_type))
             inp_s = min(inp_icon, vp_w_craft - inp_x)
             if inp_s > 0:
@@ -2023,10 +2028,10 @@ def render_inventory_menu(
             _blit_rgba(recipe_content, ratio_arr, inp_y, inp_x + inp_icon + 6)
             inp_x += inp_icon + 6 + ratio_arr.shape[1] + 12
 
-        if craft_progress > 0 and is_selected_recipe and recipe["ticks"] > 0:
+        if craft_progress > 0 and is_selected_recipe and recipe.ticks > 0:
             bar_y = ry + recipe_h - 20
             bar_w = vp_w_craft - 16
-            filled = int(bar_w * (1 - craft_progress / recipe["ticks"]))
+            filled = int(bar_w * (1 - craft_progress / recipe.ticks))
             recipe_content[bar_y : bar_y + 8, craft_pad : craft_pad + bar_w] = (
                 35,
                 35,
