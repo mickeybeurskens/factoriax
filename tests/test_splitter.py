@@ -11,12 +11,16 @@ Splitter semantics under test:
 
 1. Buffer of 2 with both perpendicular outputs receptive → fires one
    item to each, source drains to zero. Even-split is the load-bearing
-   property — anything less symmetric breaks the user's contract.
-2. Buffer of <2 → never fires (stack-of-2 gating).
-3. Either output blocked → atomic hold, neither side fires. The
-   single-tile back-pressure has to propagate cleanly.
-4. Inactive direction (NONE) → no-op, regardless of buffer state.
-5. Composition with belts upstream → buffer fills over time, fires
+   property under symmetric flow.
+2. Buffer of <2 → never fires (pair-firing gating: the splitter only
+   dispatches once it holds a pair, even if exactly one side is
+   receptive).
+3. Buffer of 2 with exactly one side blocked → fires the receptive
+   side (consumes 1, leaves 1 in buffer). The blocked side does not
+   choke the other.
+4. Both outputs blocked → hold (no neighbour can accept).
+5. Inactive direction (NONE) → no-op, regardless of buffer state.
+6. Composition with belts upstream → buffer fills over time, fires
    on the tick it reaches stack=2.
 """
 
@@ -175,10 +179,11 @@ def test_empty_buffer_is_a_no_op(state_factory) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_blocked_left_output_holds_both(state_factory) -> None:
-    """If the LEFT output has no neighbour (DIRT), the splitter must
-    not fire to RIGHT either — atomic both-or-nothing keeps the
-    even-split invariant honest under partial back-pressure."""
+def test_blocked_left_output_fires_right_only(state_factory) -> None:
+    """If the LEFT output has no neighbour (DIRT) but RIGHT is
+    receptive, the splitter fires RIGHT only — consumes 1 from the
+    buffer, leaves 1 in place. The blocked side cannot stall the
+    receptive side."""
     state = _make_splitter_world(
         state_factory,
         facing=int(Direction.UP),
@@ -186,12 +191,13 @@ def test_blocked_left_output_holds_both(state_factory) -> None:
         left_pallet=False,  # no entity on LEFT — non-receptive
     )
     out = run_splitters(state)
-    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 2
-    # RIGHT pallet stays empty even though it was receptive.
-    assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0
+    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
+    # RIGHT pallet got the single fired item.
+    assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 1
 
 
-def test_blocked_right_output_holds_both(state_factory) -> None:
+def test_blocked_right_output_fires_left_only(state_factory) -> None:
+    """Mirror of the LEFT-blocked case."""
     state = _make_splitter_world(
         state_factory,
         facing=int(Direction.UP),
@@ -199,11 +205,14 @@ def test_blocked_right_output_holds_both(state_factory) -> None:
         right_pallet=False,
     )
     out = run_splitters(state)
-    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 2
-    assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 0
+    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
+    assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 1
 
 
 def test_both_outputs_blocked_holds_both(state_factory) -> None:
+    """Neither side has a receptive neighbour, so the splitter holds
+    its pair in place. Same outcome as the old atomic hold — it's the
+    other-side-blocked case that changed, not this one."""
     state = _make_splitter_world(
         state_factory,
         facing=int(Direction.UP),
@@ -269,9 +278,10 @@ def test_two_ticks_drains_then_holds(state_factory) -> None:
     assert int(after2.ent_buf_count[_eid(after2, 1, 2)]) == 1
 
 
-def test_destination_full_stalls_splitter(state_factory) -> None:
-    """If both downstream pallets are full of a *different* item type,
-    the splitter holds — same-type-or-empty is the receptivity rule."""
+def test_left_pallet_wrong_type_fires_right_only(state_factory) -> None:
+    """LEFT pallet is full of a *different* item type (non-receptive
+    via the same-type-or-empty rule); RIGHT pallet is empty
+    (receptive). The splitter fires RIGHT only and consumes 1."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
     mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
@@ -299,8 +309,23 @@ def test_destination_full_stalls_splitter(state_factory) -> None:
         buffer_count=bc,
     )
     out = run_splitters(state)
-    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 2
-    # Atomic hold: RIGHT didn't receive even though it was receptive.
-    assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0
-    # LEFT still has its 50 COPPER_PLATE.
+    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
+    # RIGHT pallet got the single fired item.
+    assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 1
+    # LEFT pallet still holds its 50 COPPER — splitter never pushed.
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 50
+
+
+def test_buffer_of_one_with_one_side_blocked_holds(state_factory) -> None:
+    """Pair-firing gating: a single item never fires, even if the only
+    receptive side is the one that would receive it. The splitter waits
+    for upstream to deliver a second item before it dispatches."""
+    state = _make_splitter_world(
+        state_factory,
+        facing=int(Direction.UP),
+        buf_count=1,
+        left_pallet=False,  # only RIGHT is receptive
+    )
+    out = run_splitters(state)
+    assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
+    assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0

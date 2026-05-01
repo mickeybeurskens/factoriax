@@ -521,12 +521,15 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
     * **CONVEYOR_BELT** — pushes its buffer in the single direction it
       faces (1 item every tick, capped by destination space).
-    * **SPLITTER** — buffers up to 2 items in ``ent_buf`` and, when
-      full, fires one item to each of the two perpendicular output
-      sides simultaneously. Atomic both-or-nothing: a snapshot of
-      pre-pass receptivity decides whether the splitter commits, so a
-      half-blocked splitter holds the full pair instead of leaking one
-      item and stranding the other.
+    * **SPLITTER** — buffers up to 2 items in ``ent_buf``. When the
+      buffer holds a pair (>= 2), the splitter dispatches one push per
+      perpendicular output side; each push commits independently using
+      the d-loop's standard receptivity check, so a half-blocked
+      splitter still drains 1 to its receptive side instead of
+      stalling on both. With buffer of 1 the splitter holds — the
+      pair-firing semantic keeps the even-split contract honest under
+      symmetric flow, and the in-loop ``has_item`` guard prevents
+      overdraw if the second push would race the first.
     * **CROSSING** — two independent per-axis flows. Slot
       ``ent_asm_in[idx, 0]`` is the vertical buffer (UP/DOWN flow),
       slot ``ent_asm_in[idx, 1]`` is the horizontal buffer (LEFT/RIGHT
@@ -582,54 +585,27 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
     crossing_vert_dir = crossing_axes[:, 0]  # output direction of vertical axis
     crossing_horiz_dir = crossing_axes[:, 1]  # output direction of horizontal axis
 
-    def _receptive_pre(d: int) -> jnp.ndarray:
-        """Pre-pass receptivity of the d-neighbour for each entity,
-        evaluated against ``buf_type[entity]`` (the entity's own item
-        type — relevant for splitters; belts don't read this value).
-
-        Crossing destinations are always non-receptive in the pre-pass
-        because pushes into a crossing are routed to ``ent_asm_in``,
-        not ``ent_buf`` — the in-loop check below handles that route
-        correctly with the full will-drain logic.
-        """
-        dy, dx = _DY[d], _DX[d]
-        dn_y = jnp.clip(ey + dy, 0, h - 1)
-        dn_x = jnp.clip(ex + dx, 0, w - 1)
-        dn_eidx = state.tile_entity[dn_y, dn_x]
-        dn_valid = dn_eidx >= 0
-        dn_diff = (dn_y != ey) | (dn_x != ex)
-        dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
-        dn_is_crossing = state.ent_type[dn_safe] == MachineType.CROSSING
-        dn_bt = buf_type[dn_safe]
-        dn_bc = buf_count[dn_safe]
-        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
-        return (
-            dn_valid
-            & dn_diff
-            & ~dn_is_crossing
-            & ((dn_bc == 0) | ((dn_bt == buf_type) & (dn_bc < dn_max)))
-        )
-
-    rec_left = _receptive_pre(1)
-    rec_right = _receptive_pre(2)
-    rec_up = _receptive_pre(3)
-    rec_down = _receptive_pre(4)
-
     has_pair = buf_count >= 2
-    # Atomic both-or-nothing: a vertical-facing splitter only commits if
-    # *both* horizontal outputs were receptive at snapshot time. Crossing
-    # destinations are excluded from rec_*, so a splitter facing a
-    # crossing will hold rather than fire — splitters route into pallets
-    # / belts / other splitters; crossings receive from belts directly.
-    can_fire_vert = is_vert_split & has_pair & rec_left & rec_right
-    can_fire_horiz = is_horiz_split & has_pair & rec_up & rec_down
+    # Pair-gated firing. A splitter attempts to fire *both* perpendicular
+    # outputs whenever its buffer holds a pair (>= 2 items). Each output
+    # is dispatched as an independent push in the d-loop below, where the
+    # standard per-iteration receptivity check (``dn_empty | (dn_same &
+    # dn_space)``) decides whether that side actually commits — so a
+    # blocked downstream on one side simply skips that iteration while
+    # the other side still pushes one item, instead of stalling the
+    # whole splitter. Buffer of 1 holds: the pair-firing semantic
+    # preserves the even-split contract under symmetric flow, and the
+    # second-iteration ``has_item`` check ensures we never overdraw the
+    # buffer when the second side is also receptive.
+    splitter_pushers_vert = is_vert_split & has_pair
+    splitter_pushers_horiz = is_horiz_split & has_pair
 
     splitter_pushers_by_dir = (
         None,  # 0 — unused
-        can_fire_vert,  # LEFT  — vert-facing splitters output here
-        can_fire_vert,  # RIGHT
-        can_fire_horiz,  # UP   — horiz-facing splitters output here
-        can_fire_horiz,  # DOWN
+        splitter_pushers_vert,  # LEFT  — vert-facing splitters output here
+        splitter_pushers_vert,  # RIGHT
+        splitter_pushers_horiz,  # UP   — horiz-facing splitters output here
+        splitter_pushers_horiz,  # DOWN
     )
 
     for d in range(1, 5):
