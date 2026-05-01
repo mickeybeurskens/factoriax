@@ -449,6 +449,7 @@ def place_belt_network(
     *,
     occupied: set[tuple[int, int]] | None = None,
     map_size: tuple[int, int] | None = None,
+    start_near: tuple[int, int] | None = None,
 ) -> list[Goal]:
     """Plan a set of belt paths sharing perpendicular intersection tiles.
 
@@ -473,13 +474,21 @@ def place_belt_network(
       destinations, not pass-throughs; the route would dump items
       into the wrong receiver.
 
-    Placement order is computed by topological sort: each tile is
-    emitted only once its forced stand-tile constraint is satisfied
-    (BELT facing ``d`` needs the tile at ``-d`` to be walkable;
-    CROSSING needs at least one of its four neighbours walkable).
-    Walkable means dirt (any tile not in our plan and not in
-    ``occupied``) or an already-emitted belt/crossing — both of
-    which the runtime treats as walkable for the player.
+    Placement order is a *proximity-aware* topological walk: at each
+    step, among the tiles whose forced stand-tile constraint is
+    already satisfied (BELT facing ``d`` needs the tile at ``-d``
+    walkable; CROSSING needs at least one of its four neighbours
+    walkable), pick the one with the smallest Manhattan distance to a
+    moving cursor. The cursor starts at ``start_near`` (or, if
+    omitted, at the lex-smallest ready tile) and updates to the most
+    recently emitted tile after each placement. The net effect is
+    that the agent traces each trunk continuously — placing every
+    belt of one path before moving to the next — instead of
+    bouncing between trunks because lexicographic ordering visits
+    them in column-major waves. Walkable means dirt (any tile not in
+    our plan and not in ``occupied``) or an already-emitted
+    belt/crossing — both of which the runtime treats as walkable
+    for the player.
 
     The single-path case
     ``place_belt_network([BeltPath(waypoints)])`` is equivalent to
@@ -493,6 +502,14 @@ def place_belt_network(
             and belts in our plan must not collide with these.
         map_size: Optional ``(width, height)`` for in-bounds checks
             on every tile (belts, crossings, and sinks).
+        start_near: Optional ``(x, y)`` seed for the proximity-aware
+            walk. Pass the agent's expected position when this phase
+            begins (typically the spawn or the last placement of the
+            previous phase) so the first emitted trunk starts close
+            to where the agent already is. When ``None``, the cursor
+            initialises to the lex-smallest ready tile, which is the
+            same starting tile as the previous lexicographic-only
+            implementation.
 
     Returns:
         A flat list of :class:`PlaceMachineAt` goals: one per
@@ -613,7 +630,10 @@ def place_belt_network(
             f"(paths involved: {', '.join(labels)})",
         )
 
-    # Topological sort.
+    # Proximity-aware topological walk. Each iteration picks the
+    # ready tile (forced stand-tile already walkable) closest to a
+    # cursor that follows the most recent placement. Ties on distance
+    # break lexicographically so emit order stays deterministic.
     direction_offset = {
         int(Direction.UP): (0, -1),
         int(Direction.DOWN): (0, 1),
@@ -631,29 +651,20 @@ def place_belt_network(
             return False
         return tile not in occupied_set
 
+    def _is_ready(tile: tuple[int, int]) -> bool:
+        kind, payload = tile_kind[tile]
+        if kind == "BELT":
+            dx, dy = direction_offset[payload]
+            return _walkable((tile[0] - dx, tile[1] - dy))
+        return any(
+            _walkable((tile[0] + dx, tile[1] + dy))
+            for dx, dy in direction_offset.values()
+        )
+
+    cursor: tuple[int, int] | None = start_near
     while pending:
-        progressed = False
-        # Sorted iteration so the emit order is deterministic across
-        # Python set-iteration tweaks. Cheap; pending is at most a
-        # few hundred tiles.
-        for tile in sorted(pending):
-            kind, payload = tile_kind[tile]
-            if kind == "BELT":
-                dx, dy = direction_offset[payload]
-                if _walkable((tile[0] - dx, tile[1] - dy)):
-                    placed.add(tile)
-                    pending.remove(tile)
-                    emit_order.append(tile)
-                    progressed = True
-            else:
-                for dx, dy in direction_offset.values():
-                    if _walkable((tile[0] + dx, tile[1] + dy)):
-                        placed.add(tile)
-                        pending.remove(tile)
-                        emit_order.append(tile)
-                        progressed = True
-                        break
-        if not progressed:
+        ready = [tile for tile in pending if _is_ready(tile)]
+        if not ready:
             stuck = sorted(pending)
             raise ValueError(
                 f"belt network: could not order placement; "
@@ -661,6 +672,18 @@ def place_belt_network(
                 f"(first few: {stuck[:3]}). The belt graph likely "
                 f"contains a cycle.",
             )
+        if cursor is None:
+            next_tile = min(ready)
+        else:
+            cx, cy = cursor
+            next_tile = min(
+                ready,
+                key=lambda t: (abs(t[0] - cx) + abs(t[1] - cy), t),
+            )
+        placed.add(next_tile)
+        pending.remove(next_tile)
+        emit_order.append(next_tile)
+        cursor = next_tile
 
     goals: list[Goal] = []
     for tile in emit_order:

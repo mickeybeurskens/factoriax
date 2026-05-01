@@ -46,7 +46,6 @@ from factoriax.state import EnvParams
 _MAP_SIZE = 32
 _IRON_MANUAL_STASH_TILE = (10, 10)
 _IRON_SPLITTER_TILE = (10, 11)
-_COPPER_CROSSING_TILE = (21, 12)
 
 _EXPECTED_UNLOCKS: tuple[str, ...] = (
     "collect_iron",
@@ -79,10 +78,11 @@ _EXPECTED_UNLOCKS: tuple[str, ...] = (
 def test_advanced_factory_goal_list_structural() -> None:
     """Goal list builds without errors and every placement is in-map.
 
-    Also confirms the new splitter-cell design: 2 SPLITTERs (one
-    each for iron and copper) and 1 CROSSING (the auto-inserted
-    (21, 12) tile shared by the copper coal trunk and the copper
-    splitter's south output).
+    Also confirms the splitter-cell design: 4 SPLITTERs (one each
+    for iron, copper, tin, silicon) and 0 CROSSINGs — the copper
+    coal trunk is rerouted through row 13 so the splitter S output
+    drops onto a sink PALLET at (21, 12) without any path crossing
+    that tile.
     """
     goals = build_advanced_factory_goals()
     assert len(goals) > 0
@@ -99,15 +99,14 @@ def test_advanced_factory_goal_list_structural() -> None:
             elif g.machine_type == int(MachineType.CROSSING):
                 crossing_count += 1
                 crossing_tiles.append(g.target)
-    assert splitter_count == 2, (
-        f"expected 1 SPLITTER per cell (iron + copper = 2), got {splitter_count}"
+    assert splitter_count == 4, (
+        f"expected 1 SPLITTER per cell (iron + copper + tin + silicon = 4), "
+        f"got {splitter_count}"
     )
-    assert crossing_count == 1, (
-        f"expected 1 auto-inserted CROSSING (copper coal × copper auto), "
-        f"got {crossing_count}"
-    )
-    assert crossing_tiles == [_COPPER_CROSSING_TILE], (
-        f"crossing landed at unexpected tile: {crossing_tiles}"
+    assert crossing_count == 0, (
+        f"expected 0 CROSSINGs (copper coal trunk reroutes through row "
+        f"13 so no path-collision occurs), got {crossing_count} at "
+        f"{crossing_tiles}"
     )
 
 
