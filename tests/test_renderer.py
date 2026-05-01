@@ -349,13 +349,11 @@ def test_render_pixels_with_splitter_and_crossing_differs_from_empty(
     )
 
 
-def test_crossing_input_dot_drawn_when_axis_slot_holds_item(
-    state_factory,
-) -> None:
-    """A crossing with the vertical slot pre-loaded should produce a
-    coloured dot near the input-side edge (top edge for vert_dir=DOWN
-    encoding 1). The output-side edge stays unchanged from the bare
-    diagonal stripe."""
+def test_crossing_does_not_draw_item_overlay(state_factory) -> None:
+    """Crossings render only their diagonal sprite — the in-transit
+    items in ``ent_asm_in`` slots are intentionally hidden so the
+    sprite acts as a roof over both perpendicular flows. A loaded
+    crossing must produce the *same* pixel image as a bare one."""
     h, w = 3, 3
     world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
     empty = state_factory(world_map=world)
@@ -368,6 +366,8 @@ def test_crossing_input_dot_drawn_when_axis_slot_holds_item(
         1,
         asm_slot0_item=int(ItemType.IRON_PLATE),
         asm_slot0_count=1,
+        asm_slot1_item=int(ItemType.COPPER_PLATE),
+        asm_slot1_count=1,
     )
     assert CROSSING_VERT_SLOT == 0  # sanity-check the slot index used above
     assert CROSSING_HORIZ_SLOT == 1
@@ -375,29 +375,157 @@ def test_crossing_input_dot_drawn_when_axis_slot_holds_item(
     s = 16
     img_bare = render_pixels(bare, block_pixel_size=s)
     img_loaded = render_pixels(loaded, block_pixel_size=s)
-    # The full image must differ when an item is in flight.
-    assert not np.array_equal(img_bare, img_loaded), (
-        "Vert-axis item dot was not drawn on the loaded crossing."
-    )
-    # The input edge for vert_dir=DOWN is the *north* (top) edge of the
-    # crossing's tile. The strip just below the top edge of tile (1, 1)
-    # must have changed; the strip at the south edge of the same tile
-    # should still match the bare render (no horiz item).
-    cell_y0 = 1 * s
-    top_band = (slice(cell_y0, cell_y0 + s // 3), slice(s, 2 * s))
-    bottom_band = (
-        slice(cell_y0 + 2 * s // 3, cell_y0 + s),
-        slice(s, 2 * s),
-    )
-    assert not np.array_equal(
-        img_bare[top_band[0], top_band[1]],
-        img_loaded[top_band[0], top_band[1]],
-    ), "Top (input) band of crossing tile did not change with loaded vert axis."
     np.testing.assert_array_equal(
-        img_bare[bottom_band[0], bottom_band[1]],
-        img_loaded[bottom_band[0], bottom_band[1]],
+        img_bare,
+        img_loaded,
         err_msg=(
-            "Bottom (output) band of crossing tile changed even though only "
-            "the vert axis was loaded."
+            "Crossing renders changed with loaded ent_asm_in slots — the "
+            "overlay is supposed to be omitted so the crossing sprite "
+            "covers both items like a roof."
         ),
+    )
+
+
+def _place_belt_with_buffer(
+    state: EnvState,
+    y: int,
+    x: int,
+    machine_type: int,
+    direction: int,
+    *,
+    buf_item: int,
+    buf_count: int,
+) -> EnvState:
+    """Like _place_machine, but writes ent_buf_type / ent_buf_count
+    instead of the assembler-input slots. Used by belt / pallet /
+    splitter cargo-overlay tests."""
+    eid = int(np.array(state.ent_y).tolist().index(-1))
+    return state.replace(
+        machine_types=state.machine_types.at[y, x].set(machine_type),
+        tile_entity=state.tile_entity.at[y, x].set(eid),
+        ent_y=state.ent_y.at[eid].set(y),
+        ent_x=state.ent_x.at[eid].set(x),
+        ent_type=state.ent_type.at[eid].set(machine_type),
+        ent_direction=state.ent_direction.at[eid].set(direction),
+        ent_buf_type=state.ent_buf_type.at[eid].set(buf_item),
+        ent_buf_count=state.ent_buf_count.at[eid].set(buf_count),
+    )
+
+
+def _count_changed_pixels(bare: np.ndarray, loaded: np.ndarray) -> int:
+    """Number of pixels (any channel changed) between two RGB images."""
+    diff = np.any(bare != loaded, axis=-1)
+    return int(diff.sum())
+
+
+def test_belt_cargo_dot_is_smaller_than_quarter_tile(state_factory) -> None:
+    """The new cargo dot is sized to ~1/8 of the tile per axis (was
+    1/4). The total changed-pixel count of a single loaded belt's
+    overlay must therefore be well under 1/16 of the tile area —
+    use a generous bound that still rejects the old 1/4-axis sizing.
+    """
+    h, w = 3, 3
+    world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+    empty = state_factory(world_map=world)
+    bare = _place_belt_with_buffer(
+        empty,
+        1,
+        1,
+        int(MachineType.CONVEYOR_BELT),
+        int(Direction.RIGHT),
+        buf_item=0,
+        buf_count=0,
+    )
+    loaded = _place_belt_with_buffer(
+        empty,
+        1,
+        1,
+        int(MachineType.CONVEYOR_BELT),
+        int(Direction.RIGHT),
+        buf_item=int(ItemType.IRON_PLATE),
+        buf_count=1,
+    )
+    s = 32
+    img_bare = render_pixels(bare, block_pixel_size=s)
+    img_loaded = render_pixels(loaded, block_pixel_size=s)
+    changed = _count_changed_pixels(img_bare, img_loaded)
+    # Old sizing: 1/4 axis dot + 1/3-of-dot border → outer ≈ 12 px,
+    # so ~144 changed pixels. New sizing: 1/8 axis dot ≈ 4 px + 1 px
+    # border → outer = 6 px, ~36 changed pixels. The bound 64 rejects
+    # the old sizing while leaving comfortable slack.
+    assert changed > 0, "Cargo overlay didn't draw at all."
+    assert changed <= 64, (
+        f"Cargo overlay touched {changed} pixels at block_pixel_size=32; "
+        f"expected <= 64 for the new 1/8-axis dot. Did the size shrink?"
+    )
+
+
+def _splitter_overlay_runs(
+    state_factory,
+    buf_count: int,
+) -> int:
+    """Render a splitter at (1, 1) with the given buffer count; return
+    the number of contiguous *runs* of changed pixels along the row
+    through the tile centre. One run = one dot; two runs = the
+    splitter pair fired both halves."""
+    h, w = 3, 3
+    world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+    empty = state_factory(world_map=world)
+    bare = _place_belt_with_buffer(
+        empty,
+        1,
+        1,
+        int(MachineType.SPLITTER),
+        int(Direction.UP),
+        buf_item=0,
+        buf_count=0,
+    )
+    loaded = _place_belt_with_buffer(
+        empty,
+        1,
+        1,
+        int(MachineType.SPLITTER),
+        int(Direction.UP),
+        buf_item=int(ItemType.IRON_PLATE),
+        buf_count=buf_count,
+    )
+    s = 32
+    img_bare = render_pixels(bare, block_pixel_size=s)
+    img_loaded = render_pixels(loaded, block_pixel_size=s)
+    # Centre row of the splitter tile: (y * s + s/2) within the (1, 1)
+    # tile is row index s + s // 2.
+    centre_y = s + s // 2
+    bare_row = img_bare[centre_y, s : 2 * s]
+    loaded_row = img_loaded[centre_y, s : 2 * s]
+    changed = np.any(bare_row != loaded_row, axis=-1)
+    # Count contiguous runs of True.
+    runs = 0
+    in_run = False
+    for v in changed:
+        if v and not in_run:
+            runs += 1
+            in_run = True
+        elif not v:
+            in_run = False
+    return runs
+
+
+def test_splitter_with_buf_count_2_shows_two_dots(state_factory) -> None:
+    """A splitter holding 2 items renders two horizontally-separated
+    dots — the centre row through the tile must show two distinct
+    runs of changed pixels."""
+    runs = _splitter_overlay_runs(state_factory, buf_count=2)
+    assert runs == 2, (
+        f"Splitter with buf_count=2 produced {runs} dot run(s) on the centre "
+        f"row; expected exactly 2."
+    )
+
+
+def test_splitter_with_buf_count_1_shows_one_dot(state_factory) -> None:
+    """A splitter holding 1 item renders only the first of the pair —
+    the centre row must show exactly one run of changed pixels."""
+    runs = _splitter_overlay_runs(state_factory, buf_count=1)
+    assert runs == 1, (
+        f"Splitter with buf_count=1 produced {runs} dot run(s) on the centre "
+        f"row; expected exactly 1."
     )

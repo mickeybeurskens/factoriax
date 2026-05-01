@@ -1720,11 +1720,18 @@ def draw_belt_cargo(
     state: EnvState,
     block_pixel_size: int,
 ) -> None:
-    """Draw a static item dot on conveyor belts that hold items.
+    """Draw small item dots on belts, pallets, and splitters.
 
-    Each belt carrying items shows a small coloured square at its
-    centre.  The game simulation handles the actual item movement
-    between tiles, so the dot just indicates presence.
+    Each loaded BELT or PALLET shows one centred dot per tile; a
+    SPLITTER shows up to two dots side-by-side (matching the
+    stack-of-2 buffer — one dot per item held). The dot is sized to
+    1/8 of the tile width on each axis (was 1/4 before) so the belt
+    sprite remains visible underneath.
+
+    CROSSING tiles are intentionally *not* overlaid: the diagonal
+    sprite acts as a roof over the in-transit items so two
+    perpendicular flows read cleanly without dot clutter at the
+    edges.
 
     Args:
         image: RGBA pixel image, modified in place.
@@ -1735,22 +1742,17 @@ def draw_belt_cargo(
     tile_entity = np.array(state.tile_entity)
     ent_buf_type = np.array(state.ent_buf_type)
     ent_buf_count = np.array(state.ent_buf_count)
-    ent_asm_in_type = np.array(state.ent_asm_in_type)
-    ent_asm_in_count = np.array(state.ent_asm_in_count)
-    ent_direction = np.array(state.ent_direction)
 
-    show_cargo = (
-        (machine_types == MachineType.CONVEYOR_BELT)
-        | (machine_types == MachineType.PALLET)
-        | (machine_types == MachineType.SPLITTER)
+    single_cargo = (machine_types == MachineType.CONVEYOR_BELT) | (
+        machine_types == MachineType.PALLET
     )
-    belt_ys, belt_xs = np.nonzero(show_cargo)
-    cross_ys, cross_xs = np.nonzero(machine_types == MachineType.CROSSING)
-    if belt_ys.size == 0 and cross_ys.size == 0:
+    single_ys, single_xs = np.nonzero(single_cargo)
+    splitter_ys, splitter_xs = np.nonzero(machine_types == MachineType.SPLITTER)
+    if single_ys.size == 0 and splitter_ys.size == 0:
         return
 
-    dot_size = max(4, block_pixel_size // 4)
-    border = max(2, dot_size // 3)
+    dot_size = max(2, block_pixel_size // 8)
+    border = max(1, dot_size // 3)
     outer = dot_size + 2 * border
     half_outer = outer // 2
     mid = block_pixel_size // 2
@@ -1773,8 +1775,9 @@ def draw_belt_cargo(
             image[iy0:iy1, ix0:ix1, :3] = color
             image[iy0:iy1, ix0:ix1, 3] = 255
 
-    for idx in range(belt_ys.size):
-        y, x = int(belt_ys[idx]), int(belt_xs[idx])
+    # BELT + PALLET: one centred dot per loaded tile.
+    for idx in range(single_ys.size):
+        y, x = int(single_ys[idx]), int(single_xs[idx])
         eidx = int(tile_entity[y, x])
         if eidx < 0:
             continue
@@ -1787,44 +1790,25 @@ def draw_belt_cargo(
         px0 = x * block_pixel_size + mid - half_outer
         _stamp_dot(py0, px0, color)
 
-    # Crossings hold their two in-flight items in ent_asm_in slots
-    # (vert = slot 0, horiz = slot 1). Each item is drawn near its
-    # *input* edge — a flow facing direction ``d`` enters from the
-    # opposite side, so the dot sits flush to that side.
-    cross_offset = mid - half_outer
-    edge_inset = max(2, block_pixel_size // 6)
-    for idx in range(cross_ys.size):
-        y, x = int(cross_ys[idx]), int(cross_xs[idx])
+    # SPLITTER: two dots horizontally, one per buffered item (max 2).
+    # The pair is centred on the tile with a 1-px gap between dots.
+    pair_gap = 1
+    pair_width = 2 * outer + pair_gap
+    splitter_left_px = mid - pair_width // 2
+    for idx in range(splitter_ys.size):
+        y, x = int(splitter_ys[idx]), int(splitter_xs[idx])
         eidx = int(tile_entity[y, x])
         if eidx < 0:
             continue
-        enc = int(ent_direction[eidx])
-        if enc < 1 or enc > 4:
+        item_type = int(ent_buf_type[eidx])
+        item_count = int(ent_buf_count[eidx])
+        if item_type == 0 or item_count <= 0:
             continue
-        # Same decoding as factoriax.belts.CROSSING_AXIS_DIRS but in
-        # plain Python so the renderer doesn't need a JAX device hop.
-        vert_out = Direction.DOWN if enc in (1, 2) else Direction.UP
-        horiz_out = Direction.RIGHT if enc in (1, 3) else Direction.LEFT
-
-        for slot, out_dir in ((0, vert_out), (1, horiz_out)):
-            it = int(ent_asm_in_type[eidx, slot])
-            cnt = int(ent_asm_in_count[eidx, slot])
-            if it == 0 or cnt <= 0:
-                continue
-            # Input edge is opposite of the output direction.
-            if out_dir == Direction.DOWN:  # input N (top edge)
-                py0 = y * block_pixel_size + edge_inset
-                px0 = x * block_pixel_size + cross_offset
-            elif out_dir == Direction.UP:  # input S (bottom edge)
-                py0 = y * block_pixel_size + block_pixel_size - edge_inset - outer
-                px0 = x * block_pixel_size + cross_offset
-            elif out_dir == Direction.RIGHT:  # input W (left edge)
-                py0 = y * block_pixel_size + cross_offset
-                px0 = x * block_pixel_size + edge_inset
-            else:  # LEFT — input E (right edge)
-                py0 = y * block_pixel_size + cross_offset
-                px0 = x * block_pixel_size + block_pixel_size - edge_inset - outer
-            color = ITEM_COLORS.get(it, (128, 128, 128))
+        color = ITEM_COLORS.get(item_type, (128, 128, 128))
+        visible = min(2, item_count)
+        py0 = y * block_pixel_size + mid - half_outer
+        for slot in range(visible):
+            px0 = x * block_pixel_size + splitter_left_px + slot * (outer + pair_gap)
             _stamp_dot(py0, px0, color)
 
 
