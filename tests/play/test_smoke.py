@@ -66,8 +66,8 @@ class TestPlayUISmoke:
         """render_inventory_menu returns an RGBA overlay."""
         from factoriax.play.ui import render_inventory_menu
 
-        _, _, state = env_and_state
-        overlay, regions = render_inventory_menu(state, 480, 480)
+        _, params, state = env_and_state
+        overlay, regions = render_inventory_menu(state, params, 480, 480)
         assert overlay.shape == (480, 480, 4)
         assert overlay.dtype == np.uint8
 

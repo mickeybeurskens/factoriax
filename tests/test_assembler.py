@@ -14,7 +14,9 @@ from factoriax.constants import (
 )
 from factoriax.game_logic import deposit_to_adjacent
 from factoriax.machines import run_assemblers
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
+
+_PARAMS = EnvParams()
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -113,7 +115,7 @@ class TestAssemblerStartsCraft:
             asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
             asm_in_count=[5, 3],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 2
@@ -127,7 +129,7 @@ class TestAssemblerStartsCraft:
             asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
             asm_in_count=[5, 3],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
@@ -144,7 +146,7 @@ class TestAssemblerStartsCraft:
             asm_in_type=[int(ItemType.IRON_ORE), 0],
             asm_in_count=[5, 0],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
@@ -161,7 +163,7 @@ class TestAssemblerStartsCraft:
             asm_in_type=[int(ItemType.LIMESTONE), int(ItemType.COAL)],
             asm_in_count=[1, 1],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 4  # REFRACTORY ticks
@@ -178,7 +180,7 @@ class TestAssemblerStartsCraft:
             asm_in_type=[int(ItemType.COAL), 0],
             asm_in_count=[1, 0],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
@@ -192,7 +194,7 @@ class TestAssemblerStartsCraft:
             asm_in_type=[0, 0],
             asm_in_count=[0, 0],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
@@ -213,7 +215,7 @@ class TestAssemblerCompletesCraft:
             power=1,
             asm_out_type=int(ItemType.IRON_PLATE),
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
@@ -241,7 +243,7 @@ class TestAssemblerStallsOutputFull:
             asm_out_type=int(ItemType.IRON_PLATE),
             asm_out_count=1,
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         # Output still parked in asm_out; power never ticked up.
@@ -260,7 +262,7 @@ class TestAssemblerTwoInputRecipe:
             asm_in_type=[int(ItemType.IRON_PLATE), int(ItemType.TIN_PLATE)],
             asm_in_count=[3, 2],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 4
@@ -274,7 +276,7 @@ class TestAssemblerTwoInputRecipe:
             asm_in_type=[int(ItemType.IRON_PLATE), 0],
             asm_in_count=[3, 0],
         )
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
         assert int(new.ent_power[eid]) == 0
@@ -363,6 +365,6 @@ class TestAssemblerPlacementAndPickup:
     def test_progress_decrements(self, state_factory) -> None:
         """Power > 1 should decrement by 1 each tick."""
         state = _make_assembler_state(state_factory, power=5)
-        new = run_assemblers(state)
+        new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
         assert int(new.ent_power[eid]) == 4

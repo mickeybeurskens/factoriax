@@ -40,7 +40,7 @@ from factoriax.recipes import (
     RECIPE_NAMES,
 )
 from factoriax.renderer import PLAYER_COLORS, render_item_icon
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
 
 # Re-export shared primitives so existing ``from factoriax.play.ui import``
 # statements keep working.
@@ -1891,6 +1891,7 @@ def _render_info_terrain(
 
 def render_inventory_menu(
     state: EnvState,
+    params: EnvParams,
     screen_width: int,
     screen_height: int,
     menu_focus: str = "crafting",
@@ -1906,6 +1907,7 @@ def render_inventory_menu(
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the recipe table).
         screen_width: Total screen width in pixels.
         screen_height: Total screen height in pixels.
         menu_focus: Kept for API compat (always "crafting").
@@ -1974,7 +1976,7 @@ def render_inventory_menu(
     for recipe_idx in range(NUM_RECIPES):
         recipe = BASE_RECIPES[recipe_idx]
         is_selected_recipe = recipe_idx == selected_recipe
-        can_afford = bool(can_afford_recipe(state, selected_player, recipe_idx))
+        can_afford = bool(can_afford_recipe(state, params, selected_player, recipe_idx))
         ry = recipe_idx * recipe_h
 
         recipe_regions.append(

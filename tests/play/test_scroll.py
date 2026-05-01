@@ -15,8 +15,10 @@ from factoriax.play.ui import (
     render_inventory_menu,
     scroll_adjust_regions,
 )
+from factoriax.state import EnvParams
 
 _MAP = jnp.zeros((4, 4), dtype=jnp.int32)
+_PARAMS = EnvParams()
 
 
 # ---------------------------------------------------------------------------
@@ -282,14 +284,18 @@ class TestRenderInventoryMenuRecipeScroll:
     def test_renders_without_error(self, state_factory) -> None:
         """Inventory menu with crafting focus renders without error."""
         state = state_factory(world_map=_MAP)
-        overlay, regions = render_inventory_menu(state, 480, 480, menu_focus="crafting")
+        overlay, regions = render_inventory_menu(
+            state, _PARAMS, 480, 480, menu_focus="crafting"
+        )
         assert overlay.shape == (480, 480, 4)
         assert any(r.action == "select_recipe" for r in regions)
 
     def test_recipe_click_regions_within_screen_bounds(self, state_factory) -> None:
         """All recipe click regions returned are inside the screen."""
         state = state_factory(world_map=_MAP)
-        _, regions = render_inventory_menu(state, 480, 480, menu_focus="crafting")
+        _, regions = render_inventory_menu(
+            state, _PARAMS, 480, 480, menu_focus="crafting"
+        )
         for r in regions:
             if r.action == "select_recipe":
                 assert 0 <= r.x < 480

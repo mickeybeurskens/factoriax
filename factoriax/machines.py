@@ -22,15 +22,7 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
-from factoriax.recipes import (
-    BASE_RECIPES,
-    NUM_RECIPES,
-    OUTPUT_TO_RECIPE,
-    RECIPE_MACHINE_TYPE,
-    RECIPE_OUTPUT_COUNTS,
-    RECIPE_OUTPUTS,
-    RECIPE_TICKS,
-)
+from factoriax.recipes import NUM_RECIPES
 from factoriax.state import EnvParams, EnvState
 
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
@@ -58,7 +50,7 @@ def update_all_machines(
         Updated state.
     """
     state = run_miners(state, params)
-    state = run_assemblers(state)
+    state = run_assemblers(state, params)
     state = run_conveyor_belts(state)
     state = run_arms(state)
     return state
@@ -370,23 +362,28 @@ def run_arms(state: EnvState) -> EnvState:
     )
 
 
-def run_assemblers(state: EnvState) -> EnvState:
+def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     """Run assemblers: pull inputs, craft, push output to buffer.
 
     Entity-based: iterates over entity slots. Neighbor lookups use
-    ``tile_entity`` grid to find adjacent entities.
+    ``tile_entity`` grid to find adjacent entities. Recipe identity
+    and balance numbers are read via ``params.recipe_table`` so a
+    tuned :class:`~factoriax.state.EnvParams` re-uses the cached XLA
+    trace (shape stable) but applies the user's balance overlay.
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the recipe table).
 
     Returns:
         Updated state.
     """
+    table = params.recipe_table
     h, w = state.map.shape
     active = state.ent_y >= 0
     # Assemblers and furnaces share the same engine shape and code path;
     # they only differ in which recipes they're allowed to match in
-    # Phase 3 (via RECIPE_MACHINE_TYPE).
+    # Phase 3 (via params.recipe_table.machine_type).
     is_combiner = (
         (state.ent_type == MachineType.ASSEMBLER)
         | (state.ent_type == MachineType.FURNACE)
@@ -455,9 +452,9 @@ def run_assemblers(state: EnvState) -> EnvState:
     # index. ``can_complete`` already requires ``ent_asm_out_type != 0``
     # so when the where-mask fires the recipe index is guaranteed valid;
     # the clip is defensive for the lanes that mask out.
-    completing_ridx = OUTPUT_TO_RECIPE[state.ent_asm_out_type.astype(jnp.int32)]
+    completing_ridx = table.output_to_recipe[state.ent_asm_out_type.astype(jnp.int32)]
     safe_completing_ridx = jnp.clip(completing_ridx, 0, NUM_RECIPES - 1)
-    yield_count = RECIPE_OUTPUT_COUNTS[safe_completing_ridx].astype(jnp.int16)
+    yield_count = table.output_counts[safe_completing_ridx].astype(jnp.int16)
 
     new_out_count = jnp.where(
         can_complete,
@@ -475,23 +472,21 @@ def run_assemblers(state: EnvState) -> EnvState:
     # Recipes are 1- or 2-input, with 1-input recipes padded to
     # (EMPTY, 0) in the second slot. The matcher checks both slot
     # orderings so inputs can land in either slot. Each recipe is
-    # gated to its owning machine type via RECIPE_MACHINE_TYPE.
+    # gated to its owning machine type via params.recipe_table.machine_type.
     # ``asm_out_count == 0`` is part of the idle gate: without a
     # downstream buffer to drain to (no Phase 4), a stuck output
     # must be withdrawn before the machine can start a new cycle.
     idle = is_combiner & (new_power == 0) & (new_out_count == 0)
     matched = jnp.int32(-1)
     for r in range(NUM_RECIPES):
-        # 1-input recipes pad the unused slot with (EMPTY, 0); the
-        # match naturally requires the corresponding slot on the
-        # machine to also be empty (in_tX == 0 & in_cX >= 0).
-        pairs = BASE_RECIPES[r].inputs
-        if len(pairs) == 1:
-            (rt_a, ra_a) = pairs[0]
-            rt_b, ra_b = int(ItemType.EMPTY), 0
-        else:
-            (rt_a, ra_a), (rt_b, ra_b) = pairs
-        rmt = RECIPE_MACHINE_TYPE[r]
+        # 1-input recipes pad the unused slot with (EMPTY, 0) in the
+        # table, so the match naturally requires the corresponding
+        # slot on the machine to also be empty.
+        rt_a = table.input_items[r, 0]
+        ra_a = table.input_counts[r, 0]
+        rt_b = table.input_items[r, 1]
+        ra_b = table.input_counts[r, 1]
+        rmt = table.machine_type[r]
         o1 = (in_t0 == rt_a) & (in_c0 >= ra_a) & (in_t1 == rt_b) & (in_c1 >= ra_b)
         o2 = (in_t0 == rt_b) & (in_c0 >= ra_b) & (in_t1 == rt_a) & (in_c1 >= ra_a)
         type_ok = state.ent_type == rmt
@@ -499,8 +494,8 @@ def run_assemblers(state: EnvState) -> EnvState:
 
     can_start = matched >= 0
     ridx = jnp.clip(matched, 0, NUM_RECIPES - 1)
-    craft_t = RECIPE_TICKS[ridx].astype(jnp.int16)
-    out_item = RECIPE_OUTPUTS[ridx].astype(jnp.int8)
+    craft_t = table.ticks[ridx].astype(jnp.int16)
+    out_item = table.outputs[ridx].astype(jnp.int8)
 
     new_power = jnp.where(can_start, craft_t, new_power)
     new_out_type = jnp.where(can_start, out_item, new_out_type)

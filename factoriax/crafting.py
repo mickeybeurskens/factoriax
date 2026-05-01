@@ -2,20 +2,18 @@
 
 Player crafting is instant: check if the player has the required inputs,
 consume them, produce the output. Uses the same recipe table as assemblers.
+
+Recipe arrays flow in via :class:`~factoriax.state.EnvParams.recipe_table`
+so balance overlays (Step 5+) can tune input/output counts without
+rebaking the XLA graph.
 """
 
 import jax
 import jax.numpy as jnp
 
 from factoriax.constants import PLAYER_MAX_STACK, ItemType
-from factoriax.recipes import (
-    MAX_RECIPE_INPUTS,
-    RECIPE_INPUT_COUNTS,
-    RECIPE_INPUT_ITEMS,
-    RECIPE_OUTPUT_COUNTS,
-    RECIPE_OUTPUTS,
-)
-from factoriax.state import EnvState
+from factoriax.recipes import MAX_RECIPE_INPUTS
+from factoriax.state import EnvParams, EnvState
 
 
 def count_item_in_inventory(
@@ -38,6 +36,7 @@ def count_item_in_inventory(
 
 def can_afford_recipe(
     state: EnvState,
+    params: EnvParams,
     player_idx: int | jax.Array,
     recipe_idx: int | jax.Array,
 ) -> jax.Array:
@@ -45,14 +44,16 @@ def can_afford_recipe(
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the recipe table).
         player_idx: Index of the player.
         recipe_idx: Index of the recipe.
 
     Returns:
         Boolean indicating if player has all required materials.
     """
-    input_items = RECIPE_INPUT_ITEMS[recipe_idx]
-    input_counts = RECIPE_INPUT_COUNTS[recipe_idx]
+    table = params.recipe_table
+    input_items = table.input_items[recipe_idx]
+    input_counts = table.input_counts[recipe_idx]
     inv = state.player_inventory[player_idx]
 
     result = jnp.bool_(True)
@@ -67,6 +68,7 @@ def can_afford_recipe(
 
 def craft_recipe(
     state: EnvState,
+    params: EnvParams,
     player_idx: int | jax.Array,
     recipe_idx: int | jax.Array,
 ) -> EnvState:
@@ -77,26 +79,28 @@ def craft_recipe(
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the recipe table).
         player_idx: Index of the player.
         recipe_idx: Index of the recipe to craft.
 
     Returns:
         Updated state with recipe crafted (or unchanged).
     """
-    can_craft = can_afford_recipe(state, player_idx, recipe_idx)
+    table = params.recipe_table
+    can_craft = can_afford_recipe(state, params, player_idx, recipe_idx)
 
-    output_item = RECIPE_OUTPUTS[recipe_idx]
+    output_item = table.outputs[recipe_idx]
     output_count = state.player_inventory[player_idx, output_item]
     output_max = PLAYER_MAX_STACK[output_item]
-    yield_count = RECIPE_OUTPUT_COUNTS[recipe_idx]
+    yield_count = table.output_counts[recipe_idx]
     has_space = output_count + yield_count <= output_max
     should_craft = can_craft & has_space
 
     # Consume inputs.
     inv = state.player_inventory[player_idx]
     for i in range(MAX_RECIPE_INPUTS):
-        item_type = RECIPE_INPUT_ITEMS[recipe_idx, i]
-        amount = RECIPE_INPUT_COUNTS[recipe_idx, i]
+        item_type = table.input_items[recipe_idx, i]
+        amount = table.input_counts[recipe_idx, i]
         is_valid = item_type != int(ItemType.EMPTY)
         inv = inv.at[item_type].add(
             jnp.where(should_craft & is_valid, -amount, 0).astype(jnp.int16),

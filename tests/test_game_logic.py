@@ -20,6 +20,8 @@ from factoriax.game_logic import (
     withdraw_from_adjacent,
 )
 
+_PARAMS = EnvParams()
+
 
 class TestHandlePlayerAction:
     """Tests for the action dispatch function."""
@@ -35,7 +37,7 @@ class TestHandlePlayerAction:
             player_position=(1, 1),
             player_direction=int(Direction.RIGHT),
         )
-        new_state = _handle_player_action(state, Action.UP, 0)
+        new_state = _handle_player_action(state, _PARAMS, Action.UP, 0)
         assert jnp.array_equal(
             new_state.player_positions[0],
             jnp.array([1, 0]),
@@ -54,7 +56,7 @@ class TestHandlePlayerAction:
             player_position=(1, 1),
             player_direction=int(Direction.DOWN),
         )
-        new_state = _handle_player_action(state, Action.LEFT, 0)
+        new_state = _handle_player_action(state, _PARAMS, Action.LEFT, 0)
         assert jnp.array_equal(
             new_state.player_positions[0],
             jnp.array([0, 1]),
@@ -86,7 +88,7 @@ class TestHandlePlayerAction:
             Action.RIGHT: Direction.RIGHT,
         }
         for action, expected_dir in expected.items():
-            new = _handle_player_action(state, action, 0)
+            new = _handle_player_action(state, _PARAMS, action, 0)
             assert int(new.player_directions[0]) == expected_dir
 
     def test_face_changes_facing_without_moving(
@@ -103,7 +105,7 @@ class TestHandlePlayerAction:
             player_position=(1, 1),
             player_direction=int(Direction.UP),
         )
-        new_state = _handle_player_action(state, Action.FACE_RIGHT, 0)
+        new_state = _handle_player_action(state, _PARAMS, Action.FACE_RIGHT, 0)
         assert jnp.array_equal(
             new_state.player_positions[0],
             jnp.array([1, 1]),
@@ -135,7 +137,7 @@ class TestHandlePlayerAction:
             player_position=(1, 1),
             player_direction=int(Direction.UP),
         )
-        new_state = _handle_player_action(state, action, 0)
+        new_state = _handle_player_action(state, _PARAMS, action, 0)
         assert int(new_state.player_directions[0]) == expected_dir
 
     def test_mine_decrements_resources(self, state_factory) -> None:
@@ -147,7 +149,7 @@ class TestHandlePlayerAction:
             ),
             block_resources=jnp.array([[10]], dtype=jnp.int16),
         )
-        new_state = _handle_player_action(state, Action.MINE, 0)
+        new_state = _handle_player_action(state, _PARAMS, Action.MINE, 0)
         assert int(new_state.block_resources[0, 0]) == 9
         assert int(new_state.player_inventory[0, ItemType.COAL]) == 1
 
@@ -159,7 +161,7 @@ class TestHandlePlayerAction:
                 dtype=jnp.int32,
             ),
         )
-        new_state = _handle_player_action(state, Action.NOOP, 0)
+        new_state = _handle_player_action(state, _PARAMS, Action.NOOP, 0)
         assert jnp.array_equal(
             new_state.player_positions,
             state.player_positions,

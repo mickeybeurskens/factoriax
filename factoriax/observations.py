@@ -203,7 +203,7 @@ def _player_scalars(
     """
     pos = state.player_positions[player_idx]
     afford = jax.vmap(
-        lambda r: can_afford_recipe(state, player_idx, r).astype(
+        lambda r: can_afford_recipe(state, params, player_idx, r).astype(
             jnp.float32,
         ),
     )(jnp.arange(NUM_RECIPES))

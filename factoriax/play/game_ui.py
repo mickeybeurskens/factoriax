@@ -351,6 +351,7 @@ class GameUI:
         if ps.inventory_open:
             menu_overlay, inv_regions = render_inventory_menu(
                 state,
+                self._params,
                 ui_w,
                 ui_h,
                 ps.menu_focus,

@@ -17,9 +17,11 @@ from factoriax.play.ui import (
     render_pause_menu,
     render_welcome_screen,
 )
+from factoriax.state import EnvParams
 
 _SW = 128
 _SH = 128
+_PARAMS = EnvParams()
 
 
 class TestRenderAchievementMenu:
@@ -51,7 +53,7 @@ class TestRenderInventoryMenu:
     def test_returns_uint8_rgba(self, state_factory) -> None:
         """Must return a uint8 RGBA array matching the requested dimensions."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result, click_regions = render_inventory_menu(state, _SW, _SH)
+        result, click_regions = render_inventory_menu(state, _PARAMS, _SW, _SH)
         assert result.dtype == np.uint8
         assert result.shape == (_SH, _SW, 4)
         assert isinstance(click_regions, list)
@@ -60,13 +62,17 @@ class TestRenderInventoryMenu:
     def test_inventory_focus(self, state_factory) -> None:
         """Should not crash with inventory focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="inventory")
+        result, _ = render_inventory_menu(
+            state, _PARAMS, _SW, _SH, menu_focus="inventory"
+        )
         assert result.shape == (_SH, _SW, 4)
 
     def test_crafting_focus(self, state_factory) -> None:
         """Should not crash with crafting focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
+        result, _ = render_inventory_menu(
+            state, _PARAMS, _SW, _SH, menu_focus="crafting"
+        )
         assert result.shape == (_SH, _SW, 4)
 
     def test_populated_inventory(self, state_factory) -> None:
@@ -81,7 +87,7 @@ class TestRenderInventoryMenu:
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
             player_inventory=inv,
         )
-        result, _ = render_inventory_menu(state, _SW, _SH)
+        result, _ = render_inventory_menu(state, _PARAMS, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
     def test_craft_in_progress(self, state_factory) -> None:
@@ -90,7 +96,9 @@ class TestRenderInventoryMenu:
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
             craft_progress=jnp.array([2], dtype=jnp.int32),
         )
-        result, _ = render_inventory_menu(state, _SW, _SH, menu_focus="crafting")
+        result, _ = render_inventory_menu(
+            state, _PARAMS, _SW, _SH, menu_focus="crafting"
+        )
         assert result.shape == (_SH, _SW, 4)
 
 

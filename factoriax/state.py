@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from flax import struct
 
 from factoriax.constants import Action
+from factoriax.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
 
 
 class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
@@ -104,6 +105,18 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         base_resources: Starting ore count per tile.
         miner_mining_rate: Ore extracted per tick.
         max_assembler_stack_size: Max items per assembler slot.
+        recipe_table: Per-recipe balance numbers (input/output counts,
+            ticks) and identity arrays (machine type, output items)
+            packed as a :class:`~factoriax.recipes.RecipeTable`. Defaults
+            to :data:`~factoriax.recipes.DEFAULT_RECIPE_TABLE`. Stored as
+            a PyTree leaf so JIT'd kernels in :mod:`factoriax.machines`
+            and :mod:`factoriax.crafting` can read recipe values from
+            ``params.recipe_table.*`` without re-baking the XLA graph
+            when the user constructs an :class:`EnvParams` with a tuned
+            balance overlay (added in Step 5+). Shape is fixed by
+            :data:`~factoriax.recipes.NUM_RECIPES` and
+            :data:`~factoriax.recipes.MAX_RECIPE_INPUTS` so JIT cache
+            reuse is preserved across overlays.
     """
 
     max_timesteps: int = 1000
@@ -120,6 +133,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     base_resources: int = 1000
     miner_mining_rate: int = 3
     max_assembler_stack_size: int = 1000
+    recipe_table: RecipeTable = DEFAULT_RECIPE_TABLE
 
     NUM_ACTIONS: ClassVar[int] = len(Action)
 

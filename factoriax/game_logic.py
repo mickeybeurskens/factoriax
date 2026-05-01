@@ -492,6 +492,7 @@ def run_labs(state: EnvState) -> EnvState:
 
 def _handle_player_action(
     state: EnvState,
+    params: EnvParams,
     action: int | jax.Array,
     player_idx: int | jax.Array,
 ) -> EnvState:
@@ -499,6 +500,7 @@ def _handle_player_action(
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the recipe table).
         action: Action to take.
         player_idx: Index of the player.
 
@@ -549,7 +551,7 @@ def _handle_player_action(
         [
             lambda s: move_player(s, action, player_idx),
             lambda s: mine_block(s, player_idx),
-            lambda s: craft_recipe(s, player_idx, recipe_idx),
+            lambda s: craft_recipe(s, params, player_idx, recipe_idx),
             lambda s: place_machine(s, player_idx, place_item),
             lambda s: pickup_machine(s, player_idx),
             lambda s: set_machine_direction(s, player_idx, rotate_dir),
@@ -583,7 +585,7 @@ def factoriax_step(
     state = state.replace(
         science_consumed_step=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
     )
-    state = _handle_player_action(state, action, player_idx)
+    state = _handle_player_action(state, params, action, player_idx)
     state = update_all_machines(state, params)
     state = run_labs(state)
     return state.replace(timestep=state.timestep + 1)
