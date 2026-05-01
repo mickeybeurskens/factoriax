@@ -1759,13 +1759,24 @@ def draw_belt_cargo(
     h, w = image.shape[:2]
 
     def _stamp_dot(py0: int, px0: int, color: tuple[int, int, int]) -> None:
-        """Draw an outlined coloured dot at ``(py0, px0)`` (top-left)."""
+        """Draw an outlined coloured dot at ``(py0, px0)`` (top-left).
+
+        The border colour is picked to contrast the item colour so dark
+        items (e.g. COAL at ``(54, 54, 54)``) don't blend into a black
+        frame — without this, a 4x4 dark core plus a 1-px near-black
+        border reads as a uniform 6x6 block, making the dot look bigger
+        than a light-coloured item drawn at exactly the same size.
+        """
+        # Rec. 601 luma; light items get a dark border, dark items get
+        # a light border.
+        luma = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+        border_color = (20, 20, 20) if luma >= 96 else (235, 235, 235)
         oy0 = max(0, py0)
         ox0 = max(0, px0)
         oy1 = min(h, py0 + outer)
         ox1 = min(w, px0 + outer)
         if oy0 < oy1 and ox0 < ox1:
-            image[oy0:oy1, ox0:ox1, :3] = (20, 20, 20)
+            image[oy0:oy1, ox0:ox1, :3] = border_color
             image[oy0:oy1, ox0:ox1, 3] = 255
         iy0 = max(0, py0 + border)
         ix0 = max(0, px0 + border)

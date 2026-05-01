@@ -529,3 +529,60 @@ def test_splitter_with_buf_count_1_shows_one_dot(state_factory) -> None:
         f"Splitter with buf_count=1 produced {runs} dot run(s) on the centre "
         f"row; expected exactly 1."
     )
+
+
+def test_cargo_border_contrasts_dark_item(state_factory) -> None:
+    """A dark item (COAL, ``(54, 54, 54)``) gets a *light* border so
+    the 4x4 inner core stays visually distinct from the 1-px frame.
+    Without this, the dark inner blends with a default-dark frame and
+    the dot reads as a 6x6 block, looking larger than a light item
+    rendered at exactly the same pixel size."""
+    h, w = 3, 3
+    world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+    empty = state_factory(world_map=world)
+    loaded = _place_belt_with_buffer(
+        empty,
+        1,
+        1,
+        int(MachineType.CONVEYOR_BELT),
+        int(Direction.RIGHT),
+        buf_item=int(ItemType.COAL),
+        buf_count=1,
+    )
+    s = 32
+    img = render_pixels(loaded, block_pixel_size=s)
+    # A pixel on the outer ring of the dot at tile-centre. With outer=6
+    # and the dot top-left at (mid - 3), the top-left corner sits at
+    # (s + s/2 - 3, s + s/2 - 3) = (s + 13, s + 13).
+    border_pixel = img[s + s // 2 - 3, s + s // 2 - 3]
+    # Light border for a dark item: each channel >= 200.
+    assert all(int(c) >= 200 for c in border_pixel[:3]), (
+        f"COAL dot border was {tuple(border_pixel[:3])}; expected a light "
+        f"colour to contrast the dark inner core."
+    )
+
+
+def test_cargo_border_contrasts_light_item(state_factory) -> None:
+    """A light item (IRON_PLATE, ``(192, 192, 192)``) gets a *dark*
+    border. Symmetric to the COAL case — the inner core should always
+    read as the dot, regardless of item brightness."""
+    h, w = 3, 3
+    world = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
+    empty = state_factory(world_map=world)
+    loaded = _place_belt_with_buffer(
+        empty,
+        1,
+        1,
+        int(MachineType.CONVEYOR_BELT),
+        int(Direction.RIGHT),
+        buf_item=int(ItemType.IRON_PLATE),
+        buf_count=1,
+    )
+    s = 32
+    img = render_pixels(loaded, block_pixel_size=s)
+    border_pixel = img[s + s // 2 - 3, s + s // 2 - 3]
+    # Dark border for a light item: each channel <= 60.
+    assert all(int(c) <= 60 for c in border_pixel[:3]), (
+        f"IRON_PLATE dot border was {tuple(border_pixel[:3])}; expected a "
+        f"dark colour to contrast the light inner core."
+    )
