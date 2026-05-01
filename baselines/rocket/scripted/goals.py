@@ -2135,6 +2135,160 @@ def ProduceInAssembler(  # noqa: N802 - factory mirrors class-style instantiatio
 
 
 # ---------------------------------------------------------------------------
+# Tile-pinned production
+# ---------------------------------------------------------------------------
+
+
+class ProduceInMachineAt(Goal):
+    """Like :class:`ProduceInMachine`, but pinned to a specific tile.
+
+    The standard ``ProduceInMachine`` picks the nearest matching
+    machine each cycle. After Phase 1 places the iron + copper cell
+    furnaces, those cell furnaces become the nearest match for any
+    Phase 2 ``ProduceInFurnace`` call — and depositing into a cell
+    furnace's input pallet either fails (type mismatch with the
+    flowing ore) or contaminates the cell. This class sidesteps the
+    nearest-machine heuristic by using ``FaceAndInteract`` directly
+    against a fixed tile, so a smelt sized for the idle pre-placed
+    furnace at (15, 16) lands there regardless of what cells exist.
+
+    The deposit-wait-withdraw FSM mirrors :class:`ProduceInMachine`:
+    deposit each input the recipe needs (one item per tick), wait
+    for ``recipe.ticks + 3`` slack ticks, then withdraw the output.
+
+    Args:
+        tile: ``(x, y)`` of the target machine. Must be a furnace
+            or assembler at runtime; otherwise the goal FAILs on the
+            first step.
+        output_item: ``ItemType`` produced by the recipe.
+        count: Number of completed cycles to run.
+        book: :class:`~factoriax.recipes.RecipeBook` for recipe
+            lookup. Defaults to
+            :data:`~factoriax.recipes.BASE_RECIPE_BOOK`; pass a
+            tuned book to track a balance overlay.
+    """
+
+    name = "ProduceInMachineAt"
+
+    def __init__(
+        self,
+        tile: tuple[int, int],
+        output_item: int | ItemType,
+        count: int,
+        book: RecipeBook = BASE_RECIPE_BOOK,
+    ) -> None:
+        self.tile = tile
+        self.output_item = int(output_item)
+        self.count = count
+        recipe = _find_recipe(self.output_item, book)
+        if recipe is None:
+            raise ValueError(
+                f"no recipe produces {ItemType(self.output_item).name}",
+            )
+        self.recipe_inputs: list[tuple[int, int]] = [
+            (int(it), int(q)) for it, q in recipe.inputs
+        ]
+        self.wait_ticks: int = int(recipe.ticks) + 3
+
+        self._sub: FaceAndInteract | None = None
+        self._phase: str = "deposit"  # "deposit" | "wait" | "withdraw"
+        self._deposit_input_idx: int = 0
+        self._deposit_count: int = 0
+        self._wait_elapsed: int = 0
+        self._cycles_done: int = 0
+        self._withdraw_start_inv: int | None = None
+
+    def step(self, view: WorldView) -> StepReturn:
+        if self._cycles_done >= self.count:
+            return Result.DONE, None
+
+        # Validate the target tile holds a furnace or assembler.
+        x, y = self.tile
+        machine = int(view.machine_type[y, x])
+        if machine not in (
+            int(MachineType.FURNACE),
+            int(MachineType.ASSEMBLER),
+        ):
+            return Result.FAIL, None
+
+        if self._sub is not None:
+            result, action = self._sub.step(view)
+            if result is Result.RUNNING:
+                return Result.RUNNING, action
+            self._sub = None
+            return Result.RUNNING, int(Action.NOOP)
+
+        if self._phase == "deposit":
+            return self._step_deposit(view)
+        if self._phase == "wait":
+            return self._step_wait()
+        if self._phase == "withdraw":
+            return self._step_withdraw(view)
+        raise AssertionError(f"unknown phase: {self._phase}")
+
+    def _step_deposit(self, view: WorldView) -> StepReturn:
+        input_item, required = self.recipe_inputs[self._deposit_input_idx]
+        if self._deposit_count < required:
+            if view.player.held(input_item) < 1:
+                return Result.FAIL, None
+            self._deposit_count += 1
+            from .world_model import deposit_action  # noqa: PLC0415
+
+            self._sub = FaceAndInteract(self.tile, deposit_action(input_item))
+            return self._sub.step(view)
+
+        self._deposit_input_idx += 1
+        self._deposit_count = 0
+        if self._deposit_input_idx >= len(self.recipe_inputs):
+            self._phase = "wait"
+            self._wait_elapsed = 0
+        return Result.RUNNING, int(Action.NOOP)
+
+    def _step_wait(self) -> StepReturn:
+        if self._wait_elapsed >= self.wait_ticks:
+            self._phase = "withdraw"
+            self._withdraw_start_inv = None
+            return Result.RUNNING, int(Action.NOOP)
+        self._wait_elapsed += 1
+        return Result.RUNNING, int(Action.NOOP)
+
+    def _step_withdraw(self, view: WorldView) -> StepReturn:
+        held = view.player.held(self.output_item)
+        if self._withdraw_start_inv is None:
+            self._withdraw_start_inv = held
+        elif held > self._withdraw_start_inv:
+            # Withdraw succeeded — start the next cycle.
+            self._cycles_done += 1
+            self._phase = "deposit"
+            self._deposit_input_idx = 0
+            self._deposit_count = 0
+            return Result.RUNNING, int(Action.NOOP)
+
+        self._sub = FaceAndInteract(self.tile, int(Action.WITHDRAW))
+        return self._sub.step(view)
+
+
+def ProduceInFurnaceAt(  # noqa: N802 - factory mirrors class-style instantiation
+    tile: tuple[int, int],
+    output_item: int | ItemType,
+    count: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
+) -> ProduceInMachineAt:
+    """Produce *count* of *output_item* at the furnace at *tile*."""
+    return ProduceInMachineAt(tile, output_item, count, book=book)
+
+
+def ProduceInAssemblerAt(  # noqa: N802 - factory mirrors class-style instantiation
+    tile: tuple[int, int],
+    output_item: int | ItemType,
+    count: int,
+    book: RecipeBook = BASE_RECIPE_BOOK,
+) -> ProduceInMachineAt:
+    """Produce *count* of *output_item* at the assembler at *tile*."""
+    return ProduceInMachineAt(tile, output_item, count, book=book)
+
+
+# ---------------------------------------------------------------------------
 # Pipelined production across multiple machines
 # ---------------------------------------------------------------------------
 
