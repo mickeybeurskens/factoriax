@@ -35,10 +35,15 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.machines import run_conveyor_belts
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
 
 # Splitter behaviour is exercised through the merged belt-network pass.
 run_splitters = run_conveyor_belts
+
+# Default params — engine kernels read params.machine_config.max_stack
+# for buffer caps; the default config matches what these tests already
+# implicitly assumed.
+_PARAMS = EnvParams()
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -107,7 +112,7 @@ def test_facing_up_with_full_buffer_fires_one_to_each_horizontal_output(
     """Vertically-facing splitter (UP) with buf=2 sends 1 to LEFT and
     1 to RIGHT pallets simultaneously."""
     state = _make_splitter_world(state_factory, facing=int(Direction.UP), buf_count=2)
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     seid = _eid(out, 1, 1)
     left_eid = _eid(out, 1, 0)
     right_eid = _eid(out, 1, 2)
@@ -124,7 +129,7 @@ def test_facing_down_outputs_match_facing_up(state_factory) -> None:
     UP-facing); only the visual orientation differs from the engine's
     point of view."""
     state = _make_splitter_world(state_factory, facing=int(Direction.DOWN), buf_count=2)
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 1
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 1
 
@@ -132,7 +137,7 @@ def test_facing_down_outputs_match_facing_up(state_factory) -> None:
 def test_facing_left_fires_one_up_and_one_down(state_factory) -> None:
     """LEFT-facing splitters output to UP/DOWN (vertical axis pair)."""
     state = _make_splitter_world(state_factory, facing=int(Direction.LEFT), buf_count=2)
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     up_eid = _eid(out, 0, 1)
     down_eid = _eid(out, 2, 1)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 0
@@ -144,7 +149,7 @@ def test_facing_right_outputs_match_facing_left(state_factory) -> None:
     state = _make_splitter_world(
         state_factory, facing=int(Direction.RIGHT), buf_count=2
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 0, 1)]) == 1
     assert int(out.ent_buf_count[_eid(out, 2, 1)]) == 1
 
@@ -159,7 +164,7 @@ def test_buffer_of_one_does_not_fire(state_factory) -> None:
     must remain in place. Without this, the user's even-split contract
     is silently violated for low-throughput streams."""
     state = _make_splitter_world(state_factory, facing=int(Direction.UP), buf_count=1)
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 0
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0
@@ -168,7 +173,7 @@ def test_buffer_of_one_does_not_fire(state_factory) -> None:
 def test_empty_buffer_is_a_no_op(state_factory) -> None:
     """A buf=0 splitter shouldn't touch anyone's state."""
     state = _make_splitter_world(state_factory, facing=int(Direction.UP), buf_count=0)
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 0
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 0
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0
@@ -190,7 +195,7 @@ def test_blocked_left_output_fires_right_only(state_factory) -> None:
         buf_count=2,
         left_pallet=False,  # no entity on LEFT — non-receptive
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
     # RIGHT pallet got the single fired item.
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 1
@@ -204,7 +209,7 @@ def test_blocked_right_output_fires_left_only(state_factory) -> None:
         buf_count=2,
         right_pallet=False,
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 1
 
@@ -220,7 +225,7 @@ def test_both_outputs_blocked_holds_both(state_factory) -> None:
         left_pallet=False,
         right_pallet=False,
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 2
 
 
@@ -234,7 +239,7 @@ def test_inactive_direction_is_no_op(state_factory) -> None:
     The decode table returns (0, 0) for that row; a regression here
     would make every NONE-direction splitter spam fictional pushes."""
     state = _make_splitter_world(state_factory, facing=0, buf_count=2)
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 2
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 0
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0
@@ -255,7 +260,7 @@ def test_non_splitter_entities_untouched(state_factory) -> None:
     state = state_factory(
         world_map=world, machine_types=mt, buffer_type=bt, buffer_count=bc
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 0, 1)]) == 5
     assert int(out.ent_buf_type[_eid(out, 0, 1)]) == int(ItemType.IRON_PLATE)
 
@@ -269,8 +274,8 @@ def test_two_ticks_drains_then_holds(state_factory) -> None:
     """Tick 1 drains the buf-of-2 to zero; tick 2 finds buf=0 and
     nothing more arrives, so the splitter no-ops."""
     state = _make_splitter_world(state_factory, facing=int(Direction.UP), buf_count=2)
-    after1 = run_splitters(state)
-    after2 = run_splitters(after1)
+    after1 = run_splitters(state, _PARAMS)
+    after2 = run_splitters(after1, _PARAMS)
     assert int(after1.ent_buf_count[_eid(after1, 1, 1)]) == 0
     assert int(after2.ent_buf_count[_eid(after2, 1, 1)]) == 0
     # Output pallets keep their items across the second tick.
@@ -308,7 +313,7 @@ def test_left_pallet_wrong_type_fires_right_only(state_factory) -> None:
         buffer_type=bt,
         buffer_count=bc,
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
     # RIGHT pallet got the single fired item.
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 1
@@ -326,6 +331,6 @@ def test_buffer_of_one_with_one_side_blocked_holds(state_factory) -> None:
         buf_count=1,
         left_pallet=False,  # only RIGHT is receptive
     )
-    out = run_splitters(state)
+    out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 0

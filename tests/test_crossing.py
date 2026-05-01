@@ -30,7 +30,12 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.machines import run_conveyor_belts
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
+
+# Default params — engine kernels read params.machine_config.max_stack
+# for buffer caps; the default config matches what these tests already
+# implicitly assumed.
+_PARAMS = EnvParams()
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -109,7 +114,7 @@ def test_vertical_axis_pushes_down_for_encoding_1(state_factory) -> None:
         vert_item=int(ItemType.IRON_PLATE),
         vert_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     south_eid = _eid(out, 2, 1)
 
@@ -131,7 +136,7 @@ def test_horizontal_axis_pushes_right_for_encoding_1(state_factory) -> None:
         horiz_item=int(ItemType.COPPER_PLATE),
         horiz_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     east_eid = _eid(out, 1, 2)
     assert int(out.ent_asm_in_count[cid, CROSSING_HORIZ_SLOT]) == 0
@@ -148,7 +153,7 @@ def test_encoding_2_horiz_left(state_factory) -> None:
         horiz_item=int(ItemType.COPPER_PLATE),
         horiz_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     west_eid = _eid(out, 1, 0)
     assert int(out.ent_buf_count[west_eid]) == 1
     assert int(out.ent_buf_type[west_eid]) == int(ItemType.COPPER_PLATE)
@@ -162,7 +167,7 @@ def test_encoding_3_vert_up(state_factory) -> None:
         vert_item=int(ItemType.IRON_PLATE),
         vert_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     north_eid = _eid(out, 0, 1)
     assert int(out.ent_buf_count[north_eid]) == 1
     assert int(out.ent_buf_type[north_eid]) == int(ItemType.IRON_PLATE)
@@ -179,7 +184,7 @@ def test_encoding_4_full_dual_drain(state_factory) -> None:
         horiz_item=int(ItemType.COPPER_PLATE),
         horiz_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     assert int(out.ent_asm_in_count[cid, CROSSING_VERT_SLOT]) == 0
     assert int(out.ent_asm_in_count[cid, CROSSING_HORIZ_SLOT]) == 0
@@ -206,7 +211,7 @@ def test_streams_do_not_mix(state_factory) -> None:
         horiz_item=int(ItemType.COPPER_PLATE),
         horiz_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     south_eid = _eid(out, 2, 1)
     east_eid = _eid(out, 1, 2)
     # South gets exactly the vertical-axis item (iron), not copper.
@@ -253,7 +258,7 @@ def test_belt_pushing_into_output_side_is_rejected(state_factory) -> None:
         asm_in_type=ait,
         asm_in_count=aic,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     belt_eid = _eid(out, 2, 1)
     assert int(out.ent_asm_in_count[cid, CROSSING_VERT_SLOT]) == 0
@@ -294,7 +299,7 @@ def test_belt_pushing_into_correct_input_side_lands_in_axis_slot(
         asm_in_type=ait,
         asm_in_count=aic,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     belt_eid = _eid(out, 0, 1)
     assert int(out.ent_asm_in_count[cid, CROSSING_VERT_SLOT]) == 1
@@ -350,7 +355,7 @@ def test_belt_to_crossing_to_belt_chain_full_throughput(state_factory) -> None:
         asm_in_type=ait,
         asm_in_count=aic,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
 
     upstream_belt = _eid(out, 0, 0)
     crossing = _eid(out, 1, 0)
@@ -374,7 +379,7 @@ def test_belt_to_crossing_to_belt_chain_full_throughput(state_factory) -> None:
 
 def test_crossing_with_empty_slots_is_no_op(state_factory) -> None:
     state = _make_crossing_world(state_factory, encoding=1)
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     assert int(out.ent_asm_in_count[cid, CROSSING_VERT_SLOT]) == 0
     assert int(out.ent_asm_in_count[cid, CROSSING_HORIZ_SLOT]) == 0
@@ -395,7 +400,7 @@ def test_inactive_direction_is_no_op(state_factory) -> None:
         horiz_item=int(ItemType.COPPER_PLATE),
         horiz_count=1,
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     assert int(out.ent_asm_in_count[cid, CROSSING_VERT_SLOT]) == 1
     assert int(out.ent_asm_in_count[cid, CROSSING_HORIZ_SLOT]) == 1
@@ -422,7 +427,7 @@ def test_blocked_output_holds_axis_item(state_factory) -> None:
         horiz_count=1,
         pallets=(True, False, True, True),  # no S pallet
     )
-    out = run_conveyor_belts(state)
+    out = run_conveyor_belts(state, _PARAMS)
     cid = _eid(out, 1, 1)
     # Vert slot held its item.
     assert int(out.ent_asm_in_count[cid, CROSSING_VERT_SLOT]) == 1

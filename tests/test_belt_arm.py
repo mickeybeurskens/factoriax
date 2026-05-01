@@ -16,6 +16,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.machines import run_arms, run_conveyor_belts
+from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,6 +26,11 @@ from factoriax.machines import run_arms, run_conveyor_belts
 # ARM=1, ROCKET=0.
 _BELT_MAX = 3
 _NOOP = 0  # Direction that does not push anywhere.
+
+# Default params — every call to run_conveyor_belts / run_arms now
+# needs params for machine_config.max_stack lookups; the default is
+# what these tests already implicitly assumed.
+_PARAMS = EnvParams()
 
 
 def _buf_grids(
@@ -117,7 +123,7 @@ class TestConveyorBelt:
         types = jnp.array([[B, B]])
         dirs = jnp.array([[R, _NOOP]])
         state = _make_state(state_factory, machine_types=types, machine_direction=dirs)
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         assert _get_buf(result, 0, 0) == (0, 0)
         assert _get_buf(result, 0, 1) == (0, 0)
 
@@ -133,7 +139,7 @@ class TestConveyorBelt:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         _, src_count = _get_buf(result, 0, 0)
         dst_type, dst_count = _get_buf(result, 0, 1)
         assert src_count == 0
@@ -152,7 +158,7 @@ class TestConveyorBelt:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         _, src_count = _get_buf(result, 0, 0)
         dst_type, dst_count = _get_buf(result, 1, 0)
         assert src_count == 0
@@ -171,7 +177,7 @@ class TestConveyorBelt:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         src_type, src_count = _get_buf(result, 0, 0)
         assert src_type == int(ItemType.COAL)
         assert src_count == 2
@@ -194,7 +200,7 @@ class TestConveyorBelt:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         src_type, src_count = _get_buf(result, 0, 0)
         assert src_type == int(ItemType.COAL)
         assert src_count == 2
@@ -214,7 +220,7 @@ class TestConveyorBelt:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         dst_type, dst_count = _get_buf(result, 0, 1)
         assert dst_type == int(ItemType.COAL)
         assert dst_count == 3
@@ -233,7 +239,7 @@ class TestConveyorBelt:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_conveyor_belts(state)
+        result = run_conveyor_belts(state, _PARAMS)
         buf_type, buf_count = _get_buf(result, 0, 0)
         assert buf_type == int(ItemType.COAL)
         assert buf_count == 2
@@ -266,7 +272,7 @@ class TestArm:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         belt_type, belt_count = _get_buf(result, 0, 2)
         assert belt_type == int(ItemType.COAL)
         assert belt_count == 1
@@ -286,7 +292,7 @@ class TestArm:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         pallet_type, pallet_count = _get_buf(result, 0, 2)
         assert pallet_type == int(ItemType.IRON_ORE)
         assert pallet_count == 1
@@ -312,7 +318,7 @@ class TestArm:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         pallet_type, pallet_count = _get_buf(result, 0, 2)
         assert pallet_type == int(ItemType.COAL)
         assert pallet_count == 11
@@ -338,7 +344,7 @@ class TestArm:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         _, miner_count = _get_buf(result, 0, 0)
         assert miner_count == 5
         _, belt_count = _get_buf(result, 0, 2)
@@ -354,7 +360,7 @@ class TestArm:
             machine_types=types,
             machine_direction=dirs,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         assert _get_buf(result, 0, 0) == (0, 0)
         assert _get_buf(result, 0, 2) == (0, 0)
 
@@ -371,7 +377,7 @@ class TestArm:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         _, miner_count = _get_buf(result, 0, 0)
         assert miner_count == 3
 
@@ -399,7 +405,7 @@ class TestArm:
             buffer_type=bt,
             buffer_count=bc,
         )
-        result = run_arms(state)
+        result = run_arms(state, _PARAMS)
         belt_type, belt_count = _get_buf(result, 0, 2)
         assert belt_type == int(ItemType.COAL), "belt item corrupted"
         assert belt_count == 1

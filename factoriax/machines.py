@@ -17,7 +17,6 @@ from factoriax.belts import (
 )
 from factoriax.constants import (
     BLOCK_TO_ITEM_ARRAY,
-    MACHINE_MAX_STACK,
     BlockType,
     ItemType,
     MachineType,
@@ -51,8 +50,8 @@ def update_all_machines(
     """
     state = run_miners(state, params)
     state = run_assemblers(state, params)
-    state = run_conveyor_belts(state)
-    state = run_arms(state)
+    state = run_conveyor_belts(state, params)
+    state = run_arms(state, params)
     return state
 
 
@@ -166,7 +165,9 @@ def run_miners(
 
         dn_bc = new_buf_count[dn_safe]
         dn_bt = new_buf_type[dn_safe]
-        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
+        dn_max = params.machine_config.max_stack[
+            state.ent_type[dn_safe].astype(jnp.int32)
+        ]
         dn_empty = dn_bc == 0
         dn_same = dn_bt == new_buf_type
         has_buf = new_buf_count > 0
@@ -217,7 +218,7 @@ def run_miners(
     )
 
 
-def run_arms(state: EnvState) -> EnvState:
+def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     """Transfer one item from source (behind) to destination (in front).
 
     Arms perform instant pass-through: no internal buffer. Each tick
@@ -238,6 +239,8 @@ def run_arms(state: EnvState) -> EnvState:
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the per-machine
+            buffer cap via ``params.machine_config.max_stack``).
 
     Returns:
         Updated state.
@@ -290,7 +293,9 @@ def run_arms(state: EnvState) -> EnvState:
 
         dst_bc = buf_count[dst_safe]
         dst_bt = buf_type[dst_safe]
-        dst_max = MACHINE_MAX_STACK[state.ent_type[dst_safe].astype(jnp.int32)]
+        dst_max = params.machine_config.max_stack[
+            state.ent_type[dst_safe].astype(jnp.int32)
+        ]
         dst_empty = dst_bc == 0
         dst_same = dst_bt == src_bt
         dst_space = dst_bc < dst_max
@@ -519,7 +524,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     )
 
 
-def run_conveyor_belts(state: EnvState) -> EnvState:
+def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     """Advance the belt network one tick — belts, splitters, crossings.
 
     Three tile types share this pass:
@@ -555,6 +560,8 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
 
     Args:
         state: Current environment state.
+        params: Environment parameters (supplies the per-machine
+            buffer cap via ``params.machine_config.max_stack``).
 
     Returns:
         Updated state.
@@ -672,7 +679,9 @@ def run_conveyor_belts(state: EnvState) -> EnvState:
         dn_bc_axis = axis_slot_count[dn_safe]
         dn_bt = jnp.where(dn_is_crossing, dn_bt_axis, dn_bt_buf)
         dn_bc = jnp.where(dn_is_crossing, dn_bc_axis, dn_bc_buf)
-        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
+        dn_max = params.machine_config.max_stack[
+            state.ent_type[dn_safe].astype(jnp.int32)
+        ]
 
         dn_empty = dn_bc == 0
         dn_same = dn_bt == src_type

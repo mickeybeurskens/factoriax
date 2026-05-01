@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from flax import struct
 
 from factoriax.constants import Action
+from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfig
 from factoriax.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
 
 
@@ -117,6 +118,16 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             :data:`~factoriax.recipes.NUM_RECIPES` and
             :data:`~factoriax.recipes.MAX_RECIPE_INPUTS` so JIT cache
             reuse is preserved across overlays.
+        machine_config: Per-machine-type tunable knobs (currently just
+            ``max_stack``) packed as a
+            :class:`~factoriax.machine_config.MachineConfig`. Defaults
+            to :data:`~factoriax.machine_config.DEFAULT_MACHINE_CONFIG`.
+            Engine kernels in :mod:`factoriax.machines` read from
+            ``params.machine_config.max_stack`` when computing buffer
+            caps; constructing an :class:`EnvParams` with overrides via
+            ``DEFAULT_MACHINE_CONFIG.with_overrides({...})`` retunes
+            those caps without rebuilding the JIT cache (the array
+            shape is fixed by ``len(MachineType)``).
     """
 
     max_timesteps: int = 1000
@@ -134,6 +145,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     miner_mining_rate: int = 3
     max_assembler_stack_size: int = 1000
     recipe_table: RecipeTable = DEFAULT_RECIPE_TABLE
+    machine_config: MachineConfig = DEFAULT_MACHINE_CONFIG
 
     NUM_ACTIONS: ClassVar[int] = len(Action)
 
