@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import jax.numpy as jnp
+from flax import struct
 
 from factoriax.constants import ItemType, MachineType
 
@@ -98,6 +99,78 @@ class Recipe:
             if self.output in _FURNACE_OUTPUTS
             else int(MachineType.ASSEMBLER)
         )
+
+
+# ---------------------------------------------------------------------------
+# RecipeBook — validated tuple of Recipe records
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RecipeBook:
+    """Validated bundle of :class:`Recipe` records.
+
+    Wraps a tuple of recipes and enforces two structural invariants
+    that downstream JAX kernels rely on:
+
+    1. **Unique outputs** — each ``ItemType`` appears as the output of
+       at most one recipe. The reverse-lookup ``OUTPUT_TO_RECIPE`` is a
+       single-valued mapping; two recipes producing the same item would
+       race the deterministic forward-match in
+       :func:`factoriax.machines.run_assemblers` and would also break
+       :func:`factoriax.crafting.craft_recipe`'s yield calculation.
+    2. **Unique input pair per (machine_type, arity)** — no two recipes
+       on the same combiner type at the same arity share an unordered
+       input type-set. This is the gate the Phase 3 forward-match in
+       ``run_combiners`` uses to dispatch a buffer pair to a single
+       recipe slot. Different arities are allowed because the matcher
+       gates 1-input recipes on slot-emptiness; different machines are
+       always allowed because the matcher already partitions by
+       machine.
+
+    Both invariants are checked at construction time so a bad book
+    fails fast with a named offender rather than producing wrong
+    arrays at runtime.
+
+    Attributes:
+        recipes: Ordered tuple of :class:`Recipe` records. Order is
+            load-bearing — positions 0–N map directly to the
+            ``CRAFT_*`` action enum slots.
+
+    Raises:
+        ValueError: If two recipes share an output, or if two recipes
+            on the same machine type at the same arity share an
+            unordered input type-set.
+    """
+
+    recipes: tuple[Recipe, ...]
+
+    def __post_init__(self) -> None:
+        seen_outputs: dict[int, int] = {}
+        for idx, recipe in enumerate(self.recipes):
+            if recipe.output in seen_outputs:
+                raise ValueError(
+                    f"Duplicate recipe output {ItemType(recipe.output).name}: "
+                    f"recipes {seen_outputs[recipe.output]} and {idx} both "
+                    f"produce it. Each ItemType must have at most one recipe."
+                )
+            seen_outputs[recipe.output] = idx
+
+        seen_keys: dict[tuple[int, int, frozenset[int]], int] = {}
+        for idx, recipe in enumerate(self.recipes):
+            key = (
+                recipe.machine_type,
+                len(recipe.inputs),
+                frozenset(int(item) for item, _ in recipe.inputs),
+            )
+            if key in seen_keys:
+                raise ValueError(
+                    f"Recipe {idx} ({ItemType(recipe.output).name}) shares "
+                    f"input type-set {sorted(key[2])} at arity {key[1]} with "
+                    f"recipe {seen_keys[key]} on machine type {key[0]}. "
+                    f"The Phase 3 forward-match would be ambiguous."
+                )
+            seen_keys[key] = idx
 
 
 # ---------------------------------------------------------------------------
@@ -302,61 +375,125 @@ RECIPE_NAMES: list[str] = [r.name for r in BASE_RECIPES]
 
 
 # ---------------------------------------------------------------------------
-# Derived JAX arrays — projected from BASE_RECIPES
+# RecipeTable — JAX-friendly projection of a RecipeBook
 # ---------------------------------------------------------------------------
 
-# Per-recipe machine-type gate: smelting recipes run on FURNACE
-# entities, everything else on ASSEMBLER entities.
-RECIPE_MACHINE_TYPE: jnp.ndarray = jnp.array(
-    [r.machine_type for r in BASE_RECIPES],
-    dtype=jnp.int32,
-)
 
-RECIPE_OUTPUTS: jnp.ndarray = jnp.array(
-    [r.output for r in BASE_RECIPES],
-    dtype=jnp.int32,
-)
-# Per-recipe output count — number of items deposited per completed
-# cycle. Defaults to 1 for every shipped recipe; settable per-recipe
-# for balance tuning.
-RECIPE_OUTPUT_COUNTS: jnp.ndarray = jnp.array(
-    [r.output_count for r in BASE_RECIPES],
-    dtype=jnp.int32,
-)
-RECIPE_TICKS: jnp.ndarray = jnp.array(
-    [r.ticks for r in BASE_RECIPES],
-    dtype=jnp.int32,
-)
-# 1-input recipes pad the missing slot with (EMPTY, 0) so the
-# Phase 3 matcher in ``run_combiners`` can treat every recipe as a
-# 2-slot lookup without branching on recipe arity.
-RECIPE_INPUT_ITEMS: jnp.ndarray = jnp.array(
-    [
-        [item for item, _ in r.inputs]
-        + [int(ItemType.EMPTY)] * (MAX_RECIPE_INPUTS - len(r.inputs))
-        for r in BASE_RECIPES
-    ],
-    dtype=jnp.int32,
-)
-RECIPE_INPUT_COUNTS: jnp.ndarray = jnp.array(
-    [
-        [count for _, count in r.inputs] + [0] * (MAX_RECIPE_INPUTS - len(r.inputs))
-        for r in BASE_RECIPES
-    ],
-    dtype=jnp.int32,
-)
+class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
+    """Stacked JAX arrays projected from a :class:`RecipeBook`.
 
-# Reverse lookup: ItemType -> recipe index (-1 if not an output).
-OUTPUT_TO_RECIPE: jnp.ndarray = jnp.full(
-    len(ItemType),
-    -1,
-    dtype=jnp.int32,
-)
-for _i, _r in enumerate(BASE_RECIPES):
-    OUTPUT_TO_RECIPE = OUTPUT_TO_RECIPE.at[_r.output].set(_i)
+    Holds every per-recipe number the engine consumes inside JIT'd
+    kernels (combiner cycle matching, crafting yield, action dispatch)
+    as a single PyTree leaf set. Stored on :class:`EnvParams` so the
+    table flows through every JIT call without being baked into the
+    XLA graph as a Python global — this keeps balance numbers
+    runtime-tunable without per-tweak recompilation (shapes are stable
+    across all balance overlays since :class:`RecipeBook` fixes the
+    recipe count and arity at construction time).
 
-# Maps CRAFT action offset to recipe index (same order as BASE_RECIPES).
-CRAFT_ACTION_TO_RECIPE: jnp.ndarray = jnp.arange(
-    NUM_RECIPES,
-    dtype=jnp.int32,
-)
+    Attributes:
+        outputs: ``[NUM_RECIPES]`` — output ``ItemType`` per recipe.
+        output_counts: ``[NUM_RECIPES]`` — items deposited per cycle.
+        input_items: ``[NUM_RECIPES, MAX_RECIPE_INPUTS]`` — input item
+            types, EMPTY-padded for 1-input recipes.
+        input_counts: ``[NUM_RECIPES, MAX_RECIPE_INPUTS]`` — input
+            counts, zero-padded for 1-input recipes.
+        ticks: ``[NUM_RECIPES]`` — combiner cycle length.
+        machine_type: ``[NUM_RECIPES]`` — FURNACE / ASSEMBLER gate.
+        output_to_recipe: ``[len(ItemType)]`` — reverse lookup from
+            ``ItemType`` to recipe index, ``-1`` for non-output items.
+        craft_action_to_recipe: ``[NUM_RECIPES]`` — identity map from
+            ``CRAFT_*`` action offset to recipe index. Currently
+            ``arange(NUM_RECIPES)`` since the action enum and recipe
+            order are aligned, but kept as an explicit array so a
+            future re-ordering can rewire the mapping cheaply.
+    """
+
+    outputs: jnp.ndarray
+    output_counts: jnp.ndarray
+    input_items: jnp.ndarray
+    input_counts: jnp.ndarray
+    ticks: jnp.ndarray
+    machine_type: jnp.ndarray
+    output_to_recipe: jnp.ndarray
+    craft_action_to_recipe: jnp.ndarray
+
+    @classmethod
+    def from_book(cls, book: RecipeBook) -> RecipeTable:
+        """Project a :class:`RecipeBook` into stacked JAX arrays.
+
+        The book has already validated uniqueness, so this method is
+        a pure shape-and-dtype projection — no further checks. Pads
+        1-input recipes with ``(EMPTY, 0)`` so every recipe row has
+        the same arity (``MAX_RECIPE_INPUTS``).
+
+        Args:
+            book: Validated :class:`RecipeBook`.
+
+        Returns:
+            New :class:`RecipeTable` containing the projected arrays.
+        """
+        recipes = book.recipes
+        n = len(recipes)
+        max_inputs = max(len(r.inputs) for r in recipes)
+
+        outputs = jnp.array([r.output for r in recipes], dtype=jnp.int32)
+        output_counts = jnp.array([r.output_count for r in recipes], dtype=jnp.int32)
+        ticks = jnp.array([r.ticks for r in recipes], dtype=jnp.int32)
+        machine_type = jnp.array([r.machine_type for r in recipes], dtype=jnp.int32)
+        input_items = jnp.array(
+            [
+                [item for item, _ in r.inputs]
+                + [int(ItemType.EMPTY)] * (max_inputs - len(r.inputs))
+                for r in recipes
+            ],
+            dtype=jnp.int32,
+        )
+        input_counts = jnp.array(
+            [
+                [count for _, count in r.inputs] + [0] * (max_inputs - len(r.inputs))
+                for r in recipes
+            ],
+            dtype=jnp.int32,
+        )
+        output_to_recipe = jnp.full(len(ItemType), -1, dtype=jnp.int32)
+        for i, r in enumerate(recipes):
+            output_to_recipe = output_to_recipe.at[r.output].set(i)
+        craft_action_to_recipe = jnp.arange(n, dtype=jnp.int32)
+        return cls(
+            outputs=outputs,
+            output_counts=output_counts,
+            input_items=input_items,
+            input_counts=input_counts,
+            ticks=ticks,
+            machine_type=machine_type,
+            output_to_recipe=output_to_recipe,
+            craft_action_to_recipe=craft_action_to_recipe,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Default book + table — module globals projected from BASE_RECIPES
+# ---------------------------------------------------------------------------
+
+#: Canonical :class:`RecipeBook` shipped with the engine.
+BASE_RECIPE_BOOK: RecipeBook = RecipeBook(recipes=BASE_RECIPES)
+
+#: Default :class:`RecipeTable` derived from :data:`BASE_RECIPE_BOOK`.
+#: Step 4 will add this to :class:`EnvParams` as the runtime-tunable
+#: source of recipe arrays. Module-level constants below alias its
+#: fields so existing call sites keep working until the migration is
+#: complete.
+DEFAULT_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(BASE_RECIPE_BOOK)
+
+# Module-level aliases (deprecated — Step 4 will route call sites
+# through ``EnvParams.recipe_table`` instead). Kept until every
+# import is migrated so this commit is a pure-additive refactor.
+RECIPE_OUTPUTS: jnp.ndarray = DEFAULT_RECIPE_TABLE.outputs
+RECIPE_OUTPUT_COUNTS: jnp.ndarray = DEFAULT_RECIPE_TABLE.output_counts
+RECIPE_INPUT_ITEMS: jnp.ndarray = DEFAULT_RECIPE_TABLE.input_items
+RECIPE_INPUT_COUNTS: jnp.ndarray = DEFAULT_RECIPE_TABLE.input_counts
+RECIPE_TICKS: jnp.ndarray = DEFAULT_RECIPE_TABLE.ticks
+RECIPE_MACHINE_TYPE: jnp.ndarray = DEFAULT_RECIPE_TABLE.machine_type
+OUTPUT_TO_RECIPE: jnp.ndarray = DEFAULT_RECIPE_TABLE.output_to_recipe
+CRAFT_ACTION_TO_RECIPE: jnp.ndarray = DEFAULT_RECIPE_TABLE.craft_action_to_recipe
