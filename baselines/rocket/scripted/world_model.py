@@ -84,6 +84,16 @@ _ITEM_TO_DEPOSIT: dict[int, int] = {
     int(ItemType.ENGINE_UNIT): int(Action.DEPOSIT_ENGINE_UNIT),
     int(ItemType.AVIONICS): int(Action.DEPOSIT_AVIONICS),
     int(ItemType.ROCKET_CORE): int(Action.DEPOSIT_ROCKET_CORE),
+    # ItemType.LIMESTONE = 30 was inserted between SCIENCE_LAB (29)
+    # and SPLITTER (31). The Action enum's DEPOSIT_* slots weren't
+    # renumbered, so the dispatch math
+    # ``action - DEPOSIT_BASE + ItemType.COAL`` for action 71
+    # (named DEPOSIT_SPLITTER) actually deposits ItemType 30 =
+    # LIMESTONE. The agent only ever *places* SPLITTERs (never
+    # deposits them), so the SPLITTER deposit slot is otherwise
+    # unused — we redirect ItemType.LIMESTONE through it so
+    # ProduceInFurnace(REFRACTORY) (LIMESTONE + COAL recipe) works.
+    int(ItemType.LIMESTONE): int(Action.DEPOSIT_SPLITTER),
 }
 _MACHINE_TO_PLACE: dict[int, int] = {
     int(MachineType.MINER): int(Action.PLACE_MINER),
@@ -92,6 +102,8 @@ _MACHINE_TO_PLACE: dict[int, int] = {
     int(MachineType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
     int(MachineType.ARM): int(Action.PLACE_ARM),
     int(MachineType.ROCKET): int(Action.PLACE_ROCKET),
+    int(MachineType.SPLITTER): int(Action.PLACE_SPLITTER),
+    int(MachineType.CROSSING): int(Action.PLACE_CROSSING),
     int(MachineType.FURNACE): int(Action.PLACE_FURNACE),
 }
 # Reverse mapping for ore-block → item type (e.g. BlockType.IRON → ItemType.IRON_ORE).

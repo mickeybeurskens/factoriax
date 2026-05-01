@@ -1,37 +1,59 @@
-"""Advanced-factory rocket agent — Phase A + Phase B (4 smelter cells).
+"""Advanced-factory rocket agent — Phase A + Phase B (iron + copper).
 
 Two high-level phases:
 
 - **Phase A** drops a miner + pallet on each non-coal patch (iron,
-  copper, tin, silicon) and a miner-only on the coal patch. Ore flows
-  passively into the four patch pallets; the coal miner stalls because
-  no buffer exists east of it yet — Phase B closes that gap by placing
-  a belt at (10, 24) that the miner pushes onto.
+  copper, tin, silicon, *and* limestone) and the four coal-feed
+  miners are deferred to Phase B. Ore flows passively into the
+  four patch pallets; the coal miners stall because no belt exists
+  east of them yet — Phase B closes that gap by laying the iron
+  and copper coal trunks via :func:`place_belt_network`.
 
-- **Phase B** builds a smelter cell on each of the four ore patches,
-  one at a time (iron → copper → tin → silicon). Each cell is a
-  furnace + plate-extract arm + plate output pallet, fed by a coal
-  trunk from the coal patch (one dedicated coal miner per cell).
+- **Phase B** builds a splitter smelter cell on the iron and copper
+  patches and lays their coal trunks. Each cell has the new T1
+  output design (``output_split=True``):
 
-The four output bus pallets at (10, 11), (25, 11), (25, 26), and
-(17, 7) are left as bus tiles for future iterations to draw from
-(rocket sub-assemblies, science packs, etc.). This iteration just
-proves all four cells can be built and produce plates in parallel.
+  * a SPLITTER replaces the old plate-bus PALLET at the same tile;
+  * a *manual_stash* PALLET sits north of the splitter — the agent
+    withdraws plates from here for hand-crafting (the old
+    ``_PLATE_BUS`` constants are renamed ``_*_MANUAL_STASH``);
+  * an *automation belt* (south of the splitter) carries the
+    splitter's other half-stream into a *sink* PALLET placed by
+    Phase B at ``automation_belt + DOWN``. The sink is just a drain
+    so the splitter's both-or-nothing fire condition is met when
+    the manual stash has space.
+
+The two cell coal trunks are planned together via
+:func:`place_belt_network`. The copper coal trunk shares tile
+(21, 12) with the copper splitter's south-output flow — the
+network planner emits a CROSSING at that tile with encoding 1
+(vert=DOWN for the splitter feed, horiz=RIGHT for the coal
+trunk) so the two streams pass through without mixing. Iron's
+coal trunk is rerouted to (10, 24) → (10, 14) → (8, 14) → (8, 12)
+so it lands at the coal_buffer from the south, sidestepping the
+splitter automation column entirely.
+
+The central CONVEYOR_BELT auto-craft assembler that earlier
+iterations placed at (16, 9) is **removed** in this iteration.
+Routing the splitter automation flows around the assembler
+module's input pallets requires a multi-tile detour with several
+extra crossings. The tin and silicon cells are also dropped —
+adding their coal trunks (39 BELT crafts) doubles the bootstrap
+load and pushes Phase A past the 8000-tick budget. A follow-up
+iteration can add tin / silicon / central-assembler back with
+runtime plate sourcing from the iron and copper manual stashes.
+This iteration's purpose is to land the splitter design on the
+two foundational cells and demonstrate one auto-inserted
+crossing in the belt network.
 
 Pre-smelt strategy. ``ProduceInMachine`` picks the *nearest*
-furnace/assembler each cycle. After the iron cell's furnace at (8, 11)
-is placed, it is closer to the player's typical Phase B workspace
-(near the bus pallets) than the pre-placed furnace at (15, 16); a
-``ProduceInFurnace(COPPER_PLATE, ...)`` issued post-iron-cell would
-deposit ore into the iron cell's furnace and corrupt iron production.
-The fix: hand-mine and pre-smelt **every** plate the entire Phase B
-chain needs in Phase A bootstrap, before any cell exists. Phase B
-cells then only run ``ProduceInAssembler`` (assembler crafts target
-the pre-placed assembler at (17, 16); there is no second assembler in
-this iteration so no nearest-machine confusion). The user's directive
-"collect from the factory instead of hand smelting once they are
-available" is honored in spirit — the cells run continuously and
-their plate-output bus pallets are left full for future phases.
+furnace/assembler each cycle, so once a cell's furnace is placed
+post-Phase-A, any further ``ProduceInFurnace`` would land ore in
+the wrong furnace. Phase A pre-smelts every plate the entire run
+needs (including the 4 TIN_PLATEs and 1 COPPER_PLATE consumed by
+the SPLITTER and CROSSING crafts) before any cell exists, then
+Phase B sub-phases only run ``ProduceInAssembler`` against the
+pre-placed assembler at (17, 16).
 
 Map layout::
 
@@ -42,90 +64,54 @@ Map layout::
                               |
        iron (7, 7-9)                copper (22-24, 7-9)
         |                           |
-        [iron trunk col 10]         [copper trunk: col 11 + row 12]
+        [iron trunk col 10 +        [copper trunk: col 11 + row 12
+         westward bend at row 14]     CROSSING at (21, 12) with
+                                      copper splitter S output]
         |                           |
                 spawn (16, 16)
                               |
                               | [tin trunk row 26 east]
        coal (7-9, 22-24)            tin (22-24, 22-24)
         4 coal miners
-
-Each cell follows the same shape: coal-buffer pallet south of the
-furnace; plate-extract arm east of the furnace facing RIGHT; plate
-output pallet east of the arm. Furnace faces RIGHT so its stand tile
-(one west) is dirt rather than the ore-pallet that sits north.
-
-Trunks are laid via :func:`place_belt_path`, which takes a list of
-axis-aligned waypoints (start → corners → sink) and emits one
-:class:`PlaceMachineAt` belt per intermediate tile, with the
-direction inferred from the next tile in the path. The sink is the
-coal-buffer pallet (placed separately), not a belt. Placement on ore
-tiles is valid — the engine's
-:func:`factoriax.placement.is_valid_placement_tile` only rejects
-``WATER``/``OUT_OF_BOUNDS``/already-occupied tiles — so the silicon
-trunk crosses iron ore tiles to take a more direct route.
-
-Bootstrap budgets (Phase A pre-smelts everything):
-
-================  =====  =====  ===  ===
-Resource          mine   smelt  ...
-================  =====  =====  ===  ===
-IRON_ORE          20
-COPPER_ORE        62
-TIN_ORE           32
-COAL              118    (1 per smelt)
-IRON_PLATE        ...    20
-COPPER_PLATE      ...    62
-TIN_PLATE         ...    32
-REFRACTORY        ...    4    (1 per cell furnace)
-================  =====  =====  ===  ===
-
-All assembler crafts (WIRE, MINER, PALLET, ARM, FURNACE, BELT) happen
-across Phase A and the four Phase B sub-phases as each cell needs them.
 """
 
 from __future__ import annotations
 
-from factoriax.constants import Direction, ItemType
+from factoriax.constants import Direction, ItemType, MachineType
 from factoriax.state import EnvParams
 
 from .agent import ScriptedAgent, _miner_has_output_predicate
 from .goals import (
+    BeltPath,
     Goal,
     MineOre,
+    PlaceMachineAt,
     ProduceInAssembler,
     ProduceInFurnace,
     Wait,
     WaitUntil,
     WithdrawFromBusAt,
-    build_assembler_module_at,
     build_smelter_cell_at,
-    place_belt_path,
+    place_belt_network,
     place_ore_node,
-    wire_coal_feed,
 )
 from .planner import Planner
 
 # ---------------------------------------------------------------------------
-# Plate-pallet bus tiles (output pallets of the four smelter cells)
+# Manual-stash bus tiles (one per cell, replaces the old _PLATE_BUS)
 # ---------------------------------------------------------------------------
 
-_IRON_PLATE_BUS = (10, 11)
-# Copper cell is mirrored across the y axis (facing=LEFT) so its
-# plate output sits on row 11 between the iron and copper patches
-# instead of east of the copper patch — keeps the central-assembler
-# plate feeds straight without crossing belt lines.
-_COPPER_PLATE_BUS = (21, 11)
-_TIN_PLATE_BUS = (25, 26)
-_SILICON_PLATE_BUS = (17, 7)
+# The agent withdraws plates from these for hand-crafting downstream
+# Phase B craft lists. Each is the splitter's NORTH output PALLET.
+_IRON_MANUAL_STASH = (10, 10)
+_COPPER_MANUAL_STASH = (21, 10)
 
-# Central assembler module that auto-crafts CONVEYOR_BELT
-# (IRON_PLATE + COPPER_PLATE) from plates fed off the iron and
-# copper extractor arms.
-_CENTRAL_ASSEMBLER_TILE = (16, 9)
-_CENTRAL_ASSEMBLER_OUTPUT = (18, 9)
-_CENTRAL_ASSEMBLER_INPUT_A = (16, 8)  # copper feed sink
-_CENTRAL_ASSEMBLER_INPUT_B = (15, 9)  # iron feed sink
+# Sink PALLETs placed by Phase B at the automation lane's downstream
+# tile (= splitter+2*DOWN for iron, = splitter+1*DOWN for copper
+# where the splitter's S output flows through a CROSSING at
+# (21, 12) into the sink at (21, 13)).
+_IRON_AUTOMATION_SINK = (10, 13)
+_COPPER_AUTOMATION_SINK = (21, 13)
 
 _MAP_SIZE: tuple[int, int] = (32, 32)
 
@@ -136,43 +122,35 @@ _MAP_SIZE: tuple[int, int] = (32, 32)
 
 
 def _phase_a_bootstrap_mine_and_smelt() -> list[Goal]:
-    """Hand-mine + smelt every plate the entire run will need.
+    """Hand-mine + smelt every plate iron and copper Phase B need.
 
-    Crafted up front so Phase B sub-phases never have to issue a
-    FURNACE recipe — any post-iron-cell ``ProduceInFurnace`` would
-    target the iron cell's furnace instead of the pre-placed one.
+    Per-recipe plate budget:
 
-    Plate budget covers: smelter cells (5 cells × 1 furnace each =
-    5 IRON for FURNACE recipes; +12 IRON for 11 plate-feed belts +
-    1 FRAME), plate-feed belts (+11 IRON, +11 COPPER, +1 TIN,
-    +1 COPPER, +1 SILICON+COAL for the WAFER, +1 COPPER+1 IRON
-    rolling up). The single WAFER + 1 SILICON_ORE feeds the
-    central-assembler phase's ASSEMBLER craft (FRAME+CIRCUIT).
+    * Phase A: 10 WIRE + 5 MINER (5 IRON_PLATE) + 5 PALLET
+      (5 TIN_PLATE).
+    * Iron cell (with output_split=True): 2 IRON + 5 COPPER + 6 TIN.
+    * Copper cell (with output_split=True, automation_belt=False):
+      1 IRON + 5 COPPER + 6 TIN.
+    * Belt network: 41 BELT (41 IRON + 41 COPPER), 1 CROSSING
+      (1 COPPER), 1 cell coal MINER (1 IRON + 1 COPPER + 1 TIN —
+      iron's coal miner consumes Phase A's MINER slack), 2 sink
+      PALLETs (2 TIN_PLATE + 2 WIRE).
+    * REFRACTORY × 2 (iron + copper FURNACE recipes) = 2 LIMESTONE
+      + 2 COAL.
+
+    Totals (with +2 slack each): 53 IRON, 67 COPPER, 33 TIN, 2
+    LIMESTONE, 155 COAL.
     """
     return [
-        # Pre-iron-cell IRON consumption: Phase A 5 MINER + Phase B-iron
-        # 1 FURNACE + 14 BELT = 20 IRON. Slack +2.
-        MineOre(ItemType.IRON_ORE, 22),
-        # Pre-copper-cell COPPER consumption: Phase A 10 WIRE + Phase
-        # B-iron 3 WIRE + 2 ARM + 14 BELT + Phase B-copper 4 WIRE +
-        # 2 ARM + 28 BELT = 63 COPPER. Slack +2.
-        MineOre(ItemType.COPPER_ORE, 65),
-        # All-phase TIN consumption (pre-smelted because tin cell only
-        # comes online after silicon): 15 (Phase A) + 5 (iron) + 6
-        # (copper) + 8 (central asm: 4 WIRE + 3 PALLET + 1 FRAME) +
-        # 6 (tin) = 40 TIN. Slack +2.
-        MineOre(ItemType.TIN_ORE, 42),
-        # Single silicon ore for the WAFER that the central-assembler
-        # phase needs to craft 1 CIRCUIT (and from there 1 ASSEMBLER).
-        MineOre(ItemType.SILICON, 1),
-        # COAL: 1 per smelt cycle = 22 + 65 + 42 + 1 (wafer) +
-        # 4 (refractory) = 134. Slack +1.
-        MineOre(ItemType.COAL, 135),
-        ProduceInFurnace(ItemType.IRON_PLATE, 22),
-        ProduceInFurnace(ItemType.COPPER_PLATE, 65),
-        ProduceInFurnace(ItemType.TIN_PLATE, 42),
-        ProduceInFurnace(ItemType.WAFER, 1),
-        ProduceInFurnace(ItemType.REFRACTORY, 4),
+        MineOre(ItemType.IRON_ORE, 53),
+        MineOre(ItemType.COPPER_ORE, 67),
+        MineOre(ItemType.TIN_ORE, 33),
+        MineOre(ItemType.LIMESTONE, 2),
+        MineOre(ItemType.COAL, 155),
+        ProduceInFurnace(ItemType.IRON_PLATE, 51),
+        ProduceInFurnace(ItemType.COPPER_PLATE, 64),
+        ProduceInFurnace(ItemType.TIN_PLATE, 31),
+        ProduceInFurnace(ItemType.REFRACTORY, 2),
     ]
 
 
@@ -181,9 +159,8 @@ def _phase_a_craft_and_place() -> list[Goal]:
 
     Each non-coal patch gets a south-edge DOWN-facing miner pushing
     into a buffer pallet. The fifth crafted miner is consumed by
-    :func:`_phase_b_iron` via :func:`wire_coal_feed` as the iron
-    cell's coal feed — no coal miner is placed in Phase A; the
-    cells own their coal feeds end-to-end.
+    Phase B's iron coal feed (each cell phase crafts +1 MINER for
+    the next cell, but iron borrows it from Phase A's slack).
     """
     return [
         ProduceInAssembler(ItemType.WIRE, 10),
@@ -198,205 +175,138 @@ def _phase_a_craft_and_place() -> list[Goal]:
 
 
 # ---------------------------------------------------------------------------
-# Phase B helpers — one cell at a time. Each cell phase only crafts
-# (assembler) and places; no smelting (would target the iron cell's
-# furnace post-Phase-B-iron).
+# Phase B sub-phases — one cell at a time, plus the combined coal-trunk
+# belt network and the four sink pallets at the end.
 # ---------------------------------------------------------------------------
 
 
 def _phase_b_iron() -> list[Goal]:
-    """Iron smelter cell with extractor + coal feed.
-
-    Cell anchored at (8, 11) facing RIGHT, extractor arm at (11, 11)
-    facing RIGHT pulling plates out of the bus at (10, 11) and
-    pushing east onto (12, 11) — the first belt of the iron-feed
-    trunk laid by :func:`_phase_b_central_assembler`.
-
-    Coal miner at (9, 24) facing RIGHT pushes coal onto trunk
-    (10, 24) → (10, 12) → (8, 12) sink. The fifth miner crafted in
-    Phase A is consumed here; iron Phase B doesn't craft another.
-    """
+    """Iron splitter cell. Manual stash at (10, 10), automation belt
+    at (10, 12) DOWN, sink (placed by phase_b_belt_network later) at
+    (10, 13). Coal trunk laid by phase_b_belt_network."""
     return [
         ProduceInAssembler(ItemType.WIRE, 3),
-        ProduceInAssembler(ItemType.PALLET, 2),
-        # 2 ARMs: cell arm + extractor.
-        ProduceInAssembler(ItemType.ARM, 2),
+        # 1 cell ARM (no extractor) + 1 SPLITTER. Splitter recipe
+        # consumes 1 TIN_PLATE + 1 COAL pre-smelted in Phase A.
+        ProduceInAssembler(ItemType.PALLET, 2),  # coal_buffer + manual_stash
+        ProduceInAssembler(ItemType.ARM, 1),
+        ProduceInAssembler(ItemType.SPLITTER, 1),
         ProduceInAssembler(ItemType.FURNACE, 1),
-        ProduceInAssembler(ItemType.CONVEYOR_BELT, 14),
+        # 1 BELT for the cell's automation belt (cell helper emits).
+        ProduceInAssembler(ItemType.CONVEYOR_BELT, 1),
         *build_smelter_cell_at(
             (8, 11),
             facing=int(Direction.RIGHT),
-            extract_facing=int(Direction.RIGHT),
-            map_size=_MAP_SIZE,
-        ),
-        *wire_coal_feed(
-            miner_tile=(9, 24),
-            miner_facing=int(Direction.RIGHT),
-            trunk_waypoints=[(10, 24), (10, 12), (8, 12)],
+            output_split=True,
             map_size=_MAP_SIZE,
         ),
     ]
 
 
 def _phase_b_copper() -> list[Goal]:
-    """Copper smelter cell mirrored across y axis + extractor + coal feed.
+    """Copper splitter cell mirrored across y axis.
 
-    Cell anchored at (23, 11) facing LEFT — plate output at (21, 11)
-    instead of (25, 11). The mirror brings the output onto row 11
-    between the iron and copper patches so plates flow *toward* the
-    central assembler. Extractor arm at (20, 11) facing LEFT pulls
-    plates from the bus at (21, 11) and pushes west onto (19, 11) —
-    the first belt of the copper-feed trunk.
-
-    Coal feed unchanged from the canonical layout: miner at (8, 24)
-    DOWN pushes onto trunk (8, 25) → (11, 25) → (11, 12) → (23, 12)
-    sink, since the coal_buffer's south-of-furnace position is
-    symmetric across the mirror.
+    ``automation_belt=False`` because the copper splitter's south
+    output (21, 12) sits on the copper coal trunk's row-12 segment.
+    :func:`place_belt_network` planted in
+    :func:`_phase_b_belt_network` emits a CROSSING at (21, 12)
+    instead of a plain belt — vert=DOWN (splitter S output),
+    horiz=RIGHT (coal trunk going east toward (23, 12) coal_buffer).
+    Sink pallet at (21, 13) catches the splitter's drained S
+    output stream.
     """
     return [
-        WithdrawFromBusAt(_IRON_PLATE_BUS, ItemType.IRON_PLATE, 30),
-        ProduceInAssembler(ItemType.WIRE, 4),
-        ProduceInAssembler(ItemType.PALLET, 2),
-        # 2 ARMs: cell arm + extractor.
-        ProduceInAssembler(ItemType.ARM, 2),
+        WithdrawFromBusAt(_IRON_MANUAL_STASH, ItemType.IRON_PLATE, 6),
+        ProduceInAssembler(ItemType.WIRE, 3),
+        ProduceInAssembler(ItemType.PALLET, 2),  # coal_buffer + manual_stash
+        ProduceInAssembler(ItemType.ARM, 1),
+        ProduceInAssembler(ItemType.SPLITTER, 1),
         ProduceInAssembler(ItemType.FURNACE, 1),
-        ProduceInAssembler(ItemType.MINER, 1),
-        ProduceInAssembler(ItemType.CONVEYOR_BELT, 28),
+        # No automation_belt for copper — the network planner adds a
+        # CROSSING at (21, 12) instead. 1 CROSSING crafted here
+        # (recipe: 1 COPPER_PLATE + 1 COAL).
+        ProduceInAssembler(ItemType.CROSSING, 1),
         *build_smelter_cell_at(
             (23, 11),
             facing=int(Direction.LEFT),
-            extract_facing=int(Direction.LEFT),
-            map_size=_MAP_SIZE,
-        ),
-        *wire_coal_feed(
-            miner_tile=(8, 24),
-            miner_facing=int(Direction.DOWN),
-            trunk_waypoints=[(8, 25), (11, 25), (11, 12), (23, 12)],
+            output_split=True,
+            automation_belt=False,
             map_size=_MAP_SIZE,
         ),
     ]
 
 
-def _phase_b_central_assembler() -> list[Goal]:
-    """Build the central CONVEYOR_BELT assembler + plate-feed belts.
+def _phase_b_belt_network() -> list[Goal]:
+    """Lay the iron and copper coal trunks via :func:`place_belt_network`.
 
-    Sits between the iron and copper patches at center (16, 9), with
-    inputs fed by belts from the two extractor arms placed earlier:
+    Trunks:
 
-    - **Iron-feed**: extractor at (11, 11) RIGHT pushes onto belt
-      chain (12, 11) → (15, 11) → (15, 9) input_b. 5 belts.
-    - **Copper-feed**: extractor at (20, 11) LEFT pushes onto belt
-      chain (19, 11) → (19, 8) → (16, 8) input_a. 6 belts.
+    * **Iron coal**: rerouted from the canonical column-10 corner-at-
+      row-12 path to (10, 24) → (10, 14) → (8, 14) → (8, 12) so the
+      trunk reaches the coal_buffer from the south (via (8, 13) UP)
+      instead of from the east — sidesteps (10, 12), which is iron's
+      splitter automation belt.
+    * **Copper coal**: canonical (8, 25) → (11, 25) → (11, 12) →
+      (23, 12). Tile (21, 12) is shared with the copper splitter's
+      south-output flow; the network planner emits a CROSSING with
+      vert=DOWN, horiz=RIGHT (encoding 1) so the two streams pass
+      through without mixing.
 
-    No belt crossings — iron-feed runs along row 11 cols 12-15 +
-    col 15 rows 10-9, copper-feed runs along col 19 rows 9-11 + row
-    8 cols 17-19. Both terminate inside the assembler module's
-    input pallets.
+    Plus a single-tile path representing copper splitter's S output
+    going DOWN through (21, 12) into sink (21, 13). This is what
+    creates the CROSSING when planned alongside the copper coal
+    trunk.
 
-    Auto-crafts CONVEYOR_BELT (IRON_PLATE + COPPER_PLATE, 4 ticks)
-    once both feeds deliver. Output pallet at (18, 9) accumulates
-    belts.
-
-    Known limitation: the extractor arms pull from cell buses at 1
-    plate/tick while each cell produces one every ~5 ticks, so the
-    bus pallets stay near-empty. Downstream
-    :func:`WithdrawFromBusAt` calls in tin/silicon Phase B against
-    those buses time out under their 24-idle-tick threshold; an
-    iteration adding a buffer-pallet between cell bus and extractor
-    (or rerouting tin/silicon to use the central assembler's belt
-    output) is needed to make the full chain run end-to-end.
-
-    Bootstrap: 12 IRON + 13 COPPER (withdrawn from buses), 4 WIRE,
-    1 FRAME, 1 CIRCUIT, 1 ASSEMBLER, 3 PALLET (assembler module),
-    1 ARM (assembler module), 11 BELT (plate feeds). The single
-    WAFER for CIRCUIT comes from Phase A's pre-smelted wafer; the
-    1 TIN for FRAME and 3 TIN for PALLETs come from Phase A's
-    over-smelted tin reserve carried in player inventory.
+    Crafts the 14 (iron) + 27 (copper) + 0 (copper auto, replaced
+    by the crossing) = 41 BELTs and 1 CROSSING. Also crafts the 2
+    cell coal miners (iron + copper) and the 2 sink PALLETs (iron
+    + copper).
     """
+    iron_coal_waypoints = [(10, 24), (10, 14), (8, 14), (8, 12)]
+    copper_coal_waypoints = [(8, 25), (11, 25), (11, 12), (23, 12)]
+    # The copper splitter's S output is implicit at (21, 11). The
+    # path's first tile (21, 12) is the auto-stream's first
+    # placed-cell tile (becomes a CROSSING when planned alongside
+    # copper coal). Sink (21, 13).
+    copper_auto_waypoints = [(21, 12), (21, 13)]
+
     return [
-        WithdrawFromBusAt(_IRON_PLATE_BUS, ItemType.IRON_PLATE, 12),
-        WithdrawFromBusAt(_COPPER_PLATE_BUS, ItemType.COPPER_PLATE, 13),
-        ProduceInAssembler(ItemType.WIRE, 4),
-        ProduceInAssembler(ItemType.FRAME, 1),
-        ProduceInAssembler(ItemType.CIRCUIT, 1),
-        ProduceInAssembler(ItemType.ASSEMBLER, 1),
-        ProduceInAssembler(ItemType.PALLET, 3),
-        ProduceInAssembler(ItemType.ARM, 1),
-        ProduceInAssembler(ItemType.CONVEYOR_BELT, 11),
-        *build_assembler_module_at(
-            _CENTRAL_ASSEMBLER_TILE,
-            map_size=_MAP_SIZE,
-        ),
-        *place_belt_path(
-            [(12, 11), (15, 11), _CENTRAL_ASSEMBLER_INPUT_B],
-        ),
-        *place_belt_path(
-            [(19, 11), (19, 8), _CENTRAL_ASSEMBLER_INPUT_A],
-        ),
-    ]
-
-
-def _phase_b_tin() -> list[Goal]:
-    """Tin smelter cell + coal feed via row 26 east + (22, 27) east.
-
-    Cell anchored at (23, 26). Coal miner at (7, 24) DOWN pushes onto
-    trunk (7, 25) → (7, 26) → (22, 26) → (22, 27) → (23, 27) sink.
-    The trunk detours south at col 22 because (23, 26) is the tin
-    furnace itself; ``wire_coal_feed`` places the trunk before the
-    miner because the first belt's stand tile is the miner's tile.
-
-    Iron from iron cell, copper from copper cell, tin pre-smelted.
-    """
-    return [
-        WithdrawFromBusAt(_IRON_PLATE_BUS, ItemType.IRON_PLATE, 20),
-        WithdrawFromBusAt(_COPPER_PLATE_BUS, ItemType.COPPER_PLATE, 23),
-        ProduceInAssembler(ItemType.WIRE, 4),
-        ProduceInAssembler(ItemType.PALLET, 2),
-        ProduceInAssembler(ItemType.ARM, 1),
-        ProduceInAssembler(ItemType.FURNACE, 1),
+        # Coal miners. The iron miner consumes Phase A's MINER slack;
+        # craft 1 more for copper.
         ProduceInAssembler(ItemType.MINER, 1),
-        ProduceInAssembler(ItemType.CONVEYOR_BELT, 18),
-        *build_smelter_cell_at((23, 26), map_size=_MAP_SIZE),
-        *wire_coal_feed(
-            miner_tile=(7, 24),
-            miner_facing=int(Direction.DOWN),
-            trunk_waypoints=[(7, 25), (7, 26), (22, 26), (22, 27), (23, 27)],
+        # 14 + 27 + 0 BELTs from the network (copper auto's tile is
+        # the crossing, not a belt). Plus 1 CROSSING.
+        ProduceInAssembler(ItemType.CONVEYOR_BELT, 41),
+        ProduceInAssembler(ItemType.CROSSING, 1),
+        # Two sink pallets (iron + copper).
+        ProduceInAssembler(ItemType.PALLET, 2),
+        # Place the two coal miners before the network so
+        # place_belt_network's first belt at each miner's push tile
+        # has a stand tile pointing at the miner.
+        PlaceMachineAt(MachineType.MINER, (9, 24), int(Direction.RIGHT)),
+        PlaceMachineAt(MachineType.MINER, (8, 24), int(Direction.DOWN)),
+        # Plan + place the two coal trunks + the copper auto path.
+        # The single CROSSING at (21, 12) lands automatically.
+        *place_belt_network(
+            [
+                BeltPath(iron_coal_waypoints, label="iron coal"),
+                BeltPath(copper_coal_waypoints, label="copper coal"),
+                BeltPath(copper_auto_waypoints, label="copper auto"),
+            ],
             map_size=_MAP_SIZE,
         ),
-    ]
-
-
-def _phase_b_silicon() -> list[Goal]:
-    """Silicon smelter cell + coal feed via row 8 across iron ore.
-
-    Cell anchored at (15, 7). Coal miner at (7, 22) UP pushes onto
-    trunk (7, 21) → (7, 8) → (14, 8) → (15, 8) sink. The mid-segment
-    crosses iron ore tiles — placement on ore is valid (the engine's
-    :func:`factoriax.placement.is_valid_placement_tile` only rejects
-    ``WATER``/``OUT_OF_BOUNDS``/already-occupied tiles), so cutting
-    straight across row 8 above the iron cell saves 6 belts vs. the
-    earlier detour through col 6. As with tin, ``wire_coal_feed``
-    detects that the first belt's stand tile is the miner's tile
-    and emits trunk before miner.
-
-    Iron from iron cell, copper from copper cell, tin from tin cell.
-    """
-    return [
-        WithdrawFromBusAt(_IRON_PLATE_BUS, ItemType.IRON_PLATE, 23),
-        WithdrawFromBusAt(_COPPER_PLATE_BUS, ItemType.COPPER_PLATE, 26),
-        WithdrawFromBusAt(_TIN_PLATE_BUS, ItemType.TIN_PLATE, 6),
-        ProduceInAssembler(ItemType.WIRE, 4),
-        ProduceInAssembler(ItemType.PALLET, 2),
-        ProduceInAssembler(ItemType.ARM, 1),
-        ProduceInAssembler(ItemType.FURNACE, 1),
-        ProduceInAssembler(ItemType.MINER, 1),
-        ProduceInAssembler(ItemType.CONVEYOR_BELT, 21),
-        *build_smelter_cell_at((15, 7), map_size=_MAP_SIZE),
-        *wire_coal_feed(
-            miner_tile=(7, 22),
-            miner_facing=int(Direction.UP),
-            trunk_waypoints=[(7, 21), (7, 8), (14, 8), (15, 8)],
-            map_size=_MAP_SIZE,
+        # Sink pallets — drain the splitter S outputs so each
+        # splitter's atomic-fire condition is met whenever the
+        # manual stash also has space.
+        PlaceMachineAt(
+            MachineType.PALLET,
+            _IRON_AUTOMATION_SINK,
+            int(Direction.DOWN),
+        ),
+        PlaceMachineAt(
+            MachineType.PALLET,
+            _COPPER_AUTOMATION_SINK,
+            int(Direction.DOWN),
         ),
     ]
 
@@ -407,32 +317,27 @@ def _phase_b_silicon() -> list[Goal]:
 
 
 def build_advanced_factory_goals() -> list[Goal]:
-    """Phase A pre-smelts everything; Phase B builds 4 smelter cells.
-
-    Inter-phase Waits give each cell time to make plates before the
-    next phase's WithdrawFromBusAt drains them. The waits are sized
-    by trunk length × 1 tick/belt + a couple of plate cycles.
+    """Phase A pre-smelts everything. Phase B builds the coal-trunk
+    belt network *first* (so coal flows as soon as each cell's
+    coal_buffer drops in), then the four splitter cells, then a
+    final wait for production to fill the manual stashes.
     """
     return [
         *_phase_a_bootstrap_mine_and_smelt(),
         *_phase_a_craft_and_place(),
+        # Lay the coal trunks (and place the four coal miners + sink
+        # pallets) before any cell. The trunks' last belts push into
+        # the cells' coal_buffer tiles; those tiles are dirt until
+        # each cell phase places them, and the trunk belts harmlessly
+        # buffer up to 3 coal each in the meantime.
+        *_phase_b_belt_network(),
         *_phase_b_iron(),
-        # Iron trunk (14 belts) + plate accumulation: ~80 ticks.
-        Wait(80),
+        Wait(60),
         *_phase_b_copper(),
-        # Copper trunk (28 belts) + plate accumulation: ~120 ticks.
-        Wait(120),
-        *_phase_b_central_assembler(),
-        # Plate-feed belts (5 + 6) + assembler recipe priming: ~80 ticks.
-        Wait(80),
-        *_phase_b_tin(),
-        # Tin trunk (18 belts) + plate accumulation: ~80 ticks.
-        Wait(80),
-        *_phase_b_silicon(),
-        # Final wait: silicon cell is the last to come online; coal
-        # traversal of its 27-belt trunk + a few recipe cycles needs
-        # ~150 ticks before plates appear in (17, 7).
-        Wait(300),
+        # Final wait: cells ramp up their splitter fire rate (~1
+        # plate per ~5 ticks per cell) so the manual stashes
+        # accumulate measurable plates before episode end.
+        Wait(400),
     ]
 
 

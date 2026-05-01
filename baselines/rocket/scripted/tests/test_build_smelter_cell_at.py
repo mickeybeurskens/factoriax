@@ -341,6 +341,48 @@ def test_output_split_out_of_bounds_manual_stash_raises() -> None:
         )
 
 
+def test_output_split_no_automation_belt_emits_five_placements() -> None:
+    """``automation_belt=False`` drops the splitter's south-output
+    CONVEYOR_BELT; the cell emits 5 placements (coal_buffer,
+    manual_stash, splitter, arm, furnace) and the +DOWN tile of the
+    splitter is left dirt for the caller (e.g. a CROSSING placed by
+    place_belt_network because a coal trunk shares that tile)."""
+    goals = build_smelter_cell_at(
+        (8, 11),
+        output_split=True,
+        automation_belt=False,
+    )
+    placements = _placements(goals)
+    assert placements == [
+        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),
+        (int(MachineType.PALLET), (10, 10), int(Direction.DOWN)),
+        (int(MachineType.SPLITTER), (10, 11), int(Direction.RIGHT)),
+        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
+        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+    ]
+
+
+def test_output_split_no_automation_belt_inventory_drops_belt() -> None:
+    cost = smelter_cell_inventory(
+        output_split=True,
+        automation_belt=False,
+    )
+    assert cost[int(ItemType.PALLET)] == 2
+    assert cost[int(ItemType.ARM)] == 1
+    assert cost[int(ItemType.FURNACE)] == 1
+    assert cost[int(ItemType.SPLITTER)] == 1
+    assert int(ItemType.CONVEYOR_BELT) not in cost
+
+
+def test_automation_belt_false_without_output_split_raises() -> None:
+    """The ``automation_belt`` kwarg is meaningless without the
+    splitter mode and must not silently no-op the canonical layout."""
+    with pytest.raises(ValueError, match="automation_belt=False"):
+        build_smelter_cell_at((8, 11), automation_belt=False)
+    with pytest.raises(ValueError, match="automation_belt=False"):
+        smelter_cell_inventory(automation_belt=False)
+
+
 def test_output_split_two_cells_compose_via_occupied_set() -> None:
     """Two output_split cells side-by-side must not collide. Iron-
     style cell at (8, 11) and a hypothetical second cell at (16, 11)."""

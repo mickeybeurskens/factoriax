@@ -828,6 +828,7 @@ def smelter_cell_inventory(
     *,
     with_extractor: bool = False,
     output_split: bool = False,
+    automation_belt: bool = True,
 ) -> dict[int, int]:
     """Return the bootstrap inventory cost of one smelter cell.
 
@@ -844,27 +845,44 @@ def smelter_cell_inventory(
             more ARM to the cost.
         output_split: When ``True``, the plate_bus PALLET is replaced
             by a SPLITTER feeding a manual-stash PALLET on the cell's
-            north output and an automation BELT on the south output.
-            Net per cell: same 2 PALLETs (was coal_buffer +
-            plate_bus, now coal_buffer + manual_stash), +1 SPLITTER,
-            +1 CONVEYOR_BELT vs the canonical layout.
+            north output and (by default) an automation BELT on the
+            south output. Net per cell: same 2 PALLETs (was
+            coal_buffer + plate_bus, now coal_buffer + manual_stash),
+            +1 SPLITTER, +1 CONVEYOR_BELT vs the canonical layout.
+        automation_belt: Only meaningful with ``output_split=True``.
+            When ``False``, the cell helper *does not* emit the
+            automation belt at the splitter's south output — the
+            caller is responsible for placing whatever consumes the
+            splitter's S output (typically a CROSSING emitted by
+            :func:`place_belt_network` because a coal trunk shares
+            that tile). Drops the +1 CONVEYOR_BELT from the
+            inventory.
 
     Raises:
         ValueError: ``output_split`` and ``with_extractor`` together —
             the splitter's south output already drives the automation
-            lane, no extractor is needed.
+            lane, no extractor is needed. Or ``automation_belt=False``
+            without ``output_split=True`` (the kwarg only makes sense
+            with the splitter mode).
     """
     if output_split and with_extractor:
         raise ValueError(
             "smelter_cell_inventory: output_split and with_extractor are "
             "mutually exclusive (the splitter replaces the extractor)",
         )
+    if not automation_belt and not output_split:
+        raise ValueError(
+            "smelter_cell_inventory: automation_belt=False is only valid "
+            "with output_split=True (it controls whether the splitter's "
+            "south-output belt is emitted)",
+        )
     cost = dict(_SMELTER_CELL_INVENTORY)
     if with_extractor:
         cost[int(ItemType.ARM)] += 1
     if output_split:
         cost[int(ItemType.SPLITTER)] = 1
-        cost[int(ItemType.CONVEYOR_BELT)] = 1
+        if automation_belt:
+            cost[int(ItemType.CONVEYOR_BELT)] = 1
     return cost
 
 
@@ -885,6 +903,7 @@ def build_smelter_cell_at(
     facing: int = int(Direction.RIGHT),
     extract_facing: int | None = None,
     output_split: bool = False,
+    automation_belt: bool = True,
     occupied: set[tuple[int, int]] | None = None,
     map_size: tuple[int, int] | None = None,
 ) -> list[Goal]:
@@ -969,23 +988,34 @@ def build_smelter_cell_at(
             with ``output_split``.
         output_split: When ``True``, swap the plate_bus PALLET for a
             SPLITTER + manual_stash PALLET (north) +
-            automation_belt CONVEYOR_BELT (south). Mutually
-            exclusive with ``extract_facing``.
+            automation_belt CONVEYOR_BELT (south, suppressible via
+            ``automation_belt=False``). Mutually exclusive with
+            ``extract_facing``.
+        automation_belt: Only meaningful with ``output_split=True``.
+            When ``False``, the cell helper does *not* emit the
+            CONVEYOR_BELT at the splitter's south output — the caller
+            must place whatever consumes the splitter's S output
+            (typically a CROSSING placed by
+            :func:`place_belt_network` because a coal trunk shares
+            that tile). Drops one CONVEYOR_BELT from the inventory.
         occupied: Optional set of tiles already taken. Every cell
             tile (and the extractor when present) is checked.
         map_size: Optional ``(width, height)`` for in-bounds checks.
 
     Returns:
         4 :class:`PlaceMachineAt` goals by default (5 with
-        ``extract_facing``, 6 with ``output_split``), in placement
-        order. See :func:`smelter_cell_inventory` for the matching
-        bootstrap inventory.
+        ``extract_facing``, 5 with ``output_split=True,
+        automation_belt=False``, 6 with ``output_split=True``
+        default), in placement order. See
+        :func:`smelter_cell_inventory` for the matching bootstrap
+        inventory.
 
     Raises:
         ValueError: ``facing`` is not LEFT or RIGHT; ``extract_facing``
             is not a cardinal direction; ``extract_facing`` is the
             opposite of ``facing``; ``extract_facing`` and
-            ``output_split`` are both set; any tile is out of bounds,
+            ``output_split`` are both set; ``automation_belt=False``
+            without ``output_split=True``; any tile is out of bounds,
             in ``occupied``, or duplicates another piece.
     """
     if output_split and extract_facing is not None:
@@ -993,6 +1023,11 @@ def build_smelter_cell_at(
             "build_smelter_cell_at: output_split is mutually exclusive with "
             "extract_facing (the splitter's south output replaces the "
             "extractor arm)",
+        )
+    if not automation_belt and not output_split:
+        raise ValueError(
+            "build_smelter_cell_at: automation_belt=False is only valid "
+            "with output_split=True",
         )
     if int(facing) not in _HORIZONTAL_FACINGS:
         raise ValueError(
@@ -1017,11 +1052,13 @@ def build_smelter_cell_at(
     automation_belt_tile: tuple[int, int] | None = None
     if output_split:
         # plate_bus tile is reused as the SPLITTER tile; the manual
-        # stash hangs north of it, the automation belt south.
+        # stash hangs north of it; the automation belt (when emitted)
+        # hangs south.
         manual_stash_tile = (plate_bus_tile[0], plate_bus_tile[1] - 1)
-        automation_belt_tile = (plate_bus_tile[0], plate_bus_tile[1] + 1)
         pieces.append(("manual_stash", manual_stash_tile))
-        pieces.append(("automation_belt", automation_belt_tile))
+        if automation_belt:
+            automation_belt_tile = (plate_bus_tile[0], plate_bus_tile[1] + 1)
+            pieces.append(("automation_belt", automation_belt_tile))
 
     extractor_tile: tuple[int, int] | None = None
     if extract_facing is not None:
@@ -1098,13 +1135,14 @@ def build_smelter_cell_at(
                 int(Direction.DOWN),
             ),
         )
-        goals.append(
-            PlaceMachineAt(
-                MachineType.CONVEYOR_BELT,
-                automation_belt_tile,
-                int(Direction.DOWN),
-            ),
-        )
+        if automation_belt:
+            goals.append(
+                PlaceMachineAt(
+                    MachineType.CONVEYOR_BELT,
+                    automation_belt_tile,
+                    int(Direction.DOWN),
+                ),
+            )
         goals.append(
             PlaceMachineAt(
                 MachineType.SPLITTER,
