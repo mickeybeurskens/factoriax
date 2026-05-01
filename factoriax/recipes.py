@@ -23,7 +23,7 @@ overwritten, so throughput is bounded by withdrawal.
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import jax.numpy as jnp
 
@@ -31,11 +31,22 @@ from factoriax.constants import ItemType, MachineType
 
 
 class _Recipe(TypedDict):
-    """Recipe dictionary with output item, input list, and tick count."""
+    """Recipe dictionary with output item, input list, output count, and tick count.
+
+    ``output_count`` defaults to 1 when omitted, matching the historical
+    "every craft yields one unit" behaviour. Setting it greater than 1
+    lets a single craft cycle deposit multiple output items into the
+    machine's output slot (or the player's inventory for instant
+    crafting). The slot has plenty of headroom — combiner outputs share
+    the machine's stack cap (1000 for FURNACE / ASSEMBLER) and player
+    inventory caps at 1024 per item — so values up to a few dozen are
+    safe in practice.
+    """
 
     output: int
     inputs: list[tuple[int, int]]
     ticks: int
+    output_count: NotRequired[int]
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +276,15 @@ RECIPE_MACHINE_TYPE: jnp.ndarray = jnp.array(
 
 RECIPE_OUTPUTS: jnp.ndarray = jnp.array(
     [r["output"] for r in RECIPES],
+    dtype=jnp.int32,
+)
+# Per-recipe output count — number of items deposited per completed
+# cycle. Recipes that omit ``output_count`` default to 1, matching the
+# historical "one craft yields one unit" behaviour. Setting it > 1 lets
+# a recipe yield multiple units (e.g. an iron-plate smelt that emits 2
+# plates per cycle for balance tuning).
+RECIPE_OUTPUT_COUNTS: jnp.ndarray = jnp.array(
+    [r.get("output_count", 1) for r in RECIPES],
     dtype=jnp.int32,
 )
 RECIPE_TICKS: jnp.ndarray = jnp.array(

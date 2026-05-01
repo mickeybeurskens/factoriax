@@ -24,7 +24,9 @@ from factoriax.constants import (
 )
 from factoriax.recipes import (
     NUM_RECIPES,
+    OUTPUT_TO_RECIPE,
     RECIPE_MACHINE_TYPE,
+    RECIPE_OUTPUT_COUNTS,
     RECIPE_OUTPUTS,
     RECIPE_TICKS,
     RECIPES,
@@ -449,9 +451,17 @@ def run_assemblers(state: EnvState) -> EnvState:
     out_empty = state.ent_asm_out_count == 0
     can_complete = completing & (state.ent_asm_out_type != 0) & out_empty
 
+    # Look up the per-recipe output count via the output-type reverse
+    # index. ``can_complete`` already requires ``ent_asm_out_type != 0``
+    # so when the where-mask fires the recipe index is guaranteed valid;
+    # the clip is defensive for the lanes that mask out.
+    completing_ridx = OUTPUT_TO_RECIPE[state.ent_asm_out_type.astype(jnp.int32)]
+    safe_completing_ridx = jnp.clip(completing_ridx, 0, NUM_RECIPES - 1)
+    yield_count = RECIPE_OUTPUT_COUNTS[safe_completing_ridx].astype(jnp.int16)
+
     new_out_count = jnp.where(
         can_complete,
-        jnp.int16(1),
+        yield_count,
         state.ent_asm_out_count,
     )
     new_out_type = state.ent_asm_out_type

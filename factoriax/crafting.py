@@ -12,6 +12,7 @@ from factoriax.recipes import (
     MAX_RECIPE_INPUTS,
     RECIPE_INPUT_COUNTS,
     RECIPE_INPUT_ITEMS,
+    RECIPE_OUTPUT_COUNTS,
     RECIPE_OUTPUTS,
 )
 from factoriax.state import EnvState
@@ -87,7 +88,8 @@ def craft_recipe(
     output_item = RECIPE_OUTPUTS[recipe_idx]
     output_count = state.player_inventory[player_idx, output_item]
     output_max = PLAYER_MAX_STACK[output_item]
-    has_space = output_count < output_max
+    yield_count = RECIPE_OUTPUT_COUNTS[recipe_idx]
+    has_space = output_count + yield_count <= output_max
     should_craft = can_craft & has_space
 
     # Consume inputs.
@@ -102,7 +104,7 @@ def craft_recipe(
 
     # Produce output.
     inv = inv.at[output_item].add(
-        jnp.where(should_craft, jnp.int16(1), jnp.int16(0)),
+        jnp.where(should_craft, yield_count.astype(jnp.int16), jnp.int16(0)),
     )
 
     return state.replace(

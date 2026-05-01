@@ -16,7 +16,12 @@ from __future__ import annotations
 
 import pytest
 
-from factoriax.recipes import RECIPE_MACHINE_TYPE, RECIPES
+from factoriax.recipes import (
+    NUM_RECIPES,
+    RECIPE_MACHINE_TYPE,
+    RECIPE_OUTPUT_COUNTS,
+    RECIPES,
+)
 
 
 def _input_type_set(recipe: dict) -> frozenset[int]:
@@ -69,6 +74,22 @@ def test_assembler_recipes_have_two_inputs(idx: int) -> None:
         assert len(recipe["inputs"]) == 2, (
             f"Assembler recipe {idx} ({recipe['output']}) has "
             f"{len(recipe['inputs'])} inputs; expected 2."
+        )
+
+
+def test_recipe_output_counts_defaults_to_one() -> None:
+    """Recipes without an explicit ``output_count`` default to 1 — the
+    historical "every craft yields one unit" behaviour. The array
+    length must match NUM_RECIPES so the per-cycle yield lookup in
+    ``run_assemblers`` indexes safely.
+    """
+    assert RECIPE_OUTPUT_COUNTS.shape == (NUM_RECIPES,)
+    for idx, recipe in enumerate(RECIPES):
+        expected = recipe.get("output_count", 1)
+        actual = int(RECIPE_OUTPUT_COUNTS[idx])
+        assert actual == expected, (
+            f"Recipe {idx} ({recipe['output']}) output_count: expected "
+            f"{expected}, got {actual}"
         )
 
 
