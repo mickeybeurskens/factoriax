@@ -102,6 +102,87 @@ class Recipe:
 
 
 # ---------------------------------------------------------------------------
+# RecipeOverride / RecipeBalance — sparse balance overlay
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RecipeOverride:
+    """Per-recipe balance override.
+
+    Each field is optional; ``None`` means "keep the default from the
+    base :class:`Recipe`". Identity (output item, input item *types*,
+    machine type) is not tunable through this class — only the
+    balance numbers. To rewire item flow, modify the base
+    :data:`BASE_RECIPES` tuple.
+
+    Attributes:
+        input_counts: New per-input counts as a tuple ordered the same
+            as :class:`Recipe.inputs`. Length must match the target
+            recipe's input count or :meth:`RecipeBook.with_balance`
+            raises ``ValueError``. Item types are not changed.
+        output_count: New count of output items per cycle.
+        ticks: New combiner cycle length in ticks.
+    """
+
+    input_counts: tuple[int, ...] | None = None
+    output_count: int | None = None
+    ticks: int | None = None
+
+
+@dataclass(frozen=True)
+class RecipeBalance:
+    """Sparse balance overlay keyed by output ``ItemType``.
+
+    A :class:`RecipeBalance` is the user-facing config for tuning a
+    game without forking the recipe table. Construct one with the
+    overrides you want, then apply it via
+    :meth:`RecipeBook.with_balance`:
+
+    >>> balance = RecipeBalance(overrides=(
+    ...     (int(ItemType.IRON_PLATE), RecipeOverride(ticks=1)),
+    ...     (int(ItemType.WIRE), RecipeOverride(output_count=2)),
+    ... ))
+    >>> book = BASE_RECIPE_BOOK.with_balance(balance)
+    >>> table = RecipeTable.from_book(book)
+    >>> params = EnvParams(recipe_table=table)
+
+    The overrides are stored as a tuple of pairs (rather than a dict)
+    so :class:`RecipeBalance` is hashable and safe to share across
+    JIT cache keys; lookups are linear but the overrides list is
+    typically tiny (single-digit entries) and only consulted at
+    book construction time, not in the hot path.
+
+    Attributes:
+        overrides: Tuple of ``(output_item, RecipeOverride)`` pairs.
+            An output may appear at most once; duplicates raise
+            ``ValueError`` at construction time. An empty tuple means
+            "no overrides" — :meth:`RecipeBook.with_balance` returns
+            the same book unchanged in that case.
+    """
+
+    overrides: tuple[tuple[int, RecipeOverride], ...] = ()
+
+    def __post_init__(self) -> None:
+        seen: set[int] = set()
+        for output, _ in self.overrides:
+            if output in seen:
+                raise ValueError(
+                    f"RecipeBalance has duplicate override for output "
+                    f"{ItemType(output).name}; each output may appear "
+                    f"at most once."
+                )
+            seen.add(output)
+
+    def get(self, output_item: int) -> RecipeOverride | None:
+        """Return the override for ``output_item`` or ``None`` if absent."""
+        for output, override in self.overrides:
+            if output == output_item:
+                return override
+        return None
+
+
+# ---------------------------------------------------------------------------
 # RecipeBook — validated tuple of Recipe records
 # ---------------------------------------------------------------------------
 
@@ -171,6 +252,96 @@ class RecipeBook:
                     f"The Phase 3 forward-match would be ambiguous."
                 )
             seen_keys[key] = idx
+
+    def with_balance(self, balance: RecipeBalance) -> RecipeBook:
+        """Apply a balance overlay, returning a new validated book.
+
+        Identity (output items, machine type, recipe order, input
+        item types) is preserved — only the per-recipe balance numbers
+        (input counts, ``output_count``, ``ticks``) are tunable.
+        Recipes whose ``output`` does not appear in ``balance`` are
+        passed through unchanged. The returned :class:`RecipeBook` is
+        re-validated through the standard ``__post_init__`` checks so
+        the uniqueness invariants still hold; balance overlays cannot
+        introduce duplicate outputs or input pairs because they only
+        touch counts/ticks.
+
+        Args:
+            balance: Sparse :class:`RecipeBalance` keyed by output
+                ``ItemType``. Overrides for outputs that don't exist
+                in this book are silently ignored.
+
+        Returns:
+            New :class:`RecipeBook` with the overrides applied.
+
+        Raises:
+            ValueError: If a :class:`RecipeOverride` specifies an
+                ``input_counts`` tuple whose length does not match the
+                target recipe's input count, or if any count / ticks
+                value is negative.
+        """
+        if not balance.overrides:
+            return self
+
+        new_recipes: list[Recipe] = []
+        applied: set[int] = set()
+        for recipe in self.recipes:
+            override = balance.get(recipe.output)
+            if override is None:
+                new_recipes.append(recipe)
+                continue
+            applied.add(recipe.output)
+
+            new_inputs = recipe.inputs
+            if override.input_counts is not None:
+                if len(override.input_counts) != len(recipe.inputs):
+                    raise ValueError(
+                        f"RecipeOverride for "
+                        f"{ItemType(recipe.output).name} specifies "
+                        f"input_counts of length "
+                        f"{len(override.input_counts)} but the recipe has "
+                        f"{len(recipe.inputs)} inputs."
+                    )
+                for count in override.input_counts:
+                    if count < 0:
+                        raise ValueError(
+                            f"RecipeOverride for "
+                            f"{ItemType(recipe.output).name} has a "
+                            f"negative input count {count}."
+                        )
+                new_inputs = tuple(
+                    (item, override.input_counts[i])
+                    for i, (item, _) in enumerate(recipe.inputs)
+                )
+
+            new_output_count = (
+                recipe.output_count
+                if override.output_count is None
+                else override.output_count
+            )
+            new_ticks = recipe.ticks if override.ticks is None else override.ticks
+            if new_output_count < 0:
+                raise ValueError(
+                    f"RecipeOverride for {ItemType(recipe.output).name} "
+                    f"has a negative output_count {new_output_count}."
+                )
+            if new_ticks < 0:
+                raise ValueError(
+                    f"RecipeOverride for {ItemType(recipe.output).name} "
+                    f"has a negative ticks value {new_ticks}."
+                )
+
+            new_recipes.append(
+                Recipe(
+                    output=recipe.output,
+                    inputs=new_inputs,
+                    ticks=new_ticks,
+                    output_count=new_output_count,
+                    name=recipe.name,
+                )
+            )
+
+        return RecipeBook(recipes=tuple(new_recipes))
 
 
 # ---------------------------------------------------------------------------
