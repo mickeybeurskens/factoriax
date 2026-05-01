@@ -27,7 +27,7 @@ from baselines.rocket.scripted.agent_advanced_factory import (
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
-from baselines.rocket.scripted.goals import PlaceMachineAt
+from baselines.rocket.scripted.goals import MineOre, PlaceMachineAt, ProduceInMachine
 from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -41,6 +41,7 @@ from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrap
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
+from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBalance, RecipeOverride
 from factoriax.state import EnvParams
 
 _MAP_SIZE = 32
@@ -108,6 +109,127 @@ def test_advanced_factory_goal_list_structural() -> None:
         f"13 so no path-collision occurs), got {crossing_count} at "
         f"{crossing_tiles}"
     )
+
+
+def _mine_count(goals: list, item: ItemType) -> int:
+    """Sum the count across all MineOre(item, ...) goals in the list."""
+    return sum(
+        g.count for g in goals if isinstance(g, MineOre) and g.item_type == int(item)
+    )
+
+
+def _produce_count(goals: list, item: ItemType) -> int:
+    """Sum the count across all ProduceInMachine goals targeting *item*.
+
+    Both ProduceInFurnace and ProduceInAssembler return ProduceInMachine
+    instances, so a single isinstance check covers both.
+    """
+    return sum(
+        g.count
+        for g in goals
+        if isinstance(g, ProduceInMachine) and g.output_item == int(item)
+    )
+
+
+def test_balance_overlay_doubles_iron_ore_demand() -> None:
+    """A book that doubles IRON_PLATE.input_counts should roughly
+    double the agent's IRON_ORE mine count and the IRON_PLATE
+    pre-smelt count, leaving every other ore count unchanged.
+    """
+    base_goals = build_advanced_factory_goals()
+    base_iron_ore = _mine_count(base_goals, ItemType.IRON_ORE)
+    base_iron_plate = _produce_count(base_goals, ItemType.IRON_PLATE)
+    assert base_iron_ore > 0, "BOM produced no IRON_ORE goal in default book"
+
+    balance = RecipeBalance(
+        overrides=(
+            (
+                int(ItemType.IRON_PLATE),
+                RecipeOverride(input_counts=(2, 1)),  # was (1, 1)
+            ),
+        )
+    )
+    tuned_book = BASE_RECIPE_BOOK.with_balance(balance)
+    tuned_goals = build_advanced_factory_goals(book=tuned_book)
+    tuned_iron_ore = _mine_count(tuned_goals, ItemType.IRON_ORE)
+
+    # Mining demand: BOM = base_iron_plate * 2 (was * 1). Slack stays
+    # constant so the relationship is exactly:
+    #   tuned_iron_ore = (base_iron_ore - slack) * 2 + slack
+    # The default IRON_ORE slack is 2.
+    expected = (base_iron_ore - 2) * 2 + 2
+    assert tuned_iron_ore == expected, (
+        f"IRON_ORE demand did not double: base={base_iron_ore}, "
+        f"tuned={tuned_iron_ore}, expected={expected}"
+    )
+
+    # COPPER_ORE / TIN_ORE demand should be unchanged.
+    assert _mine_count(tuned_goals, ItemType.COPPER_ORE) == _mine_count(
+        base_goals, ItemType.COPPER_ORE
+    )
+    assert _mine_count(tuned_goals, ItemType.TIN_ORE) == _mine_count(
+        base_goals, ItemType.TIN_ORE
+    )
+
+    # IRON_PLATE pre-smelt count is the *number of plates produced*,
+    # which is unchanged by an input-count tweak — the recipe still
+    # yields 1 plate per cycle, just with 2 ore inputs instead of 1.
+    assert _produce_count(tuned_goals, ItemType.IRON_PLATE) == base_iron_plate
+
+
+def test_balance_overlay_higher_output_count_drops_smelts() -> None:
+    """A book where IRON_PLATE.output_count=2 should halve (round up)
+    the pre-smelt cycle count for plates AND the IRON_ORE / COAL
+    demand, since one cycle now yields two plates from one ore + one
+    coal.
+    """
+    base_goals = build_advanced_factory_goals()
+    base_iron_plate = _produce_count(base_goals, ItemType.IRON_PLATE)
+    base_iron_ore = _mine_count(base_goals, ItemType.IRON_ORE)
+
+    balance = RecipeBalance(
+        overrides=((int(ItemType.IRON_PLATE), RecipeOverride(output_count=2)),)
+    )
+    tuned_book = BASE_RECIPE_BOOK.with_balance(balance)
+    tuned_goals = build_advanced_factory_goals(book=tuned_book)
+
+    tuned_iron_plate = _produce_count(tuned_goals, ItemType.IRON_PLATE)
+    tuned_iron_ore = _mine_count(tuned_goals, ItemType.IRON_ORE)
+
+    # Plates *produced* must still cover the original demand —
+    # production_schedule reports cycles * output_count, which for an
+    # odd target rounds up. So the tuned plate count is either the
+    # base count (if even) or base + 1 (if odd).
+    assert tuned_iron_plate in (base_iron_plate, base_iron_plate + 1), (
+        f"IRON_PLATE schedule out of expected range: base={base_iron_plate}, "
+        f"tuned={tuned_iron_plate}"
+    )
+
+    # IRON_ORE demand: base = N plates * 1 ore + slack. tuned = ceil(N/2)
+    # cycles * 1 ore + slack. With slack=2 and base N, expect:
+    #   tuned_iron_ore = ceil(N/2) + 2
+    n = base_iron_plate  # plates needed
+    expected = -(-n // 2) + 2
+    assert tuned_iron_ore == expected, (
+        f"IRON_ORE demand did not halve: base={base_iron_ore}, "
+        f"tuned={tuned_iron_ore}, expected={expected}"
+    )
+
+
+def test_slack_kwarg_overrides_default() -> None:
+    """Passing ``slack={}`` mines exactly the BOM amount with no extra."""
+    no_slack_goals = build_advanced_factory_goals(slack={})
+    default_goals = build_advanced_factory_goals()
+
+    no_slack_iron_ore = _mine_count(no_slack_goals, ItemType.IRON_ORE)
+    default_iron_ore = _mine_count(default_goals, ItemType.IRON_ORE)
+    # Default slack adds 2 to IRON_ORE.
+    assert default_iron_ore - no_slack_iron_ore == 2
+
+    no_slack_coal = _mine_count(no_slack_goals, ItemType.COAL)
+    default_coal = _mine_count(default_goals, ItemType.COAL)
+    # Default slack adds 5 to COAL.
+    assert default_coal - no_slack_coal == 5
 
 
 @pytest.mark.slow
