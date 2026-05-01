@@ -48,6 +48,8 @@ from factoriax.benchmarks.rocket import (
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_ACHIEVEMENT_WEIGHTS,
     ROCKET_BLOCKED_ACTIONS,
+    ROCKET_RECIPE_BOOK,
+    ROCKET_RECIPE_TABLE,
     build_rocket_level,
     rocket_conditions,
 )
@@ -117,6 +119,7 @@ def _run(
         map_height=32,
         num_players=1,
         max_timesteps=max_steps,
+        recipe_table=ROCKET_RECIPE_TABLE,
     )
     level = build_rocket_level()
     env_state = build_state(level, env_params)
@@ -521,10 +524,16 @@ def main() -> None:
             save_video=save_video,
         )
 
+    # advanced_factory's BOM math must use the same recipe book the
+    # engine uses, otherwise its mine / smelt / craft quantities will
+    # mis-size against the rebalanced engine.
+    def _advanced_factory(env_params: EnvParams) -> Any:
+        return make_advanced_factory_rocket_agent(env_params, book=ROCKET_RECIPE_BOOK)
+
     all_agents: dict[str, Any] = {
         "naive": make_scripted_rocket_agent,
         "factory": make_factory_rocket_agent,
-        "advanced_factory": make_advanced_factory_rocket_agent,
+        "advanced_factory": _advanced_factory,
     }
     selected = args.agents or list(all_agents.keys())
 

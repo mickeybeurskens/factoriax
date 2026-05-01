@@ -38,6 +38,13 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.levels import Level, LevelBuilder
+from factoriax.recipes import (
+    BASE_RECIPE_BOOK,
+    RecipeBalance,
+    RecipeBook,
+    RecipeOverride,
+    RecipeTable,
+)
 from factoriax.rewards import achievement_reward
 from factoriax.state import EnvParams, EnvState
 
@@ -354,6 +361,37 @@ def rocket_reward(
 
 
 # ---------------------------------------------------------------------------
+# Recipe balance — rocket-specific tuning over BASE_RECIPE_BOOK
+# ---------------------------------------------------------------------------
+
+# Mass-production transport recipes are tuned up so a single craft
+# cycle yields enough belts / splitters / crossings to wire a 4-cell
+# factory without dominating the bootstrap phase. BASE outputs are 1
+# per cycle for all three; the factory needs ~50–80 belts, 4 splitters,
+# and 0–2 crossings (depending on layout) to wire the rocket chain, so
+# 10 / 4 / 4 keeps the bootstrap craft list short.
+ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
+    overrides=(
+        (int(ItemType.CONVEYOR_BELT), RecipeOverride(output_count=10)),
+        (int(ItemType.SPLITTER), RecipeOverride(output_count=4)),
+        (int(ItemType.CROSSING), RecipeOverride(output_count=4)),
+    )
+)
+
+#: :class:`RecipeBook` used by the rocket benchmark — applies
+#: :data:`ROCKET_RECIPE_BALANCE` over :data:`BASE_RECIPE_BOOK`.
+#: Pass to recipe-driven scripted agents (e.g.
+#: :func:`make_advanced_factory_rocket_agent`) so their BOM math
+#: tracks the engine's recipe table.
+ROCKET_RECIPE_BOOK: RecipeBook = BASE_RECIPE_BOOK.with_balance(ROCKET_RECIPE_BALANCE)
+
+#: :class:`RecipeTable` projection of :data:`ROCKET_RECIPE_BOOK`.
+#: Pass into :class:`~factoriax.state.EnvParams` ``recipe_table`` so
+#: the JIT'd engine produces the rebalanced output counts.
+ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(ROCKET_RECIPE_BOOK)
+
+
+# ---------------------------------------------------------------------------
 # Level construction
 # ---------------------------------------------------------------------------
 
@@ -488,6 +526,7 @@ class RocketBenchmark:
             map_width=_MAP_SIZE,
             map_height=_MAP_SIZE,
             num_players=1,
+            recipe_table=ROCKET_RECIPE_TABLE,
         )
         return [
             BenchmarkLevel(
