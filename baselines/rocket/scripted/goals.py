@@ -20,6 +20,7 @@ picks the next nearest patch without giving up.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import ClassVar, Literal
 
 import numpy as np
 
@@ -43,14 +44,58 @@ from .world_model import (
 # Signature for "pick a location" callbacks used by :class:`PlaceMachine`.
 LocationPredicate = Callable[[WorldView], tuple[int, int] | None]
 
+# What the planner does when ``Goal.verify`` returns ``False``.
+#
+# - ``"halt"``: stop the run with a structured diagnostic. The right
+#   default for goals whose post-condition can't self-heal (placement,
+#   layout). Re-running ``step`` won't help because the goal already
+#   reported DONE; the world just doesn't match.
+# - ``"retry"``: count the verify failure against the goal's existing
+#   ``fail_retries`` budget and rerun ``step``. Use only when the
+#   post-condition might land a tick or two later because of engine
+#   latency.
+# - ``"ignore"``: log the failure but advance the planner as if DONE.
+#   Useful for redundant sanity checks during development.
+VerifyFailureAction = Literal["halt", "retry", "ignore"]
+
 
 class Goal:
-    """Base class for high-level goals."""
+    """Base class for high-level goals.
+
+    Attributes:
+        name: Short identifier used by the planner's debug log.
+        verify_failure_action: What the planner should do when this
+            goal's :meth:`verify` returns ``False``. Defaults to
+            ``"halt"`` so a goal that opts in to a post-condition
+            check halts the run loud on a violation. Override to
+            ``"retry"`` or ``"ignore"`` per goal class as needed.
+    """
 
     name: str = "Goal"
+    verify_failure_action: ClassVar[VerifyFailureAction] = "halt"
 
     def step(self, view: WorldView) -> StepReturn:  # pragma: no cover - abstract
         raise NotImplementedError
+
+    def verify(self, view: WorldView) -> bool:
+        """Post-condition asserted once :meth:`step` reports ``DONE``.
+
+        Default is a no-op: returns ``True`` so goals that don't opt
+        in to verification pass through the planner unchanged. Goals
+        whose ``step`` reports ``DONE`` based on issuing an action
+        (rather than observing the resulting state) should override
+        this to check the world directly — see
+        :class:`PlaceMachineAt` for the canonical example.
+
+        Args:
+            view: Current :class:`WorldView` (the same one passed to
+                the final :meth:`step` call).
+
+        Returns:
+            ``True`` if the post-condition holds, ``False`` to trip
+            the planner's :attr:`verify_failure_action` handling.
+        """
+        return True
 
 
 # ---------------------------------------------------------------------------
