@@ -29,7 +29,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from baselines.rocket.scripted.agent import make_scripted_rocket_agent
-from baselines.rocket.scripted.agent_factory import make_factory_rocket_agent
+from baselines.rocket.scripted.agent_advanced_factory import (
+    make_advanced_factory_rocket_agent,
+)
 from factoriax.analysis.trajectory import states_to_trajectory
 from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
@@ -50,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 _AGENTS: dict[str, object] = {
     "naive": make_scripted_rocket_agent,
-    "factory": make_factory_rocket_agent,
+    "advanced_factory": make_advanced_factory_rocket_agent,
 }
 
 

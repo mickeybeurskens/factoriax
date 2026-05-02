@@ -1,20 +1,16 @@
 """Run scripted rocket agents and compare their episode timings.
 
 All agents share the same rocket benchmark level (pre-placed
-furnace + assembler, five ore patches). The difference is the plan:
+furnace + assembler, coal column + 2x2 ore stack). The difference
+is the plan:
 
-- ``naive``   — :mod:`baselines.rocket.scripted.agent` runs every
+- ``naive`` — :mod:`baselines.rocket.scripted.agent` runs every
   recipe serially through the pre-placed machines.
-- ``factory`` — :mod:`baselines.rocket.scripted.agent_factory`
-  spends a starter phase to place two extra furnaces and two extra
-  assemblers, then uses :class:`PipelinedProduce` to rotate bulk
-  work across the 3-machine batteries.
 - ``advanced_factory`` —
-  :mod:`baselines.rocket.scripted.agent_advanced_factory` builds a
-  full :class:`BuildSmelterCell` on every non-coal patch so each
-  patch auto-mines + auto-smelts its own plates locally; the agent
-  then ferries coal in and uses :class:`CraftFromBus` to chain the
-  bus-pallet plates into rocket-chain intermediates.
+  :mod:`baselines.rocket.scripted.agent_advanced_factory` builds an
+  end-to-end factory: smelter cells on every ore patch, tier-1..4
+  assembler cells wired by belts and arms, ending in a placed
+  rocket.
 
 All agents are deterministic, so the comparison is reproducible
 from a single seed.
@@ -37,7 +33,6 @@ from baselines.rocket.scripted.agent import make_scripted_rocket_agent
 from baselines.rocket.scripted.agent_advanced_factory import (
     make_advanced_factory_rocket_agent,
 )
-from baselines.rocket.scripted.agent_factory import make_factory_rocket_agent
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import (
     compose_frame_with_inventory,
@@ -539,7 +534,6 @@ def main() -> None:
 
     all_agents: dict[str, Any] = {
         "naive": make_scripted_rocket_agent,
-        "factory": make_factory_rocket_agent,
         "advanced_factory": _advanced_factory,
     }
     selected = args.agents or list(all_agents.keys())

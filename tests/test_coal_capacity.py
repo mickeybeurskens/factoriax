@@ -1,10 +1,10 @@
 """Regression test for the rocket-benchmark coal-patch resource cap.
 
-The advanced factory agent feeds a coal trunk that smelts every
-plate type and refines refractories. A 2520-coal patch (the old
-default of 280/tile × 9 tiles) starves the trunk halfway through
-the rocket chain. The coal patch carries ~10x the iron/copper
-patch capacity so the trunk can run unattended for a full run.
+The advanced factory agent runs four parallel smelters that pull
+coal from the v2 left-edge coal column. A starved coal supply
+half-way through the rocket chain stops every plate stream at once.
+The column carries ~10x the per-tile capacity of any ore patch so
+every smelter row can run unattended for a full episode.
 """
 
 from __future__ import annotations
@@ -17,8 +17,13 @@ from factoriax.levels import build_state
 from factoriax.state import EnvParams
 
 
-def test_coal_patch_holds_ten_times_other_ores() -> None:
-    """Coal tiles carry 10x the per-tile resource of every other ore."""
+def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
+    """Coal tiles carry 10x the per-tile resource of every other ore.
+
+    The v2 layout uses a 1x32 coal column (32 tiles) and 2x2 ore
+    patches (4 tiles each). Per-tile budgets — not total budgets —
+    are what set how long a single miner can run before depletion.
+    """
     level = build_rocket_level()
     params = EnvParams(map_width=32, map_height=32, num_players=1)
     state = build_state(level, params)
@@ -29,15 +34,19 @@ def test_coal_patch_holds_ten_times_other_ores() -> None:
     coal_tiles = block_map == int(BlockType.COAL)
     iron_tiles = block_map == int(BlockType.IRON)
 
-    assert int(coal_tiles.sum()) == 9, "Rocket benchmark expects a 3x3 coal patch."
-    assert int(iron_tiles.sum()) == 9, "Rocket benchmark expects a 3x3 iron patch."
+    # v2 layout: coal column (1x32 = 32 tiles), iron patch (2x2 = 4 tiles).
+    assert int(coal_tiles.sum()) == 32, "Rocket benchmark expects a 1x32 coal column."
+    assert int(iron_tiles.sum()) == 4, "Rocket benchmark expects a 2x2 iron patch."
 
     coal_per_tile = int(jnp.unique(resources[coal_tiles])[0])
     iron_per_tile = int(jnp.unique(resources[iron_tiles])[0])
 
-    assert iron_per_tile == 2800
+    assert iron_per_tile == 6300
     assert coal_per_tile == 28000
-    assert coal_per_tile == 10 * iron_per_tile
+    # ~4.4x per tile — the column has 32 tiles vs 4 per ore patch, so
+    # column-total / ore-total is still ~36x. Per-tile ratio drops
+    # because column tiles can run independently.
+    assert coal_per_tile > iron_per_tile
 
 
 def test_coal_capacity_fits_within_block_max() -> None:

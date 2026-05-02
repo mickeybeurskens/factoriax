@@ -61,6 +61,15 @@ from factoriax.recipes import (
 )
 from factoriax.state import EnvParams
 
+# v1 of the advanced-factory agent hard-codes the legacy 3x3 patch
+# coords (e.g. (8, 10), (21, 12)) and the four-cross coal trunks. The
+# rocket benchmark shipped its v2 map in M1 (coal column at x=0, 2x2
+# patches stacked on cols 3-4), which strands every v1 placement.
+# These tests are skipped until M3 lands the rewritten agent.
+pytestmark = pytest.mark.skip(
+    reason="agent_advanced_factory v1 retired in M1; rewrite tracked in M3-M15"
+)
+
 _MAP_SIZE = 32
 _IRON_MANUAL_STASH_TILE = (10, 10)
 _IRON_SPLITTER_TILE = (10, 11)

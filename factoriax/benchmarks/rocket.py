@@ -395,69 +395,79 @@ ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(ROCKET_RECIPE_BOOK)
 # Level construction
 # ---------------------------------------------------------------------------
 
-# 32x32 map; player spawns at the centre with six 3x3 ore patches
-# placed symmetrically at ~8 tiles radius. A furnace and an assembler
-# are pre-placed immediately west / east of the spawn so the agent
-# never has to hand-craft to get started. The sixth patch (LIMESTONE)
-# was added so REFRACTORY can take two inputs (LIMESTONE + COAL)
-# matching every other furnace recipe — see factoriax.recipes.
+# 32x32 map. Layout (the "streamlined" v2 geometry, see
+# docs/rocket_scripted_agent.md):
+#
+# - Coal occupies the entire left column (x = 0, all 32 rows). Every
+#   smelter cell pulls coal east along its own row — no vertical coal
+#   trunks to navigate around.
+# - The five ore patches sit on cols 3-4 in 2x2 squares, stacked
+#   vertically with a 1-tile dirt gap between them (rows 9, 12, 15,
+#   18, 21). The 2-tile dirt buffer at cols 1-2 keeps belts and arms
+#   off the coal column.
+# - Spawn at the map centre with a furnace / assembler pre-placed
+#   immediately west / east. Hand-crafting is masked, so production
+#   must flow through these two starter machines.
+# - Limestone (rows 21-22) is unused for the rocket chain itself but
+#   kept so the recipe book's REFRACTORY recipe stays satisfiable.
 _MAP_SIZE: int = 32
-_ORE_PATCH_SIZE: int = 3
-# 280 per tile × 9 tiles per patch ≈ 2500 ore per patch. Enough for
-# automated miners to run essentially the whole episode without
-# depleting — the agent doesn't have to re-mine midway.
-_ORE_RESOURCES_PER_TILE: int = 2800
-# Coal is consumed by every smelt and every refractory craft, so the
-# coal patch needs ~10x the throughput of any other ore. 28 000 per
-# tile × 9 tiles per patch ≈ 250 000 coal per patch — enough to
-# sustain a fully-automated factory through the whole rocket chain
-# without refueling. Requires ``BLOCK_MAX_RESOURCES`` to be at least
-# 28 000.
+_ORE_PATCH_SIZE: int = 2  # 2x2 ore squares
+# 6300 per tile × 4 tiles per patch ≈ 25 000 ore per patch. Comparable
+# to the old 9-tile patch budget, so demand-side recipe planning
+# doesn't need to change.
+_ORE_RESOURCES_PER_TILE: int = 6300
+# Coal column is one tile wide × 32 tiles tall. 28 000 per tile means
+# ~900 000 coal — comfortably more than the rocket chain consumes
+# even if every smelter and every refractory craft fires worst-case.
+# Requires ``BLOCK_MAX_RESOURCES`` to be at least 28 000.
 _COAL_RESOURCES_PER_TILE: int = 28000
+_COAL_COLUMN_X: int = 0
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
 _FURNACE_TILE: tuple[int, int] = (_SPAWN[0] - 1, _SPAWN[1])
 _ASSEMBLER_TILE: tuple[int, int] = (_SPAWN[0] + 1, _SPAWN[1])
 _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
-    # (x, y, block) — all coordinates are the top-left corner of the 3x3 patch.
-    (7, 7, BlockType.IRON),
-    (22, 7, BlockType.COPPER),
-    (7, 22, BlockType.COAL),
-    (22, 22, BlockType.TIN),
-    (14, 3, BlockType.SILICON),
-    # Limestone: south-centre, well clear of the iron/copper/tin/coal
-    # patches and the spawn corridor. Covers (13..15, 28..30).
-    (13, 28, BlockType.LIMESTONE),
+    # (x, y, block) — top-left corner of the 2x2 patch.
+    (3, 9, BlockType.IRON),
+    (3, 12, BlockType.COPPER),
+    (3, 15, BlockType.TIN),
+    (3, 18, BlockType.SILICON),
+    (3, 21, BlockType.LIMESTONE),
 ]
 
 
 def build_rocket_level() -> Level:
     """Construct the canonical 32x32 rocket benchmark level.
 
-    Player spawns at :data:`_SPAWN`. Six 3x3 ore patches (iron, copper,
-    coal, tin, silicon, limestone) sit at varying radii from spawn in
-    a roughly-symmetric layout, each tile carrying
-    :data:`_ORE_RESOURCES_PER_TILE` units (or
-    :data:`_COAL_RESOURCES_PER_TILE` for coal) — plenty for a full
-    rocket run. A furnace and an assembler are pre-placed one tile
-    west and east of spawn respectively.
+    Player spawns at :data:`_SPAWN`. Five 2x2 ore patches (iron,
+    copper, tin, silicon, limestone) sit on cols 3-4, vertically
+    stacked with 1-tile dirt gaps (rows 9, 12, 15, 18, 21). A 1-wide
+    coal column fills the entire left edge (x = 0). Each ore tile
+    carries :data:`_ORE_RESOURCES_PER_TILE` units; each coal tile
+    carries :data:`_COAL_RESOURCES_PER_TILE`. A furnace and an
+    assembler are pre-placed one tile west and east of spawn
+    respectively.
 
     Returns:
         Deterministic :class:`Level` used as the benchmark's only level.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
+    # Coal column — one tile wide, full map height.
+    builder.fill_rect(
+        _COAL_COLUMN_X,
+        0,
+        1,
+        _MAP_SIZE,
+        BlockType.COAL,
+        resources=_COAL_RESOURCES_PER_TILE,
+    )
     for x, y, block in _PATCH_OFFSETS:
-        per_tile = (
-            _COAL_RESOURCES_PER_TILE
-            if block == BlockType.COAL
-            else _ORE_RESOURCES_PER_TILE
-        )
         builder.fill_rect(
             x,
             y,
             _ORE_PATCH_SIZE,
             _ORE_PATCH_SIZE,
             block,
-            resources=per_tile,
+            resources=_ORE_RESOURCES_PER_TILE,
         )
     builder.set_player_position(*_SPAWN)
     builder.place_machine(
