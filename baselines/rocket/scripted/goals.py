@@ -408,6 +408,28 @@ class PlaceMachineAt(Goal):
             return Result.FAIL, None
         return Result.RUNNING, action
 
+    def verify(self, view: WorldView) -> bool:
+        """Confirm the target tile holds the expected machine + direction.
+
+        ``step`` reports DONE the tick after :class:`PlaceAt` emits its
+        ``PLACE_*`` action — based on the machine count rising, not on
+        observing the target tile. This verify closes the gap: it
+        reads ``view.machine_type[y, x]`` and ``view.machine_direction``
+        directly, so a placement that landed at the wrong tile, with
+        the wrong direction, or didn't land at all (NavigateTo
+        stalled, blocked tile, occupied) trips the planner's halt.
+        """
+        x, y = self.target
+        return bool(
+            int(view.machine_type[y, x]) == self.machine_type
+            and int(view.machine_direction[y, x]) == self.facing
+        )
+
+    def __repr__(self) -> str:
+        mt_name = MachineType(self.machine_type).name
+        dir_name = Direction(self.facing).name
+        return f"PlaceMachineAt({mt_name}, {self.target}, {dir_name})"
+
 
 class BeltPath:
     """One axis-aligned belt path in a :func:`place_belt_network` plan.
