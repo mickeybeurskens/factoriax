@@ -217,9 +217,20 @@ _WIRE_INPUT_B_TILE: tuple[int, int] = (12, 14)  # TIN_PLATE   (west)
 _WIRE_OUTPUT_TILE: tuple[int, int] = (15, 14)  # WIRE pallet  (east)
 # arm at (14, 14) is internal to build_assembler_module_at.
 
-# Copper extractor arm + east route into input_a.
+# Copper extractor arm + route into a horizontal splitter that fans
+# plates DOWN to the WIRE input_a feeder at (13, 13) and UP to the
+# CIRCUIT-bound corridor on row 11 (consumed by Phase 3.CIRCUIT).
+# Routing the copper UP off the extractor row into row 12 lets us
+# place the splitter where its DOWN output lands directly on WIRE's
+# input_a feeder without any extra belt — and the UP output corridor
+# on row 11 is fully clear east to col 18.
 _COPPER_EXTRACT_ARM_TILE: tuple[int, int] = (10, 13)
-_COPPER_TO_WIRE_BELT_TILES: tuple[tuple[int, int], ...] = ((11, 13), (12, 13))
+_COPPER_PRE_SPLITTER_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((11, 13), int(Direction.UP)),  # extractor pushes east; belt routes UP
+    ((11, 12), int(Direction.RIGHT)),
+    ((12, 12), int(Direction.RIGHT)),
+)
+_COPPER_SPLITTER_TILE: tuple[int, int] = (13, 12)
 
 # Tin extractor arm pushes east into a SPLITTER, which fans plates
 # UP (-> WIRE) and DOWN (-> future FRAME route).
@@ -296,10 +307,12 @@ _IRON_TO_FRAME_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((11, 10), int(Direction.RIGHT)),
 )
 
-# Tin -> FRAME belts, sink-first. The trunk's source belt at
-# (11, 17) is placed separately via ``PlaceMachineFromBackAt``
-# (its stand tile is the tin splitter at (11, 16)).
-_TIN_FRAME_TRUNK_HEAD_TILE: tuple[int, int] = (11, 17)
+# Tin -> FRAME belts, sink-first. The trunk's source tile at
+# (11, 17) is *not* placed by FRAME — Phase 3.CIRCUIT lands a
+# CROSSING there instead so the wafer route can cross the tin
+# trunk on row 17 (vertical lane = tin DOWN, horizontal lane =
+# wafer RIGHT). The CROSSING substitutes for the BELT-from-back
+# the FRAME phase used to emit; tin still flows into (11, 18).
 _TIN_TO_FRAME_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((17, 22), int(Direction.RIGHT)),
     ((16, 22), int(Direction.RIGHT)),
@@ -315,20 +328,100 @@ _TIN_TO_FRAME_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Geometry — Phase 3.CIRCUIT (copper + wafer -> circuit)
+# ---------------------------------------------------------------------------
+#
+# CIRCUIT recipe: 1 COPPER_PLATE + 1 WAFER -> 1 CIRCUIT, in an
+# assembler.
+#
+# Copper feed: tap off the WIRE-bound copper splitter at (13, 12).
+# Its UP output lands on (13, 11); the CIRCUIT phase routes that
+# east along row 11 (the dirt corridor between the iron / copper
+# patches and iron-to-FRAME's row-10 east-bound trunk) to col 16,
+# then south down col 16 (which is one column west of the F+A
+# drain zone — col 16 row 16 sits between the pre-placed FURNACE
+# at (15, 16) and ASSEMBLER at (17, 16) but is safe because the
+# belt there faces DOWN, not LEFT/RIGHT toward either combiner,
+# so the directional Phase 0 pull doesn't trigger). The route
+# terminates at the CIRCUIT module's input_a feeder belt at
+# (16, 17).
+#
+# Wafer feed: extract from the silicon plate-bus at (9, 19) by
+# placing an arm at (9, 18) facing UP via ``PlaceMachineFromBackAt``
+# (its natural stand tile is the bus PALLET, non-walkable). The
+# arm pushes UP onto (9, 17); the route then runs east along row 17
+# (above the silicon and tin coal trunks on row 17 col 1-7), passes
+# through a CROSSING at (11, 17) that shares the tile with the tin
+# -> FRAME trunk's vertical lane, and bends DOWN at col 14 onto
+# row 18 into the CIRCUIT module's input_b feeder belt at (15, 18).
+#
+# CIRCUIT module sits at (16, 18) facing DOWN — east of the WIRE
+# module and west of the iron-to-FRAME col-19 trunk. Output PALLET
+# at (18, 18) is checked for CIRCUITs by the smoke test.
+
+_CIRCUIT_ASSEMBLER_TILE: tuple[int, int] = (16, 18)
+_CIRCUIT_INPUT_A_TILE: tuple[int, int] = (16, 17)  # COPPER_PLATE (north)
+_CIRCUIT_INPUT_B_TILE: tuple[int, int] = (15, 18)  # WAFER       (west)
+_CIRCUIT_OUTPUT_TILE: tuple[int, int] = (18, 18)
+_WAFER_EXTRACT_ARM_TILE: tuple[int, int] = (9, 18)
+
+# Copper splitter UP -> CIRCUIT. Belts in placement order
+# (sink-first toward (13, 11) where the splitter dumps copper):
+# col 16 south-to-north, then row 11 east-to-west.
+_COPPER_TO_CIRCUIT_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((16, 16), int(Direction.DOWN)),
+    ((16, 15), int(Direction.DOWN)),
+    ((16, 14), int(Direction.DOWN)),
+    ((16, 13), int(Direction.DOWN)),
+    ((16, 12), int(Direction.DOWN)),
+    ((16, 11), int(Direction.DOWN)),
+    ((15, 11), int(Direction.RIGHT)),
+    ((14, 11), int(Direction.RIGHT)),
+    ((13, 11), int(Direction.RIGHT)),
+)
+
+# Wafer extractor UP -> row 17 east -> CROSSING -> bend DOWN to
+# (15, 18). Sink-first placement order keeps every stand tile dirt
+# or a previously-placed walkable belt:
+# - (14, 18) RIGHT     (final approach into input_b from the west)
+# - (14, 17) DOWN      (bend off row 17)
+# - (13, 17), (12, 17) RIGHT (post-crossing eastward)
+# - CROSSING (11, 17)  (separately, after both side belts so its
+#                       dir=1 stand-tile (12, 17) is already a belt)
+# - (10, 17), (9, 17)  RIGHT (pre-crossing east-flow off the wafer
+#                       extractor)
+_WAFER_CROSSING_TILE: tuple[int, int] = (11, 17)
+_WAFER_PRE_CROSSING_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((10, 17), int(Direction.RIGHT)),
+    ((9, 17), int(Direction.RIGHT)),
+)
+_WAFER_POST_CROSSING_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((14, 18), int(Direction.RIGHT)),
+    ((14, 17), int(Direction.DOWN)),
+    ((13, 17), int(Direction.RIGHT)),
+    ((12, 17), int(Direction.RIGHT)),
+)
+
+
 def _phase_2_wire_targets() -> dict[int, int]:
     """Return ``{ItemType: count}`` for the WIRE cell + plate routes.
 
-    Counts: 1 ASSEMBLER + 3 PALLET + 1 ARM (assembler module) +
-    2 ARM (copper + tin extractors) + 1 SPLITTER (tin output) +
-    N CONVEYOR_BELT (route belts).
+    Counts: 1 ASSEMBLER + 1 PALLET + 1 ARM + 2 BELT (assembler module
+    via :func:`assembler_module_inventory`) + 2 ARM (copper + tin
+    extractors) + 2 SPLITTER (copper splitter at (13, 12) fanning to
+    WIRE+CIRCUIT, tin splitter at (11, 16) fanning to WIRE+FRAME) +
+    N CONVEYOR_BELT (pre-splitter copper belts + tin route belts).
+    The CIRCUIT-bound copper belts past the splitter are owned by
+    Phase 3.CIRCUIT.
     """
     return sum_inventories(
         assembler_module_inventory(input_b=True),
         {
             int(ItemType.ARM): 2,
-            int(ItemType.SPLITTER): 1,
+            int(ItemType.SPLITTER): 2,
             int(ItemType.CONVEYOR_BELT): (
-                len(_COPPER_TO_WIRE_BELT_TILES) + len(_TIN_TO_WIRE_BELTS)
+                len(_COPPER_PRE_SPLITTER_BELTS) + len(_TIN_TO_WIRE_BELTS)
             ),
         },
     )
@@ -337,28 +430,52 @@ def _phase_2_wire_targets() -> dict[int, int]:
 def _phase_3_frame_targets() -> dict[int, int]:
     """Return ``{ItemType: count}`` for the FRAME cell + plate routes.
 
-    Counts: 1 ASSEMBLER + 3 PALLET + 1 ARM (assembler module) +
-    1 ARM (iron extractor) + N CONVEYOR_BELT (iron route + tin
-    route + the from-back trunk-head belt). The tin extractor +
-    splitter were placed in Phase 2.
+    Counts: 1 ASSEMBLER + 1 PALLET + 1 ARM + 2 BELT (assembler module
+    via :func:`assembler_module_inventory`) + 1 ARM (iron extractor) +
+    N CONVEYOR_BELT (iron route + tin route). The tin extractor +
+    splitter were placed in Phase 2; the tin trunk head at (11, 17)
+    is placed by Phase 3.CIRCUIT as a CROSSING (so wafer can cross
+    the tin trunk on its way east to the CIRCUIT cell).
     """
     return sum_inventories(
         assembler_module_inventory(input_b=True),
         {
             int(ItemType.ARM): 1,
             int(ItemType.CONVEYOR_BELT): (
-                len(_IRON_TO_FRAME_BELTS) + len(_TIN_TO_FRAME_BELTS) + 1
+                len(_IRON_TO_FRAME_BELTS) + len(_TIN_TO_FRAME_BELTS)
+            ),
+        },
+    )
+
+
+def _phase_3_circuit_targets() -> dict[int, int]:
+    """Return ``{ItemType: count}`` for the CIRCUIT cell + plate routes.
+
+    Counts: 1 ASSEMBLER + 1 PALLET + 1 ARM + 2 BELT (assembler module
+    via :func:`assembler_module_inventory`) + 1 ARM (wafer extractor)
+    + 1 CROSSING (tin / wafer cross at (11, 17), substituting for the
+    BELT the FRAME phase used to emit there) + N CONVEYOR_BELT
+    (copper-to-CIRCUIT branch off the splitter + wafer route).
+    """
+    return sum_inventories(
+        assembler_module_inventory(input_b=True),
+        {
+            int(ItemType.ARM): 1,
+            int(ItemType.CROSSING): 1,
+            int(ItemType.CONVEYOR_BELT): (
+                len(_COPPER_TO_CIRCUIT_BELTS)
+                + len(_WAFER_PRE_CROSSING_BELTS)
+                + len(_WAFER_POST_CROSSING_BELTS)
             ),
         },
     )
 
 
 # Achievement-preservation targets: items the agent smelts / crafts
-# even though no Phase 1 placement consumes them, so the rocket
-# benchmark unlocks fire (e.g. ``smelt_wafer`` requires holding a
-# wafer at some point — Phase 1.iron doesn't need wafer otherwise).
-# Future cell additions will retire this set as wafer / etc.
-# become genuine infrastructure inputs.
+# even though no Phase 1 placement consumes them. Phase 3.CIRCUIT
+# consumes wafer in steady state (so the keepsake is no longer
+# strictly needed for ``smelt_wafer``), but a tiny float keeps the
+# bootstrap robust against the deposit/auto-pull race.
 _ACHIEVEMENT_KEEPSAKES: dict[int, int] = {
     int(ItemType.WAFER): 2,
 }
@@ -508,25 +625,33 @@ def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
 
 
 def _phase_2_wire_goals() -> list[Goal]:
-    """Place the WIRE assembler + the two plate routes feeding it.
+    """Place the WIRE assembler + plate routes + both inter-cell splitters.
 
-    The tin feed goes through a SPLITTER so the same extractor can
-    also feed the deferred FRAME cell when it ships.
+    Both routes go through a SPLITTER so the same single extractor
+    can feed two downstream cells:
+
+    * **copper** splitter at (13, 12) horizontal RIGHT — DOWN output
+      lands on the WIRE input_a feeder (13, 13); UP output is consumed
+      by Phase 3.CIRCUIT (off the (13, 11) corridor).
+    * **tin** splitter at (11, 16) horizontal RIGHT — UP output runs
+      east to WIRE input_b; DOWN output drops south into the FRAME
+      tin trunk (Phase 3.FRAME).
 
     Placement order (each step's stand tile is dirt or a previously
     placed walkable belt):
 
     1. Assembler module at ``_WIRE_ASSEMBLER_TILE``.
-    2. Copper route belts west-to-east into the input_a tile.
-    3. Copper extractor arm via from-back.
-    4. Tin -> WIRE route belts. The splitter at (11, 16) is placed
-       *after* its UP-output belt (11, 15) so the splitter's stand
-       tile (10, 16) is dirt at placement; (10, 16) is later
-       occupied by the tin extractor arm.
-    5. Tin SPLITTER at (11, 16) facing RIGHT — accepts west input
-       from the extractor arm, outputs to (11, 15) UP and (11, 17)
-       DOWN. The DOWN output is consumed by the FRAME phase.
-    6. Tin extractor arm at (10, 16) RIGHT via from-back.
+    2. Pre-splitter copper belts in source-first order so the splitter
+       at (13, 12) has a walkable belt at (12, 12) under it: (11, 13)
+       UP, (11, 12) RIGHT, (12, 12) RIGHT.
+    3. Copper SPLITTER at (13, 12) RIGHT.
+    4. Copper extractor arm at (10, 13) via from-back (stand on the
+       (11, 13) UP belt placed in step 2).
+    5. Tin -> WIRE route belts (sink-first).
+    6. Tin extractor arm at (10, 16) RIGHT via from-back — placed
+       *before* the splitter so the from-back stand tile (11, 16)
+       is still dirt.
+    7. Tin SPLITTER at (11, 16) RIGHT via from-back.
     """
     goals: list[Goal] = []
 
@@ -538,10 +663,13 @@ def _phase_2_wire_goals() -> list[Goal]:
         )
     )
 
-    for tile in reversed(_COPPER_TO_WIRE_BELT_TILES):
-        goals.append(
-            PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, int(Direction.RIGHT))
+    for tile, facing in _COPPER_PRE_SPLITTER_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+    goals.append(
+        PlaceMachineAt(
+            MachineType.SPLITTER, _COPPER_SPLITTER_TILE, int(Direction.RIGHT)
         )
+    )
     goals.append(
         PlaceMachineFromBackAt(
             MachineType.ARM, _COPPER_EXTRACT_ARM_TILE, int(Direction.RIGHT)
@@ -593,16 +721,18 @@ def _phase_3_frame_goals() -> list[Goal]:
 
     Tin reuses the splitter placed in Phase 2: its DOWN output
     drops onto (11, 17). Belts run south down col 11, bend east
-    on row 22, and feed FRAME's input_b at (18, 22). The trunk
-    head at (11, 17) goes via :class:`PlaceMachineFromBackAt`
-    because its natural stand tile (11, 16) is the splitter.
+    on row 22, and feed FRAME's input_b at (18, 22). The tin
+    trunk head at (11, 17) is *not* placed here — Phase 3.CIRCUIT
+    lands a CROSSING at that tile (the wafer route shares it),
+    and the CROSSING's vertical lane carries tin DOWN unchanged.
 
     Placement order so every stand tile is walkable:
 
     1. FRAME assembler module at ``_FRAME_ASSEMBLER_TILE``.
     2. Iron route belts (sink-first), then iron extractor arm.
-    3. Tin route belts (sink-first), then the from-back trunk
-       head at (11, 17).
+    3. Tin route belts (sink-first). Phase 3.CIRCUIT will place the
+       CROSSING at (11, 17) afterward to complete the tin trunk's
+       splitter-to-trunk join.
     """
     goals: list[Goal] = []
 
@@ -624,11 +754,70 @@ def _phase_3_frame_goals() -> list[Goal]:
 
     for tile, facing in _TIN_TO_FRAME_BELTS:
         goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+    return goals
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.CIRCUIT — assembler + wafer extractor + copper / wafer routes
+# ---------------------------------------------------------------------------
+
+
+def _phase_3_circuit_goals() -> list[Goal]:
+    """Place the CIRCUIT assembler module + copper-tap + wafer route.
+
+    Copper comes off the WIRE-bound splitter at (13, 12)'s UP output:
+    a 9-belt route (col 16 south + row 11 west) drops it into the
+    CIRCUIT module's input_a feeder at (16, 17). Wafer comes off the
+    silicon plate-bus via a from-back arm at (9, 18) facing UP, runs
+    east on row 17 through a CROSSING at (11, 17), bends DOWN at
+    col 14, and lands on the input_b feeder at (15, 18).
+
+    The CROSSING dir=1 (vertical N->S, horizontal W->E) replaces the
+    BELT the previous design placed at (11, 17) via from-back. The
+    vertical lane carries tin DOWN from the splitter at (11, 16)
+    into the FRAME trunk at (11, 18); the horizontal lane carries
+    wafer RIGHT from (10, 17) into (12, 17).
+
+    Placement order (each step's stand tile is dirt or a previously
+    placed walkable belt; CROSSINGs and SPLITTERs are not walkable):
+
+    1. CIRCUIT module at ``_CIRCUIT_ASSEMBLER_TILE``.
+    2. Copper -> CIRCUIT belts sink-first (col 16 from row 16 up to
+       row 11, then row 11 from col 15 west to col 13).
+    3. Wafer post-crossing belts sink-first ((14, 18), (14, 17),
+       (13, 17), (12, 17)).
+    4. CROSSING at (11, 17). Stand = (12, 17) belt (placed in step 3).
+    5. Wafer pre-crossing belts ((10, 17), (9, 17)).
+    6. Wafer extractor arm at (9, 18) UP via from-back.
+    """
+    goals: list[Goal] = []
+
+    goals.extend(
+        build_assembler_module_at(
+            _CIRCUIT_ASSEMBLER_TILE,
+            input_b=True,
+            map_size=_MAP_SIZE,
+        )
+    )
+
+    for tile, facing in _COPPER_TO_CIRCUIT_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    for tile, facing in _WAFER_POST_CROSSING_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # CROSSING dir=1: vertical N->S (tin) + horizontal W->E (wafer).
+    # PlaceMachineAt navigates to target - unit(facing); facing=1
+    # (LEFT) means stand = (12, 17), which is the wafer post-crossing
+    # belt placed above.
+    goals.append(PlaceMachineAt(MachineType.CROSSING, _WAFER_CROSSING_TILE, 1))
+
+    for tile, facing in _WAFER_PRE_CROSSING_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.CONVEYOR_BELT,
-            _TIN_FRAME_TRUNK_HEAD_TILE,
-            int(Direction.DOWN),
+            MachineType.ARM, _WAFER_EXTRACT_ARM_TILE, int(Direction.UP)
         )
     )
     return goals
@@ -647,9 +836,12 @@ def build_advanced_factory_goals(
 
     Phase 0 hand-bootstraps every item later phases consume; Phase 1
     drops one automated smelter cell per ore (iron / copper / tin /
-    silicon); Phase 2 places the WIRE assembler and the tin
-    SPLITTER feeding it; Phase 3 places the FRAME assembler with
-    an iron extractor and routes that bypass the F+A drain zone.
+    silicon); Phase 2 places the WIRE assembler with both inter-cell
+    splitters (copper at (13, 12), tin at (11, 16)); Phase 3.FRAME
+    places the FRAME assembler with an iron extractor and routes
+    that bypass the F+A drain zone; Phase 3.CIRCUIT places the
+    CIRCUIT assembler with a wafer extractor, plus a CROSSING that
+    lets the wafer route share row 17 with the tin -> FRAME trunk.
     Phase 0's mine / smelt / craft quantities are derived from
     later-phase consumption via a BOM walk, so a recipe rebalance
     flows through automatically.
@@ -678,6 +870,7 @@ def build_advanced_factory_goals(
         _phase_1_targets(),
         _phase_2_wire_targets(),
         _phase_3_frame_targets(),
+        _phase_3_circuit_targets(),
         _ACHIEVEMENT_KEEPSAKES,
     )
     goals: list[Goal] = list(_phase_0(crafted_targets, book, slack))
@@ -699,9 +892,14 @@ def build_advanced_factory_goals(
     expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
     goals.append(VerifyLayout(expected, label="phase 3.frame"))
 
+    goals.extend(_phase_3_circuit_goals())
+    expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
+    goals.append(VerifyLayout(expected, label="phase 3.circuit"))
+
     # Trailing wait. Iron has to travel ~19 belts and tin ~12 plus
-    # propagation through the splitter; 3000 ticks lets the FRAME
-    # assembler reach steady state by end of episode.
+    # propagation through both splitters; CIRCUIT's copper and wafer
+    # routes add another ~15 belts. 3000 ticks lets every cell reach
+    # steady state before episode end.
     goals.append(Wait(3000))
     return goals
 
