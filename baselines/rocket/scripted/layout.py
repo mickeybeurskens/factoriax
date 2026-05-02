@@ -29,7 +29,7 @@ from typing import Literal
 
 from factoriax.constants import Direction, MachineType
 
-from .goals import Goal, PlaceMachineAt
+from .goals import Goal, PlaceMachineAt, PlaceMachineFromBackAt
 from .world_model import WorldView
 
 #: Type alias for an expected layout. Maps ``(x, y)`` tile coords to
@@ -118,7 +118,7 @@ def expected_layout_from_goals(goals: Iterable[Goal]) -> ExpectedLayout:
     """
     layout: ExpectedLayout = {}
     for goal in goals:
-        if isinstance(goal, PlaceMachineAt):
+        if isinstance(goal, (PlaceMachineAt, PlaceMachineFromBackAt)):
             layout[goal.target] = (goal.machine_type, goal.facing)
     return layout
 

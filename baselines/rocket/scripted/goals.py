@@ -37,7 +37,9 @@ from .skills import (
 )
 from .world_model import (
     WorldView,
+    opposite_direction,
     place_action,
+    rotate_action,
     withdraw_action,
 )
 
@@ -492,6 +494,112 @@ class PlaceMachineAt(Goal):
         mt_name = MachineType(self.machine_type).name
         dir_name = Direction(self.facing).name
         return f"PlaceMachineAt({mt_name}, {self.target}, {dir_name})"
+
+
+class PlaceMachineFromBackAt(Goal):
+    """Place a machine at *target* facing *facing*, approaching from the front.
+
+    Used when ``target - unit_vec(facing)`` is off-map or otherwise
+    unreachable (the natural :class:`PlaceMachineAt` stand tile).
+    The opposite stand tile, ``target + unit_vec(facing)``, sits in
+    front of the would-be machine and is usually walkable.
+
+    Sequence:
+
+    1. :class:`PlaceAt` with ``opposite(facing)`` — navigates to
+       ``target + unit_vec(facing)``, faces ``opposite(facing)``
+       (i.e. toward the target tile), and emits ``PLACE_<machine>``.
+       The new entity inherits the player's direction, so it lands
+       facing ``opposite(facing)``.
+    2. ``ROTATE_<facing>`` — the player is still standing one tile
+       *in front* of the new machine, facing it. The engine's
+       ``set_machine_direction`` retargets the tile in front of the
+       player (which is ``target``) and overwrites its direction to
+       ``facing``.
+
+    Verify is identical to :class:`PlaceMachineAt`: tile holds the
+    expected machine type and direction.
+
+    Use sparingly — every other placement should pick a stand tile
+    on the back of the machine via :class:`PlaceMachineAt`. The
+    rotate step burns one extra tick and assumes the rotate-action
+    space is unblocked (rocket benchmark allows it; check before
+    porting elsewhere).
+    """
+
+    name = "PlaceMachineFromBackAt"
+
+    def __init__(
+        self,
+        machine_type: int | MachineType,
+        target: tuple[int, int],
+        facing: int,
+    ) -> None:
+        self.machine_type = int(machine_type)
+        self.item_type = _machine_to_item(self.machine_type)
+        self.target = target
+        self.facing = int(facing)
+        self._opposite = opposite_direction(self.facing)
+        self._active: PlaceAt | None = None
+
+    def step(self, view: WorldView) -> StepReturn:
+        x, y = self.target
+        observed_mt = int(view.machine_type[y, x])
+        observed_dir = int(view.machine_direction[y, x])
+
+        if observed_mt == self.machine_type and observed_dir == self.facing:
+            return Result.DONE, None
+
+        if observed_mt == self.machine_type:
+            return Result.RUNNING, rotate_action(self.facing)
+
+        if view.player.held(self.item_type) < 1:
+            return Result.FAIL, None
+
+        if self._active is None:
+            self._active = PlaceAt(
+                self.target,
+                self._opposite,
+                place_action(self.machine_type),
+            )
+
+        result, action = self._active.step(view)
+        if result is Result.DONE:
+            self._active = None
+            return Result.RUNNING, int(Action.NOOP)
+        if result is Result.FAIL:
+            self._active = None
+            return Result.FAIL, None
+        return Result.RUNNING, action
+
+    def verify(self, view: WorldView) -> bool:
+        x, y = self.target
+        return bool(
+            int(view.machine_type[y, x]) == self.machine_type
+            and int(view.machine_direction[y, x]) == self.facing
+        )
+
+    def verify_failure_details(self, view: WorldView) -> str | None:
+        x, y = self.target
+        observed_mt = int(view.machine_type[y, x])
+        observed_dir = int(view.machine_direction[y, x])
+        observed_mt_name = MachineType(observed_mt).name
+        observed_dir_name = (
+            Direction(observed_dir).name if observed_dir != 0 else "NONE"
+        )
+        expected_mt_name = MachineType(self.machine_type).name
+        expected_dir_name = Direction(self.facing).name if self.facing != 0 else "NONE"
+        return (
+            f"  expected: tile {self.target} -> "
+            f"({expected_mt_name}, {expected_dir_name}) [from-back]\n"
+            f"  observed: tile {self.target} -> "
+            f"({observed_mt_name}, {observed_dir_name})"
+        )
+
+    def __repr__(self) -> str:
+        mt_name = MachineType(self.machine_type).name
+        dir_name = Direction(self.facing).name
+        return f"PlaceMachineFromBackAt({mt_name}, {self.target}, {dir_name})"
 
 
 class BeltPath:

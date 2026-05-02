@@ -128,6 +128,18 @@ _DIR_TO_FACE_ACTION: dict[int, int] = {
     int(Direction.UP): int(Action.FACE_UP),
     int(Direction.DOWN): int(Action.FACE_DOWN),
 }
+_DIR_TO_ROTATE_ACTION: dict[int, int] = {
+    int(Direction.LEFT): int(Action.ROTATE_LEFT),
+    int(Direction.RIGHT): int(Action.ROTATE_RIGHT),
+    int(Direction.UP): int(Action.ROTATE_UP),
+    int(Direction.DOWN): int(Action.ROTATE_DOWN),
+}
+_OPPOSITE_DIR: dict[int, int] = {
+    int(Direction.LEFT): int(Direction.RIGHT),
+    int(Direction.RIGHT): int(Direction.LEFT),
+    int(Direction.UP): int(Direction.DOWN),
+    int(Direction.DOWN): int(Direction.UP),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -565,6 +577,17 @@ def direction_toward(
 def face_action(direction: int) -> int:
     """``FACE_*`` action that orients the player in *direction*."""
     return _DIR_TO_FACE_ACTION[int(direction)]
+
+
+def rotate_action(direction: int) -> int:
+    """``ROTATE_*`` action that sets the facing of the machine in front
+    of the player to *direction* (absolute)."""
+    return _DIR_TO_ROTATE_ACTION[int(direction)]
+
+
+def opposite_direction(direction: int) -> int:
+    """Return the direction 180 degrees from *direction*."""
+    return _OPPOSITE_DIR[int(direction)]
 
 
 def withdraw_action() -> int:
