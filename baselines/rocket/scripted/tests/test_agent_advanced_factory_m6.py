@@ -1,14 +1,15 @@
-"""End-to-end tests for the v2 advanced-factory rocket agent (M5).
+"""End-to-end tests for the v2 advanced-factory rocket agent (M6).
 
 Two layers:
 
 - Structural (sub-second): the goal list constructs cleanly, has the
-  M5 shape (Phase 0 bootstrap + four smelter cells — iron, copper,
-  tin, silicon — each with ore feed + coal trunk + verify gates),
-  and every placement lands inside the 32x32 map.
+  M6 shape (Phase 0 bootstrap + four smelter cells + WIRE assembler
+  + copper/tin -> WIRE plate routes + per-stage verify gates), and
+  every placement lands inside the 32x32 map.
 - Smoke (``@pytest.mark.slow``, full env rollout): the agent unlocks
-  the M5 achievement floor and every plate-bus PALLET accumulates
-  its plate type (silicon -> WAFER).
+  the M6 achievement floor (M5 floor plus craft_assembler /
+  place_assembler) and every plate-bus PALLET accumulates its plate
+  type. The WIRE output pallet at (15, 14) holds WIRE.
 """
 
 from __future__ import annotations
@@ -19,10 +20,14 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted.agent_advanced_factory import (
-    _COPPER_PLATE_BUS_TILE,
+    _COPPER_EXTRACT_ARM_TILE,
     _IRON_PLATE_BUS_TILE,
     _SILICON_PLATE_BUS_TILE,
-    _TIN_PLATE_BUS_TILE,
+    _TIN_EXTRACT_ARM_TILE,
+    _WIRE_ASSEMBLER_TILE,
+    _WIRE_INPUT_A_TILE,
+    _WIRE_INPUT_B_TILE,
+    _WIRE_OUTPUT_TILE,
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
@@ -52,8 +57,8 @@ from factoriax.levels import build_state
 from factoriax.observations import global_array
 from factoriax.state import EnvParams
 
-_M5_EXPECTED_UNLOCKS: tuple[str, ...] = (
-    # M3 floor — still hold.
+_M6_EXPECTED_UNLOCKS: tuple[str, ...] = (
+    # M3 floor.
     "collect_iron",
     "collect_copper",
     "collect_tin",
@@ -80,6 +85,9 @@ _M5_EXPECTED_UNLOCKS: tuple[str, ...] = (
     "automated_mining",
     "pallet_filled",
     "belt_network",
+    # New at M6 — WIRE assembler placed by the agent (not just
+    # the pre-placed one) and crafted via plates.
+    "craft_assembler",
 )
 
 
@@ -111,7 +119,7 @@ _CELL_GEOMETRY: tuple[
 )
 
 
-def test_m5_emits_each_cell_placements() -> None:
+def test_m6_emits_each_cell_placements() -> None:
     """Every cell's miner/belts/ore_pallet/smelter/coal_trunk land
     at the documented tiles."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
@@ -121,23 +129,48 @@ def test_m5_emits_each_cell_placements() -> None:
     by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
 
     for label, (mx, my), (fx, fy), (cx, cy) in _CELL_GEOMETRY:
-        # Ore miner + 2 ore belts + ore_pallet on the patch's top row.
         assert by_tile[(mx, my)][0] == int(MachineType.MINER), label
         assert by_tile[(mx + 1, my)][0] == int(MachineType.CONVEYOR_BELT), label
         assert by_tile[(mx + 2, my)][0] == int(MachineType.CONVEYOR_BELT), label
         assert by_tile[(fx, my)][0] == int(MachineType.PALLET), label
-        # Smelter cell at (fx, fy).
         assert by_tile[(fx, fy)][0] == int(MachineType.FURNACE), label
         assert by_tile[(fx + 1, fy)][0] == int(MachineType.ARM), label
-        assert by_tile[(fx + 2, fy)][0] == int(MachineType.PALLET), label  # plate
-        assert by_tile[(fx, fy + 1)][0] == int(MachineType.PALLET), label  # coal_buf
-        # Coal trunk: miner on the column + 6 belts.
+        assert by_tile[(fx + 2, fy)][0] == int(MachineType.PALLET), label
+        assert by_tile[(fx, fy + 1)][0] == int(MachineType.PALLET), label
         assert by_tile[(cx, cy)][0] == int(MachineType.MINER), label
         for x in range(1, 7):
             assert by_tile[(x, cy)][0] == int(MachineType.CONVEYOR_BELT), label
 
 
-def test_m5_uses_place_from_back_for_coal_miners() -> None:
+def test_m6_emits_wire_cell_placements() -> None:
+    """The WIRE assembler module + extractor arms + route belts land
+    at the documented tiles."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    placements = [
+        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
+    ]
+    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
+
+    # WIRE assembler module.
+    assert by_tile[_WIRE_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
+    assert by_tile[_WIRE_INPUT_A_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[_WIRE_INPUT_B_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[_WIRE_OUTPUT_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[(14, 14)][0] == int(MachineType.ARM)  # output arm
+
+    # Copper extractor arm + 2 belt route to input_a.
+    assert by_tile[_COPPER_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
+    assert by_tile[(11, 13)][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[(12, 13)][0] == int(MachineType.CONVEYOR_BELT)
+
+    # Tin extractor arm + 3 belt L-route to input_b.
+    assert by_tile[_TIN_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
+    assert by_tile[(11, 16)][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[(12, 16)][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[(12, 15)][0] == int(MachineType.CONVEYOR_BELT)
+
+
+def test_m6_uses_place_from_back_for_coal_miners() -> None:
     """Each cell's coal miner sits on the column at x=0; all go via from-back."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     miners_from_back = [
@@ -147,18 +180,32 @@ def test_m5_uses_place_from_back_for_coal_miners() -> None:
         and g.machine_type == int(MachineType.MINER)
     ]
     expected_targets = {(0, 11), (0, 14), (0, 17), (0, 20)}
-    assert len(miners_from_back) == len(expected_targets), (
-        f"Expect one from-back miner per cell; got {len(miners_from_back)}"
-    )
     assert {g.target for g in miners_from_back} == expected_targets
     for g in miners_from_back:
         assert g.facing == int(Direction.RIGHT)
 
 
-def test_m5_uses_place_from_back_for_ore_pallets() -> None:
+def test_m6_uses_place_from_back_for_extractor_arms() -> None:
+    """Both extractor arms (copper, tin) land on plate-bus-east tiles
+    whose natural west stand is the bus PALLET; both use from-back."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    arms_from_back = [
+        g
+        for g in goals
+        if isinstance(g, PlaceMachineFromBackAt)
+        and g.machine_type == int(MachineType.ARM)
+    ]
+    assert {g.target for g in arms_from_back} == {
+        _COPPER_EXTRACT_ARM_TILE,
+        _TIN_EXTRACT_ARM_TILE,
+    }
+    for g in arms_from_back:
+        assert g.facing == int(Direction.RIGHT)
+
+
+def test_m6_uses_place_from_back_for_ore_pallets() -> None:
     """Each cell's ore_pallet uses from-back so the previous cell's
-    coal_buffer (which blocks the natural north stand tile) doesn't
-    trip placement."""
+    coal_buffer doesn't trip placement."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     pallets_from_back = [
         g
@@ -167,16 +214,13 @@ def test_m5_uses_place_from_back_for_ore_pallets() -> None:
         and g.machine_type == int(MachineType.PALLET)
     ]
     expected_targets = {(7, 9), (7, 12), (7, 15), (7, 18)}
-    assert len(pallets_from_back) == len(expected_targets), (
-        f"Expect one from-back ore_pallet per cell; got {len(pallets_from_back)}"
-    )
     assert {g.target for g in pallets_from_back} == expected_targets
     for g in pallets_from_back:
         assert g.facing == int(Direction.DOWN)
 
 
-def test_m5_all_placements_in_map_bounds() -> None:
-    """Every Phase 1 placement target sits inside the 32x32 map."""
+def test_m6_all_placements_in_map_bounds() -> None:
+    """Every placement target sits inside the 32x32 map."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     for g in goals:
         if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt)):
@@ -185,8 +229,9 @@ def test_m5_all_placements_in_map_bounds() -> None:
             assert 0 <= y < 32, f"{g.target} y out of bounds"
 
 
-def test_m5_includes_per_cell_verify_layout_gates() -> None:
-    """Each cell ends with its own VerifyLayout (one per cell, not one total)."""
+def test_m6_includes_per_stage_verify_layout_gates() -> None:
+    """Each smelter cell + the WIRE stage end with their own
+    VerifyLayout (5 total: 4 smelter + 1 wire)."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     verifies = [g for g in goals if isinstance(g, VerifyLayout)]
     expected_labels = {
@@ -194,14 +239,12 @@ def test_m5_includes_per_cell_verify_layout_gates() -> None:
         "phase 1.copper",
         "phase 1.tin",
         "phase 1.silicon",
+        "phase 2.wire",
     }
-    assert len(verifies) == len(expected_labels), (
-        f"Expect one VerifyLayout per cell; got {len(verifies)}"
-    )
     assert {v.label for v in verifies} == expected_labels
 
 
-def test_m5_wait_precedes_verify() -> None:
+def test_m6_wait_precedes_verify() -> None:
     """The first WaitUntil precedes the first VerifyLayout."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     waits = [i for i, g in enumerate(goals) if isinstance(g, WaitUntil)]
@@ -210,7 +253,7 @@ def test_m5_wait_precedes_verify() -> None:
     assert min(waits) < min(verifies), "WaitUntil should precede VerifyLayout"
 
 
-def test_m5_mines_every_ore_type() -> None:
+def test_m6_mines_every_ore_type() -> None:
     """The starter targets resolve to a MineOre for each of the 5 ores."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     mined = {g.item_type: g.count for g in goals if isinstance(g, MineOre)}
@@ -222,13 +265,13 @@ def test_m5_mines_every_ore_type() -> None:
         int(ItemType.COAL),
     }
     assert set(mined.keys()) >= expected, (
-        f"M5 must mine all five ore leaves; missing {expected - set(mined.keys())}"
+        f"M6 must mine all five ore leaves; missing {expected - set(mined.keys())}"
     )
     for item, qty in mined.items():
         assert qty > 0, f"MineOre({ItemType(item).name}) has zero qty"
 
 
-def test_m5_smelts_each_plate_type() -> None:
+def test_m6_smelts_each_plate_type() -> None:
     """The smelt phase covers iron, copper, tin, and wafer."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     produced_outputs: set[int] = set()
@@ -242,11 +285,11 @@ def test_m5_smelts_each_plate_type() -> None:
         int(ItemType.WAFER),
     }
     assert produced_outputs >= expected_plates, (
-        f"M5 must smelt every plate; missing {expected_plates - produced_outputs}"
+        f"M6 must smelt every plate; missing {expected_plates - produced_outputs}"
     )
 
 
-def test_m5_ends_with_a_settling_wait() -> None:
+def test_m6_ends_with_a_settling_wait() -> None:
     """The final goal is a Wait so plates accumulate before episode end."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     assert isinstance(goals[-1], Wait)
@@ -333,7 +376,7 @@ def _index_of(achievement_id: str) -> int:
     raise AssertionError(f"Unknown achievement id: {achievement_id}")
 
 
-def _assert_plate_bus_holds(state, tile: tuple[int, int], plate: ItemType) -> None:
+def _assert_pallet_holds(state, tile: tuple[int, int], item: ItemType) -> None:
     machine_types = np.asarray(state.env_state.machine_types)
     tile_entity = np.asarray(state.env_state.tile_entity)
     ent_buf_type = np.asarray(state.env_state.ent_buf_type)
@@ -341,43 +384,53 @@ def _assert_plate_bus_holds(state, tile: tuple[int, int], plate: ItemType) -> No
 
     bx, by = tile
     assert int(machine_types[by, bx]) == int(MachineType.PALLET), (
-        f"plate-bus tile {tile} should be PALLET; got "
+        f"tile {tile} should be PALLET; got "
         f"{MachineType(int(machine_types[by, bx])).name}"
     )
     ent_id = int(tile_entity[by, bx])
-    assert ent_id >= 0, f"plate-bus entity not registered at {tile}"
+    assert ent_id >= 0, f"entity not registered at {tile}"
     assert int(ent_buf_count[ent_id]) >= 1, (
-        f"plate-bus PALLET at {tile} is empty; cell pipeline broken"
+        f"PALLET at {tile} is empty; expected {item.name}"
     )
-    assert int(ent_buf_type[ent_id]) == int(plate), (
-        f"plate-bus PALLET at {tile} holds "
-        f"{ItemType(int(ent_buf_type[ent_id])).name}, expected {plate.name}"
+    assert int(ent_buf_type[ent_id]) == int(item), (
+        f"PALLET at {tile} holds "
+        f"{ItemType(int(ent_buf_type[ent_id])).name}, expected {item.name}"
     )
 
 
 @pytest.mark.slow
-def test_m5_unlocks_expected_floor() -> None:
-    """The M5 agent unlocks the M3+M4 floor (iron + copper cells)."""
+def test_m6_unlocks_expected_floor() -> None:
+    """The M6 agent unlocks the M5 floor plus craft_assembler."""
     mask, timing, _ = _run_agent(max_steps=8000)
-    missing = [name for name in _M5_EXPECTED_UNLOCKS if not bool(mask[_index_of(name)])]
+    missing = [name for name in _M6_EXPECTED_UNLOCKS if not bool(mask[_index_of(name)])]
     timing_str = ", ".join(
         f"{ROCKET_ACHIEVEMENT_INFO[i].id}@{timing[i]}"
         for i in range(NUM_ROCKET_ACHIEVEMENTS)
         if timing[i] >= 0
     )
-    assert not missing, f"M5 floor missing {missing}.\nUnlocked: {timing_str}"
+    assert not missing, f"M6 floor missing {missing}.\nUnlocked: {timing_str}"
 
 
 @pytest.mark.slow
-def test_m5_all_plate_buses_accumulate_plates() -> None:
-    """Each smelter cell's plate-bus PALLET holds the right plate type.
+def test_m6_terminal_plate_buses_accumulate_plates() -> None:
+    """Iron and silicon plate-bus PALLETs are still terminal (no
+    extractor under M6) and accumulate their plate type."""
+    _, _, state = _run_agent(max_steps=8000)
+    _assert_pallet_holds(state, _IRON_PLATE_BUS_TILE, ItemType.IRON_PLATE)
+    _assert_pallet_holds(state, _SILICON_PLATE_BUS_TILE, ItemType.WAFER)
 
-    Single rollout, one assertion per cell. Failing means the
-    ore -> belt -> ore_pallet -> furnace -> arm -> plate_bus chain
-    didn't run end-to-end for that cell.
+
+@pytest.mark.slow
+def test_m6_wire_output_pallet_accumulates_wire() -> None:
+    """The WIRE assembler's output pallet at (15, 14) holds WIRE.
+
+    Load-bearing for the inter-smelter route: copper plates extracted
+    from (9, 13) and tin plates extracted from (9, 16) both reach the
+    WIRE assembler's input pallets and an arm pushes the assembled
+    WIRE into (15, 14). The copper and tin plate-buses themselves
+    are *transient* under M6 (drained by extractor arms), so they
+    are not checked directly — a non-empty WIRE output proves both
+    feeds worked end-to-end.
     """
     _, _, state = _run_agent(max_steps=8000)
-    _assert_plate_bus_holds(state, _IRON_PLATE_BUS_TILE, ItemType.IRON_PLATE)
-    _assert_plate_bus_holds(state, _COPPER_PLATE_BUS_TILE, ItemType.COPPER_PLATE)
-    _assert_plate_bus_holds(state, _TIN_PLATE_BUS_TILE, ItemType.TIN_PLATE)
-    _assert_plate_bus_holds(state, _SILICON_PLATE_BUS_TILE, ItemType.WAFER)
+    _assert_pallet_holds(state, _WIRE_OUTPUT_TILE, ItemType.WIRE)

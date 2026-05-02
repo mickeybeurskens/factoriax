@@ -98,7 +98,7 @@ def main() -> None:
     ent_asm_out_type = np.asarray(env_state.ent_asm_out_type)
     ent_asm_out_count = np.asarray(env_state.ent_asm_out_count)
     for y in range(9, 22):
-        for x in range(0, 11):
+        for x in range(0, 16):
             mt = int(machine_types[y, x])
             if mt == 0:
                 continue

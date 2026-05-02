@@ -57,6 +57,8 @@ from .goals import (
     VerifyLayout,
     Wait,
     WaitUntil,
+    assembler_module_inventory,
+    build_assembler_module_at,
     build_smelter_cell_at,
     smelter_cell_inventory,
 )
@@ -185,6 +187,58 @@ _SILICON_PLATE_BUS_TILE: tuple[int, int] = _SILICON_CELL.plate_bus_tile
 def _phase_1_targets() -> dict[int, int]:
     """Return ``{ItemType: count}`` for every Phase 1 placement."""
     return sum_inventories(*[c.cell_inventory() for c in _PHASE_1_CELLS])
+
+
+# ---------------------------------------------------------------------------
+# Geometry — Phase 2.WIRE (first inter-smelter route)
+# ---------------------------------------------------------------------------
+#
+# WIRE recipe: 1 COPPER_PLATE + 1 TIN_PLATE -> 1 WIRE in an assembler.
+# The cell pulls plates straight off the copper and tin smelter
+# plate-buses with extractor arms, then routes them east along
+# rows 13 (copper) and 16 (tin) to a single 2-input assembler
+# module centered at (13, 14).
+#
+# The extractor arms sit *east* of each plate-bus (col 10) facing
+# RIGHT so they pull from the bus and push onto the first east-
+# bound belt. Their natural stand tile (col 9) is the bus itself
+# (non-walkable PALLET), so they go in via ``PlaceMachineFromBackAt``
+# from the east side, same trick as the coal miners on x=0.
+
+_WIRE_ASSEMBLER_TILE: tuple[int, int] = (13, 14)
+_WIRE_INPUT_A_TILE: tuple[int, int] = (13, 13)  # COPPER_PLATE (north)
+_WIRE_INPUT_B_TILE: tuple[int, int] = (12, 14)  # TIN_PLATE   (west)
+_WIRE_OUTPUT_TILE: tuple[int, int] = (15, 14)  # WIRE pallet  (east)
+# arm at (14, 14) is internal to build_assembler_module_at.
+
+# Copper extractor arm + east route into input_a.
+_COPPER_EXTRACT_ARM_TILE: tuple[int, int] = (10, 13)
+_COPPER_TO_WIRE_BELT_TILES: tuple[tuple[int, int], ...] = ((11, 13), (12, 13))
+
+# Tin extractor arm + east route then north turn into input_b.
+_TIN_EXTRACT_ARM_TILE: tuple[int, int] = (10, 16)
+_TIN_TO_WIRE_BELT_TILES: tuple[tuple[int, int], ...] = (
+    (11, 16),  # RIGHT
+    (12, 16),  # UP — turns north
+    (12, 15),  # UP — pushes north into input_b at (12, 14)
+)
+
+
+def _phase_2_wire_targets() -> dict[int, int]:
+    """Return ``{ItemType: count}`` for the WIRE cell + plate routes.
+
+    Counts: 1 ASSEMBLER + 3 PALLET + 1 ARM (assembler module) +
+    2 ARM (copper + tin extractors) + 5 CONVEYOR_BELT (route belts).
+    """
+    return sum_inventories(
+        assembler_module_inventory(input_b=True),
+        {
+            int(ItemType.ARM): 2,
+            int(ItemType.CONVEYOR_BELT): (
+                len(_COPPER_TO_WIRE_BELT_TILES) + len(_TIN_TO_WIRE_BELT_TILES)
+            ),
+        },
+    )
 
 
 # Achievement-preservation targets: items the agent smelts / crafts
@@ -330,6 +384,73 @@ def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2.WIRE — assembler module + copper/tin plate routing
+# ---------------------------------------------------------------------------
+
+
+def _phase_2_wire_goals() -> list[Goal]:
+    """Place the WIRE assembler + the two plate routes feeding it.
+
+    Placement order (each step's stand tile is dirt or a previously
+    placed walkable belt):
+
+    1. Assembler module at ``_WIRE_ASSEMBLER_TILE``. The module
+       helper places output -> input_b -> arm -> assembler ->
+       input_a, in that order (output last among the input pallets
+       so each stand tile stays walkable).
+    2. Copper route belts west-to-east into the input_a tile.
+       Order ``[(12, 13), (11, 13)]`` because (11, 13)'s stand tile
+       (10, 13) must be dirt at place time — the extractor arm
+       lands there only afterward.
+    3. Copper extractor arm at (10, 13) RIGHT via from-back. Its
+       natural stand tile (9, 13) is the copper plate-bus PALLET
+       (non-walkable); the from-back variant stands on the belt
+       at (11, 13), places facing LEFT, then ROTATEs to RIGHT.
+    4. Tin route belts. Order ``[(12, 15), (12, 16), (11, 16)]``
+       so each new belt's stand tile stays dirt.
+    5. Tin extractor arm at (10, 16) RIGHT via from-back, same
+       trick as copper.
+    """
+    goals: list[Goal] = []
+
+    goals.extend(
+        build_assembler_module_at(
+            _WIRE_ASSEMBLER_TILE,
+            input_b=True,
+            map_size=_MAP_SIZE,
+        )
+    )
+
+    for tile in reversed(_COPPER_TO_WIRE_BELT_TILES):
+        goals.append(
+            PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, int(Direction.RIGHT))
+        )
+    goals.append(
+        PlaceMachineFromBackAt(
+            MachineType.ARM, _COPPER_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+        )
+    )
+
+    # Tin route belts. Tiles in order [(11, 16), (12, 16), (12, 15)]
+    # with facings [RIGHT, UP, UP]. Each placement's stand tile is
+    # dirt at the moment of placement: (10, 16) for (11, 16) RIGHT,
+    # (12, 17) for (12, 16) UP, (12, 16) [now a belt] for (12, 15) UP.
+    tin_belt_facings: tuple[int, ...] = (
+        int(Direction.RIGHT),
+        int(Direction.UP),
+        int(Direction.UP),
+    )
+    for tile, facing in zip(_TIN_TO_WIRE_BELT_TILES, tin_belt_facings):
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+    goals.append(
+        PlaceMachineFromBackAt(
+            MachineType.ARM, _TIN_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+        )
+    )
+    return goals
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -367,6 +488,7 @@ def build_advanced_factory_goals(
 
     crafted_targets = sum_inventories(
         _phase_1_targets(),
+        _phase_2_wire_targets(),
         _ACHIEVEMENT_KEEPSAKES,
     )
     goals: list[Goal] = list(_phase_0(crafted_targets, book, slack))
@@ -380,9 +502,14 @@ def build_advanced_factory_goals(
         expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
         goals.append(VerifyLayout(expected, label=f"phase 1.{spec.label}"))
 
+    goals.extend(_phase_2_wire_goals())
+    expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
+    goals.append(VerifyLayout(expected, label="phase 2.wire"))
+
     # Trailing wait. Each cell needs ~50 ticks to make a plate
     # (smelt + arm-pull-out + push-into-bus); 1500 ticks lets every
-    # bus pallet collect multiple plates by end of episode.
+    # bus pallet collect multiple plates by end of episode and the
+    # WIRE assembler enough cycles to fill its output pallet.
     goals.append(Wait(1500))
     return goals
 
