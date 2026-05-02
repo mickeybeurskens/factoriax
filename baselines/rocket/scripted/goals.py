@@ -1487,6 +1487,188 @@ def build_assembler_module_at(
     return goals
 
 
+def _chain_axis_offset(
+    crate_tile: tuple[int, int],
+    next_input_tile: tuple[int, int],
+    direction: int,
+) -> int:
+    """Return the signed distance from ``crate_tile`` to ``next_input_tile``.
+
+    Validates that the two tiles are axis-aligned in ``direction`` and
+    that ``next_input_tile`` lies *forward* (not behind) along that
+    axis. Returns the magnitude of the offset along the active axis.
+
+    Raises:
+        ValueError: ``direction`` is not a cardinal; the tiles are
+            off-axis; or ``next_input_tile`` is behind ``crate_tile``.
+    """
+    if direction not in _DIRECTION_OFFSETS:
+        raise ValueError(
+            f"build_inter_cell_chain direction must be UP/DOWN/LEFT/RIGHT, "
+            f"got {direction}"
+        )
+    dx, dy = _DIRECTION_OFFSETS[direction]
+    cx, cy = crate_tile
+    nx, ny = next_input_tile
+    if dx != 0:
+        if ny != cy:
+            raise ValueError(
+                f"build_inter_cell_chain: next_input_tile {next_input_tile} "
+                f"is not on the same row as crate_tile {crate_tile} "
+                f"(direction={direction})"
+            )
+        offset = (nx - cx) * dx
+    else:
+        if nx != cx:
+            raise ValueError(
+                f"build_inter_cell_chain: next_input_tile {next_input_tile} "
+                f"is not on the same column as crate_tile {crate_tile} "
+                f"(direction={direction})"
+            )
+        offset = (ny - cy) * dy
+    if offset <= 0:
+        raise ValueError(
+            f"build_inter_cell_chain: next_input_tile {next_input_tile} is "
+            f"not forward of crate_tile {crate_tile} along direction "
+            f"{direction}"
+        )
+    return offset
+
+
+def inter_cell_chain_inventory(
+    crate_tile: tuple[int, int],
+    next_input_tile: tuple[int, int],
+    *,
+    direction: int = int(Direction.RIGHT),
+) -> dict[int, int]:
+    """Return the bootstrap inventory cost of one cell-to-cell chain.
+
+    Bridges a same-row (or same-column) crate PALLET to a downstream
+    cell's input PALLET with one ARM and zero or more BELTs. The
+    minimum supported offset is 2 (arm at ``crate + 1``, input at
+    ``crate + 2``). Larger offsets pad with belts.
+
+    Args:
+        crate_tile: ``(x, y)`` of the upstream cell's output crate.
+        next_input_tile: ``(x, y)`` of the downstream cell's input
+            pallet. Must be axis-aligned with ``crate_tile`` in
+            ``direction``.
+        direction: One of UP/DOWN/LEFT/RIGHT. Default RIGHT.
+
+    Raises:
+        ValueError: ``direction`` is not a cardinal; the tiles are
+            off-axis; offset < 2.
+    """
+    offset = _chain_axis_offset(crate_tile, next_input_tile, direction)
+    if offset < 2:
+        raise ValueError(
+            f"inter_cell_chain_inventory: offset {offset} too small; the "
+            f"chain needs at least 2 tiles between crate and next input "
+            f"(arm at +1, sink at +2)"
+        )
+    cost: dict[int, int] = {int(ItemType.ARM): 1}
+    n_belts = offset - 2
+    if n_belts > 0:
+        cost[int(ItemType.CONVEYOR_BELT)] = n_belts
+    return cost
+
+
+def build_inter_cell_chain(
+    crate_tile: tuple[int, int],
+    next_input_tile: tuple[int, int],
+    *,
+    direction: int = int(Direction.RIGHT),
+    occupied: set[tuple[int, int]] | None = None,
+    map_size: tuple[int, int] | None = None,
+) -> list[Goal]:
+    """Place an arm + belt chain bridging one cell's crate to the next cell's input.
+
+    The chain consists of one ARM directly adjacent to ``crate_tile``
+    in ``direction``, followed by zero or more CONVEYOR_BELTs ending
+    one tile *before* ``next_input_tile``. The arm pulls items from
+    the crate PALLET and pushes onto the first downstream tile; each
+    belt pushes onto the next; the final belt (or the arm itself,
+    when no belts are needed) pushes into ``next_input_tile``'s
+    buffer.
+
+    Layout for ``direction=RIGHT`` and offset ``N`` (= number of
+    tiles from ``crate_tile`` to ``next_input_tile``)::
+
+           crate (cx,cy) -> arm (cx+1,cy) -> belt (cx+2,cy) ->
+                            ... -> belt (cx+N-1,cy) -> next_input (cx+N,cy)
+
+    Cell-chaining gap math: for two assembler cells facing RIGHT,
+    crate sits at ``cx_A + 2`` and the next cell's input_b sits at
+    ``cx_B - 1``. Same-row spacing of 5 (``cx_B = cx_A + 5``) puts
+    the input exactly 2 east of the crate — minimum bridge: 1 arm,
+    0 belts. Larger spacings add ``offset - 2`` belts.
+
+    For multi-axis routes (turns, north-then-east), use
+    :func:`place_belt_path` or :func:`place_belt_network` directly —
+    this helper is intentionally limited to simple in-line bridges.
+
+    Args:
+        crate_tile: ``(x, y)`` of the upstream cell's output crate.
+        next_input_tile: ``(x, y)`` of the downstream cell's input
+            pallet. Must be axis-aligned with ``crate_tile`` in
+            ``direction`` at offset >= 2.
+        direction: One of UP/DOWN/LEFT/RIGHT. Default RIGHT.
+        occupied: Optional set of tiles already taken; every chain
+            tile (arm + belts) is checked.
+        map_size: Optional ``(width, height)`` for in-bounds checks.
+
+    Returns:
+        A list of :class:`PlaceMachineAt` goals: 1 ARM + ``offset -
+        2`` BELTs, in placement order (arm first, then belts left to
+        right). Matches :func:`inter_cell_chain_inventory`.
+
+    Raises:
+        ValueError: ``direction`` is not a cardinal; the tiles are
+            off-axis or wrong direction; offset < 2; any chain tile
+            is out of bounds, in ``occupied``, or coincides with
+            ``next_input_tile``.
+    """
+    offset = _chain_axis_offset(crate_tile, next_input_tile, direction)
+    if offset < 2:
+        raise ValueError(
+            f"build_inter_cell_chain: offset {offset} too small; the chain "
+            f"needs at least 2 tiles between crate {crate_tile} and "
+            f"next input {next_input_tile}"
+        )
+    dx, dy = _DIRECTION_OFFSETS[direction]
+    cx, cy = crate_tile
+
+    arm_tile = (cx + dx, cy + dy)
+    belt_tiles: list[tuple[int, int]] = [
+        (cx + i * dx, cy + i * dy) for i in range(2, offset)
+    ]
+    chain_tiles: list[tuple[str, tuple[int, int]]] = [("arm", arm_tile)]
+    chain_tiles.extend(("belt", t) for t in belt_tiles)
+
+    if map_size is not None:
+        width, height = map_size
+        for label, (x, y) in chain_tiles:
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(
+                    f"build_inter_cell_chain: {label} tile {(x, y)} is out "
+                    f"of map bounds (width={width}, height={height})"
+                )
+
+    if occupied is not None:
+        blocked = frozenset(occupied)
+        for label, tile in chain_tiles:
+            if tile in blocked:
+                raise ValueError(
+                    f"build_inter_cell_chain: {label} tile {tile} collides "
+                    f"with an occupied tile"
+                )
+
+    goals: list[Goal] = [PlaceMachineAt(MachineType.ARM, arm_tile, direction)]
+    for tile in belt_tiles:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, direction))
+    return goals
+
+
 # Per-item bootstrap cost of one ore-extraction node placed via
 # :func:`place_ore_node_at`. The pallet is optional (set
 # ``with_pallet=False`` for the rocket benchmark's coal node, which
