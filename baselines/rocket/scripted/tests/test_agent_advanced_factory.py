@@ -41,6 +41,8 @@ from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_BLOCKED_ACTIONS,
+    ROCKET_RECIPE_BOOK,
+    ROCKET_RECIPE_TABLE,
     build_rocket_level,
     rocket_conditions,
 )
@@ -50,7 +52,13 @@ from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrap
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
-from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBalance, RecipeOverride
+from factoriax.recipes import (
+    BASE_RECIPE_BOOK,
+    RecipeBalance,
+    RecipeBook,
+    RecipeOverride,
+    RecipeTable,
+)
 from factoriax.state import EnvParams
 
 _MAP_SIZE = 32
@@ -317,31 +325,40 @@ def test_slack_kwarg_overrides_default() -> None:
     assert default_coal - no_slack_coal == 10
 
 
-@pytest.mark.slow
-def test_advanced_factory_iron_cell_produces_plates() -> None:
-    """Run the agent and verify the iron cell delivers plates to the
-    manual stash through the new splitter design.
+def _run_agent_and_assert_layout(
+    *, book: RecipeBook, recipe_table: RecipeTable | None
+) -> tuple:
+    """Drive the advanced-factory agent end-to-end and assert layout.
 
-    The load-bearing assertion: at episode end, the entity at
-    ``(10, 10)`` (the iron cell's *manual stash*, north of its
-    splitter) is a PALLET whose buffer holds at least one
-    IRON_PLATE. That tile is reachable only if (a) the coal trunk
-    delivered coal to the buffer pallet at (8, 12) (via the rerouted
-    network laid by ``_phase_b_belt_network``), (b) the furnace at
-    (8, 11) auto-pulled both iron ore (from (8, 10)) and coal (from
-    (8, 12)) and ran the IRON_PLATE recipe, (c) the arm at (9, 11)
-    extracted the plate east into the splitter at (10, 11), and
-    (d) the splitter fired its north output (manual stash) — which
-    requires both the manual stash and the automation belt's
-    downstream sink at (10, 13) to be receptive.
+    Splits the existing slow test's setup so we can run it under
+    multiple :class:`RecipeBook` configurations. Returns the final
+    env state arrays the caller wants to assert further.
+
+    Args:
+        book: Recipe book passed to the agent (drives BOM + production
+            schedule). Engine recipe table can differ if the benchmark
+            uses a balanced book.
+        recipe_table: ``params.recipe_table`` — when ``None`` defaults
+            to the engine's :data:`BASE_RECIPE_BOOK`.
+
+    Returns:
+        ``(env_state, machine_types, tile_entity, ent_buf_type, ent_buf_count)``
+        for downstream assertions.
     """
+    from baselines.rocket.scripted.world_model import (
+        decode_observation,  # noqa: PLC0415
+    )
+
     max_steps = 8000
-    env_params = EnvParams(
+    params_kwargs: dict[str, object] = dict(
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
         num_players=1,
         max_timesteps=max_steps,
     )
+    if recipe_table is not None:
+        params_kwargs["recipe_table"] = recipe_table
+    env_params = EnvParams(**params_kwargs)
     level = build_rocket_level()
     env_state = build_state(level, env_params)
     state = AchievementState(
@@ -354,7 +371,7 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
     )
     jit_step = jax.jit(env.step_env)
     jit_obs = jax.jit(lambda s: global_array(s, env_params, 0))
-    agent = make_advanced_factory_rocket_agent(env_params)
+    agent = make_advanced_factory_rocket_agent(env_params, book=book)
 
     key = jax.random.PRNGKey(0)
     last_state = state
@@ -372,25 +389,13 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
             break
 
     env_state = last_state.env_state
-    machine_types = np.asarray(env_state.machine_types)
-    tile_entity = np.asarray(env_state.tile_entity)
-    ent_buf_type = np.asarray(env_state.ent_buf_type)
-    ent_buf_count = np.asarray(env_state.ent_buf_count)
-
-    # Layout-equivalence assertion: every PlaceMachineAt the goal
-    # tree promised must end up on the map with the right type and
-    # direction. Pre-placed machines (the rocket benchmark's spawn-
-    # adjacent FURNACE + ASSEMBLER) get added to the expected layout
-    # so they don't show up as STRAY.
-    from baselines.rocket.scripted.world_model import decode_observation
-
     final_view = decode_observation(
         np.asarray(jit_obs(env_state)),
         env_params.map_height,
         env_params.map_width,
         env_params.max_timesteps,
     )
-    goals = build_advanced_factory_goals()
+    goals = build_advanced_factory_goals(book=book)
     expected_from_goals = expected_layout_from_goals(goals)
     pre_placed = {
         (15, 16): (int(MachineType.FURNACE), int(Direction.DOWN)),
@@ -413,6 +418,37 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
             f"diagnostic:\n{diag_text}\n"
             f"first {min(30, len(layout_diff))} mismatches:\n{rendered}{more}"
         )
+
+    return (
+        last_state,
+        np.asarray(env_state.machine_types),
+        np.asarray(env_state.tile_entity),
+        np.asarray(env_state.ent_buf_type),
+        np.asarray(env_state.ent_buf_count),
+    )
+
+
+@pytest.mark.slow
+def test_advanced_factory_iron_cell_produces_plates() -> None:
+    """Run the agent and verify the iron cell delivers plates to the
+    manual stash through the new splitter design.
+
+    The load-bearing assertion: at episode end, the entity at
+    ``(10, 10)`` (the iron cell's *manual stash*, north of its
+    splitter) is a PALLET whose buffer holds at least one
+    IRON_PLATE. That tile is reachable only if (a) the coal trunk
+    delivered coal to the buffer pallet at (8, 12) (via the rerouted
+    network laid by ``_phase_b_belt_network``), (b) the furnace at
+    (8, 11) auto-pulled both iron ore (from (8, 10)) and coal (from
+    (8, 12)) and ran the IRON_PLATE recipe, (c) the arm at (9, 11)
+    extracted the plate east into the splitter at (10, 11), and
+    (d) the splitter fired its north output (manual stash) — which
+    requires both the manual stash and the automation belt's
+    downstream sink at (10, 13) to be receptive.
+    """
+    last_state, machine_types, tile_entity, ent_buf_type, ent_buf_count = (
+        _run_agent_and_assert_layout(book=BASE_RECIPE_BOOK, recipe_table=None)
+    )
 
     sx, sy = _IRON_SPLITTER_TILE
     assert int(machine_types[sy, sx]) == int(MachineType.SPLITTER), (
@@ -458,3 +494,34 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
     ids = {info.id: i for i, info in enumerate(ROCKET_ACHIEVEMENT_INFO)}
     missing = [name for name in _EXPECTED_UNLOCKS if not mask[ids[name]]]
     assert not missing, f"Missing expected achievements: {missing}"
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(
+    strict=False,
+    reason=(
+        "Known issue, surfaced by the layout-diff assertion: under the "
+        "rocket benchmark's actual recipe balance (belts=10, "
+        "splitters/crossings=4) the agent reaches Phase 2 short on plates "
+        "and 39 placements (tin + silicon stages) silently FAIL_GIVEUP "
+        "in the planner's step-FAIL retry path. Tracked for the staged "
+        "build refactor; this test stays as a regression canary so the "
+        "fix flips it back to passing."
+    ),
+)
+def test_advanced_factory_under_rocket_recipe_book() -> None:
+    """Same end-to-end run, but with the rocket benchmark's actual
+    recipe balance (belts=10, splitters/crossings=4 per craft).
+
+    Reproduces the configuration the
+    :class:`~factoriax.benchmarks.rocket.RocketBenchmark` ships with
+    and that the wandb runs use. If the agent's plate-budget math
+    diverges from what the rebalanced recipes need, the layout-diff
+    assertion in :func:`_run_agent_and_assert_layout` reports the
+    exact placements that didn't land instead of the run silently
+    stumbling forward.
+    """
+    _run_agent_and_assert_layout(
+        book=ROCKET_RECIPE_BOOK,
+        recipe_table=ROCKET_RECIPE_TABLE,
+    )
