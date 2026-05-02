@@ -1913,6 +1913,52 @@ class Wait(Goal):
         return Result.RUNNING, int(Action.NOOP)
 
 
+class VerifyLayout(Goal):
+    """Stage-boundary assertion that observed layout matches the plan.
+
+    All work happens in :meth:`verify`; :meth:`step` is a single-tick
+    no-op so the goal is suitable for inserting *between* stages of a
+    multi-stage build. When the diff comes back clean the planner
+    advances; on any mismatch the planner halts via the standard
+    :attr:`Goal.verify_failure_action` machinery (``"halt"`` here).
+
+    Useful pattern: after a stage's placement goals, append
+    ``VerifyLayout(stage.expected_layout, label="iron stage")``. The
+    label is purely diagnostic — it surfaces in
+    :class:`~baselines.rocket.scripted.planner.VerifyDiagnostic`'s
+    ``goal_repr`` so a halt at tick T points cleanly at which stage
+    failed.
+
+    Args:
+        expected: ``(x, y) -> (machine_type, direction)`` map. Build
+            with :func:`~baselines.rocket.scripted.layout.expected_layout_from_goals`
+            for the standard "extract from goal list" use case.
+        label: Human-readable tag for diagnostics.
+    """
+
+    name: str = "VerifyLayout"
+    verify_failure_action: ClassVar[VerifyFailureAction] = "halt"
+
+    def __init__(
+        self,
+        expected: dict[tuple[int, int], tuple[int, int]],
+        label: str = "",
+    ) -> None:
+        self.expected = expected
+        self.label = label
+
+    def step(self, view: WorldView) -> StepReturn:  # noqa: ARG002
+        return Result.DONE, int(Action.NOOP)
+
+    def verify(self, view: WorldView) -> bool:
+        from .layout import verify_layout  # noqa: PLC0415 — avoid import cycle
+
+        return verify_layout(view, self.expected)
+
+    def __repr__(self) -> str:
+        return f"VerifyLayout(label={self.label!r}, n_tiles={len(self.expected)})"
+
+
 class WithdrawUntilHeld(Goal):
     """Withdraw from adjacent pallets until the player holds >= count.
 
