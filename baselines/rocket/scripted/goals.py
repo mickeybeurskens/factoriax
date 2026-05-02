@@ -127,15 +127,25 @@ class MineOre(Goal):
     Replans each tick: reselects the nearest ore patch from the current
     observation, so a depleted patch or a new blocker doesn't strand the
     agent.
+
+    Verify post-condition is the same predicate ``step`` uses to gate
+    DONE, so ``verify_failure_action`` is set to ``"ignore"``: a
+    failure here would mean the step gate is buggy, not the world,
+    and we'd rather log it than halt a long run.
     """
 
     name = "MineOre"
+    verify_failure_action: ClassVar[VerifyFailureAction] = "ignore"
 
     def __init__(self, item_type: int | ItemType, count: int) -> None:
         self.item_type = int(item_type)
         self.count = count
         self._active: Skill | None = None
         self._active_target: tuple[int, int] | None = None
+
+    def verify(self, view: WorldView) -> bool:
+        """Confirm the player holds at least ``count`` of the target item."""
+        return view.player.held(self.item_type) >= self.count
 
     def step(self, view: WorldView) -> StepReturn:
         if view.player.held(self.item_type) >= self.count:
@@ -333,6 +343,13 @@ class PlaceMachine(Goal):
 
     Fails fast if the predicate returns ``None`` (no valid location
     exists right now) or if the player doesn't hold the placeable item.
+
+    Verify tightens step's loose ``total_machines()`` gate (which
+    counts machines of any type) to a per-type check: when verify
+    runs, the count of ``self.machine_type`` must have grown by at
+    least one. Defaults to ``halt`` because a placement that landed
+    as the wrong type indicates a real engine or planner bug rather
+    than a self-healing transient.
     """
 
     name = "PlaceMachine"
@@ -347,6 +364,7 @@ class PlaceMachine(Goal):
         self.predicate = predicate
         self._active: FaceAndInteract | None = None
         self._start_count: int | None = None
+        self._start_typed_count: int | None = None
 
     def step(self, view: WorldView) -> StepReturn:
         # Detect success: machine count went up, our inventory went down.
@@ -361,6 +379,7 @@ class PlaceMachine(Goal):
             if target is None:
                 return Result.FAIL, None
             self._start_count = view.total_machines()
+            self._start_typed_count = len(view.tiles_with_machine(self.machine_type))
             self._active = FaceAndInteract(
                 target,
                 place_action(self.machine_type),
@@ -375,6 +394,12 @@ class PlaceMachine(Goal):
             self._active = None
             return Result.FAIL, None
         return Result.RUNNING, action
+
+    def verify(self, view: WorldView) -> bool:
+        """Confirm a machine of ``self.machine_type`` was newly placed."""
+        if self._start_typed_count is None:
+            return False
+        return len(view.tiles_with_machine(self.machine_type)) > self._start_typed_count
 
 
 class PlaceMachineAt(Goal):
