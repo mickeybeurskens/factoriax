@@ -29,11 +29,16 @@ from baselines.rocket.scripted.agent_advanced_factory import (
     _COPPER_SPLITTER_TILE,
     _COPPER_TO_CIRCUIT_BELTS,
     _FRAME_ASSEMBLER_TILE,
+    _FRAME_EXTRACT_ARM_TILE,
     _FRAME_INPUT_A_TILE,
     _FRAME_INPUT_B_TILE,
     _FRAME_OUTPUT_TILE,
     _IRON_EXTRACT_ARM_TILE,
     _IRON_TO_FRAME_BELTS,
+    _MOTOR_ASSEMBLER_TILE,
+    _MOTOR_INPUT_A_TILE,
+    _MOTOR_INPUT_B_TILE,
+    _MOTOR_OUTPUT_TILE,
     _TIN_EXTRACT_ARM_TILE,
     _TIN_TO_FRAME_BELTS,
     _WAFER_CROSSING_TILE,
@@ -41,9 +46,15 @@ from baselines.rocket.scripted.agent_advanced_factory import (
     _WAFER_POST_CROSSING_BELTS,
     _WAFER_PRE_CROSSING_BELTS,
     _WIRE_ASSEMBLER_TILE,
+    _WIRE_COPPER_CROSSING_TILE,
+    _WIRE_EXTRACT_ARM_TILE,
     _WIRE_INPUT_A_TILE,
     _WIRE_INPUT_B_TILE,
+    _WIRE_IRON_CROSSING_TILE,
     _WIRE_OUTPUT_TILE,
+    _WIRE_TO_MOTOR_BELTS,
+    _WIRE_TO_MOTOR_MID_BELTS,
+    _WIRE_TO_MOTOR_TAIL_BELTS,
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
@@ -111,6 +122,10 @@ _EXPECTED_UNLOCKS: tuple[str, ...] = (
     # the wafer extractor at (9, 18); the wafer route crosses the tin
     # trunk via a CROSSING at (11, 17).
     "craft_circuit",
+    # MOTOR assembler at (24, 22) fed by a FRAME extractor at (22, 22)
+    # and a WIRE extractor at (16, 14); the wire route crosses the
+    # iron-to-FRAME col-19 trunk via a CROSSING at (19, 14).
+    "craft_motor",
 )
 
 
@@ -224,10 +239,9 @@ def test_uses_place_from_back_for_coal_miners() -> None:
 
 
 def test_uses_place_from_back_for_extractor_arms() -> None:
-    """Every plate-bus extractor arm (iron, copper, tin pushing east;
-    wafer pushing UP) lands adjacent to its bus PALLET on a side where
-    the natural stand tile is the PALLET itself, so all four go via
-    from-back."""
+    """Every plate-bus / output-pallet extractor arm lands adjacent to
+    a non-walkable PALLET; the natural back-side stand tile is the
+    PALLET itself, so each arm goes via from-back."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     arms_from_back = [
         g
@@ -241,6 +255,8 @@ def test_uses_place_from_back_for_extractor_arms() -> None:
         _COPPER_EXTRACT_ARM_TILE: int(Direction.RIGHT),
         _TIN_EXTRACT_ARM_TILE: int(Direction.RIGHT),
         _WAFER_EXTRACT_ARM_TILE: int(Direction.UP),
+        _WIRE_EXTRACT_ARM_TILE: int(Direction.UP),
+        _FRAME_EXTRACT_ARM_TILE: int(Direction.RIGHT),
     }
 
 
@@ -278,6 +294,57 @@ def test_emits_circuit_cell_placements() -> None:
         assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
     for tile, _facing in _WAFER_POST_CROSSING_BELTS:
         assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+
+
+def test_emits_motor_cell_placements() -> None:
+    """The MOTOR assembler module + WIRE / FRAME extractor arms +
+    WIRE route + two CROSSINGs land at the documented tiles."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    placements = [
+        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
+    ]
+    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
+
+    # MOTOR module: inputs are feeder belts; output is a pallet.
+    cx, cy = _MOTOR_ASSEMBLER_TILE
+    assert by_tile[_MOTOR_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
+    assert by_tile[_MOTOR_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_MOTOR_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_MOTOR_OUTPUT_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+
+    # Extractor arms.
+    assert by_tile[_WIRE_EXTRACT_ARM_TILE] == (
+        int(MachineType.ARM),
+        int(Direction.UP),
+    )
+    assert by_tile[_FRAME_EXTRACT_ARM_TILE] == (
+        int(MachineType.ARM),
+        int(Direction.RIGHT),
+    )
+
+    # Both CROSSINGs share their tile with an upstream cell's trunk;
+    # dir=1 = N->S vertical (copper or iron) + W->E horizontal (wire).
+    assert by_tile[_WIRE_COPPER_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+    assert by_tile[_WIRE_IRON_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+
+    # Every wire-route belt landed.
+    for tile, _facing in _WIRE_TO_MOTOR_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+    for tile, _facing in _WIRE_TO_MOTOR_MID_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+    for tile, _facing in _WIRE_TO_MOTOR_TAIL_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+
+
+def test_circuit_and_iron_belts_skip_motor_crossing_tiles() -> None:
+    """The (16, 12) and (19, 12) tiles are CROSSINGs placed by
+    Phase 3.MOTOR, not BELTs — verifies CIRCUIT and FRAME phases
+    drop those tiles from their respective belt lists."""
+    copper_tiles = {tile for tile, _ in _COPPER_TO_CIRCUIT_BELTS}
+    iron_tiles = {tile for tile, _ in _IRON_TO_FRAME_BELTS}
+    assert _WIRE_COPPER_CROSSING_TILE not in copper_tiles
+    assert _WIRE_IRON_CROSSING_TILE not in iron_tiles
 
 
 def test_emits_frame_cell_placements() -> None:
@@ -333,10 +400,15 @@ def test_frame_routes_avoid_pre_placed_drain_zone() -> None:
     feeds.extend(_COPPER_TO_CIRCUIT_BELTS)
     feeds.extend(_WAFER_PRE_CROSSING_BELTS)
     feeds.extend(_WAFER_POST_CROSSING_BELTS)
+    feeds.extend(_WIRE_TO_MOTOR_BELTS)
+    feeds.extend(_WIRE_TO_MOTOR_MID_BELTS)
+    feeds.extend(_WIRE_TO_MOTOR_TAIL_BELTS)
     feeds.append((_FRAME_INPUT_A_TILE, int(Direction.DOWN)))
     feeds.append((_FRAME_INPUT_B_TILE, int(Direction.RIGHT)))
     feeds.append((_CIRCUIT_INPUT_A_TILE, int(Direction.DOWN)))
     feeds.append((_CIRCUIT_INPUT_B_TILE, int(Direction.RIGHT)))
+    feeds.append((_MOTOR_INPUT_A_TILE, int(Direction.DOWN)))
+    feeds.append((_MOTOR_INPUT_B_TILE, int(Direction.RIGHT)))
 
     # For each combiner, list the {neighbour_tile: bad_facing} where
     # bad_facing is the direction a belt at neighbour_tile would face
@@ -397,7 +469,8 @@ def test_all_placements_in_map_bounds() -> None:
 
 def test_includes_per_stage_verify_layout_gates() -> None:
     """Each smelter cell + each later stage end with their own
-    VerifyLayout (7 total: 4 smelter + 1 wire + 1 frame + 1 circuit)."""
+    VerifyLayout (8 total: 4 smelter + 1 wire + 1 frame + 1 circuit
+    + 1 motor)."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     verifies = [g for g in goals if isinstance(g, VerifyLayout)]
     expected_labels = {
@@ -408,6 +481,7 @@ def test_includes_per_stage_verify_layout_gates() -> None:
         "phase 2.wire",
         "phase 3.frame",
         "phase 3.circuit",
+        "phase 3.motor",
     }
     assert {v.label for v in verifies} == expected_labels
 
@@ -580,22 +654,6 @@ def test_unlocks_expected_floor() -> None:
 
 
 @pytest.mark.slow
-def test_wire_output_pallet_accumulates_wire() -> None:
-    """The WIRE assembler's output pallet at (15, 14) holds WIRE.
-
-    Load-bearing for the inter-smelter route: copper plates extracted
-    from (9, 13) and tin plates extracted from (9, 16) both reach the
-    WIRE assembler's input pallets and an arm pushes the assembled
-    WIRE into (15, 14). The copper and tin plate-buses themselves
-    are *transient* (drained by extractor arms), so they are not
-    checked directly — a non-empty WIRE output proves both feeds
-    worked end-to-end.
-    """
-    _, _, state = _run_agent(max_steps=8000)
-    _assert_pallet_holds(state, _WIRE_OUTPUT_TILE, ItemType.WIRE)
-
-
-@pytest.mark.slow
 def test_frame_output_pallet_accumulates_frame() -> None:
     """The FRAME assembler's output pallet at (21, 22) holds FRAME.
 
@@ -626,3 +684,20 @@ def test_circuit_output_pallet_accumulates_circuit() -> None:
     """
     _, _, state = _run_agent(max_steps=8000)
     _assert_pallet_holds(state, _CIRCUIT_OUTPUT_TILE, ItemType.CIRCUIT)
+
+
+@pytest.mark.slow
+def test_motor_output_pallet_accumulates_motor() -> None:
+    """The MOTOR assembler's output pallet at (26, 22) holds MOTOR.
+
+    Load-bearing for the first cell-chain bridge: FRAME extractor at
+    (22, 22) RIGHT pushes directly onto the MOTOR input_b feeder at
+    (23, 22), and a WIRE extractor at (16, 14) RIGHT routes wire east
+    along row 14, through a CROSSING at (19, 14) (vertical lane =
+    iron DOWN unchanged, horizontal lane = wire RIGHT), and south
+    down col 24 to the input_a feeder at (24, 21). A non-empty MOTOR
+    pallet proves both upstream cells (FRAME + WIRE) feed it under
+    the new CROSSING design.
+    """
+    _, _, state = _run_agent(max_steps=8000)
+    _assert_pallet_holds(state, _MOTOR_OUTPUT_TILE, ItemType.MOTOR)

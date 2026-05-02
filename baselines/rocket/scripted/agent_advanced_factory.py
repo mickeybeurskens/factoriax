@@ -284,7 +284,11 @@ _IRON_EXTRACT_ARM_TILE: tuple[int, int] = (10, 10)
 # Iron route belts in placement order (sink-first). Every belt's
 # stand tile (target - unit(facing)) is dirt or a prior walkable
 # belt. The bend at (19, 10) faces DOWN so it accepts the east
-# push from (18, 10) RIGHT and pushes south down col 19.
+# push from (18, 10) RIGHT and pushes south down col 19. Note:
+# (19, 12) is *not* in this list — Phase 3.MOTOR places a CROSSING
+# there so the WIRE -> MOTOR route can cross col 19 at row 12
+# (vertical lane carries iron DOWN unchanged; horizontal lane
+# carries wire RIGHT).
 _IRON_TO_FRAME_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((19, 20), int(Direction.DOWN)),
     ((19, 19), int(Direction.DOWN)),
@@ -294,7 +298,6 @@ _IRON_TO_FRAME_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((19, 15), int(Direction.DOWN)),
     ((19, 14), int(Direction.DOWN)),
     ((19, 13), int(Direction.DOWN)),
-    ((19, 12), int(Direction.DOWN)),
     ((19, 11), int(Direction.DOWN)),
     ((19, 10), int(Direction.DOWN)),
     ((18, 10), int(Direction.RIGHT)),
@@ -366,15 +369,17 @@ _CIRCUIT_INPUT_B_TILE: tuple[int, int] = (15, 18)  # WAFER       (west)
 _CIRCUIT_OUTPUT_TILE: tuple[int, int] = (18, 18)
 _WAFER_EXTRACT_ARM_TILE: tuple[int, int] = (9, 18)
 
-# Copper splitter UP -> CIRCUIT. Belts in placement order
-# (sink-first toward (13, 11) where the splitter dumps copper):
-# col 16 south-to-north, then row 11 east-to-west.
+# Copper splitter UP -> CIRCUIT. Belts in placement order (sink-first
+# toward (13, 11) where the splitter dumps copper): col 16 south-to-
+# north, then row 11 east-to-west. (16, 12) is *not* in this list —
+# Phase 3.MOTOR places a CROSSING there so its WIRE -> MOTOR route
+# can cross col 16 at row 12 (vertical lane carries copper DOWN
+# unchanged; horizontal lane carries wire RIGHT).
 _COPPER_TO_CIRCUIT_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((16, 16), int(Direction.DOWN)),
     ((16, 15), int(Direction.DOWN)),
     ((16, 14), int(Direction.DOWN)),
     ((16, 13), int(Direction.DOWN)),
-    ((16, 12), int(Direction.DOWN)),
     ((16, 11), int(Direction.DOWN)),
     ((15, 11), int(Direction.RIGHT)),
     ((14, 11), int(Direction.RIGHT)),
@@ -401,6 +406,88 @@ _WAFER_POST_CROSSING_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((14, 17), int(Direction.DOWN)),
     ((13, 17), int(Direction.RIGHT)),
     ((12, 17), int(Direction.RIGHT)),
+)
+
+
+# ---------------------------------------------------------------------------
+# Geometry — Phase 3.MOTOR (frame + wire -> motor)
+# ---------------------------------------------------------------------------
+#
+# MOTOR recipe: 1 FRAME + 1 WIRE -> 1 MOTOR, in an assembler.
+#
+# MOTOR module sits east of the FRAME cell at (24, 22) so its
+# input_b feeder belt (23, 22) catches a single arm-push directly
+# off the FRAME output PALLET at (21, 22) — no FRAME-route belts
+# are needed, just one extractor arm at (22, 22) facing RIGHT
+# (from-back, since the natural west stand tile is the PALLET).
+#
+# WIRE comes off the WIRE output PALLET at (15, 14) via an extractor
+# arm at (15, 13) facing UP (from-back, since the natural south
+# stand tile is the PALLET itself). The arm pushes WIRE UP onto
+# (15, 12); the route then runs east along row 12 through two
+# CROSSINGs:
+#
+# * CROSSING at (16, 12) dir=1 — vertical lane carries CIRCUIT-bound
+#   copper DOWN unchanged (substitutes for the BELT the CIRCUIT phase
+#   used to emit there); horizontal lane carries wire RIGHT.
+# * CROSSING at (19, 12) dir=1 — vertical lane carries iron DOWN
+#   unchanged (substitutes for the BELT the FRAME phase used to emit
+#   there); horizontal lane carries wire RIGHT.
+#
+# After (19, 12) the route continues east on row 12 to col 24 then
+# DOWN col 24 to the MOTOR input_a feeder at (24, 21).
+#
+# Pushing wire UP off the PALLET (instead of east, the natural
+# extractor direction used by the iron / copper / tin extractors)
+# avoids a 3-way collision: the WIRE pallet's east neighbour (16, 14)
+# is already the CIRCUIT copper trunk's south-bound belt, and the
+# (16, 12) CROSSING reuses col 16's vertical copper lane to ferry
+# the wire eastward without a fourth CIRCUIT detour.
+
+_MOTOR_ASSEMBLER_TILE: tuple[int, int] = (24, 22)
+_MOTOR_INPUT_A_TILE: tuple[int, int] = (24, 21)  # WIRE  (north)
+_MOTOR_INPUT_B_TILE: tuple[int, int] = (23, 22)  # FRAME (west)
+_MOTOR_OUTPUT_TILE: tuple[int, int] = (26, 22)
+_WIRE_EXTRACT_ARM_TILE: tuple[int, int] = (15, 13)
+_FRAME_EXTRACT_ARM_TILE: tuple[int, int] = (22, 22)
+_WIRE_COPPER_CROSSING_TILE: tuple[int, int] = (16, 12)
+_WIRE_IRON_CROSSING_TILE: tuple[int, int] = (19, 12)
+
+# WIRE -> MOTOR belts in placement order (sink-first toward the
+# extractor at (15, 13) UP). The two CROSSINGs at (16, 12) and
+# (19, 12) are placed separately, between the corresponding flank
+# belts, so each crossing's stand tile (target - unit(LEFT) =
+# target + (1, 0)) is already a walkable belt.
+_WIRE_TO_MOTOR_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    # Col 24 sink-first: south-end belt (24, 20) feeds the input_a
+    # feeder at (24, 21); each belt's stand tile is the next belt
+    # north (or dirt at the row 12 end).
+    ((24, 20), int(Direction.DOWN)),
+    ((24, 19), int(Direction.DOWN)),
+    ((24, 18), int(Direction.DOWN)),
+    ((24, 17), int(Direction.DOWN)),
+    ((24, 16), int(Direction.DOWN)),
+    ((24, 15), int(Direction.DOWN)),
+    ((24, 14), int(Direction.DOWN)),
+    ((24, 13), int(Direction.DOWN)),
+    ((24, 12), int(Direction.DOWN)),
+    # Row 12 east-flow into col 24 (sink-first toward the iron
+    # CROSSING).
+    ((23, 12), int(Direction.RIGHT)),
+    ((22, 12), int(Direction.RIGHT)),
+    ((21, 12), int(Direction.RIGHT)),
+    ((20, 12), int(Direction.RIGHT)),
+)
+# Belts placed *after* the iron CROSSING at (19, 12) so the next
+# CROSSING (16, 12) sees its (17, 12) stand tile as a fresh belt.
+_WIRE_TO_MOTOR_MID_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((18, 12), int(Direction.RIGHT)),
+    ((17, 12), int(Direction.RIGHT)),
+)
+# Final belt placed after the copper CROSSING at (16, 12); the WIRE
+# extractor arm at (15, 13) UP stands on (15, 12).
+_WIRE_TO_MOTOR_TAIL_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((15, 12), int(Direction.RIGHT)),
 )
 
 
@@ -471,13 +558,42 @@ def _phase_3_circuit_targets() -> dict[int, int]:
     )
 
 
+def _phase_3_motor_targets() -> dict[int, int]:
+    """Return ``{ItemType: count}`` for the MOTOR cell + plate routes.
+
+    Counts: 1 ASSEMBLER + 1 PALLET + 1 ARM + 2 BELT (assembler module
+    via :func:`assembler_module_inventory`) + 2 ARM (wire + frame
+    extractors) + 2 CROSSING (wire / copper cross at (16, 12) and
+    wire / iron cross at (19, 12), substituting for the BELTs the
+    CIRCUIT and FRAME phases used to emit there) + N CONVEYOR_BELT
+    (wire route on row 12 + col 24 south). The FRAME extractor arm
+    pushes directly onto the MOTOR input_b feeder belt at (23, 22),
+    so no FRAME-route belts are needed.
+    """
+    return sum_inventories(
+        assembler_module_inventory(input_b=True),
+        {
+            int(ItemType.ARM): 2,
+            int(ItemType.CROSSING): 2,
+            int(ItemType.CONVEYOR_BELT): (
+                len(_WIRE_TO_MOTOR_BELTS)
+                + len(_WIRE_TO_MOTOR_MID_BELTS)
+                + len(_WIRE_TO_MOTOR_TAIL_BELTS)
+            ),
+        },
+    )
+
+
 # Achievement-preservation targets: items the agent smelts / crafts
-# even though no Phase 1 placement consumes them. Phase 3.CIRCUIT
-# consumes wafer in steady state (so the keepsake is no longer
-# strictly needed for ``smelt_wafer``), but a tiny float keeps the
-# bootstrap robust against the deposit/auto-pull race.
+# even though no later phase placement consumes them. The MOTOR
+# pallet at (26, 22) accumulates motors automatically, but the
+# ``craft_motor`` achievement specifically checks that the *player*
+# holds a MOTOR — so we ask Phase 0 to hand-craft one at the pre-
+# placed assembler. Same pattern for any future intermediate that
+# is produced only on-belt.
 _ACHIEVEMENT_KEEPSAKES: dict[int, int] = {
     int(ItemType.WAFER): 2,
+    int(ItemType.MOTOR): 1,
 }
 
 
@@ -824,6 +940,85 @@ def _phase_3_circuit_goals() -> list[Goal]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3.MOTOR — assembler + frame extractor + wire route
+# ---------------------------------------------------------------------------
+
+
+def _phase_3_motor_goals() -> list[Goal]:
+    """Place the MOTOR assembler module + WIRE route + extractor arms.
+
+    FRAME comes off (21, 22) via a single arm at (22, 22) facing
+    RIGHT (from-back) that pushes directly onto the MOTOR input_b
+    feeder belt at (23, 22) — no FRAME-route belts needed.
+
+    WIRE comes off the WIRE PALLET at (15, 14) via an arm at (15, 13)
+    facing UP (from-back; the natural south stand tile is the PALLET).
+    The arm pushes WIRE UP onto (15, 12); the route runs east on
+    row 12 through two CROSSINGs at (16, 12) and (19, 12), continues
+    to col 24, then south down col 24 to the MOTOR input_a feeder at
+    (24, 21).
+
+    Placement order (each step's stand tile is dirt or a previously
+    placed walkable belt; CROSSINGs are not walkable):
+
+    1. MOTOR module at ``_MOTOR_ASSEMBLER_TILE``.
+    2. Sink-first row 12 + col 24 belts up to (20, 12).
+    3. CROSSING at (19, 12) dir=1. Stand = (20, 12) belt.
+    4. Mid belts at (18, 12) and (17, 12).
+    5. CROSSING at (16, 12) dir=1. Stand = (17, 12) belt.
+    6. Tail belt (15, 12).
+    7. WIRE extractor arm at (15, 13) UP via from-back. Stand =
+       (15, 12) belt (placed in step 6).
+    8. FRAME extractor arm at (22, 22) RIGHT via from-back. Stand =
+       (23, 22) = MOTOR input_b feeder belt.
+    """
+    goals: list[Goal] = []
+
+    goals.extend(
+        build_assembler_module_at(
+            _MOTOR_ASSEMBLER_TILE,
+            input_b=True,
+            map_size=_MAP_SIZE,
+        )
+    )
+
+    for tile, facing in _WIRE_TO_MOTOR_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # CROSSING dir=1: vertical N->S (iron) + horizontal W->E (wire).
+    # Stand = (20, 12) belt placed above.
+    goals.append(PlaceMachineAt(MachineType.CROSSING, _WIRE_IRON_CROSSING_TILE, 1))
+
+    for tile, facing in _WIRE_TO_MOTOR_MID_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # CROSSING dir=1: vertical N->S (CIRCUIT-bound copper) +
+    # horizontal W->E (wire). Stand = (17, 12) belt placed above.
+    goals.append(PlaceMachineAt(MachineType.CROSSING, _WIRE_COPPER_CROSSING_TILE, 1))
+
+    for tile, facing in _WIRE_TO_MOTOR_TAIL_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # WIRE extractor's natural stand tile (15, 14) is the WIRE output
+    # PALLET (non-walkable), so it goes via from-back: stand on the
+    # (15, 12) belt placed above, face DOWN, place inheriting DOWN,
+    # then ROTATE to UP. After placement the arm pulls wire from
+    # (15, 14) PALLET (south, behind) and pushes onto (15, 12) belt
+    # (north, front).
+    goals.append(
+        PlaceMachineFromBackAt(
+            MachineType.ARM, _WIRE_EXTRACT_ARM_TILE, int(Direction.UP)
+        )
+    )
+    goals.append(
+        PlaceMachineFromBackAt(
+            MachineType.ARM, _FRAME_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+        )
+    )
+    return goals
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -871,6 +1066,7 @@ def build_advanced_factory_goals(
         _phase_2_wire_targets(),
         _phase_3_frame_targets(),
         _phase_3_circuit_targets(),
+        _phase_3_motor_targets(),
         _ACHIEVEMENT_KEEPSAKES,
     )
     goals: list[Goal] = list(_phase_0(crafted_targets, book, slack))
@@ -896,10 +1092,13 @@ def build_advanced_factory_goals(
     expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
     goals.append(VerifyLayout(expected, label="phase 3.circuit"))
 
-    # Trailing wait. Iron has to travel ~19 belts and tin ~12 plus
-    # propagation through both splitters; CIRCUIT's copper and wafer
-    # routes add another ~15 belts. 3000 ticks lets every cell reach
-    # steady state before episode end.
+    goals.extend(_phase_3_motor_goals())
+    expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
+    goals.append(VerifyLayout(expected, label="phase 3.motor"))
+
+    # Trailing wait. Iron and tin trunks plus CIRCUIT and MOTOR routes
+    # together span ~50 belts; 3000 ticks lets every cell reach steady
+    # state before episode end.
     goals.append(Wait(3000))
     return goals
 
