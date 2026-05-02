@@ -44,6 +44,12 @@ from .world_model import (
 # Signature for "pick a location" callbacks used by :class:`PlaceMachine`.
 LocationPredicate = Callable[[WorldView], tuple[int, int] | None]
 
+# Per-failure cap on rendered :class:`VerifyLayout` mismatch lines.
+# Beyond this many divergent tiles the renderer prints
+# ``(... N more)`` and stops — large stage-wide failures stay
+# readable in console output without losing the count signal.
+_MAX_LAYOUT_MISMATCHES_RENDERED: int = 20
+
 # What the planner does when ``Goal.verify`` returns ``False``.
 #
 # - ``"halt"``: stop the run with a structured diagnostic. The right
@@ -96,6 +102,18 @@ class Goal:
             the planner's :attr:`verify_failure_action` handling.
         """
         return True
+
+    def verify_failure_details(self, view: WorldView) -> str | None:
+        """Optional human-readable explanation when :meth:`verify` fails.
+
+        Called by the planner immediately after :meth:`verify` returns
+        ``False``. Override to return a multi-line string describing
+        what was expected vs observed; the planner attaches the result
+        to its :class:`~baselines.rocket.scripted.planner.VerifyDiagnostic`
+        record. Default returns ``None`` (no extra detail).
+        """
+        del view
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +441,26 @@ class PlaceMachineAt(Goal):
         return bool(
             int(view.machine_type[y, x]) == self.machine_type
             and int(view.machine_direction[y, x]) == self.facing
+        )
+
+    def verify_failure_details(self, view: WorldView) -> str | None:
+        """Render the (x, y) tile contents at the moment of failure."""
+        x, y = self.target
+        observed_mt = int(view.machine_type[y, x])
+        observed_dir = int(view.machine_direction[y, x])
+        observed_mt_name = MachineType(observed_mt).name
+        # Direction starts at 1; treat 0 as "no direction" rather than
+        # tripping a ValueError on the enum lookup.
+        observed_dir_name = (
+            Direction(observed_dir).name if observed_dir != 0 else "NONE"
+        )
+        expected_mt_name = MachineType(self.machine_type).name
+        expected_dir_name = Direction(self.facing).name if self.facing != 0 else "NONE"
+        return (
+            f"  expected: tile {self.target} -> "
+            f"({expected_mt_name}, {expected_dir_name})\n"
+            f"  observed: tile {self.target} -> "
+            f"({observed_mt_name}, {observed_dir_name})"
         )
 
     def __repr__(self) -> str:
@@ -1954,6 +1992,26 @@ class VerifyLayout(Goal):
         from .layout import verify_layout  # noqa: PLC0415 — avoid import cycle
 
         return verify_layout(view, self.expected)
+
+    def verify_failure_details(self, view: WorldView) -> str | None:
+        """Dump the layout diff, capped at :data:`_MAX_LAYOUT_MISMATCHES_RENDERED`.
+
+        For runs with many simultaneous failures (e.g. a whole stage
+        that didn't run), the cap keeps the diagnostic readable while
+        still signalling that more remain via the ``(... N more)``
+        trailer.
+        """
+        from .layout import diff_layout  # noqa: PLC0415 — avoid import cycle
+
+        mismatches = diff_layout(view, self.expected)
+        if not mismatches:
+            return None
+        head = mismatches[:_MAX_LAYOUT_MISMATCHES_RENDERED]
+        rendered = "\n".join(m.render() for m in head)
+        leftover = len(mismatches) - len(head)
+        if leftover > 0:
+            rendered += f"\n  (... {leftover} more)"
+        return f"  label: {self.label}\n{rendered}"
 
     def __repr__(self) -> str:
         return f"VerifyLayout(label={self.label!r}, n_tiles={len(self.expected)})"

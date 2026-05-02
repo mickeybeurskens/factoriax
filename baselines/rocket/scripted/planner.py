@@ -59,12 +59,31 @@ class VerifyDiagnostic:
         action_taken: Which branch of
             :data:`~baselines.rocket.scripted.goals.VerifyFailureAction`
             ran in response (``"halt"`` | ``"retry"`` | ``"ignore"``).
+        details: Optional multi-line explanation produced by the goal
+            via :meth:`~baselines.rocket.scripted.goals.Goal.verify_failure_details`.
+            ``None`` if the goal didn't override the hook.
     """
 
     tick: int
     goal_name: str
     goal_repr: str
     action_taken: str
+    details: str | None = None
+
+    def format(self) -> str:
+        """Render the diagnostic as a multi-line, human-readable block.
+
+        Top line gives the tick + the goal repr; subsequent lines hold
+        the goal-supplied details (when present). Suitable for
+        printing to a console or attaching to a log artifact.
+        """
+        head = (
+            f"VERIFY_FAIL at tick={self.tick} ({self.action_taken})\n"
+            f"  goal: {self.goal_repr}"
+        )
+        if self.details:
+            return f"{head}\n{self.details}"
+        return head
 
 
 class Planner:
@@ -192,6 +211,7 @@ class Planner:
             goal_name=goal.name,
             goal_repr=repr(goal),
             action_taken=action,
+            details=goal.verify_failure_details(view),
         )
 
         if action == "halt" and self._halt_on_verify_fail:

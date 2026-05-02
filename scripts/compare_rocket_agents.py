@@ -189,6 +189,13 @@ def _run(
     final_mask = np.asarray(state.achievements_unlocked)[:NUM_ROCKET_ACHIEVEMENTS]
     score = float(np.sum(weights * final_mask))
 
+    # Surface verify diagnostics at end of run. ScriptedAgent owns its
+    # planner; pre-existing agents that don't expose ``planner``
+    # silently skip this block.
+    diag = getattr(getattr(agent, "planner", None), "verify_diagnostic", None)
+    if diag is not None:
+        print(f"[{label}] {diag.format()}")
+
     rollout: EvalRollout | None = None
     if collect_rollout:
         rollout = EvalRollout(

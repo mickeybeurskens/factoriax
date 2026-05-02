@@ -65,14 +65,24 @@ class LayoutMismatch:
     kind: MismatchKind
 
     def render(self) -> str:
-        """Format this mismatch as a single human-readable line."""
+        """Format this mismatch as a single human-readable line.
+
+        Both ``mt == NONE`` (0) and ``direction == 0`` are the zero-init
+        values for the underlying arrays — neither is a valid
+        :class:`Direction` (the enum starts at 1) so we render them as
+        ``NONE`` rather than tripping
+        :meth:`enum.Enum.__call__` with a ``ValueError``.
+        """
         x, y = self.tile
+
+        def _dir_name(d: int) -> str:
+            return Direction(d).name if d != 0 else "NONE"
 
         def _fmt(pair: tuple[int, int] | None) -> str:
             if pair is None:
                 return "NONE"
             mt, d = pair
-            return f"({MachineType(mt).name}, {Direction(d).name})"
+            return f"({MachineType(mt).name}, {_dir_name(d)})"
 
         return (
             f"  ({x:>2}, {y:>2}) {self.kind:<10}  "
