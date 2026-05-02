@@ -33,6 +33,10 @@ from baselines.rocket.scripted.goals import (
     ProduceInMachine,
     WithdrawFromBusAt,
 )
+from baselines.rocket.scripted.layout import (
+    diff_layout,
+    expected_layout_from_goals,
+)
 from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -40,7 +44,7 @@ from factoriax.benchmarks.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, MachineType
+from factoriax.constants import MAX_ACHIEVEMENTS, Direction, ItemType, MachineType
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
@@ -372,6 +376,43 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
     tile_entity = np.asarray(env_state.tile_entity)
     ent_buf_type = np.asarray(env_state.ent_buf_type)
     ent_buf_count = np.asarray(env_state.ent_buf_count)
+
+    # Layout-equivalence assertion: every PlaceMachineAt the goal
+    # tree promised must end up on the map with the right type and
+    # direction. Pre-placed machines (the rocket benchmark's spawn-
+    # adjacent FURNACE + ASSEMBLER) get added to the expected layout
+    # so they don't show up as STRAY.
+    from baselines.rocket.scripted.world_model import decode_observation
+
+    final_view = decode_observation(
+        np.asarray(jit_obs(env_state)),
+        env_params.map_height,
+        env_params.map_width,
+        env_params.max_timesteps,
+    )
+    goals = build_advanced_factory_goals()
+    expected_from_goals = expected_layout_from_goals(goals)
+    pre_placed = {
+        (15, 16): (int(MachineType.FURNACE), int(Direction.DOWN)),
+        (17, 16): (int(MachineType.ASSEMBLER), int(Direction.DOWN)),
+    }
+    expected_layout = {**expected_from_goals, **pre_placed}
+    layout_diff = diff_layout(final_view, expected_layout)
+    diag = agent.planner.verify_diagnostic
+    if layout_diff:
+        diag_text = diag.format() if diag is not None else "(no verify halt)"
+        rendered = "\n".join(m.render() for m in layout_diff[:30])
+        leftover = max(0, len(layout_diff) - 30)
+        more = f"\n  (... {leftover} more)" if leftover else ""
+        raise AssertionError(
+            f"layout diff: {len(layout_diff)} mismatches "
+            f"(MISSING={sum(1 for m in layout_diff if m.kind == 'MISSING')}, "
+            f"WRONG_TYPE={sum(1 for m in layout_diff if m.kind == 'WRONG_TYPE')}, "
+            f"WRONG_DIR={sum(1 for m in layout_diff if m.kind == 'WRONG_DIR')}, "
+            f"STRAY={sum(1 for m in layout_diff if m.kind == 'STRAY')})\n"
+            f"diagnostic:\n{diag_text}\n"
+            f"first {min(30, len(layout_diff))} mismatches:\n{rendered}{more}"
+        )
 
     sx, sy = _IRON_SPLITTER_TILE
     assert int(machine_types[sy, sx]) == int(MachineType.SPLITTER), (
