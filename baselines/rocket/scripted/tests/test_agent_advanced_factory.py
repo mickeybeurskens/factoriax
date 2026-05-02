@@ -22,9 +22,15 @@ import pytest
 
 from baselines.rocket.scripted.agent_advanced_factory import (
     _CIRCUIT_ASSEMBLER_TILE,
+    _CIRCUIT_EXTRACT_ARM_TILE,
     _CIRCUIT_INPUT_A_TILE,
     _CIRCUIT_INPUT_B_TILE,
+    _CIRCUIT_IRON_CROSSING_TILE,
     _CIRCUIT_OUTPUT_TILE,
+    _CIRCUIT_TO_SENSOR_BELTS,
+    _CIRCUIT_TO_SENSOR_MID_BELTS,
+    _CIRCUIT_TO_SENSOR_TAIL_BELTS,
+    _CIRCUIT_WIRE_CROSSING_TILE,
     _COPPER_EXTRACT_ARM_TILE,
     _COPPER_SPLITTER_TILE,
     _COPPER_TO_CIRCUIT_BELTS,
@@ -39,6 +45,10 @@ from baselines.rocket.scripted.agent_advanced_factory import (
     _MOTOR_INPUT_A_TILE,
     _MOTOR_INPUT_B_TILE,
     _MOTOR_OUTPUT_TILE,
+    _SENSOR_ASSEMBLER_TILE,
+    _SENSOR_INPUT_A_TILE,
+    _SENSOR_INPUT_B_TILE,
+    _SENSOR_OUTPUT_TILE,
     _TIN_EXTRACT_ARM_TILE,
     _TIN_TO_FRAME_BELTS,
     _WAFER_CROSSING_TILE,
@@ -52,9 +62,11 @@ from baselines.rocket.scripted.agent_advanced_factory import (
     _WIRE_INPUT_B_TILE,
     _WIRE_IRON_CROSSING_TILE,
     _WIRE_OUTPUT_TILE,
+    _WIRE_SPLITTER_TILE,
     _WIRE_TO_MOTOR_BELTS,
     _WIRE_TO_MOTOR_MID_BELTS,
     _WIRE_TO_MOTOR_TAIL_BELTS,
+    _WIRE_TO_SENSOR_BELTS,
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
@@ -126,6 +138,11 @@ _EXPECTED_UNLOCKS: tuple[str, ...] = (
     # and a WIRE extractor at (16, 14); the wire route crosses the
     # iron-to-FRAME col-19 trunk via a CROSSING at (19, 14).
     "craft_motor",
+    # SENSOR assembler at (28, 18) fed by a CIRCUIT extractor at
+    # (18, 19) and a WIRE splitter at (24, 12); the CIRCUIT route
+    # crosses the iron and wire trunks via two CROSSINGs at (19, 20)
+    # and (24, 20).
+    "craft_sensor",
 )
 
 
@@ -257,6 +274,7 @@ def test_uses_place_from_back_for_extractor_arms() -> None:
         _WAFER_EXTRACT_ARM_TILE: int(Direction.UP),
         _WIRE_EXTRACT_ARM_TILE: int(Direction.UP),
         _FRAME_EXTRACT_ARM_TILE: int(Direction.RIGHT),
+        _CIRCUIT_EXTRACT_ARM_TILE: int(Direction.DOWN),
     }
 
 
@@ -347,6 +365,62 @@ def test_circuit_and_iron_belts_skip_motor_crossing_tiles() -> None:
     assert _WIRE_IRON_CROSSING_TILE not in iron_tiles
 
 
+def test_iron_and_wire_belts_skip_sensor_crossing_tiles() -> None:
+    """The (19, 20) and (24, 20) tiles are CROSSINGs placed by
+    Phase 3.SENSOR, not BELTs — verifies FRAME and MOTOR phases
+    drop those tiles from their respective belt lists. (24, 12)
+    is a SPLITTER placed by SENSOR, also dropped from MOTOR."""
+    iron_tiles = {tile for tile, _ in _IRON_TO_FRAME_BELTS}
+    wire_motor_tiles = {tile for tile, _ in _WIRE_TO_MOTOR_BELTS}
+    assert _CIRCUIT_IRON_CROSSING_TILE not in iron_tiles
+    assert _CIRCUIT_WIRE_CROSSING_TILE not in wire_motor_tiles
+    assert _WIRE_SPLITTER_TILE not in wire_motor_tiles
+
+
+def test_emits_sensor_cell_placements() -> None:
+    """The SENSOR assembler module + WIRE splitter + CIRCUIT
+    extractor + WIRE / CIRCUIT routes + 2 CROSSINGs land at the
+    documented tiles."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    placements = [
+        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
+    ]
+    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
+
+    # SENSOR module: inputs are feeder belts; output is a pallet.
+    cx, cy = _SENSOR_ASSEMBLER_TILE
+    assert by_tile[_SENSOR_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
+    assert by_tile[_SENSOR_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_SENSOR_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_SENSOR_OUTPUT_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+
+    # CIRCUIT extractor (from-back, facing DOWN).
+    assert by_tile[_CIRCUIT_EXTRACT_ARM_TILE] == (
+        int(MachineType.ARM),
+        int(Direction.DOWN),
+    )
+
+    # WIRE splitter inline on the WIRE -> MOTOR trunk.
+    assert by_tile[_WIRE_SPLITTER_TILE] == (
+        int(MachineType.SPLITTER),
+        int(Direction.RIGHT),
+    )
+
+    # Two CROSSINGs on the CIRCUIT route across iron and wire trunks.
+    assert by_tile[_CIRCUIT_IRON_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+    assert by_tile[_CIRCUIT_WIRE_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+
+    for tile, _facing in _WIRE_TO_SENSOR_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+    for tile, _facing in _CIRCUIT_TO_SENSOR_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+    for tile, _facing in _CIRCUIT_TO_SENSOR_MID_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+    for tile, _facing in _CIRCUIT_TO_SENSOR_TAIL_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+
+
 def test_emits_frame_cell_placements() -> None:
     """The FRAME assembler module + iron extractor + iron / tin
     routes land at the documented tiles. The tin trunk head at
@@ -403,12 +477,18 @@ def test_frame_routes_avoid_pre_placed_drain_zone() -> None:
     feeds.extend(_WIRE_TO_MOTOR_BELTS)
     feeds.extend(_WIRE_TO_MOTOR_MID_BELTS)
     feeds.extend(_WIRE_TO_MOTOR_TAIL_BELTS)
+    feeds.extend(_WIRE_TO_SENSOR_BELTS)
+    feeds.extend(_CIRCUIT_TO_SENSOR_BELTS)
+    feeds.extend(_CIRCUIT_TO_SENSOR_MID_BELTS)
+    feeds.extend(_CIRCUIT_TO_SENSOR_TAIL_BELTS)
     feeds.append((_FRAME_INPUT_A_TILE, int(Direction.DOWN)))
     feeds.append((_FRAME_INPUT_B_TILE, int(Direction.RIGHT)))
     feeds.append((_CIRCUIT_INPUT_A_TILE, int(Direction.DOWN)))
     feeds.append((_CIRCUIT_INPUT_B_TILE, int(Direction.RIGHT)))
     feeds.append((_MOTOR_INPUT_A_TILE, int(Direction.DOWN)))
     feeds.append((_MOTOR_INPUT_B_TILE, int(Direction.RIGHT)))
+    feeds.append((_SENSOR_INPUT_A_TILE, int(Direction.DOWN)))
+    feeds.append((_SENSOR_INPUT_B_TILE, int(Direction.RIGHT)))
 
     # For each combiner, list the {neighbour_tile: bad_facing} where
     # bad_facing is the direction a belt at neighbour_tile would face
@@ -469,8 +549,8 @@ def test_all_placements_in_map_bounds() -> None:
 
 def test_includes_per_stage_verify_layout_gates() -> None:
     """Each smelter cell + each later stage end with their own
-    VerifyLayout (8 total: 4 smelter + 1 wire + 1 frame + 1 circuit
-    + 1 motor)."""
+    VerifyLayout (9 total: 4 smelter + 1 wire + 1 frame + 1 circuit
+    + 1 motor + 1 sensor)."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     verifies = [g for g in goals if isinstance(g, VerifyLayout)]
     expected_labels = {
@@ -482,6 +562,7 @@ def test_includes_per_stage_verify_layout_gates() -> None:
         "phase 3.frame",
         "phase 3.circuit",
         "phase 3.motor",
+        "phase 3.sensor",
     }
     assert {v.label for v in verifies} == expected_labels
 
@@ -513,8 +594,14 @@ def test_mines_every_ore_type() -> None:
         assert qty > 0, f"MineOre({ItemType(item).name}) has zero qty"
 
 
-def test_smelts_each_plate_type() -> None:
-    """The smelt phase covers iron, copper, tin, and wafer."""
+def test_phase_0a_smelts_iron_copper_tin_only() -> None:
+    """Phase 0a hand-smelts the three plates Phase 1 cells consume.
+
+    WAFER is *not* hand-smelted: the silicon cell built in Phase 1
+    smelts wafer automatically, and Phase 0b withdraws any wafer the
+    later assembler crafts (CIRCUIT) need from the silicon cell's
+    plate-bus.
+    """
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     produced_outputs: set[int] = set()
     for g in goals:
@@ -524,10 +611,14 @@ def test_smelts_each_plate_type() -> None:
         int(ItemType.IRON_PLATE),
         int(ItemType.COPPER_PLATE),
         int(ItemType.TIN_PLATE),
-        int(ItemType.WAFER),
     }
     assert produced_outputs >= expected_plates, (
-        f"Goals must smelt every plate; missing {expected_plates - produced_outputs}"
+        f"Goals must smelt iron / copper / tin; missing "
+        f"{expected_plates - produced_outputs}"
+    )
+    assert int(ItemType.WAFER) not in produced_outputs, (
+        "WAFER should not appear in the bootstrap smelt set — the silicon "
+        "cell handles it"
     )
 
 
@@ -701,3 +792,20 @@ def test_motor_output_pallet_accumulates_motor() -> None:
     """
     _, _, state = _run_agent(max_steps=8000)
     _assert_pallet_holds(state, _MOTOR_OUTPUT_TILE, ItemType.MOTOR)
+
+
+@pytest.mark.slow
+def test_sensor_output_pallet_accumulates_sensor() -> None:
+    """The SENSOR assembler's output pallet at (30, 18) holds SENSOR.
+
+    Load-bearing for the WIRE splitter design: a SPLITTER at (24, 12)
+    fans wire DOWN to MOTOR (existing route) and UP to a new SENSOR-
+    bound corridor on row 11 + col 28 south. CIRCUIT comes from the
+    CIRCUIT output PALLET via an extractor at (18, 19) DOWN; the
+    route runs east on row 20 through two CROSSINGs (iron at
+    (19, 20), wire at (24, 20)) and lands on the SENSOR input_b
+    feeder at (27, 18). A non-empty SENSOR pallet proves the WIRE
+    fan-out and the dual-CROSSING CIRCUIT route both work.
+    """
+    _, _, state = _run_agent(max_steps=8000)
+    _assert_pallet_holds(state, _SENSOR_OUTPUT_TILE, ItemType.SENSOR)

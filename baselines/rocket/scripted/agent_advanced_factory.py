@@ -60,6 +60,7 @@ from .goals import (
     VerifyLayout,
     Wait,
     WaitUntil,
+    WithdrawFromBusAt,
     assembler_module_inventory,
     build_assembler_module_at,
     build_smelter_cell_at,
@@ -69,6 +70,7 @@ from .layout import expected_layout_from_goals
 from .planner import Planner
 from .recipe_planning import (
     bill_of_materials,
+    book_without_recipes_for,
     production_schedule,
     sum_inventories,
 )
@@ -284,13 +286,12 @@ _IRON_EXTRACT_ARM_TILE: tuple[int, int] = (10, 10)
 # Iron route belts in placement order (sink-first). Every belt's
 # stand tile (target - unit(facing)) is dirt or a prior walkable
 # belt. The bend at (19, 10) faces DOWN so it accepts the east
-# push from (18, 10) RIGHT and pushes south down col 19. Note:
-# (19, 12) is *not* in this list — Phase 3.MOTOR places a CROSSING
-# there so the WIRE -> MOTOR route can cross col 19 at row 12
-# (vertical lane carries iron DOWN unchanged; horizontal lane
-# carries wire RIGHT).
+# push from (18, 10) RIGHT and pushes south down col 19. Two tiles
+# on col 19 are *not* in this list — Phase 3.MOTOR places a CROSSING
+# at (19, 12) and Phase 3.SENSOR places a CROSSING at (19, 20). Both
+# crossings carry iron DOWN through their vertical lane unchanged;
+# the horizontal lanes carry wire / CIRCUIT respectively.
 _IRON_TO_FRAME_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
-    ((19, 20), int(Direction.DOWN)),
     ((19, 19), int(Direction.DOWN)),
     ((19, 18), int(Direction.DOWN)),
     ((19, 17), int(Direction.DOWN)),
@@ -457,12 +458,21 @@ _WIRE_IRON_CROSSING_TILE: tuple[int, int] = (19, 12)
 # extractor at (15, 13) UP). The two CROSSINGs at (16, 12) and
 # (19, 12) are placed separately, between the corresponding flank
 # belts, so each crossing's stand tile (target - unit(LEFT) =
-# target + (1, 0)) is already a walkable belt.
+# target + (1, 0)) is already a walkable belt. Two further tiles
+# on this trunk are *not* in this list — they are placed by
+# Phase 3.SENSOR:
+#
+# * (24, 12) is a SPLITTER (horizontal RIGHT) that fans wire DOWN
+#   to MOTOR (continuing the existing col-24 trunk) and UP to a new
+#   SENSOR-bound corridor on row 11.
+# * (24, 20) is a CROSSING dir=1 that lets CIRCUIT-to-SENSOR cross
+#   the col-24 wire trunk (vertical lane carries wire DOWN; horizontal
+#   lane carries CIRCUIT RIGHT).
 _WIRE_TO_MOTOR_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     # Col 24 sink-first: south-end belt (24, 20) feeds the input_a
     # feeder at (24, 21); each belt's stand tile is the next belt
-    # north (or dirt at the row 12 end).
-    ((24, 20), int(Direction.DOWN)),
+    # north (or dirt at the row 12 end). (24, 12) and (24, 20) are
+    # owned by Phase 3.SENSOR (SPLITTER and CROSSING respectively).
     ((24, 19), int(Direction.DOWN)),
     ((24, 18), int(Direction.DOWN)),
     ((24, 17), int(Direction.DOWN)),
@@ -470,7 +480,6 @@ _WIRE_TO_MOTOR_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((24, 15), int(Direction.DOWN)),
     ((24, 14), int(Direction.DOWN)),
     ((24, 13), int(Direction.DOWN)),
-    ((24, 12), int(Direction.DOWN)),
     # Row 12 east-flow into col 24 (sink-first toward the iron
     # CROSSING).
     ((23, 12), int(Direction.RIGHT)),
@@ -488,6 +497,85 @@ _WIRE_TO_MOTOR_MID_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
 # extractor arm at (15, 13) UP stands on (15, 12).
 _WIRE_TO_MOTOR_TAIL_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
     ((15, 12), int(Direction.RIGHT)),
+)
+
+
+# ---------------------------------------------------------------------------
+# Geometry — Phase 3.SENSOR (circuit + wire -> sensor)
+# ---------------------------------------------------------------------------
+#
+# SENSOR recipe: 1 CIRCUIT + 1 WIRE -> 1 SENSOR, in an assembler.
+#
+# SENSOR module sits at (28, 18) — east of FRAME's col-19 trunk and
+# south-east of MOTOR. WIRE comes off a SPLITTER at (24, 12) that
+# replaces the wire belt on the WIRE -> MOTOR trunk; the splitter's
+# DOWN output continues the existing MOTOR feed unchanged, while
+# its UP output drives a new corridor along row 11 east, then south
+# down col 28 into the SENSOR input_a feeder at (28, 17).
+#
+# CIRCUIT is extracted from the CIRCUIT output PALLET at (18, 18)
+# by an arm at (18, 19) facing DOWN (from-back, since the natural
+# stand tile is the PALLET). The arm pushes CIRCUIT onto (18, 20);
+# the route runs east along row 20 through two CROSSINGs:
+#
+# * CROSSING at (19, 20) dir=1 — vertical lane carries iron DOWN
+#   unchanged (substitutes for the BELT the FRAME phase used to
+#   emit there); horizontal lane carries CIRCUIT RIGHT.
+# * CROSSING at (24, 20) dir=1 — vertical lane carries WIRE DOWN
+#   to MOTOR (substitutes for the BELT the MOTOR phase used to
+#   emit there); horizontal lane carries CIRCUIT RIGHT.
+#
+# After (24, 20) the route continues east on row 20 to col 27, then
+# bends UP col 27 to land on the SENSOR input_b feeder at (27, 18).
+
+_SENSOR_ASSEMBLER_TILE: tuple[int, int] = (28, 18)
+_SENSOR_INPUT_A_TILE: tuple[int, int] = (28, 17)  # WIRE    (north)
+_SENSOR_INPUT_B_TILE: tuple[int, int] = (27, 18)  # CIRCUIT (west)
+_SENSOR_OUTPUT_TILE: tuple[int, int] = (30, 18)
+_CIRCUIT_EXTRACT_ARM_TILE: tuple[int, int] = (18, 19)
+_WIRE_SPLITTER_TILE: tuple[int, int] = (24, 12)
+_CIRCUIT_IRON_CROSSING_TILE: tuple[int, int] = (19, 20)
+_CIRCUIT_WIRE_CROSSING_TILE: tuple[int, int] = (24, 20)
+
+# WIRE splitter UP -> SENSOR. Belts in placement order (sink-first
+# from (28, 16) back to the splitter at (24, 12)):
+_WIRE_TO_SENSOR_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((28, 16), int(Direction.DOWN)),
+    ((28, 15), int(Direction.DOWN)),
+    ((28, 14), int(Direction.DOWN)),
+    ((28, 13), int(Direction.DOWN)),
+    ((28, 12), int(Direction.DOWN)),
+    ((28, 11), int(Direction.DOWN)),
+    ((27, 11), int(Direction.RIGHT)),
+    ((26, 11), int(Direction.RIGHT)),
+    ((25, 11), int(Direction.RIGHT)),
+    ((24, 11), int(Direction.RIGHT)),
+)
+
+# CIRCUIT extractor DOWN -> row 20 east -> col 27 UP -> SENSOR
+# input_b. Belts split into three batches around the two CROSSINGs
+# so each crossing's stand tile (target - unit(LEFT) = target +
+# (1, 0)) is already a walkable belt at placement time.
+_CIRCUIT_TO_SENSOR_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    # Col 27 UP into input_b feeder at (27, 18). Sink-first:
+    ((27, 19), int(Direction.UP)),
+    ((27, 20), int(Direction.UP)),
+    # Row 20 west-to-east approach to col 27 — sink-first toward
+    # the wire CROSSING at (24, 20).
+    ((26, 20), int(Direction.RIGHT)),
+    ((25, 20), int(Direction.RIGHT)),
+)
+_CIRCUIT_TO_SENSOR_MID_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    # Belts between the wire CROSSING at (24, 20) and the iron
+    # CROSSING at (19, 20). Sink-first toward the iron CROSSING.
+    ((23, 20), int(Direction.RIGHT)),
+    ((22, 20), int(Direction.RIGHT)),
+    ((21, 20), int(Direction.RIGHT)),
+    ((20, 20), int(Direction.RIGHT)),
+)
+_CIRCUIT_TO_SENSOR_TAIL_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    # Final belt between the iron CROSSING and the extractor arm.
+    ((18, 20), int(Direction.RIGHT)),
 )
 
 
@@ -584,17 +672,62 @@ def _phase_3_motor_targets() -> dict[int, int]:
     )
 
 
-# Achievement-preservation targets: items the agent smelts / crafts
-# even though no later phase placement consumes them. The MOTOR
-# pallet at (26, 22) accumulates motors automatically, but the
-# ``craft_motor`` achievement specifically checks that the *player*
-# holds a MOTOR — so we ask Phase 0 to hand-craft one at the pre-
-# placed assembler. Same pattern for any future intermediate that
-# is produced only on-belt.
-_ACHIEVEMENT_KEEPSAKES: dict[int, int] = {
-    int(ItemType.WAFER): 2,
-    int(ItemType.MOTOR): 1,
+def _phase_3_sensor_targets() -> dict[int, int]:
+    """Return ``{ItemType: count}`` for the SENSOR cell + plate routes.
+
+    Counts: 1 ASSEMBLER + 1 PALLET + 1 ARM + 2 BELT (assembler module
+    via :func:`assembler_module_inventory`) + 1 ARM (CIRCUIT extractor;
+    WIRE comes off the splitter, not a dedicated arm) + 1 SPLITTER
+    (wire fan-out at (24, 12) — substitutes for the BELT the MOTOR
+    phase used to emit there) + 2 CROSSING ((19, 20) iron / CIRCUIT
+    cross, substituting for the BELT the FRAME phase used to emit
+    there; (24, 20) wire / CIRCUIT cross, substituting for the BELT
+    the MOTOR phase used to emit there) + N CONVEYOR_BELT (wire +
+    CIRCUIT routes).
+    """
+    return sum_inventories(
+        assembler_module_inventory(input_b=True),
+        {
+            int(ItemType.ARM): 1,
+            int(ItemType.SPLITTER): 1,
+            int(ItemType.CROSSING): 2,
+            int(ItemType.CONVEYOR_BELT): (
+                len(_WIRE_TO_SENSOR_BELTS)
+                + len(_CIRCUIT_TO_SENSOR_BELTS)
+                + len(_CIRCUIT_TO_SENSOR_MID_BELTS)
+                + len(_CIRCUIT_TO_SENSOR_TAIL_BELTS)
+            ),
+        },
+    )
+
+
+# Plate-leaf items: in Phase 0b the agent withdraws these from the
+# Phase 1 cell plate-buses instead of hand-smelting them, so the
+# truncated recipe book treats them as raw leaves for the BOM walk.
+_PLATE_LEAVES: frozenset[int] = frozenset(
+    {
+        int(ItemType.IRON_PLATE),
+        int(ItemType.COPPER_PLATE),
+        int(ItemType.TIN_PLATE),
+        int(ItemType.WAFER),
+    }
+)
+
+# Per-plate-leaf cell pallet — withdraw from these in Phase 0b.
+_PLATE_PALLETS: dict[int, tuple[int, int]] = {
+    int(ItemType.IRON_PLATE): _IRON_PLATE_BUS_TILE,
+    int(ItemType.COPPER_PLATE): _COPPER_PLATE_BUS_TILE,
+    int(ItemType.TIN_PLATE): _TIN_PLATE_BUS_TILE,
+    int(ItemType.WAFER): _SILICON_PLATE_BUS_TILE,
 }
+
+# Inventory-cap-aware chunk size for Phase 0b crafts. The player can
+# hold up to 99 of each item; we withdraw at most this many plates of
+# any one type before crafting, keeping headroom under the cap so a
+# stray bus-pallet over-pull never stalls the goal. 25 also keeps each
+# WithdrawFromBusAt's wait short — a cell smelts ~1 plate every 2
+# ticks, so 25 plates land in ~50 ticks.
+_PHASE_0B_CHUNK: int = 25
 
 
 # ---------------------------------------------------------------------------
@@ -616,22 +749,22 @@ _DEFAULT_SLACK: dict[int, int] = {
 
 
 # ---------------------------------------------------------------------------
-# Phase 0 — bootstrap (hand-mine + smelt + craft at pre-placed F+A)
+# Phase 0a — hand-bootstrap items needed to build Phase 1 cells
 # ---------------------------------------------------------------------------
 
 
-def _phase_0(
+def _phase_0a(
     crafted_targets: dict[int, int],
     book: RecipeBook,
     slack: dict[int, int],
 ) -> list[Goal]:
     """Hand-mine + smelt + craft enough to cover ``crafted_targets``.
 
-    ``crafted_targets`` is the union of every recipe-output item the
-    agent will *consume* in subsequent phases (placements +
-    crafts that feed into other crafts). The schedule helper expands
-    that into per-recipe production counts; the BOM walks back to
-    leaves so we know how much raw to mine.
+    ``crafted_targets`` should be sized for Phase 1 placements only
+    (cells + ore-feeders + coal trunks). Phase 2 / Phase 3 placements
+    are sourced from the live cell plate-buses by :func:`_phase_0b`,
+    avoiding the brute-force hand-mining and hand-smelting of every
+    plate the agent ever needs.
     """
     schedule = production_schedule(crafted_targets, book)
     bom = bill_of_materials(crafted_targets, book)
@@ -647,11 +780,88 @@ def _phase_0(
             smelt_goals.append(ProduceInFurnace(output_item, qty, book=book))
         elif machine_type == int(MachineType.ASSEMBLER):
             craft_goals.append(ProduceInAssembler(output_item, qty, book=book))
-        # Other machine types are not produced via Phase 0 (e.g. recipes
+        # Other machine types are not produced via Phase 0a (e.g. recipes
         # gated to a specific cell). None of the rocket recipes use them
         # at this stage.
 
     return [*mine_goals, *smelt_goals, *craft_goals]
+
+
+# ---------------------------------------------------------------------------
+# Phase 0b — bootstrap part 2: withdraw plates from cells, craft Phase 2/3
+# ---------------------------------------------------------------------------
+
+
+def _phase_0b(
+    crafted_targets: dict[int, int],
+    book: RecipeBook,
+    slack: dict[int, int],
+) -> list[Goal]:
+    """Withdraw plates from cell pallets, mine raw, craft Phase 2/3 items.
+
+    Run *after* the Phase 1 cells are placed and producing. Treats
+    plates and wafer as leaves (truncating their smelt recipes from
+    the book), so the BOM walk only requests raw resources the cells
+    don't produce — namely COAL for the SPLITTER + CROSSING crafts
+    that consume coal directly in the assembler.
+
+    For each scheduled craft, the agent:
+
+    1. Withdraws the per-cycle plate input from the corresponding cell
+       plate-bus pallet (chunked to :data:`_PHASE_0B_CHUNK` cycles per
+       batch so the player's inventory stays under cap).
+    2. Runs ``ProduceInMachine`` for the chunk. The machine is the
+       pre-placed assembler at (17, 16) for assembler recipes (or the
+       pre-placed furnace at (15, 16) for any furnace recipe — none
+       in the rocket pipeline today).
+
+    Slack only applies to raw leaves; plates have effectively unlimited
+    supply from the cells, so no per-plate slack is needed.
+    """
+    truncated = book_without_recipes_for(book, set(_PLATE_LEAVES))
+    bom = bill_of_materials(crafted_targets, truncated)
+    schedule = production_schedule(crafted_targets, truncated)
+    for item, qty in slack.items():
+        if int(item) in _PLATE_LEAVES:
+            continue
+        bom[int(item)] = bom.get(int(item), 0) + int(qty)
+
+    goals: list[Goal] = []
+    for item, qty in sorted(bom.items()):
+        if item in _PLATE_LEAVES or qty <= 0:
+            continue
+        goals.append(MineOre(item, qty))
+
+    book_lookup = {r.output: r for r in book.recipes}
+    for output_item, qty, machine_type in schedule:
+        recipe = book_lookup[output_item]
+        for chunk_start in range(0, qty, _PHASE_0B_CHUNK):
+            chunk_qty = min(_PHASE_0B_CHUNK, qty - chunk_start)
+            for input_item, per_craft in recipe.inputs:
+                input_id = int(input_item)
+                if input_id not in _PLATE_LEAVES:
+                    continue
+                need = chunk_qty * int(per_craft)
+                # WithdrawFromBusAt is absolute ("until held >= count");
+                # after the previous chunk's craft consumed the inputs
+                # the player holds 0 of this plate, so the goal pulls
+                # `need` plates from the cell pallet. max_idle_attempts
+                # is generous because the cell may need a few hundred
+                # ticks to refill after a large pull.
+                goals.append(
+                    WithdrawFromBusAt(
+                        _PLATE_PALLETS[input_id],
+                        input_id,
+                        need,
+                        max_idle_attempts=400,
+                    )
+                )
+            if int(machine_type) == int(MachineType.FURNACE):
+                goals.append(ProduceInFurnace(output_item, chunk_qty, book=book))
+            elif int(machine_type) == int(MachineType.ASSEMBLER):
+                goals.append(ProduceInAssembler(output_item, chunk_qty, book=book))
+
+    return goals
 
 
 # ---------------------------------------------------------------------------
@@ -1019,6 +1229,91 @@ def _phase_3_motor_goals() -> list[Goal]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3.SENSOR — assembler + CIRCUIT extractor + WIRE splitter
+# ---------------------------------------------------------------------------
+
+
+def _phase_3_sensor_goals() -> list[Goal]:
+    """Place the SENSOR module + WIRE splitter + CIRCUIT extractor.
+
+    WIRE comes off a SPLITTER at (24, 12) horizontal RIGHT that
+    replaces the wire belt on the WIRE -> MOTOR trunk. The splitter's
+    DOWN output continues feeding MOTOR; its UP output feeds a new
+    corridor along row 11 east, then south down col 28 into the
+    SENSOR input_a feeder at (28, 17).
+
+    CIRCUIT comes off the CIRCUIT output PALLET at (18, 18) via an
+    arm at (18, 19) facing DOWN (from-back; the natural stand tile
+    is the PALLET). The arm pushes CIRCUIT onto (18, 20); the route
+    runs east on row 20 through two CROSSINGs at (19, 20) (iron) and
+    (24, 20) (wire), continues to col 27, then bends UP into the
+    SENSOR input_b feeder at (27, 18).
+
+    Placement order (each step's stand tile is dirt or a previously
+    placed walkable belt; CROSSINGs and SPLITTERs are not walkable):
+
+    1. SENSOR module at ``_SENSOR_ASSEMBLER_TILE``.
+    2. WIRE -> SENSOR belts sink-first (col 28 from row 16 up to
+       row 11, then row 11 from col 27 west to col 24).
+    3. WIRE SPLITTER at (24, 12). Stand = (23, 12) wire-trunk belt
+       (placed by Phase 3.MOTOR).
+    4. CIRCUIT -> SENSOR sink belts (col 27 UP, row 20 east-end
+       sink-first to (25, 20)).
+    5. CROSSING (24, 20) dir=1. Stand = (25, 20) belt.
+    6. CIRCUIT -> SENSOR mid belts ((23, 20)..(20, 20) RIGHT).
+    7. CROSSING (19, 20) dir=1. Stand = (20, 20) belt.
+    8. CIRCUIT -> SENSOR tail belt ((18, 20) RIGHT).
+    9. CIRCUIT extractor arm at (18, 19) DOWN via from-back. Stand
+       = (18, 20) belt.
+    """
+    goals: list[Goal] = []
+
+    goals.extend(
+        build_assembler_module_at(
+            _SENSOR_ASSEMBLER_TILE,
+            input_b=True,
+            map_size=_MAP_SIZE,
+        )
+    )
+
+    for tile, facing in _WIRE_TO_SENSOR_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # WIRE SPLITTER — horizontal facing RIGHT outputs UP and DOWN.
+    # DOWN feeds the existing MOTOR-bound col-24 trunk; UP feeds
+    # the SENSOR-bound row-11 corridor placed above.
+    goals.append(
+        PlaceMachineAt(MachineType.SPLITTER, _WIRE_SPLITTER_TILE, int(Direction.RIGHT))
+    )
+
+    for tile, facing in _CIRCUIT_TO_SENSOR_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # CROSSING dir=1: vertical N->S (wire) + horizontal W->E (CIRCUIT).
+    goals.append(PlaceMachineAt(MachineType.CROSSING, _CIRCUIT_WIRE_CROSSING_TILE, 1))
+
+    for tile, facing in _CIRCUIT_TO_SENSOR_MID_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # CROSSING dir=1: vertical N->S (iron) + horizontal W->E (CIRCUIT).
+    goals.append(PlaceMachineAt(MachineType.CROSSING, _CIRCUIT_IRON_CROSSING_TILE, 1))
+
+    for tile, facing in _CIRCUIT_TO_SENSOR_TAIL_BELTS:
+        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # CIRCUIT extractor arm at (18, 19) facing DOWN — natural stand
+    # tile (18, 18) is the CIRCUIT output PALLET, so go from-back:
+    # stand on the (18, 20) belt placed in step 8, face UP, place
+    # inheriting UP, then ROTATE to DOWN.
+    goals.append(
+        PlaceMachineFromBackAt(
+            MachineType.ARM, _CIRCUIT_EXTRACT_ARM_TILE, int(Direction.DOWN)
+        )
+    )
+    return goals
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -1061,15 +1356,15 @@ def build_advanced_factory_goals(
     if slack is None:
         slack = _DEFAULT_SLACK
 
-    crafted_targets = sum_inventories(
-        _phase_1_targets(),
+    phase_0a_targets = _phase_1_targets()
+    phase_0b_targets = sum_inventories(
         _phase_2_wire_targets(),
         _phase_3_frame_targets(),
         _phase_3_circuit_targets(),
         _phase_3_motor_targets(),
-        _ACHIEVEMENT_KEEPSAKES,
+        _phase_3_sensor_targets(),
     )
-    goals: list[Goal] = list(_phase_0(crafted_targets, book, slack))
+    goals: list[Goal] = list(_phase_0a(phase_0a_targets, book, slack))
 
     for spec in _PHASE_1_CELLS:
         goals.extend(_phase_1_cell_goals(spec))
@@ -1079,6 +1374,14 @@ def build_advanced_factory_goals(
         goals.append(WaitUntil(_miner_has_output_predicate(), max_ticks=60))
         expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
         goals.append(VerifyLayout(expected, label=f"phase 1.{spec.label}"))
+
+    # Settle wait so each cell's plate-bus has at least one plate
+    # before Phase 0b's first WithdrawFromBusAt fires. Each cell
+    # smelts at 1 plate per ~2 ticks once ore + coal are flowing,
+    # so 80 ticks comfortably covers spin-up and the first plate
+    # landing on the bus.
+    goals.append(Wait(80))
+    goals.extend(_phase_0b(phase_0b_targets, book, slack))
 
     goals.extend(_phase_2_wire_goals())
     expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
@@ -1096,10 +1399,42 @@ def build_advanced_factory_goals(
     expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
     goals.append(VerifyLayout(expected, label="phase 3.motor"))
 
-    # Trailing wait. Iron and tin trunks plus CIRCUIT and MOTOR routes
-    # together span ~50 belts; 3000 ticks lets every cell reach steady
-    # state before episode end.
-    goals.append(Wait(3000))
+    goals.extend(_phase_3_sensor_goals())
+    expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
+    goals.append(VerifyLayout(expected, label="phase 3.sensor"))
+
+    # Settle wait — let the chain reach steady state so MOTOR and
+    # SENSOR pallets fill before the player tries to withdraw. ~70
+    # belts plus four assembler cycles take a few hundred ticks for
+    # the first item of each kind to land.
+    goals.append(Wait(800))
+
+    # End-of-run achievement pickups. MOTOR and SENSOR are produced
+    # only on-belt (no Phase 0 hand-craft path), so the player has
+    # never held one. WithdrawFromBusAt drains a single unit from
+    # each live output pallet, which is enough to unlock the
+    # craft_motor / craft_sensor achievements (the benchmark checks
+    # player inventory, not pallet contents).
+    goals.append(
+        WithdrawFromBusAt(
+            _MOTOR_OUTPUT_TILE,
+            ItemType.MOTOR,
+            count=1,
+            max_idle_attempts=400,
+        )
+    )
+    goals.append(
+        WithdrawFromBusAt(
+            _SENSOR_OUTPUT_TILE,
+            ItemType.SENSOR,
+            count=1,
+            max_idle_attempts=400,
+        )
+    )
+
+    # Trailing wait. Lets late achievements (e.g. accumulating output
+    # pallet counts) finish firing before episode end.
+    goals.append(Wait(1500))
     return goals
 
 
