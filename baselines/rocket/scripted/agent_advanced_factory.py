@@ -1,47 +1,46 @@
 """Advanced-factory rocket agent — v2 incremental rebuild.
 
-Currently at **M4** of the v2 plan: Phase 0 bootstrap + Phase 1.iron
-(first automated smelter). The agent
+Currently at **M5** of the v2 plan: Phase 0 bootstrap + Phase 1
+(iron *and* copper automated smelters). Iron and copper share the
+same cell shape; M6+ adds tin / silicon / wafer cells and the
+inter-cell crafting chain.
 
-1. Hand-mines a starter inventory sized for *every* placement Phase
-   1.iron will make, smelts each plate, then crafts every machine
-   the cell + coal trunk + supporting infrastructure consumes.
-2. Drops one MINER on the iron patch, threads ore east into the
-   smelter cell's ore_pallet, then places the smelter (furnace,
-   arm, plate-bus PALLET, coal-buffer PALLET) and a 1-miner + 7-
-   belt coal trunk along row 11 feeding the coal-buffer.
-3. Verifies the placements landed, waits for plates to accumulate.
+1. Hand-mines a starter inventory sized for *every* placement
+   Phase 1 will make, smelts each plate, then crafts every machine
+   the cells + coal trunks + supporting infrastructure consume.
+2. For each ore (iron, copper) drops one ore-MINER + 2 belts
+   feeding the smelter ore_pallet, places the smelter cell
+   (furnace + arm + plate-bus PALLET + coal-buffer PALLET), then a
+   1-miner + 6-belt coal trunk on its dedicated row feeding the
+   coal-buffer.
+3. After each cell, verifies the placements landed and waits for
+   the miners to spin up.
 
 Phase 0 quantities are recipe-driven: targets feed
 :func:`bill_of_materials` and :func:`production_schedule`, so a
 recipe rebalance auto-resizes mining / smelting / crafting without
 hand edits.
 
-M5+ extend Phase 1 to copper / tin / silicon by tacking more
-identical-shaped cells onto the same Phase 0 + Phase 1 prefix.
-
 Map layout the agent assumes (v2; see
 :func:`factoriax.benchmarks.rocket.build_rocket_level`)::
 
       0 1 2 3 4 5 6 7 8 9 ...
-    0 #
-    .                              spawn at (16, 16),
-    9 # · · I I · · . O . . .      pre-placed F at (15,16),
-   10 # · · I I · · F a P . .      pre-placed A at (17,16)
-   11 M . . . . . . . P . . .
-    .
-   12 # · · U U · · . . . . .       (M=miner, .=belt, F=furnace,
-   13 # · · U U                      a=arm, P=pallet, O=ore_pallet,
-   14                                #=coal column, I=iron patch)
+    9 # · · I I · · . O . . .       (M=miner, .=belt, F=furnace,
+   10 # · · I I · · F a P . .        a=arm, P=pallet, O=ore_pallet,
+   11 M . . . . . . . P . . .        #=coal column, I=iron patch,
+   12 # · · U U · · . O . . .        U=copper patch).
+   13 # · · U U · · F a P . .
+   14 M . . . . . . . P . . .
 
-The coal column is a single tile wide (x=0). The iron coal miner
-sits *on* the column at (0, 11) facing RIGHT. Its natural stand
-tile (-1, 11) is off-map; ``PlaceMachineFromBackAt`` works around
-that by placing from the front (player at (1, 11) facing LEFT)
-and rotating the miner with ``ROTATE_RIGHT`` afterward.
+Each cell's coal miner sits *on* the coal column at (0, k) facing
+RIGHT — its natural stand tile (-1, k) is off-map, so the agent
+uses ``PlaceMachineFromBackAt``: stand on the belt at (1, k)
+facing LEFT, place (miner inherits LEFT), then ROTATE_RIGHT.
 """
 
 from __future__ import annotations
+
+import dataclasses
 
 from factoriax.constants import Direction, ItemType, MachineType
 from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBook
@@ -78,67 +77,81 @@ _PRE_PLACED_LAYOUT: dict[tuple[int, int], tuple[int, int]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Geometry — Phase 1.iron tile coordinates
+# Geometry — per-cell smelter spec
 # ---------------------------------------------------------------------------
 
 _MAP_SIZE: tuple[int, int] = (32, 32)
 
-# Iron smelter cell anchor (the furnace tile). build_smelter_cell_at
-# derives ore_pallet (north), coal_pallet (south), arm (east), and
-# plate-bus (east+1) from this.
-_IRON_FURNACE_TILE: tuple[int, int] = (7, 10)
-_IRON_ORE_PALLET_TILE: tuple[int, int] = (7, 9)  # north of furnace
-_IRON_PLATE_BUS_TILE: tuple[int, int] = (9, 10)  # east of arm
 
-# Iron miner sits on the bottom-right tile of the 2x2 iron patch
-# at (3..4, 9..10) and pushes east. Two belts carry the ore to the
-# ore_pallet north of the furnace.
-_IRON_MINER_TILE: tuple[int, int] = (4, 9)
-_IRON_ORE_BELT_TILES: tuple[tuple[int, int], ...] = ((5, 9), (6, 9))
+@dataclasses.dataclass(frozen=True)
+class _SmelterCellSpec:
+    """All tiles + facing a single Phase 1 smelter cell touches.
 
-# Iron coal trunk: one coal miner on the coal column, seven belts
-# running east along row 11 into the smelter cell's coal_buffer
-# pallet at (7, 11). Row 11 is the dirt strip between the iron
-# patch (rows 9-10) and the copper patch (rows 12-13).
-#
-# Miner sits at (0, 11) — on the coal column itself — facing RIGHT.
-# Its natural stand tile (-1, 11) is off-map, so the agent uses
-# ``PlaceMachineFromBackAt``: stand at (1, 11) facing LEFT, place
-# (miner inherits LEFT), then ROTATE_RIGHT to flip facing.
-_IRON_COAL_MINER_TILE: tuple[int, int] = (0, 11)
-_IRON_COAL_BELT_TILES: tuple[tuple[int, int], ...] = (
-    (1, 11),
-    (2, 11),
-    (3, 11),
-    (4, 11),
-    (5, 11),
-    (6, 11),
+    The shape is identical for iron / copper / tin / silicon: a 1x2
+    ore-feed belt run on the patch's top row pushing east into a
+    DOWN-facing ore_pallet, a smelter cell anchored at the furnace
+    tile (RIGHT-facing), and a 1-miner + 6-belt coal trunk on the
+    next dirt row south of the cell.
+    """
+
+    label: str  # "iron" / "copper" / ...
+    plate_bus_tile: tuple[int, int]
+    furnace_tile: tuple[int, int]
+    ore_pallet_tile: tuple[int, int]
+    ore_miner_tile: tuple[int, int]
+    ore_belt_tiles: tuple[tuple[int, int], ...]
+    coal_miner_tile: tuple[int, int]
+    coal_belt_tiles: tuple[tuple[int, int], ...]
+
+    def cell_inventory(self) -> dict[int, int]:
+        """Items the cell consumes when placed (cell + feeders)."""
+        return sum_inventories(
+            smelter_cell_inventory(),
+            {
+                int(ItemType.MINER): 2,  # 1 ore + 1 coal
+                int(ItemType.CONVEYOR_BELT): (
+                    len(self.ore_belt_tiles) + len(self.coal_belt_tiles)
+                ),
+                int(ItemType.PALLET): 1,  # ore_pallet
+            },
+        )
+
+
+_IRON_CELL = _SmelterCellSpec(
+    label="iron",
+    plate_bus_tile=(9, 10),
+    furnace_tile=(7, 10),
+    ore_pallet_tile=(7, 9),
+    ore_miner_tile=(4, 9),
+    ore_belt_tiles=((5, 9), (6, 9)),
+    coal_miner_tile=(0, 11),
+    coal_belt_tiles=((1, 11), (2, 11), (3, 11), (4, 11), (5, 11), (6, 11)),
 )
 
-# ---------------------------------------------------------------------------
-# Phase-1 placement inventory — items needed for Phase 1.iron alone
-# ---------------------------------------------------------------------------
+# Copper sits one ore-patch slot south. Cell anchor on row 13 mirrors
+# iron's row 10. Coal trunk on row 14 (the dirt gap between copper
+# rows 12-13 and tin rows 15-16).
+_COPPER_CELL = _SmelterCellSpec(
+    label="copper",
+    plate_bus_tile=(9, 13),
+    furnace_tile=(7, 13),
+    ore_pallet_tile=(7, 12),
+    ore_miner_tile=(4, 12),
+    ore_belt_tiles=((5, 12), (6, 12)),
+    coal_miner_tile=(0, 14),
+    coal_belt_tiles=((1, 14), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14)),
+)
 
-# Iron-cell + coal-trunk machinery (does not include the ore_pallet
-# nor the smelter-cell pieces; those come from
-# smelter_cell_inventory() + 1 explicit PALLET below).
-_PHASE_1_IRON_INFRASTRUCTURE: dict[int, int] = {
-    int(ItemType.MINER): 2,  # 1 ore + 1 coal
-    int(ItemType.CONVEYOR_BELT): len(_IRON_ORE_BELT_TILES) + len(_IRON_COAL_BELT_TILES),
-    int(ItemType.PALLET): 1,  # ore_pallet at (7, 9)
-}
+_PHASE_1_CELLS: tuple[_SmelterCellSpec, ...] = (_IRON_CELL, _COPPER_CELL)
+
+# Convenience alias kept stable for external references (tests).
+_IRON_PLATE_BUS_TILE: tuple[int, int] = _IRON_CELL.plate_bus_tile
+_COPPER_PLATE_BUS_TILE: tuple[int, int] = _COPPER_CELL.plate_bus_tile
 
 
-def _phase_1_iron_targets() -> dict[int, int]:
-    """Return ``{ItemType: count}`` of items Phase 1.iron places.
-
-    Sums the cell footprint (2 PALLET + 1 ARM + 1 FURNACE) with the
-    feeder infrastructure (2 MINER + 8 BELT + 1 ore PALLET).
-    """
-    return sum_inventories(
-        smelter_cell_inventory(),
-        _PHASE_1_IRON_INFRASTRUCTURE,
-    )
+def _phase_1_targets() -> dict[int, int]:
+    """Return ``{ItemType: count}`` for every Phase 1 placement."""
+    return sum_inventories(*[c.cell_inventory() for c in _PHASE_1_CELLS])
 
 
 # Achievement-preservation targets: items the agent smelts / crafts
@@ -210,87 +223,76 @@ def _phase_0(
 
 
 # ---------------------------------------------------------------------------
-# Phase 1.iron — one smelter cell + ore feed + coal trunk
+# Phase 1 — per-cell smelter + ore feed + coal trunk
 # ---------------------------------------------------------------------------
 
 
-def _phase_1_iron() -> list[Goal]:
-    """Place the iron smelter cell, ore feed belts, and coal trunk.
+def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
+    """Build the placement goals for a single Phase 1 smelter cell.
 
-    Placement order. Belts are always placed *before* the
-    machines that push onto them, otherwise the player would have
-    to stand on a non-walkable miner / pallet tile to place the
-    next belt east of it.
+    Placement order. Belts are always placed *before* the machines
+    that push onto them; otherwise the player would have to stand
+    on a non-walkable miner / pallet tile to place the next belt
+    east of it.
 
-    1. Two ore belts on row 9 ((5, 9), (6, 9)) ferrying ore from
-       the iron patch east to the ore_pallet. Belt (5, 9)'s stand
-       tile is (4, 9) — iron ore tile, walkable.
-    2. Ore_pallet at (7, 9) facing DOWN. Stand tile (7, 8) is
-       dirt.
-    3. Iron miner on patch (4, 9) facing RIGHT pushing east onto
-       the belt at (5, 9). Stand tile (3, 9) is iron ore.
-    4. Smelter cell at (7, 10) facing RIGHT. ``build_smelter_cell_at``
-       internally orders coal_buffer -> plate_bus -> arm -> furnace
-       so every stand tile is walkable at place time.
-    5. Six coal belts on row 11 ((1, 11)..(6, 11)) feeding the
-       coal_buffer at (7, 11). Placed before the coal miner so
-       (1, 11) has a belt to receive the miner's eastward push.
-    6. Coal miner at (0, 11) RIGHT via ``PlaceMachineFromBackAt``.
-       Natural stand tile (-1, 11) is off-map; the from-back
-       variant stands on the belt at (1, 11) facing LEFT, places
-       (miner inherits LEFT), then ROTATEs to RIGHT.
+    1. Ore feed belts ferrying ore from the patch east to the
+       ore_pallet. Belt 0's stand tile sits on the ore patch
+       itself — walkable.
+    2. Ore_pallet facing DOWN via ``PlaceMachineFromBackAt``.
+       The natural (north) stand tile would either be dirt
+       (iron — fine on its own) or the previous cell's
+       coal_buffer (copper, tin, silicon — non-walkable). Using
+       from-back uniformly stands the player on the dirt south of
+       the pallet, places facing UP, then ROTATEs to DOWN.
+    3. Ore miner facing RIGHT pushing east onto the first belt.
+       Stand tile is the patch's third column — walkable ore.
+    4. Smelter cell at the furnace tile facing RIGHT.
+       ``build_smelter_cell_at`` internally orders coal_buffer ->
+       plate_bus -> arm -> furnace so every stand tile is walkable
+       at place time.
+    5. Six coal belts feeding the cell's coal_buffer. Placed
+       before the coal miner so the trunk's first tile has a belt
+       to receive the miner's eastward push.
+    6. Coal miner on the coal column at x=0 via
+       ``PlaceMachineFromBackAt``. Natural stand tile (-1, k) is
+       off-map; the from-back variant stands on the belt at
+       (1, k) facing LEFT, places (miner inherits LEFT), then
+       ROTATEs to RIGHT.
 
-    A WaitUntil + VerifyLayout gate confirms automation_mining
-    fires and every Phase 1.iron placement is on the map before
-    the trailing settle-Wait counts plates.
+    The caller appends a WaitUntil + VerifyLayout gate to confirm
+    the placements landed before the next cell starts (or before
+    the trailing Wait that lets plates accumulate).
     """
     goals: list[Goal] = []
 
-    # 1. Iron ore feed belts (placed before the miner so the miner's
-    # stand tile isn't blocked by a previously placed neighbour).
-    for tile in _IRON_ORE_BELT_TILES:
+    for tile in spec.ore_belt_tiles:
         goals.append(
             PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, int(Direction.RIGHT))
         )
-
-    # 2. Ore_pallet (faces DOWN; receives push from the last belt at
-    # (6, 9) RIGHT and pushes south into the furnace at (7, 10)).
     goals.append(
-        PlaceMachineAt(MachineType.PALLET, _IRON_ORE_PALLET_TILE, int(Direction.DOWN))
+        PlaceMachineFromBackAt(
+            MachineType.PALLET, spec.ore_pallet_tile, int(Direction.DOWN)
+        )
     )
-
-    # 3. Iron miner pushing east onto the belt at (5, 9).
     goals.append(
-        PlaceMachineAt(MachineType.MINER, _IRON_MINER_TILE, int(Direction.RIGHT))
+        PlaceMachineAt(MachineType.MINER, spec.ore_miner_tile, int(Direction.RIGHT))
     )
-
-    # 4. Smelter cell — places coal_buffer (7, 11) UP, plate_bus
-    # (9, 10) DOWN, arm (8, 10) RIGHT, furnace (7, 10) RIGHT.
     goals.extend(
         build_smelter_cell_at(
-            _IRON_FURNACE_TILE,
+            spec.furnace_tile,
             facing=int(Direction.RIGHT),
             map_size=_MAP_SIZE,
         )
     )
-
-    # 5. Coal trunk belts on row 11.
-    for tile in _IRON_COAL_BELT_TILES:
+    for tile in spec.coal_belt_tiles:
         goals.append(
             PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, int(Direction.RIGHT))
         )
-
-    # 6. Coal miner at (0, 11) RIGHT via place-from-back.
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.MINER, _IRON_COAL_MINER_TILE, int(Direction.RIGHT)
+            MachineType.MINER, spec.coal_miner_tile, int(Direction.RIGHT)
         )
     )
-
-    # 7. Stage gates.
-    goals.append(WaitUntil(_miner_has_output_predicate(), max_ticks=60))
-    expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
-    goals.append(VerifyLayout(expected, label="phase 1.iron"))
     return goals
 
 
@@ -305,10 +307,10 @@ def build_advanced_factory_goals(
 ) -> list[Goal]:
     """Build the flat goal list for the advanced-factory rocket agent.
 
-    Currently M4: Phase 0 bootstrap + Phase 1.iron (one automated
-    smelter cell). Phase 0 is sized for exactly the items Phase 1
-    places, so a recipe rebalance flows through to mining /
-    smelting / crafting counts automatically.
+    Currently M5: Phase 0 bootstrap + Phase 1 (iron + copper
+    automated smelter cells). Phase 0 is sized for exactly the
+    items Phase 1 places, so a recipe rebalance flows through to
+    mining / smelting / crafting counts automatically.
 
     Args:
         book: :class:`~factoriax.recipes.RecipeBook` whose recipes
@@ -331,17 +333,25 @@ def build_advanced_factory_goals(
         slack = _DEFAULT_SLACK
 
     crafted_targets = sum_inventories(
-        _phase_1_iron_targets(),
+        _phase_1_targets(),
         _ACHIEVEMENT_KEEPSAKES,
     )
-    return [
-        *_phase_0(crafted_targets, book, slack),
-        *_phase_1_iron(),
-        # Trailing wait. The cell needs ~50 ticks to make a plate
-        # (smelt + arm-pull-out + push-into-bus); 1500 ticks ensures
-        # the bus pallet has multiple plates by end of episode.
-        Wait(1500),
-    ]
+    goals: list[Goal] = list(_phase_0(crafted_targets, book, slack))
+
+    for spec in _PHASE_1_CELLS:
+        goals.extend(_phase_1_cell_goals(spec))
+        # WaitUntil after each cell so its miners spin up before
+        # VerifyLayout reads the map; new placements fire the
+        # output-predicate within a few ticks.
+        goals.append(WaitUntil(_miner_has_output_predicate(), max_ticks=60))
+        expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
+        goals.append(VerifyLayout(expected, label=f"phase 1.{spec.label}"))
+
+    # Trailing wait. Each cell needs ~50 ticks to make a plate
+    # (smelt + arm-pull-out + push-into-bus); 1500 ticks lets every
+    # bus pallet collect multiple plates by end of episode.
+    goals.append(Wait(1500))
+    return goals
 
 
 def make_advanced_factory_rocket_agent(
