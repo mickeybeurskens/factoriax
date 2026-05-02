@@ -200,6 +200,52 @@ def test_iterative_bootstrap_phase_order() -> None:
     )
 
 
+def test_phase_1_crafts_match_summed_schedule() -> None:
+    """Regression test: Phase 1's craft schedule must not over-spend.
+
+    Splitting Phase 1 crafts into multiple per-subset
+    ``_craft_goals_for`` calls used to double-count integer-ceiling
+    intermediates (e.g. 2 SPLITTER cycles instead of 1 — each yields
+    4, but each cycle still consumes 1 TIN_PLATE and 1 COAL). With
+    the rocket book's belts=10 and splitter/crossing=4 yields, this
+    drained ~1 plate per item type more than the pre-smelt produced,
+    starving the copper cell's ARM/FURNACE/SPLITTER crafts and
+    cascading to tin + silicon never building.
+
+    The fix collapses Phase 1 crafts into a single
+    ``_craft_goals_for(_phase_1_targets(), book)``. This test pins
+    that contract by checking the goal list has at most one
+    ``ProduceInMachine`` per ``output_item`` *across all of
+    Phase 1*. If a future edit reintroduces per-subset crafts, the
+    duplicate-output count will trip this test before the rebalanced
+    end-to-end run does.
+    """
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    # Walk goals up to (but not including) the first Phase 2 marker —
+    # WithdrawFromBusAt for IRON_PLATE / COPPER_PLATE never appears in
+    # Phase 1, so its first occurrence is the cleanest cut.
+    phase_1_cutoff = next(
+        i
+        for i, g in enumerate(goals)
+        if isinstance(g, WithdrawFromBusAt)
+        and g.item_type in (int(ItemType.IRON_PLATE), int(ItemType.COPPER_PLATE))
+    )
+    phase_1_goals = goals[:phase_1_cutoff]
+
+    output_counts: dict[int, int] = {}
+    for g in phase_1_goals:
+        if isinstance(g, ProduceInMachine):
+            output_counts[g.output_item] = output_counts.get(g.output_item, 0) + 1
+
+    duplicates = {ItemType(item).name: n for item, n in output_counts.items() if n > 1}
+    assert not duplicates, (
+        f"Phase 1 has multiple ProduceInMachine goals for the same output, "
+        f"which causes integer-ceiling over-spend on intermediates: "
+        f"{duplicates}. Collapse Phase 1 crafts into a single "
+        f"_craft_goals_for call against the summed target."
+    )
+
+
 def _mine_count(goals: list, item: ItemType) -> int:
     """Sum the count across all MineOre(item, ...) goals in the list."""
     return sum(
@@ -497,18 +543,6 @@ def test_advanced_factory_iron_cell_produces_plates() -> None:
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Known issue, surfaced by the layout-diff assertion: under the "
-        "rocket benchmark's actual recipe balance (belts=10, "
-        "splitters/crossings=4) the agent reaches Phase 2 short on plates "
-        "and 39 placements (tin + silicon stages) silently FAIL_GIVEUP "
-        "in the planner's step-FAIL retry path. Tracked for the staged "
-        "build refactor; this test stays as a regression canary so the "
-        "fix flips it back to passing."
-    ),
-)
 def test_advanced_factory_under_rocket_recipe_book() -> None:
     """Same end-to-end run, but with the rocket benchmark's actual
     recipe balance (belts=10, splitters/crossings=4 per craft).

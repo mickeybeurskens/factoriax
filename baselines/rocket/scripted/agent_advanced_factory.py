@@ -345,9 +345,16 @@ def _phase_1(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
 
     Mines every leaf resource Phase 1 will consume, pre-smelts the
     plates needed for iron + copper cells + their two trunks + the
-    four ore-node placements, places the 4 patch miners, lays the
-    iron + copper coal trunks, places the matching coal miners +
-    sink pallets, and finally builds the iron + copper cells.
+    four ore-node placements, then crafts *every Phase 1 item in a
+    single batch* so the craft schedule shares intermediate cycles
+    (BELT, SPLITTER) across cells. Splitting the crafts into per-cell
+    calls — as a previous version did — caused integer-ceiling
+    over-spend (e.g. 2 SPLITTER cycles instead of 1, 6 BELT cycles
+    instead of 5), which by the copper cell's craft step left
+    inventory ~1 plate short of each type. The copper cell's ARM,
+    FURNACE, and SPLITTER cycles then FAILed, the cell built without
+    its smelter, and the entire downstream Phase 2 cascade starved
+    on missing COPPER_PLATE.
 
     Tin + silicon mining and smelting is deferred to Phase 2 so the
     iron + copper cells can produce plates passively while Phase 2
@@ -360,15 +367,16 @@ def _phase_1(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
         # Phase 1 pre-smelt — plates the iron + copper cell crafts
         # will consume. Routes to (15, 16) since no cells exist yet.
         *_smelt_goals_for(targets, book),
-        # Phase A craft + place — 4 patch miners + 4 buffer pallets.
-        *_craft_goals_for(_PHASE_1_ORE_NODE_TARGETS, book),
+        # Phase 1 craft — one batch, summed target. Same schedule the
+        # pre-smelt sized for, so plates balance exactly.
+        *_craft_goals_for(targets, book),
+        # Place 4 patch miners + 4 buffer pallets.
         *place_ore_node((8, 9), map_size=_MAP_SIZE),  # iron
         *place_ore_node((23, 9), map_size=_MAP_SIZE),  # copper
         *place_ore_node((23, 24), map_size=_MAP_SIZE),  # tin
         *place_ore_node((15, 5), map_size=_MAP_SIZE),  # silicon
         WaitUntil(_miner_has_output_predicate(), max_ticks=30),
-        # Iron + copper coal trunks — uses _phase_1_belt_paths.
-        *_craft_goals_for(_phase_1_belt_network_targets(), book),
+        # Iron + copper coal trunks.
         *place_belt_network(
             _phase_1_belt_paths(),
             map_size=_MAP_SIZE,
@@ -383,7 +391,6 @@ def _phase_1(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
             MachineType.PALLET, _COPPER_AUTOMATION_SINK, int(Direction.DOWN)
         ),
         # Build iron + copper cells.
-        *_craft_goals_for(_cell_targets_with_belt(), book),
         *build_smelter_cell_at(
             (8, 11),
             facing=int(Direction.RIGHT),
@@ -391,7 +398,6 @@ def _phase_1(book: RecipeBook, slack: dict[int, int]) -> list[Goal]:
             map_size=_MAP_SIZE,
         ),
         Wait(60),
-        *_craft_goals_for(_cell_targets_no_belt(), book),
         *build_smelter_cell_at(
             (23, 11),
             facing=int(Direction.LEFT),
