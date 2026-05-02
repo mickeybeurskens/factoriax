@@ -248,6 +248,9 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     h, w = state.map.shape
     active = state.ent_y >= 0
     is_arm = (state.ent_type == MachineType.ARM) & active
+    self_is_combiner = (state.ent_type == MachineType.ASSEMBLER) | (
+        state.ent_type == MachineType.FURNACE
+    )
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
@@ -256,6 +259,12 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     buf_count = state.ent_buf_count
     out_type = state.ent_asm_out_type
     out_count = state.ent_asm_out_count
+    # Per-slot scalars for asm_in updates — stack only at function
+    # return so per-iteration jnp.stack allocations don't dominate.
+    in_t0 = state.ent_asm_in_type[..., 0]
+    in_c0 = state.ent_asm_in_count[..., 0]
+    in_t1 = state.ent_asm_in_type[..., 1]
+    in_c1 = state.ent_asm_in_count[..., 1]
 
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
@@ -281,9 +290,10 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         src_bc = jnp.where(src_use_out, src_out_c, src_buf_c)
         src_has = src_valid & src_diff & (src_bc > 0)
 
-        # Destination = in front (facing direction). Always writes
-        # to buf — the receiving entity's asm_out slot is reserved
-        # for its own recipe output.
+        # Destination = in front (facing direction). Combiner
+        # destinations route the push to ``ent_asm_in`` (slot 0
+        # first if empty/type-match, else slot 1); everything else
+        # writes to ``ent_buf``.
         dst_y = jnp.clip(ey + dy, 0, h - 1)
         dst_x = jnp.clip(ex + dx, 0, w - 1)
         dst_eidx = state.tile_entity[dst_y, dst_x]
@@ -291,22 +301,31 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         dst_diff = (dst_y != ey) | (dst_x != ex)
         dst_safe = jnp.clip(dst_eidx, 0, buf_type.shape[0] - 1)
 
+        dst_type = state.ent_type[dst_safe]
+        dst_is_combiner = (dst_type == MachineType.ASSEMBLER) | (
+            dst_type == MachineType.FURNACE
+        )
+
         dst_bc = buf_count[dst_safe]
         dst_bt = buf_type[dst_safe]
-        dst_max = params.machine_config.max_stack[
-            state.ent_type[dst_safe].astype(jnp.int32)
-        ]
+        dst_max = params.machine_config.max_stack[dst_type.astype(jnp.int32)]
         dst_empty = dst_bc == 0
         dst_same = dst_bt == src_bt
         dst_space = dst_bc < dst_max
+        dst_buf_accepts = dst_empty | (dst_same & dst_space)
 
-        can_xfer = (
-            facing_d
-            & src_has
-            & dst_valid
-            & dst_diff
-            & (dst_empty | (dst_same & dst_space))
-        )
+        # Combiner-destination receptivity: slot 0 first if empty
+        # or matches type, else slot 1.
+        dst_in_t0 = in_t0[dst_safe]
+        dst_in_c0 = in_c0[dst_safe]
+        dst_in_t1 = in_t1[dst_safe]
+        dst_in_c1 = in_c1[dst_safe]
+        dst_combiner_s0_ok = (dst_in_c0 == 0) | (dst_in_t0 == src_bt)
+        dst_combiner_s1_ok = (dst_in_c1 == 0) | (dst_in_t1 == src_bt)
+        dst_combiner_accepts = dst_combiner_s0_ok | dst_combiner_s1_ok
+        dst_accepts = jnp.where(dst_is_combiner, dst_combiner_accepts, dst_buf_accepts)
+
+        can_xfer = facing_d & src_has & dst_valid & dst_diff & dst_accepts
 
         # Gather: each entity checks if an arm behind it (opposite
         # of d) is transferring to it, and if an arm in front of it
@@ -321,12 +340,27 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         receiving = can_xfer[rcv_safe] & (rcv_eidx >= 0) & rcv_diff
         rcv_bt = src_bt[rcv_safe]
 
-        buf_type = jnp.where(receiving, rcv_bt, buf_type)
+        # ent_buf-track: combiners receive into ``ent_asm_in`` instead.
+        receives_buf = receiving & ~self_is_combiner
+        buf_type = jnp.where(receives_buf, rcv_bt, buf_type)
         buf_count = jnp.where(
-            receiving,
+            receives_buf,
             buf_count + jnp.int16(1),
             buf_count,
         )
+
+        # ent_asm_in track: pick slot 0 first if empty or matches the
+        # incoming type, else slot 1. Per-slot scalar updates avoid
+        # the per-iteration ``jnp.stack`` allocator pressure.
+        receives_combiner = receiving & self_is_combiner
+        self_s0_ok = (in_c0 == 0) | (in_t0 == rcv_bt)
+        self_s1_ok = (in_c1 == 0) | (in_t1 == rcv_bt)
+        to_s0 = receives_combiner & self_s0_ok
+        to_s1 = receives_combiner & ~self_s0_ok & self_s1_ok
+        in_t0 = jnp.where(to_s0, rcv_bt, in_t0)
+        in_c0 = jnp.where(to_s0, in_c0 + jnp.int16(1), in_c0)
+        in_t1 = jnp.where(to_s1, rcv_bt, in_t1)
+        in_c1 = jnp.where(to_s1, in_c1 + jnp.int16(1), in_c1)
 
         # -- Source side: look at tile (ey + dy, ex + dx). If an arm
         #    there faces d and can_xfer, this entity loses 1 item.
@@ -362,6 +396,8 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     return state.replace(
         ent_buf_type=buf_type,
         ent_buf_count=buf_count,
+        ent_asm_in_type=jnp.stack([in_t0, in_t1], axis=-1),
+        ent_asm_in_count=jnp.stack([in_c0, in_c1], axis=-1),
         ent_asm_out_type=out_type,
         ent_asm_out_count=out_count,
     )
@@ -404,13 +440,22 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     in_t1 = state.ent_asm_in_type[..., 1]
     in_c1 = state.ent_asm_in_count[..., 1]
 
-    # --- Phase 0: Pull inputs from adjacent tiles ---
+    # --- Phase 0: Directional pull from facing-belt neighbours ---
+    #
+    # Combiners pull only from a neighbour that is a CONVEYOR_BELT
+    # whose direction points *at* the machine (``nb_dir ==
+    # opposite(d)``). Pallets, miners, splitters, and arms are
+    # excluded — pallets in particular don't push, so they shouldn't
+    # passively feed adjacent machines (this kills the F+A drain on
+    # incidentally-adjacent ent_buf storage). Belts whose direction
+    # is parallel/perpendicular to the scan are also excluded — only
+    # a belt aimed at the machine counts as a feed.
+    opposite_dir = {1: 2, 2: 1, 3: 4, 4: 3}
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
         ny = jnp.clip(ey + dy, 0, h - 1)
         nx = jnp.clip(ex + dx, 0, w - 1)
 
-        # Look up neighbor entity via grid.
         nb_eidx = state.tile_entity[ny, nx]
         nb_valid = nb_eidx >= 0
         nb_diff = (ny != ey) | (nx != ex)
@@ -418,12 +463,16 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
 
         nb_bt = buf_type[nb_safe]
         nb_bc = buf_count[nb_safe]
-        nb_has = nb_valid & nb_diff & (nb_bc > 0)
+        nb_type = state.ent_type[nb_safe]
+        nb_dir = state.ent_direction[nb_safe]
+        nb_is_belt = nb_type == MachineType.CONVEYOR_BELT
+        nb_facing_self = nb_dir == jnp.int8(opposite_dir[d])
+        nb_eligible = nb_valid & nb_diff & (nb_bc > 0) & nb_is_belt & nb_facing_self
 
         s0_ok = (in_c0 == 0) | (in_t0 == nb_bt)
         s1_ok = (in_c1 == 0) | (in_t1 == nb_bt)
-        tk0 = is_combiner & nb_has & s0_ok
-        tk1 = is_combiner & nb_has & ~tk0 & s1_ok
+        tk0 = is_combiner & nb_eligible & s0_ok
+        tk1 = is_combiner & nb_eligible & ~tk0 & s1_ok
         tk = tk0 | tk1
 
         in_t0 = jnp.where(tk0, nb_bt, in_t0)
@@ -431,8 +480,8 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
         in_t1 = jnp.where(tk1, nb_bt, in_t1)
         in_c1 = jnp.where(tk1, in_c1 + jnp.int16(1), in_c1)
 
-        # Gather: each entity checks if an assembler on the opposite
-        # side (direction d) is taking from it.
+        # Gather: each entity checks if a combiner on the opposite
+        # side (direction d) is pulling from it.
         asm_y = jnp.clip(ey - dy, 0, h - 1)
         asm_x = jnp.clip(ex - dx, 0, w - 1)
         asm_diff = (asm_y != ey) | (asm_x != ex)
@@ -662,7 +711,18 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         dn_diff = (dn_y != ey) | (dn_x != ex)
         dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
 
-        dn_is_crossing = state.ent_type[dn_safe] == MachineType.CROSSING
+        dn_type = state.ent_type[dn_safe]
+        dn_is_crossing = dn_type == MachineType.CROSSING
+        # Reject pushes into combiner destinations. Combiners receive
+        # inputs only via Phase 0's directional pull (from facing
+        # belts) or via an arm pushing into ``ent_asm_in`` — never via
+        # a belt's blind push into ``ent_buf`` (where items would
+        # accumulate uncontrolled). Belts whose terminus faces a
+        # combiner back-pressure: items hold on the belt and Phase 0
+        # picks them up next tick.
+        dn_is_combiner = (dn_type == MachineType.ASSEMBLER) | (
+            dn_type == MachineType.FURNACE
+        )
         # Crossing destination only accepts pushes that align with the
         # *input direction* for the relevant axis. The input direction is
         # the same as the axis output direction (a flow N→S takes inputs
@@ -679,9 +739,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         dn_bc_axis = axis_slot_count[dn_safe]
         dn_bt = jnp.where(dn_is_crossing, dn_bt_axis, dn_bt_buf)
         dn_bc = jnp.where(dn_is_crossing, dn_bc_axis, dn_bc_buf)
-        dn_max = params.machine_config.max_stack[
-            state.ent_type[dn_safe].astype(jnp.int32)
-        ]
+        dn_max = params.machine_config.max_stack[dn_type.astype(jnp.int32)]
 
         dn_empty = dn_bc == 0
         dn_same = dn_bt == src_type
@@ -699,6 +757,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
             & dn_valid
             & dn_diff
             & dn_accepts
+            & ~dn_is_combiner
             & (dn_empty | (dn_same & dn_space))
         )
 
@@ -725,6 +784,10 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         in_xfer = xfer[up_safe]
 
         # Buf-track gather: receivers that are not crossings.
+        # Combiner receivers are unreachable here because can_push
+        # already excluded ``dn_is_combiner`` — combiners are fed only
+        # by Phase 0's directional pull and by arms pushing into
+        # ``ent_asm_in`` (see ``run_arms``).
         receives_buf = incoming & ~is_crossing
         buf_type = jnp.where(receives_buf, in_type, buf_type)
         buf_count = jnp.where(receives_buf, buf_count + in_xfer, buf_count)

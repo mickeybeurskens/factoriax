@@ -147,16 +147,18 @@ def _build_module_level(
             int(MachineType.PALLET),
             int(Direction.DOWN),
         )
+        # Input feeders are belts (facing into the assembler) under
+        # the directional Phase 0; pallets here would never feed.
         builder.place_machine(
             *_INPUT_A,
-            int(MachineType.PALLET),
+            int(MachineType.CONVEYOR_BELT),
             int(Direction.DOWN),
         )
         if not one_input:
             builder.place_machine(
                 *_INPUT_B,
-                int(MachineType.PALLET),
-                int(Direction.LEFT),
+                int(MachineType.CONVEYOR_BELT),
+                int(Direction.RIGHT),
             )
         builder.place_machine(
             *_ARM,
@@ -191,7 +193,8 @@ def _build_module_level(
     inv[0, int(ItemType.ASSEMBLER)] = 1
     inv[0, int(ItemType.FURNACE)] = 1
     inv[0, int(ItemType.ARM)] = 1
-    inv[0, int(ItemType.PALLET)] = 3
+    inv[0, int(ItemType.PALLET)] = 1
+    inv[0, int(ItemType.CONVEYOR_BELT)] = 2
     env_state = env_state.replace(player_inventory=jnp.asarray(inv))
 
     state = AchievementState(
@@ -219,10 +222,13 @@ def test_build_assembler_module_places_all_entities() -> None:
     tile_entity = np.asarray(final_state.env_state.tile_entity)
     ent_direction = np.asarray(final_state.env_state.ent_direction)
 
-    # Pallets: north (input A), west (input B), east-of-arm (output).
-    for tile in (_INPUT_A, _INPUT_B, _OUTPUT):
-        assert mt[tile[1], tile[0]] == int(MachineType.PALLET), (
-            f"expected pallet at {tile}"
+    # Output pallet east-of-arm; inputs are feeder belts.
+    assert mt[_OUTPUT[1], _OUTPUT[0]] == int(MachineType.PALLET), (
+        f"expected pallet at {_OUTPUT}"
+    )
+    for tile in (_INPUT_A, _INPUT_B):
+        assert mt[tile[1], tile[0]] == int(MachineType.CONVEYOR_BELT), (
+            f"expected feeder belt at {tile}"
         )
     # Center machine = assembler facing DOWN.
     assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.ASSEMBLER)
@@ -312,18 +318,20 @@ def test_build_assembler_module_one_input_variant() -> None:
     assert verdict == "done", f"got {verdict}"
 
     mt = np.asarray(final_state.env_state.machine_types)
-    # Two pallets placed (input A, output); west neighbour is dirt.
-    assert mt[_INPUT_A[1], _INPUT_A[0]] == int(MachineType.PALLET)
+    # Output pallet + input_a feeder belt; west neighbour is dirt.
+    assert mt[_INPUT_A[1], _INPUT_A[0]] == int(MachineType.CONVEYOR_BELT)
     assert mt[_OUTPUT[1], _OUTPUT[0]] == int(MachineType.PALLET)
     assert mt[_INPUT_B[1], _INPUT_B[0]] == int(MachineType.NONE), (
-        "1-input variant must not place a west pallet"
+        "1-input variant must not place a west feeder belt"
     )
     # Furnace + arm.
     assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.FURNACE)
     assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
-    # One PALLET left in inventory (started with 3, used 2).
+    # One PALLET left in inventory (started with 1, used 1 for output);
+    # one CONVEYOR_BELT used (started with 2, 1 left).
     inv = np.asarray(final_state.env_state.player_inventory[0])
-    assert int(inv[int(ItemType.PALLET)]) == 1
+    assert int(inv[int(ItemType.PALLET)]) == 0
+    assert int(inv[int(ItemType.CONVEYOR_BELT)]) == 1
     assert int(inv[int(ItemType.FURNACE)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
 
@@ -428,7 +436,8 @@ def test_two_assembler_modules_compose_without_collision() -> None:
     inv = np.asarray(env_state.player_inventory).copy()
     inv[0, int(ItemType.ASSEMBLER)] = 2
     inv[0, int(ItemType.ARM)] = 2
-    inv[0, int(ItemType.PALLET)] = 6
+    inv[0, int(ItemType.PALLET)] = 2
+    inv[0, int(ItemType.CONVEYOR_BELT)] = 4
     env_state = env_state.replace(player_inventory=jnp.asarray(inv))
     state = AchievementState(
         env_state=env_state,
@@ -469,16 +478,22 @@ def test_two_assembler_modules_compose_without_collision() -> None:
     assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
     assert mt[center_b[1], center_b[0]] == int(MachineType.ASSEMBLER)
     assert mt[arm_b[1], arm_b[0]] == int(MachineType.ARM)
-    # Both modules' input + output pallets exist.
-    for tile in (_INPUT_A, _INPUT_B, _OUTPUT, input_a_b, input_b_b, output_b):
+    # Both modules' output pallets exist.
+    for tile in (_OUTPUT, output_b):
         assert mt[tile[1], tile[0]] == int(MachineType.PALLET), (
             f"missing pallet at {tile}"
+        )
+    # Both modules' input feeders are belts.
+    for tile in (_INPUT_A, _INPUT_B, input_a_b, input_b_b):
+        assert mt[tile[1], tile[0]] == int(MachineType.CONVEYOR_BELT), (
+            f"missing feeder belt at {tile}"
         )
     # Bootstrap inventory fully consumed.
     inv = np.asarray(state.env_state.player_inventory[0])
     assert int(inv[int(ItemType.ASSEMBLER)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
     assert int(inv[int(ItemType.PALLET)]) == 0
+    assert int(inv[int(ItemType.CONVEYOR_BELT)]) == 0
 
 
 # ---------------------------------------------------------------------------

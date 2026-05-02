@@ -21,34 +21,40 @@ def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:
     return out
 
 
-def test_inventory_2_input_three_pallets_one_arm_one_assembler() -> None:
+def test_inventory_2_input_one_pallet_two_belts_one_arm_one_assembler() -> None:
+    """Inputs are feeder belts (north + west); output is a pallet."""
     cost = assembler_module_inventory(input_b=True)
     assert cost[int(ItemType.ASSEMBLER)] == 1
-    assert cost[int(ItemType.PALLET)] == 3
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 2  # input_a + input_b feeders
+    assert cost[int(ItemType.PALLET)] == 1  # output only
     assert cost[int(ItemType.ARM)] == 1
 
 
-def test_inventory_1_input_drops_one_pallet() -> None:
+def test_inventory_1_input_drops_one_belt() -> None:
     cost = assembler_module_inventory(input_b=False)
-    assert cost[int(ItemType.PALLET)] == 2
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 1  # input_a feeder only
+    assert cost[int(ItemType.PALLET)] == 1  # output
 
 
 def test_2_input_layout_around_center() -> None:
-    """Standard layout: input_a north, input_b west, arm east, output east-east."""
+    """Standard layout: input_a north feeder belt, input_b west
+    feeder belt, arm east, output east-east."""
     goals = build_assembler_module_at((16, 9))
     placements = _placements(goals)
     assert placements == [
         # output east-east, facing DOWN
         (int(MachineType.PALLET), (18, 9), int(Direction.DOWN)),
-        # input_b west, facing LEFT
-        (int(MachineType.PALLET), (15, 9), int(Direction.LEFT)),
+        # input_b west feeder belt, facing RIGHT (pushes east into
+        # the assembler; Phase 0 directional pull picks it up).
+        (int(MachineType.CONVEYOR_BELT), (15, 9), int(Direction.RIGHT)),
         # arm east, facing RIGHT
         (int(MachineType.ARM), (17, 9), int(Direction.RIGHT)),
         # center assembler, facing DOWN
         (int(MachineType.ASSEMBLER), (16, 9), int(Direction.DOWN)),
-        # input_a north, facing DOWN — last because its stand tile
-        # (one further north) is unaffected by anything else.
-        (int(MachineType.PALLET), (16, 8), int(Direction.DOWN)),
+        # input_a north feeder belt, facing DOWN — last because its
+        # stand tile (one further north) is unaffected by anything
+        # else.
+        (int(MachineType.CONVEYOR_BELT), (16, 8), int(Direction.DOWN)),
     ]
 
 

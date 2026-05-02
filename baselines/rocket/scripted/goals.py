@@ -1075,11 +1075,13 @@ def place_belt_path(
 
 
 # Per-item bootstrap cost of one smelter cell built via
-# :func:`build_smelter_cell_at`. Two pallets (coal-buffer south + plate
-# bus to one side), one cell arm, one furnace; extras are added by the
-# kwargs (``with_extractor``, ``output_split``).
+# :func:`build_smelter_cell_at`. One feeder belt (coal-buffer south,
+# pushes coal UP into the furnace), one plate-bus pallet, one cell
+# arm, one furnace; extras are added by the kwargs (``with_extractor``,
+# ``output_split``).
 _SMELTER_CELL_INVENTORY: tuple[tuple[int, int], ...] = (
-    (int(ItemType.PALLET), 2),
+    (int(ItemType.CONVEYOR_BELT), 1),
+    (int(ItemType.PALLET), 1),
     (int(ItemType.ARM), 1),
     (int(ItemType.FURNACE), 1),
 )
@@ -1142,8 +1144,15 @@ def smelter_cell_inventory(
         cost[int(ItemType.ARM)] += 1
     if output_split:
         cost[int(ItemType.SPLITTER)] = 1
+        # plate_bus PALLET swapped for the SPLITTER, but a fresh
+        # manual_stash PALLET is also placed — the two cancel out so
+        # the PALLET count is unchanged from the base layout.
         if automation_belt:
-            cost[int(ItemType.CONVEYOR_BELT)] = 1
+            # Stack on the existing coal-feeder belt so the cost is
+            # 2 belts total (coal-feeder + automation).
+            cost[int(ItemType.CONVEYOR_BELT)] = (
+                cost.get(int(ItemType.CONVEYOR_BELT), 0) + 1
+            )
     return cost
 
 
@@ -1373,9 +1382,14 @@ def build_smelter_cell_at(
                     f"smelter cell {label} tile {tile} collides with an occupied tile",
                 )
 
+    # Coal feeder is now a belt facing UP (into the furnace's
+    # ``ent_asm_in`` slot 1) instead of a pallet — combiners no longer
+    # auto-pull from neighbour buffers. The trunk's last belt pushes
+    # east into this tile, the belt holds the coal one tick, then
+    # pushes UP into the furnace.
     goals: list[Goal] = [
         PlaceMachineAt(
-            MachineType.PALLET,
+            MachineType.CONVEYOR_BELT,
             coal_buffer_tile,
             int(Direction.UP),
         ),
@@ -1439,11 +1453,14 @@ def build_smelter_cell_at(
 
 
 # Per-item bootstrap cost of one 2-input assembler module placed via
-# :func:`build_assembler_module_at`: 1 assembler + 3 pallets
-# (input_a, input_b, output) + 1 arm (east-side plate extractor).
+# :func:`build_assembler_module_at`. Inputs are belts facing into the
+# assembler (north belt facing DOWN, west belt facing RIGHT) so the
+# directional Phase 0 pull picks up items deposited via belt or arm
+# upstream. Output is a pallet drained by the east-side arm.
 _ASSEMBLER_MODULE_INVENTORY: tuple[tuple[int, int], ...] = (
     (int(ItemType.ASSEMBLER), 1),
-    (int(ItemType.PALLET), 3),
+    (int(ItemType.CONVEYOR_BELT), 2),
+    (int(ItemType.PALLET), 1),
     (int(ItemType.ARM), 1),
 )
 
@@ -1453,13 +1470,12 @@ def assembler_module_inventory(*, input_b: bool = True) -> dict[int, int]:
 
     Args:
         input_b: When ``True`` (default), accounts for both north and
-            west input pallets (3 pallets total: input_a, input_b,
-            output). When ``False``, drops one pallet for a 1-input
-            module.
+            west input feeder belts (2 belts total). When ``False``,
+            drops the west feeder belt for a 1-input module.
     """
     cost = dict(_ASSEMBLER_MODULE_INVENTORY)
     if not input_b:
-        cost[int(ItemType.PALLET)] -= 1
+        cost[int(ItemType.CONVEYOR_BELT)] -= 1
     return cost
 
 
@@ -1474,18 +1490,19 @@ def build_assembler_module_at(
 
     Layout (top-down, ``(cx, cy) = center_tile``)::
 
-                       input_a   (cx,   cy-1)  facing DOWN
-        input_b Center  Arm  Output  (cx-1..cx+2, cy)
+                       input_a   (cx,   cy-1)  BELT facing DOWN
+        input_b Center  Arm  Output  (cx-1..cx+2, cy)  input_b BELT facing RIGHT
                           .          (cx,   cy+1)  free
 
     Engine semantics relied on:
 
-    - The assembler at ``center_tile`` auto-pulls from any adjacent
-      buffer in :func:`run_assemblers` Phase 0, matching empty /
-      same-type input slots. With pallets at the north and west
-      neighbours both inputs land in ``ent_asm_in`` without arm
-      orchestration; downstream goals can deposit into either pallet
-      manually or feed them via belts ending in those tiles.
+    - The assembler's ``run_assemblers`` Phase 0 directionally pulls
+      one item per tick from a neighbour CONVEYOR_BELT whose facing
+      points *at* the assembler. Input_a (north belt facing DOWN) and
+      input_b (west belt facing RIGHT) are both eligible; pallets
+      adjacent to the assembler are *not* pulled from, so the player
+      must deposit upstream of the feeder belt (or upstream goals
+      route belts that terminate at these feeders).
     - The east-facing arm reads from the assembler's ``ent_asm_out``
       and pushes east into the output pallet's ``ent_buf``.
 
@@ -1500,9 +1517,9 @@ def build_assembler_module_at(
         center_tile: ``(cx, cy)`` for the assembler. The four other
             module tiles are derived around it.
         input_b: When ``True`` (default), place the west input
-            pallet for a 2-input recipe (e.g. CONVEYOR_BELT needs
-            IRON_PLATE + COPPER_PLATE). Set ``False`` for 1-input
-            recipes; only one input pallet is placed.
+            feeder belt for a 2-input recipe (e.g. CONVEYOR_BELT
+            needs IRON_PLATE + COPPER_PLATE). Set ``False`` for
+            1-input recipes; only the north feeder belt is placed.
         occupied: Optional set of tiles already taken; each module
             tile is checked.
         map_size: Optional ``(width, height)`` for in-bounds checks.
@@ -1566,11 +1583,15 @@ def build_assembler_module_at(
         ),
     ]
     if input_b:
+        # Feeder belt facing RIGHT (east) so it pushes its item into
+        # the assembler. Phase 0 of ``run_assemblers`` directionally
+        # pulls from this belt because its direction == opposite(LEFT)
+        # in the assembler's iteration scanning west.
         goals.append(
             PlaceMachineAt(
-                MachineType.PALLET,
+                MachineType.CONVEYOR_BELT,
                 input_b_tile,
-                int(Direction.LEFT),
+                int(Direction.RIGHT),
             ),
         )
     goals.extend(
@@ -1585,8 +1606,10 @@ def build_assembler_module_at(
                 center_tile,
                 int(Direction.DOWN),
             ),
+            # Feeder belt facing DOWN (south) — same Phase 0 pull
+            # rationale as input_b above (just rotated).
             PlaceMachineAt(
-                MachineType.PALLET,
+                MachineType.CONVEYOR_BELT,
                 input_a_tile,
                 int(Direction.DOWN),
             ),
@@ -3203,8 +3226,12 @@ class BuildSmelterCell(Goal):
                 self.furnace_tile,
                 int(Direction.DOWN),
             ),
+            # Ore feeder is a belt facing DOWN — the furnace's
+            # directional Phase 0 pull picks ore up from any
+            # neighbour belt whose direction points at it. A pallet
+            # here would not auto-feed (only belts are eligible).
             PlaceMachineAt(
-                MachineType.PALLET,
+                MachineType.CONVEYOR_BELT,
                 self.ore_pallet_tile,
                 int(Direction.DOWN),
             ),
@@ -3399,11 +3426,15 @@ class BuildAssemblerModule(Goal):
             ),
         ]
         if input_b_tile is not None:
+            # Input_b feeder belt facing RIGHT — pushes east into
+            # the assembler (Phase 0's directional pull picks it up
+            # because direction == opposite(LEFT) in the assembler's
+            # west-scan iteration).
             steps.append(
                 PlaceMachineAt(
-                    MachineType.PALLET,
+                    MachineType.CONVEYOR_BELT,
                     input_b_tile,
-                    int(Direction.LEFT),
+                    int(Direction.RIGHT),
                 )
             )
         steps.extend(
@@ -3418,8 +3449,10 @@ class BuildAssemblerModule(Goal):
                     center_tile,
                     int(Direction.DOWN),
                 ),
+                # Input_a feeder belt facing DOWN — same reasoning,
+                # rotated.
                 PlaceMachineAt(
-                    MachineType.PALLET,
+                    MachineType.CONVEYOR_BELT,
                     input_a_tile,
                     int(Direction.DOWN),
                 ),

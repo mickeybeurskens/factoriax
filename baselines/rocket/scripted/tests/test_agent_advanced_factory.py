@@ -22,9 +22,17 @@ import pytest
 
 from baselines.rocket.scripted.agent_advanced_factory import (
     _COPPER_EXTRACT_ARM_TILE,
+    _FRAME_ASSEMBLER_TILE,
+    _FRAME_INPUT_A_TILE,
+    _FRAME_INPUT_B_TILE,
+    _FRAME_OUTPUT_TILE,
+    _IRON_EXTRACT_ARM_TILE,
     _IRON_PLATE_BUS_TILE,
+    _IRON_TO_FRAME_BELTS,
     _SILICON_PLATE_BUS_TILE,
     _TIN_EXTRACT_ARM_TILE,
+    _TIN_FRAME_TRUNK_HEAD_TILE,
+    _TIN_TO_FRAME_BELTS,
     _WIRE_ASSEMBLER_TILE,
     _WIRE_INPUT_A_TILE,
     _WIRE_INPUT_B_TILE,
@@ -89,6 +97,9 @@ _EXPECTED_UNLOCKS: tuple[str, ...] = (
     # WIRE assembler placed by the agent (not just the pre-placed
     # one) and crafted via plates.
     "craft_assembler",
+    # FRAME assembler with iron + tin extractors routing around the
+    # pre-placed F+A drain zone.
+    "craft_frame",
 )
 
 
@@ -133,11 +144,14 @@ def test_emits_each_cell_placements() -> None:
         assert by_tile[(mx, my)][0] == int(MachineType.MINER), label
         assert by_tile[(mx + 1, my)][0] == int(MachineType.CONVEYOR_BELT), label
         assert by_tile[(mx + 2, my)][0] == int(MachineType.CONVEYOR_BELT), label
-        assert by_tile[(fx, my)][0] == int(MachineType.PALLET), label
+        # Ore feeder is now a belt facing DOWN (combiners pull only
+        # from facing belts under the directional Phase 0).
+        assert by_tile[(fx, my)][0] == int(MachineType.CONVEYOR_BELT), label
         assert by_tile[(fx, fy)][0] == int(MachineType.FURNACE), label
         assert by_tile[(fx + 1, fy)][0] == int(MachineType.ARM), label
         assert by_tile[(fx + 2, fy)][0] == int(MachineType.PALLET), label
-        assert by_tile[(fx, fy + 1)][0] == int(MachineType.PALLET), label
+        # Coal feeder south of the furnace is also a belt (UP-facing).
+        assert by_tile[(fx, fy + 1)][0] == int(MachineType.CONVEYOR_BELT), label
         assert by_tile[(cx, cy)][0] == int(MachineType.MINER), label
         for x in range(1, 7):
             assert by_tile[(x, cy)][0] == int(MachineType.CONVEYOR_BELT), label
@@ -152,10 +166,10 @@ def test_emits_wire_cell_placements() -> None:
     ]
     by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
 
-    # WIRE assembler module.
+    # WIRE assembler module: inputs are feeder belts; output is a pallet.
     assert by_tile[_WIRE_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
-    assert by_tile[_WIRE_INPUT_A_TILE][0] == int(MachineType.PALLET)
-    assert by_tile[_WIRE_INPUT_B_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[_WIRE_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_WIRE_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
     assert by_tile[_WIRE_OUTPUT_TILE][0] == int(MachineType.PALLET)
     assert by_tile[(14, 14)][0] == int(MachineType.ARM)  # output arm
 
@@ -191,8 +205,9 @@ def test_uses_place_from_back_for_coal_miners() -> None:
 
 
 def test_uses_place_from_back_for_extractor_arms() -> None:
-    """Both extractor arms (copper, tin) land on plate-bus-east tiles
-    whose natural west stand is the bus PALLET; both use from-back."""
+    """Every plate-bus extractor arm (iron, copper, tin) lands east
+    of its bus PALLET; the natural west stand tile is the PALLET
+    itself, so all three go via from-back."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     arms_from_back = [
         g
@@ -201,6 +216,7 @@ def test_uses_place_from_back_for_extractor_arms() -> None:
         and g.machine_type == int(MachineType.ARM)
     ]
     assert {g.target for g in arms_from_back} == {
+        _IRON_EXTRACT_ARM_TILE,
         _COPPER_EXTRACT_ARM_TILE,
         _TIN_EXTRACT_ARM_TILE,
     }
@@ -208,19 +224,71 @@ def test_uses_place_from_back_for_extractor_arms() -> None:
         assert g.facing == int(Direction.RIGHT)
 
 
-def test_uses_place_from_back_for_ore_pallets() -> None:
-    """Each cell's ore_pallet uses from-back so the previous cell's
-    coal_buffer doesn't trip placement."""
+def test_emits_frame_cell_placements() -> None:
+    """The FRAME assembler module + iron extractor + iron / tin
+    routes land at the documented tiles."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
-    pallets_from_back = [
+    placements = [
+        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
+    ]
+    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
+
+    # FRAME assembler module: inputs are feeder belts; output is a pallet.
+    cx, cy = _FRAME_ASSEMBLER_TILE
+    assert by_tile[_FRAME_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
+    assert by_tile[_FRAME_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_FRAME_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_FRAME_OUTPUT_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+
+    # Iron extractor + every iron route belt.
+    assert by_tile[_IRON_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
+    for tile, _facing in _IRON_TO_FRAME_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+
+    # Tin route belts + the from-back trunk-head.
+    for tile, _facing in _TIN_TO_FRAME_BELTS:
+        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+    assert by_tile[_TIN_FRAME_TRUNK_HEAD_TILE][0] == int(MachineType.CONVEYOR_BELT)
+
+
+def test_frame_routes_avoid_pre_placed_drain_zone() -> None:
+    """No FRAME-feed tile sits on a 4-neighbour of the pre-placed
+    FURNACE (15, 16) or ASSEMBLER (17, 16). Both combiners auto-pull
+    from any adjacent buffer regardless of recipe match, so a belt
+    on those tiles would have its plate siphoned into a stalled
+    input slot."""
+    drain_zone: set[tuple[int, int]] = set()
+    for cx, cy in ((15, 16), (17, 16)):
+        drain_zone |= {(cx - 1, cy), (cx + 1, cy), (cx, cy - 1), (cx, cy + 1)}
+
+    feed_tiles = {tile for tile, _ in _IRON_TO_FRAME_BELTS}
+    feed_tiles |= {tile for tile, _ in _TIN_TO_FRAME_BELTS}
+    feed_tiles.add(_TIN_FRAME_TRUNK_HEAD_TILE)
+    feed_tiles.add(_FRAME_INPUT_A_TILE)
+    feed_tiles.add(_FRAME_INPUT_B_TILE)
+
+    overlap = feed_tiles & drain_zone
+    assert not overlap, f"FRAME feed tiles in F+A drain zone: {sorted(overlap)}"
+
+
+def test_uses_place_from_back_for_ore_feeder_belts() -> None:
+    """Each cell's ore-feeder belt uses from-back so the previous
+    cell's coal-feeder belt doesn't trip placement (the natural
+    north stand tile would be that prior belt for cells 2-4, and
+    although belts are walkable it's simpler to use from-back
+    uniformly across all four cells)."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    expected_targets = {(7, 9), (7, 12), (7, 15), (7, 18)}
+    feeders_from_back = [
         g
         for g in goals
         if isinstance(g, PlaceMachineFromBackAt)
-        and g.machine_type == int(MachineType.PALLET)
+        and g.machine_type == int(MachineType.CONVEYOR_BELT)
+        and g.target in expected_targets
     ]
-    expected_targets = {(7, 9), (7, 12), (7, 15), (7, 18)}
-    assert {g.target for g in pallets_from_back} == expected_targets
-    for g in pallets_from_back:
+    assert {g.target for g in feeders_from_back} == expected_targets
+    for g in feeders_from_back:
         assert g.facing == int(Direction.DOWN)
 
 
@@ -236,7 +304,7 @@ def test_all_placements_in_map_bounds() -> None:
 
 def test_includes_per_stage_verify_layout_gates() -> None:
     """Each smelter cell + the WIRE stage end with their own
-    VerifyLayout (5 total: 4 smelter + 1 wire)."""
+    VerifyLayout (6 total: 4 smelter + 1 wire + 1 frame)."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     verifies = [g for g in goals if isinstance(g, VerifyLayout)]
     expected_labels = {
@@ -245,6 +313,7 @@ def test_includes_per_stage_verify_layout_gates() -> None:
         "phase 1.tin",
         "phase 1.silicon",
         "phase 2.wire",
+        "phase 3.frame",
     }
     assert {v.label for v in verifies} == expected_labels
 
@@ -439,3 +508,19 @@ def test_wire_output_pallet_accumulates_wire() -> None:
     """
     _, _, state = _run_agent(max_steps=8000)
     _assert_pallet_holds(state, _WIRE_OUTPUT_TILE, ItemType.WIRE)
+
+
+@pytest.mark.slow
+def test_frame_output_pallet_accumulates_frame() -> None:
+    """The FRAME assembler's output pallet at (21, 22) holds FRAME.
+
+    Load-bearing for the F+A drain bypass: iron plates extracted
+    from (9, 10) run east along row 10 to col 19, then south down
+    col 19 — the first fully-clear column east of the pre-placed
+    FURNACE (15, 16) + ASSEMBLER (17, 16). Tin plates come from
+    the existing splitter's DOWN output. Both arrive at the FRAME
+    assembler at (19, 22); a non-empty output pallet proves both
+    routes survived the drain zone.
+    """
+    _, _, state = _run_agent(max_steps=8000)
+    _assert_pallet_holds(state, _FRAME_OUTPUT_TILE, ItemType.FRAME)

@@ -127,8 +127,10 @@ def _build_iron_level(
         mx = _PATCH_X + _PATCH_SIZE // 2
         my_se = _PATCH_Y + _PATCH_SIZE - 1
         builder.place_machine(mx, my_se, int(MachineType.MINER), int(Direction.DOWN))
+        # Ore feeder is a belt facing DOWN — combiners pull only
+        # from facing belts under the directional Phase 0.
         builder.place_machine(
-            mx, my_se + 1, int(MachineType.PALLET), int(Direction.DOWN)
+            mx, my_se + 1, int(MachineType.CONVEYOR_BELT), int(Direction.DOWN)
         )
         builder.place_machine(
             mx, my_se + 2, int(MachineType.FURNACE), int(Direction.DOWN)
@@ -146,18 +148,15 @@ def _build_iron_level(
             int(Direction.DOWN),
         )
         if coal_feeder:
-            # Coal pallet south of the furnace. Engine quirk: an
-            # assembler's recipe-start phase zeroes the *entire*
-            # input slot, so injecting coal directly into slot 0 is
-            # destructive (200 coal → 1 plate). Feeding via an
-            # adjacent buffer instead lets the assembler pull one
-            # coal per tick, which is exactly what the trunk will
-            # do in Phase 3.
+            # Coal feeder belt south of the furnace, facing UP. The
+            # furnace's directional Phase 0 pulls one coal per tick
+            # from this belt because its direction points at the
+            # furnace. The belt itself starts pre-loaded with coal.
             builder.place_machine(
                 mx,
                 my_se + 3,
-                int(MachineType.PALLET),
-                int(Direction.DOWN),
+                int(MachineType.CONVEYOR_BELT),
+                int(Direction.UP),
             )
             builder.set_machine_inventory(
                 mx,
@@ -175,10 +174,12 @@ def _build_iron_level(
     )
     env_state = build_state(level, env_params)
 
-    # Player gets the bootstrap inventory: 1 MINER, 2 PALLET, 1 FURNACE, 1 ARM.
+    # Player bootstrap inventory: 1 MINER, 1 CONVEYOR_BELT (ore
+    # feeder), 1 PALLET (plate-bus), 1 FURNACE, 1 ARM.
     inv = np.asarray(env_state.player_inventory).copy()
     inv[0, int(ItemType.MINER)] = 1
-    inv[0, int(ItemType.PALLET)] = 2
+    inv[0, int(ItemType.CONVEYOR_BELT)] = 1
+    inv[0, int(ItemType.PALLET)] = 1
     inv[0, int(ItemType.FURNACE)] = 1
     inv[0, int(ItemType.ARM)] = 1
     env_state = env_state.replace(player_inventory=jnp.asarray(inv))
@@ -203,7 +204,7 @@ def test_build_smelter_cell_places_all_five_entities() -> None:
     mt = np.asarray(final_state.env_state.machine_types)
     # Note: machine_types is indexed [y, x].
     assert mt[my_se, mx] == int(MachineType.MINER)
-    assert mt[my_se + 1, mx] == int(MachineType.PALLET)
+    assert mt[my_se + 1, mx] == int(MachineType.CONVEYOR_BELT)
     assert mt[my_se + 2, mx] == int(MachineType.FURNACE)
     assert mt[my_se + 2, mx + 1] == int(MachineType.ARM)
     assert mt[my_se + 2, mx + 2] == int(MachineType.PALLET)
@@ -218,6 +219,7 @@ def test_build_smelter_cell_consumes_bootstrap_inventory() -> None:
     inv = np.asarray(final_state.env_state.player_inventory[0])
     assert int(inv[int(ItemType.MINER)]) == 0
     assert int(inv[int(ItemType.PALLET)]) == 0
+    assert int(inv[int(ItemType.CONVEYOR_BELT)]) == 0
     assert int(inv[int(ItemType.FURNACE)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
 

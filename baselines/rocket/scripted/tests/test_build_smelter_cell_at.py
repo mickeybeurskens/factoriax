@@ -27,10 +27,12 @@ def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:
     return out
 
 
-def test_inventory_costs_two_pallets_one_arm_one_furnace() -> None:
-    """One smelter cell consumes 2 PALLET + 1 ARM + 1 FURNACE."""
+def test_inventory_costs_one_belt_one_pallet_one_arm_one_furnace() -> None:
+    """One smelter cell consumes 1 CONVEYOR_BELT (coal feeder) +
+    1 PALLET (plate-bus) + 1 ARM + 1 FURNACE."""
     cost = smelter_cell_inventory()
-    assert cost[int(ItemType.PALLET)] == 2
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 1
+    assert cost[int(ItemType.PALLET)] == 1
     assert cost[int(ItemType.ARM)] == 1
     assert cost[int(ItemType.FURNACE)] == 1
     assert sum(cost.values()) == 4
@@ -41,8 +43,9 @@ def test_canonical_cell_emits_four_placements_in_order() -> None:
     goals = build_smelter_cell_at((8, 11))
     placements = _placements(goals)
     assert placements == [
-        # coal_buffer south of furnace, faces UP toward the furnace
-        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),
+        # coal feeder south of furnace, BELT facing UP — pushes coal
+        # north into the furnace via the directional Phase 0 pull
+        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
         # plate-bus east of arm, faces DOWN so its stand tile is south
         (int(MachineType.PALLET), (10, 11), int(Direction.DOWN)),
         # arm east of furnace, faces RIGHT (pulls plate east)
@@ -122,8 +125,8 @@ def test_facing_left_mirrors_arm_and_plate_bus_to_west() -> None:
     goals = build_smelter_cell_at((23, 11), facing=int(Direction.LEFT))
     placements = _placements(goals)
     assert placements == [
-        # coal_buffer south, unchanged from RIGHT case
-        (int(MachineType.PALLET), (23, 12), int(Direction.UP)),
+        # coal feeder belt south, unchanged from RIGHT case
+        (int(MachineType.CONVEYOR_BELT), (23, 12), int(Direction.UP)),
         # plate_bus two tiles WEST of furnace, still facing DOWN
         (int(MachineType.PALLET), (21, 11), int(Direction.DOWN)),
         # arm one tile WEST of furnace, facing LEFT
@@ -149,7 +152,7 @@ def test_extract_facing_adds_extractor_arm_before_plate_bus() -> None:
     )
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),  # coal
+        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),  # coal
         # Extractor at (11, 11) facing RIGHT — plate_bus is (10, 11),
         # extractor sits one step further east.
         (int(MachineType.ARM), (11, 11), int(Direction.RIGHT)),
@@ -201,7 +204,8 @@ def test_extract_facing_invalid_direction_raises() -> None:
 
 def test_inventory_with_extractor_adds_one_arm() -> None:
     cost = smelter_cell_inventory(with_extractor=True)
-    assert cost[int(ItemType.PALLET)] == 2
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 1  # coal feeder
+    assert cost[int(ItemType.PALLET)] == 1  # plate-bus
     assert cost[int(ItemType.ARM)] == 2  # cell arm + extractor
     assert cost[int(ItemType.FURNACE)] == 1
 
@@ -212,14 +216,16 @@ def test_inventory_with_extractor_adds_one_arm() -> None:
 
 
 def test_output_split_inventory_adds_splitter_and_belt() -> None:
-    """Inventory drops 0 PALLETs (one swapped from plate_bus to
-    manual_stash) but gains 1 SPLITTER and 1 CONVEYOR_BELT."""
+    """Inventory: 1 CONVEYOR_BELT (coal feeder) + 1 PALLET (manual
+    stash, replaces the plate_bus pallet) + 1 SPLITTER + 1
+    CONVEYOR_BELT (automation belt)."""
     cost = smelter_cell_inventory(output_split=True)
-    assert cost[int(ItemType.PALLET)] == 2  # coal_buffer + manual_stash
+    assert cost[int(ItemType.PALLET)] == 1  # manual_stash only
     assert cost[int(ItemType.ARM)] == 1  # cell arm only
     assert cost[int(ItemType.FURNACE)] == 1
     assert cost[int(ItemType.SPLITTER)] == 1
-    assert cost[int(ItemType.CONVEYOR_BELT)] == 1
+    # 1 (coal feeder) + 1 (automation belt south of splitter) = 2.
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 2
 
 
 def test_output_split_emits_six_placements_in_order() -> None:
@@ -229,8 +235,8 @@ def test_output_split_emits_six_placements_in_order() -> None:
     goals = build_smelter_cell_at((8, 11), output_split=True)
     placements = _placements(goals)
     assert placements == [
-        # coal_buffer south of furnace, faces UP toward the furnace
-        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),
+        # coal feeder belt south of furnace, faces UP toward the furnace
+        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
         # manual_stash north of splitter (smaller y)
         (int(MachineType.PALLET), (10, 10), int(Direction.DOWN)),
         # automation_belt south of splitter (larger y), facing DOWN
@@ -255,9 +261,9 @@ def test_output_split_facing_left_mirrors_horizontal_axis() -> None:
         output_split=True,
     )
     placements = _placements(goals)
-    # Coal buffer south of the furnace.
+    # Coal feeder belt south of the furnace.
     assert placements[0] == (
-        int(MachineType.PALLET),
+        int(MachineType.CONVEYOR_BELT),
         (24, 12),
         int(Direction.UP),
     )
@@ -354,7 +360,7 @@ def test_output_split_no_automation_belt_emits_five_placements() -> None:
     )
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.PALLET), (8, 12), int(Direction.UP)),
+        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
         (int(MachineType.PALLET), (10, 10), int(Direction.DOWN)),
         (int(MachineType.SPLITTER), (10, 11), int(Direction.RIGHT)),
         (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
@@ -367,11 +373,11 @@ def test_output_split_no_automation_belt_inventory_drops_belt() -> None:
         output_split=True,
         automation_belt=False,
     )
-    assert cost[int(ItemType.PALLET)] == 2
+    assert cost[int(ItemType.PALLET)] == 1  # manual_stash only
+    assert cost[int(ItemType.CONVEYOR_BELT)] == 1  # coal feeder only
     assert cost[int(ItemType.ARM)] == 1
     assert cost[int(ItemType.FURNACE)] == 1
     assert cost[int(ItemType.SPLITTER)] == 1
-    assert int(ItemType.CONVEYOR_BELT) not in cost
 
 
 def test_automation_belt_false_without_output_split_raises() -> None:
