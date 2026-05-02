@@ -3,12 +3,12 @@
 Two layers:
 
 - Structural (sub-second): the goal list constructs cleanly, has the
-  M5 shape (Phase 0 bootstrap + iron + copper smelter cells, each
-  with ore feed + coal trunk + verify gates), and every placement
-  lands inside the 32x32 map.
+  M5 shape (Phase 0 bootstrap + four smelter cells — iron, copper,
+  tin, silicon — each with ore feed + coal trunk + verify gates),
+  and every placement lands inside the 32x32 map.
 - Smoke (``@pytest.mark.slow``, full env rollout): the agent unlocks
-  the M5 achievement floor and both plate-bus PALLETs accumulate
-  their plate type.
+  the M5 achievement floor and every plate-bus PALLET accumulates
+  its plate type (silicon -> WAFER).
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ import pytest
 from baselines.rocket.scripted.agent_advanced_factory import (
     _COPPER_PLATE_BUS_TILE,
     _IRON_PLATE_BUS_TILE,
+    _SILICON_PLATE_BUS_TILE,
+    _TIN_PLATE_BUS_TILE,
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
@@ -98,56 +100,45 @@ def test_goal_list_constructs_under_rocket_book() -> None:
     assert len(goals) > 0
 
 
-def test_m5_emits_iron_cell_placements() -> None:
-    """Iron cell + ore feed + coal trunk land at the documented tiles."""
+_CELL_GEOMETRY: tuple[
+    tuple[str, tuple[int, int], tuple[int, int], tuple[int, int]], ...
+] = (
+    # (label, ore_miner, furnace, coal_miner)
+    ("iron", (4, 9), (7, 10), (0, 11)),
+    ("copper", (4, 12), (7, 13), (0, 14)),
+    ("tin", (4, 15), (7, 16), (0, 17)),
+    ("silicon", (4, 18), (7, 19), (0, 20)),
+)
+
+
+def test_m5_emits_each_cell_placements() -> None:
+    """Every cell's miner/belts/ore_pallet/smelter/coal_trunk land
+    at the documented tiles."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     placements = [
         g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
     ]
     by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
 
-    # Iron miner + 2 ore belts + ore_pallet on row 9.
-    assert by_tile[(4, 9)][0] == int(MachineType.MINER)
-    assert by_tile[(5, 9)][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[(6, 9)][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[(7, 9)][0] == int(MachineType.PALLET)
-    # Smelter cell at (7, 10).
-    assert by_tile[(7, 10)][0] == int(MachineType.FURNACE)
-    assert by_tile[(8, 10)][0] == int(MachineType.ARM)
-    assert by_tile[(9, 10)][0] == int(MachineType.PALLET)
-    assert by_tile[(7, 11)][0] == int(MachineType.PALLET)  # coal_buffer
-    # Coal trunk: 6 belts on row 11 + miner on the coal column at (0, 11).
-    assert by_tile[(0, 11)][0] == int(MachineType.MINER)
-    for x in range(1, 7):
-        assert by_tile[(x, 11)][0] == int(MachineType.CONVEYOR_BELT)
-
-
-def test_m5_emits_copper_cell_placements() -> None:
-    """Copper cell + ore feed + coal trunk land at the documented tiles."""
-    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
-    placements = [
-        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
-    ]
-    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
-
-    # Copper miner + 2 ore belts + ore_pallet on row 12.
-    assert by_tile[(4, 12)][0] == int(MachineType.MINER)
-    assert by_tile[(5, 12)][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[(6, 12)][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[(7, 12)][0] == int(MachineType.PALLET)
-    # Smelter cell at (7, 13).
-    assert by_tile[(7, 13)][0] == int(MachineType.FURNACE)
-    assert by_tile[(8, 13)][0] == int(MachineType.ARM)
-    assert by_tile[(9, 13)][0] == int(MachineType.PALLET)
-    assert by_tile[(7, 14)][0] == int(MachineType.PALLET)  # coal_buffer
-    # Coal trunk: 6 belts on row 14 + miner on the coal column at (0, 14).
-    assert by_tile[(0, 14)][0] == int(MachineType.MINER)
-    for x in range(1, 7):
-        assert by_tile[(x, 14)][0] == int(MachineType.CONVEYOR_BELT)
+    for label, (mx, my), (fx, fy), (cx, cy) in _CELL_GEOMETRY:
+        # Ore miner + 2 ore belts + ore_pallet on the patch's top row.
+        assert by_tile[(mx, my)][0] == int(MachineType.MINER), label
+        assert by_tile[(mx + 1, my)][0] == int(MachineType.CONVEYOR_BELT), label
+        assert by_tile[(mx + 2, my)][0] == int(MachineType.CONVEYOR_BELT), label
+        assert by_tile[(fx, my)][0] == int(MachineType.PALLET), label
+        # Smelter cell at (fx, fy).
+        assert by_tile[(fx, fy)][0] == int(MachineType.FURNACE), label
+        assert by_tile[(fx + 1, fy)][0] == int(MachineType.ARM), label
+        assert by_tile[(fx + 2, fy)][0] == int(MachineType.PALLET), label  # plate
+        assert by_tile[(fx, fy + 1)][0] == int(MachineType.PALLET), label  # coal_buf
+        # Coal trunk: miner on the column + 6 belts.
+        assert by_tile[(cx, cy)][0] == int(MachineType.MINER), label
+        for x in range(1, 7):
+            assert by_tile[(x, cy)][0] == int(MachineType.CONVEYOR_BELT), label
 
 
 def test_m5_uses_place_from_back_for_coal_miners() -> None:
-    """Each coal miner sits on the column at x=0; both go via from-back."""
+    """Each cell's coal miner sits on the column at x=0; all go via from-back."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     miners_from_back = [
         g
@@ -155,20 +146,19 @@ def test_m5_uses_place_from_back_for_coal_miners() -> None:
         if isinstance(g, PlaceMachineFromBackAt)
         and g.machine_type == int(MachineType.MINER)
     ]
-    assert len(miners_from_back) == 2, (
-        f"Expect one from-back miner per cell (iron+copper); got "
-        f"{len(miners_from_back)}"
+    expected_targets = {(0, 11), (0, 14), (0, 17), (0, 20)}
+    assert len(miners_from_back) == len(expected_targets), (
+        f"Expect one from-back miner per cell; got {len(miners_from_back)}"
     )
-    targets = {g.target for g in miners_from_back}
-    assert targets == {(0, 11), (0, 14)}
+    assert {g.target for g in miners_from_back} == expected_targets
     for g in miners_from_back:
         assert g.facing == int(Direction.RIGHT)
 
 
 def test_m5_uses_place_from_back_for_ore_pallets() -> None:
     """Each cell's ore_pallet uses from-back so the previous cell's
-    coal_buffer (which blocks the natural north stand tile for cells
-    after iron) doesn't trip placement."""
+    coal_buffer (which blocks the natural north stand tile) doesn't
+    trip placement."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     pallets_from_back = [
         g
@@ -176,12 +166,11 @@ def test_m5_uses_place_from_back_for_ore_pallets() -> None:
         if isinstance(g, PlaceMachineFromBackAt)
         and g.machine_type == int(MachineType.PALLET)
     ]
-    assert len(pallets_from_back) == 2, (
-        f"Expect one from-back ore_pallet per cell (iron+copper); got "
-        f"{len(pallets_from_back)}"
+    expected_targets = {(7, 9), (7, 12), (7, 15), (7, 18)}
+    assert len(pallets_from_back) == len(expected_targets), (
+        f"Expect one from-back ore_pallet per cell; got {len(pallets_from_back)}"
     )
-    targets = {g.target for g in pallets_from_back}
-    assert targets == {(7, 9), (7, 12)}
+    assert {g.target for g in pallets_from_back} == expected_targets
     for g in pallets_from_back:
         assert g.facing == int(Direction.DOWN)
 
@@ -200,11 +189,16 @@ def test_m5_includes_per_cell_verify_layout_gates() -> None:
     """Each cell ends with its own VerifyLayout (one per cell, not one total)."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     verifies = [g for g in goals if isinstance(g, VerifyLayout)]
-    assert len(verifies) == 2, (
-        f"Expect one VerifyLayout per cell (iron, copper); got {len(verifies)}"
+    expected_labels = {
+        "phase 1.iron",
+        "phase 1.copper",
+        "phase 1.tin",
+        "phase 1.silicon",
+    }
+    assert len(verifies) == len(expected_labels), (
+        f"Expect one VerifyLayout per cell; got {len(verifies)}"
     )
-    labels = {v.label for v in verifies}
-    assert labels == {"phase 1.iron", "phase 1.copper"}
+    assert {v.label for v in verifies} == expected_labels
 
 
 def test_m5_wait_precedes_verify() -> None:
@@ -375,14 +369,15 @@ def test_m5_unlocks_expected_floor() -> None:
 
 
 @pytest.mark.slow
-def test_m5_iron_plate_bus_accumulates_plates() -> None:
-    """The iron smelter cell's plate-bus PALLET holds IRON_PLATE."""
+def test_m5_all_plate_buses_accumulate_plates() -> None:
+    """Each smelter cell's plate-bus PALLET holds the right plate type.
+
+    Single rollout, one assertion per cell. Failing means the
+    ore -> belt -> ore_pallet -> furnace -> arm -> plate_bus chain
+    didn't run end-to-end for that cell.
+    """
     _, _, state = _run_agent(max_steps=8000)
     _assert_plate_bus_holds(state, _IRON_PLATE_BUS_TILE, ItemType.IRON_PLATE)
-
-
-@pytest.mark.slow
-def test_m5_copper_plate_bus_accumulates_plates() -> None:
-    """The copper smelter cell's plate-bus PALLET holds COPPER_PLATE."""
-    _, _, state = _run_agent(max_steps=8000)
     _assert_plate_bus_holds(state, _COPPER_PLATE_BUS_TILE, ItemType.COPPER_PLATE)
+    _assert_plate_bus_holds(state, _TIN_PLATE_BUS_TILE, ItemType.TIN_PLATE)
+    _assert_plate_bus_holds(state, _SILICON_PLATE_BUS_TILE, ItemType.WAFER)

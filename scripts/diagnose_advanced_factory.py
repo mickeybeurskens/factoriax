@@ -85,7 +85,7 @@ def main() -> None:
     env_state = last_state.env_state
 
     print(
-        f"\n=== Iron+copper cell area dump (rows 9-15, cols 0-10) "
+        f"\n=== Phase 1 cell area dump (rows 9-21, cols 0-10) "
         f"after {final_tick} ticks ==="
     )
     machine_types = np.asarray(env_state.machine_types)
@@ -97,7 +97,7 @@ def main() -> None:
     ent_asm_in_count = np.asarray(env_state.ent_asm_in_count)
     ent_asm_out_type = np.asarray(env_state.ent_asm_out_type)
     ent_asm_out_count = np.asarray(env_state.ent_asm_out_count)
-    for y in range(9, 16):
+    for y in range(9, 22):
         for x in range(0, 11):
             mt = int(machine_types[y, x])
             if mt == 0:

@@ -142,11 +142,44 @@ _COPPER_CELL = _SmelterCellSpec(
     coal_belt_tiles=((1, 14), (2, 14), (3, 14), (4, 14), (5, 14), (6, 14)),
 )
 
-_PHASE_1_CELLS: tuple[_SmelterCellSpec, ...] = (_IRON_CELL, _COPPER_CELL)
+# Tin patch on rows 15-16. Cell anchor (7, 16); coal trunk on row 17.
+_TIN_CELL = _SmelterCellSpec(
+    label="tin",
+    plate_bus_tile=(9, 16),
+    furnace_tile=(7, 16),
+    ore_pallet_tile=(7, 15),
+    ore_miner_tile=(4, 15),
+    ore_belt_tiles=((5, 15), (6, 15)),
+    coal_miner_tile=(0, 17),
+    coal_belt_tiles=((1, 17), (2, 17), (3, 17), (4, 17), (5, 17), (6, 17)),
+)
 
-# Convenience alias kept stable for external references (tests).
+# Silicon patch on rows 18-19. Cell anchor (7, 19); coal trunk on
+# row 20. Furnace recipe SILICON + COAL → WAFER fits the same cell
+# shape unchanged; the cell is recipe-agnostic.
+_SILICON_CELL = _SmelterCellSpec(
+    label="silicon",
+    plate_bus_tile=(9, 19),
+    furnace_tile=(7, 19),
+    ore_pallet_tile=(7, 18),
+    ore_miner_tile=(4, 18),
+    ore_belt_tiles=((5, 18), (6, 18)),
+    coal_miner_tile=(0, 20),
+    coal_belt_tiles=((1, 20), (2, 20), (3, 20), (4, 20), (5, 20), (6, 20)),
+)
+
+_PHASE_1_CELLS: tuple[_SmelterCellSpec, ...] = (
+    _IRON_CELL,
+    _COPPER_CELL,
+    _TIN_CELL,
+    _SILICON_CELL,
+)
+
+# Convenience aliases kept stable for external references (tests).
 _IRON_PLATE_BUS_TILE: tuple[int, int] = _IRON_CELL.plate_bus_tile
 _COPPER_PLATE_BUS_TILE: tuple[int, int] = _COPPER_CELL.plate_bus_tile
+_TIN_PLATE_BUS_TILE: tuple[int, int] = _TIN_CELL.plate_bus_tile
+_SILICON_PLATE_BUS_TILE: tuple[int, int] = _SILICON_CELL.plate_bus_tile
 
 
 def _phase_1_targets() -> dict[int, int]:
@@ -178,7 +211,7 @@ _DEFAULT_SLACK: dict[int, int] = {
     int(ItemType.COPPER_ORE): 2,
     int(ItemType.TIN_ORE): 2,
     int(ItemType.SILICON): 2,
-    int(ItemType.LIMESTONE): 1,
+    int(ItemType.LIMESTONE): 2,
     int(ItemType.COAL): 5,
 }
 
