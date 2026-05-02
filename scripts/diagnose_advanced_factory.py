@@ -44,7 +44,7 @@ _MAP_SIZE = 32
 
 def main() -> None:
     """Run the agent, dump diagnostics to stdout."""
-    max_steps = 8000
+    max_steps = 12000
     env_params = EnvParams(
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
@@ -98,7 +98,7 @@ def main() -> None:
     ent_asm_out_type = np.asarray(env_state.ent_asm_out_type)
     ent_asm_out_count = np.asarray(env_state.ent_asm_out_count)
     for y in range(9, 22):
-        for x in range(0, 16):
+        for x in range(0, 19):
             mt = int(machine_types[y, x])
             if mt == 0:
                 continue
@@ -110,19 +110,23 @@ def main() -> None:
             buf_count = int(ent_buf_count[eidx]) if eidx >= 0 else 0
             buf_name = ItemType(buf_type).name if buf_type != 0 else "EMPTY"
             extra = f"buf=({buf_name}, {buf_count})"
-            if mt == int(MachineType.FURNACE) and eidx >= 0:
+            if (
+                mt in (int(MachineType.FURNACE), int(MachineType.ASSEMBLER))
+                and eidx >= 0
+            ):
                 in0_t = int(ent_asm_in_type[eidx, 0])
                 in0_c = int(ent_asm_in_count[eidx, 0])
                 in1_t = int(ent_asm_in_type[eidx, 1])
                 in1_c = int(ent_asm_in_count[eidx, 1])
                 out_t = int(ent_asm_out_type[eidx])
                 out_c = int(ent_asm_out_count[eidx])
+                power = int(np.asarray(env_state.ent_power)[eidx])
                 in0_name = ItemType(in0_t).name if in0_t != 0 else "EMPTY"
                 in1_name = ItemType(in1_t).name if in1_t != 0 else "EMPTY"
                 out_name = ItemType(out_t).name if out_t != 0 else "EMPTY"
                 extra = (
                     f"asm_in=[({in0_name}, {in0_c}), ({in1_name}, {in1_c})] "
-                    f"asm_out=({out_name}, {out_c})"
+                    f"asm_out=({out_name}, {out_c}) power={power}"
                 )
             print(f"  ({x:>2}, {y:>2}) {mt_name:<14} {d_name:<5}  {extra}")
 

@@ -1,9 +1,12 @@
-"""Advanced-factory rocket agent — v2 incremental rebuild.
+"""Advanced-factory rocket agent.
 
-Currently at **M5** of the v2 plan: Phase 0 bootstrap + Phase 1
-(iron *and* copper automated smelters). Iron and copper share the
-same cell shape; M6+ adds tin / silicon / wafer cells and the
-inter-cell crafting chain.
+Pipeline shape: Phase 0 bootstrap (hand-mine + smelt + craft at
+the pre-placed furnace + assembler) followed by Phase 1
+(iron / copper / tin / silicon automated smelter cells) and
+Phase 2 (WIRE assembler module + tin SPLITTER feeding it).
+A FRAME cell is sketched but deferred — see the
+"Phase 3.FRAME — deferred" block below for why the natural
+iron route gets drained by the pre-placed F+A.
 
 1. Hand-mines a starter inventory sized for *every* placement
    Phase 1 will make, smelts each plate, then crafts every machine
@@ -215,27 +218,53 @@ _WIRE_OUTPUT_TILE: tuple[int, int] = (15, 14)  # WIRE pallet  (east)
 _COPPER_EXTRACT_ARM_TILE: tuple[int, int] = (10, 13)
 _COPPER_TO_WIRE_BELT_TILES: tuple[tuple[int, int], ...] = ((11, 13), (12, 13))
 
-# Tin extractor arm + east route then north turn into input_b.
+# Tin extractor arm pushes east into a SPLITTER, which fans plates
+# UP (-> WIRE) and DOWN (-> future FRAME route).
 _TIN_EXTRACT_ARM_TILE: tuple[int, int] = (10, 16)
-_TIN_TO_WIRE_BELT_TILES: tuple[tuple[int, int], ...] = (
-    (11, 16),  # RIGHT
-    (12, 16),  # UP — turns north
-    (12, 15),  # UP — pushes north into input_b at (12, 14)
+_TIN_SPLITTER_TILE: tuple[int, int] = (11, 16)
+# Splitter UP output (11, 15) -> belt RIGHT -> (12, 15) UP ->
+# WIRE input_b at (12, 14).
+_TIN_TO_WIRE_BELTS: tuple[tuple[tuple[int, int], int], ...] = (
+    ((11, 15), int(Direction.RIGHT)),
+    ((12, 15), int(Direction.UP)),
 )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.FRAME — deferred
+# ---------------------------------------------------------------------------
+#
+# FRAME recipe: 1 IRON_PLATE + 1 TIN_PLATE -> 1 FRAME, in an
+# assembler. The natural route would extract iron from the iron
+# plate-bus and run it east-then-south down column 16 to a FRAME
+# assembler near the pre-placed F+A, but col 16 row 16 sits between
+# the pre-placed FURNACE at (15, 16) and ASSEMBLER at (17, 16) —
+# both auto-pull iron plates from any adjacent buffer, draining
+# the iron route before it can reach the FRAME assembler. Every
+# tile adjacent to the FRAME input_a position (north/east/west of
+# (16, 17)) is similarly inside the F+A drain zone.
+#
+# A full fix needs to route iron either far east (col 19+) so the
+# whole vertical leg avoids the F+A neighbours, or place the FRAME
+# cell south of the limestone patch and accept a long path. Both
+# add several belts and were deferred. What ships today is the
+# tin SPLITTER (which the future FRAME route will also need).
 
 
 def _phase_2_wire_targets() -> dict[int, int]:
     """Return ``{ItemType: count}`` for the WIRE cell + plate routes.
 
     Counts: 1 ASSEMBLER + 3 PALLET + 1 ARM (assembler module) +
-    2 ARM (copper + tin extractors) + 5 CONVEYOR_BELT (route belts).
+    2 ARM (copper + tin extractors) + 1 SPLITTER (tin output) +
+    N CONVEYOR_BELT (route belts).
     """
     return sum_inventories(
         assembler_module_inventory(input_b=True),
         {
             int(ItemType.ARM): 2,
+            int(ItemType.SPLITTER): 1,
             int(ItemType.CONVEYOR_BELT): (
-                len(_COPPER_TO_WIRE_BELT_TILES) + len(_TIN_TO_WIRE_BELT_TILES)
+                len(_COPPER_TO_WIRE_BELT_TILES) + len(_TIN_TO_WIRE_BELTS)
             ),
         },
     )
@@ -245,8 +274,8 @@ def _phase_2_wire_targets() -> dict[int, int]:
 # even though no Phase 1 placement consumes them, so the rocket
 # benchmark unlocks fire (e.g. ``smelt_wafer`` requires holding a
 # wafer at some point — Phase 1.iron doesn't need wafer otherwise).
-# M5 will retire this set as wafer / etc. become genuine
-# infrastructure inputs.
+# Future cell additions will retire this set as wafer / etc.
+# become genuine infrastructure inputs.
 _ACHIEVEMENT_KEEPSAKES: dict[int, int] = {
     int(ItemType.WAFER): 2,
 }
@@ -391,25 +420,23 @@ def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
 def _phase_2_wire_goals() -> list[Goal]:
     """Place the WIRE assembler + the two plate routes feeding it.
 
+    The tin feed goes through a SPLITTER so the same extractor can
+    also feed the deferred FRAME cell when it ships.
+
     Placement order (each step's stand tile is dirt or a previously
     placed walkable belt):
 
-    1. Assembler module at ``_WIRE_ASSEMBLER_TILE``. The module
-       helper places output -> input_b -> arm -> assembler ->
-       input_a, in that order (output last among the input pallets
-       so each stand tile stays walkable).
+    1. Assembler module at ``_WIRE_ASSEMBLER_TILE``.
     2. Copper route belts west-to-east into the input_a tile.
-       Order ``[(12, 13), (11, 13)]`` because (11, 13)'s stand tile
-       (10, 13) must be dirt at place time — the extractor arm
-       lands there only afterward.
-    3. Copper extractor arm at (10, 13) RIGHT via from-back. Its
-       natural stand tile (9, 13) is the copper plate-bus PALLET
-       (non-walkable); the from-back variant stands on the belt
-       at (11, 13), places facing LEFT, then ROTATEs to RIGHT.
-    4. Tin route belts. Order ``[(12, 15), (12, 16), (11, 16)]``
-       so each new belt's stand tile stays dirt.
-    5. Tin extractor arm at (10, 16) RIGHT via from-back, same
-       trick as copper.
+    3. Copper extractor arm via from-back.
+    4. Tin -> WIRE route belts. The splitter at (11, 16) is placed
+       *after* its UP-output belt (11, 15) so the splitter's stand
+       tile (10, 16) is dirt at placement; (10, 16) is later
+       occupied by the tin extractor arm.
+    5. Tin SPLITTER at (11, 16) facing RIGHT — accepts west input
+       from the extractor arm, outputs to (11, 15) UP and (11, 17)
+       DOWN. The DOWN output is consumed by the FRAME phase.
+    6. Tin extractor arm at (10, 16) RIGHT via from-back.
     """
     goals: list[Goal] = []
 
@@ -431,20 +458,29 @@ def _phase_2_wire_goals() -> list[Goal]:
         )
     )
 
-    # Tin route belts. Tiles in order [(11, 16), (12, 16), (12, 15)]
-    # with facings [RIGHT, UP, UP]. Each placement's stand tile is
-    # dirt at the moment of placement: (10, 16) for (11, 16) RIGHT,
-    # (12, 17) for (12, 16) UP, (12, 16) [now a belt] for (12, 15) UP.
-    tin_belt_facings: tuple[int, ...] = (
-        int(Direction.RIGHT),
-        int(Direction.UP),
-        int(Direction.UP),
-    )
-    for tile, facing in zip(_TIN_TO_WIRE_BELT_TILES, tin_belt_facings):
+    # Tin -> WIRE belts. Place from sink (12, 15) UP back toward the
+    # splitter (11, 15) RIGHT so each stand tile stays dirt or a
+    # prior walkable belt.
+    for tile, facing in reversed(_TIN_TO_WIRE_BELTS):
         goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+
+    # Tin extractor arm at (10, 16) RIGHT — placed *before* the
+    # splitter so the from-back stand tile (11, 16) is still dirt.
+    # If the splitter went first, both (10, 16) and (11, 16) would
+    # be non-walkable for any subsequent placement here.
     goals.append(
         PlaceMachineFromBackAt(
             MachineType.ARM, _TIN_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+        )
+    )
+
+    # Tin splitter — both natural stand tiles ((10, 16) is the arm,
+    # (12, 16) is dirt) — go from the back: stand at (12, 16)
+    # facing LEFT, place splitter inheriting LEFT (still horizontal-
+    # facing, same I/O), then ROTATE_RIGHT to settle at facing=RIGHT.
+    goals.append(
+        PlaceMachineFromBackAt(
+            MachineType.SPLITTER, _TIN_SPLITTER_TILE, int(Direction.RIGHT)
         )
     )
     return goals
@@ -461,10 +497,12 @@ def build_advanced_factory_goals(
 ) -> list[Goal]:
     """Build the flat goal list for the advanced-factory rocket agent.
 
-    Currently M5: Phase 0 bootstrap + Phase 1 (iron + copper
-    automated smelter cells). Phase 0 is sized for exactly the
-    items Phase 1 places, so a recipe rebalance flows through to
-    mining / smelting / crafting counts automatically.
+    Phase 0 hand-bootstraps every item later phases consume; Phase 1
+    drops one automated smelter cell per ore (iron / copper / tin /
+    silicon); Phase 2 places the WIRE assembler and the tin
+    SPLITTER feeding it. Phase 0's mine / smelt / craft quantities
+    are derived from later-phase consumption via a BOM walk, so a
+    recipe rebalance flows through automatically.
 
     Args:
         book: :class:`~factoriax.recipes.RecipeBook` whose recipes
@@ -506,11 +544,10 @@ def build_advanced_factory_goals(
     expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
     goals.append(VerifyLayout(expected, label="phase 2.wire"))
 
-    # Trailing wait. Each cell needs ~50 ticks to make a plate
-    # (smelt + arm-pull-out + push-into-bus); 1500 ticks lets every
-    # bus pallet collect multiple plates by end of episode and the
-    # WIRE assembler enough cycles to fill its output pallet.
-    goals.append(Wait(1500))
+    # Trailing wait. The tin splitter + WIRE route needs many ticks
+    # of belt propagation before the assembler reaches steady state;
+    # 3000 ticks is generous and lets every plate-bus saturate.
+    goals.append(Wait(3000))
     return goals
 
 

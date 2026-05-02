@@ -1,19 +1,16 @@
-"""End-to-end tests for the splitter-cell advanced-factory rocket agent.
+"""End-to-end tests for the advanced-factory rocket agent.
 
-Two tests:
+Two layers:
 
-- ``test_advanced_factory_goal_list_structural`` runs in milliseconds
-  and just checks that ``build_advanced_factory_goals`` constructs
-  cleanly with placement coordinates inside the 32x32 map AND emits
-  the expected splitter / crossing counts (2 SPLITTERs — one each
-  for iron and copper — and 1 CROSSING, the auto-inserted (21, 12)
-  intersection between the copper coal trunk and the copper
-  splitter's south output).
-- ``test_advanced_factory_iron_cell_produces_plates`` is the load-
-  bearing smoke test: runs the agent against the rocket benchmark
-  env and asserts a PALLET ends up at (10, 10) (the iron cell's
-  *manual stash*, north of the splitter) holding IRON_PLATE — the
-  entire ore->furnace->arm->splitter->manual_stash chain.
+- Structural (sub-second): the goal list constructs cleanly, has
+  the expected shape (Phase 0 bootstrap + four smelter cells +
+  WIRE assembler + tin SPLITTER + copper/tin -> WIRE plate routes
+  + per-stage verify gates), and every placement lands inside the
+  32x32 map.
+- Smoke (``@pytest.mark.slow``, full env rollout): the agent
+  unlocks the achievement floor in :data:`_EXPECTED_UNLOCKS`,
+  every terminal plate-bus PALLET accumulates its plate type,
+  and the WIRE output pallet at (15, 14) holds WIRE.
 """
 
 from __future__ import annotations
@@ -24,18 +21,25 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted.agent_advanced_factory import (
+    _COPPER_EXTRACT_ARM_TILE,
+    _IRON_PLATE_BUS_TILE,
+    _SILICON_PLATE_BUS_TILE,
+    _TIN_EXTRACT_ARM_TILE,
+    _WIRE_ASSEMBLER_TILE,
+    _WIRE_INPUT_A_TILE,
+    _WIRE_INPUT_B_TILE,
+    _WIRE_OUTPUT_TILE,
     build_advanced_factory_goals,
     make_advanced_factory_rocket_agent,
 )
 from baselines.rocket.scripted.goals import (
     MineOre,
     PlaceMachineAt,
+    PlaceMachineFromBackAt,
     ProduceInMachine,
-    WithdrawFromBusAt,
-)
-from baselines.rocket.scripted.layout import (
-    diff_layout,
-    expected_layout_from_goals,
+    VerifyLayout,
+    Wait,
+    WaitUntil,
 )
 from factoriax.benchmarks.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
@@ -52,368 +56,292 @@ from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrap
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
-from factoriax.recipes import (
-    BASE_RECIPE_BOOK,
-    RecipeBalance,
-    RecipeBook,
-    RecipeOverride,
-    RecipeTable,
-)
 from factoriax.state import EnvParams
 
-# v1 of the advanced-factory agent hard-codes the legacy 3x3 patch
-# coords (e.g. (8, 10), (21, 12)) and the four-cross coal trunks. The
-# rocket benchmark shipped its v2 map in M1 (coal column at x=0, 2x2
-# patches stacked on cols 3-4), which strands every v1 placement.
-# These tests are skipped until M3 lands the rewritten agent.
-pytestmark = pytest.mark.skip(
-    reason="agent_advanced_factory v1 retired in M1; rewrite tracked in M3-M15"
-)
-
-_MAP_SIZE = 32
-_IRON_MANUAL_STASH_TILE = (10, 10)
-_IRON_SPLITTER_TILE = (10, 11)
-_COPPER_SPLITTER_TILE = (21, 11)
-_TIN_MANUAL_STASH_TILE = (25, 25)
-_TIN_SPLITTER_TILE = (25, 26)
-
 _EXPECTED_UNLOCKS: tuple[str, ...] = (
+    # Bootstrap + ore collection.
     "collect_iron",
     "collect_copper",
     "collect_tin",
     "collect_coal",
+    "collect_silicon",
     "smelt_iron",
     "smelt_copper",
     "smelt_tin",
+    "smelt_wafer",
     "craft_wire",
+    "place_furnace",
+    "place_assembler",
+    "first_assembly",
+    # Smelter-cell automation.
     "craft_miner",
     "place_miner",
-    "craft_furnace",
-    "place_furnace",
-    "automated_mining",
     "craft_belt",
     "place_belt",
     "craft_pallet",
     "place_pallet",
-    "pallet_filled",
     "craft_arm",
     "place_arm",
-    "first_assembly",
+    "craft_furnace",
+    "automated_mining",
+    "pallet_filled",
     "belt_network",
-    "scaling_up",
-    "industrialist",
+    # WIRE assembler placed by the agent (not just the pre-placed
+    # one) and crafted via plates.
+    "craft_assembler",
 )
 
 
-def test_advanced_factory_goal_list_structural() -> None:
-    """Goal list builds without errors and every placement is in-map.
+# ---------------------------------------------------------------------------
+# Structural — millisecond
+# ---------------------------------------------------------------------------
 
-    Also confirms the splitter-cell design: 4 SPLITTERs (one each
-    for iron, copper, tin, silicon) and 0 CROSSINGs — the copper
-    coal trunk is rerouted through row 13 so the splitter S output
-    drops onto a sink PALLET at (21, 12) without any path crossing
-    that tile.
-    """
+
+def test_goal_list_constructs_under_default_book() -> None:
+    """``build_advanced_factory_goals()`` returns a non-empty list."""
     goals = build_advanced_factory_goals()
     assert len(goals) > 0
-    splitter_count = 0
-    crossing_count = 0
-    crossing_tiles: list[tuple[int, int]] = []
-    for g in goals:
-        if isinstance(g, PlaceMachineAt):
-            x, y = g.target
-            assert 0 <= x < _MAP_SIZE, f"x out of range for {g.name} target={g.target}"
-            assert 0 <= y < _MAP_SIZE, f"y out of range for {g.name} target={g.target}"
-            if g.machine_type == int(MachineType.SPLITTER):
-                splitter_count += 1
-            elif g.machine_type == int(MachineType.CROSSING):
-                crossing_count += 1
-                crossing_tiles.append(g.target)
-    assert splitter_count == 4, (
-        f"expected 1 SPLITTER per cell (iron + copper + tin + silicon = 4), "
-        f"got {splitter_count}"
-    )
-    assert crossing_count == 0, (
-        f"expected 0 CROSSINGs (copper coal trunk reroutes through row "
-        f"13 so no path-collision occurs), got {crossing_count} at "
-        f"{crossing_tiles}"
-    )
 
 
-def test_iterative_bootstrap_phase_order() -> None:
-    """Verify the iterative bootstrap structure: iron + copper cells
-    are fully built (both SPLITTERs placed) before any
-    ``WithdrawFromBusAt`` goal targeting IRON_PLATE / COPPER_PLATE
-    fires, and before any tin / silicon SPLITTER is placed.
-
-    This is the load-bearing structural property of the iterative
-    bootstrap: Phase 2's plate withdrawals only make sense if the
-    iron + copper cells have already been producing plates for some
-    time, which in turn requires their splitters to exist.
-    """
-    goals = build_advanced_factory_goals()
-
-    iron_splitter_idx: int | None = None
-    copper_splitter_idx: int | None = None
-    tin_splitter_idx: int | None = None
-    silicon_splitter_idx: int | None = None
-    iron_withdraw_idx: int | None = None
-    copper_withdraw_idx: int | None = None
-
-    for i, g in enumerate(goals):
-        if isinstance(g, PlaceMachineAt) and g.machine_type == int(
-            MachineType.SPLITTER
-        ):
-            if g.target == _IRON_SPLITTER_TILE:
-                iron_splitter_idx = i
-            elif g.target == _COPPER_SPLITTER_TILE:
-                copper_splitter_idx = i
-            elif g.target == _TIN_SPLITTER_TILE:
-                tin_splitter_idx = i
-            else:
-                silicon_splitter_idx = i
-        elif isinstance(g, WithdrawFromBusAt):
-            if g.item_type == int(ItemType.IRON_PLATE):
-                iron_withdraw_idx = i
-            elif g.item_type == int(ItemType.COPPER_PLATE):
-                copper_withdraw_idx = i
-
-    assert iron_splitter_idx is not None, "no iron splitter found"
-    assert copper_splitter_idx is not None, "no copper splitter found"
-    assert tin_splitter_idx is not None, "no tin splitter found"
-    assert silicon_splitter_idx is not None, "no silicon splitter found"
-    assert iron_withdraw_idx is not None, (
-        "iterative bootstrap should withdraw IRON_PLATE from the "
-        "running iron cell stash in Phase 2"
-    )
-    assert copper_withdraw_idx is not None, (
-        "iterative bootstrap should withdraw COPPER_PLATE from the "
-        "running copper cell stash in Phase 2"
-    )
-
-    assert iron_splitter_idx < iron_withdraw_idx, (
-        f"iron cell must be built before its plate withdrawal: "
-        f"splitter@{iron_splitter_idx}, withdraw@{iron_withdraw_idx}"
-    )
-    assert copper_splitter_idx < copper_withdraw_idx, (
-        f"copper cell must be built before its plate withdrawal: "
-        f"splitter@{copper_splitter_idx}, withdraw@{copper_withdraw_idx}"
-    )
-    assert iron_splitter_idx < tin_splitter_idx, (
-        f"iron cell must be built before tin cell: "
-        f"iron@{iron_splitter_idx}, tin@{tin_splitter_idx}"
-    )
-    assert copper_splitter_idx < silicon_splitter_idx, (
-        f"copper cell must be built before silicon cell: "
-        f"copper@{copper_splitter_idx}, silicon@{silicon_splitter_idx}"
-    )
-
-
-def test_phase_1_crafts_match_summed_schedule() -> None:
-    """Regression test: Phase 1's craft schedule must not over-spend.
-
-    Splitting Phase 1 crafts into multiple per-subset
-    ``_craft_goals_for`` calls used to double-count integer-ceiling
-    intermediates (e.g. 2 SPLITTER cycles instead of 1 — each yields
-    4, but each cycle still consumes 1 TIN_PLATE and 1 COAL). With
-    the rocket book's belts=10 and splitter/crossing=4 yields, this
-    drained ~1 plate per item type more than the pre-smelt produced,
-    starving the copper cell's ARM/FURNACE/SPLITTER crafts and
-    cascading to tin + silicon never building.
-
-    The fix collapses Phase 1 crafts into a single
-    ``_craft_goals_for(_phase_1_targets(), book)``. This test pins
-    that contract by checking the goal list has at most one
-    ``ProduceInMachine`` per ``output_item`` *across all of
-    Phase 1*. If a future edit reintroduces per-subset crafts, the
-    duplicate-output count will trip this test before the rebalanced
-    end-to-end run does.
-    """
+def test_goal_list_constructs_under_rocket_book() -> None:
+    """The agent works against the rocket benchmark's recipe overlay."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
-    # Walk goals up to (but not including) the first Phase 2 marker —
-    # WithdrawFromBusAt for IRON_PLATE / COPPER_PLATE never appears in
-    # Phase 1, so its first occurrence is the cleanest cut.
-    phase_1_cutoff = next(
-        i
-        for i, g in enumerate(goals)
-        if isinstance(g, WithdrawFromBusAt)
-        and g.item_type in (int(ItemType.IRON_PLATE), int(ItemType.COPPER_PLATE))
-    )
-    phase_1_goals = goals[:phase_1_cutoff]
-
-    output_counts: dict[int, int] = {}
-    for g in phase_1_goals:
-        if isinstance(g, ProduceInMachine):
-            output_counts[g.output_item] = output_counts.get(g.output_item, 0) + 1
-
-    duplicates = {ItemType(item).name: n for item, n in output_counts.items() if n > 1}
-    assert not duplicates, (
-        f"Phase 1 has multiple ProduceInMachine goals for the same output, "
-        f"which causes integer-ceiling over-spend on intermediates: "
-        f"{duplicates}. Collapse Phase 1 crafts into a single "
-        f"_craft_goals_for call against the summed target."
-    )
+    assert len(goals) > 0
 
 
-def _mine_count(goals: list, item: ItemType) -> int:
-    """Sum the count across all MineOre(item, ...) goals in the list."""
-    return sum(
-        g.count for g in goals if isinstance(g, MineOre) and g.item_type == int(item)
-    )
+_CELL_GEOMETRY: tuple[
+    tuple[str, tuple[int, int], tuple[int, int], tuple[int, int]], ...
+] = (
+    # (label, ore_miner, furnace, coal_miner)
+    ("iron", (4, 9), (7, 10), (0, 11)),
+    ("copper", (4, 12), (7, 13), (0, 14)),
+    ("tin", (4, 15), (7, 16), (0, 17)),
+    ("silicon", (4, 18), (7, 19), (0, 20)),
+)
 
 
-def _produce_count(goals: list, item: ItemType) -> int:
-    """Sum the count across all ProduceInMachine goals targeting *item*.
+def test_emits_each_cell_placements() -> None:
+    """Every cell's miner/belts/ore_pallet/smelter/coal_trunk land
+    at the documented tiles."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    placements = [
+        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
+    ]
+    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
 
-    Both ProduceInFurnace and ProduceInAssembler return ProduceInMachine
-    instances, so a single isinstance check covers both.
-    """
-    return sum(
-        g.count
+    for label, (mx, my), (fx, fy), (cx, cy) in _CELL_GEOMETRY:
+        assert by_tile[(mx, my)][0] == int(MachineType.MINER), label
+        assert by_tile[(mx + 1, my)][0] == int(MachineType.CONVEYOR_BELT), label
+        assert by_tile[(mx + 2, my)][0] == int(MachineType.CONVEYOR_BELT), label
+        assert by_tile[(fx, my)][0] == int(MachineType.PALLET), label
+        assert by_tile[(fx, fy)][0] == int(MachineType.FURNACE), label
+        assert by_tile[(fx + 1, fy)][0] == int(MachineType.ARM), label
+        assert by_tile[(fx + 2, fy)][0] == int(MachineType.PALLET), label
+        assert by_tile[(fx, fy + 1)][0] == int(MachineType.PALLET), label
+        assert by_tile[(cx, cy)][0] == int(MachineType.MINER), label
+        for x in range(1, 7):
+            assert by_tile[(x, cy)][0] == int(MachineType.CONVEYOR_BELT), label
+
+
+def test_emits_wire_cell_placements() -> None:
+    """The WIRE assembler module + extractor arms + route belts land
+    at the documented tiles."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    placements = [
+        g for g in goals if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt))
+    ]
+    by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
+
+    # WIRE assembler module.
+    assert by_tile[_WIRE_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
+    assert by_tile[_WIRE_INPUT_A_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[_WIRE_INPUT_B_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[_WIRE_OUTPUT_TILE][0] == int(MachineType.PALLET)
+    assert by_tile[(14, 14)][0] == int(MachineType.ARM)  # output arm
+
+    # Copper extractor arm + 2 belt route to input_a.
+    assert by_tile[_COPPER_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
+    assert by_tile[(11, 13)][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[(12, 13)][0] == int(MachineType.CONVEYOR_BELT)
+
+    # Tin extractor arm + SPLITTER + 2 belt L-route to input_b.
+    # The splitter at (11, 16) lets the same extractor feed both
+    # the WIRE route (via its UP output) and a future FRAME route
+    # (via its DOWN output). The UP output drops onto (11, 15)
+    # RIGHT then bends to (12, 15) UP into the WIRE input_b.
+    assert by_tile[_TIN_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
+    assert by_tile[(11, 16)][0] == int(MachineType.SPLITTER)
+    assert by_tile[(11, 15)][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[(12, 15)][0] == int(MachineType.CONVEYOR_BELT)
+
+
+def test_uses_place_from_back_for_coal_miners() -> None:
+    """Each cell's coal miner sits on the column at x=0; all go via from-back."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    miners_from_back = [
+        g
         for g in goals
-        if isinstance(g, ProduceInMachine) and g.output_item == int(item)
+        if isinstance(g, PlaceMachineFromBackAt)
+        and g.machine_type == int(MachineType.MINER)
+    ]
+    expected_targets = {(0, 11), (0, 14), (0, 17), (0, 20)}
+    assert {g.target for g in miners_from_back} == expected_targets
+    for g in miners_from_back:
+        assert g.facing == int(Direction.RIGHT)
+
+
+def test_uses_place_from_back_for_extractor_arms() -> None:
+    """Both extractor arms (copper, tin) land on plate-bus-east tiles
+    whose natural west stand is the bus PALLET; both use from-back."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    arms_from_back = [
+        g
+        for g in goals
+        if isinstance(g, PlaceMachineFromBackAt)
+        and g.machine_type == int(MachineType.ARM)
+    ]
+    assert {g.target for g in arms_from_back} == {
+        _COPPER_EXTRACT_ARM_TILE,
+        _TIN_EXTRACT_ARM_TILE,
+    }
+    for g in arms_from_back:
+        assert g.facing == int(Direction.RIGHT)
+
+
+def test_uses_place_from_back_for_ore_pallets() -> None:
+    """Each cell's ore_pallet uses from-back so the previous cell's
+    coal_buffer doesn't trip placement."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    pallets_from_back = [
+        g
+        for g in goals
+        if isinstance(g, PlaceMachineFromBackAt)
+        and g.machine_type == int(MachineType.PALLET)
+    ]
+    expected_targets = {(7, 9), (7, 12), (7, 15), (7, 18)}
+    assert {g.target for g in pallets_from_back} == expected_targets
+    for g in pallets_from_back:
+        assert g.facing == int(Direction.DOWN)
+
+
+def test_all_placements_in_map_bounds() -> None:
+    """Every placement target sits inside the 32x32 map."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    for g in goals:
+        if isinstance(g, (PlaceMachineAt, PlaceMachineFromBackAt)):
+            x, y = g.target
+            assert 0 <= x < 32, f"{g.target} x out of bounds"
+            assert 0 <= y < 32, f"{g.target} y out of bounds"
+
+
+def test_includes_per_stage_verify_layout_gates() -> None:
+    """Each smelter cell + the WIRE stage end with their own
+    VerifyLayout (5 total: 4 smelter + 1 wire)."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    verifies = [g for g in goals if isinstance(g, VerifyLayout)]
+    expected_labels = {
+        "phase 1.iron",
+        "phase 1.copper",
+        "phase 1.tin",
+        "phase 1.silicon",
+        "phase 2.wire",
+    }
+    assert {v.label for v in verifies} == expected_labels
+
+
+def test_wait_precedes_verify() -> None:
+    """The first WaitUntil precedes the first VerifyLayout."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    waits = [i for i, g in enumerate(goals) if isinstance(g, WaitUntil)]
+    verifies = [i for i, g in enumerate(goals) if isinstance(g, VerifyLayout)]
+    assert waits and verifies
+    assert min(waits) < min(verifies), "WaitUntil should precede VerifyLayout"
+
+
+def test_mines_every_ore_type() -> None:
+    """The starter targets resolve to a MineOre for each of the 5 ores."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    mined = {g.item_type: g.count for g in goals if isinstance(g, MineOre)}
+    expected = {
+        int(ItemType.IRON_ORE),
+        int(ItemType.COPPER_ORE),
+        int(ItemType.TIN_ORE),
+        int(ItemType.SILICON),
+        int(ItemType.COAL),
+    }
+    assert set(mined.keys()) >= expected, (
+        f"Goals must mine all five ore leaves; missing {expected - set(mined.keys())}"
+    )
+    for item, qty in mined.items():
+        assert qty > 0, f"MineOre({ItemType(item).name}) has zero qty"
+
+
+def test_smelts_each_plate_type() -> None:
+    """The smelt phase covers iron, copper, tin, and wafer."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    produced_outputs: set[int] = set()
+    for g in goals:
+        if isinstance(g, ProduceInMachine):
+            produced_outputs.add(g.output_item)
+    expected_plates = {
+        int(ItemType.IRON_PLATE),
+        int(ItemType.COPPER_PLATE),
+        int(ItemType.TIN_PLATE),
+        int(ItemType.WAFER),
+    }
+    assert produced_outputs >= expected_plates, (
+        f"Goals must smelt every plate; missing {expected_plates - produced_outputs}"
     )
 
 
-def test_balance_overlay_doubles_iron_ore_demand() -> None:
-    """A book that doubles IRON_PLATE.input_counts should roughly
-    double the agent's IRON_ORE mine count and the IRON_PLATE
-    pre-smelt count, leaving every other ore count unchanged.
-    """
-    base_goals = build_advanced_factory_goals()
-    base_iron_ore = _mine_count(base_goals, ItemType.IRON_ORE)
-    base_iron_plate = _produce_count(base_goals, ItemType.IRON_PLATE)
-    assert base_iron_ore > 0, "BOM produced no IRON_ORE goal in default book"
+def test_ends_with_a_settling_wait() -> None:
+    """The final goal is a Wait so plates accumulate before episode end."""
+    goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
+    assert isinstance(goals[-1], Wait)
 
-    balance = RecipeBalance(
-        overrides=(
-            (
-                int(ItemType.IRON_PLATE),
-                RecipeOverride(input_counts=(2, 1)),  # was (1, 1)
-            ),
+
+def test_recipe_overlay_changes_bom_quantities() -> None:
+    """Doubling WIRE's COPPER_PLATE input scales COPPER_ORE mining up."""
+    from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBalance, RecipeOverride
+
+    base_goals = build_advanced_factory_goals(book=BASE_RECIPE_BOOK, slack={})
+    base_copper = next(
+        g.count
+        for g in base_goals
+        if isinstance(g, MineOre) and g.item_type == int(ItemType.COPPER_ORE)
+    )
+
+    heavy_book = BASE_RECIPE_BOOK.with_balance(
+        RecipeBalance(
+            overrides=((int(ItemType.WIRE), RecipeOverride(input_counts=(4, 1))),)
         )
     )
-    tuned_book = BASE_RECIPE_BOOK.with_balance(balance)
-    tuned_goals = build_advanced_factory_goals(book=tuned_book)
-    tuned_iron_ore = _mine_count(tuned_goals, ItemType.IRON_ORE)
-
-    # Mining demand: BOM = base_iron_plate * 2 (was * 1). Slack stays
-    # constant so the relationship is exactly:
-    #   tuned_iron_ore = (base_iron_ore - slack) * 2 + slack
-    # The default IRON_ORE slack is 2.
-    expected = (base_iron_ore - 2) * 2 + 2
-    assert tuned_iron_ore == expected, (
-        f"IRON_ORE demand did not double: base={base_iron_ore}, "
-        f"tuned={tuned_iron_ore}, expected={expected}"
+    heavy_goals = build_advanced_factory_goals(book=heavy_book, slack={})
+    heavy_copper = next(
+        g.count
+        for g in heavy_goals
+        if isinstance(g, MineOre) and g.item_type == int(ItemType.COPPER_ORE)
     )
 
-    # COPPER_ORE / TIN_ORE demand should be unchanged.
-    assert _mine_count(tuned_goals, ItemType.COPPER_ORE) == _mine_count(
-        base_goals, ItemType.COPPER_ORE
-    )
-    assert _mine_count(tuned_goals, ItemType.TIN_ORE) == _mine_count(
-        base_goals, ItemType.TIN_ORE
-    )
-
-    # IRON_PLATE pre-smelt count is the *number of plates produced*,
-    # which is unchanged by an input-count tweak — the recipe still
-    # yields 1 plate per cycle, just with 2 ore inputs instead of 1.
-    assert _produce_count(tuned_goals, ItemType.IRON_PLATE) == base_iron_plate
-
-
-def test_balance_overlay_higher_output_count_drops_smelts() -> None:
-    """A book where IRON_PLATE.output_count=2 should halve (round up)
-    the pre-smelt cycle count for plates AND the IRON_ORE / COAL
-    demand, since one cycle now yields two plates from one ore + one
-    coal.
-    """
-    base_goals = build_advanced_factory_goals()
-    base_iron_plate = _produce_count(base_goals, ItemType.IRON_PLATE)
-    base_iron_ore = _mine_count(base_goals, ItemType.IRON_ORE)
-
-    balance = RecipeBalance(
-        overrides=((int(ItemType.IRON_PLATE), RecipeOverride(output_count=2)),)
-    )
-    tuned_book = BASE_RECIPE_BOOK.with_balance(balance)
-    tuned_goals = build_advanced_factory_goals(book=tuned_book)
-
-    tuned_iron_plate = _produce_count(tuned_goals, ItemType.IRON_PLATE)
-    tuned_iron_ore = _mine_count(tuned_goals, ItemType.IRON_ORE)
-
-    # Plates *produced* must still cover the original demand —
-    # production_schedule reports cycles * output_count, which for an
-    # odd target rounds up. So the tuned plate count is either the
-    # base count (if even) or base + 1 (if odd).
-    assert tuned_iron_plate in (base_iron_plate, base_iron_plate + 1), (
-        f"IRON_PLATE schedule out of expected range: base={base_iron_plate}, "
-        f"tuned={tuned_iron_plate}"
-    )
-
-    # IRON_ORE demand: base = N plates * 1 ore + slack. tuned = ceil(N/2)
-    # cycles * 1 ore + slack. With slack=2 and base N, expect:
-    #   tuned_iron_ore = ceil(N/2) + 2
-    n = base_iron_plate  # plates needed
-    expected = -(-n // 2) + 2
-    assert tuned_iron_ore == expected, (
-        f"IRON_ORE demand did not halve: base={base_iron_ore}, "
-        f"tuned={tuned_iron_ore}, expected={expected}"
+    assert heavy_copper > base_copper, (
+        f"Balance overlay should increase COPPER_ORE demand; "
+        f"base={base_copper}, heavy={heavy_copper}"
     )
 
 
-def test_slack_kwarg_overrides_default() -> None:
-    """Passing ``slack={}`` mines exactly the BOM amount with no extra."""
-    no_slack_goals = build_advanced_factory_goals(slack={})
-    default_goals = build_advanced_factory_goals()
-
-    no_slack_iron_ore = _mine_count(no_slack_goals, ItemType.IRON_ORE)
-    default_iron_ore = _mine_count(default_goals, ItemType.IRON_ORE)
-    # IRON_ORE only mined in Phase 1 (Phase 2 withdraws plates from
-    # the running iron cell stash). Default slack adds 2.
-    assert default_iron_ore - no_slack_iron_ore == 2
-
-    no_slack_coal = _mine_count(no_slack_goals, ItemType.COAL)
-    default_coal = _mine_count(default_goals, ItemType.COAL)
-    # COAL is mined in *both* Phase 1 and Phase 2 (each phase smelts
-    # its own plates / refractory + needs cell coal-trunk feed). Default
-    # COAL slack=5 is applied to each phase's mine call independently,
-    # so the delta is 2 * 5 = 10.
-    assert default_coal - no_slack_coal == 10
+# ---------------------------------------------------------------------------
+# Slow smoke — full env rollout under the rocket benchmark
+# ---------------------------------------------------------------------------
 
 
-def _run_agent_and_assert_layout(
-    *, book: RecipeBook, recipe_table: RecipeTable | None
-) -> tuple:
-    """Drive the advanced-factory agent end-to-end and assert layout.
-
-    Splits the existing slow test's setup so we can run it under
-    multiple :class:`RecipeBook` configurations. Returns the final
-    env state arrays the caller wants to assert further.
-
-    Args:
-        book: Recipe book passed to the agent (drives BOM + production
-            schedule). Engine recipe table can differ if the benchmark
-            uses a balanced book.
-        recipe_table: ``params.recipe_table`` — when ``None`` defaults
-            to the engine's :data:`BASE_RECIPE_BOOK`.
-
-    Returns:
-        ``(env_state, machine_types, tile_entity, ent_buf_type, ent_buf_count)``
-        for downstream assertions.
-    """
-    from baselines.rocket.scripted.world_model import (
-        decode_observation,  # noqa: PLC0415
-    )
-
-    max_steps = 8000
-    params_kwargs: dict[str, object] = dict(
-        map_width=_MAP_SIZE,
-        map_height=_MAP_SIZE,
+def _run_agent(max_steps: int, seed: int = 0):
+    env_params = EnvParams(
+        map_width=32,
+        map_height=32,
         num_players=1,
         max_timesteps=max_steps,
+        recipe_table=ROCKET_RECIPE_TABLE,
     )
-    if recipe_table is not None:
-        params_kwargs["recipe_table"] = recipe_table
-    env_params = EnvParams(**params_kwargs)
     level = build_rocket_level()
     env_state = build_state(level, env_params)
     state = AchievementState(
@@ -426,145 +354,88 @@ def _run_agent_and_assert_layout(
     )
     jit_step = jax.jit(env.step_env)
     jit_obs = jax.jit(lambda s: global_array(s, env_params, 0))
-    agent = make_advanced_factory_rocket_agent(env_params, book=book)
+    agent = make_advanced_factory_rocket_agent(env_params, book=ROCKET_RECIPE_BOOK)
 
-    key = jax.random.PRNGKey(0)
-    last_state = state
-    for _ in range(max_steps):
-        obs = np.asarray(jit_obs(last_state.env_state))
+    unlock_timestep = np.full((NUM_ROCKET_ACHIEVEMENTS,), -1, dtype=np.int32)
+    key = jax.random.PRNGKey(seed)
+
+    for t in range(max_steps):
+        obs = np.asarray(jit_obs(state.env_state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
-        _, last_state, _, done, _ = jit_step(
-            subkey,
-            last_state,
-            jnp.int32(action),
-            env_params,
-        )
+        _, state, _, done, _ = jit_step(subkey, state, jnp.int32(action), env_params)
+        mask = np.asarray(state.achievements_unlocked)[:NUM_ROCKET_ACHIEVEMENTS]
+        newly = (unlock_timestep < 0) & mask
+        unlock_timestep[newly] = t
         if agent.is_done or bool(done):
             break
 
-    env_state = last_state.env_state
-    final_view = decode_observation(
-        np.asarray(jit_obs(env_state)),
-        env_params.map_height,
-        env_params.map_width,
-        env_params.max_timesteps,
-    )
-    goals = build_advanced_factory_goals(book=book)
-    expected_from_goals = expected_layout_from_goals(goals)
-    pre_placed = {
-        (15, 16): (int(MachineType.FURNACE), int(Direction.DOWN)),
-        (17, 16): (int(MachineType.ASSEMBLER), int(Direction.DOWN)),
-    }
-    expected_layout = {**expected_from_goals, **pre_placed}
-    layout_diff = diff_layout(final_view, expected_layout)
-    diag = agent.planner.verify_diagnostic
-    if layout_diff:
-        diag_text = diag.format() if diag is not None else "(no verify halt)"
-        rendered = "\n".join(m.render() for m in layout_diff[:30])
-        leftover = max(0, len(layout_diff) - 30)
-        more = f"\n  (... {leftover} more)" if leftover else ""
-        raise AssertionError(
-            f"layout diff: {len(layout_diff)} mismatches "
-            f"(MISSING={sum(1 for m in layout_diff if m.kind == 'MISSING')}, "
-            f"WRONG_TYPE={sum(1 for m in layout_diff if m.kind == 'WRONG_TYPE')}, "
-            f"WRONG_DIR={sum(1 for m in layout_diff if m.kind == 'WRONG_DIR')}, "
-            f"STRAY={sum(1 for m in layout_diff if m.kind == 'STRAY')})\n"
-            f"diagnostic:\n{diag_text}\n"
-            f"first {min(30, len(layout_diff))} mismatches:\n{rendered}{more}"
-        )
+    final_mask = np.asarray(state.achievements_unlocked)[:NUM_ROCKET_ACHIEVEMENTS]
+    return final_mask, unlock_timestep, state
 
-    return (
-        last_state,
-        np.asarray(env_state.machine_types),
-        np.asarray(env_state.tile_entity),
-        np.asarray(env_state.ent_buf_type),
-        np.asarray(env_state.ent_buf_count),
+
+def _index_of(achievement_id: str) -> int:
+    for i, info in enumerate(ROCKET_ACHIEVEMENT_INFO):
+        if info.id == achievement_id:
+            return i
+    raise AssertionError(f"Unknown achievement id: {achievement_id}")
+
+
+def _assert_pallet_holds(state, tile: tuple[int, int], item: ItemType) -> None:
+    machine_types = np.asarray(state.env_state.machine_types)
+    tile_entity = np.asarray(state.env_state.tile_entity)
+    ent_buf_type = np.asarray(state.env_state.ent_buf_type)
+    ent_buf_count = np.asarray(state.env_state.ent_buf_count)
+
+    bx, by = tile
+    assert int(machine_types[by, bx]) == int(MachineType.PALLET), (
+        f"tile {tile} should be PALLET; got "
+        f"{MachineType(int(machine_types[by, bx])).name}"
+    )
+    ent_id = int(tile_entity[by, bx])
+    assert ent_id >= 0, f"entity not registered at {tile}"
+    assert int(ent_buf_count[ent_id]) >= 1, (
+        f"PALLET at {tile} is empty; expected {item.name}"
+    )
+    assert int(ent_buf_type[ent_id]) == int(item), (
+        f"PALLET at {tile} holds "
+        f"{ItemType(int(ent_buf_type[ent_id])).name}, expected {item.name}"
     )
 
 
 @pytest.mark.slow
-def test_advanced_factory_iron_cell_produces_plates() -> None:
-    """Run the agent and verify the iron cell delivers plates to the
-    manual stash through the new splitter design.
-
-    The load-bearing assertion: at episode end, the entity at
-    ``(10, 10)`` (the iron cell's *manual stash*, north of its
-    splitter) is a PALLET whose buffer holds at least one
-    IRON_PLATE. That tile is reachable only if (a) the coal trunk
-    delivered coal to the buffer pallet at (8, 12) (via the rerouted
-    network laid by ``_phase_b_belt_network``), (b) the furnace at
-    (8, 11) auto-pulled both iron ore (from (8, 10)) and coal (from
-    (8, 12)) and ran the IRON_PLATE recipe, (c) the arm at (9, 11)
-    extracted the plate east into the splitter at (10, 11), and
-    (d) the splitter fired its north output (manual stash) — which
-    requires both the manual stash and the automation belt's
-    downstream sink at (10, 13) to be receptive.
-    """
-    last_state, machine_types, tile_entity, ent_buf_type, ent_buf_count = (
-        _run_agent_and_assert_layout(book=BASE_RECIPE_BOOK, recipe_table=None)
+def test_unlocks_expected_floor() -> None:
+    """The agent unlocks every achievement in :data:`_EXPECTED_UNLOCKS`."""
+    mask, timing, _ = _run_agent(max_steps=8000)
+    missing = [name for name in _EXPECTED_UNLOCKS if not bool(mask[_index_of(name)])]
+    timing_str = ", ".join(
+        f"{ROCKET_ACHIEVEMENT_INFO[i].id}@{timing[i]}"
+        for i in range(NUM_ROCKET_ACHIEVEMENTS)
+        if timing[i] >= 0
     )
-
-    sx, sy = _IRON_SPLITTER_TILE
-    assert int(machine_types[sy, sx]) == int(MachineType.SPLITTER), (
-        f"iron splitter missing at {_IRON_SPLITTER_TILE}; "
-        f"got machine_type={int(machine_types[sy, sx])}"
-    )
-
-    mx, my = _IRON_MANUAL_STASH_TILE
-    assert int(machine_types[my, mx]) == int(MachineType.PALLET), (
-        f"iron manual stash missing at {_IRON_MANUAL_STASH_TILE}; "
-        f"got machine_type={int(machine_types[my, mx])}"
-    )
-    ent_idx = int(tile_entity[my, mx])
-    assert ent_idx >= 0, "tile_entity has no entity at manual stash"
-    assert int(ent_buf_count[ent_idx]) >= 1, (
-        "iron manual stash at (10, 10) is empty — the splitter did not "
-        "fire its north output. Check coal flow to (8, 12), furnace at "
-        "(8, 11), arm at (9, 11), splitter at (10, 11), and the sink at "
-        "(10, 13) (splitter requires both outputs receptive to fire)."
-    )
-    assert int(ent_buf_type[ent_idx]) == int(ItemType.IRON_PLATE), (
-        f"manual stash holds wrong item: type={int(ent_buf_type[ent_idx])}"
-    )
-
-    # Tin cell must also have built and produced — this is the
-    # iterative-bootstrap proof: tin cell construction in Phase 2
-    # used IRON_PLATE / COPPER_PLATE withdrawn from the running
-    # iron + copper cells, not freshly mined ore.
-    tx, ty = _TIN_SPLITTER_TILE
-    assert int(machine_types[ty, tx]) == int(MachineType.SPLITTER), (
-        f"tin splitter missing at {_TIN_SPLITTER_TILE}; tin cell did "
-        f"not build — Phase 2 likely failed to withdraw plates from "
-        f"the running iron/copper cells. machine_type="
-        f"{int(machine_types[ty, tx])}"
-    )
-    tmx, tmy = _TIN_MANUAL_STASH_TILE
-    assert int(machine_types[tmy, tmx]) == int(MachineType.PALLET), (
-        f"tin manual stash missing at {_TIN_MANUAL_STASH_TILE}; "
-        f"got machine_type={int(machine_types[tmy, tmx])}"
-    )
-
-    mask = np.asarray(last_state.achievements_unlocked)[:NUM_ROCKET_ACHIEVEMENTS]
-    ids = {info.id: i for i, info in enumerate(ROCKET_ACHIEVEMENT_INFO)}
-    missing = [name for name in _EXPECTED_UNLOCKS if not mask[ids[name]]]
-    assert not missing, f"Missing expected achievements: {missing}"
+    assert not missing, f"Achievement floor missing {missing}.\nUnlocked: {timing_str}"
 
 
 @pytest.mark.slow
-def test_advanced_factory_under_rocket_recipe_book() -> None:
-    """Same end-to-end run, but with the rocket benchmark's actual
-    recipe balance (belts=10, splitters/crossings=4 per craft).
+def test_terminal_plate_buses_accumulate_plates() -> None:
+    """Iron and silicon plate-bus PALLETs are still terminal (no
+    extractor placed yet) and accumulate their plate type."""
+    _, _, state = _run_agent(max_steps=8000)
+    _assert_pallet_holds(state, _IRON_PLATE_BUS_TILE, ItemType.IRON_PLATE)
+    _assert_pallet_holds(state, _SILICON_PLATE_BUS_TILE, ItemType.WAFER)
 
-    Reproduces the configuration the
-    :class:`~factoriax.benchmarks.rocket.RocketBenchmark` ships with
-    and that the wandb runs use. If the agent's plate-budget math
-    diverges from what the rebalanced recipes need, the layout-diff
-    assertion in :func:`_run_agent_and_assert_layout` reports the
-    exact placements that didn't land instead of the run silently
-    stumbling forward.
+
+@pytest.mark.slow
+def test_wire_output_pallet_accumulates_wire() -> None:
+    """The WIRE assembler's output pallet at (15, 14) holds WIRE.
+
+    Load-bearing for the inter-smelter route: copper plates extracted
+    from (9, 13) and tin plates extracted from (9, 16) both reach the
+    WIRE assembler's input pallets and an arm pushes the assembled
+    WIRE into (15, 14). The copper and tin plate-buses themselves
+    are *transient* (drained by extractor arms), so they are not
+    checked directly — a non-empty WIRE output proves both feeds
+    worked end-to-end.
     """
-    _run_agent_and_assert_layout(
-        book=ROCKET_RECIPE_BOOK,
-        recipe_table=ROCKET_RECIPE_TABLE,
-    )
+    _, _, state = _run_agent(max_steps=8000)
+    _assert_pallet_holds(state, _WIRE_OUTPUT_TILE, ItemType.WIRE)
