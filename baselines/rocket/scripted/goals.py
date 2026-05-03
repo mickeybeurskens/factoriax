@@ -2670,11 +2670,23 @@ class ProduceInMachineAt(Goal):
             or assembler at runtime; otherwise the goal FAILs on the
             first step.
         output_item: ``ItemType`` produced by the recipe.
-        count: Number of completed cycles to run.
+        count: Stop condition. By default this is the number of
+            completed cycles to run; with ``until_held=True`` it is
+            the held-output threshold (matching
+            :class:`ProduceInMachine`'s semantics).
         book: :class:`~factoriax.recipes.RecipeBook` for recipe
             lookup. Defaults to
             :data:`~factoriax.recipes.BASE_RECIPE_BOOK`; pass a
             tuned book to track a balance overlay.
+        until_held: When True, the goal exits as soon as the
+            player's held output is at least ``count``. This matches
+            :class:`ProduceInMachine`'s exit semantics and lets the
+            cumulative-target chunk pattern (each chunk says
+            "produce until held >= cumulative_target") work with a
+            tile-pinned producer. It also dodges the cycle/output
+            mismatch when the recipe's ``output_count > 1``: cycle
+            counting would overshoot by ``output_count`` per cycle,
+            but held-target naturally clamps to the threshold.
     """
 
     name = "ProduceInMachineAt"
@@ -2685,10 +2697,13 @@ class ProduceInMachineAt(Goal):
         output_item: int | ItemType,
         count: int,
         book: RecipeBook = BASE_RECIPE_BOOK,
+        *,
+        until_held: bool = False,
     ) -> None:
         self.tile = tile
         self.output_item = int(output_item)
         self.count = count
+        self.until_held = until_held
         recipe = _find_recipe(self.output_item, book)
         if recipe is None:
             raise ValueError(
@@ -2708,7 +2723,10 @@ class ProduceInMachineAt(Goal):
         self._withdraw_start_inv: int | None = None
 
     def step(self, view: WorldView) -> StepReturn:
-        if self._cycles_done >= self.count:
+        if self.until_held:
+            if view.player.held(self.output_item) >= self.count:
+                return Result.DONE, None
+        elif self._cycles_done >= self.count:
             return Result.DONE, None
 
         # Validate the target tile holds a furnace or assembler.
@@ -2782,9 +2800,16 @@ def ProduceInFurnaceAt(  # noqa: N802 - factory mirrors class-style instantiatio
     output_item: int | ItemType,
     count: int,
     book: RecipeBook = BASE_RECIPE_BOOK,
+    *,
+    until_held: bool = False,
 ) -> ProduceInMachineAt:
-    """Produce *count* of *output_item* at the furnace at *tile*."""
-    return ProduceInMachineAt(tile, output_item, count, book=book)
+    """Produce *count* of *output_item* at the furnace at *tile*.
+
+    See :class:`ProduceInMachineAt` for ``until_held`` semantics.
+    """
+    return ProduceInMachineAt(
+        tile, output_item, count, book=book, until_held=until_held
+    )
 
 
 def ProduceInAssemblerAt(  # noqa: N802 - factory mirrors class-style instantiation
@@ -2792,9 +2817,16 @@ def ProduceInAssemblerAt(  # noqa: N802 - factory mirrors class-style instantiat
     output_item: int | ItemType,
     count: int,
     book: RecipeBook = BASE_RECIPE_BOOK,
+    *,
+    until_held: bool = False,
 ) -> ProduceInMachineAt:
-    """Produce *count* of *output_item* at the assembler at *tile*."""
-    return ProduceInMachineAt(tile, output_item, count, book=book)
+    """Produce *count* of *output_item* at the assembler at *tile*.
+
+    See :class:`ProduceInMachineAt` for ``until_held`` semantics.
+    """
+    return ProduceInMachineAt(
+        tile, output_item, count, book=book, until_held=until_held
+    )
 
 
 # ---------------------------------------------------------------------------

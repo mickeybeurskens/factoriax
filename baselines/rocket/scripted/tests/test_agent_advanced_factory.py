@@ -632,7 +632,7 @@ def test_ends_with_a_settling_wait() -> None:
 def test_bus_pull_chunk_counts_are_cumulative() -> None:
     """Bus-pull chunks must aim for *cumulative* held counts, not per-chunk.
 
-    ``ProduceInMachine.step`` exits as soon as
+    ``ProduceInMachineAt(until_held=True).step`` exits as soon as
     ``view.player.held(output_item) >= self.count``. The player doesn't
     drop placed items until Phase 2/3, so held counts grow monotonically
     across chunks. If chunk N's ``count`` is per-chunk (e.g. 25), the
@@ -641,13 +641,14 @@ def test_bus_pull_chunk_counts_are_cumulative() -> None:
     of any item ever gets crafted, and Phase 2/3 placements starve.
 
     Forces a target requiring multiple chunks (60 > _BUS_PULL_CHUNK=25)
-    and asserts the resulting ProduceInMachine goals have strictly
-    increasing counts across chunks.
+    and asserts the resulting production goals have strictly increasing
+    counts across chunks.
     """
     from baselines.rocket.scripted.agent_advanced_factory import (
         _BUS_PULL_CHUNK,
         _bus_pull_phase,
     )
+    from baselines.rocket.scripted.goals import ProduceInMachineAt
 
     qty = _BUS_PULL_CHUNK * 2 + 10  # 60 with the current chunk constant
     targets = {int(ItemType.CONVEYOR_BELT): qty}
@@ -657,12 +658,12 @@ def test_bus_pull_chunk_counts_are_cumulative() -> None:
     belt_produce = [
         g
         for g in phase_goals
-        if isinstance(g, ProduceInMachine)
+        if isinstance(g, (ProduceInMachine, ProduceInMachineAt))
         and g.output_item == int(ItemType.CONVEYOR_BELT)
     ]
     assert len(belt_produce) >= 3, (
         f"qty={qty} > _BUS_PULL_CHUNK={_BUS_PULL_CHUNK} should yield "
-        f">=3 ProduceInMachine chunks; got {len(belt_produce)}"
+        f">=3 production chunks; got {len(belt_produce)}"
     )
     counts = [g.count for g in belt_produce]
     assert all(b > a for a, b in zip(counts, counts[1:])), (
@@ -766,13 +767,17 @@ def test_bus_pull_falls_back_to_plates_without_frame_circuit() -> None:
     at the pre-placed assembler.
     """
     from baselines.rocket.scripted.agent_advanced_factory import _bus_pull_phase
-    from baselines.rocket.scripted.goals import WithdrawFromBusAt
+    from baselines.rocket.scripted.goals import ProduceInMachineAt, WithdrawFromBusAt
 
     targets = {int(ItemType.ASSEMBLER): 2}
     available = frozenset(_BUS_LEAVES_PLATES | {int(ItemType.WIRE)})
     phase_goals = _bus_pull_phase(targets, available, ROCKET_RECIPE_BOOK, slack={})
 
-    produced = {g.output_item for g in phase_goals if isinstance(g, ProduceInMachine)}
+    produced = {
+        g.output_item
+        for g in phase_goals
+        if isinstance(g, (ProduceInMachine, ProduceInMachineAt))
+    }
     assert int(ItemType.FRAME) in produced, (
         "FRAME not a bus leaf -> ASSEMBLER schedule must craft FRAME"
     )
@@ -781,6 +786,61 @@ def test_bus_pull_falls_back_to_plates_without_frame_circuit() -> None:
     pull_items = {g.item_type for g in phase_goals if isinstance(g, WithdrawFromBusAt)}
     assert int(ItemType.FRAME) not in pull_items
     assert int(ItemType.CIRCUIT) not in pull_items
+
+
+def test_bus_pull_pins_production_to_pre_placed_machines() -> None:
+    """Bus-pull production must be pinned to the pre-placed F+A tiles.
+
+    ``ProduceInMachine`` (the nearest-pick variant) deposits into the
+    closest matching machine. This works *only* while bus-pull runs
+    before any Phase 2/3 cell exists, because the only assembler on
+    the map is then the pre-placed (17, 16). Any future staged bus
+    pull (Stage C onward) runs after cells like the WIRE assembler at
+    (13, 14) are placed, and nearest-pick will deposit into the wrong
+    machine -- type-clogging the cell or starving the recipe.
+
+    The fix is :class:`ProduceInMachineAt` pinned to
+    ``_PRE_PLACED_FURNACE_TILE`` / ``_PRE_PLACED_ASSEMBLER_TILE``.
+    This test forces the issue at construction time: emit goals for
+    a target that requires both furnace smelts (e.g. IRON_PLATE via
+    plate fallback) and assembler crafts, then assert no nearest-pick
+    goal is produced and every pinned goal targets a pre-placed tile.
+    """
+    from baselines.rocket.scripted.agent_advanced_factory import (
+        _PRE_PLACED_ASSEMBLER_TILE,
+        _PRE_PLACED_FURNACE_TILE,
+        _bus_pull_phase,
+    )
+    from baselines.rocket.scripted.goals import ProduceInMachineAt
+
+    # ASSEMBLER target with a minimal bus drives both furnace smelts
+    # (plate fallback) and assembler crafts (FRAME, CIRCUIT, ASSEMBLER
+    # itself) through the chunk loop.
+    targets = {int(ItemType.ASSEMBLER): 2}
+    phase_goals = _bus_pull_phase(
+        targets, _BUS_LEAVES_PLATES, ROCKET_RECIPE_BOOK, slack={}
+    )
+
+    nearest = [g for g in phase_goals if isinstance(g, ProduceInMachine)]
+    assert not nearest, (
+        f"_bus_pull_phase emitted {len(nearest)} ProduceInMachine "
+        f"(nearest-pick) goal(s): "
+        f"{[ItemType(g.output_item).name for g in nearest]}. These "
+        f"will deposit into the wrong assembler/furnace once Phase "
+        f"2/3 cells are placed. Use ProduceInMachineAt pinned to "
+        f"_PRE_PLACED_FURNACE_TILE / _PRE_PLACED_ASSEMBLER_TILE."
+    )
+
+    pinned = [g for g in phase_goals if isinstance(g, ProduceInMachineAt)]
+    assert pinned, "expected at least one ProduceInMachineAt goal"
+
+    valid_tiles = {_PRE_PLACED_FURNACE_TILE, _PRE_PLACED_ASSEMBLER_TILE}
+    bad_tiles = [g for g in pinned if g.tile not in valid_tiles]
+    assert not bad_tiles, (
+        f"ProduceInMachineAt goals must pin to pre-placed F+A tiles "
+        f"{valid_tiles}; got mismatched tiles "
+        f"{[(ItemType(g.output_item).name, g.tile) for g in bad_tiles]}"
+    )
 
 
 def test_recipe_overlay_changes_bom_quantities() -> None:

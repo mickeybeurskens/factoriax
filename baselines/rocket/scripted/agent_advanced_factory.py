@@ -56,7 +56,9 @@ from .goals import (
     PlaceMachineAt,
     PlaceMachineFromBackAt,
     ProduceInAssembler,
+    ProduceInAssemblerAt,
     ProduceInFurnace,
+    ProduceInFurnaceAt,
     VerifyLayout,
     Wait,
     WaitUntil,
@@ -889,25 +891,38 @@ def _bus_pull_phase(
                         max_idle_attempts=400,
                     )
                 )
-            # ProduceInMachine.step exits when held(output) >= count.
-            # The player doesn't drop placeables until Phase 2/3, so
-            # held counts accumulate across chunks; each chunk's stop
-            # condition must therefore be the cumulative target, not
-            # the per-chunk delta, otherwise chunks 2+ no-op.
+            # Each chunk's stop condition is the *cumulative* held
+            # target: ``until_held=True`` exits when
+            # ``held(output) >= cumulative_target``. The player doesn't
+            # drop placeables until Phase 2/3, so held counts grow
+            # monotonically across chunks; per-chunk deltas would
+            # no-op every chunk after the first.
             #
-            # Note: ProduceInMachine picks the nearest matching machine.
-            # That works while bus_pull runs before Phase 2/3 cells are
-            # placed (only the pre-placed F+A exist). A future staged
-            # bus pull (which runs after some assembler cells exist)
-            # will need ProduceInMachineAt pinned to the pre-placed
-            # F+A tiles to avoid depositing into a cell's assembler.
+            # Tile-pinning is required so that any future staged bus
+            # pull (running after Phase 2/3 cells exist) doesn't
+            # accidentally deposit into a cell's assembler/furnace.
+            # Plain ``ProduceInMachine`` picks the nearest machine,
+            # which is brittle once the WIRE / FRAME / etc. cells
+            # are on the map.
             if int(machine_type) == int(MachineType.FURNACE):
                 goals.append(
-                    ProduceInFurnace(output_item, cumulative_target, book=book)
+                    ProduceInFurnaceAt(
+                        _PRE_PLACED_FURNACE_TILE,
+                        output_item,
+                        cumulative_target,
+                        book=book,
+                        until_held=True,
+                    )
                 )
             elif int(machine_type) == int(MachineType.ASSEMBLER):
                 goals.append(
-                    ProduceInAssembler(output_item, cumulative_target, book=book)
+                    ProduceInAssemblerAt(
+                        _PRE_PLACED_ASSEMBLER_TILE,
+                        output_item,
+                        cumulative_target,
+                        book=book,
+                        until_held=True,
+                    )
                 )
 
     return goals
