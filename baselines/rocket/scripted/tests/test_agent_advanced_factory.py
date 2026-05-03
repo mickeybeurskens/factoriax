@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted.agent_advanced_factory import (
+    _BUS_LEAVES_PLATES,
     _CIRCUIT_ASSEMBLER_TILE,
     _CIRCUIT_EXTRACT_ARM_TILE,
     _CIRCUIT_INPUT_A_TILE,
@@ -626,6 +627,160 @@ def test_ends_with_a_settling_wait() -> None:
     """The final goal is a Wait so plates accumulate before episode end."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     assert isinstance(goals[-1], Wait)
+
+
+def test_bus_pull_chunk_counts_are_cumulative() -> None:
+    """Bus-pull chunks must aim for *cumulative* held counts, not per-chunk.
+
+    ``ProduceInMachine.step`` (goals.py) exits as soon as
+    ``view.player.held(output_item) >= self.count``. The player doesn't
+    drop placed items until Phase 2/3, so held counts grow monotonically
+    across chunks. If chunk N's ``count`` is per-chunk (e.g. 25), the
+    player already holds 25 from chunk N-1, so chunk N returns DONE
+    immediately and produces nothing. Result: only the first chunk_size
+    of any item ever gets crafted, and Phase 2/3 placements starve.
+
+    Forces a target requiring multiple chunks (60 > _BUS_PULL_CHUNK=25)
+    and asserts the resulting ProduceInMachine goals have strictly
+    increasing counts across chunks.
+    """
+    from baselines.rocket.scripted.agent_advanced_factory import (
+        _BUS_PULL_CHUNK,
+        _bus_pull_phase,
+    )
+
+    qty = _BUS_PULL_CHUNK * 2 + 10  # 60 with the current chunk constant
+    targets = {int(ItemType.CONVEYOR_BELT): qty}
+    phase_goals = _bus_pull_phase(
+        targets, _BUS_LEAVES_PLATES, ROCKET_RECIPE_BOOK, slack={}
+    )
+    belt_produce = [
+        g
+        for g in phase_goals
+        if isinstance(g, ProduceInMachine)
+        and g.output_item == int(ItemType.CONVEYOR_BELT)
+    ]
+    assert len(belt_produce) >= 3, (
+        f"qty={qty} > _BUS_PULL_CHUNK={_BUS_PULL_CHUNK} should yield "
+        f">=3 ProduceInMachine chunks; got {len(belt_produce)}"
+    )
+    counts = [g.count for g in belt_produce]
+    assert all(b > a for a, b in zip(counts, counts[1:])), (
+        f"Bus-pull ProduceInMachine counts {counts} aren't strictly "
+        f"increasing; later chunks will no-op because the player's held "
+        f"count from earlier chunks already satisfies the per-chunk count."
+    )
+    assert counts[-1] >= qty, (
+        f"Final chunk count {counts[-1]} < total target {qty}; the "
+        f"cumulative target must reach the requested qty by the last chunk."
+    )
+
+
+def test_bus_pull_uses_finished_wire_when_available() -> None:
+    """When WIRE is in ``available_buses``, MINER crafts pull finished WIRE.
+
+    With WIRE listed as a bus leaf, the BOM walk treats it as raw and
+    the chunk loop emits a ``WithdrawFromBusAt`` against the WIRE
+    output pallet. The COPPER_PLATE / TIN_PLATE inputs the WIRE recipe
+    would consume should not appear as MineOre goals (no copper/tin
+    ore demand) because WIRE itself is now a leaf.
+    """
+    from baselines.rocket.scripted.agent_advanced_factory import (
+        _BUS_PALLETS,
+        _bus_pull_phase,
+    )
+
+    targets = {int(ItemType.MINER): 5}
+    available = frozenset(_BUS_LEAVES_PLATES | {int(ItemType.WIRE)})
+    phase_goals = _bus_pull_phase(targets, available, ROCKET_RECIPE_BOOK, slack={})
+
+    from baselines.rocket.scripted.goals import WithdrawFromBusAt
+
+    wire_pulls = [
+        g
+        for g in phase_goals
+        if isinstance(g, WithdrawFromBusAt)
+        and g.item_type == int(ItemType.WIRE)
+        and g.tile == _BUS_PALLETS[int(ItemType.WIRE)]
+    ]
+    assert wire_pulls, "expected at least one WithdrawFromBusAt(WIRE) chunk"
+
+    copper_mines = [
+        g
+        for g in phase_goals
+        if isinstance(g, MineOre) and g.item_type == int(ItemType.COPPER_ORE)
+    ]
+    tin_mines = [
+        g
+        for g in phase_goals
+        if isinstance(g, MineOre) and g.item_type == int(ItemType.TIN_ORE)
+    ]
+    assert not copper_mines, (
+        "WIRE listed as a bus leaf should suppress COPPER_ORE mining"
+    )
+    assert not tin_mines, "WIRE listed as a bus leaf should suppress TIN_ORE mining"
+
+
+def test_bus_pull_uses_bus_frame_and_circuit_for_assemblers() -> None:
+    """With FRAME+CIRCUIT bus leaves, ASSEMBLER crafts pull finished items."""
+    from baselines.rocket.scripted.agent_advanced_factory import (
+        _BUS_PALLETS,
+        _bus_pull_phase,
+    )
+    from baselines.rocket.scripted.goals import WithdrawFromBusAt
+
+    targets = {int(ItemType.ASSEMBLER): 2}
+    available = frozenset(
+        _BUS_LEAVES_PLATES
+        | {int(ItemType.WIRE), int(ItemType.FRAME), int(ItemType.CIRCUIT)}
+    )
+    phase_goals = _bus_pull_phase(targets, available, ROCKET_RECIPE_BOOK, slack={})
+
+    frame_pulls = [
+        g
+        for g in phase_goals
+        if isinstance(g, WithdrawFromBusAt)
+        and g.item_type == int(ItemType.FRAME)
+        and g.tile == _BUS_PALLETS[int(ItemType.FRAME)]
+    ]
+    circuit_pulls = [
+        g
+        for g in phase_goals
+        if isinstance(g, WithdrawFromBusAt)
+        and g.item_type == int(ItemType.CIRCUIT)
+        and g.tile == _BUS_PALLETS[int(ItemType.CIRCUIT)]
+    ]
+    assert frame_pulls, "expected WithdrawFromBusAt(FRAME) for ASSEMBLER recipe"
+    assert circuit_pulls, "expected WithdrawFromBusAt(CIRCUIT) for ASSEMBLER recipe"
+
+    # FRAME's recipe inputs (IRON_PLATE+TIN_PLATE) shouldn't appear in
+    # the schedule as crafted items because FRAME is a leaf.
+    produced = {g.output_item for g in phase_goals if isinstance(g, ProduceInMachine)}
+    assert int(ItemType.FRAME) not in produced
+    assert int(ItemType.CIRCUIT) not in produced
+
+
+def test_bus_pull_falls_back_to_plates_without_frame_circuit() -> None:
+    """Without FRAME/CIRCUIT in available_buses, the ASSEMBLER walk
+    recurses to plates and the chunk loop crafts FRAME and CIRCUIT
+    at the pre-placed assembler.
+    """
+    from baselines.rocket.scripted.agent_advanced_factory import _bus_pull_phase
+    from baselines.rocket.scripted.goals import WithdrawFromBusAt
+
+    targets = {int(ItemType.ASSEMBLER): 2}
+    available = frozenset(_BUS_LEAVES_PLATES | {int(ItemType.WIRE)})
+    phase_goals = _bus_pull_phase(targets, available, ROCKET_RECIPE_BOOK, slack={})
+
+    produced = {g.output_item for g in phase_goals if isinstance(g, ProduceInMachine)}
+    assert int(ItemType.FRAME) in produced, (
+        "FRAME not a bus leaf -> ASSEMBLER schedule must craft FRAME"
+    )
+    assert int(ItemType.CIRCUIT) in produced
+
+    pull_items = {g.item_type for g in phase_goals if isinstance(g, WithdrawFromBusAt)}
+    assert int(ItemType.FRAME) not in pull_items
+    assert int(ItemType.CIRCUIT) not in pull_items
 
 
 def test_recipe_overlay_changes_bom_quantities() -> None:

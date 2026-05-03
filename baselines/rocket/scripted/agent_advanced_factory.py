@@ -701,10 +701,13 @@ def _phase_3_sensor_targets() -> dict[int, int]:
     )
 
 
-# Plate-leaf items: in Phase 0b the agent withdraws these from the
-# Phase 1 cell plate-buses instead of hand-smelting them, so the
-# truncated recipe book treats them as raw leaves for the BOM walk.
-_PLATE_LEAVES: frozenset[int] = frozenset(
+# Bus-leaf candidates per stage. The bus-pull phase withdraws these
+# from cell pallets instead of walking the recipe back to ore. Plates
+# (the Phase 1 cell outputs) are always available once Phase 1 lands;
+# higher-tier outputs (WIRE, FRAME, CIRCUIT, MOTOR, SENSOR) become
+# available stage-by-stage as their cells are placed. Stage helpers
+# choose the appropriate subset via :func:`_bus_pull_phase`.
+_BUS_LEAVES_PLATES: frozenset[int] = frozenset(
     {
         int(ItemType.IRON_PLATE),
         int(ItemType.COPPER_PLATE),
@@ -713,21 +716,28 @@ _PLATE_LEAVES: frozenset[int] = frozenset(
     }
 )
 
-# Per-plate-leaf cell pallet — withdraw from these in Phase 0b.
-_PLATE_PALLETS: dict[int, tuple[int, int]] = {
+# Source pallet for every item the bus-pull phase can withdraw.
+# Every key is a candidate "bus leaf"; the active subset per stage
+# is passed via ``available_buses`` to :func:`_bus_pull_phase`.
+_BUS_PALLETS: dict[int, tuple[int, int]] = {
     int(ItemType.IRON_PLATE): _IRON_PLATE_BUS_TILE,
     int(ItemType.COPPER_PLATE): _COPPER_PLATE_BUS_TILE,
     int(ItemType.TIN_PLATE): _TIN_PLATE_BUS_TILE,
     int(ItemType.WAFER): _SILICON_PLATE_BUS_TILE,
+    int(ItemType.WIRE): _WIRE_OUTPUT_TILE,
+    int(ItemType.FRAME): _FRAME_OUTPUT_TILE,
+    int(ItemType.CIRCUIT): _CIRCUIT_OUTPUT_TILE,
+    int(ItemType.MOTOR): _MOTOR_OUTPUT_TILE,
+    int(ItemType.SENSOR): _SENSOR_OUTPUT_TILE,
 }
 
-# Inventory-cap-aware chunk size for Phase 0b crafts. The player can
-# hold up to 99 of each item; we withdraw at most this many plates of
-# any one type before crafting, keeping headroom under the cap so a
-# stray bus-pallet over-pull never stalls the goal. 25 also keeps each
+# Inventory-cap-aware chunk size for bus-pull crafts. The player can
+# hold up to 99 of each item; we withdraw at most this many of any
+# one bus leaf before crafting, keeping headroom under the cap so a
+# stray over-pull never stalls the goal. 25 also keeps each
 # WithdrawFromBusAt's wait short — a cell smelts ~1 plate every 2
 # ticks, so 25 plates land in ~50 ticks.
-_PHASE_0B_CHUNK: int = 25
+_BUS_PULL_CHUNK: int = 25
 
 
 # ---------------------------------------------------------------------------
@@ -762,7 +772,7 @@ def _phase_0a(
 
     ``crafted_targets`` should be sized for Phase 1 placements only
     (cells + ore-feeders + coal trunks). Phase 2 / Phase 3 placements
-    are sourced from the live cell plate-buses by :func:`_phase_0b`,
+    are sourced from live cell pallets by :func:`_bus_pull_phase`,
     avoiding the brute-force hand-mining and hand-smelting of every
     plate the agent ever needs.
     """
@@ -788,78 +798,107 @@ def _phase_0a(
 
 
 # ---------------------------------------------------------------------------
-# Phase 0b — bootstrap part 2: withdraw plates from cells, craft Phase 2/3
+# Bus-pull phase — withdraw from already-running cells, craft the rest
 # ---------------------------------------------------------------------------
 
 
-def _phase_0b(
+def _bus_pull_phase(
     crafted_targets: dict[int, int],
+    available_buses: frozenset[int],
     book: RecipeBook,
     slack: dict[int, int],
 ) -> list[Goal]:
-    """Withdraw plates from cell pallets, mine raw, craft Phase 2/3 items.
+    """Withdraw cell-bus items, mine raw, craft remainder at pre-placed F+A.
 
-    Run *after* the Phase 1 cells are placed and producing. Treats
-    plates and wafer as leaves (truncating their smelt recipes from
-    the book), so the BOM walk only requests raw resources the cells
-    don't produce — namely COAL for the SPLITTER + CROSSING crafts
-    that consume coal directly in the assembler.
+    Generalisation of the original Phase 0b. Parameterised on
+    ``available_buses`` — the set of item types whose producing cells
+    are already placed and can therefore be pulled from a known bus
+    pallet (``_BUS_PALLETS``) rather than walked back to ore. With
+    ``available_buses = _BUS_LEAVES_PLATES`` this reproduces the
+    plate-only behaviour used during early M-stages; passing the
+    higher-tier set ``{plates, WIRE, FRAME, CIRCUIT, MOTOR, SENSOR}``
+    lets later stages skip rebuilding intermediate items the live
+    factory already produces.
 
     For each scheduled craft, the agent:
 
-    1. Withdraws the per-cycle plate input from the corresponding cell
-       plate-bus pallet (chunked to :data:`_PHASE_0B_CHUNK` cycles per
-       batch so the player's inventory stays under cap).
-    2. Runs ``ProduceInMachine`` for the chunk. The machine is the
-       pre-placed assembler at (17, 16) for assembler recipes (or the
-       pre-placed furnace at (15, 16) for any furnace recipe — none
-       in the rocket pipeline today).
+    1. Withdraws each recipe input that's an active bus leaf from the
+       corresponding cell pallet (chunked to :data:`_BUS_PULL_CHUNK`
+       cycles per batch so the player's inventory stays under cap).
+    2. Runs ``ProduceInMachine`` for the chunk at the pre-placed
+       assembler at (17, 16) (or the pre-placed furnace at (15, 16)
+       for furnace recipes; none currently route through here).
 
-    Slack only applies to raw leaves; plates have effectively unlimited
-    supply from the cells, so no per-plate slack is needed.
+    Slack only applies to raw leaves; bus items come from cells with
+    effectively unlimited supply, so no per-bus-leaf slack is needed.
+
+    Args:
+        crafted_targets: ``{item: qty}`` of machines this stage must
+            produce (typically the placement counts for one or two
+            cells the agent is about to build).
+        available_buses: Subset of :data:`_BUS_PALLETS` keys whose
+            producing cells are already placed at this stage.
+        book: :class:`RecipeBook` driving the BOM and schedule.
+        slack: Per-leaf slack added to raw mines (does not apply to
+            bus leaves).
+
+    Returns:
+        Flat list of :class:`Goal` instances: ``MineOre`` for raw
+        leaves, then chunked ``WithdrawFromBusAt`` + ``ProduceInMachine``
+        cycles per scheduled item.
     """
-    truncated = book_without_recipes_for(book, set(_PLATE_LEAVES))
+    truncated = book_without_recipes_for(book, set(available_buses))
     bom = bill_of_materials(crafted_targets, truncated)
     schedule = production_schedule(crafted_targets, truncated)
     for item, qty in slack.items():
-        if int(item) in _PLATE_LEAVES:
+        if int(item) in available_buses:
             continue
         bom[int(item)] = bom.get(int(item), 0) + int(qty)
 
     goals: list[Goal] = []
     for item, qty in sorted(bom.items()):
-        if item in _PLATE_LEAVES or qty <= 0:
+        if item in available_buses or qty <= 0:
             continue
         goals.append(MineOre(item, qty))
 
     book_lookup = {r.output: r for r in book.recipes}
     for output_item, qty, machine_type in schedule:
         recipe = book_lookup[output_item]
-        for chunk_start in range(0, qty, _PHASE_0B_CHUNK):
-            chunk_qty = min(_PHASE_0B_CHUNK, qty - chunk_start)
+        for chunk_start in range(0, qty, _BUS_PULL_CHUNK):
+            chunk_qty = min(_BUS_PULL_CHUNK, qty - chunk_start)
+            cumulative_target = chunk_start + chunk_qty
             for input_item, per_craft in recipe.inputs:
                 input_id = int(input_item)
-                if input_id not in _PLATE_LEAVES:
+                if input_id not in available_buses:
                     continue
                 need = chunk_qty * int(per_craft)
                 # WithdrawFromBusAt is absolute ("until held >= count");
                 # after the previous chunk's craft consumed the inputs
-                # the player holds 0 of this plate, so the goal pulls
-                # `need` plates from the cell pallet. max_idle_attempts
+                # the player holds 0 of this bus leaf, so the goal pulls
+                # `need` items from the cell pallet. max_idle_attempts
                 # is generous because the cell may need a few hundred
                 # ticks to refill after a large pull.
                 goals.append(
                     WithdrawFromBusAt(
-                        _PLATE_PALLETS[input_id],
+                        _BUS_PALLETS[input_id],
                         input_id,
                         need,
                         max_idle_attempts=400,
                     )
                 )
+            # ProduceInMachine.step exits when held(output) >= count.
+            # The player doesn't drop placeables until Phase 2/3, so
+            # held counts accumulate across chunks; each chunk's stop
+            # condition must therefore be the cumulative target, not
+            # the per-chunk delta, otherwise chunks 2+ no-op.
             if int(machine_type) == int(MachineType.FURNACE):
-                goals.append(ProduceInFurnace(output_item, chunk_qty, book=book))
+                goals.append(
+                    ProduceInFurnace(output_item, cumulative_target, book=book)
+                )
             elif int(machine_type) == int(MachineType.ASSEMBLER):
-                goals.append(ProduceInAssembler(output_item, chunk_qty, book=book))
+                goals.append(
+                    ProduceInAssembler(output_item, cumulative_target, book=book)
+                )
 
     return goals
 
@@ -1376,12 +1415,16 @@ def build_advanced_factory_goals(
         goals.append(VerifyLayout(expected, label=f"phase 1.{spec.label}"))
 
     # Settle wait so each cell's plate-bus has at least one plate
-    # before Phase 0b's first WithdrawFromBusAt fires. Each cell
+    # before the bus pull's first WithdrawFromBusAt fires. Each cell
     # smelts at 1 plate per ~2 ticks once ore + coal are flowing,
     # so 80 ticks comfortably covers spin-up and the first plate
     # landing on the bus.
     goals.append(Wait(80))
-    goals.extend(_phase_0b(phase_0b_targets, book, slack))
+    # Single-stage bus pull: only Phase 1 plate cells are live, so the
+    # active bus-leaf set is plates only. Later commits split this into
+    # Stages B–D so each stage can pull from whichever cells exist by
+    # then.
+    goals.extend(_bus_pull_phase(phase_0b_targets, _BUS_LEAVES_PLATES, book, slack))
 
     goals.extend(_phase_2_wire_goals())
     expected = {**_PRE_PLACED_LAYOUT, **expected_layout_from_goals(goals)}
