@@ -84,6 +84,35 @@ def _miner_has_output_predicate() -> Callable[[WorldView], bool]:
     return pred
 
 
+def _pallet_has_output_predicate(
+    tile: tuple[int, int],
+    item: int | ItemType,
+) -> Callable[[WorldView], bool]:
+    """Predicate: True when the PALLET at *tile* holds at least one *item*.
+
+    Used to gate a stage transition on "the cell I just placed has
+    actually produced something." Reads the tile's slot-2 (output)
+    channel from the obs — the same channel ``buffer_type`` aliases —
+    and checks both that the buffer is non-empty and that its type
+    matches *item* (so a stale buffered ore on a different tile can't
+    spuriously fire).
+
+    Args:
+        tile: ``(x, y)`` of the pallet to probe.
+        item: Expected item type in the pallet's output slot.
+
+    Returns:
+        A predicate suitable for :class:`WaitUntil`.
+    """
+    item_id = int(item)
+    x, y = tile
+
+    def pred(view: WorldView) -> bool:
+        return int(view.slot2_count[y, x]) > 0 and int(view.slot2_type[y, x]) == item_id
+
+    return pred
+
+
 def _any_assembler_has_output_predicate() -> Callable[[WorldView], bool]:
     """Predicate: any assembler shows a non-zero output buffer.
 
