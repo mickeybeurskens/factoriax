@@ -632,7 +632,7 @@ def test_ends_with_a_settling_wait() -> None:
 def test_bus_pull_chunk_counts_are_cumulative() -> None:
     """Bus-pull chunks must aim for *cumulative* held counts, not per-chunk.
 
-    ``ProduceInMachine.step`` (goals.py) exits as soon as
+    ``ProduceInMachine.step`` exits as soon as
     ``view.player.held(output_item) >= self.count``. The player doesn't
     drop placed items until Phase 2/3, so held counts grow monotonically
     across chunks. If chunk N's ``count`` is per-chunk (e.g. 25), the

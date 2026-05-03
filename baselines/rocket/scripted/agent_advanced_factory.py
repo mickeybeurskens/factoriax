@@ -78,9 +78,12 @@ from .recipe_planning import (
 # Pre-placed machinery from the rocket benchmark level — included in
 # every stage's ``VerifyLayout`` expected map so the helper doesn't
 # flag them as STRAY.
+_PRE_PLACED_FURNACE_TILE: tuple[int, int] = (15, 16)
+_PRE_PLACED_ASSEMBLER_TILE: tuple[int, int] = (17, 16)
+
 _PRE_PLACED_LAYOUT: dict[tuple[int, int], tuple[int, int]] = {
-    (15, 16): (int(MachineType.FURNACE), int(Direction.DOWN)),
-    (17, 16): (int(MachineType.ASSEMBLER), int(Direction.DOWN)),
+    _PRE_PLACED_FURNACE_TILE: (int(MachineType.FURNACE), int(Direction.DOWN)),
+    _PRE_PLACED_ASSEMBLER_TILE: (int(MachineType.ASSEMBLER), int(Direction.DOWN)),
 }
 
 # ---------------------------------------------------------------------------
@@ -891,6 +894,13 @@ def _bus_pull_phase(
             # held counts accumulate across chunks; each chunk's stop
             # condition must therefore be the cumulative target, not
             # the per-chunk delta, otherwise chunks 2+ no-op.
+            #
+            # Note: ProduceInMachine picks the nearest matching machine.
+            # That works while bus_pull runs before Phase 2/3 cells are
+            # placed (only the pre-placed F+A exist). A future staged
+            # bus pull (which runs after some assembler cells exist)
+            # will need ProduceInMachineAt pinned to the pre-placed
+            # F+A tiles to avoid depositing into a cell's assembler.
             if int(machine_type) == int(MachineType.FURNACE):
                 goals.append(
                     ProduceInFurnace(output_item, cumulative_target, book=book)
@@ -1421,9 +1431,10 @@ def build_advanced_factory_goals(
     # landing on the bus.
     goals.append(Wait(80))
     # Single-stage bus pull: only Phase 1 plate cells are live, so the
-    # active bus-leaf set is plates only. Later commits split this into
-    # Stages B–D so each stage can pull from whichever cells exist by
-    # then.
+    # active bus-leaf set is plates only. A future iteration will split
+    # this into Stages B–D so each stage can pull from whichever cells
+    # exist by then; that requires careful per-stage warmup tuning and
+    # is left as a follow-up.
     goals.extend(_bus_pull_phase(phase_0b_targets, _BUS_LEAVES_PLATES, book, slack))
 
     goals.extend(_phase_2_wire_goals())
