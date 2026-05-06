@@ -83,6 +83,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "ent_asm_in_count",
     "ent_asm_out_type",
     "ent_asm_out_count",
+    "ent_health",
     # Global fields — shape (B, T, ...).
     "selected_player",
     "achievements",
@@ -213,6 +214,7 @@ class Trajectory:
     ent_asm_in_count: np.ndarray | None = None
     ent_asm_out_type: np.ndarray | None = None
     ent_asm_out_count: np.ndarray | None = None
+    ent_health: np.ndarray | None = None
 
     # Global fields — (B, T, ...).
     selected_player: np.ndarray | None = None
@@ -554,8 +556,9 @@ def trajectory_to_states(
         else:
             state_kwargs["timestep"] = t
 
-        # Older trajectories predate EnvState.ent_health; zero-fill it
-        # using ent_y's MAX_M dimension so reconstruction still works.
+        # Trajectories saved before ent_health was a recorded field
+        # have no entry for it. Zero-fill from ent_y's MAX_M dimension
+        # so legacy files still reconstruct without raising.
         if "ent_health" not in state_kwargs and "ent_y" in state_kwargs:
             import jax.numpy as jnp
 
