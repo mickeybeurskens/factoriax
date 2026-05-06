@@ -4,17 +4,24 @@ The achievement system used to live in a wrapper (AchievementWrapper);
 this set of tests pins the engine-state version: a constructor argument
 on FactoriaXEnv, evaluated and OR-folded inside step_env, with the
 result available on state.achievements_unlocked. Spec: SPEC.md Phase A
-item 1.2.
+items 1.2 and 1.3.
 """
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 from jax import random
 
-from factoriax.constants import MAX_ACHIEVEMENTS
+from factoriax.achievements import ACHIEVEMENT_INFO, core_game_conditions
+from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES, BlockType, ItemType
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
+
+
+def _achievement_index(achievement_id: str) -> int:
+    """Look up the index of an achievement by its string id."""
+    return next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == achievement_id)
 
 
 def _all_true(state: EnvState) -> jnp.ndarray:
@@ -77,3 +84,49 @@ def test_unlocks_are_latched_across_steps() -> None:
     _, state, _, _, _ = env.step_env(step_key, state, 0, params)
     # condition is False at timestep=2 but unlocks must persist
     assert bool(state.achievements_unlocked.all())
+
+
+def test_core_game_conditions_unlock_through_engine(state_factory) -> None:
+    """End-to-end: core_game_conditions wired into the env latches first_ore."""
+    items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
+    items_mined = items_mined.at[ItemType.IRON_ORE].set(1)
+    state = state_factory(
+        world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
+        items_mined=items_mined,
+    )
+
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
+    params = EnvParams(map_width=1, map_height=1, num_players=1, max_machines=4)
+    rng = random.PRNGKey(0)
+    _, state, _, _, _ = env.step_env(rng, state, 0, params)
+
+    assert bool(state.achievements_unlocked[_achievement_index("first_ore")])
+
+
+def test_core_game_conditions_jits_via_step() -> None:
+    """core_game_conditions must JIT-trace cleanly when used as achievement_fn."""
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
+    params = env.default_params
+    rng = random.PRNGKey(0)
+    _, state = env.reset_env(rng, params)
+
+    rng, step_key = random.split(rng)
+    # env.step is JIT-decorated. If achievement_fn doesn't trace, this raises.
+    _ = env.step(step_key, state, 0, params)
+
+
+def test_core_game_conditions_vmaps() -> None:
+    """core_game_conditions must vmap across batched envs."""
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
+    params = env.default_params
+
+    reset_keys = random.split(random.PRNGKey(0), 4)
+    _, states = jax.vmap(env.reset_env, in_axes=(0, None))(reset_keys, params)
+
+    step_keys = random.split(random.PRNGKey(1), 4)
+    actions = jnp.zeros(4, dtype=jnp.int32)
+    _, states, _, _, _ = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))(
+        step_keys, states, actions, params
+    )
+
+    assert states.achievements_unlocked.shape == (4, MAX_ACHIEVEMENTS)
