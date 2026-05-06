@@ -51,8 +51,8 @@ from factoriax.benchmarks.rocket import (
 )
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import LocalObservationWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
 from factoriax.levels import build_state
 from factoriax.state import EnvParams, EnvState
 

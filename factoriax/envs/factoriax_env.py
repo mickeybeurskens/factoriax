@@ -91,7 +91,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         when the episode is not done, roughly tripling the per-step
         cost. This override simply calls ``step_env`` directly.
 
-        Use :class:`~factoriax.envs.achievement_wrapper.AutoResetWrapper`
+        Use :class:`~factoriax.envs.auto_reset_wrapper.AutoResetWrapper`
         if you need auto-reset for ``lax.scan`` training loops.
 
         Args:
