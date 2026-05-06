@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import partial
 from typing import Any
 
@@ -21,34 +22,49 @@ from factoriax.observations import (
 from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
+AchievementFn = Callable[[EnvState], jax.Array]
+
 
 class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """FactoriaX JAX-based grid environment.
 
-    Pure simulation engine. Advances world state (terrain, machines,
-    player inventories) without computing achievements or rewards.
-    Those concerns belong in gymnax wrappers that compose over this
-    environment.
+    Advances world state (terrain, machines, player inventories) and
+    evaluates an optional achievement-condition function each step.
+    Reward computation and other policy-shaping concerns still belong
+    in gymnax wrappers that compose over this environment.
 
     The ``tile_px`` parameter controls the pixel size for the JAX
     renderer. A :class:`~factoriax.jax_renderer.JaxRenderer` is
     created at init and used by :meth:`render` and :meth:`render_hud`.
 
+    The ``achievement_fn`` parameter is captured at construction time
+    and folded into ``state.achievements_unlocked`` inside
+    :meth:`step_env`. Different functions produce different JIT
+    cache entries via ``static_argnames=("self",)`` on :meth:`step`.
+    Pass ``None`` to skip the eval pass entirely (zero added cost).
+
     Args:
         tile_px: Tile side length in pixels for the JAX renderer.
+        achievement_fn: Pure function ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``
+            evaluated each step. Returned True bits are OR-folded into
+            ``state.achievements_unlocked`` and latch for the rest of
+            the episode. ``None`` (default) skips evaluation.
     """
 
     def __init__(
         self,
         tile_px: int = 8,
+        achievement_fn: AchievementFn | None = None,
     ) -> None:
         """Initialize the environment.
 
         Args:
             tile_px: Tile side length in pixels for the JAX renderer.
+            achievement_fn: Optional achievement condition function.
         """
         super().__init__()
         self.jax_renderer = JaxRenderer(tile_px=tile_px)
+        self._achievement_fn = achievement_fn
 
     @property
     def default_params(self) -> EnvParams:
@@ -100,9 +116,12 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
         """Execute one environment step.
 
-        Runs game mechanics, then checks achievements using the
-        injected condition function, then computes the reward from
-        newly unlocked achievements.
+        Runs game mechanics, then evaluates the optional achievement
+        condition function and OR-folds the result into
+        ``state.achievements_unlocked``. The eval pass is skipped
+        entirely when no ``achievement_fn`` was provided at
+        construction (the ``is None`` check is resolved at JIT trace
+        time, so there is no per-step branch cost in that path).
 
         Args:
             key: JAX random key.
@@ -115,6 +134,11 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """
         action_arr = jnp.int32(action)
         new_state = factoriax_step(key, state, action_arr, params)
+        if self._achievement_fn is not None:
+            conditions = self._achievement_fn(new_state)
+            new_state = new_state.replace(
+                achievements_unlocked=new_state.achievements_unlocked | conditions,
+            )
         done = is_game_over(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}
