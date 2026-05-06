@@ -88,9 +88,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "achievements",
     "items_mined",
     "science_consumed_step",
-    "machine_health",
     "biter_positions",
-    "biter_health",
     "scent_field",
     "rewards",
     "timesteps",
@@ -221,9 +219,7 @@ class Trajectory:
     achievements: np.ndarray | None = None
     items_mined: np.ndarray | None = None
     science_consumed_step: np.ndarray | None = None
-    machine_health: np.ndarray | None = None  # deprecated
     biter_positions: np.ndarray | None = None  # deprecated
-    biter_health: np.ndarray | None = None  # deprecated
     scent_field: np.ndarray | None = None  # deprecated
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None

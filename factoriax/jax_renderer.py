@@ -462,7 +462,7 @@ def render_q1_inspector(
     quad_h: int,
     quad_w: int,
 ) -> jnp.ndarray:
-    """Q1: tile inspector -- block, resources, machine, biters.
+    """Q1: tile inspector -- block, resources, machine.
 
     Args:
         state: Single EnvState.
@@ -520,38 +520,6 @@ def render_q1_inspector(
     status_dot = status_dot * has_machine.astype(jnp.uint8)
     img = jax.lax.dynamic_update_slice(img, status_dot, (14, ICON_SIZE + 12, 0))
 
-    health = state.machine_health[fy, fx]
-    img = _stamp_number(
-        img,
-        digit_atlas,
-        health,
-        3,
-        14,
-        jnp.int32(ICON_SIZE + 18),
-        COUNT_COLOR,
-    )
-
-    # Biter check
-    biter_at = (
-        (state.biter_positions[:, 0] == fx)
-        & (state.biter_positions[:, 1] == fy)
-        & (state.biter_health > 0)
-    )
-    any_biter = jnp.any(biter_at)
-    biter_idx = jnp.argmax(biter_at)
-    biter_hp = jnp.where(any_biter, state.biter_health[biter_idx], 0)
-    biter_dot = jnp.broadcast_to(HUD_RED, (ICON_SIZE, ICON_SIZE, 3))
-    biter_dot = biter_dot * any_biter.astype(jnp.uint8)
-    img = jax.lax.dynamic_update_slice(img, biter_dot, (26, 2, 0))
-    img = _stamp_number(
-        img,
-        digit_atlas,
-        biter_hp,
-        2,
-        26,
-        jnp.int32(ICON_SIZE + 4),
-        HUD_RED,
-    )
     return img
 
 

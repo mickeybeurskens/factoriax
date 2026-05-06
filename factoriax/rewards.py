@@ -12,7 +12,6 @@ import jax.numpy as jnp
 
 from factoriax.achievements import CORE_ACHIEVEMENT_WEIGHTS
 from factoriax.constants import (
-    DEFAULT_MACHINE_MAX_HEALTH,
     MINEABLE_BLOCKS,
     ItemType,
     MachineType,
@@ -596,35 +595,3 @@ def dense_assembler_reward(
     new_packs = _item_count(new_state, ItemType.BASIC_SCIENCE_PACK)
     pack_delta = jnp.maximum(new_packs - prev_packs, 0).astype(jnp.float32)
     return asm_prox + 2.0 * input_delta + 10.0 * pack_delta
-
-
-def dense_repair_reward(
-    prev_state: EnvState, new_state: EnvState, params: EnvParams
-) -> jax.Array:
-    """Dense reward for the repair_machine level.
-
-    Proximity to the nearest damaged machine plus bonus for each
-    machine restored to full health.
-
-    Args:
-        prev_state: State immediately before the step.
-        new_state: State immediately after the step.
-        params: Environment parameters.
-
-    Returns:
-        Scalar float32 reward.
-    """
-    is_damaged = (new_state.machine_types != MachineType.NONE) & (
-        new_state.machine_health < DEFAULT_MACHINE_MAX_HEALTH
-    )
-    proximity = _proximity(new_state, is_damaged)
-    prev_full = jnp.sum(
-        (prev_state.machine_types != MachineType.NONE)
-        & (prev_state.machine_health >= DEFAULT_MACHINE_MAX_HEALTH)
-    )
-    new_full = jnp.sum(
-        (new_state.machine_types != MachineType.NONE)
-        & (new_state.machine_health >= DEFAULT_MACHINE_MAX_HEALTH)
-    )
-    repaired = jnp.maximum(new_full - prev_full, 0)
-    return proximity + 10.0 * repaired.astype(jnp.float32)

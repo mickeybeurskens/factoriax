@@ -20,7 +20,6 @@ from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
-    DEFAULT_MACHINE_MAX_HEALTH,
     ITEM_COLORS,
     MACHINE_TYPE_NAMES,
     NUM_ITEM_TYPES,
@@ -731,10 +730,8 @@ def render_machine_menu(
     header_offset = _theme.BORDER_PX + _theme.HEADER_H + _theme.SEP_H + 8
 
     # Fixed overhead: everything except the slot grid itself.
-    health_bar_h = 32  # bar (10) + text (~14) + spacing (8)
     overhead_h = (
         header_offset
-        + health_bar_h
         + padding
         + (padding if slot_rows > 0 else 0)
         + player_strip_h
@@ -771,32 +768,6 @@ def render_machine_menu(
     content_y = _draw_section_header(
         overlay, menu_x, menu_y, menu_w, machine_name, header_font, False
     )
-
-    # --- Health bar ---
-    if machine_type != int(MachineType.NONE):
-        health = 100
-        max_hp = DEFAULT_MACHINE_MAX_HEALTH
-        bar_w = min(160, menu_w - 40)
-        bar_h = 10
-        bar_x = menu_x + (menu_w - bar_w) // 2
-        bar_y = content_y + 2
-        overlay[bar_y : bar_y + bar_h, bar_x : bar_x + bar_w] = (25, 25, 25, 255)
-        fill_w = int(bar_w * health / max_hp) if max_hp > 0 else 0
-        if fill_w > 0:
-            hp_frac = health / max_hp
-            bar_color = (
-                (75, 215, 75, 255)
-                if hp_frac > 0.5
-                else (215, 195, 65, 255)
-                if hp_frac > 0.25
-                else (215, 65, 65, 255)
-            )
-            overlay[bar_y : bar_y + bar_h, bar_x : bar_x + fill_w] = bar_color
-        hp_text = f"HP: {health}/{max_hp}"
-        hp_arr = _render_text_rgba(hp_text, body_font, (180, 175, 150))
-        hp_x = bar_x + (bar_w - hp_arr.shape[1]) // 2
-        _blit_rgba(overlay, hp_arr, bar_y + bar_h + 2, hp_x)
-        content_y = bar_y + bar_h + hp_arr.shape[0] + 8
 
     # --- Assembler recipe subtitle ---
     if machine_type == int(MachineType.ASSEMBLER):
@@ -1629,8 +1600,8 @@ def render_info_panel(
     """Render the tile info panel in the right 1/3 of the bottom bar.
 
     Shows contextual information about the tile the mouse is hovering
-    over: machine details (name, health, inventory), resource stats, or
-    plain block type. When no tile is hovered the panel shows a hint.
+    over: machine details (name, inventory), resource stats, or plain
+    block type. When no tile is hovered the panel shows a hint.
 
     Args:
         state: Current environment state.
@@ -1755,29 +1726,6 @@ def _render_info_machine(
         cx + icon_s + 6,
     )
     cy += max(icon_s, name_surf.shape[0]) + 6
-
-    # Health bar.
-    hp = 100
-    max_hp = DEFAULT_MACHINE_MAX_HEALTH
-    hp_frac = max(0.0, min(1.0, hp / max_hp)) if max_hp > 0 else 0.0
-    bar_w = min(140, max_x - cx - 50)
-    bar_h = 8
-    # Background.
-    overlay[cy : cy + bar_h, cx : cx + bar_w] = (50, 50, 50, 200)
-    # Fill: green at full, yellow at half, red at low.
-    r = int(255 * (1.0 - hp_frac))
-    g = int(200 * hp_frac)
-    fill_w = max(0, int(bar_w * hp_frac))
-    if fill_w > 0:
-        overlay[cy : cy + bar_h, cx : cx + fill_w] = (r, g, 40, 255)
-    # HP label.
-    hp_txt = _render_text_rgba(
-        f"{hp}/{max_hp}",
-        hint_font,
-        (220, 215, 180),
-    )
-    _blit_rgba(overlay, hp_txt, cy - 1, cx + bar_w + 4)
-    cy += bar_h + 6
 
     # Facing direction.
     eidx_dir = int(state.tile_entity[ty, tx])

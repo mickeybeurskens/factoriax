@@ -596,7 +596,6 @@ MAX_ACHIEVEMENTS = 64
 # Temporary backward-compat constants (will be removed in Stage 2+)
 # ---------------------------------------------------------------------------
 
-DEFAULT_MACHINE_MAX_HEALTH: int = 100
 NUM_INVENTORY_SLOTS: int = 10
 MAX_MACHINE_INVENTORY_SLOTS: int = 8
 

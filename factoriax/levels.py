@@ -43,7 +43,6 @@ from jax import random
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    DEFAULT_MACHINE_MAX_HEALTH,
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
@@ -99,7 +98,6 @@ class Level:
     machine_directions: np.ndarray | None = None
     machine_inventory: np.ndarray | None = None
     machine_selected_recipe: np.ndarray | None = None
-    machine_health: np.ndarray | None = None
     player_inventory: list[tuple[int, int]] | None = None
     player_inventories: dict[int, list[tuple[int, int]]] | None = None
     player_positions: list[tuple[int, int]] | None = None
@@ -123,7 +121,6 @@ class Level:
             ("machine_directions", self.machine_directions, expected),
             ("machine_inventory", self.machine_inventory, inv_expected),
             ("machine_selected_recipe", self.machine_selected_recipe, expected),
-            ("machine_health", self.machine_health, expected),
         ]:
             if arr is not None and arr.shape != exp:
                 raise ValueError(
@@ -173,7 +170,6 @@ class LevelBuilder:
         self._machine_directions: np.ndarray | None = None
         self._machine_inv: np.ndarray | None = None
         self._machine_selected_recipe: np.ndarray | None = None
-        self._machine_health: np.ndarray | None = None
         self._player_positions: list[tuple[int, int]] | None = None
         self._biter_positions: list[tuple[int, int]] | None = None
 
@@ -338,33 +334,6 @@ class LevelBuilder:
         self._machine_directions[y, x] = direction
         return self
 
-    def set_machine_health(self, x: int, y: int, health: int) -> LevelBuilder:
-        """Set the health of a placed machine.
-
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
-            health: Health value (0 = disabled).
-
-        Returns:
-            ``self`` for chaining.
-
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
-        """
-        if not (0 <= x < self._width and 0 <= y < self._height):
-            raise IndexError(
-                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
-            )
-        if self._machine_health is None:
-            self._machine_health = np.full(
-                (self._height, self._width),
-                DEFAULT_MACHINE_MAX_HEALTH,
-                dtype=np.int32,
-            )
-        self._machine_health[y, x] = health
-        return self
-
     def set_player_position(self, x: int, y: int) -> LevelBuilder:
         """Set the spawn position for the first player.
 
@@ -459,11 +428,6 @@ class LevelBuilder:
                 if self._machine_selected_recipe is not None
                 else None
             ),
-            machine_health=(
-                self._machine_health.copy()
-                if self._machine_health is not None
-                else None
-            ),
             player_positions=(
                 list(self._player_positions)
                 if self._player_positions is not None
@@ -499,50 +463,6 @@ def default_resources(block_map: np.ndarray) -> np.ndarray:
         block_map, [int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)]
     )
     return np.where(mineable, BLOCK_MAX_RESOURCES, 0).astype(np.int32)
-
-
-def _build_biter_positions(level: Level, max_biters: int) -> jnp.ndarray:
-    """Build the biter_positions array from level data.
-
-    Places biters from ``level.biter_positions`` into a fixed-size
-    array of shape ``(max_biters, 2)``. Excess biters are silently
-    truncated.
-
-    Args:
-        level: Level definition.
-        max_biters: Maximum number of biters the environment supports.
-
-    Returns:
-        Int32 array of shape ``(max_biters, 2)``.
-    """
-    positions = jnp.zeros((max_biters, 2), dtype=jnp.int32)
-    if level.biter_positions is not None:
-        n = min(len(level.biter_positions), max_biters)
-        if n > 0:
-            bp = np.array(level.biter_positions[:n], dtype=np.int32)
-            positions = positions.at[:n].set(bp)
-    return positions
-
-
-def _build_biter_health(level: Level, max_biters: int) -> jnp.ndarray:
-    """Build the biter_health array from level data.
-
-    Each biter from ``level.biter_positions`` starts with 1 HP so
-    the environment treats it as active.
-
-    Args:
-        level: Level definition.
-        max_biters: Maximum number of biters the environment supports.
-
-    Returns:
-        Int32 array of shape ``(max_biters,)``.
-    """
-    health = jnp.zeros(max_biters, dtype=jnp.int32)
-    if level.biter_positions is not None:
-        n = min(len(level.biter_positions), max_biters)
-        if n > 0:
-            health = health.at[:n].set(jnp.full(n, 20, dtype=jnp.int32))
-    return health
 
 
 def _place_players(
@@ -1064,9 +984,6 @@ def save_level(level: Level, path: Path) -> None:
             if level.machine_selected_recipe is not None
             else None
         ),
-        "machine_health": (
-            level.machine_health.tolist() if level.machine_health is not None else None
-        ),
         "player_inventory": level.player_inventory,
         "player_inventories": (
             {str(k): v for k, v in level.player_inventories.items()}
@@ -1118,11 +1035,6 @@ def load_level(path: Path) -> Level:
         ),
         machine_selected_recipe=(
             np.array(raw_recipe, dtype=np.int32) if raw_recipe is not None else None
-        ),
-        machine_health=(
-            np.array(raw_health, dtype=np.int32)
-            if (raw_health := payload.get("machine_health")) is not None
-            else None
         ),
         player_inventory=payload.get("player_inventory"),
         player_inventories=(

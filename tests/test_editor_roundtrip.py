@@ -149,7 +149,6 @@ class TestFieldCoverage:
         "map_height",
         "block_map",
         "player_positions",
-        "machine_health",
         # machine_inventory is converted to slot-based on the editor side
         "machine_inventory",
     }
