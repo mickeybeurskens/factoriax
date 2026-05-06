@@ -37,6 +37,14 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         ent_asm_in_count: Assembler input counts, shape ``(MAX_M, 2)``, int16.
         ent_asm_out_type: Assembler output type, shape ``(MAX_M,)``, int8.
         ent_asm_out_count: Assembler output count, shape ``(MAX_M,)``, int16.
+        ent_health: Per-entity machine health, shape ``(MAX_M,)``, int16.
+            Initialized to ``params.machine_config.max_health[ent_type]``
+            on placement. Inactive slots hold ``0``. Read by
+            :func:`~factoriax.placement.apply_repair` and
+            :func:`~factoriax.placement.pickup_machine`; no other engine
+            kernel reads or writes this field, so wrappers can layer
+            arbitrary degradation/repair models on top without engine
+            changes.
         player_positions: (x, y) per player, shape ``(P, 2)``, int16.
         player_directions: Facing per player, shape ``(P,)``, int8.
         player_inventory: Item counts per player, shape ``(P, N)``, int16.
@@ -68,6 +76,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     ent_asm_in_count: jnp.ndarray
     ent_asm_out_type: jnp.ndarray
     ent_asm_out_count: jnp.ndarray
+    ent_health: jnp.ndarray
 
     # Player
     player_positions: jnp.ndarray

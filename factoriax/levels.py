@@ -656,6 +656,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         ent_asm_in_count=jnp.array(ent_asm_in_count_np, dtype=jnp.int16),
         ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
+        ent_health=jnp.zeros(mm, dtype=jnp.int16),
         player_positions=jnp.array(player_positions_np, dtype=jnp.int16),
         player_directions=jnp.full(
             player_shape,
@@ -735,6 +736,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         ent_asm_in_count=jnp.zeros((mm, 2), dtype=jnp.int16),
         ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
+        ent_health=jnp.zeros(mm, dtype=jnp.int16),
         player_positions=player_positions_arr.astype(jnp.int16),
         player_directions=player_directions.astype(jnp.int8),
         player_inventory=jnp.zeros(inv_shape, dtype=jnp.int16),

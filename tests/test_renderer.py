@@ -64,6 +64,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         ent_asm_in_count=jnp.zeros((mm, 2), dtype=jnp.int16),
         ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
+        ent_health=jnp.zeros(mm, dtype=jnp.int16),
         player_positions=jnp.array([[0, 0]], dtype=jnp.int16),
         player_directions=jnp.array(
             [int(Direction.DOWN)],

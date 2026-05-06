@@ -199,6 +199,7 @@ def state_factory():
         ent_asm_in_count = np.zeros((mm, 2), dtype=np.int16)
         ent_asm_out_type = np.zeros(mm, dtype=np.int8)
         ent_asm_out_count = np.zeros(mm, dtype=np.int16)
+        ent_health = np.zeros(mm, dtype=np.int16)
         tile_ent = np.full(shape, -1, dtype=np.int16)
 
         idx = 0
@@ -239,6 +240,7 @@ def state_factory():
             ent_asm_in_count=jnp.array(ent_asm_in_count, dtype=jnp.int16),
             ent_asm_out_type=jnp.array(ent_asm_out_type, dtype=jnp.int8),
             ent_asm_out_count=jnp.array(ent_asm_out_count, dtype=jnp.int16),
+            ent_health=jnp.array(ent_health, dtype=jnp.int16),
             player_positions=positions.astype(jnp.int16),
             player_directions=directions,
             player_inventory=(

@@ -1,16 +1,45 @@
 """Tests for the machine placement system."""
 
+import jax
 import jax.numpy as jnp
 import pytest
 
 from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import NUM_ITEM_TYPES, MachineType
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.placement import (
     get_tile_in_front,
     is_placeable_item,
     is_valid_placement_tile,
     place_machine,
 )
+from factoriax.state import EnvParams
+
+
+class TestEntHealth:
+    """Tests for the per-entity health field."""
+
+    def test_reset_env_initializes_ent_health_zeros(self) -> None:
+        """After reset, ``ent_health`` exists with the right shape and
+        every slot is zero (no entities placed yet)."""
+        env = FactoriaXEnv()
+        params = EnvParams(map_width=8, map_height=8, num_players=1)
+        _, state = env.reset_env(jax.random.key(0), params)
+        mm = params.resolved_max_machines()
+        assert state.ent_health.shape == (mm,)
+        assert state.ent_health.dtype == jnp.int16
+        assert bool(jnp.all(state.ent_health == 0))
+
+    def test_state_factory_initializes_ent_health_zeros(self, state_factory) -> None:
+        """``state_factory`` exposes the new field so existing tests
+        keep building EnvState without modification."""
+        state = state_factory(
+            world_map=jnp.full((4, 4), BlockType.DIRT, dtype=jnp.int32),
+            max_machines=16,
+        )
+        assert state.ent_health.shape == (16,)
+        assert state.ent_health.dtype == jnp.int16
+        assert bool(jnp.all(state.ent_health == 0))
 
 
 class TestDirectionOffsets:

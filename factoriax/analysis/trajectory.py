@@ -554,6 +554,15 @@ def trajectory_to_states(
         else:
             state_kwargs["timestep"] = t
 
+        # Older trajectories predate EnvState.ent_health; zero-fill it
+        # using ent_y's MAX_M dimension so reconstruction still works.
+        if "ent_health" not in state_kwargs and "ent_y" in state_kwargs:
+            import jax.numpy as jnp
+
+            state_kwargs["ent_health"] = jnp.zeros(
+                state_kwargs["ent_y"].shape, dtype=jnp.int16
+            )
+
         states.append(EnvState(**state_kwargs))
 
     return states

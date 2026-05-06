@@ -372,6 +372,7 @@ def _dummy_env_state():
         ent_asm_in_count=jnp.zeros((1, 2), dtype=jnp.int16),
         ent_asm_out_type=jnp.zeros((1,), dtype=jnp.int8),
         ent_asm_out_count=jnp.zeros((1,), dtype=jnp.int16),
+        ent_health=jnp.zeros((1,), dtype=jnp.int16),
         player_positions=jnp.zeros((1, 2), dtype=jnp.int16),
         player_directions=jnp.zeros((1,), dtype=jnp.int8),
         player_inventory=jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int16),
