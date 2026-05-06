@@ -581,6 +581,8 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     ent_x = jnp.full(mm, -1, dtype=jnp.int16)
     ent_type = jnp.zeros(mm, dtype=jnp.int8)
     ent_dir = jnp.zeros(mm, dtype=jnp.int8)
+    ent_health = jnp.zeros(mm, dtype=jnp.int16)
+    max_health_arr = params.machine_config.max_health
     tile_ent = jnp.full(map_shape, -1, dtype=jnp.int16)
 
     # Entity inventory arrays (populated from level.machine_inventory).
@@ -606,6 +608,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             ent_dir = ent_dir.at[idx].set(
                 jnp.int8(machine_dirs_np[y, x]),
             )
+            ent_health = ent_health.at[idx].set(max_health_arr[mt])
             tile_ent = tile_ent.at[y, x].set(jnp.int16(idx))
 
             # Populate inventory from level data.
@@ -656,7 +659,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         ent_asm_in_count=jnp.array(ent_asm_in_count_np, dtype=jnp.int16),
         ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
         ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
-        ent_health=jnp.zeros(mm, dtype=jnp.int16),
+        ent_health=ent_health,
         player_positions=jnp.array(player_positions_np, dtype=jnp.int16),
         player_directions=jnp.full(
             player_shape,

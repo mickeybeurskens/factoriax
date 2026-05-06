@@ -17,7 +17,7 @@ from factoriax.constants import (
     SOLID_BLOCKS,
     MachineType,
 )
-from factoriax.state import EnvState
+from factoriax.state import EnvParams, EnvState
 
 
 def get_tile_in_front(
@@ -79,16 +79,21 @@ def is_valid_placement_tile(
 
 def place_machine(
     state: EnvState,
+    params: EnvParams,
     player_idx: int | jax.Array,
     item_type: int | jax.Array,
 ) -> EnvState:
     """Place a machine on the tile in front of the player.
 
     Allocates an entity slot for the new machine and updates both the
-    grid (machine_types, tile_entity) and entity arrays.
+    grid (machine_types, tile_entity) and entity arrays. The new
+    entity is initialized to its configured maximum health
+    (``params.machine_config.max_health[machine_type]``).
 
     Args:
         state: Current environment state.
+        params: Environment parameters; supplies the per-type max
+            health used to seed ``ent_health``.
         player_idx: Player index.
         item_type: ItemType of the machine to place.
 
@@ -116,6 +121,7 @@ def place_machine(
 
     mt = ITEM_TO_MACHINE_ARRAY[item_type]
     direction = state.player_directions[player_idx]
+    full_hp = params.machine_config.max_health[mt]
 
     new_count = jnp.where(should_place, player_count - 1, player_count)
     new_mt = jnp.where(
@@ -148,6 +154,11 @@ def place_machine(
         ),
         state.ent_direction,
     )
+    new_ent_health = jnp.where(
+        should_place,
+        state.ent_health.at[safe_idx].set(full_hp.astype(jnp.int16)),
+        state.ent_health,
+    )
     new_tile_entity = jnp.where(
         should_place,
         state.tile_entity.at[sy, sx].set(safe_idx.astype(jnp.int16)),
@@ -164,6 +175,7 @@ def place_machine(
         ent_x=new_ent_x,
         ent_type=new_ent_type,
         ent_direction=new_ent_dir,
+        ent_health=new_ent_health,
     )
 
 

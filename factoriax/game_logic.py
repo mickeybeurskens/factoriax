@@ -552,7 +552,7 @@ def _handle_player_action(
             lambda s: move_player(s, action, player_idx),
             lambda s: mine_block(s, player_idx),
             lambda s: craft_recipe(s, params, player_idx, recipe_idx),
-            lambda s: place_machine(s, player_idx, place_item),
+            lambda s: place_machine(s, params, player_idx, place_item),
             lambda s: pickup_machine(s, player_idx),
             lambda s: set_machine_direction(s, player_idx, rotate_dir),
             lambda s: deposit_to_adjacent(s, player_idx, deposit_item),
