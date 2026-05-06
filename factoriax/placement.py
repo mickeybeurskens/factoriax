@@ -181,6 +181,7 @@ def place_machine(
 
 def pickup_machine(
     state: EnvState,
+    params: EnvParams,
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Pick up the machine in front of the player.
@@ -188,8 +189,15 @@ def pickup_machine(
     Returns the machine item and any buffer contents to the player.
     Deactivates the entity slot and clears tile_entity.
 
+    Pickup is gated on the target being at full health for its type;
+    damaged machines must be repaired (or destroyed by a wrapper)
+    before they can be picked up. On success, the freed entity slot's
+    ``ent_health`` is cleared to ``0``.
+
     Args:
         state: Current environment state.
+        params: Environment parameters; supplies the per-type max
+            health used for the full-HP gate.
         player_idx: Player index.
 
     Returns:
@@ -209,12 +217,17 @@ def pickup_machine(
     player_count = state.player_inventory[player_idx, machine_item]
     player_max = PLAYER_MAX_STACK[machine_item]
     fits = player_count < player_max
-    should_pickup = in_bounds & has_machine & fits
 
     # Entity lookup for the target tile.
     max_e = state.ent_y.shape[0]
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
+
+    # Gate pickup on full health for the entity's type.
+    target_type = state.ent_type[eidx]
+    full_hp = params.machine_config.max_health[target_type]
+    is_full_health = state.ent_health[eidx] >= full_hp
+    should_pickup = in_bounds & has_machine & fits & is_full_health
 
     # Return machine item to player.
     new_inv = state.player_inventory.at[player_idx, machine_item].add(
@@ -299,6 +312,11 @@ def pickup_machine(
         state.ent_asm_out_count.at[eidx].set(jnp.int16(0)),
         state.ent_asm_out_count,
     )
+    new_ent_health = jnp.where(
+        should_pickup,
+        state.ent_health.at[eidx].set(jnp.int16(0)),
+        state.ent_health,
+    )
 
     return state.replace(
         player_inventory=new_inv,
@@ -315,6 +333,7 @@ def pickup_machine(
         ent_asm_in_count=new_asm_in_count,
         ent_asm_out_type=new_asm_out_type,
         ent_asm_out_count=new_asm_out_count,
+        ent_health=new_ent_health,
     )
 
 

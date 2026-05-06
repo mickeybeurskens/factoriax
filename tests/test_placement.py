@@ -20,6 +20,7 @@ from factoriax.placement import (
     get_tile_in_front,
     is_placeable_item,
     is_valid_placement_tile,
+    pickup_machine,
     place_machine,
 )
 from factoriax.state import EnvParams
@@ -394,3 +395,62 @@ class TestActionRepair:
             params,
         )
         assert int(new_state.ent_health[eidx]) == MAX_HEALTH
+
+
+class TestPickupHealthGate:
+    """Pickup is blocked unless the target is at full health."""
+
+    def _placed_state(self, state_factory):
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(1)
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            player_position=(0, 0),
+            player_direction=Direction.RIGHT,
+            player_inventory=inv,
+        )
+        params = EnvParams()
+        placed = place_machine(state, params, 0, int(ItemType.MINER))
+        eidx = int(placed.tile_entity[0, 1])
+        return placed, params, eidx
+
+    def test_pickup_blocked_when_damaged(self, state_factory) -> None:
+        """A damaged target stays in place; inventory unchanged."""
+        state, _, eidx = self._placed_state(state_factory)
+        damaged = state.replace(ent_health=state.ent_health.at[eidx].set(50))
+        result = pickup_machine(damaged, EnvParams(), 0)
+        # Machine still on grid.
+        assert int(result.machine_types[0, 1]) == int(MachineType.MINER)
+        # Entity slot still active.
+        assert int(result.ent_y[eidx]) == 0
+        # Inventory unchanged.
+        assert int(result.player_inventory[0, ItemType.MINER]) == 0
+        # Health unchanged.
+        assert int(result.ent_health[eidx]) == 50
+
+    def test_pickup_succeeds_at_full_health(self, state_factory) -> None:
+        """A full-HP target is picked up normally; HP cleared on pickup."""
+        state, _, eidx = self._placed_state(state_factory)
+        result = pickup_machine(state, EnvParams(), 0)
+        # Tile cleared.
+        assert int(result.machine_types[0, 1]) == int(MachineType.NONE)
+        # Entity slot deactivated.
+        assert int(result.ent_y[eidx]) == -1
+        # Inventory got the item back.
+        assert int(result.player_inventory[0, ItemType.MINER]) == 1
+        # ent_health for the slot cleared.
+        assert int(result.ent_health[eidx]) == 0
+
+    def test_pickup_then_replace_resets_to_full_health(self, state_factory) -> None:
+        """Pickup-then-replace restores a fresh machine at full HP."""
+        state, params, eidx = self._placed_state(state_factory)
+        # Damage but not enough to block — actually, full HP so pickup works.
+        picked_up = pickup_machine(state, params, 0)
+        # Now place again — should land at full HP in some slot.
+        replaced = place_machine(picked_up, params, 0, int(ItemType.MINER))
+        new_eidx = int(replaced.tile_entity[0, 1])
+        assert new_eidx >= 0
+        assert int(replaced.ent_health[new_eidx]) == MAX_HEALTH
