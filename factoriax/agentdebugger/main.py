@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -35,6 +36,9 @@ from factoriax.agentdebugger.layout import (
     render_replay_frame,
 )
 from factoriax.agentdebugger.state import DebuggerState
+
+if TYPE_CHECKING:
+    from factoriax.agentdebugger.dialogs import FileBrowserDialog
 from factoriax.config import build_key_lookup, default_keyboard
 from factoriax.constants import Action
 from factoriax.envs.factoriax_env import FactoriaXEnv
@@ -116,6 +120,8 @@ class Debugger:
 
         self._dbg = DebuggerState()
         self._awaiting_human_input = False
+        # Replay-only field; the from_trajectory constructor rebinds it.
+        self._level_path: str | None = None
 
     # ------------------------------------------------------------------
     # Trajectory replay constructor
@@ -241,7 +247,7 @@ class Debugger:
 
         clock = pygame.time.Clock()
         running = True
-        dialog = None
+        dialog: FileBrowserDialog | None = None
 
         while running:
             for event in pygame.event.get():
@@ -508,7 +514,7 @@ class Debugger:
         event: pygame.event.Event,
         quadrant_w: int,
         quadrant_h: int,
-    ) -> tuple[bool, object]:
+    ) -> tuple[bool, FileBrowserDialog | None]:
         """Process a keyboard event (replay mode).
 
         Args:

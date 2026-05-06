@@ -47,7 +47,8 @@ class EvalRollout:
     @property
     def final_ach_mask(self) -> np.ndarray:
         """Latched achievement mask at the last recorded step."""
-        return self.ach_per_step[-1]
+        mask: np.ndarray = self.ach_per_step[-1]
+        return mask
 
 
 def plot_item_counts(

@@ -216,20 +216,25 @@ def run_main_menu(
     btn_top = max(deco_bottom + 16 * s, int(sh * 0.50) - btn_block_h // 2)
     btn_x = (sw - btn_w) // 2
 
-    # Click regions for hit testing (canvas coordinates).
+    # Click regions for hit testing (canvas coordinates). The Quit
+    # button uses the "quit" action sentinel; the caller maps it back
+    # to ``None`` so :class:`ClickRegion.action` can stay typed as ``str``.
     labels = ["Play", "Editor", "Settings", "Quit"]
-    actions: list[str | None] = ["play", "editor", "settings", None]
+    button_actions: list[str] = ["play", "editor", "settings", "quit"]
     regions = [
         ClickRegion(
             btn_x,
             btn_top + i * (btn_h + btn_gap),
             btn_w,
             btn_h,
-            actions[i],
+            button_actions[i],
             i,
         )
         for i in range(num_btns)
     ]
+
+    def _resolve(action: str) -> str | None:
+        return None if action == "quit" else action
 
     focus_idx = 0
 
@@ -245,16 +250,16 @@ def run_main_menu(
                 mx, my = canvas.to_canvas(*event.pos)
                 hit = hit_test_regions(regions, mx, my)
                 if hit is not None:
-                    return hit.action
+                    return _resolve(hit.action)
 
-            actions = resolve_event(event, kb_lookup, ctrl_lookup)
-            if PlayerAction.CONFIRM in actions:
-                return regions[focus_idx].action
-            if PlayerAction.BACK in actions:
+            player_actions = resolve_event(event, kb_lookup, ctrl_lookup)
+            if PlayerAction.CONFIRM in player_actions:
+                return _resolve(regions[focus_idx].action)
+            if PlayerAction.BACK in player_actions:
                 return None
-            if PlayerAction.NAV_DOWN in actions:
+            if PlayerAction.NAV_DOWN in player_actions:
                 focus_idx = (focus_idx + 1) % len(regions)
-            elif PlayerAction.NAV_UP in actions:
+            elif PlayerAction.NAV_UP in player_actions:
                 focus_idx = (focus_idx - 1) % len(regions)
             # Keep Tab as a direct key for convenience.
             if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:

@@ -53,13 +53,16 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
 
     @property
     def default_params(self) -> EnvParams:
-        return self._inner.default_params
+        # gymnax's environment.Environment is untyped so the inner attribute
+        # is Any; the runtime contract guarantees an EnvParams.
+        params: EnvParams = self._inner.default_params
+        return params
 
     def _rewrite(self, action: int | jax.Array) -> jax.Array:
         """Return ``Action.NOOP`` when *action* is masked, else pass through."""
         action_i = jnp.asarray(action, dtype=jnp.int32)
         is_blocked = self._mask[action_i]
-        return jnp.where(is_blocked, self._noop, action_i)
+        return jnp.asarray(jnp.where(is_blocked, self._noop, action_i))
 
     def step_env(
         self,
@@ -69,27 +72,34 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         params: EnvParams,
     ) -> tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]]:
         """Step the inner env after rewriting blocked actions to NOOP."""
-        return self._inner.step_env(key, state, self._rewrite(action), params)
+        result: tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]] = (
+            self._inner.step_env(key, state, self._rewrite(action), params)
+        )
+        return result
 
     def reset_env(
         self,
         key: jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any]:
-        return self._inner.reset_env(key, params)
+        result: tuple[jax.Array, Any] = self._inner.reset_env(key, params)
+        return result
 
     def reset_from_level(
         self,
         level: Level,
         params: EnvParams,
     ) -> tuple[jax.Array, Any]:
-        return self._inner.reset_from_level(level, params)
+        result: tuple[jax.Array, Any] = self._inner.reset_from_level(level, params)
+        return result
 
     def get_obs(self, state: Any, params: EnvParams) -> jax.Array:
-        return self._inner.get_obs(state, params)
+        obs: jax.Array = self._inner.get_obs(state, params)
+        return obs
 
     def is_terminal(self, state: Any, params: EnvParams) -> jax.Array:
-        return self._inner.is_terminal(state, params)
+        terminal: jax.Array = self._inner.is_terminal(state, params)
+        return terminal
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
         return self._inner.action_space(params)

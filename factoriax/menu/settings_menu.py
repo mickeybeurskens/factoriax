@@ -1184,10 +1184,10 @@ def run_controls_menu(
                         pygame.JOYHATMOTION,
                         pygame.JOYAXISMOTION,
                     ):
-                        name = controller_event_to_name(event)
-                        if name is not None:
+                        ctrl_name = controller_event_to_name(event)
+                        if ctrl_name is not None:
                             bindings = _active_bindings()
-                            bindings[rs.listening_action] = [name]
+                            bindings[rs.listening_action] = [ctrl_name]
                             rs.listening_action = None
                 continue  # Consume all events while listening.
 

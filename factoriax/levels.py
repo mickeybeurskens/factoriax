@@ -592,7 +592,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     ent_asm_in_type_np = np.zeros((mm, 2), dtype=np.int8)
     ent_asm_in_count_np = np.zeros((mm, 2), dtype=np.int16)
 
-    has_inv = level.machine_inventory is not None
+    machine_inv = level.machine_inventory
 
     # Populate entities from grid (Python loop, only at build time)
     idx = 0
@@ -613,8 +613,8 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             tile_ent = tile_ent.at[y, x].set(jnp.int16(idx))
 
             # Populate inventory from level data.
-            if has_inv:
-                inv_row = level.machine_inventory[y, x]
+            if machine_inv is not None:
+                inv_row = machine_inv[y, x]
                 if mt == int(MachineType.MINER):
                     # Miners have one output buffer for mined ore.
                     for it in range(1, NUM_ITEM_TYPES):

@@ -122,13 +122,14 @@ ACTION_GROUPS: OrderedDict[str, tuple[str, list[int]]] = OrderedDict(
             ),
         ),
         (
-            "Legacy",
+            "Rotate",
             (
                 "#7f7f7f",
                 [
-                    Action.TURN_LEFT,
-                    Action.TURN_RIGHT,
-                    Action.ROTATE,
+                    Action.ROTATE_LEFT,
+                    Action.ROTATE_RIGHT,
+                    Action.ROTATE_UP,
+                    Action.ROTATE_DOWN,
                     Action.REPAIR,
                 ],
             ),

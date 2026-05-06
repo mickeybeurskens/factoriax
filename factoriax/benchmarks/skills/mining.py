@@ -199,9 +199,9 @@ def mining_level(
         y, x = divmod(int(idx), map_size)
         if x == center and y == center:
             continue
-        ore_type = rng.choice(_ORE_TYPES)
+        ore_type = BlockType(int(rng.choice(_ORE_TYPES)))
         res = int(rng.integers(min_res, max_res + 1))
-        builder.fill_rect(x, y, 1, 1, int(ore_type), resources=res)
+        builder.fill_rect(x, y, 1, 1, ore_type, resources=res)
 
     builder.set_player_position(center, center)
 

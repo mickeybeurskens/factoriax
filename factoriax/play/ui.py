@@ -1162,7 +1162,7 @@ def _render_count_badge(
         Badge width in pixels.
     """
     text_arr = _render_text_rgba(str(count), font, _theme.SLOT_COUNT_COLOR)
-    th, tw = text_arr.shape[:2]
+    th, tw = int(text_arr.shape[0]), int(text_arr.shape[1])
     pad_x, pad_y = 3, 1
     bw = tw + 2 * pad_x
     bh = th + 2 * pad_y

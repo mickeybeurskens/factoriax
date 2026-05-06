@@ -364,7 +364,7 @@ class GameUI:
 
         if ps.achievement_open and achievements is not None:
             ach_overlay = render_achievement_menu(
-                achievements,
+                np.asarray(achievements),
                 ui_w,
                 ui_h,
                 ps.achievement_scroll,

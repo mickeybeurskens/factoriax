@@ -80,6 +80,10 @@ def _parse_override(name: str, raw: dict[str, Any]) -> RecipeOverride:
                 f"{expected.__name__}, got {type(value).__name__}."
             )
         if field == "input_counts":
+            # The isinstance check above guarantees ``value`` is a list,
+            # but ``expected`` is a runtime ``type`` and so cannot be
+            # used to narrow. Assert keeps the static type accurate.
+            assert isinstance(value, list)
             if not value:
                 raise ValueError(
                     f"Recipe override [{name}].input_counts must be a "

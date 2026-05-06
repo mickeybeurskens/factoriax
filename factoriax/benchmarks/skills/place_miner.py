@@ -199,7 +199,7 @@ def place_miner_level(
     placed[center, center] = True
 
     for _ in range(num_patches):
-        ore_type = int(rng.choice(_ORE_TYPES))
+        ore_type = BlockType(int(rng.choice(_ORE_TYPES)))
         patch_w = int(rng.integers(1, 3))
         patch_h = int(rng.integers(1, 3))
         for _attempt in range(50):

@@ -37,8 +37,13 @@ def add_to_pouch(
     item_type = jnp.int32(item_type)
     amount = jnp.int32(amount)
     current = counts[item_type]
-    is_array = hasattr(max_stack, "__getitem__") and jnp.ndim(max_stack) > 0
-    cap = max_stack[item_type] if is_array else max_stack
+    # ``max_stack`` is a per-type Array or a scalar int; only the array
+    # branch is indexable. The runtime check guards both, but mypy can't
+    # prove the int branch isn't reached.
+    if isinstance(max_stack, int) or jnp.ndim(max_stack) == 0:
+        cap = max_stack
+    else:
+        cap = max_stack[item_type]
     space = jnp.maximum(0, cap - current)
     to_add = jnp.minimum(amount, space)
     new_counts = counts.at[item_type].set(current + to_add)

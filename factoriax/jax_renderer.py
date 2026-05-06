@@ -505,7 +505,9 @@ def render_q1_inspector(
     m_swatch = m_swatch * has_machine.astype(jnp.uint8)
     img = jax.lax.dynamic_update_slice(img, m_swatch, (14, 2, 0))
 
-    m_dir = state.machine_direction[fy, fx]
+    # NOTE: machine_direction was removed from EnvState; this renderer is
+    # being rewritten in Phase A item 3 (single render path consolidation).
+    m_dir = state.machine_direction[fy, fx]  # type: ignore[attr-defined]
     dir_dx = DIRECTIONS[jnp.clip(m_dir, 0, 4), 0]
     dir_dy = DIRECTIONS[jnp.clip(m_dir, 0, 4), 1]
     arrow_dot = jnp.full((3, 3, 3), HUD_LABEL, dtype=jnp.uint8)
@@ -514,7 +516,8 @@ def render_q1_inspector(
         img, arrow_dot, (15 + dir_dy * 2, ICON_SIZE + 4 + dir_dx * 2, 0)
     )
 
-    is_working = has_machine & (state.machine_power[fy, fx] > 0)
+    # NOTE: machine_power was removed from EnvState; rewrite in Phase A item 3.
+    is_working = has_machine & (state.machine_power[fy, fx] > 0)  # type: ignore[attr-defined]
     status_color = jnp.where(is_working, HUD_GREEN, HUD_RED)
     status_dot = jnp.broadcast_to(status_color, (3, 3, 3))
     status_dot = status_dot * has_machine.astype(jnp.uint8)
@@ -546,7 +549,8 @@ def render_q2_machine_inv(
     fx, fy = _get_facing_tile(state)
     mt = state.machine_types[fy, fx]
     has_machine = mt != int(MachineType.NONE)
-    inv = state.machine_inventory[fy, fx, :]
+    # NOTE: machine_inventory was removed from EnvState; rewrite in Phase A item 3.
+    inv = state.machine_inventory[fy, fx, :]  # type: ignore[attr-defined]
     cols = 5
     cell_w = quad_w // cols
     rows = (NUM_ITEM_TYPES + cols - 1) // cols
@@ -653,8 +657,10 @@ def render_q4_crafting(
     """
     img = jnp.full((quad_h, quad_w, 3), HUD_BG, dtype=jnp.uint8)
     inv = state.player_inventory[0]
-    craft_recipe = state.crafting_recipe[0]
-    craft_progress = state.craft_progress[0]
+    # NOTE: crafting_recipe and craft_progress were removed from EnvState;
+    # rewrite in Phase A item 3 (single render path consolidation).
+    craft_recipe = state.crafting_recipe[0]  # type: ignore[attr-defined]
+    craft_progress = state.craft_progress[0]  # type: ignore[attr-defined]
     row_h = quad_h // NUM_RECIPES
 
     def _draw_recipe(r: int, img: jnp.ndarray) -> jnp.ndarray:

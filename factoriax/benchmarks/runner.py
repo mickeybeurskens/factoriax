@@ -112,7 +112,7 @@ class BenchmarkRunner:
         self,
         achievement_fn: AchievementFn | None,
         blocked_actions: frozenset[int],
-    ) -> tuple[Any, Callable]:
+    ) -> tuple[Any, Callable[..., Any]]:
         """Build the environment and its JIT-compiled step function.
 
         Layering, outermost to innermost:
@@ -135,7 +135,7 @@ class BenchmarkRunner:
         if achievement_fn is not None:
             env = AchievementWrapper(env, achievement_fn)
         if blocked_actions:
-            env = ActionMaskWrapper(env, blocked_actions)
+            env = ActionMaskWrapper(env, tuple(blocked_actions))
         return env, jax.jit(env.step_env)
 
     def _resolve_achievement_fn(self, benchmark: Benchmark) -> AchievementFn | None:

@@ -149,7 +149,7 @@ def render_inventory_panel(
         # Color swatch.
         sx = slot_x
         sy = y + (row_h - swatch_sz) // 2
-        rgb = ITEM_COLORS.get(int(item), (120, 120, 120))
+        rgb: tuple[int, ...] = ITEM_COLORS.get(int(item), (120, 120, 120))
         if not active:
             rgb = tuple(max(0, c // 3) for c in rgb)
         img[sy : sy + swatch_sz, sx : sx + swatch_sz] = rgb

@@ -77,10 +77,12 @@ def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
     in_bounds = is_position_in_bounds(position, map_width, map_height)
     clipped_x = jnp.clip(position[0], 0, map_width - 1)
     clipped_y = jnp.clip(position[1], 0, map_height - 1)
-    return jnp.where(
-        in_bounds,
-        state.map[clipped_y, clipped_x],
-        jnp.int8(BlockType.OUT_OF_BOUNDS),
+    return jnp.asarray(
+        jnp.where(
+            in_bounds,
+            state.map[clipped_y, clipped_x],
+            jnp.int8(BlockType.OUT_OF_BOUNDS),
+        )
     )
 
 
@@ -253,7 +255,7 @@ def deposit_to_adjacent(
     Returns:
         Updated state.
     """
-    item_type = jnp.int32(item_type)
+    item_type_arr = jnp.int32(item_type)
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
@@ -262,7 +264,7 @@ def deposit_to_adjacent(
 
     mt = jnp.where(in_bounds, state.machine_types[sy, sx], MachineType.NONE)
     has_machine = mt != MachineType.NONE
-    player_count = state.player_inventory[player_idx, item_type]
+    player_count = state.player_inventory[player_idx, item_type_arr]
     has_item = player_count > 0
 
     # Entity lookup for the target tile.
@@ -279,8 +281,8 @@ def deposit_to_adjacent(
     in_t1 = state.ent_asm_in_type[eidx, 1]
     in_c1 = state.ent_asm_in_count[eidx, 1]
 
-    slot0_ok = (in_c0 == 0) | (in_t0 == item_type)
-    slot1_ok = (in_c1 == 0) | (in_t1 == item_type)
+    slot0_ok = (in_c0 == 0) | (in_t0 == item_type_arr)
+    slot1_ok = (in_c1 == 0) | (in_t1 == item_type_arr)
     use_s0 = is_combiner & slot0_ok
     use_s1 = is_combiner & ~use_s0 & slot1_ok
 
@@ -289,7 +291,7 @@ def deposit_to_adjacent(
     # Deposit to buffer machine (non-combiner, non-miner).
     is_miner = mt == MachineType.MINER
     buf_empty = state.ent_buf_count[eidx] == 0
-    buf_same = state.ent_buf_type[eidx] == item_type
+    buf_same = state.ent_buf_type[eidx] == item_type_arr
     buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
     is_buf = ~is_combiner & ~is_miner & has_machine
     can_deposit_buf = in_bounds & has_item & is_buf & (buf_empty | buf_same) & buf_space
@@ -298,13 +300,13 @@ def deposit_to_adjacent(
     transfer = jnp.where(can_deposit, jnp.int16(1), jnp.int16(0))
 
     # Apply.
-    new_player_inv = state.player_inventory.at[player_idx, item_type].add(
+    new_player_inv = state.player_inventory.at[player_idx, item_type_arr].add(
         -transfer,
     )
 
     new_buf_type = jnp.where(
         can_deposit_buf,
-        state.ent_buf_type.at[eidx].set(item_type.astype(jnp.int8)),
+        state.ent_buf_type.at[eidx].set(item_type_arr.astype(jnp.int8)),
         state.ent_buf_type,
     )
     new_buf_count = jnp.where(
@@ -317,7 +319,7 @@ def deposit_to_adjacent(
     new_asm_in_count = state.ent_asm_in_count
     new_asm_in_type = jnp.where(
         use_s0 & has_item,
-        new_asm_in_type.at[eidx, 0].set(item_type.astype(jnp.int8)),
+        new_asm_in_type.at[eidx, 0].set(item_type_arr.astype(jnp.int8)),
         new_asm_in_type,
     )
     new_asm_in_count = jnp.where(
@@ -327,7 +329,7 @@ def deposit_to_adjacent(
     )
     new_asm_in_type = jnp.where(
         use_s1 & has_item,
-        new_asm_in_type.at[eidx, 1].set(item_type.astype(jnp.int8)),
+        new_asm_in_type.at[eidx, 1].set(item_type_arr.astype(jnp.int8)),
         new_asm_in_type,
     )
     new_asm_in_count = jnp.where(
@@ -548,7 +550,7 @@ def _handle_player_action(
     cat = jnp.where(action == Action.REPAIR, 8, cat)
 
     # Single-dispatch: only the matching handler executes at runtime.
-    return jax.lax.switch(
+    new_state: EnvState = jax.lax.switch(
         cat,
         [
             lambda s: move_player(s, action, player_idx),
@@ -563,6 +565,7 @@ def _handle_player_action(
         ],
         state,
     )
+    return new_state
 
 
 def factoriax_step(
@@ -607,4 +610,4 @@ def is_game_over(
     Returns:
         Boolean indicating game over.
     """
-    return jnp.bool_(state.timestep >= params.max_timesteps)
+    return jnp.asarray(state.timestep >= params.max_timesteps, dtype=jnp.bool_)

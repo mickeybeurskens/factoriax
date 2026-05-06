@@ -661,8 +661,12 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     splitter_pushers_vert = is_vert_split & has_pair
     splitter_pushers_horiz = is_horiz_split & has_pair
 
-    splitter_pushers_by_dir = (
-        None,  # 0 — unused
+    # Index 0 (direction NONE) is never read — the d-loop below ranges
+    # 1..4 — but a zeros placeholder keeps the tuple typed as Array
+    # rather than ``Array | None`` so downstream ``|`` ops type-check.
+    _no_pusher = jnp.zeros_like(splitter_pushers_vert)
+    splitter_pushers_by_dir: tuple[jnp.ndarray, ...] = (
+        _no_pusher,  # 0 — unused
         splitter_pushers_vert,  # LEFT  — vert-facing splitters output here
         splitter_pushers_vert,  # RIGHT
         splitter_pushers_horiz,  # UP   — horiz-facing splitters output here

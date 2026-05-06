@@ -63,7 +63,7 @@ def can_afford_recipe(
         have = inv[item_type]
         is_valid = item_type != int(ItemType.EMPTY)
         result = result & jnp.where(is_valid, have >= required, True)
-    return result
+    return jnp.asarray(result)
 
 
 def craft_recipe(

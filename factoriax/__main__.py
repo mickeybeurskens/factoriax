@@ -7,6 +7,8 @@ once at startup and persisted on play.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pygame
 
 from factoriax.config import (
@@ -112,12 +114,18 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     rng, reset_key = random.split(rng)
     _reset_key = reset_key
 
-    reset_result = _run_with_loading_screen(
-        screen,
-        "Generating world",
-        lambda: env.reset_env(_reset_key, params),
+    # ``_run_with_loading_screen`` is generic over the worker's return
+    # type but typed as ``object``; cast to the concrete ``(obs, state)``
+    # tuple ``env.reset_env`` actually returns.
+    reset_result = cast(
+        "tuple[Any, Any]",
+        _run_with_loading_screen(
+            screen,
+            "Generating world",
+            lambda: env.reset_env(_reset_key, params),
+        ),
     )
-    _, state = reset_result  # type: ignore[misc]
+    _, state = reset_result
 
     kb_lookup = build_key_lookup(config.keyboard)
     ctrl_lookup = build_controller_lookup(config.controller)
