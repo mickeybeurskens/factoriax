@@ -26,9 +26,8 @@ from factoriax.benchmarks.core import (
     LevelResult,
     Policy,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, ItemType
+from factoriax.constants import ItemType
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
@@ -94,14 +93,14 @@ class BenchmarkRunner:
                 call, not shared across calls.
             achievement_fn: Optional achievement condition function with
                 signature ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``. When
-                supplied, the runner wraps the core env with an
-                :class:`AchievementWrapper` and surfaces the latched
-                unlock mask on each :class:`LevelResult`. Benchmarks can
-                also advertise their own function via an
-                ``achievement_fn`` attribute; the explicit argument here
-                takes precedence when both are set.
+                supplied, the runner constructs ``FactoriaXEnv`` with
+                this function and surfaces the latched unlock mask
+                (read from ``state.achievements_unlocked``) on each
+                :class:`LevelResult`. Benchmarks can also advertise
+                their own function via an ``achievement_fn`` attribute;
+                the explicit argument here takes precedence when both
+                are set.
         """
-        self._base_env = FactoriaXEnv()
         self._achievement_fn: AchievementFn | None = achievement_fn
         self._current_fn: AchievementFn | None = achievement_fn
         self._current_blocked: frozenset[int] = frozenset()
@@ -118,11 +117,12 @@ class BenchmarkRunner:
         Layering, outermost to innermost:
 
         - :class:`ActionMaskWrapper` (if any actions are blocked) —
-          rewrites masked actions to ``NOOP`` before the inner envs
-          see them.
-        - :class:`AchievementWrapper` (if a condition function is
-          supplied) — tracks which achievements have fired.
-        - :class:`FactoriaXEnv` — core simulator.
+          rewrites masked actions to ``NOOP`` before the inner env
+          sees them.
+        - :class:`FactoriaXEnv` — core simulator. The achievement
+          condition function is bound at construction time and
+          evaluated inside ``step_env``; results live on
+          ``state.achievements_unlocked``.
 
         Args:
             achievement_fn: Optional achievement condition function.
@@ -131,9 +131,7 @@ class BenchmarkRunner:
         Returns:
             Tuple of ``(env, jit_step)``.
         """
-        env: Any = self._base_env
-        if achievement_fn is not None:
-            env = AchievementWrapper(env, achievement_fn)
+        env: Any = FactoriaXEnv(achievement_fn=achievement_fn)
         if blocked_actions:
             env = ActionMaskWrapper(env, tuple(blocked_actions))
         return env, jax.jit(env.step_env)
@@ -161,59 +159,22 @@ class BenchmarkRunner:
             self._current_blocked = blocked
         return resolved
 
-    def _wrap_initial_state(
-        self,
-        env_state: EnvState,
-        achievement_fn: AchievementFn | None,
-    ) -> EnvState | AchievementState:
-        """Wrap a bare ``EnvState`` in an ``AchievementState`` when needed.
+    def _achievements(self, state: EnvState) -> np.ndarray | None:
+        """Return the unlocked-achievement mask as a numpy array, or None.
 
-        Args:
-            env_state: Freshly built environment state.
-            achievement_fn: Resolved achievement function, or ``None``.
-
-        Returns:
-            Either the original ``EnvState`` (when no tracking) or a new
-            ``AchievementState`` with a zero unlock mask.
+        Returns ``None`` when no achievement_fn is bound to the runner;
+        the engine still carries an all-False ``achievements_unlocked``
+        field on every state, but reporting ``None`` preserves the
+        contract that ``LevelResult.achievements_unlocked`` distinguishes
+        "this benchmark tracks achievements" from "no tracking attempted".
         """
-        if achievement_fn is None:
-            return env_state
-        return AchievementState(
-            env_state=env_state,
-            achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-        )
+        if self._current_fn is None:
+            return None
+        return np.asarray(state.achievements_unlocked)
 
     @staticmethod
-    def _inner_env_state(
-        state: EnvState | AchievementState,
-    ) -> EnvState:
-        """Return the underlying ``EnvState`` regardless of wrapping."""
-        if isinstance(state, AchievementState):
-            return state.env_state
-        return state
-
-    @staticmethod
-    def _achievements(
-        state: EnvState | AchievementState,
-    ) -> np.ndarray | None:
-        """Return the unlocked-achievement mask as a numpy array, or None."""
-        if isinstance(state, AchievementState):
-            return np.asarray(state.achievements_unlocked)
-        return None
-
-    @staticmethod
-    def _select_player(
-        state: EnvState | AchievementState, player_idx: int
-    ) -> EnvState | AchievementState:
-        """Return a copy of ``state`` with ``selected_player`` set.
-
-        Transparently handles both wrapped and unwrapped states by
-        rewriting ``env_state.selected_player`` on the inner state when
-        wrapping is in use.
-        """
-        if isinstance(state, AchievementState):
-            inner = state.env_state.replace(selected_player=player_idx)
-            return state.replace(env_state=inner)
+    def _select_player(state: EnvState, player_idx: int) -> EnvState:
+        """Return a copy of ``state`` with ``selected_player`` set."""
         return state.replace(selected_player=player_idx)
 
     def run(
@@ -332,19 +293,16 @@ class BenchmarkRunner:
                 f"got num_players={benchmark.num_players}."
             )
         _obs_fn = obs_fn if obs_fn is not None else global_array
-        achievement_fn = self._resolve_achievement_fn(benchmark)
+        self._resolve_achievement_fn(benchmark)
         num_seeds = len(seeds)
         levels = benchmark.levels()
 
         # Per-level batched results: level_name -> (final_states, actions, timesteps)
-        level_data: list[
-            tuple[BenchmarkLevel, EnvState | AchievementState, np.ndarray, np.ndarray]
-        ] = []
+        level_data: list[tuple[BenchmarkLevel, EnvState, np.ndarray, np.ndarray]] = []
 
         for bench_level in levels:
             params = bench_level.env_params
-            env_state0 = build_state(bench_level.level, params)
-            state0 = self._wrap_initial_state(env_state0, achievement_fn)
+            state0 = build_state(bench_level.level, params)
             max_steps = params.max_timesteps
 
             # Broadcast initial state to (num_seeds, ...).
@@ -362,10 +320,9 @@ class BenchmarkRunner:
                 self._env.step_env,
                 in_axes=(0, 0, 0, None),
             )
-            unwrap = self._inner_env_state
 
-            def _obs_single(s: EnvState | AchievementState) -> jax.Array:
-                return _obs_fn(unwrap(s), params, 0)
+            def _obs_single(s: EnvState) -> jax.Array:
+                return _obs_fn(s, params, 0)
 
             vmap_obs = jax.vmap(_obs_single)
             vmap_policy = jax.vmap(policy_fn, in_axes=(0, 0))
@@ -433,12 +390,11 @@ class BenchmarkRunner:
             level_results: list[LevelResult] = []
             for bench_level, final_states, all_actions_np, timesteps_np in level_data:
                 t_used = int(timesteps_np[i])
-                fs_i = jax.tree.map(lambda x: x[i], final_states)
-                env_state_i = self._inner_env_state(fs_i)
+                state_i = jax.tree.map(lambda x: x[i], final_states)
                 items_mined = {
-                    "coal": int(env_state_i.items_mined[ItemType.COAL]),
-                    "iron": int(env_state_i.items_mined[ItemType.IRON_ORE]),
-                    "copper": int(env_state_i.items_mined[ItemType.COPPER_ORE]),
+                    "coal": int(state_i.items_mined[ItemType.COAL]),
+                    "iron": int(state_i.items_mined[ItemType.IRON_ORE]),
+                    "copper": int(state_i.items_mined[ItemType.COPPER_ORE]),
                 }
                 score = benchmark.score_level(bench_level, items_mined)
                 level_results.append(
@@ -448,8 +404,8 @@ class BenchmarkRunner:
                         weighted_score=score,
                         timesteps_used=t_used,
                         actions=all_actions_np[:t_used, i],
-                        final_state=env_state_i,
-                        achievements_unlocked=self._achievements(fs_i),
+                        final_state=state_i,
+                        achievements_unlocked=self._achievements(state_i),
                     )
                 )
             agg = benchmark.score(level_results)
@@ -490,9 +446,11 @@ class BenchmarkRunner:
 
         When *constraint_fn* is provided, it is evaluated once per tick
         (after all players have acted) and the per-step cost vectors are
-        stored in ``LevelResult.constraint_costs``. When *achievement_fn*
-        is non-``None``, the internal state is an ``AchievementState``
-        and the latched unlock mask is returned on the result.
+        stored in ``LevelResult.constraint_costs``. When the runner has
+        an achievement function bound (either explicitly or via the
+        benchmark's ``achievement_fn`` attribute), the latched unlock
+        mask is read directly off ``state.achievements_unlocked``
+        and returned on the result.
 
         Args:
             benchmark: Benchmark owning this level (provides per-level scoring).
@@ -501,19 +459,16 @@ class BenchmarkRunner:
             rng: PRNG key for this level's episode steps.
             obs_fn: Observation extraction function.
             constraint_fn: Optional constraint cost function.
-            achievement_fn: Optional achievement function used to
-                initialise the wrapped state. Used only to distinguish
-                wrapped vs. unwrapped state; the function itself is
-                already baked into ``self._jit_step``.
+            achievement_fn: Unused — kept in the signature for backward
+                compat; the function itself is already baked into
+                ``self._jit_step`` via the env constructor.
 
         Returns:
             ``LevelResult`` for this level.
         """
+        del achievement_fn  # bound at env-construction time, not used here
         params = bench_level.env_params
-        env_state0 = build_state(bench_level.level, params)
-        state: EnvState | AchievementState = self._wrap_initial_state(
-            env_state0, achievement_fn
-        )
+        state: EnvState = build_state(bench_level.level, params)
         num_players = params.num_players
         jit_step = self._jit_step
 
@@ -525,8 +480,7 @@ class BenchmarkRunner:
             prev_state = state
             for p in range(num_players):
                 state_p = self._select_player(state, p)
-                inner_p = self._inner_env_state(state_p)
-                obs = obs_fn(inner_p, params, p)
+                obs = obs_fn(state_p, params, p)
                 action = policies[p](obs)
 
                 rng, subkey = jax.random.split(rng)
@@ -541,21 +495,16 @@ class BenchmarkRunner:
                     actions_log.append(int(action))
 
             if constraint_fn is not None:
-                cost = constraint_fn(
-                    self._inner_env_state(prev_state),
-                    self._inner_env_state(state),
-                    params,
-                )
+                cost = constraint_fn(prev_state, state, params)
                 costs_log.append(np.asarray(cost))
 
             if bool(done):
                 break
 
-        final_env_state = self._inner_env_state(state)
         items_mined: dict[str, int] = {
-            "coal": int(final_env_state.items_mined[ItemType.COAL]),
-            "iron": int(final_env_state.items_mined[ItemType.IRON_ORE]),
-            "copper": int(final_env_state.items_mined[ItemType.COPPER_ORE]),
+            "coal": int(state.items_mined[ItemType.COAL]),
+            "iron": int(state.items_mined[ItemType.IRON_ORE]),
+            "copper": int(state.items_mined[ItemType.COPPER_ORE]),
         }
         weighted_score = benchmark.score_level(bench_level, items_mined)
         constraint_costs = np.stack(costs_log) if costs_log else None
@@ -567,6 +516,6 @@ class BenchmarkRunner:
             timesteps_used=len(actions_log),
             actions=np.array(actions_log, dtype=np.int32),
             constraint_costs=constraint_costs,
-            final_state=final_env_state,
+            final_state=state,
             achievements_unlocked=self._achievements(state),
         )
