@@ -85,6 +85,34 @@ class TestWorldGen:
         assert not jnp.array_equal(state1.map, state2.map)
 
 
+class TestEnvStateSchema:
+    """Tests for the EnvState schema — fields the engine guarantees."""
+
+    def test_generate_state_initializes_achievements_unlocked(self) -> None:
+        """Procedural state has all-False achievements_unlocked of correct shape."""
+        from factoriax.constants import MAX_ACHIEVEMENTS
+        from factoriax.levels import generate_state
+
+        state = generate_state(random.PRNGKey(0), EnvParams())
+
+        assert state.achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
+        assert state.achievements_unlocked.dtype == jnp.bool_
+        assert not bool(state.achievements_unlocked.any())
+
+    def test_build_state_initializes_achievements_unlocked(self) -> None:
+        """Level-built state has all-False achievements_unlocked of correct shape."""
+        from factoriax.constants import MAX_ACHIEVEMENTS
+        from factoriax.levels import build_state, get_level
+
+        level = get_level("15x15_resources")
+        params = EnvParams(map_width=15, map_height=15, num_players=1)
+        state = build_state(level, params)
+
+        assert state.achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
+        assert state.achievements_unlocked.dtype == jnp.bool_
+        assert not bool(state.achievements_unlocked.any())
+
+
 class TestGameLogic:
     """Tests for game logic."""
 

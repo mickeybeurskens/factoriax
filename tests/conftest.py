@@ -17,6 +17,7 @@ import pytest  # noqa: E402
 from factoriax import EnvState  # noqa: E402
 from factoriax.constants import (
     BLOCK_RESOURCE_DTYPE,
+    MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     Direction,
@@ -260,6 +261,7 @@ def state_factory():
                 if science_consumed_step is not None
                 else jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32)
             ),
+            achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
         )
 
     return _create

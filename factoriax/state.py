@@ -56,6 +56,13 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             lab's input slots during each step, reset to zero at the next
             step. Read by :class:`ScienceTallyWrapper` to accumulate
             total research consumption without touching the engine.
+        achievements_unlocked: Latched achievement flags, shape
+            ``(MAX_ACHIEVEMENTS,)``, bool. Once a bit flips on it stays
+            on for the rest of the episode. The engine evaluates the
+            condition function bound at env-construction time inside
+            :func:`~factoriax.game_logic.factoriax_step` and folds the
+            result in with ``|``. Wrappers, observations, rewards, and
+            benchmarks read this field directly — no wrapper needed.
     """
 
     # Grid (terrain + spatial lookup)
@@ -88,6 +95,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     timestep: int
     items_mined: jnp.ndarray
     science_consumed_step: jnp.ndarray
+    achievements_unlocked: jnp.ndarray
 
 
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]

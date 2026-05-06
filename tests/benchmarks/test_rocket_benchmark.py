@@ -380,6 +380,7 @@ def _dummy_env_state():
         timestep=jnp.int32(0),
         items_mined=jnp.zeros((NUM_ITEM_TYPES,), dtype=jnp.int32),
         science_consumed_step=jnp.zeros((2,), dtype=jnp.int32),
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 

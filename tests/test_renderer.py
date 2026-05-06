@@ -11,6 +11,7 @@ import pytest
 
 from factoriax.belts import CROSSING_HORIZ_SLOT, CROSSING_VERT_SLOT
 from factoriax.constants import (
+    MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     BlockType,
@@ -78,6 +79,7 @@ def _make_state(world_map: np.ndarray) -> EnvState:
         timestep=0,
         items_mined=jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32),
         science_consumed_step=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 

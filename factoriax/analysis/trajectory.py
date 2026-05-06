@@ -566,6 +566,16 @@ def trajectory_to_states(
                 state_kwargs["ent_y"].shape, dtype=jnp.int16
             )
 
+        # Same backward-compat fallback for achievements_unlocked.
+        if "achievements_unlocked" not in state_kwargs:
+            import jax.numpy as jnp
+
+            from factoriax.constants import MAX_ACHIEVEMENTS
+
+            state_kwargs["achievements_unlocked"] = jnp.zeros(
+                MAX_ACHIEVEMENTS, dtype=jnp.bool_
+            )
+
         states.append(EnvState(**state_kwargs))
 
     return states
