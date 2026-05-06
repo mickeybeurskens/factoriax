@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import MACHINE_MAX_STACK, MachineType
+from factoriax.constants import MACHINE_MAX_STACK, MAX_HEALTH, MachineType
 
 
 @dataclass(frozen=True)
@@ -47,9 +47,13 @@ class MachineConfigOverride:
     Attributes:
         max_stack: New per-machine buffer cap. Must be a non-negative
             int; the engine reads it as int16 so values must fit.
+        max_health: New per-machine maximum health. Must be a
+            non-negative int; the engine reads it as int16 so values
+            must fit.
     """
 
     max_stack: int | None = None
+    max_health: int | None = None
 
 
 class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
@@ -64,20 +68,29 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     Attributes:
         max_stack: Per-machine buffer cap, shape
             ``(len(MachineType),)``, int16.
+        max_health: Per-machine maximum health, shape
+            ``(len(MachineType),)``, int16. Default is
+            :data:`~factoriax.constants.MAX_HEALTH` for every type;
+            wrappers tune via :meth:`with_overrides`.
     """
 
     max_stack: jnp.ndarray
+    max_health: jnp.ndarray
 
     @classmethod
     def default(cls) -> MachineConfig:
-        """Construct the default config from
-        :data:`~factoriax.constants.MACHINE_MAX_STACK`.
+        """Construct the default config from shipped engine constants.
 
         Returns:
-            :class:`MachineConfig` whose ``max_stack`` is the shipped
-            engine constant.
+            :class:`MachineConfig` whose ``max_stack`` mirrors
+            :data:`~factoriax.constants.MACHINE_MAX_STACK` and whose
+            ``max_health`` is :data:`~factoriax.constants.MAX_HEALTH`
+            for every machine type.
         """
-        return cls(max_stack=jnp.asarray(MACHINE_MAX_STACK, dtype=jnp.int16))
+        return cls(
+            max_stack=jnp.asarray(MACHINE_MAX_STACK, dtype=jnp.int16),
+            max_health=jnp.full(len(MachineType), MAX_HEALTH, dtype=jnp.int16),
+        )
 
     def with_overrides(
         self,
@@ -107,6 +120,7 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             return self
         n = self.max_stack.shape[0]
         max_stack = self.max_stack
+        max_health = self.max_health
         for mt, ov in overrides.items():
             mt_int = int(mt)
             if mt_int < 0 or mt_int >= n:
@@ -121,7 +135,14 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
                         f"for {MachineType(mt_int).name}"
                     )
                 max_stack = max_stack.at[mt_int].set(jnp.int16(ov.max_stack))
-        return MachineConfig(max_stack=max_stack)
+            if ov.max_health is not None:
+                if ov.max_health < 0:
+                    raise ValueError(
+                        f"max_health must be non-negative; got {ov.max_health} "
+                        f"for {MachineType(mt_int).name}"
+                    )
+                max_health = max_health.at[mt_int].set(jnp.int16(ov.max_health))
+        return MachineConfig(max_stack=max_stack, max_health=max_health)
 
 
 #: Default :class:`MachineConfig` derived from

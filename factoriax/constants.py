@@ -596,6 +596,10 @@ MAX_ACHIEVEMENTS = 64
 # Temporary backward-compat constants (will be removed in Stage 2+)
 # ---------------------------------------------------------------------------
 
+#: Default maximum health for every placeable machine. Wrappers can
+#: tune per-type values via :class:`~factoriax.machine_config.MachineConfig`.
+MAX_HEALTH: int = 256
+
 NUM_INVENTORY_SLOTS: int = 10
 MAX_MACHINE_INVENTORY_SLOTS: int = 8
 

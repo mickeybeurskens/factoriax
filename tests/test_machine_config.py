@@ -7,6 +7,7 @@ import pytest
 
 from factoriax.constants import (
     MACHINE_MAX_STACK,
+    MAX_HEALTH,
     BlockType,
     Direction,
     ItemType,
@@ -40,6 +41,19 @@ class TestMachineConfigDefault:
         assert jnp.all(
             params.machine_config.max_stack == DEFAULT_MACHINE_CONFIG.max_stack
         )
+
+    def test_default_max_health_is_max_health_constant(self) -> None:
+        """``MachineConfig.default()`` initializes max_health=MAX_HEALTH for
+        every machine type."""
+        cfg = MachineConfig.default()
+        assert cfg.max_health.shape == (len(MachineType),)
+        assert cfg.max_health.dtype == jnp.int16
+        assert jnp.all(cfg.max_health == MAX_HEALTH)
+
+    def test_envparams_default_carries_max_health(self) -> None:
+        """A bare ``EnvParams()`` exposes the default max_health array."""
+        params = EnvParams()
+        assert jnp.all(params.machine_config.max_health == MAX_HEALTH)
 
 
 class TestMachineConfigOverrides:
@@ -95,6 +109,39 @@ class TestMachineConfigOverrides:
         with pytest.raises(ValueError, match="out of range"):
             MachineConfig.default().with_overrides(
                 {999: MachineConfigOverride(max_stack=1)}
+            )
+
+    def test_max_health_override_changes_only_that_index(self) -> None:
+        """Overriding FURNACE.max_health=42 leaves other entries untouched."""
+        base = MachineConfig.default()
+        out = base.with_overrides(
+            {int(MachineType.FURNACE): MachineConfigOverride(max_health=42)}
+        )
+        furnace_idx = int(MachineType.FURNACE)
+        assert int(out.max_health[furnace_idx]) == 42
+        mask = jnp.arange(out.max_health.shape[0]) != furnace_idx
+        assert jnp.all(out.max_health[mask] == base.max_health[mask])
+        # Independent: max_stack is untouched by a max_health override.
+        assert jnp.all(out.max_stack == base.max_stack)
+
+    def test_max_health_and_max_stack_overrides_compose(self) -> None:
+        """Both fields on the same override apply to the same machine type."""
+        base = MachineConfig.default()
+        out = base.with_overrides(
+            {
+                int(MachineType.PALLET): MachineConfigOverride(
+                    max_stack=64, max_health=200
+                )
+            }
+        )
+        idx = int(MachineType.PALLET)
+        assert int(out.max_stack[idx]) == 64
+        assert int(out.max_health[idx]) == 200
+
+    def test_negative_max_health_rejected(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            MachineConfig.default().with_overrides(
+                {int(MachineType.PALLET): MachineConfigOverride(max_health=-1)}
             )
 
 
