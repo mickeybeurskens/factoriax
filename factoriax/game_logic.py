@@ -30,6 +30,7 @@ from factoriax.constants import (
 from factoriax.crafting import craft_recipe
 from factoriax.machines import update_all_machines
 from factoriax.placement import (
+    apply_repair,
     get_tile_in_front,
     pickup_machine,
     place_machine,
@@ -519,7 +520,7 @@ def _handle_player_action(
         NUM_ITEM_TYPES - 1,
     )
 
-    # Map action to handler category (0-7).
+    # Map action to handler category (0-8).
     cat = jnp.int32(0)  # default: movement
     cat = jnp.where(action == Action.MINE, 1, cat)
     cat = jnp.where(
@@ -544,6 +545,7 @@ def _handle_player_action(
         cat,
     )
     cat = jnp.where(action == Action.WITHDRAW, 7, cat)
+    cat = jnp.where(action == Action.REPAIR, 8, cat)
 
     # Single-dispatch: only the matching handler executes at runtime.
     return jax.lax.switch(
@@ -557,6 +559,7 @@ def _handle_player_action(
             lambda s: set_machine_direction(s, player_idx, rotate_dir),
             lambda s: deposit_to_adjacent(s, player_idx, deposit_item),
             lambda s: withdraw_from_adjacent(s, player_idx),
+            lambda s: apply_repair(s, params, player_idx),
         ],
         state,
     )

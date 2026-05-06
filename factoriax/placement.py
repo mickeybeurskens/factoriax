@@ -318,6 +318,58 @@ def pickup_machine(
     )
 
 
+def apply_repair(
+    state: EnvState,
+    params: EnvParams,
+    player_idx: int | jax.Array,
+) -> EnvState:
+    """Restore the entity in front of the player to full health.
+
+    The base engine implements REPAIR as a full restore with no item
+    cost. Wrappers that want a different policy (per-tick repair,
+    inventory consumption, partial restore) pre-empt
+    :data:`~factoriax.constants.Action.REPAIR` by rewriting it to
+    :data:`~factoriax.constants.Action.NOOP` before calling
+    ``step_env`` and then applying their own update to
+    ``state.ent_health``.
+
+    No-op when the target tile is out of bounds, contains no entity,
+    or the entity is already at full health for its type. The
+    function is JIT-compatible and pure: it never raises.
+
+    Args:
+        state: Current environment state.
+        params: Environment parameters; supplies per-type max health.
+        player_idx: Player index.
+
+    Returns:
+        Updated state with the target entity's health restored, or
+        unchanged when no valid target exists.
+    """
+    tx, ty = get_tile_in_front(state, player_idx)
+    h, w = state.map.shape
+    in_bounds = (tx >= 0) & (tx < w) & (ty >= 0) & (ty < h)
+    sx = jnp.clip(tx, 0, w - 1)
+    sy = jnp.clip(ty, 0, h - 1)
+
+    max_e = state.ent_y.shape[0]
+    eidx_raw = state.tile_entity[sy, sx]
+    has_entity = in_bounds & (eidx_raw >= 0)
+    eidx = jnp.clip(eidx_raw, 0, max_e - 1)
+
+    target_type = state.ent_type[eidx]
+    full_hp = params.machine_config.max_health[target_type]
+    cur_hp = state.ent_health[eidx]
+    needs_repair = cur_hp < full_hp
+    should_repair = has_entity & needs_repair
+
+    new_hp = jnp.where(should_repair, full_hp.astype(jnp.int16), cur_hp)
+    new_ent_health = state.ent_health.at[eidx].set(new_hp)
+    return state.replace(
+        ent_health=jnp.where(should_repair, new_ent_health, state.ent_health),
+    )
+
+
 def set_machine_direction(
     state: EnvState,
     player_idx: int | jax.Array,

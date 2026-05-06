@@ -517,6 +517,11 @@ class Action(IntEnum):
     ROTATE_UP = 76
     ROTATE_DOWN = 77
 
+    # Repair the machine in front of the player. The base engine
+    # restores the target's health to its configured maximum;
+    # wrappers override repair semantics by pre-empting this action.
+    REPAIR = 78
+
 
 # Base offsets for arithmetic dispatch of compound actions.
 PLACE_BASE: int = Action.PLACE_MINER

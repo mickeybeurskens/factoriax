@@ -5,10 +5,18 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax import BlockType, Direction, ItemType
-from factoriax.constants import MAX_HEALTH, NUM_ITEM_TYPES, MachineType
+from factoriax.constants import (
+    MAX_HEALTH,
+    NUM_ACTIONS,
+    NUM_ITEM_TYPES,
+    Action,
+    MachineType,
+)
 from factoriax.envs.factoriax_env import FactoriaXEnv
+from factoriax.game_logic import factoriax_step
 from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfigOverride
 from factoriax.placement import (
+    apply_repair,
     get_tile_in_front,
     is_placeable_item,
     is_valid_placement_tile,
@@ -282,3 +290,107 @@ class TestPlacementInitializesHealth:
         eidx = int(state.tile_entity[2, 2])
         assert eidx >= 0
         assert int(state.ent_health[eidx]) == MAX_HEALTH
+
+
+class TestActionRepair:
+    """Tests for Action.REPAIR and apply_repair."""
+
+    def test_action_repair_value(self) -> None:
+        """REPAIR is the last action; NUM_ACTIONS reflects it."""
+        assert int(Action.REPAIR) == 78
+        assert NUM_ACTIONS == 79
+
+    def _placed_state(self, state_factory):
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(1)
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            player_position=(0, 0),
+            player_direction=Direction.RIGHT,
+            player_inventory=inv,
+        )
+        params = EnvParams()
+        placed = place_machine(state, params, 0, int(ItemType.MINER))
+        eidx = int(placed.tile_entity[0, 1])
+        return placed, params, eidx
+
+    def test_apply_repair_restores_full_health(self, state_factory) -> None:
+        """Calling apply_repair on a damaged target restores full HP."""
+        state, params, eidx = self._placed_state(state_factory)
+        damaged = state.replace(ent_health=state.ent_health.at[eidx].set(10))
+        repaired = apply_repair(damaged, params, 0)
+        assert int(repaired.ent_health[eidx]) == MAX_HEALTH
+
+    def test_apply_repair_noop_on_full_health(self, state_factory) -> None:
+        """Repair on a full-HP entity leaves ent_health untouched."""
+        state, params, _ = self._placed_state(state_factory)
+        repaired = apply_repair(state, params, 0)
+        assert bool(jnp.all(repaired.ent_health == state.ent_health))
+
+    def test_apply_repair_noop_on_empty_tile(self, state_factory) -> None:
+        """Repair facing an empty tile leaves ent_health untouched."""
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            player_position=(0, 0),
+            player_direction=Direction.RIGHT,
+        )
+        params = EnvParams()
+        repaired = apply_repair(state, params, 0)
+        assert bool(jnp.all(repaired.ent_health == state.ent_health))
+
+    def test_apply_repair_noop_out_of_bounds(self, state_factory) -> None:
+        """Repair facing OOB is a no-op (no exception, no state change)."""
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            player_position=(0, 0),
+            player_direction=Direction.UP,  # facing y=-1
+        )
+        params = EnvParams()
+        repaired = apply_repair(state, params, 0)
+        assert bool(jnp.all(repaired.ent_health == state.ent_health))
+
+    def test_apply_repair_honors_per_type_override(self, state_factory) -> None:
+        """If max_health is overridden for a type, apply_repair restores
+        to the override value (not MAX_HEALTH)."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(1)
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            player_position=(0, 0),
+            player_direction=Direction.RIGHT,
+            player_inventory=inv,
+        )
+        params = EnvParams(
+            machine_config=DEFAULT_MACHINE_CONFIG.with_overrides(
+                {int(MachineType.MINER): MachineConfigOverride(max_health=42)}
+            )
+        )
+        placed = place_machine(state, params, 0, int(ItemType.MINER))
+        eidx = int(placed.tile_entity[0, 1])
+        damaged = placed.replace(ent_health=placed.ent_health.at[eidx].set(5))
+        repaired = apply_repair(damaged, params, 0)
+        assert int(repaired.ent_health[eidx]) == 42
+
+    def test_repair_action_dispatch_restores_health(self, state_factory) -> None:
+        """A full step with Action.REPAIR routes to apply_repair."""
+        state, params, eidx = self._placed_state(state_factory)
+        damaged = state.replace(ent_health=state.ent_health.at[eidx].set(7))
+        new_state = factoriax_step(
+            jax.random.key(0),
+            damaged,
+            jnp.int32(int(Action.REPAIR)),
+            params,
+        )
+        assert int(new_state.ent_health[eidx]) == MAX_HEALTH
