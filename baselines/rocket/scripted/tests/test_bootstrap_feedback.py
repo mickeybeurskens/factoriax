@@ -26,13 +26,11 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
 )
 from factoriax.constants import (
-    MAX_ACHIEVEMENTS,
     Direction,
     ItemType,
     MachineType,
 )
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.observations import global_array
@@ -60,7 +58,7 @@ def _shared_jit_step(env_params: EnvParams):
     fn = _JIT_STEP_CACHE.get(key)
     if fn is None:
         env = ActionMaskWrapper(
-            AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+            FactoriaXEnv(achievement_fn=rocket_conditions),
             ROCKET_BLOCKED_ACTIONS,
         )
         fn = jax.jit(env.step_env)
@@ -90,7 +88,7 @@ def _build_test_env(
             machine — hand-crafting isn't available.
 
     Returns:
-        ``(jit_step_fn, AchievementState, env_params)``.
+        ``(jit_step_fn, EnvState, env_params)``.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     builder.set_player_position(*_SPAWN)
@@ -122,18 +120,14 @@ def _build_test_env(
         num_players=1,
         max_timesteps=400,
     )
-    env_state = build_state(level, env_params)
+    state = build_state(level, env_params)
 
     if starting_inventory:
-        inv = np.asarray(env_state.player_inventory).copy()
+        inv = np.asarray(state.player_inventory).copy()
         for item_id, count in starting_inventory.items():
             inv[0, int(item_id)] = count
-        env_state = env_state.replace(player_inventory=jnp.asarray(inv))
+        state = state.replace(player_inventory=jnp.asarray(inv))
 
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
     return _shared_jit_step(env_params), state, env_params
 
 
@@ -150,7 +144,7 @@ def _jit_obs(env_params: EnvParams):
 
 
 def _view(state, env_params: EnvParams):
-    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    obs = np.asarray(_jit_obs(env_params)(state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,

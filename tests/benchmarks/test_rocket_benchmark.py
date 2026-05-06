@@ -30,8 +30,7 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
-from factoriax.envs.achievement_wrapper import AchievementState
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
 # Catalogue + construction
@@ -340,21 +339,18 @@ def test_first_assembly_requires_assembler_output(state_factory) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _ach_state_with(mask_indices: list[int]) -> AchievementState:
-    """Build an AchievementState with specific slots latched."""
-    # env_state content doesn't matter for achievement_reward — it reads
-    # the top-level achievements_unlocked field.
-    dummy_env = jax.tree.map(lambda x: x, _dummy_env_state())
+def _ach_state_with(mask_indices: list[int]) -> EnvState:
+    """Build an EnvState with specific achievement slots latched."""
+    # The other state fields don't matter for achievement_reward — it
+    # reads only ``achievements_unlocked``.
     unlocked = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
     for i in mask_indices:
         unlocked = unlocked.at[i].set(True)
-    return AchievementState(env_state=dummy_env, achievements_unlocked=unlocked)
+    return _dummy_env_state().replace(achievements_unlocked=unlocked)
 
 
-def _dummy_env_state():
+def _dummy_env_state() -> EnvState:
     """Minimal EnvState — the reward function ignores its contents."""
-    from factoriax import EnvState
-
     shape = (1, 1)
     return EnvState(
         map=jnp.zeros(shape, dtype=jnp.int8),

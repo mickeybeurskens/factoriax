@@ -89,9 +89,8 @@ from factoriax.benchmarks.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, MachineType
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
@@ -886,13 +885,9 @@ def _run_agent(max_steps: int, seed: int = 0):
         recipe_table=ROCKET_RECIPE_TABLE,
     )
     level = build_rocket_level()
-    env_state = build_state(level, env_params)
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = build_state(level, env_params)
     env = ActionMaskWrapper(
-        AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+        FactoriaXEnv(achievement_fn=rocket_conditions),
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
@@ -903,7 +898,7 @@ def _run_agent(max_steps: int, seed: int = 0):
     key = jax.random.PRNGKey(seed)
 
     for t in range(max_steps):
-        obs = np.asarray(jit_obs(state.env_state))
+        obs = np.asarray(jit_obs(state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
         _, state, _, done, _ = jit_step(subkey, state, jnp.int32(action), env_params)
@@ -925,10 +920,10 @@ def _index_of(achievement_id: str) -> int:
 
 
 def _assert_pallet_holds(state, tile: tuple[int, int], item: ItemType) -> None:
-    machine_types = np.asarray(state.env_state.machine_types)
-    tile_entity = np.asarray(state.env_state.tile_entity)
-    ent_buf_type = np.asarray(state.env_state.ent_buf_type)
-    ent_buf_count = np.asarray(state.env_state.ent_buf_count)
+    machine_types = np.asarray(state.machine_types)
+    tile_entity = np.asarray(state.tile_entity)
+    ent_buf_type = np.asarray(state.ent_buf_type)
+    ent_buf_count = np.asarray(state.ent_buf_count)
 
     bx, by = tile
     assert int(machine_types[by, bx]) == int(MachineType.PALLET), (

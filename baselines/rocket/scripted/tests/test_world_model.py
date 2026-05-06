@@ -9,21 +9,18 @@ matches the original state.
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from baselines.rocket.scripted import world_model as wm
 from factoriax.benchmarks.rocket import build_rocket_level, rocket_conditions
 from factoriax.constants import (
-    MAX_ACHIEVEMENTS,
     Action,
     Direction,
     ItemType,
     MachineType,
 )
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
 from factoriax.state import EnvParams
@@ -394,20 +391,18 @@ def test_decode_tracks_player_movement(
     rocket_env_params: EnvParams,
 ) -> None:
     """After emitting MOVE_DOWN, decoded pos reflects the new coordinates."""
-    env = AchievementWrapper(FactoriaXEnv(), rocket_conditions)
-    ach_state = AchievementState(
-        env_state=rocket_initial_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    import jax.numpy as jnp
+
+    env = FactoriaXEnv(achievement_fn=rocket_conditions)
     key = jax.random.PRNGKey(0)
     _, new_state, _, _, _ = env.step_env(
         key,
-        ach_state,
+        rocket_initial_state,
         jnp.int32(int(Action.DOWN)),
         rocket_env_params,
     )
     obs_new = np.asarray(
-        global_array(new_state.env_state, rocket_env_params, 0),
+        global_array(new_state, rocket_env_params, 0),
     )
     view_new = wm.decode_observation(
         obs_new,

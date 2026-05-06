@@ -56,14 +56,16 @@ def achievement_reward(
 ) -> jax.Array:
     """Sparse reward for newly unlocked achievements.
 
-    Compares ``achievements_unlocked`` between the two states and
-    returns the weighted sum of newly satisfied slots. The ``weights``
-    vector controls the magnitude per slot — slots with zero weight
-    contribute nothing.
+    Compares ``achievements_unlocked`` between the two ``EnvState``
+    instances and returns the weighted sum of newly satisfied slots.
+    The ``weights`` vector controls the magnitude per slot — slots with
+    zero weight contribute nothing. Achievements live on
+    :class:`~factoriax.state.EnvState` directly; the env's
+    ``achievement_fn`` constructor argument latches them each step.
 
     Args:
-        prev_state: State immediately before the step.
-        new_state: State immediately after the step.
+        prev_state: EnvState immediately before the step.
+        new_state: EnvState immediately after the step.
         params: Environment parameters (unused; present for interface
             uniformity).
         weights: Per-slot reward magnitudes, shape

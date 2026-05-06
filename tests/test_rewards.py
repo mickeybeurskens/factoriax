@@ -7,36 +7,25 @@ import pytest
 from factoriax import BlockType, ItemType
 from factoriax.achievements import core_game_conditions
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
-from factoriax.envs.achievement_wrapper import AchievementState
 from factoriax.rewards import achievement_reward, mining_reward, sparse_mining_reward
 from factoriax.state import EnvParams, EnvState
 
 
-def _wrap(state: EnvState) -> AchievementState:
-    """Wrap an EnvState with empty achievement tracking."""
-    return AchievementState(
-        env_state=state,
-        achievements_unlocked=jnp.zeros(
-            MAX_ACHIEVEMENTS,
-            dtype=jnp.bool_,
-        ),
+def _wrap(state: EnvState) -> EnvState:
+    """Return *state* with an empty ``achievements_unlocked`` mask."""
+    return state.replace(
+        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
 
 
-def _wrap_with(
-    state: EnvState,
-    unlocked: jnp.ndarray,
-) -> AchievementState:
-    """Wrap an EnvState with specified achievement flags."""
-    return AchievementState(
-        env_state=state,
-        achievements_unlocked=unlocked,
-    )
+def _wrap_with(state: EnvState, unlocked: jnp.ndarray) -> EnvState:
+    """Return *state* with the given ``achievements_unlocked`` mask."""
+    return state.replace(achievements_unlocked=unlocked)
 
 
-def _apply_conds(state: AchievementState) -> AchievementState:
-    """Apply core game conditions to wrapped state."""
-    conds = core_game_conditions(state.env_state)
+def _apply_conds(state: EnvState) -> EnvState:
+    """OR core-game conditions into the state's ``achievements_unlocked``."""
+    conds = core_game_conditions(state)
     return state.replace(
         achievements_unlocked=state.achievements_unlocked | conds,
     )

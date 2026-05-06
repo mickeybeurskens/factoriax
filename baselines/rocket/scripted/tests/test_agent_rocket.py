@@ -22,9 +22,7 @@ from factoriax.benchmarks.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
@@ -49,13 +47,9 @@ def _run_agent(max_steps: int, seed: int = 0):
         max_timesteps=max_steps,
     )
     level = build_rocket_level()
-    env_state = build_state(level, env_params)
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = build_state(level, env_params)
     env = ActionMaskWrapper(
-        AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+        FactoriaXEnv(achievement_fn=rocket_conditions),
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
@@ -66,7 +60,7 @@ def _run_agent(max_steps: int, seed: int = 0):
     key = jax.random.PRNGKey(seed)
 
     for t in range(max_steps):
-        obs = np.asarray(jit_obs(state.env_state))
+        obs = np.asarray(jit_obs(state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
         _, state, _, done, _ = jit_step(

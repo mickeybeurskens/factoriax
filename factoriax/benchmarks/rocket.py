@@ -265,8 +265,8 @@ def rocket_conditions(state: EnvState) -> jax.Array:
 
     Every condition is a pure function of ``state``. The returned array
     is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
-    :class:`~factoriax.envs.achievement_wrapper.AchievementWrapper`
-    directly.
+    :class:`~factoriax.envs.factoriax_env.FactoriaXEnv`'s
+    ``achievement_fn`` constructor argument directly.
 
     Args:
         state: Current environment state.
@@ -343,13 +343,13 @@ def rocket_reward(
 
     Thin wrapper around :func:`factoriax.rewards.achievement_reward`
     bound to :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. Assumes *prev_state*
-    and *new_state* are :class:`AchievementState` instances — i.e. the
-    env was wrapped with :class:`AchievementWrapper` using
-    :func:`rocket_conditions`.
+    and *new_state* are :class:`~factoriax.state.EnvState` instances
+    whose ``achievements_unlocked`` field has been latched by the env's
+    ``achievement_fn`` (typically :func:`rocket_conditions`).
 
     Args:
-        prev_state: State before the step.
-        new_state: State after the step.
+        prev_state: EnvState before the step.
+        new_state: EnvState after the step.
         params: Environment parameters (unused; interface uniformity).
 
     Returns:

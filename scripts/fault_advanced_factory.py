@@ -37,7 +37,6 @@ from factoriax.benchmarks.rocket import (
 )
 from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, MachineType
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
@@ -83,13 +82,9 @@ def main() -> None:
         recipe_table=ROCKET_RECIPE_TABLE,
     )
     level = build_rocket_level()
-    env_state = build_state(level, env_params)
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = build_state(level, env_params)
     env = ActionMaskWrapper(
-        AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+        FactoriaXEnv(achievement_fn=rocket_conditions),
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
@@ -103,7 +98,7 @@ def main() -> None:
     last_state = state
     final_tick = 0
     for t in range(max_steps):
-        obs = np.asarray(jit_obs(last_state.env_state))
+        obs = np.asarray(jit_obs(last_state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
         _, last_state, _, done, _ = jit_step(
@@ -114,7 +109,7 @@ def main() -> None:
             break
         if agent.planner.is_done:
             break
-    env_state = last_state.env_state
+    env_state = last_state
 
     print(f"=== Run terminated after {final_tick} ticks ===")
     print(f"Total events recorded: {len(rich_events)}\n")

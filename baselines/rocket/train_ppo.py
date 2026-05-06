@@ -1,10 +1,9 @@
 """Train PPO on the rocket achievement benchmark.
 
-Wraps :class:`~factoriax.envs.FactoriaXEnv` with
-:class:`~factoriax.envs.achievement_wrapper.AchievementWrapper` using the
-rocket benchmark's condition function, then uses :func:`rocket_reward`
-as the training signal — Craftax-style sparse reward of +weight on each
-newly-unlocked achievement.
+Builds :class:`~factoriax.envs.FactoriaXEnv` with the rocket benchmark's
+:func:`rocket_conditions` bound as ``achievement_fn``, then uses
+:func:`rocket_reward` as the training signal — Craftax-style sparse
+reward of +weight on each newly-unlocked achievement.
 
 Reuses the shared PPO infrastructure from ``baselines.ppo``. The
 collect/GAE/update pipeline is fused into one JIT-compiled step to keep
@@ -52,14 +51,10 @@ from factoriax.benchmarks.rocket import (
 )
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import (
-    AchievementState,
-    AchievementWrapper,
-    LocalObservationWrapper,
-)
+from factoriax.envs.achievement_wrapper import LocalObservationWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams, EnvState
 
 logging.basicConfig(
     level=logging.INFO,
@@ -159,8 +154,8 @@ def _ppo_loss(
 
 def _make_env_and_state(
     config: Config,
-) -> tuple[ActionMaskWrapper, AchievementState, EnvParams]:
-    """Build the wrapped env, initial AchievementState, and EnvParams.
+) -> tuple[ActionMaskWrapper, EnvState, EnvParams]:
+    """Build the wrapped env, initial EnvState, and EnvParams.
 
     Action mask matches the scripted benchmark: ``CRAFT_*`` actions are
     blocked so the policy has to produce intermediates through machines
@@ -174,12 +169,9 @@ def _make_env_and_state(
     the policy; switching to a local window keeps throughput flat as the
     map grows.
     """
-    base_env = FactoriaXEnv()
+    base_env = FactoriaXEnv(achievement_fn=rocket_conditions)
     env = ActionMaskWrapper(
-        AchievementWrapper(
-            LocalObservationWrapper(base_env, radius=config.obs_radius),
-            rocket_conditions,
-        ),
+        LocalObservationWrapper(base_env, radius=config.obs_radius),
         ROCKET_BLOCKED_ACTIONS,
     )
     env_params = EnvParams(
@@ -189,11 +181,7 @@ def _make_env_and_state(
         max_timesteps=config.max_timesteps,
     )
     level = build_rocket_level()
-    env_state0 = build_state(level, env_params)
-    state0 = AchievementState(
-        env_state=env_state0,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state0 = build_state(level, env_params)
     return env, state0, env_params
 
 
@@ -257,7 +245,7 @@ def _render_eval_episode(
     config: Config,
     env: ActionMaskWrapper,
     env_params: EnvParams,
-    initial_state: AchievementState,
+    initial_state: EnvState,
     network: ActorCritic,
     params: Any,
     obs_stats: RunningStats,
@@ -279,8 +267,8 @@ def _render_eval_episode(
     rng = jax.random.PRNGKey(config.seed + 4242)
     state = initial_state
 
-    frames: list[np.ndarray] = [compose_frame_with_inventory(state.env_state)]
-    env_states: list[Any] = [state.env_state]
+    frames: list[np.ndarray] = [compose_frame_with_inventory(state)]
+    env_states: list[Any] = [state]
     ach_per_step: list[np.ndarray] = [np.asarray(state.achievements_unlocked)]
     actions_log: list[int] = []
 
@@ -293,8 +281,8 @@ def _render_eval_episode(
         rng, k_step = jax.random.split(rng)
         _, state, _, done, _ = jit_step(k_step, state, action, env_params)
         actions_log.append(int(action))
-        frames.append(compose_frame_with_inventory(state.env_state))
-        env_states.append(state.env_state)
+        frames.append(compose_frame_with_inventory(state))
+        env_states.append(state)
         ach_per_step.append(np.asarray(state.achievements_unlocked))
         if bool(done):
             break
@@ -311,7 +299,7 @@ def _finalize_artifacts(
     config: Config,
     env: ActionMaskWrapper,
     env_params: EnvParams,
-    initial_state: AchievementState,
+    initial_state: EnvState,
     network: ActorCritic,
     params: Any,
     obs_stats: RunningStats,
@@ -506,12 +494,12 @@ def train(config: Config) -> dict[str, float]:
 
     obs_stats = init_running_stats(obs_dim)
 
-    # Broadcast the initial AchievementState to (num_envs, ...).
+    # Broadcast the initial EnvState to (num_envs, ...).
     def _broadcast(x: jax.Array) -> jax.Array:
         a = jnp.asarray(x)
         return jnp.broadcast_to(a[None], (config.num_envs,) + a.shape)
 
-    fixed_states: AchievementState = jax.tree_util.tree_map(_broadcast, initial_state)
+    fixed_states: EnvState = jax.tree_util.tree_map(_broadcast, initial_state)
 
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_obs = jax.vmap(env.get_obs, in_axes=(0, None))
@@ -524,7 +512,7 @@ def train(config: Config) -> dict[str, float]:
         params: Any,
         opt_state: optax.OptState,
         obs_stats: RunningStats,
-        env_states: AchievementState,
+        env_states: EnvState,
         obs: jax.Array,
         rng: jax.Array,
     ):
@@ -550,7 +538,7 @@ def train(config: Config) -> dict[str, float]:
             # Reward = newly-unlocked weighted achievements.
             rewards = vmap_reward(states, next_states, env_params)
 
-            # Reset on done: swap back the fixed initial (AchievementState).
+            # Reset on done: swap back the fixed initial EnvState.
             def _where(r, s):
                 mask = dones.reshape((-1,) + (1,) * (s.ndim - 1))
                 return jnp.where(mask, r, s)

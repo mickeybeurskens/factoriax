@@ -1,10 +1,10 @@
-"""Raw vs. wrapped env throughput A/B for the rocket benchmark.
+"""Raw vs. with-achievement_fn env throughput A/B for the rocket benchmark.
 
-Measures the per-step cost of wrapping :class:`FactoriaXEnv` with
-:class:`AchievementWrapper` evaluating :func:`rocket_conditions` every
-step. Runs an identical random-policy rollout through both
-configurations, warms up JIT, then times a scan of ``rollout_steps``
-ticks across ``num_envs`` parallel envs.
+Measures the per-step cost of evaluating :func:`rocket_conditions` on
+every tick by binding it as :class:`FactoriaXEnv`'s ``achievement_fn``
+constructor argument. Runs an identical random-policy rollout through
+both configurations (no fn vs fn), warms up JIT, then times a scan of
+``rollout_steps`` ticks across ``num_envs`` parallel envs.
 
 Usage::
 
@@ -25,9 +25,7 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.benchmarks.rocket import build_rocket_level, rocket_conditions
-from factoriax.constants import MAX_ACHIEVEMENTS
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.levels import build_state
 from factoriax.state import EnvParams
 
@@ -142,15 +140,11 @@ def bench(
         seed,
     )
 
-    wrapped_env = AchievementWrapper(FactoriaXEnv(), rocket_conditions)
-    wrapped_state0 = AchievementState(
-        env_state=env_state0,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    wrapped_env = FactoriaXEnv(achievement_fn=rocket_conditions)
     wrapped_result = _time_rollout(
         "wrapped",
         wrapped_env,
-        wrapped_state0,
+        env_state0,
         num_envs,
         rollout_steps,
         seed,

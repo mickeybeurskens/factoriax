@@ -103,12 +103,11 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
 
     from jax import random
 
-    from factoriax.envs.achievement_wrapper import AchievementWrapper
-    from factoriax.envs.factoriax_env import make_factoriax_env
+    from factoriax.achievements import core_game_conditions
+    from factoriax.envs.factoriax_env import FactoriaXEnv
     from factoriax.play.main import _play_loop, _run_with_loading_screen
 
-    inner_env, _ = make_factoriax_env()
-    env = AchievementWrapper(inner_env)
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
 
     rng = random.PRNGKey(42)
     rng, reset_key = random.split(rng)

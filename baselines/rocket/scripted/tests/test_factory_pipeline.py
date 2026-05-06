@@ -31,7 +31,6 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
 )
 from factoriax.constants import (
-    MAX_ACHIEVEMENTS,
     Action,
     BlockType,
     Direction,
@@ -39,7 +38,6 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.observations import global_array
@@ -87,7 +85,7 @@ def _shared_jit_step(env_params: EnvParams):
     fn = _JIT_STEP_CACHE.get(key)
     if fn is None:
         env = ActionMaskWrapper(
-            AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+            FactoriaXEnv(achievement_fn=rocket_conditions),
             ROCKET_BLOCKED_ACTIONS,
         )
         fn = jax.jit(env.step_env)
@@ -105,7 +103,7 @@ def _jit_obs(env_params: EnvParams):
 
 
 def _view(state, env_params: EnvParams):
-    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    obs = np.asarray(_jit_obs(env_params)(state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,
@@ -204,19 +202,15 @@ def test_smelter_cell_plus_coal_trunk_produces_iron_plate() -> None:
         num_players=1,
         max_timesteps=400,
     )
-    env_state = build_state(level, env_params)
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = build_state(level, env_params)
     jit_step = _shared_jit_step(env_params)
 
     state = _run_noops(state, jit_step, env_params, 200)
 
-    plate_eid = int(state.env_state.tile_entity[_PLATE_PALLET[1], _PLATE_PALLET[0]])
+    plate_eid = int(state.tile_entity[_PLATE_PALLET[1], _PLATE_PALLET[0]])
     assert plate_eid >= 0
-    plate_buf = int(state.env_state.ent_buf_count[plate_eid])
-    plate_type = int(state.env_state.ent_buf_type[plate_eid])
+    plate_buf = int(state.ent_buf_count[plate_eid])
+    plate_type = int(state.ent_buf_type[plate_eid])
     assert plate_type == int(ItemType.IRON_PLATE), (
         f"expected IRON_PLATE in plate pallet, got ItemType={plate_type}"
     )
@@ -278,11 +272,7 @@ def test_smelter_output_feeds_craft_from_bus() -> None:
         num_players=1,
         max_timesteps=400,
     )
-    env_state = build_state(level, env_params)
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = build_state(level, env_params)
     jit_step = _shared_jit_step(env_params)
 
     # Run NOOPs to let the smelter accumulate plates.

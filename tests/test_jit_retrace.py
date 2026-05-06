@@ -15,9 +15,9 @@ import jax
 import pytest
 from jax import random
 
+from factoriax.achievements import core_game_conditions
 from factoriax.constants import Action
-from factoriax.envs.achievement_wrapper import AchievementWrapper
-from factoriax.envs.factoriax_env import make_factoriax_env
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.state import EnvParams
 
 # Each test JIT-compiles step_env — necessarily slow, but catches the
@@ -27,8 +27,7 @@ pytestmark = pytest.mark.slow
 
 def _setup():
     """Create env, reset, and JIT step_fn."""
-    inner_env, _ = make_factoriax_env()
-    env = AchievementWrapper(inner_env)
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
     params = EnvParams(map_width=8, map_height=8, num_players=1)
     rng = random.PRNGKey(42)
     rng, k = random.split(rng)

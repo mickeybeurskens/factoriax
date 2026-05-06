@@ -19,9 +19,8 @@ from factoriax.benchmarks.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, ItemType
+from factoriax.constants import ItemType
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
@@ -42,18 +41,14 @@ def _setup_env(starting_inventory: dict[int, int]):
         max_timesteps=500,
     )
     level = build_rocket_level()
-    env_state = build_state(level, env_params)
+    state = build_state(level, env_params)
     # Patch the starting player inventory with the seed items.
-    inv = np.asarray(env_state.player_inventory).copy()
+    inv = np.asarray(state.player_inventory).copy()
     for item_id, count in starting_inventory.items():
         inv[0, int(item_id)] = count
-    env_state = env_state.replace(player_inventory=jnp.asarray(inv))
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = state.replace(player_inventory=jnp.asarray(inv))
     env = ActionMaskWrapper(
-        AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+        FactoriaXEnv(achievement_fn=rocket_conditions),
         ROCKET_BLOCKED_ACTIONS,
     )
     return jax.jit(env.step_env), state, env_params
@@ -73,7 +68,7 @@ def _jit_obs(env_params: EnvParams):
 
 
 def _view(state, env_params: EnvParams):
-    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    obs = np.asarray(_jit_obs(env_params)(state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,

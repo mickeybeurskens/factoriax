@@ -10,11 +10,12 @@ Usage::
     uv run python scripts/record_scripted_rocket.py
     uv run python -m factoriax.agentdebugger /tmp/scripted_rocket.npz
 
-The agent runs against the unwrapped ``FactoriaXEnv`` so the saved
-states are plain ``EnvState`` (no ``AchievementState`` wrapping,
-which ``trajectory_to_states`` wouldn't understand). Blocked actions
-from :data:`ROCKET_BLOCKED_ACTIONS` are substituted with ``NOOP`` in
-software — matching the behaviour of the training-time mask wrapper.
+The agent runs against ``FactoriaXEnv`` with no ``achievement_fn``
+bound so the saved states' ``achievements_unlocked`` field stays at
+its initial all-False; achievement progress is computed locally for
+the reward signal. Blocked actions from :data:`ROCKET_BLOCKED_ACTIONS`
+are substituted with ``NOOP`` in software — matching the behaviour of
+the training-time mask wrapper.
 """
 
 from __future__ import annotations
@@ -92,11 +93,11 @@ def record(
         )
     agent = _AGENTS[agent_kind](env_params)
 
-    # The unwrapped env emits 0 reward every step — the rocket reward
-    # lives on :class:`AchievementWrapper`, which we can't use here
-    # without losing raw EnvState. Recompute it locally: latch the
-    # achievement mask across ticks and take the weighted sum of newly
-    # unlocked slots each step.
+    # The env emits 0 reward every step — the rocket reward is the
+    # weighted sum of newly-unlocked achievements, which we recompute
+    # locally so the saved trajectory carries non-zero rewards. Latch
+    # the achievement mask across ticks and emit the weighted sum of
+    # newly-unlocked slots each step.
     weights_np = np.asarray(ROCKET_ACHIEVEMENT_WEIGHTS)[:NUM_ROCKET_ACHIEVEMENTS]
     unlocked_latched = np.zeros(NUM_ROCKET_ACHIEVEMENTS, dtype=bool)
 

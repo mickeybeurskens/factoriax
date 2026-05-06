@@ -17,9 +17,9 @@ import time
 import jax
 from jax import lax, random
 
+from factoriax.achievements import core_game_conditions
 from factoriax.constants import Action
-from factoriax.envs.achievement_wrapper import AchievementWrapper
-from factoriax.envs.factoriax_env import make_factoriax_env
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.state import EnvParams
 
 
@@ -40,8 +40,7 @@ def profile(
     Returns:
         Dict with warmup_s, call_ms, steps_per_second, total_steps.
     """
-    inner_env, _ = make_factoriax_env()
-    env = AchievementWrapper(inner_env)
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
     params = EnvParams(map_width=map_size, map_height=map_size)
 
     keys = jax.random.split(jax.random.PRNGKey(0), batch)
@@ -55,13 +54,19 @@ def profile(
         rng, key = random.split(rng)
         sk = random.split(key, batch)
         _, st, _, _, _ = vmap_step(
-            sk, st, int(Action.NOOP), params,
+            sk,
+            st,
+            int(Action.NOOP),
+            params,
         )
         return (st, rng), None
 
     scan_fn = jax.jit(
         lambda s, r: lax.scan(
-            scan_body, (s, r), None, length=scan_length,
+            scan_body,
+            (s, r),
+            None,
+            length=scan_length,
         ),
     )
 
@@ -104,10 +109,10 @@ def profile(
 # Tuned configs: (map_size, batch, scan_length, num_scans)
 # Each should take ~10s for the measurement phase.
 DEFAULT_CONFIGS = [
-    (8, 16384, 256, 3),   # small map, big batch, fast
-    (16, 8192, 128, 3),   # medium
-    (32, 4096, 64, 3),    # large map, smaller batch
-    (64, 2048, 32, 3),    # biggest map, small batch
+    (8, 16384, 256, 3),  # small map, big batch, fast
+    (16, 8192, 128, 3),  # medium
+    (32, 4096, 64, 3),  # large map, smaller batch
+    (64, 2048, 32, 3),  # biggest map, small batch
 ]
 
 
@@ -117,30 +122,40 @@ def main() -> None:
         description="Quick lax.scan profiler.",
     )
     parser.add_argument(
-        "--map-size", type=int, default=None,
+        "--map-size",
+        type=int,
+        default=None,
         help="Single map size (overrides default sweep).",
     )
     parser.add_argument(
-        "--batch", type=int, default=None,
+        "--batch",
+        type=int,
+        default=None,
         help="Batch size (overrides default).",
     )
     parser.add_argument(
-        "--scan-length", type=int, default=128,
+        "--scan-length",
+        type=int,
+        default=128,
         help="Steps per lax.scan call (default: 128).",
     )
     parser.add_argument(
-        "--num-scans", type=int, default=3,
+        "--num-scans",
+        type=int,
+        default=3,
         help="Scan calls for measurement (default: 3).",
     )
     args = parser.parse_args()
 
     if args.map_size is not None:
-        configs = [(
-            args.map_size,
-            args.batch or 4096,
-            args.scan_length,
-            args.num_scans,
-        )]
+        configs = [
+            (
+                args.map_size,
+                args.batch or 4096,
+                args.scan_length,
+                args.num_scans,
+            )
+        ]
     else:
         configs = DEFAULT_CONFIGS
 
@@ -154,7 +169,8 @@ def main() -> None:
     for ms, bs, sl, ns in configs:
         print(
             f"{ms:>5} {bs:>7} {sl:>5}  ",
-            end="", flush=True,
+            end="",
+            flush=True,
         )
         r = profile(ms, bs, sl, ns)
         print(

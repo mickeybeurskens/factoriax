@@ -48,9 +48,8 @@ from factoriax.benchmarks.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, Action
+from factoriax.constants import Action
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
@@ -117,13 +116,9 @@ def _run(
         recipe_table=ROCKET_RECIPE_TABLE,
     )
     level = build_rocket_level()
-    env_state = build_state(level, env_params)
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = build_state(level, env_params)
     env = ActionMaskWrapper(
-        AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+        FactoriaXEnv(achievement_fn=rocket_conditions),
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
@@ -141,11 +136,11 @@ def _run(
     actions_log: list[int] = []
     ach_log: list[np.ndarray] = []
     if collect_rollout:
-        env_states_log.append(state.env_state)
+        env_states_log.append(state)
         ach_log.append(np.asarray(state.achievements_unlocked))
 
     for t in range(max_steps):
-        obs = np.asarray(jit_obs(state.env_state))
+        obs = np.asarray(jit_obs(state))
         action = agent.act(obs)
         key, subkey = jax.random.split(key)
         _, state, _, done, _ = jit_step(
@@ -173,7 +168,7 @@ def _run(
             )
 
         if collect_rollout:
-            env_states_log.append(state.env_state)
+            env_states_log.append(state)
             actions_log.append(int(action))
             ach_log.append(np.asarray(state.achievements_unlocked))
 

@@ -37,14 +37,12 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
 )
 from factoriax.constants import (
-    MAX_ACHIEVEMENTS,
     Action,
     Direction,
     ItemType,
     MachineType,
 )
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.observations import global_array
@@ -73,7 +71,7 @@ def _shared_jit_step(env_params: EnvParams):
     fn = _JIT_STEP_CACHE.get(key)
     if fn is None:
         env = ActionMaskWrapper(
-            AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+            FactoriaXEnv(achievement_fn=rocket_conditions),
             ROCKET_BLOCKED_ACTIONS,
         )
         fn = jax.jit(env.step_env)
@@ -91,7 +89,7 @@ def _jit_obs(env_params: EnvParams):
 
 
 def _view(state, env_params: EnvParams):
-    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    obs = np.asarray(_jit_obs(env_params)(state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,
@@ -136,7 +134,7 @@ def _build_module_level(
         one_input: When True, use the 1-input variant (no west pallet).
 
     Returns:
-        ``(jit_step_fn, AchievementState, env_params)``.
+        ``(jit_step_fn, EnvState, env_params)``.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     builder.set_player_position(*_SPAWN)
@@ -187,20 +185,16 @@ def _build_module_level(
         num_players=1,
         max_timesteps=max_timesteps,
     )
-    env_state = build_state(level, env_params)
+    state = build_state(level, env_params)
 
-    inv = np.asarray(env_state.player_inventory).copy()
+    inv = np.asarray(state.player_inventory).copy()
     inv[0, int(ItemType.ASSEMBLER)] = 1
     inv[0, int(ItemType.FURNACE)] = 1
     inv[0, int(ItemType.ARM)] = 1
     inv[0, int(ItemType.PALLET)] = 1
     inv[0, int(ItemType.CONVEYOR_BELT)] = 2
-    env_state = env_state.replace(player_inventory=jnp.asarray(inv))
+    state = state.replace(player_inventory=jnp.asarray(inv))
 
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
     return _shared_jit_step(env_params), state, env_params
 
 
@@ -218,9 +212,9 @@ def test_build_assembler_module_places_all_entities() -> None:
 
     assert verdict == "done", f"got {verdict}"
 
-    mt = np.asarray(final_state.env_state.machine_types)
-    tile_entity = np.asarray(final_state.env_state.tile_entity)
-    ent_direction = np.asarray(final_state.env_state.ent_direction)
+    mt = np.asarray(final_state.machine_types)
+    tile_entity = np.asarray(final_state.tile_entity)
+    ent_direction = np.asarray(final_state.ent_direction)
 
     # Output pallet east-of-arm; inputs are feeder belts.
     assert mt[_OUTPUT[1], _OUTPUT[0]] == int(MachineType.PALLET), (
@@ -254,7 +248,7 @@ def test_build_assembler_module_consumes_bootstrap_inventory() -> None:
     )
     final_state, verdict = _rollout(state, goal, jit_step, env_params, max_steps=400)
     assert verdict == "done"
-    inv = np.asarray(final_state.env_state.player_inventory[0])
+    inv = np.asarray(final_state.player_inventory[0])
     assert int(inv[int(ItemType.ASSEMBLER)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
     assert int(inv[int(ItemType.PALLET)]) == 0
@@ -293,10 +287,10 @@ def test_assembler_module_produces_wire_when_fed_plates() -> None:
             env_params,
         )
 
-    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    out_eid = int(state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
     assert out_eid >= 0
-    out_buf = int(state.env_state.ent_buf_count[out_eid])
-    out_type = int(state.env_state.ent_buf_type[out_eid])
+    out_buf = int(state.ent_buf_count[out_eid])
+    out_type = int(state.ent_buf_type[out_eid])
     assert out_type == int(ItemType.WIRE), (
         f"expected WIRE in output pallet, got ItemType={out_type}"
     )
@@ -317,7 +311,7 @@ def test_build_assembler_module_one_input_variant() -> None:
 
     assert verdict == "done", f"got {verdict}"
 
-    mt = np.asarray(final_state.env_state.machine_types)
+    mt = np.asarray(final_state.machine_types)
     # Output pallet + input_a feeder belt; west neighbour is dirt.
     assert mt[_INPUT_A[1], _INPUT_A[0]] == int(MachineType.CONVEYOR_BELT)
     assert mt[_OUTPUT[1], _OUTPUT[0]] == int(MachineType.PALLET)
@@ -329,7 +323,7 @@ def test_build_assembler_module_one_input_variant() -> None:
     assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
     # One PALLET left in inventory (started with 1, used 1 for output);
     # one CONVEYOR_BELT used (started with 2, 1 left).
-    inv = np.asarray(final_state.env_state.player_inventory[0])
+    inv = np.asarray(final_state.player_inventory[0])
     assert int(inv[int(ItemType.PALLET)]) == 0
     assert int(inv[int(ItemType.CONVEYOR_BELT)]) == 1
     assert int(inv[int(ItemType.FURNACE)]) == 0
@@ -396,10 +390,10 @@ def test_assembler_module_produces_tier3_recipes(
             env_params,
         )
 
-    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    out_eid = int(state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
     assert out_eid >= 0
-    out_buf = int(state.env_state.ent_buf_count[out_eid])
-    out_type = int(state.env_state.ent_buf_type[out_eid])
+    out_buf = int(state.ent_buf_count[out_eid])
+    out_type = int(state.ent_buf_type[out_eid])
     assert out_type == expected_output, (
         f"expected {ItemType(expected_output).name} in output, got ItemType={out_type}"
     )
@@ -432,17 +426,13 @@ def test_two_assembler_modules_compose_without_collision() -> None:
         num_players=1,
         max_timesteps=600,
     )
-    env_state = build_state(level, env_params)
-    inv = np.asarray(env_state.player_inventory).copy()
+    state = build_state(level, env_params)
+    inv = np.asarray(state.player_inventory).copy()
     inv[0, int(ItemType.ASSEMBLER)] = 2
     inv[0, int(ItemType.ARM)] = 2
     inv[0, int(ItemType.PALLET)] = 2
     inv[0, int(ItemType.CONVEYOR_BELT)] = 4
-    env_state = env_state.replace(player_inventory=jnp.asarray(inv))
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    state = state.replace(player_inventory=jnp.asarray(inv))
     jit_step = _shared_jit_step(env_params)
 
     # Module A — the canonical layout.
@@ -472,7 +462,7 @@ def test_two_assembler_modules_compose_without_collision() -> None:
     state, verdict = _rollout(state, goal_b, jit_step, env_params, max_steps=400)
     assert verdict == "done", f"module B got {verdict}"
 
-    mt = np.asarray(state.env_state.machine_types)
+    mt = np.asarray(state.machine_types)
     # Both modules' centers + arms exist.
     assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.ASSEMBLER)
     assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
@@ -489,7 +479,7 @@ def test_two_assembler_modules_compose_without_collision() -> None:
             f"missing feeder belt at {tile}"
         )
     # Bootstrap inventory fully consumed.
-    inv = np.asarray(state.env_state.player_inventory[0])
+    inv = np.asarray(state.player_inventory[0])
     assert int(inv[int(ItemType.ASSEMBLER)]) == 0
     assert int(inv[int(ItemType.ARM)]) == 0
     assert int(inv[int(ItemType.PALLET)]) == 0
@@ -569,10 +559,10 @@ def test_assembler_module_produces_tier4_recipes(
             env_params,
         )
 
-    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    out_eid = int(state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
     assert out_eid >= 0
-    out_buf = int(state.env_state.ent_buf_count[out_eid])
-    out_type = int(state.env_state.ent_buf_type[out_eid])
+    out_buf = int(state.ent_buf_count[out_eid])
+    out_type = int(state.ent_buf_type[out_eid])
     assert out_type == expected_output, (
         f"expected {ItemType(expected_output).name} in output, got ItemType={out_type}"
     )
@@ -623,10 +613,10 @@ def test_assembler_module_produces_rocket_when_fed_subassemblies() -> None:
             env_params,
         )
 
-    out_eid = int(state.env_state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
+    out_eid = int(state.tile_entity[_OUTPUT[1], _OUTPUT[0]])
     assert out_eid >= 0
-    out_buf = int(state.env_state.ent_buf_count[out_eid])
-    out_type = int(state.env_state.ent_buf_type[out_eid])
+    out_buf = int(state.ent_buf_count[out_eid])
+    out_type = int(state.ent_buf_type[out_eid])
     assert out_type == int(ItemType.ROCKET), (
         f"expected ROCKET in output pallet, got ItemType={out_type}"
     )

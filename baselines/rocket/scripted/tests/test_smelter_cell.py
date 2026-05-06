@@ -22,7 +22,6 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
 )
 from factoriax.constants import (
-    MAX_ACHIEVEMENTS,
     Action,
     BlockType,
     Direction,
@@ -30,7 +29,6 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.observations import global_array
@@ -53,7 +51,7 @@ def _shared_jit_step(env_params: EnvParams):
     fn = _JIT_STEP_CACHE.get(key)
     if fn is None:
         env = ActionMaskWrapper(
-            AchievementWrapper(FactoriaXEnv(), rocket_conditions),
+            FactoriaXEnv(achievement_fn=rocket_conditions),
             ROCKET_BLOCKED_ACTIONS,
         )
         fn = jax.jit(env.step_env)
@@ -71,7 +69,7 @@ def _jit_obs(env_params: EnvParams):
 
 
 def _view(state, env_params: EnvParams):
-    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    obs = np.asarray(_jit_obs(env_params)(state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,
@@ -114,7 +112,7 @@ def _build_iron_level(
             trunk module.
 
     Returns:
-        ``(jit_step_fn, AchievementState, env_params)``.
+        ``(jit_step_fn, EnvState, env_params)``.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     builder.fill_rect(
@@ -172,22 +170,18 @@ def _build_iron_level(
         num_players=1,
         max_timesteps=400,
     )
-    env_state = build_state(level, env_params)
+    state = build_state(level, env_params)
 
     # Player bootstrap inventory: 1 MINER, 1 CONVEYOR_BELT (ore
     # feeder), 1 PALLET (plate-bus), 1 FURNACE, 1 ARM.
-    inv = np.asarray(env_state.player_inventory).copy()
+    inv = np.asarray(state.player_inventory).copy()
     inv[0, int(ItemType.MINER)] = 1
     inv[0, int(ItemType.CONVEYOR_BELT)] = 1
     inv[0, int(ItemType.PALLET)] = 1
     inv[0, int(ItemType.FURNACE)] = 1
     inv[0, int(ItemType.ARM)] = 1
-    env_state = env_state.replace(player_inventory=jnp.asarray(inv))
+    state = state.replace(player_inventory=jnp.asarray(inv))
 
-    state = AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
     return _shared_jit_step(env_params), state, env_params
 
 
@@ -201,7 +195,7 @@ def test_build_smelter_cell_places_all_five_entities() -> None:
 
     mx = _PATCH_X + _PATCH_SIZE // 2
     my_se = _PATCH_Y + _PATCH_SIZE - 1
-    mt = np.asarray(final_state.env_state.machine_types)
+    mt = np.asarray(final_state.machine_types)
     # Note: machine_types is indexed [y, x].
     assert mt[my_se, mx] == int(MachineType.MINER)
     assert mt[my_se + 1, mx] == int(MachineType.CONVEYOR_BELT)
@@ -216,7 +210,7 @@ def test_build_smelter_cell_consumes_bootstrap_inventory() -> None:
     goal = goals.BuildSmelterCell(_PATCH_X, _PATCH_Y, patch_size=_PATCH_SIZE)
     final_state, verdict = _rollout(state, goal, jit_step, env_params, max_steps=400)
     assert verdict == "done"
-    inv = np.asarray(final_state.env_state.player_inventory[0])
+    inv = np.asarray(final_state.player_inventory[0])
     assert int(inv[int(ItemType.MINER)]) == 0
     assert int(inv[int(ItemType.PALLET)]) == 0
     assert int(inv[int(ItemType.CONVEYOR_BELT)]) == 0
@@ -255,12 +249,10 @@ def test_smelter_cell_produces_iron_plate_when_fed_coal() -> None:
             env_params,
         )
 
-    pallet_eid = int(
-        state.env_state.tile_entity[plate_pallet_tile[1], plate_pallet_tile[0]]
-    )
+    pallet_eid = int(state.tile_entity[plate_pallet_tile[1], plate_pallet_tile[0]])
     assert pallet_eid >= 0
-    plate_buf = int(state.env_state.ent_buf_count[pallet_eid])
-    plate_type = int(state.env_state.ent_buf_type[pallet_eid])
+    plate_buf = int(state.ent_buf_count[pallet_eid])
+    plate_type = int(state.ent_buf_type[pallet_eid])
     assert plate_type == int(ItemType.IRON_PLATE), (
         f"expected IRON_PLATE in plate pallet, got ItemType={plate_type}"
     )

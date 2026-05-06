@@ -16,9 +16,8 @@ import pytest
 from baselines.rocket.scripted import goals, skills
 from baselines.rocket.scripted.world_model import decode_observation
 from factoriax.benchmarks.rocket import build_rocket_level, rocket_conditions
-from factoriax.constants import MAX_ACHIEVEMENTS, Action, ItemType
+from factoriax.constants import Action, ItemType
 from factoriax.envs import FactoriaXEnv
-from factoriax.envs.achievement_wrapper import AchievementState, AchievementWrapper
 from factoriax.levels import build_state
 from factoriax.observations import global_array
 from factoriax.state import EnvParams
@@ -39,16 +38,12 @@ def env_params() -> EnvParams:
 @pytest.fixture(scope="module")
 def initial_state(env_params: EnvParams):
     level = build_rocket_level()
-    env_state = build_state(level, env_params)
-    return AchievementState(
-        env_state=env_state,
-        achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-    )
+    return build_state(level, env_params)
 
 
 @pytest.fixture(scope="module")
 def jit_step():
-    env = AchievementWrapper(FactoriaXEnv(), rocket_conditions)
+    env = FactoriaXEnv(achievement_fn=rocket_conditions)
     return env, jax.jit(env.step_env)
 
 
@@ -72,7 +67,7 @@ def _jit_obs(env_params: EnvParams):
 
 def _view(state, env_params: EnvParams):
     """Decode a fresh WorldView from the current state."""
-    obs = np.asarray(_jit_obs(env_params)(state.env_state))
+    obs = np.asarray(_jit_obs(env_params)(state))
     return decode_observation(
         obs,
         map_height=env_params.map_height,

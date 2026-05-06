@@ -27,9 +27,9 @@ observation vector, not from direct state inspection.
 
 ### 1.1 Environment
 
-- Uses `AchievementWrapper(FactoriaXEnv(), rocket_conditions)` so we can
-  check which achievements have fired without having to recompute
-  conditions.
+- Uses `FactoriaXEnv(achievement_fn=rocket_conditions)` so the engine
+  latches `state.achievements_unlocked` each tick and we can check
+  which achievements have fired without recomputing conditions.
 - One player. `EnvParams` with `num_players=1`, map size ≥ ~16×16,
   `max_timesteps` ≥ ~3000 (scripted agent doesn't need to be efficient,
   it just needs to finish).
