@@ -129,6 +129,31 @@ class TestStateConsistency:
 
         assert jnp.all(final.block_resources >= 0)
 
+    def test_ent_health_within_bounds(self) -> None:
+        """Active entities have ``0 <= ent_health <= max_health[type]``;
+        inactive slots hold ``ent_health == 0``.
+
+        Random rollouts dispatch placement, pickup, and REPAIR actions
+        among others. Base mechanics never decrement health, so the
+        invariant we check here is structural: bounds and inactive-slot
+        zeroing.
+        """
+        env = FactoriaXEnv()
+        _, final = _run_random_episode(
+            random.PRNGKey(101), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
+        )
+
+        max_health_per_type = _SMALL_PARAMS.machine_config.max_health
+        cap = max_health_per_type[final.ent_type]
+        active = final.ent_y >= 0
+        # For active entities: 0 <= ent_health <= max_health[type].
+        active_health = jnp.where(active, final.ent_health, jnp.int16(0))
+        assert jnp.all(active_health >= 0)
+        assert jnp.all(jnp.where(active, final.ent_health <= cap, True))
+        # Inactive slots stay at zero.
+        inactive_health = jnp.where(active, jnp.int16(0), final.ent_health)
+        assert jnp.all(inactive_health == 0)
+
 
 # ---------------------------------------------------------------------------
 # Item conservation invariants
