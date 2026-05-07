@@ -16,6 +16,21 @@ For the full HUD, four additional quadrants are rendered below the map:
   Q3: Player inventory (2x5 grid with items and counts)
   Q4: Crafting menu (5 recipes with affordability indicators)
 
+Sprites for blocks, machines, and the player come from the committed
+sprite atlas at ``factoriax/assets/atlas.png``. Per-tile-size atlases
+are derived by slicing the relevant atlas row and downsampling each
+cell from 32×32 to ``tile_px`` via nearest-neighbour. v1 of this
+atlas is a faithful capture of the procedural pixel-art that this
+module used to build directly; replacing the PNG (with the same
+layout, see ``factoriax/assets/atlas.layout.md``) swaps in new art
+without touching this code.
+
+Item-color and digit-glyph atlases are still procedural — they're
+scalar lookups and bool masks rather than RGB sprites, so they don't
+fit the (cells, 32, 32, 3) shape and don't need to. The atlas's
+``items`` and ``digits`` rows are present for completeness but
+unused by this renderer.
+
 Usage::
 
     renderer = JaxRenderer(tile_px=8)
@@ -28,7 +43,9 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from pathlib import Path
 
+import imageio.v3 as iio
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -74,55 +91,92 @@ HUD_RED = jnp.array([200, 60, 60], dtype=jnp.uint8)
 # ---------------------------------------------------------------------------
 # Texture atlas construction
 #
-# All visual assets are pre-built as JAX arrays at init time. At render
-# time we index into them with state arrays (e.g. atlas[state.map]),
-# which compiles to a pure gather operation in XLA.
+# Sprites for blocks, machines, and the player come from the committed
+# sprite atlas at ``factoriax/assets/atlas.png``. Per-tile-size atlases
+# are derived by slicing the atlas row for the category and downsampling
+# each 32×32 cell to ``tile_px`` via nearest-neighbour. The atlas
+# itself is built by ``scripts/build_atlas.py``; the layout is pinned
+# in ``factoriax/assets/atlas.layout.md`` and verified by
+# ``tests/test_atlas_fresh.py``.
+#
+# Item-color and digit-glyph atlases stay procedural — see the module
+# docstring for why. The atlas's items/digits rows are unused here.
 # ---------------------------------------------------------------------------
 
+_ATLAS_PATH: Path = Path(__file__).resolve().parent / "assets" / "atlas.png"
+_ATLAS_CELL_PX: int = 32
 
-def _solid_tile(r: int, g: int, b: int, size: int) -> np.ndarray:
-    """Create a solid-colored square tile.
-
-    Args:
-        r: Red channel (0-255).
-        g: Green channel (0-255).
-        b: Blue channel (0-255).
-        size: Tile side length in pixels.
-
-    Returns:
-        uint8 array of shape (size, size, 3).
-    """
-    tile = np.empty((size, size, 3), dtype=np.uint8)
-    tile[:, :] = (r, g, b)
-    return tile
+# Row indices in the sprite atlas (must match factoriax/assets/atlas.layout.md).
+_ATLAS_ROW_BLOCKS: int = 0
+_ATLAS_ROW_MACHINES: int = 1
+_ATLAS_ROW_MISC: int = 3
+_ATLAS_MISC_PLAYER: int = 0
 
 
-def _circle_tile(
-    r: int, g: int, b: int, bg: tuple[int, int, int], size: int
-) -> np.ndarray:
-    """Create a tile with a filled circle on a background color.
-
-    Args:
-        r: Circle red channel.
-        g: Circle green channel.
-        b: Circle blue channel.
-        bg: Background (r, g, b) tuple.
-        size: Tile side length in pixels.
+@functools.cache
+def _load_atlas_image() -> np.ndarray:
+    """Read the sprite atlas PNG once and cache the resulting array.
 
     Returns:
-        uint8 array of shape (size, size, 3).
+        uint8 RGB array of shape (rows * 32, cols * 32, 3) where rows
+        and cols are defined in ``factoriax/assets/atlas.layout.md``.
     """
-    tile = np.full((size, size, 3), bg, dtype=np.uint8)
-    center = size / 2.0
-    radius_sq = (size / 3.0) ** 2
-    ys, xs = np.mgrid[:size, :size]
-    dist_sq = (xs - center + 0.5) ** 2 + (ys - center + 0.5) ** 2
-    tile[dist_sq <= radius_sq] = (r, g, b)
-    return tile
+    img: np.ndarray = np.asarray(iio.imread(_ATLAS_PATH))
+    if img.ndim == 3 and img.shape[-1] == 4:
+        img = img[..., :3]  # drop alpha if present
+    return img
+
+
+def _atlas_row_cells(row: int, n_cols: int) -> np.ndarray:
+    """Slice a row of the atlas and return its cells as a stack.
+
+    Args:
+        row: Row index into the atlas grid.
+        n_cols: Number of cells (from column 0) to extract.
+
+    Returns:
+        uint8 array of shape (n_cols, 32, 32, 3).
+    """
+    atlas = _load_atlas_image()
+    s = _ATLAS_CELL_PX
+    y0 = row * s
+    cells = np.empty((n_cols, s, s, 3), dtype=np.uint8)
+    for col in range(n_cols):
+        x0 = col * s
+        cells[col] = atlas[y0 : y0 + s, x0 : x0 + s, :]
+    return cells
+
+
+def _atlas_cell(row: int, col: int) -> np.ndarray:
+    """Slice a single cell out of the atlas.
+
+    Returns:
+        uint8 array of shape (32, 32, 3).
+    """
+    atlas = _load_atlas_image()
+    s = _ATLAS_CELL_PX
+    y0, x0 = row * s, col * s
+    return atlas[y0 : y0 + s, x0 : x0 + s, :].copy()
+
+
+def _downsample(cells: np.ndarray, target_px: int) -> np.ndarray:
+    """Nearest-neighbour resample square cells to ``target_px``.
+
+    Accepts either a single cell of shape (S, S, 3) or a stack of
+    cells of shape (N, S, S, 3). Returns the same rank with the
+    spatial dims rescaled.
+    """
+    src_px = cells.shape[-2]
+    if src_px == target_px:
+        return cells
+    idx = (np.arange(target_px) * src_px // target_px).astype(np.int64)
+    if cells.ndim == 3:
+        return cells[np.ix_(idx, idx)]
+    return cells[:, idx][:, :, idx]
 
 
 def build_block_atlas(tile_px: int) -> jnp.ndarray:
-    """Build a texture atlas for terrain block types.
+    """Build a texture atlas for terrain block types from the sprite atlas.
 
     Args:
         tile_px: Tile side length in pixels.
@@ -130,25 +184,13 @@ def build_block_atlas(tile_px: int) -> jnp.ndarray:
     Returns:
         JAX array of shape (num_block_types, tile_px, tile_px, 3).
     """
-    colors = {
-        BlockType.INVALID: (139, 90, 43),
-        BlockType.OUT_OF_BOUNDS: (30, 30, 30),
-        BlockType.DIRT: (139, 90, 43),
-        BlockType.WATER: (64, 164, 223),
-        BlockType.IRON: (192, 192, 192),
-        BlockType.COPPER: (184, 115, 51),
-        BlockType.COAL: (54, 54, 54),
-        BlockType.NEST: (90, 40, 60),
-    }
-    num_types = max(colors.keys()) + 1
-    atlas = np.zeros((num_types, tile_px, tile_px, 3), dtype=np.uint8)
-    for block_id, (r, g, b) in colors.items():
-        atlas[int(block_id)] = _solid_tile(r, g, b, tile_px)
-    return jnp.array(atlas)
+    n_cells = max(int(b) for b in BlockType) + 1
+    cells = _atlas_row_cells(_ATLAS_ROW_BLOCKS, n_cells)
+    return jnp.array(_downsample(cells, tile_px))
 
 
 def build_machine_atlas(tile_px: int) -> jnp.ndarray:
-    """Build a texture atlas for machine overlays.
+    """Build a texture atlas for machine overlays from the sprite atlas.
 
     Args:
         tile_px: Tile side length in pixels.
@@ -156,24 +198,13 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
     Returns:
         JAX array of shape (num_machine_types, tile_px, tile_px, 3).
     """
-    colors = {
-        MachineType.NONE: (0, 0, 0),
-        MachineType.MINER: (0, 200, 0),
-        MachineType.PALLET: (170, 170, 175),
-        MachineType.ASSEMBLER: (160, 80, 200),
-        MachineType.CONVEYOR_BELT: (220, 180, 50),
-        MachineType.ROCKET: (240, 240, 240),
-        MachineType.SCIENCE_LAB: (76, 29, 149),
-    }
-    num_types = max(colors.keys()) + 1
-    atlas = np.zeros((num_types, tile_px, tile_px, 3), dtype=np.uint8)
-    for machine_id, (r, g, b) in colors.items():
-        atlas[int(machine_id)] = _solid_tile(r, g, b, tile_px)
-    return jnp.array(atlas)
+    n_cells = max(int(m) for m in MachineType) + 1
+    cells = _atlas_row_cells(_ATLAS_ROW_MACHINES, n_cells)
+    return jnp.array(_downsample(cells, tile_px))
 
 
 def build_player_sprite(tile_px: int) -> jnp.ndarray:
-    """Build a player sprite (red circle).
+    """Build the player sprite from the sprite atlas.
 
     Args:
         tile_px: Tile side length in pixels.
@@ -181,7 +212,8 @@ def build_player_sprite(tile_px: int) -> jnp.ndarray:
     Returns:
         JAX array of shape (tile_px, tile_px, 3).
     """
-    return jnp.array(_circle_tile(255, 100, 100, (0, 0, 0), tile_px))
+    cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_PLAYER)
+    return jnp.array(_downsample(cell, tile_px))
 
 
 def build_item_color_atlas() -> jnp.ndarray:
