@@ -34,42 +34,33 @@ def inventory_over_time(
     player: int = 0,
     num_item_types: int = 5,
 ) -> np.ndarray:
-    """Compute total item counts per type at each timestep.
+    """Compute mean per-type item counts at each timestep.
 
     Parameters
     ----------
     traj : Trajectory
-        Must have ``inventory_items`` and ``inventory_counts``.
+        Must have ``player_inventory`` populated. The current
+        engine stores inventory as a dense ``(P, num_item_types)``
+        count vector per state, so the slot-aggregation step the
+        old slot-model required is gone.
     player : int
     num_item_types : int
 
     Returns
     -------
     counts : np.ndarray
-        Shape ``(T, num_item_types)`` — mean across episodes of total
-        inventory count per item type.
+        Shape ``(T, num_item_types)`` — mean across episodes of
+        inventory count per item type for the requested player.
     """
-    if traj.inventory_items is None or traj.inventory_counts is None:
-        raise ValueError(
-            "inventory_over_time requires inventory_items and inventory_counts"
-        )
+    if traj.player_inventory is None:
+        raise ValueError("inventory_over_time requires player_inventory")
 
-    # Get single-player view
     if traj.is_multi_player:
-        items = traj.inventory_items[:, :, player, :]  # (B, T, slots)
-        counts = traj.inventory_counts[:, :, player, :]  # (B, T, slots)
+        inv = traj.player_inventory[:, :, player, :num_item_types]  # (B, T, K)
     else:
-        items = traj.inventory_items  # (B, T, slots)
-        counts = traj.inventory_counts  # (B, T, slots)
+        inv = traj.player_inventory[..., :num_item_types]  # (B, T, K)
 
-    B, T, S = items.shape
-    result = np.zeros((B, T, num_item_types))
-
-    for item_type in range(num_item_types):
-        mask = items == item_type
-        result[:, :, item_type] = (counts * mask).sum(axis=-1)
-
-    return np.asarray(result.mean(axis=0))  # (T, num_item_types)
+    return np.asarray(inv.mean(axis=0))  # (T, num_item_types)
 
 
 def plot_inventory(

@@ -54,23 +54,11 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "positions",
     "player_directions",
     "player_inventory",
-    "inventory_items",
-    "inventory_counts",
-    "selected_slots",
-    "crafting_recipe",
-    "craft_progress",
     # Map fields — shape (B, T, H, W, ...).
     "block_map",
     "block_resources",
     "machine_types",
     "tile_entity",
-    "machine_power",
-    "machine_inventory",
-    "machine_inventory_items",
-    "machine_inventory_counts",
-    "machine_selected_recipe",
-    "machine_selected_slot",
-    "machine_direction",
     # Entity fields — shape (B, T, MAX_M, ...).
     "ent_y",
     "ent_x",
@@ -89,8 +77,6 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "achievements",
     "items_mined",
     "science_consumed_step",
-    "biter_positions",
-    "scent_field",
     "rewards",
     "timesteps",
 )
@@ -128,34 +114,14 @@ class Trajectory:
         Player ``(x, y)`` positions.  Shape ``(B, T, P, 2)``.
     player_directions : np.ndarray, optional
         Player facing directions.  Shape ``(B, T, P)``.
-    inventory_items : np.ndarray, optional
-        Item type IDs per inventory slot.  Shape ``(B, T, P, num_slots)``.
-    inventory_counts : np.ndarray, optional
-        Stack counts per inventory slot.  Shape ``(B, T, P, num_slots)``.
-    selected_slots : np.ndarray, optional
-        Selected inventory slot per player.  Shape ``(B, T, P)``.
-    crafting_recipe : np.ndarray, optional
-        Recipe in progress per player.  Shape ``(B, T, P)``.
-    craft_progress : np.ndarray, optional
-        Crafting ticks remaining per player.  Shape ``(B, T, P)``.
+    player_inventory : np.ndarray, optional
+        Per-type item counts per player.  Shape ``(B, T, P, num_item_types)``.
     block_map : np.ndarray, optional
         Block type grid snapshots.  Shape ``(B, T, H, W)``.
     block_resources : np.ndarray, optional
         Per-tile resource counts.  Shape ``(B, T, H, W)``.
     machine_types : np.ndarray, optional
         Machine type grid snapshots.  Shape ``(B, T, H, W)``.
-    machine_power : np.ndarray, optional
-        Machine power levels.  Shape ``(B, T, H, W)``.
-    machine_inventory_items : np.ndarray, optional
-        Machine slot items.  Shape ``(B, T, H, W, S)``.
-    machine_inventory_counts : np.ndarray, optional
-        Machine slot counts.  Shape ``(B, T, H, W, S)``.
-    machine_selected_recipe : np.ndarray, optional
-        Assembler recipe per tile.  Shape ``(B, T, H, W)``.
-    machine_selected_slot : np.ndarray, optional
-        UI-focused slot per tile.  Shape ``(B, T, H, W)``.
-    machine_direction : np.ndarray, optional
-        Machine facing direction per tile.  Shape ``(B, T, H, W)``.
     selected_player : np.ndarray, optional
         Active player index per step.  Shape ``(B, T)``.
     achievements : np.ndarray, optional
@@ -183,24 +149,12 @@ class Trajectory:
     positions: np.ndarray | None = None
     player_directions: np.ndarray | None = None
     player_inventory: np.ndarray | None = None
-    inventory_items: np.ndarray | None = None  # deprecated (slot model)
-    inventory_counts: np.ndarray | None = None  # deprecated (slot model)
-    selected_slots: np.ndarray | None = None  # deprecated (slot model)
-    crafting_recipe: np.ndarray | None = None  # deprecated
-    craft_progress: np.ndarray | None = None  # deprecated
 
     # Map fields — (B, T, H, W, ...).
     block_map: np.ndarray | None = None
     block_resources: np.ndarray | None = None
     machine_types: np.ndarray | None = None
     tile_entity: np.ndarray | None = None
-    machine_power: np.ndarray | None = None  # deprecated
-    machine_inventory: np.ndarray | None = None  # deprecated
-    machine_inventory_items: np.ndarray | None = None  # deprecated
-    machine_inventory_counts: np.ndarray | None = None  # deprecated
-    machine_selected_recipe: np.ndarray | None = None  # deprecated
-    machine_selected_slot: np.ndarray | None = None  # deprecated
-    machine_direction: np.ndarray | None = None  # deprecated
 
     # Entity fields — (B, T, MAX_M, ...).
     ent_y: np.ndarray | None = None
@@ -221,8 +175,6 @@ class Trajectory:
     achievements: np.ndarray | None = None
     items_mined: np.ndarray | None = None
     science_consumed_step: np.ndarray | None = None
-    biter_positions: np.ndarray | None = None  # deprecated
-    scent_field: np.ndarray | None = None  # deprecated
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None
 

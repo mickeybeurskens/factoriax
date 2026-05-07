@@ -108,10 +108,7 @@ def make_multi_player_traj(
     positions = rng.integers(0, 32, size=(num_eps, num_steps, num_p, 2)).astype(
         np.int32
     )
-    inventory_items = rng.integers(0, 3, size=(num_eps, num_steps, num_p, 3)).astype(
-        np.int32
-    )
-    inventory_counts = rng.integers(0, 20, size=(num_eps, num_steps, num_p, 3)).astype(
+    player_inventory = rng.integers(0, 20, size=(num_eps, num_steps, num_p, 3)).astype(
         np.int32
     )
     achievements = np.zeros((num_eps, num_steps, 2), dtype=bool)
@@ -126,8 +123,7 @@ def make_multi_player_traj(
     return Trajectory(
         actions=actions,
         positions=positions,
-        inventory_items=inventory_items,
-        inventory_counts=inventory_counts,
+        player_inventory=player_inventory,
         achievements=achievements,
         rewards=rewards,
         timesteps=timesteps,
@@ -454,31 +450,27 @@ class TestState:
     """Tests for state evolution analysis (inventory, positions, resources)."""
 
     def _make_single_player_inventory_traj(
-        self, num_eps: int, num_steps: int, num_slots: int = 3
+        self, num_eps: int, num_steps: int, num_item_types: int = 3
     ) -> Trajectory:
-        """Build a single-player trajectory with inventory fields shaped
-        (num_eps, num_steps, num_slots).
+        """Build a single-player trajectory with player_inventory shaped
+        ``(num_eps, num_steps, num_item_types)``.
 
         Args:
             num_eps: Number of episodes.
             num_steps: Episode length.
-            num_slots: Inventory slot count.
+            num_item_types: Distinct item types to populate.
 
         Returns:
-            Trajectory with randomly populated inventory fields.
+            Trajectory with randomly populated player_inventory.
         """
         rng = np.random.default_rng(42)
         actions = np.zeros((num_eps, num_steps), dtype=np.int32)
-        inventory_items = rng.integers(
-            0, 3, size=(num_eps, num_steps, num_slots)
-        ).astype(np.int32)
-        inventory_counts = rng.integers(
-            0, 20, size=(num_eps, num_steps, num_slots)
+        player_inventory = rng.integers(
+            0, 20, size=(num_eps, num_steps, num_item_types)
         ).astype(np.int32)
         return Trajectory(
             actions=actions,
-            inventory_items=inventory_items,
-            inventory_counts=inventory_counts,
+            player_inventory=player_inventory,
         )
 
     # ---- inventory_over_time ----
@@ -498,17 +490,17 @@ class TestState:
 
     def test_inventory_over_time_values_correct(self) -> None:
         """Counts for known item distribution match expected totals."""
-        num_eps, num_steps, num_slots = 4, 20, 3
-        # All slots contain item type 1 with count 2
-        inventory_items = np.ones((num_eps, num_steps, num_slots), dtype=np.int32)
-        inventory_counts = np.full((num_eps, num_steps, num_slots), 2, dtype=np.int32)
+        num_eps, num_steps, num_item_types = 4, 20, 3
+        # Each step the player has 6 of item type 1, 0 of the others.
+        player_inventory = np.zeros(
+            (num_eps, num_steps, num_item_types), dtype=np.int32
+        )
+        player_inventory[..., 1] = 6
         traj = Trajectory(
             actions=np.zeros((num_eps, num_steps), dtype=np.int32),
-            inventory_items=inventory_items,
-            inventory_counts=inventory_counts,
+            player_inventory=player_inventory,
         )
-        result = inventory_over_time(traj, player=0, num_item_types=3)
-        # num_slots=3 × count=2 = 6 for item type 1; 0 for others
+        result = inventory_over_time(traj, player=0, num_item_types=num_item_types)
         np.testing.assert_array_almost_equal(result[:, 1], 6.0)
         np.testing.assert_array_almost_equal(result[:, 0], 0.0)
         np.testing.assert_array_almost_equal(result[:, 2], 0.0)

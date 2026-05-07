@@ -51,13 +51,12 @@ class RolloutRecorder:
         Stop recording after this many complete episodes.  If *None*,
         record indefinitely until :meth:`finish` is called.
     record_states : bool
-        If *True*, also extract ``player_positions``, ``inventory_items``,
-        and ``inventory_counts`` from ``env_states`` at each step.
+        If *True*, also extract ``player_positions`` and
+        ``player_inventory`` from ``env_states`` at each step.
         This increases memory usage but enables state-evolution analyses.
     state_fields : list[str], optional
         Which ``EnvState`` fields to record when ``record_states=True``.
-        Defaults to ``["player_positions", "inventory_items",
-        "inventory_counts"]``.
+        Defaults to ``["player_positions", "player_inventory"]``.
 
     Examples
     --------
@@ -85,8 +84,7 @@ class RolloutRecorder:
     state_fields: list[str] = field(
         default_factory=lambda: [
             "player_positions",
-            "inventory_items",
-            "inventory_counts",
+            "player_inventory",
         ]
     )
 
