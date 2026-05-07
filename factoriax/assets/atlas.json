@@ -1,0 +1,102 @@
+{
+  "categories": {
+    "blocks": {
+      "missing": "magenta",
+      "names": [
+        "INVALID",
+        "OUT_OF_BOUNDS",
+        "DIRT",
+        "WATER",
+        "IRON",
+        "COPPER",
+        "COAL",
+        "TIN",
+        "SILICON",
+        "NEST",
+        "LIMESTONE"
+      ],
+      "row": 0
+    },
+    "digits": {
+      "names": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "row": 4
+    },
+    "items": {
+      "missing": "magenta",
+      "names": [
+        "EMPTY",
+        "COAL",
+        "IRON_ORE",
+        "COPPER_ORE",
+        "TIN_ORE",
+        "SILICON",
+        "IRON_PLATE",
+        "COPPER_PLATE",
+        "TIN_PLATE",
+        "WAFER",
+        "FRAME",
+        "CIRCUIT",
+        "WIRE",
+        "MOTOR",
+        "SENSOR",
+        "CONVEYOR_BELT",
+        "MINER",
+        "ASSEMBLER",
+        "PALLET",
+        "ARM",
+        "BASIC_SCIENCE_PACK",
+        "ADVANCED_SCIENCE_PACK",
+        "ROCKET",
+        "FURNACE",
+        "REFRACTORY",
+        "HULL",
+        "ENGINE_UNIT",
+        "AVIONICS",
+        "ROCKET_CORE",
+        "SCIENCE_LAB",
+        "LIMESTONE",
+        "SPLITTER",
+        "CROSSING"
+      ],
+      "row": 2
+    },
+    "machines": {
+      "missing": "magenta",
+      "names": [
+        "NONE",
+        "MINER",
+        "PALLET",
+        "ASSEMBLER",
+        "CONVEYOR_BELT",
+        "ARM",
+        "ROCKET",
+        "FURNACE",
+        "SCIENCE_LAB",
+        "SPLITTER",
+        "CROSSING"
+      ],
+      "row": 1
+    },
+    "misc": {
+      "names": [
+        "player",
+        "biter"
+      ],
+      "row": 3
+    }
+  },
+  "cell_px": 32,
+  "cols": 33,
+  "rows": 5
+}
