@@ -12,14 +12,12 @@ from gymnax.environments import environment, spaces  # type: ignore[import-untyp
 
 from factoriax.constants import NUM_ACTIONS
 from factoriax.game_logic import factoriax_step, is_game_over
-from factoriax.jax_renderer import JaxRenderer
 from factoriax.levels import Level, build_state, generate_state
 from factoriax.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
     global_array,
 )
-from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
 AchievementFn = Callable[[EnvState], jax.Array]
@@ -31,11 +29,10 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     Advances world state (terrain, machines, player inventories) and
     evaluates an optional achievement-condition function each step.
     Reward computation and other policy-shaping concerns still belong
-    in gymnax wrappers that compose over this environment.
-
-    The ``tile_px`` parameter controls the pixel size for the JAX
-    renderer. A :class:`~factoriax.jax_renderer.JaxRenderer` is
-    created at init and used by :meth:`render` and :meth:`render_hud`.
+    in gymnax wrappers that compose over this environment. Pixel
+    rendering is provided by :class:`factoriax.jax_renderer.JaxRenderer`
+    (headless / batched) and :mod:`factoriax.renderer` (pygame for
+    play and editor); the env itself does not expose a render method.
 
     The ``achievement_fn`` parameter is captured at construction time
     and folded into ``state.achievements_unlocked`` inside
@@ -52,7 +49,6 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     the only reset surface.
 
     Args:
-        tile_px: Tile side length in pixels for the JAX renderer.
         achievement_fn: Pure function ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``
             evaluated each step. Returned True bits are OR-folded into
             ``state.achievements_unlocked`` and latch for the rest of
@@ -63,20 +59,17 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     def __init__(
         self,
-        tile_px: int = 8,
         achievement_fn: AchievementFn | None = None,
         level: Level | None = None,
     ) -> None:
         """Initialize the environment.
 
         Args:
-            tile_px: Tile side length in pixels for the JAX renderer.
             achievement_fn: Optional achievement condition function.
             level: Fixed level for :meth:`reset_env`, or ``None`` for
                 procedural generation.
         """
         super().__init__()
-        self.jax_renderer = JaxRenderer(tile_px=tile_px)
         self._achievement_fn = achievement_fn
         self._level = level
 
@@ -237,50 +230,6 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             shape=(obs_size,),
             dtype=jnp.float32,
         )
-
-    def render(self, state: EnvState) -> jax.Array:
-        """Render the map using the JAX renderer.
-
-        Returns a JIT-compiled, GPU-accelerated pixel render of the
-        map with terrain, machines, and players. For the full HUD
-        (including inventory, inspector, crafting), use :meth:`render_hud`.
-
-        Args:
-            state: Current environment state (single, non-batched).
-
-        Returns:
-            uint8 JAX array of shape (H * tile_px, W * tile_px, 3).
-        """
-        return self.jax_renderer.jit_render_map(state)
-
-    def render_hud(self, state: EnvState) -> jax.Array:
-        """Render the map + full HUD using the JAX renderer.
-
-        Returns a JIT-compiled, GPU-accelerated pixel render with the
-        map on top and a 4-quadrant info panel below (tile inspector,
-        machine inventory, player inventory, crafting menu).
-
-        Args:
-            state: Current environment state (single, non-batched).
-
-        Returns:
-            uint8 JAX array of shape (2 * H * tile_px, W * tile_px, 3).
-        """
-        return self.jax_renderer.jit_render_hud(state)
-
-    def render_cpu(self, state: EnvState) -> jax.Array:
-        """Render using the legacy NumPy CPU renderer.
-
-        For backward compatibility with the editor and play modes.
-        Cannot be JIT-compiled or vmapped.
-
-        Args:
-            state: Current environment state.
-
-        Returns:
-            RGB pixel array (NumPy, wrapped in JAX).
-        """
-        return jnp.array(render_pixels(state))
 
 
 def make_factoriax_env() -> tuple[FactoriaXEnv, EnvParams]:
