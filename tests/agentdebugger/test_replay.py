@@ -9,6 +9,7 @@ import numpy as np
 import pygame
 import pytest
 
+import factoriax
 from factoriax.agentdebugger.charts import (
     render_action_legend,
     render_action_sankey,
@@ -22,7 +23,6 @@ from factoriax.agentdebugger.layout import (
 )
 from factoriax.agentdebugger.main import Debugger
 from factoriax.analysis.trajectory import Trajectory, states_to_trajectory
-from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
 
 # Replay tests run a real episode through the debugger before
@@ -52,7 +52,7 @@ def stateful_trajectory(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Path:
     """Create a trajectory with full state data (block_map etc.)."""
-    env, _ = make_factoriax_env()
+    env, _ = factoriax.make()
     params = EnvParams(map_width=8, map_height=8, num_players=1)
     rng = jax.random.PRNGKey(42)
     _, state = env.reset_env(rng, params)

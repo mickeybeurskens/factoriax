@@ -9,9 +9,10 @@ import jax.numpy as jnp
 import pygame
 import pytest
 
+import factoriax
 from factoriax.agentdebugger.main import Debugger
 from factoriax.constants import Action
-from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.observations import global_array
 from factoriax.state import EnvParams
 
@@ -31,7 +32,7 @@ def env_and_state() -> tuple[FactoriaXEnv, EnvParams, object]:
     Returns:
         Tuple of (env, params, initial_state).
     """
-    env, _ = make_factoriax_env()
+    env, _ = factoriax.make()
     params = EnvParams(map_width=8, map_height=8, num_players=1)
     _, state = env.reset_env(jax.random.PRNGKey(0), params)
     return env, params, state

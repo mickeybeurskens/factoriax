@@ -10,8 +10,8 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+import factoriax
 from factoriax.constants import NUM_ACTIONS
-from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
 
 
@@ -24,7 +24,7 @@ def bench_single_env(num_steps: int = 2000) -> float:
     Returns:
         Steps per second.
     """
-    env, _ = make_factoriax_env()
+    env, _ = factoriax.make()
     params = EnvParams(map_width=15, map_height=15, num_players=1)
     rng = random.PRNGKey(0)
 
@@ -68,7 +68,7 @@ def bench_batched_env(num_envs: int = 64, num_steps: int = 500) -> float:
     Returns:
         Total steps per second (num_envs * num_steps / elapsed).
     """
-    env, _ = make_factoriax_env()
+    env, _ = factoriax.make()
     params = EnvParams(map_width=15, map_height=15, num_players=1)
     rng = random.PRNGKey(0)
 

@@ -229,14 +229,3 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             shape=(obs_size,),
             dtype=jnp.float32,
         )
-
-
-def make_factoriax_env() -> tuple[FactoriaXEnv, EnvParams]:
-    """Create a FactoriaX environment.
-
-    Returns:
-        Tuple of (environment, default_params).
-    """
-    env = FactoriaXEnv()
-    params = env.default_params
-    return env, params

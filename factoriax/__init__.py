@@ -21,7 +21,7 @@ from factoriax.constants import (
 )
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.auto_reset_wrapper import AutoResetWrapper
-from factoriax.envs.factoriax_env import FactoriaXEnv, make_factoriax_env
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
 from factoriax.levels import (
     LEVELS,
@@ -135,7 +135,6 @@ __all__ = [
     "load_level",
     "local_array",
     "make",
-    "make_factoriax_env",
     "mining_reward",
     "rgb",
     "save_level",

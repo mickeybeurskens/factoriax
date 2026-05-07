@@ -239,9 +239,10 @@ def core_game_conditions(state: EnvState) -> jax.Array:
     first ``NUM_ACHIEVEMENTS`` slots correspond to the core tutorial
     milestones. Remaining slots are False.
 
-    This is the default condition function for
-    :func:`~factoriax.envs.factoriax_env.make_factoriax_env`.
-    Benchmarks can provide their own function with the same signature.
+    This is the default condition function used when constructing a
+    :class:`~factoriax.envs.factoriax_env.FactoriaXEnv` via
+    :func:`factoriax.make`. Benchmarks can provide their own
+    function with the same signature.
 
     Args:
         state: Current environment state.

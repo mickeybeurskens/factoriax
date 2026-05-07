@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 from jax import random
 
+import factoriax
 from factoriax import (
     Action,
     BlockType,
     Direction,
     EnvParams,
     EnvState,
-    make_factoriax_env,
 )
 from factoriax.constants import (
     NUM_ACTIONS,
@@ -375,15 +375,15 @@ class TestRenderer:
 class TestEnvironment:
     """Tests for the gymnax environment interface."""
 
-    def test_make_factoriax_env(self) -> None:
+    def test_make(self) -> None:
         """Environment factory should return env and params."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         assert env is not None
         assert params is not None
 
     def test_reset_returns_obs_and_state(self) -> None:
         """Reset should return observation and state."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         obs, state = env.reset_env(rng, params)
 
@@ -393,7 +393,7 @@ class TestEnvironment:
 
     def test_step_returns_correct_tuple(self) -> None:
         """Step should return (obs, state, reward, done, info)."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         rng, reset_key, step_key = random.split(rng, 3)
         obs, state = env.reset_env(reset_key, params)
@@ -410,7 +410,7 @@ class TestEnvironment:
 
     def test_step_increments_timestep(self) -> None:
         """Each step should increment the timestep."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         rng, reset_key, step_key = random.split(rng, 3)
         _, state = env.reset_env(reset_key, params)
@@ -425,13 +425,13 @@ class TestEnvironment:
 
     def test_action_space(self) -> None:
         """Action space should match the number of defined actions."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         action_space = env.action_space(params)
         assert action_space.n == NUM_ACTIONS
 
     def test_observation_space(self) -> None:
         """Observation space should match expected dimensions."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         obs_space = env.observation_space(params)
         expected_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
@@ -441,7 +441,7 @@ class TestEnvironment:
 
     def test_jit_compilation(self) -> None:
         """Environment should be JIT-compilable."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
 
         @jax.jit
         def run_episode(rng: jax.Array) -> jax.Array:

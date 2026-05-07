@@ -14,8 +14,8 @@ import time
 
 import jax
 
+import factoriax
 from factoriax.constants import Action
-from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
 
 
@@ -33,7 +33,7 @@ def _bench(
         batch_sizes: Batch sizes to test.
         duration: Seconds to measure per configuration.
     """
-    env, _ = make_factoriax_env()
+    env, _ = factoriax.make()
     print(f"\n{'=' * 60}")
     print(f"  {label}")
     print(f"{'=' * 60}")

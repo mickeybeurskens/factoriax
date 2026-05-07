@@ -9,9 +9,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import factoriax
 from factoriax.agentdebugger.main import Debugger
 from factoriax.constants import Action
-from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.observations import global_array
 from factoriax.state import EnvParams
 
@@ -195,7 +195,7 @@ class TestMultiPlayer:
     @pytest.fixture
     def mp_debugger(self) -> Debugger:
         """Two-player debugger where human controls player 0."""
-        env, _ = make_factoriax_env()
+        env, _ = factoriax.make()
         params = EnvParams(
             map_width=8,
             map_height=8,

@@ -3,7 +3,8 @@
 import jax.numpy as jnp
 from jax import random
 
-from factoriax import ItemType, make_factoriax_env
+import factoriax
+from factoriax import ItemType
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     NUM_ITEM_TYPES,
@@ -73,7 +74,7 @@ class TestInventoryObservation:
 
     def test_observation_includes_inventory(self) -> None:
         """Observation should include inventory data."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         obs, state = env.reset_env(rng, params)
 
@@ -85,7 +86,7 @@ class TestInventoryObservation:
 
     def test_observation_space_matches_observation(self) -> None:
         """Observation shape should match observation_space."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         obs, _ = env.reset_env(rng, params)
 
@@ -94,7 +95,7 @@ class TestInventoryObservation:
 
     def test_inventory_observation_normalized(self) -> None:
         """Inventory values should be in [0, 1]."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         obs, state = env.reset_env(rng, params)
 
@@ -107,7 +108,7 @@ class TestInventoryObservation:
 
     def test_inventory_observation_encodes_correctly(self) -> None:
         """Inventory observation should correctly encode item counts."""
-        env, params = make_factoriax_env()
+        env, params = factoriax.make()
         rng = random.PRNGKey(0)
         _, state = env.reset_env(rng, params)
 

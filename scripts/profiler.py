@@ -27,8 +27,8 @@ from pathlib import Path
 import jax
 import orjson
 
+import factoriax
 from factoriax.constants import Action
-from factoriax.envs.factoriax_env import make_factoriax_env
 from factoriax.state import EnvParams
 
 logging.basicConfig(
@@ -101,13 +101,18 @@ def _find_max_batch(
             last_good = bs
             logger.info(
                 "  batch=%d OK (map %dx%d)",
-                bs, params.map_width, params.map_height,
+                bs,
+                params.map_width,
+                params.map_height,
             )
             bs *= 2
         except (jax.errors.JaxRuntimeError, RuntimeError):
             logger.info(
                 "  batch=%d OOM (map %dx%d), using %d",
-                bs, params.map_width, params.map_height, last_good,
+                bs,
+                params.map_width,
+                params.map_height,
+                last_good,
             )
             break
     return last_good
@@ -160,7 +165,10 @@ def _profile_config(
 
     logger.info(
         "  %dx%d b=%d: warmup=%.1fs, mem=%dMB/%dMB",
-        ms, ms, bs, warmup_s,
+        ms,
+        ms,
+        bs,
+        warmup_s,
         mem_in_use // (1024 * 1024),
         mem_limit // (1024 * 1024),
     )
@@ -170,7 +178,8 @@ def _profile_config(
         Path(trace_dir).mkdir(parents=True, exist_ok=True)
         logger.info("  Capturing Perfetto trace -> %s", trace_dir)
         with jax.profiler.trace(
-            trace_dir, create_perfetto_trace=True,
+            trace_dir,
+            create_perfetto_trace=True,
         ):
             for _ in range(5):
                 _ = step_fn(step_keys, states, action, params)
@@ -188,7 +197,12 @@ def _profile_config(
 
     logger.info(
         "  %dx%d b=%d: %s steps/s (%d steps in %.1fs)",
-        ms, ms, bs, f"{sps:,.0f}", total, elapsed,
+        ms,
+        ms,
+        bs,
+        f"{sps:,.0f}",
+        total,
+        elapsed,
     )
 
     return {
@@ -245,7 +259,7 @@ def main() -> None:
     logger.info("Map sizes: %s", args.map_sizes)
     logger.info("Duration: %.0fs per config", args.duration)
 
-    env, _ = make_factoriax_env()
+    env, _ = factoriax.make()
     configs: list[dict] = []
 
     for ms in args.map_sizes:
@@ -262,14 +276,19 @@ def main() -> None:
                 if not args.no_trace:
                     trace_dir = f"profiles/{commit}/{ms}x{ms}_b{bs}"
                 result = _profile_config(
-                    env, params, bs, args.duration, trace_dir,
+                    env,
+                    params,
+                    bs,
+                    args.duration,
+                    trace_dir,
                 )
                 configs.append(result)
                 break
             except (jax.errors.JaxRuntimeError, RuntimeError):
                 logger.info(
                     "  OOM during profiling at b=%d, retrying b=%d",
-                    bs, bs // 2,
+                    bs,
+                    bs // 2,
                 )
                 bs //= 2
         else:
