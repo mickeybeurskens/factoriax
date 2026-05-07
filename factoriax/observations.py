@@ -286,6 +286,15 @@ def global_array(
     Returns:
         Float32 array of shape ``(NUM_SPATIAL_CHANNELS * H * W
         + NUM_PLAYER_SCALARS,)``.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make()
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> obs = factoriax.global_array(state, params, state.selected_player)
+        >>> obs.ndim
+        1
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
     flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
@@ -341,6 +350,15 @@ def local_array(
     Returns:
         Float32 array of shape ``(NUM_SPATIAL_CHANNELS * (2r+1)^2
         + NUM_PLAYER_SCALARS,)``.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make()
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> obs = factoriax.local_array(state, params, state.selected_player, radius=3)
+        >>> obs.ndim
+        1
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))
@@ -415,6 +433,15 @@ def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
 
     Returns:
         uint8 NumPy array of shape ``(H*px, W*px, 3)``.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make()
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> img = factoriax.rgb(state, block_pixel_size=8)
+        >>> img.shape[2]
+        3
     """
     renderer = _RENDERER_CACHE.get(block_pixel_size)
     if renderer is None:

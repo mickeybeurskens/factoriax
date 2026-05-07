@@ -34,6 +34,15 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         blocked_actions: Iterable of ``Action`` integers to block. The
             mask is captured at construction time and baked into the
             JIT graph of :meth:`step_env`.
+
+    Example:
+        >>> import factoriax
+        >>> from factoriax import Action
+        >>> env, params = factoriax.make(
+        ...     blocked_actions=(int(Action.MINE),),
+        ... )
+        >>> # ``factoriax.make`` returns ``env`` already wrapped in
+        >>> # :class:`ActionMaskWrapper`; MINE actions become NOOPs.
     """
 
     def __init__(

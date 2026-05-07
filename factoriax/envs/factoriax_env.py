@@ -54,6 +54,14 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             the episode. ``None`` (default) skips evaluation.
         level: Fixed :class:`Level` used by :meth:`reset_env`. ``None``
             (default) means procedural generation from the PRNG key.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make()  # bare FactoriaXEnv
+        >>> obs, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> obs.shape == env.observation_space(params).shape
+        True
     """
 
     def __init__(

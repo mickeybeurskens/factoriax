@@ -21,6 +21,15 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     Terrain (``map``, ``block_resources``) and spatial lookup
     (``machine_types``, ``tile_entity``) remain on the grid.
 
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make()
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> ni = factoriax.NUM_ITEM_TYPES
+        >>> state.player_inventory.shape == (params.num_players, ni)
+        True
+
     Attributes:
         map: Block types, shape ``(H, W)``, int8.
         block_resources: Ore remaining per tile, shape ``(H, W)``, int16.
@@ -100,6 +109,13 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Environment parameters.
+
+    Example:
+        >>> import factoriax
+        >>> _, params = factoriax.make()
+        >>> larger = params.replace(map_width=64, map_height=64)
+        >>> larger.map_width, larger.map_height
+        (64, 64)
 
     Attributes:
         max_timesteps: Maximum steps per episode.

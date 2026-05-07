@@ -23,6 +23,7 @@ from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.auto_reset_wrapper import AutoResetWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
+from factoriax.envs.science_tally_wrapper import ScienceTallyWrapper
 from factoriax.levels import (
     LEVELS,
     Level,
@@ -128,6 +129,7 @@ __all__ = [
     "LocalObservationWrapper",
     "MAX_STACK_SIZE",
     "NUM_ITEM_TYPES",
+    "ScienceTallyWrapper",
     "build_state",
     "generate_state",
     "get_level",

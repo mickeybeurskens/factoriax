@@ -50,6 +50,14 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
     Args:
         inner: Any gymnax-compatible env whose state type is :class:`EnvState`
             and which exposes ``science_consumed_step`` on every step.
+
+    Example:
+        >>> import factoriax
+        >>> from factoriax import ScienceTallyWrapper
+        >>> inner, params = factoriax.make()
+        >>> env = ScienceTallyWrapper(inner)
+        >>> # ``env.reset_env(...)`` returns a ``ScienceTallyState`` with
+        >>> # ``total_science_consumed`` initialized to zeros.
     """
 
     def __init__(self, inner: FactoriaXEnv) -> None:

@@ -102,6 +102,18 @@ def mining_reward(
 
     Returns:
         Scalar float32 reward.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make()
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> _, next_state, _, _, _ = env.step_env(
+        ...     jax.random.PRNGKey(1), state, 0, params
+        ... )
+        >>> reward = factoriax.mining_reward(state, next_state, params)
+        >>> float(reward) >= 0.0
+        True
     """
     player_pos = new_state.player_positions[new_state.selected_player]
     px, py = player_pos[0], player_pos[1]

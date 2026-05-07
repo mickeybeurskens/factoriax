@@ -88,6 +88,12 @@ class Level:
         player_positions: Explicit spawn positions as a list of
             ``(x, y)`` tuples, one per player.  ``None`` (default)
             uses the automatic centre-of-map placement.
+
+    Example:
+        >>> import factoriax
+        >>> env, params = factoriax.make("15x15_resources")
+        >>> # ``env`` is bound to the registered Level for the lifetime
+        >>> # of the env; ``factoriax.LEVELS`` lists every built-in.
     """
 
     name: str
@@ -521,6 +527,15 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
 
     Raises:
         ValueError: If the level dimensions do not match ``params``.
+
+    Example:
+        >>> import factoriax
+        >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
+        >>> _, params = factoriax.make()
+        >>> params = params.replace(map_width=8, map_height=8, num_players=1)
+        >>> state = factoriax.build_state(level, params)
+        >>> state.map.shape
+        (8, 8)
     """
     if level.map_width != params.map_width or level.map_height != params.map_height:
         raise ValueError(
@@ -695,6 +710,14 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     Returns:
         Initial :class:`~factoriax.state.EnvState` with a randomly
         generated map and players near the centre.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> _, params = factoriax.make()
+        >>> state = factoriax.generate_state(jax.random.PRNGKey(0), params)
+        >>> state.map.shape == (params.map_height, params.map_width)
+        True
     """
     rng_map, _ = random.split(rng)
     world_map = _generate_terrain(rng_map, params)
@@ -961,6 +984,13 @@ def save_level(level: Level, path: Path) -> None:
         path: Destination file path.  Parent directories are created if
             they do not exist.
         level: Level to serialize.
+
+    Example:
+        >>> from pathlib import Path
+        >>> import tempfile, factoriax
+        >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     factoriax.save_level(level, Path(d) / "tiny.json")
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1015,6 +1045,16 @@ def load_level(path: Path) -> Level:
 
     Raises:
         FileNotFoundError: If *path* does not exist.
+
+    Example:
+        >>> from pathlib import Path
+        >>> import tempfile, factoriax
+        >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     p = Path(d) / "tiny.json"
+        ...     factoriax.save_level(level, p)
+        ...     factoriax.load_level(p).name
+        'tiny'
     """
     payload = orjson.loads(Path(path).read_bytes())
     raw_dirs = payload.get("machine_directions")
@@ -1095,6 +1135,11 @@ def get_level(name: str) -> Level:
     Raises:
         KeyError: If *name* is not found.  The error message lists
             available names.
+
+    Example:
+        >>> import factoriax
+        >>> factoriax.get_level("15x15_resources").name
+        '15x15_resources'
     """
     if name not in LEVELS:
         available = ", ".join(sorted(LEVELS))

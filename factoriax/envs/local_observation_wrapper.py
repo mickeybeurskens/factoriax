@@ -33,6 +33,12 @@ class LocalObservationWrapper(environment.Environment[EnvState, EnvParams]):  # 
     Args:
         inner: Core FactoriaX environment.
         radius: Half-width of the observation window in tiles.
+
+    Example:
+        >>> import factoriax
+        >>> env, params = factoriax.make(obs="local", obs_radius=3)
+        >>> # observation_space is the 7x7 window plus per-player scalars
+        >>> # rather than the full map view.
     """
 
     def __init__(self, inner: FactoriaXEnv, radius: int) -> None:

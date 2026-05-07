@@ -53,6 +53,12 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
     Args:
         inner: Core FactoriaX environment to wrap.
+
+    Example:
+        >>> import factoriax
+        >>> env, params = factoriax.make(auto_reset=True)
+        >>> # ``env.step_env`` now returns the next-episode reset state
+        >>> # whenever ``done`` flips True, with no Python-side branch.
     """
 
     def __init__(self, inner: FactoriaXEnv) -> None:
