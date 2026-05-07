@@ -33,6 +33,30 @@ markers = [
     "slow: marks tests as slow (e.g. CPU JIT compilation)",
 ]
 
+[tool.coverage.run]
+# Coverage targets the production tree (factoriax/) and the ahead-
+# of-time training code (baselines/). Tests, scripts, and vendored
+# craftax/ are excluded — they're either the measurement instrument
+# or out-of-tree references.
+source = ["factoriax", "baselines"]
+omit = [
+    "factoriax/__main__.py",
+    "factoriax/*/__main__.py",
+]
+
+[tool.coverage.report]
+# Floor measured at the close of Phase C item 8 (37.61% over the
+# fast suite, with UI-only ``__main__.py`` shims omitted). The
+# pre-commit hook enforces this number — a PR that drops coverage
+# below it fails to commit. Raising the floor is a deliberate act:
+# bump this number when adding tests, never lower it. Phase D's
+# docs ratchet (cookbook examples + their tests) is the next
+# natural lift; the ratchet practice itself is the load-bearing
+# part, not the absolute number.
+fail_under = 37
+show_missing = false
+skip_covered = true
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -56,6 +80,7 @@ dev = [
     "mypy>=1.19.1",
     "plotly>=6.6.0",
     "pytest>=9.0.2",
+    "pytest-cov>=5.0.0",
     "ruff>=0.15.5",
     "tqdm>=4.67.3",
     "wandb>=0.25.1",

@@ -30,10 +30,14 @@ if [ -z "$TEST_RELEVANT" ]; then
     echo "[pre-commit] No staged changes under factoriax/, tests/, or"
     echo "[pre-commit] dependency manifests; skipping pytest."
 else
-    echo "[pre-commit] Running fast tests (skipping @pytest.mark.slow)..."
+    echo "[pre-commit] Running fast tests with coverage gate..."
     echo "[pre-commit] The full suite — including JIT-heavy integration"
     echo "[pre-commit] tests (invariants, smoke, benchmarks, debugger) — runs in CI."
-    uv run pytest tests/ -x -q -m "not slow"
+    # The fail-under floor lives in pyproject.toml's
+    # [tool.coverage.report]. The hook fails when coverage drops
+    # below it; raising the floor is a deliberate act in a follow-up.
+    uv run pytest tests/ -x -q -m "not slow" \
+        --cov=factoriax --cov=baselines --cov-report=term:skip-covered
 fi
 
 echo "[pre-commit] All checks passed."
