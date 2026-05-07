@@ -805,10 +805,11 @@ class Debugger:
         if not self._states or self._dbg.current_step >= len(self._states):
             print("No frame to export.")
             return
-        from factoriax.renderer import render_pixels
+        from factoriax.jax_renderer import JaxRenderer
 
         state = self._states[self._dbg.current_step]
-        frame = np.asarray(render_pixels(state, block_pixel_size=24))
+        renderer = JaxRenderer(tile_px=24)
+        frame = np.asarray(renderer.jit_render_map(state))
         path = self._dbg.trajectory_path or "trajectory"
         out = Path(path).stem + f"_step{self._dbg.current_step}.png"
         try:
@@ -829,7 +830,7 @@ class Debugger:
         if not self._states:
             print("No frames to export.")
             return
-        from factoriax.renderer import render_pixels
+        from factoriax.jax_renderer import JaxRenderer
 
         path = self._dbg.trajectory_path or "trajectory"
         out = Path(path).stem + f"_ep{self._dbg.selected_episode}.mp4"
@@ -841,9 +842,10 @@ class Debugger:
             out_path = Path(out)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"Rendering {len(self._states)} frames for export...")
+            renderer = JaxRenderer(tile_px=24)
             rendered = np.stack(
                 [
-                    np.asarray(render_pixels(s, block_pixel_size=24), dtype=np.uint8)
+                    np.asarray(renderer.jit_render_map(s), dtype=np.uint8)
                     for s in self._states
                 ]
             )
@@ -881,8 +883,9 @@ def _load_trajectory_data(
     Returns states only — frames are rendered on demand inside
     :func:`render_replay_frame`. Pre-rendering the whole frame list
     upfront at ~550 KB per frame caused multi-GB RAM spikes on long
-    trajectories; the state list is ~45x smaller and render_pixels
-    is fast enough (~0.3 ms at 24 px / 32x32) to redo per frame.
+    trajectories; the state list is ~45x smaller and the JIT'd JAX
+    renderer is fast enough (~0.3 ms at 24 px / 32x32) to redo per
+    frame.
 
     Args:
         traj: :class:`~factoriax.analysis.trajectory.Trajectory`.

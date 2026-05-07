@@ -1,8 +1,9 @@
 """Player-only UI components using pygame for pixel-font text rendering.
 
-This module is intentionally separate from renderer.py so that the RL
-environment never pulls in a pygame dependency.  Only the play subpackage
-(and any other human-facing entry points) should import from here.
+This module is intentionally separate from the JAX renderer so that the
+RL environment never pulls in a pygame dependency. Only the play
+subpackage (and any other human-facing entry points) should import from
+here.
 
 Generic UI primitives (ClickRegion, draw_panel, fonts, compositing) now
 live in :mod:`factoriax.ui` and are re-exported here for backward
@@ -38,7 +39,6 @@ from factoriax.recipes import (
     OUTPUT_TO_RECIPE,
     RECIPE_NAMES,
 )
-from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.state import EnvParams, EnvState
 
 # Re-export shared primitives so existing ``from factoriax.play.ui import``
@@ -51,6 +51,7 @@ from factoriax.ui.compositing import (
 )
 from factoriax.ui.fonts import get_pixel_font  # noqa: F401
 from factoriax.ui.fonts import render_text_rgba as _render_text_rgba  # noqa: F401
+from factoriax.ui.icons import PLAYER_COLORS, render_item_icon
 from factoriax.ui.primitives import (
     ClickRegion,  # noqa: F401
     draw_panel,  # noqa: F401

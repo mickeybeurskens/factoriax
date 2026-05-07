@@ -20,13 +20,13 @@ from factoriax.constants import (
     MachineType,
     SlotRole,
 )
-from factoriax.renderer import (
+from factoriax.ui.fonts import get_pixel_font
+from factoriax.ui.icons import (
     create_biter_texture,
     create_player_start_icon,
     get_textures,
     render_item_icon,
 )
-from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.primitives import ClickRegion
 
 TOOLBAR_WIDTH = 120

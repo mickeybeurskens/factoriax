@@ -34,10 +34,15 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.crafting import can_afford_recipe
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.placement import get_tile_in_front
 from factoriax.recipes import NUM_RECIPES
-from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
+
+# JaxRenderer caches device-resident texture atlases per tile size; keep
+# one renderer per requested ``block_pixel_size`` so the JIT compile and
+# atlas build only happen on the first call for that size.
+_RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 _MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(MachineType))
@@ -400,6 +405,10 @@ def local_array(
 def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
     """Render the full map as an RGB image.
 
+    Routes through a process-wide :class:`JaxRenderer` cache keyed by
+    ``block_pixel_size`` so vision-mode rollouts pay the atlas build
+    and JIT compile cost once per tile size, not per call.
+
     Args:
         state: Current environment state.
         block_pixel_size: Tile side length in pixels.
@@ -407,4 +416,8 @@ def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
     Returns:
         uint8 NumPy array of shape ``(H*px, W*px, 3)``.
     """
-    return render_pixels(state, block_pixel_size=block_pixel_size)
+    renderer = _RENDERER_CACHE.get(block_pixel_size)
+    if renderer is None:
+        renderer = JaxRenderer(tile_px=block_pixel_size)
+        _RENDERER_CACHE[block_pixel_size] = renderer
+    return np.asarray(renderer.jit_render_map(state))

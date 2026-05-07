@@ -17,8 +17,22 @@ from typing import Any
 import numpy as np
 
 from factoriax.analysis.inventory import render_inventory_panel
-from factoriax.renderer import render_pixels
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.state import EnvState
+
+# JaxRenderer holds device-resident atlases for one tile size. Cache
+# instances per ``block_pixel_size`` so the per-call cost is just a
+# JIT-compiled gather, not an atlas rebuild.
+_RENDERER_CACHE: dict[int, JaxRenderer] = {}
+
+
+def _get_renderer(block_pixel_size: int) -> JaxRenderer:
+    """Return a cached :class:`JaxRenderer` for ``block_pixel_size``."""
+    renderer = _RENDERER_CACHE.get(block_pixel_size)
+    if renderer is None:
+        renderer = JaxRenderer(tile_px=block_pixel_size)
+        _RENDERER_CACHE[block_pixel_size] = renderer
+    return renderer
 
 
 @contextlib.contextmanager
@@ -64,7 +78,8 @@ def compose_frame_with_inventory(
         RGB ``uint8`` array of shape
         ``(map_h, map_w + inv_panel_width, 3)``.
     """
-    map_img = np.asarray(render_pixels(state, block_pixel_size=block_pixel_size))
+    renderer = _get_renderer(block_pixel_size)
+    map_img = np.asarray(renderer.jit_render_map(state))
     panel_h = int(map_img.shape[0])
     inv_vec = np.asarray(state.player_inventory[int(state.selected_player)])
     panel = render_inventory_panel(

@@ -578,8 +578,8 @@ def _evaluate(
     """
     from pathlib import Path
 
+    from factoriax.jax_renderer import JaxRenderer
     from factoriax.levels import build_state
-    from factoriax.renderer import render_pixels
 
     logger.info("Running evaluation rollout...")
     state = build_state(level, env_params)
@@ -618,7 +618,8 @@ def _evaluate(
     out_dir = Path("runs") / f"skills_ppo_{config.skill_name}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    frames = [render_pixels(s, block_pixel_size=16) for s in states]
+    renderer = JaxRenderer(tile_px=16)
+    frames = [np.asarray(renderer.jit_render_map(s)) for s in states]
     mp4_path = out_dir / f"{config.skill_name}.mp4"
     try:
         import warnings

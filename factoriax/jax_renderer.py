@@ -367,10 +367,13 @@ def render_map(
     num_players = state.player_positions.shape[0]
 
     def _stamp_player(i: int, img: jnp.ndarray) -> jnp.ndarray:
-        px = state.player_positions[i, 0]
-        py = state.player_positions[i, 1]
+        # Cast indices to int32 so all three coordinates passed to
+        # ``dynamic_update_slice`` share the same dtype. ``player_positions``
+        # is int16 in level/world states; the literal 0 is int32.
+        px = state.player_positions[i, 0].astype(jnp.int32)
+        py = state.player_positions[i, 1].astype(jnp.int32)
         return jax.lax.dynamic_update_slice(
-            img, player_sprite, (py * tile_px, px * tile_px, 0)
+            img, player_sprite, (py * tile_px, px * tile_px, jnp.int32(0))
         )
 
     composited: jnp.ndarray = jax.lax.fori_loop(0, num_players, _stamp_player, image)

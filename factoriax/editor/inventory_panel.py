@@ -25,8 +25,8 @@ from factoriax.editor.state import (
     get_inventory_slots,
     get_num_slots,
 )
-from factoriax.renderer import PLAYER_COLORS, render_item_icon
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
+from factoriax.ui.icons import PLAYER_COLORS, render_item_icon
 from factoriax.ui.primitives import ClickRegion
 
 # ---------------------------------------------------------------------------

@@ -18,12 +18,9 @@ from factoriax.config import (
     resolve_event,
 )
 from factoriax.constants import Direction, ItemType
-from factoriax.renderer import (
-    create_player_texture,
-    render_item_icon,
-)
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
+from factoriax.ui.icons import create_player_texture, render_item_icon
 from factoriax.ui.primitives import ClickRegion, hit_test_regions
 from factoriax.ui.scaling import ScaledCanvas
 

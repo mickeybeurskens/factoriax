@@ -25,10 +25,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-
-from baselines.ppo.network import VisionActorCritic
 from factoriax.benchmarks.basic_skills.benchmark import REWARD_FNS
 from factoriax.benchmarks.basic_skills.levels import BASIC_SKILLS_LEVELS
+
+from baselines.ppo.network import VisionActorCritic
 from factoriax.benchmarks.core import BenchmarkLevel
 from factoriax.constants import NUM_ACTIONS, Action, ItemType
 from factoriax.envs import FactoriaXEnv
@@ -800,9 +800,10 @@ def _evaluate(
 
     # 2. Render video from saved states.
     logger.info("Rendering video...")
-    from factoriax.renderer import render_pixels
+    from factoriax.jax_renderer import JaxRenderer
 
-    frames = [render_pixels(s, block_pixel_size=16) for s in states_log]
+    renderer = JaxRenderer(tile_px=16)
+    frames = [np.asarray(renderer.jit_render_map(s)) for s in states_log]
     mp4_path = out_dir / f"{config.level_name}.mp4"
     try:
         import warnings

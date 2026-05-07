@@ -5,9 +5,6 @@ Compares rendering throughput across batch sizes for three approaches:
   2. Step + map render -- map with terrain, machines, players.
   3. Step + full HUD -- map + 4-quadrant info panel.
 
-A CPU step+render baseline (single env, NumPy renderer) is shown as a
-dashed line for reference.
-
 All rendering uses the pure-JAX renderer from factoriax.jax_renderer,
 which compiles to XLA and vmaps across batched environment states.
 
@@ -32,7 +29,6 @@ from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.jax_renderer import (
     JaxRenderer,
 )
-from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
@@ -50,9 +46,7 @@ MAX_BATCH_POWER = 13  # Try up to 2^13 = 8192.
 # ---------------------------------------------------------------------------
 
 
-def make_batched_envs(
-    n: int, params: EnvParams
-) -> tuple[jnp.ndarray, EnvState]:
+def make_batched_envs(n: int, params: EnvParams) -> tuple[jnp.ndarray, EnvState]:
     """Create N parallel environment states via vmapped reset.
 
     Args:
@@ -100,9 +94,7 @@ def _make_vmap_step(
     """
     env = FactoriaXEnv()
     _, states = make_batched_envs(n_envs, params)
-    vmap_step = jax.jit(
-        jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
-    )
+    vmap_step = jax.jit(jax.vmap(env.step_env, in_axes=(0, 0, 0, None)))
     rng = jax.random.key(99)
     rng, k_a, k_s = jax.random.split(rng, 3)
     actions = jax.random.randint(k_a, (n_envs,), 0, params.NUM_ACTIONS)
@@ -151,9 +143,7 @@ def _step_loop(
     return t1 - t0
 
 
-def benchmark_step_only(
-    n_envs: int, params: EnvParams, num_steps: int
-) -> float:
+def benchmark_step_only(n_envs: int, params: EnvParams, num_steps: int) -> float:
     """Benchmark vmapped env stepping only (no rendering).
 
     Args:
@@ -169,7 +159,9 @@ def benchmark_step_only(
 
 
 def benchmark_step_map(
-    n_envs: int, params: EnvParams, num_steps: int,
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
     renderer: JaxRenderer,
 ) -> float:
     """Benchmark step + map render.
@@ -186,20 +178,23 @@ def benchmark_step_map(
     vmap_step, states, rng = _make_vmap_step(n_envs, params)
     vmap_render = renderer._vmap_render_map
     # Warmup render.
-    result = vmap_render(states, renderer.block_atlas,
-                         renderer.machine_atlas, renderer.player_sprite)
+    result = vmap_render(
+        states, renderer.block_atlas, renderer.machine_atlas, renderer.player_sprite
+    )
     jax.block_until_ready(result)
 
     def _render(s: EnvState) -> jnp.ndarray:
-        return vmap_render(s, renderer.block_atlas,
-                           renderer.machine_atlas, renderer.player_sprite)
+        return vmap_render(
+            s, renderer.block_atlas, renderer.machine_atlas, renderer.player_sprite
+        )
 
-    return _step_loop(vmap_step, states, rng, n_envs, params,
-                      num_steps, _render)
+    return _step_loop(vmap_step, states, rng, n_envs, params, num_steps, _render)
 
 
 def benchmark_step_hud(
-    n_envs: int, params: EnvParams, num_steps: int,
+    n_envs: int,
+    params: EnvParams,
+    num_steps: int,
     renderer: JaxRenderer,
 ) -> float:
     """Benchmark step + full HUD render.
@@ -217,67 +212,26 @@ def benchmark_step_hud(
     vmap_render = renderer._vmap_render_hud
     # Warmup render.
     result = vmap_render(
-        states, renderer.block_atlas, renderer.machine_atlas,
-        renderer.player_sprite, renderer.item_colors, renderer.digit_atlas,
+        states,
+        renderer.block_atlas,
+        renderer.machine_atlas,
+        renderer.player_sprite,
+        renderer.item_colors,
+        renderer.digit_atlas,
     )
     jax.block_until_ready(result)
 
     def _render(s: EnvState) -> jnp.ndarray:
         return vmap_render(
-            s, renderer.block_atlas, renderer.machine_atlas,
-            renderer.player_sprite, renderer.item_colors,
+            s,
+            renderer.block_atlas,
+            renderer.machine_atlas,
+            renderer.player_sprite,
+            renderer.item_colors,
             renderer.digit_atlas,
         )
 
-    return _step_loop(vmap_step, states, rng, n_envs, params,
-                      num_steps, _render)
-
-
-def benchmark_cpu_step_render(
-    params: EnvParams,
-    num_steps: int,
-    tile_px: int,
-    log_fn: object = None,
-) -> float:
-    """Benchmark single-env step + NumPy render on the CPU backend.
-
-    Args:
-        params: Environment parameters.
-        num_steps: Number of timesteps.
-        tile_px: Tile pixel size for render_pixels.
-        log_fn: Optional logging function for progress.
-
-    Returns:
-        Wall-clock seconds (excluding warmup).
-    """
-    _log = log_fn or (lambda *a, **kw: None)
-    cpu_device = jax.devices("cpu")[0]
-    env = FactoriaXEnv()
-
-    with jax.default_device(cpu_device):
-        key = jax.random.key(55)
-        _, state = env.reset_env(key, params)
-        step_fn = jax.jit(env.step_env, device=cpu_device)
-
-        _log(" compiling on CPU...", end="", flush=True)
-        rng = jax.random.key(56)
-        rng, k_a, k_s = jax.random.split(rng, 3)
-        action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
-        _, state, _, _, _ = step_fn(k_s, state, action, params)
-        jax.block_until_ready(jax.tree.leaves(state))
-        render_pixels(state, block_pixel_size=tile_px)
-        _log(" done.", end="", flush=True)
-
-        t0 = time.perf_counter()
-        for _ in range(num_steps):
-            rng, k_a, k_s = jax.random.split(rng, 3)
-            action = jax.random.randint(k_a, (), 0, params.NUM_ACTIONS)
-            _, state, _, _, _ = step_fn(k_s, state, action, params)
-            jax.block_until_ready(jax.tree.leaves(state))
-            render_pixels(state, block_pixel_size=tile_px)
-        t1 = time.perf_counter()
-
-    return t1 - t0
+    return _step_loop(vmap_step, states, rng, n_envs, params, num_steps, _render)
 
 
 # ---------------------------------------------------------------------------
@@ -360,11 +314,11 @@ def save_sample_images(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # CPU render: single environment.
+    # JAX map render: single environment.
     _, single_states = make_batched_envs(1, params)
     state = extract_single_state(single_states, 0)
-    cpu_img = render_pixels(state, block_pixel_size=renderer.tile_px)
-    Image.fromarray(cpu_img[:, :, :3]).save(output_dir / "cpu_render.png")
+    map_img = np.asarray(renderer.jit_render_map(state))
+    Image.fromarray(map_img).save(output_dir / "jax_map_render.png")
 
     # JAX HUD render: batch of 4, stitched 2x2.
     _, batch_states = make_batched_envs(4, params)
@@ -406,7 +360,6 @@ def save_sample_images(
 
 
 def save_throughput_chart(
-    cpu_fps: float,
     step_render_fps: dict[int, float],
     step_render_hud_fps: dict[int, float],
     vector_fps: dict[int, float],
@@ -415,7 +368,6 @@ def save_throughput_chart(
     """Save the throughput chart with three GPU series.
 
     Args:
-        cpu_fps: CPU step+render throughput (fps), single env.
         step_render_fps: batch_size -> step + map render fps.
         step_render_hud_fps: batch_size -> step + full HUD fps.
         vector_fps: batch_size -> step-only fps.
@@ -424,9 +376,7 @@ def save_throughput_chart(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     all_sizes = sorted(
-        set(step_render_fps)
-        & set(vector_fps)
-        & set(step_render_hud_fps)
+        set(step_render_fps) & set(vector_fps) & set(step_render_hud_fps)
     )
     if not all_sizes:
         return
@@ -448,14 +398,14 @@ def save_throughput_chart(
     ]
     for pos, vals, color, label in series:
         ax.bar(
-            pos, vals, width, color=color,
-            edgecolor="white", linewidth=0.5, label=label,
+            pos,
+            vals,
+            width,
+            color=color,
+            edgecolor="white",
+            linewidth=0.5,
+            label=label,
         )
-
-    ax.axhline(
-        cpu_fps, color="#d45f5f", linestyle="--", linewidth=1.5,
-        label=f"CPU step+render ({cpu_fps:,.0f} fps)",
-    )
 
     ax.set_yscale("log")
     ax.set_xlabel("Batch size (envs)", fontsize=12)
@@ -524,17 +474,9 @@ def main() -> None:
 
     save_sample_images(params, renderer, output_dir)
 
-    # ---- CPU baseline ----
-    log("Measuring CPU step+render baseline (1 env)...", end="", flush=True)
-    cpu_sr_time = benchmark_cpu_step_render(params, NUM_STEPS, TILE_PX, log)
-    cpu_sr_fps = NUM_STEPS / cpu_sr_time
-    log(f" {cpu_sr_fps:,.0f} fps ({cpu_sr_time:.3f}s)")
-    log()
-
     # ---- Series 1: step + map render ----
     step_render_fps = discover_scaling(
-        run_fn=lambda n: _try(benchmark_step_map, n, params, NUM_STEPS,
-                              renderer),
+        run_fn=lambda n: _try(benchmark_step_map, n, params, NUM_STEPS, renderer),
         label="Step + Map Render",
         log_fn=log,
     )
@@ -542,8 +484,7 @@ def main() -> None:
 
     # ---- Series 2: step + full HUD render ----
     step_render_hud_fps = discover_scaling(
-        run_fn=lambda n: _try(benchmark_step_hud, n, params, NUM_STEPS,
-                              renderer),
+        run_fn=lambda n: _try(benchmark_step_hud, n, params, NUM_STEPS, renderer),
         label="Step + Full HUD Render",
         log_fn=log,
     )
@@ -558,8 +499,10 @@ def main() -> None:
 
     # ---- Save outputs ----
     save_throughput_chart(
-        cpu_sr_fps, step_render_fps, step_render_hud_fps,
-        vector_fps, output_dir,
+        step_render_fps,
+        step_render_hud_fps,
+        vector_fps,
+        output_dir,
     )
 
     log()

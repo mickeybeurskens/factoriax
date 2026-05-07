@@ -27,8 +27,8 @@ from factoriax.constants import (
     SlotRole,
 )
 from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
-from factoriax.renderer import render_item_icon
 from factoriax.ui.fonts import get_pixel_font
+from factoriax.ui.icons import render_item_icon
 
 _BG = (22, 22, 22, 228)
 _BORDER = (190, 165, 55, 255)

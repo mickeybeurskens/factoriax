@@ -1,4 +1,6 @@
-"""Pixel rendering for the FactoriaX environment."""
+"""Procedural icon and texture generation for play, editor, and menu UI."""
+
+from __future__ import annotations
 
 import functools
 
@@ -8,17 +10,15 @@ from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
     ITEM_COLORS,
     ITEM_TO_MACHINE,
-    MAX_MACHINE_STACK_SIZE,
-    NUM_ITEM_TYPES,
     BlockType,
     Direction,
     ItemType,
-    MachineType,
     load_all_textures,
 )
-from factoriax.state import EnvState
 
-INVENTORY_BAR_HEIGHT = 24
+# ---------------------------------------------------------------------------
+# Block textures
+# ---------------------------------------------------------------------------
 
 
 def _resize_texture(texture: np.ndarray, size: int) -> np.ndarray:
@@ -93,6 +93,53 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
         _draw_ore_patches(tex, rgb, seed=block_id, crystalline=crystalline)
         textures[block_id] = tex
     return textures
+
+
+@functools.lru_cache(maxsize=8)
+def get_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
+    """Load textures from files, falling back to defaults if not found.
+
+    Results are cached per ``size`` so disk I/O and resizing happen at
+    most once per unique block pixel size across the entire process.
+
+    Args:
+        size: Required texture side length in pixels.
+
+    Returns:
+        Dictionary mapping BlockType values to RGBA texture arrays
+    """
+    try:
+        raw = load_all_textures()
+        return {k: _resize_texture(v, size) for k, v in raw.items()}
+    except FileNotFoundError:
+        return create_default_textures(size)
+
+
+@functools.lru_cache(maxsize=8)
+def build_texture_lookup(size: int) -> np.ndarray:
+    """Build a dense texture lookup array indexed by block type.
+
+    Allows tile rendering via a single numpy advanced-index operation
+    instead of a Python loop over every map cell.
+
+    Args:
+        size: Block pixel size.
+
+    Returns:
+        Array of shape (max_block_id + 1, size, size, 4).
+    """
+    textures = get_textures(size)
+    max_id = max(textures.keys())
+    lookup = np.zeros((max_id + 1, size, size, 4), dtype=np.uint8)
+    default = textures[int(BlockType.DIRT)]
+    for i in range(max_id + 1):
+        lookup[i] = textures.get(i, default)
+    return lookup
+
+
+# ---------------------------------------------------------------------------
+# Player and biter sprites
+# ---------------------------------------------------------------------------
 
 
 PLAYER_COLORS = [
@@ -234,158 +281,9 @@ def create_biter_texture(size: int = BLOCK_PIXEL_SIZE) -> np.ndarray:
     return texture
 
 
-@functools.lru_cache(maxsize=8)
-def _get_biter_texture(size: int) -> np.ndarray:
-    """Cached biter texture.
-
-    Args:
-        size: Block pixel size.
-
-    Returns:
-        RGBA numpy array of shape (size, size, 4).
-    """
-    return create_biter_texture(size)
-
-
-@functools.lru_cache(maxsize=8)
-def get_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
-    """Load textures from files, falling back to defaults if not found.
-
-    Results are cached per ``size`` so disk I/O and resizing happen at
-    most once per unique block pixel size across the entire process.
-
-    Args:
-        size: Required texture side length in pixels.
-
-    Returns:
-        Dictionary mapping BlockType values to RGBA texture arrays
-    """
-    try:
-        raw = load_all_textures()
-        return {k: _resize_texture(v, size) for k, v in raw.items()}
-    except FileNotFoundError:
-        return create_default_textures(size)
-
-
-@functools.lru_cache(maxsize=256)
-def _get_player_texture(
-    direction: int,
-    player_idx: int,
-    is_selected: bool,
-    size: int,
-) -> np.ndarray:
-    """Cached wrapper around create_player_texture.
-
-    The full set of combinations is small (players × 4 dirs × 2 selected
-    states), so every texture is computed at most once per size.
-
-    Args:
-        direction: Facing direction (Action enum value).
-        player_idx: Player index.
-        is_selected: Whether this player is currently selected.
-        size: Block pixel size.
-
-    Returns:
-        RGBA numpy array of shape (size, size, 4).
-    """
-    return create_player_texture(direction, player_idx, is_selected, size)
-
-
-@functools.lru_cache(maxsize=8)
-def build_texture_lookup(size: int) -> np.ndarray:
-    """Build a dense texture lookup array indexed by block type.
-
-    Allows tile rendering via a single numpy advanced-index operation
-    instead of a Python loop over every map cell.
-
-    Args:
-        size: Block pixel size.
-
-    Returns:
-        Array of shape (max_block_id + 1, size, size, 4).
-    """
-    textures = get_textures(size)
-    max_id = max(textures.keys())
-    lookup = np.zeros((max_id + 1, size, size, 4), dtype=np.uint8)
-    default = textures[int(BlockType.DIRT)]
-    for i in range(max_id + 1):
-        lookup[i] = textures.get(i, default)
-    return lookup
-
-
-def render_inventory_bar(
-    state: EnvState,
-    width: int,
-    selected_item: int = 0,
-) -> np.ndarray:
-    """Render inventory bar showing the selected player's inventory.
-
-    Each slot corresponds to an ``ItemType`` index. The slot matching
-    *selected_item* is highlighted with a white border.
-
-    Args:
-        state: Current environment state containing inventory data.
-        width: Width of the bar in pixels (should match map render width).
-        selected_item: ``ItemType`` index of the currently selected item.
-
-    Returns:
-        RGB numpy array of shape (INVENTORY_BAR_HEIGHT, width, 3).
-    """
-    bar = np.full(
-        (INVENTORY_BAR_HEIGHT, width, 3),
-        (40, 40, 40),
-        dtype=np.uint8,
-    )
-
-    slot_width = width // NUM_ITEM_TYPES
-    slot_size = min(slot_width - 4, INVENTORY_BAR_HEIGHT - 4)
-
-    selected_player = int(state.selected_player)
-    inventory = np.array(state.player_inventory[selected_player])
-
-    for item_idx in range(NUM_ITEM_TYPES):
-        x_center = item_idx * slot_width + slot_width // 2
-        x_start = x_center - slot_size // 2
-        y_start = (INVENTORY_BAR_HEIGHT - slot_size) // 2
-
-        is_selected_slot = item_idx == selected_item
-        slot_bg = (100, 100, 100) if is_selected_slot else (60, 60, 60)
-        bar[
-            y_start : y_start + slot_size,
-            x_start : x_start + slot_size,
-        ] = slot_bg
-
-        if is_selected_slot:
-            bar[y_start, x_start : x_start + slot_size] = (
-                255,
-                255,
-                255,
-            )
-            bar[
-                y_start + slot_size - 1,
-                x_start : x_start + slot_size,
-            ] = (255, 255, 255)
-            bar[y_start : y_start + slot_size, x_start] = (
-                255,
-                255,
-                255,
-            )
-            bar[
-                y_start : y_start + slot_size,
-                x_start + slot_size - 1,
-            ] = (255, 255, 255)
-
-        count = int(inventory[item_idx])
-
-        if item_idx != 0 and count > 0:
-            pad = 2
-            color = ITEM_COLORS.get(item_idx, (128, 128, 128))
-            bar[
-                y_start + pad : y_start + slot_size - pad,
-                x_start + pad : x_start + slot_size - pad,
-            ] = color
-
-    return bar
+# ---------------------------------------------------------------------------
+# Item-icon constants
+# ---------------------------------------------------------------------------
 
 
 # Derived from the single source of truth in constants.ITEM_TO_MACHINE.
@@ -396,6 +294,11 @@ MACHINE_TO_ITEM: dict[int, int] = {
 
 # Dark arrow colour drawn on top of the gold conveyor belt square.
 _BELT_ARROW_COLOR: tuple[int, int, int, int] = (60, 50, 10, 255)
+
+
+# ---------------------------------------------------------------------------
+# Belt / miner / arm directional helpers
+# ---------------------------------------------------------------------------
 
 
 def _draw_chevron(
@@ -555,7 +458,7 @@ def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Shared drawing helpers for ore / plate / item / machine textures
+# Shared drawing helpers for ore / plate / item / machine icons
 # ---------------------------------------------------------------------------
 
 
@@ -1034,9 +937,7 @@ def _draw_science_lab_body(
 ) -> None:
     """Draw a geodesic dome, top-down.
 
-    Palette C: violet body + lavender ribs + pale apex. The active
-    interior glow (amber fill when the lab consumed a pack this tick)
-    is layered on by the caller via :func:`apply_activity_tint`.
+    Palette C: violet body + lavender ribs + pale apex.
 
     The silhouette is an inset square rim with four diagonal ribs
     meeting at a central apex, plus four small window panels tucked
@@ -1306,8 +1207,9 @@ def render_item_icon(
     """Render a square RGBA icon for an item type.
 
     This is the single source of truth for how an item looks visually.
-    Both the map renderer and the menu UI call this function so that
-    placed machines and inventory icons are always identical.
+    Every UI surface that paints an item — inventory panels, hotbars,
+    editor toolbar, menu screens — calls this function so identical
+    items always look the same.
 
     Each item category has a distinct visual language:
 
@@ -1440,409 +1342,3 @@ def render_item_icon(
         return icon
 
     return icon
-
-
-def render_machine_overlays(
-    image: np.ndarray,
-    state: EnvState,
-    block_pixel_size: int,
-    frame_tick: int = 0,
-) -> None:
-    """Draw machine overlays on tiles that have machines.
-
-    Uses :func:`render_item_icon` for each machine so that placed
-    machines look identical to their inventory icons.  When
-    *frame_tick* is non-zero, active machines pulse and idle machines
-    dim.
-
-    Args:
-        image: RGBA image to draw on (modified in place)
-        state: Current environment state
-        block_pixel_size: Size of each block in pixels
-        frame_tick: Monotonic frame counter (0 = static)
-    """
-    machine_size = int(block_pixel_size * 0.6)
-    offset = (block_pixel_size - machine_size) // 2
-
-    machine_types = np.array(state.machine_types)
-    tile_entity = np.array(state.tile_entity)
-    ent_direction = np.array(state.ent_direction)
-    ent_power = np.array(state.ent_power)
-
-    ys, xs = np.nonzero(machine_types != MachineType.NONE)
-    if ys.size == 0:
-        return
-
-    for y, x in zip(ys, xs):
-        machine_type = int(machine_types[y, x])
-        item_type = MACHINE_TO_ITEM.get(machine_type, int(ItemType.EMPTY))
-
-        eidx = int(tile_entity[y, x])
-        direction = int(ent_direction[eidx]) if eidx >= 0 else int(Direction.DOWN)
-
-        icon = render_item_icon(
-            item_type,
-            machine_size,
-            direction,
-        )
-
-        if frame_tick > 0:
-            if machine_type == int(MachineType.MINER):
-                active = is_miner_active(state, int(y), int(x))
-            elif machine_type == int(MachineType.ASSEMBLER):
-                active = int(ent_power[eidx]) > 0 if eidx >= 0 else False
-            else:
-                active = True
-            icon = apply_activity_tint(icon, active, frame_tick)
-
-        y_start = y * block_pixel_size + offset
-        x_start = x * block_pixel_size + offset
-        # Alpha composite so transparent pixels (corner knockouts, shaped
-        # machines like the rocket) let the terrain tile show through.
-        mask = icon[..., 3] > 0
-        tile = image[
-            y_start : y_start + machine_size,
-            x_start : x_start + machine_size,
-        ]
-        tile[mask] = icon[mask]
-
-    draw_belt_cargo(image, state, block_pixel_size)
-
-
-def render_pixels(
-    state: EnvState,
-    block_pixel_size: int = BLOCK_PIXEL_SIZE,
-    frame_tick: int = 0,
-) -> np.ndarray:
-    """Render the environment state as an RGB pixel image.
-
-    Renders the map, machines, and all players. The selected player has
-    a white highlight ring. Does not include the inventory menu.
-
-    When *frame_tick* is non-zero, world animations are applied: water
-    shimmers, active machines pulse, and belt cargo dots slide along
-    belts.  The default of 0 produces the same static output as before
-    so existing callers are unaffected.
-
-    Args:
-        state: Current environment state
-        block_pixel_size: Size of each block in pixels
-        frame_tick: Monotonic frame counter (0 = static rendering)
-
-    Returns:
-        RGB numpy array of the rendered scene
-    """
-    texture_lookup = build_texture_lookup(block_pixel_size)
-
-    map_array = np.array(state.map)
-    map_height, map_width = map_array.shape
-
-    # Clamp unknown block IDs to the DIRT fallback.
-    max_id = texture_lookup.shape[0] - 1
-    safe_map = np.clip(map_array, 0, max_id)
-
-    # Single numpy index: (H, W, size, size, 4) -> (H*size, W*size, 4)
-    tile_textures = texture_lookup[safe_map]
-    image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
-        map_height * block_pixel_size, map_width * block_pixel_size, 4
-    )
-    # Make writable — the reshape may return a view into the read-only cache.
-    image = np.array(image)
-
-    if frame_tick > 0:
-        animate_water(image, map_array, block_pixel_size, frame_tick)
-
-    render_machine_overlays(image, state, block_pixel_size, frame_tick)
-
-    player_positions = np.array(state.player_positions)
-    player_directions = np.array(state.player_directions)
-    selected = int(state.selected_player)
-    num_players = player_positions.shape[0]
-
-    for player_idx in range(num_players):
-        direction = int(player_directions[player_idx])
-        is_selected = player_idx == selected
-        player_texture = _get_player_texture(
-            direction, player_idx, is_selected, block_pixel_size
-        )
-
-        px, py = (
-            int(player_positions[player_idx, 0]),
-            int(player_positions[player_idx, 1]),
-        )
-        py_start = py * block_pixel_size
-        px_start = px * block_pixel_size
-        _alpha_blend_inplace(
-            image,
-            player_texture,
-            py_start,
-            px_start,
-            block_pixel_size,
-        )
-
-    return image[:, :, :3]
-
-
-def _alpha_blend_inplace(
-    background: np.ndarray,
-    foreground: np.ndarray,
-    y_start: int,
-    x_start: int,
-    size: int,
-) -> None:
-    """Blend a foreground texture onto the background using alpha compositing.
-
-    Args:
-        background: RGBA background image to modify in place
-        foreground: RGBA foreground texture
-        y_start: Y coordinate of top-left corner
-        x_start: X coordinate of top-left corner
-        size: Size of the foreground texture
-    """
-    fg_alpha = foreground[:, :, 3:4].astype(np.float32) / 255.0
-    bg_region = background[y_start : y_start + size, x_start : x_start + size]
-    blended = foreground[:, :, :3].astype(np.float32) * fg_alpha + bg_region[
-        :, :, :3
-    ].astype(np.float32) * (1 - fg_alpha)
-    bg_region[:, :, :3] = blended.astype(np.uint8)
-    bg_region[:, :, 3] = 255
-
-
-# ---------------------------------------------------------------------------
-# Animation helpers
-#
-# All world-animation logic lives in this section. It is deliberately
-# self-contained so it can be extracted into its own module later.
-# Every function here takes a `frame_tick` counter and operates on
-# plain NumPy arrays.  Nothing in this section touches JAX.
-# ---------------------------------------------------------------------------
-
-_TWO_PI: float = 2.0 * np.pi
-
-# Machine activity pulse parameters.
-_PULSE_PERIOD: int = 30  # frames for one full sine cycle (~1 s at 30 FPS)
-_PULSE_MIN: int = 10
-_PULSE_MAX: int = 30
-_IDLE_DIM: float = 0.65  # RGB multiplier for idle machines
-
-# Water wave stripe parameters.
-_WAVE_STRIPE_COLOR: tuple[int, int, int] = (90, 190, 245)
-_WAVE_STRIPE_WIDTH: int = 2  # px thickness of each stripe
-_WAVE_PERIOD: int = 60  # frames for stripes to scroll one full cycle
-_WAVE_SPACING: int = 5  # px between stripe centers
-
-
-def animate_water(
-    image: np.ndarray,
-    map_array: np.ndarray,
-    block_pixel_size: int,
-    frame_tick: int,
-) -> None:
-    """Draw synchronized wave stripes across all water tiles.
-
-    Diagonal stripes in a lighter blue scroll steadily across every
-    water tile in lockstep, giving the impression of flowing water.
-    The stripes tile seamlessly across adjacent water tiles because
-    the pattern is computed in global pixel coordinates.
-
-    Args:
-        image: RGBA pixel image, modified in place.
-        map_array: Integer block-type grid of shape ``(H, W)``.
-        block_pixel_size: Tile side length in pixels.
-        frame_tick: Monotonic frame counter from the game loop.
-    """
-    water_ys, water_xs = np.nonzero(map_array == BlockType.WATER)
-    if water_ys.size == 0:
-        return
-
-    scroll = (frame_tick * _WAVE_SPACING) // _WAVE_PERIOD
-
-    # Local pixel offsets within one tile.
-    local_r = np.arange(block_pixel_size)
-    local_c = np.arange(block_pixel_size)
-    lr, lc = np.meshgrid(local_r, local_c, indexing="ij")
-
-    for idx in range(water_ys.size):
-        y, x = int(water_ys[idx]), int(water_xs[idx])
-        r0 = y * block_pixel_size
-        c0 = x * block_pixel_size
-
-        diag = (r0 + lr) + (c0 + lc) + scroll
-        stripe_mask = (diag % _WAVE_SPACING) < _WAVE_STRIPE_WIDTH
-
-        region = image[
-            r0 : r0 + block_pixel_size,
-            c0 : c0 + block_pixel_size,
-        ]
-        region[:, :, :3][stripe_mask] = _WAVE_STRIPE_COLOR
-
-
-def apply_activity_tint(
-    icon: np.ndarray,
-    active: bool,
-    frame_tick: int,
-) -> np.ndarray:
-    """Return a tinted copy of *icon* based on machine activity.
-
-    Active machines get a pulsing brightness boost.  Idle machines
-    are dimmed.  When ``frame_tick`` is 0 the icon is returned
-    unchanged so the static renderer path has zero overhead.
-
-    Args:
-        icon: Base RGBA icon from :func:`render_item_icon`.
-        active: Whether the machine is currently doing work.
-        frame_tick: Monotonic frame counter from the game loop.
-
-    Returns:
-        A new RGBA array (never mutates the cached *icon*).
-    """
-    if frame_tick == 0:
-        return icon
-
-    result = icon.copy()
-    if active:
-        phase = _TWO_PI * frame_tick / _PULSE_PERIOD
-        boost = int(
-            _PULSE_MIN + (_PULSE_MAX - _PULSE_MIN) * (0.5 + 0.5 * np.sin(phase))
-        )
-        rgb = result[:, :, :3].astype(np.int16) + boost
-        np.clip(rgb, 0, 255, out=rgb)
-        result[:, :, :3] = rgb.astype(np.uint8)
-    else:
-        result[:, :, :3] = (result[:, :, :3].astype(np.float32) * _IDLE_DIM).astype(
-            np.uint8
-        )
-    return result
-
-
-def draw_belt_cargo(
-    image: np.ndarray,
-    state: EnvState,
-    block_pixel_size: int,
-) -> None:
-    """Draw small item dots on belts, pallets, and splitters.
-
-    Each loaded BELT or PALLET shows one centred dot per tile; a
-    SPLITTER shows up to two dots side-by-side (matching the
-    stack-of-2 buffer — one dot per item held). The dot is sized to
-    1/8 of the tile width on each axis (was 1/4 before) so the belt
-    sprite remains visible underneath.
-
-    CROSSING tiles are intentionally *not* overlaid: the diagonal
-    sprite acts as a roof over the in-transit items so two
-    perpendicular flows read cleanly without dot clutter at the
-    edges.
-
-    Args:
-        image: RGBA pixel image, modified in place.
-        state: Current environment state.
-        block_pixel_size: Tile side length in pixels.
-    """
-    machine_types = np.array(state.machine_types)
-    tile_entity = np.array(state.tile_entity)
-    ent_buf_type = np.array(state.ent_buf_type)
-    ent_buf_count = np.array(state.ent_buf_count)
-
-    single_cargo = (machine_types == MachineType.CONVEYOR_BELT) | (
-        machine_types == MachineType.PALLET
-    )
-    single_ys, single_xs = np.nonzero(single_cargo)
-    splitter_ys, splitter_xs = np.nonzero(machine_types == MachineType.SPLITTER)
-    if single_ys.size == 0 and splitter_ys.size == 0:
-        return
-
-    dot_size = max(2, block_pixel_size // 8)
-    border = max(1, dot_size // 3)
-    outer = dot_size + 2 * border
-    half_outer = outer // 2
-    mid = block_pixel_size // 2
-    h, w = image.shape[:2]
-
-    def _stamp_dot(py0: int, px0: int, color: tuple[int, int, int]) -> None:
-        """Draw an outlined coloured dot at ``(py0, px0)`` (top-left).
-
-        The border colour is picked to contrast the item colour so dark
-        items (e.g. COAL at ``(54, 54, 54)``) don't blend into a black
-        frame — without this, a 4x4 dark core plus a 1-px near-black
-        border reads as a uniform 6x6 block, making the dot look bigger
-        than a light-coloured item drawn at exactly the same size.
-        """
-        # Rec. 601 luma; light items get a dark border, dark items get
-        # a light border.
-        luma = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
-        border_color = (20, 20, 20) if luma >= 96 else (235, 235, 235)
-        oy0 = max(0, py0)
-        ox0 = max(0, px0)
-        oy1 = min(h, py0 + outer)
-        ox1 = min(w, px0 + outer)
-        if oy0 < oy1 and ox0 < ox1:
-            image[oy0:oy1, ox0:ox1, :3] = border_color
-            image[oy0:oy1, ox0:ox1, 3] = 255
-        iy0 = max(0, py0 + border)
-        ix0 = max(0, px0 + border)
-        iy1 = min(h, py0 + border + dot_size)
-        ix1 = min(w, px0 + border + dot_size)
-        if iy0 < iy1 and ix0 < ix1:
-            image[iy0:iy1, ix0:ix1, :3] = color
-            image[iy0:iy1, ix0:ix1, 3] = 255
-
-    # BELT + PALLET: one centred dot per loaded tile.
-    for idx in range(single_ys.size):
-        y, x = int(single_ys[idx]), int(single_xs[idx])
-        eidx = int(tile_entity[y, x])
-        if eidx < 0:
-            continue
-        item_type = int(ent_buf_type[eidx])
-        item_count = int(ent_buf_count[eidx])
-        if item_type == 0 or item_count <= 0:
-            continue
-        color = ITEM_COLORS.get(item_type, (128, 128, 128))
-        py0 = y * block_pixel_size + mid - half_outer
-        px0 = x * block_pixel_size + mid - half_outer
-        _stamp_dot(py0, px0, color)
-
-    # SPLITTER: two dots horizontally, one per buffered item (max 2).
-    # The pair is centred on the tile with a 1-px gap between dots.
-    pair_gap = 1
-    pair_width = 2 * outer + pair_gap
-    splitter_left_px = mid - pair_width // 2
-    for idx in range(splitter_ys.size):
-        y, x = int(splitter_ys[idx]), int(splitter_xs[idx])
-        eidx = int(tile_entity[y, x])
-        if eidx < 0:
-            continue
-        item_type = int(ent_buf_type[eidx])
-        item_count = int(ent_buf_count[eidx])
-        if item_type == 0 or item_count <= 0:
-            continue
-        color = ITEM_COLORS.get(item_type, (128, 128, 128))
-        visible = min(2, item_count)
-        py0 = y * block_pixel_size + mid - half_outer
-        for slot in range(visible):
-            px0 = x * block_pixel_size + splitter_left_px + slot * (outer + pair_gap)
-            _stamp_dot(py0, px0, color)
-
-
-def is_miner_active(state: EnvState, y: int, x: int) -> bool:
-    """Check whether the miner at ``(y, x)`` is actively mining.
-
-    A miner is active when it has power, the tile below still holds
-    resources, and the inventory is not completely full. Fullness is
-    checked by summing all item counts in the machine's pouch.
-
-    Args:
-        state: Current environment state.
-        y: Row of the miner tile.
-        x: Column of the miner tile.
-
-    Returns:
-        True if the miner is doing work this tick.
-    """
-    eidx = int(state.tile_entity[y, x])
-    if eidx < 0:
-        return False
-    has_power = int(state.ent_power[eidx]) > 0
-    has_resources = int(state.block_resources[y, x]) > 0
-    total_count = int(state.ent_buf_count[eidx])
-    has_space = total_count < MAX_MACHINE_STACK_SIZE
-    return has_power and has_resources and has_space

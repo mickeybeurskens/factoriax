@@ -22,8 +22,8 @@ from factoriax.editor.main import (  # noqa: E402
 )
 from factoriax.editor.state import ResourceBrush, editor_state_from_level  # noqa: E402
 from factoriax.editor.toolbar import STATUS_BAR_HEIGHT, TOOL_PAINT  # noqa: E402
+from factoriax.jax_renderer import JaxRenderer  # noqa: E402
 from factoriax.levels import build_state, load_level  # noqa: E402
-from factoriax.renderer import render_pixels  # noqa: E402
 from factoriax.state import EnvParams  # noqa: E402
 
 MEDIA_DIR = Path("docs/media")
@@ -40,9 +40,8 @@ def render_factory() -> None:
         max_timesteps=1000,
     )
     state = build_state(level, params)
-    pixels = render_pixels(state, block_pixel_size=32, frame_tick=5)
-    rgb = pixels[:, :, :3]
-    img = Image.fromarray(np.array(rgb))
+    pixels = np.asarray(JaxRenderer(tile_px=32).jit_render_map(state))
+    img = Image.fromarray(pixels)
     img = img.resize((img.width * 2, img.height * 2), Image.NEAREST)
     img.save(MEDIA_DIR / "factory.png")
     print(f"Saved factory.png ({img.width}x{img.height})")
@@ -78,8 +77,11 @@ def render_editor() -> None:
     )
 
     frame = _render_frame(
-        es, vp, ts,
-        base_w, base_h,
+        es,
+        vp,
+        ts,
+        base_w,
+        base_h,
         file_dialog=None,
         dialog=None,
         number_dialog=None,

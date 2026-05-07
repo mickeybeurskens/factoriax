@@ -9,8 +9,8 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
 )
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
-from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams
 from factoriax.world_gen import generate_world
 
@@ -130,12 +130,13 @@ class TestInventoryRenderer:
     """Regression tests for the base renderer output contract."""
 
     def test_render_pixels_excludes_inventory(self) -> None:
-        """render_pixels should return an RGB array sized to the map, no menu."""
+        """The renderer should return an RGB array sized to the map, no menu."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=8, map_height=8)
         state = generate_world(rng, params)
 
-        pixels = render_pixels(state)
+        renderer = JaxRenderer(tile_px=BLOCK_PIXEL_SIZE)
+        pixels = renderer.jit_render_map(state)
         assert pixels.shape == (
             8 * BLOCK_PIXEL_SIZE,
             8 * BLOCK_PIXEL_SIZE,

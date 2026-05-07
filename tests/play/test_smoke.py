@@ -35,18 +35,18 @@ class TestRendererSmoke:
     """Renderer should produce an image from any valid state."""
 
     def test_render_pixels(self, env_and_state) -> None:
-        """render_pixels returns an RGB array."""
-        from factoriax.renderer import render_pixels
+        """The renderer returns an RGB array."""
+        from factoriax.jax_renderer import JaxRenderer
 
         _, _, state = env_and_state
-        img = render_pixels(state, block_pixel_size=8)
+        img = np.asarray(JaxRenderer(tile_px=8).jit_render_map(state))
         assert img.ndim == 3
         assert img.shape[2] == 3
         assert img.dtype == np.uint8
 
     def test_render_after_step(self, env_and_state) -> None:
         """Rendering works after stepping the environment."""
-        from factoriax.renderer import render_pixels
+        from factoriax.jax_renderer import JaxRenderer
 
         env, params, state = env_and_state
         _, state2, _, _, _ = env.step_env(
@@ -55,7 +55,7 @@ class TestRendererSmoke:
             jnp.int32(Action.NOOP),
             params,
         )
-        img = render_pixels(state2, block_pixel_size=8)
+        img = np.asarray(JaxRenderer(tile_px=8).jit_render_map(state2))
         assert img.shape == (128, 128, 3)
 
 

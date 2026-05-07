@@ -40,6 +40,7 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.play.play_state import PlayState
 from factoriax.play.ui import (
     _entity_inventory,
@@ -54,10 +55,24 @@ from factoriax.play.ui import (
     render_victory_screen,
 )
 from factoriax.recipes import NUM_RECIPES
-from factoriax.renderer import render_pixels
 from factoriax.state import EnvParams, EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import ClickRegion, hit_test_regions
+
+# Module-level renderer cache keyed by tile size. Play windows resize
+# the render at runtime; cache instances so each tile size pays the
+# atlas-build + JIT-compile cost once.
+_RENDERER_CACHE: dict[int, JaxRenderer] = {}
+
+
+def _renderer_for(tile_px: int) -> JaxRenderer:
+    """Return a cached :class:`JaxRenderer` for ``tile_px``."""
+    renderer = _RENDERER_CACHE.get(tile_px)
+    if renderer is None:
+        renderer = JaxRenderer(tile_px=tile_px)
+        _RENDERER_CACHE[tile_px] = renderer
+    return renderer
+
 
 _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(int(x) for x in PLACEABLE_ITEMS)
 
@@ -293,11 +308,7 @@ class GameUI:
             Tuple of (RGB frame array, click regions for this frame).
         """
         ps = self._ps
-        pixels = render_pixels(
-            state,
-            block_pixel_size=tile_px,
-            frame_tick=ps.frame_tick,
-        )
+        pixels = np.asarray(_renderer_for(tile_px).jit_render_map(state))
         click_regions: list[ClickRegion] = []
 
         ui_frame = np.zeros((ui_h, ui_w, 3), dtype=np.uint8)

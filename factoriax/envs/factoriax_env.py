@@ -30,9 +30,8 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     evaluates an optional achievement-condition function each step.
     Reward computation and other policy-shaping concerns still belong
     in gymnax wrappers that compose over this environment. Pixel
-    rendering is provided by :class:`factoriax.jax_renderer.JaxRenderer`
-    (headless / batched) and :mod:`factoriax.renderer` (pygame for
-    play and editor); the env itself does not expose a render method.
+    rendering is provided by :class:`factoriax.jax_renderer.JaxRenderer`;
+    the env itself does not expose a render method.
 
     The ``achievement_fn`` parameter is captured at construction time
     and folded into ``state.achievements_unlocked`` inside

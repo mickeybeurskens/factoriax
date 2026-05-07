@@ -375,13 +375,13 @@ class TestReplayLayout:
         self,
         stateful_trajectory: Path,
     ) -> None:
-        """Q1's map region equals ``render_pixels(states[current_step])``.
+        """Q1's map region equals ``JaxRenderer.jit_render_map`` output.
 
         Proves the on-demand render path produces the same content the
         pre-rendered cache used to serve.
         """
         from factoriax.agentdebugger.layout import _tile_px
-        from factoriax.renderer import render_pixels
+        from factoriax.jax_renderer import JaxRenderer
 
         dbg = Debugger.from_trajectory(str(stateful_trajectory))
         if not dbg._states:
@@ -395,7 +395,8 @@ class TestReplayLayout:
         rebuild_replay_caches(dbg._dbg, qw, qh)
         frame = render_replay_frame(dbg._dbg, dbg._states, base_w, base_h, qw, qh)
         state = dbg._states[dbg._dbg.current_step]
-        expected = np.asarray(render_pixels(state, block_pixel_size=_tile_px(state)))
+        renderer = JaxRenderer(tile_px=_tile_px(state))
+        expected = np.asarray(renderer.jit_render_map(state))
         # The game image is blitted into Q1 (top-left), centered with
         # aspect-preserving scale. We can't compare pixel-exact without
         # recomputing the scale math — instead assert a non-trivial
@@ -414,7 +415,7 @@ class TestReplayLayout:
         bg = (20, 20, 25)
         foreign = q1_set - exp_set - {bg}
         assert not foreign, (
-            f"Q1 contains colors not present in render_pixels: {foreign}"
+            f"Q1 contains colors not present in JaxRenderer output: {foreign}"
         )
 
 

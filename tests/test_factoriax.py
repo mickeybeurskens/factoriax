@@ -27,9 +27,7 @@ from factoriax.game_logic import (
     move_player,
 )
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
-from factoriax.renderer import (
-    create_default_textures,
-)
+from factoriax.ui.icons import create_default_textures
 from factoriax.world_gen import generate_world
 
 

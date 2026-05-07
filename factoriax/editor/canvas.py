@@ -15,7 +15,7 @@ import numpy as np
 import pygame
 
 from factoriax.constants import ItemType, MachineType
-from factoriax.renderer import (
+from factoriax.ui.icons import (
     MACHINE_TO_ITEM,
     build_texture_lookup,
     render_item_icon,
@@ -282,7 +282,7 @@ def render_canvas(
 @functools.lru_cache(maxsize=72)
 def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
     """Cached player start icon for the editor canvas."""
-    from factoriax.renderer import create_player_start_icon
+    from factoriax.ui.icons import create_player_start_icon
 
     return create_player_start_icon(player_idx, size)
 
@@ -290,7 +290,7 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
 @functools.lru_cache(maxsize=8)
 def _cached_biter_texture(size: int) -> np.ndarray:
     """Cached biter texture for the editor canvas."""
-    from factoriax.renderer import create_biter_texture
+    from factoriax.ui.icons import create_biter_texture
 
     return create_biter_texture(size)
 

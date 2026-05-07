@@ -36,10 +36,25 @@ from factoriax.agentdebugger.charts import (
 )
 from factoriax.agentdebugger.state import DebuggerState
 from factoriax.analysis.inventory import render_inventory_panel
-from factoriax.renderer import render_pixels
+from factoriax.jax_renderer import JaxRenderer
 from factoriax.state import EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
+
+# Cache one ``JaxRenderer`` per tile size so the debugger pays the
+# atlas build and JIT compile cost once per zoom level instead of once
+# per frame.
+_RENDERER_CACHE: dict[int, JaxRenderer] = {}
+
+
+def _render_map(state: EnvState, block_pixel_size: int) -> np.ndarray:
+    """Render the map at ``block_pixel_size`` via a cached JaxRenderer."""
+    renderer = _RENDERER_CACHE.get(block_pixel_size)
+    if renderer is None:
+        renderer = JaxRenderer(tile_px=block_pixel_size)
+        _RENDERER_CACHE[block_pixel_size] = renderer
+    return np.asarray(renderer.jit_render_map(state))
+
 
 STATUS_BAR_HEIGHT = 28
 DIVIDER_COLOR = (60, 60, 60)
@@ -166,11 +181,7 @@ def render_debugger_frame(
     # ------------------------------------------------------------------
     # Q1: Game view (top-left)
     # ------------------------------------------------------------------
-    game_img = render_pixels(
-        current_state,
-        block_pixel_size=_tile_px(current_state),
-        frame_tick=dbg.frame_tick,
-    )
+    game_img = _render_map(current_state, _tile_px(current_state))
     _blit_game_frame(frame, game_img, 0, 0, quadrant_w, quadrant_h)
 
     # ------------------------------------------------------------------
@@ -295,8 +306,8 @@ def render_replay_frame(
 
     The current step's map is rendered fresh each call rather than
     pulled from a pre-rendered cache — an 8000-step 32x32 trajectory
-    with 550 KB/frame caching was the OOM culprit. ``render_pixels``
-    runs in well under a frame at typical tile sizes.
+    with 550 KB/frame caching was the OOM culprit. The cached
+    ``JaxRenderer`` runs in well under a frame at typical tile sizes.
 
     Args:
         dbg: Current debugger state (must have ``replay_mode=True``).
@@ -319,10 +330,7 @@ def render_replay_frame(
     # ------------------------------------------------------------------
     if states and 0 <= dbg.current_step < len(states):
         current_state = states[dbg.current_step]
-        game_img = render_pixels(
-            current_state,
-            block_pixel_size=_tile_px(current_state),
-        )
+        game_img = _render_map(current_state, _tile_px(current_state))
         if dbg.show_obs_overlay and traj is not None:
             game_img = _maybe_apply_fog(game_img, traj, dbg)
         _blit_game_frame(frame, game_img, 0, 0, quadrant_w, quadrant_h)
@@ -774,7 +782,7 @@ def _draw_world(
     has positions but no block_map).
     """
     from factoriax.analysis.trajectory import Trajectory
-    from factoriax.renderer import PLAYER_COLORS
+    from factoriax.ui.icons import PLAYER_COLORS
 
     if not isinstance(traj, Trajectory) or traj.positions is None:
         return
