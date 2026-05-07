@@ -266,6 +266,101 @@ def build_player_sprite(tile_px: int) -> jnp.ndarray:
     return jnp.array(np.stack([np.stack(rows, axis=0) for rows in sprites], axis=0))
 
 
+# ---------------------------------------------------------------------------
+# Numpy-side atlas helpers
+#
+# The editor canvas and other pygame surfaces need RGBA numpy arrays
+# rather than the device-resident JAX arrays the renderer uses. These
+# helpers slice the same atlas the JAX builders consume, so swapping
+# the atlas PNG re-skins both surfaces at once. Results are cached per
+# requested size so a frame loop pays the slice + downsample cost
+# exactly once per tile size.
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=8)
+def block_textures_rgba(size: int) -> np.ndarray:
+    """Return per-block RGBA textures sliced from the sprite atlas.
+
+    The shape mirrors what the editor canvas needs for its vectorised
+    advanced-index blit: ``(num_block_types, size, size, 4)``. Block
+    cells in the atlas are fully opaque, so the alpha channel is
+    always 255 here — terrain is always the ground truth layer.
+
+    Args:
+        size: Tile side length in pixels. Downsampling from the atlas's
+            32×32 base is nearest-neighbour.
+
+    Returns:
+        uint8 RGBA array of shape ``(num_block_types, size, size, 4)``.
+    """
+    n_cells = max(int(b) for b in BlockType) + 1
+    cells = _atlas_row_cells(_ATLAS_ROW_BLOCKS, n_cells)
+    return _downsample(cells, size).astype(np.uint8, copy=False)
+
+
+@functools.lru_cache(maxsize=64)
+def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarray:
+    """Return the RGBA machine sprite for a placed machine.
+
+    Sliced from the atlas's directional machine rows; the editor
+    canvas uses this in place of
+    :func:`factoriax.ui.icons.render_item_icon` so both surfaces
+    pull from the same source of truth. Direction values outside
+    ``[1, 4]`` (e.g. an unset machine direction) are clipped to the
+    LEFT row to keep the gather well-defined.
+
+    Args:
+        machine_type: ``MachineType`` integer.
+        size: Side length in pixels for the returned sprite.
+        direction: ``Direction`` integer (1=LEFT, 2=RIGHT, 3=UP, 4=DOWN).
+
+    Returns:
+        uint8 RGBA array of shape ``(size, size, 4)``.
+    """
+    direction_idx = max(0, min(_ATLAS_NUM_DIRECTIONS - 1, direction - 1))
+    row = _ATLAS_ROW_MACHINES_BASE + direction_idx
+    cell = _atlas_cell(row, machine_type)
+    return _downsample(cell, size).astype(np.uint8, copy=False)
+
+
+@functools.lru_cache(maxsize=8)
+def biter_icon_rgba(size: int) -> np.ndarray:
+    """Return the RGBA biter sprite from the misc row's biter cell.
+
+    Args:
+        size: Side length in pixels for the returned sprite.
+
+    Returns:
+        uint8 RGBA array of shape ``(size, size, 4)``.
+    """
+    cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_BITER)
+    return _downsample(cell, size).astype(np.uint8, copy=False)
+
+
+@functools.lru_cache(maxsize=64)
+def player_icon_rgba(player_idx: int, size: int, direction: int) -> np.ndarray:
+    """Return the RGBA player sprite for the given slot and facing.
+
+    Players beyond :data:`_ATLAS_NUM_PLAYERS` wrap modulo the palette
+    size, matching the renderer's runtime behaviour and the editor's
+    legacy player-color recycling.
+
+    Args:
+        player_idx: Player slot (0-based).
+        size: Side length in pixels for the returned sprite.
+        direction: ``Direction`` integer (1=LEFT, 2=RIGHT, 3=UP, 4=DOWN).
+
+    Returns:
+        uint8 RGBA array of shape ``(size, size, 4)``.
+    """
+    slot = player_idx % _ATLAS_NUM_PLAYERS
+    direction_idx = max(0, min(_ATLAS_NUM_DIRECTIONS - 1, direction - 1))
+    col = _ATLAS_MISC_PLAYER_BASE + slot * _ATLAS_NUM_DIRECTIONS + direction_idx
+    cell = _atlas_cell(_ATLAS_ROW_MISC, col)
+    return _downsample(cell, size).astype(np.uint8, copy=False)
+
+
 def build_item_color_atlas() -> jnp.ndarray:
     """Build an RGB color lookup indexed by ItemType.
 

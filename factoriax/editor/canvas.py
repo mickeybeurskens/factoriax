@@ -1,8 +1,12 @@
 """Viewport and tile rendering for the level editor canvas.
 
-Renders only the visible slice of the map using the same texture lookup
-that the game renderer uses, so editor tiles look pixel-identical to
-in-game tiles.
+Renders only the visible slice of the map. Block and machine sprites
+come from the same sprite atlas the JAX renderer reads, so the editor
+canvas is pixel-identical to the play view down to the swapped art on
+``factoriax/assets/atlas.png``. Per-cell helpers in
+:mod:`factoriax.jax_renderer` (``block_textures_rgba``,
+``machine_icon_rgba``) provide RGBA numpy arrays at the requested
+tile size.
 """
 
 from __future__ import annotations
@@ -14,11 +18,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pygame
 
-from factoriax.constants import ItemType, MachineType
-from factoriax.ui.icons import (
-    MACHINE_TO_ITEM,
-    build_texture_lookup,
-    render_item_icon,
+from factoriax.constants import MachineType
+from factoriax.jax_renderer import (
+    biter_icon_rgba,
+    block_textures_rgba,
+    machine_icon_rgba,
 )
 
 if TYPE_CHECKING:
@@ -181,7 +185,7 @@ def render_canvas(
     if col1 <= col0 or row1 <= row0:
         return canvas
 
-    lookup = build_texture_lookup(vp.tile_size)
+    lookup = block_textures_rgba(vp.tile_size)
     block_slice = es.block_map[row0:row1, col0:col1]
     max_id = lookup.shape[0] - 1
     safe = np.clip(block_slice, 0, max_id)
@@ -208,9 +212,8 @@ def render_canvas(
 
     for my, mx in zip(mys, mxs):
         mt = int(machine_slice[my, mx])
-        item_type = MACHINE_TO_ITEM.get(mt, int(ItemType.EMPTY))
         direction = int(direction_slice[my, mx])
-        icon = render_item_icon(item_type, machine_size, direction)
+        icon = machine_icon_rgba(mt, machine_size, direction)
         iy = int(py0 + my * ts + offset)
         ix = int(px0 + mx * ts + offset)
         _blit_clipped(canvas, icon, iy, ix)
@@ -287,19 +290,14 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
     return create_player_start_icon(player_idx, size)
 
 
-@functools.lru_cache(maxsize=8)
-def _cached_biter_texture(size: int) -> np.ndarray:
-    """Cached biter texture for the editor canvas."""
-    from factoriax.ui.icons import create_biter_texture
-
-    return create_biter_texture(size)
-
-
 def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
     """Draw player start markers and biters on the canvas.
 
     Biters are drawn first so player markers appear on top when
-    they overlap.
+    they overlap. Biter sprites come from the atlas (same source the
+    play renderer uses); player start markers stay procedural since
+    they're editor-only spawn-point indicators with no in-game
+    counterpart.
 
     Args:
         canvas: RGBA canvas array (mutated in place).
@@ -307,9 +305,10 @@ def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
         vp: Current viewport.
     """
     ts = vp.tile_size
+    biter_sprite = biter_icon_rgba(ts)
     for bx, by in es.biter_positions:
         sx, sy = tile_to_screen(vp, bx, by)
-        _blit_alpha(canvas, _cached_biter_texture(ts), sy, sx)
+        _blit_alpha(canvas, biter_sprite, sy, sx)
     for idx, (px, py) in es.player_positions.items():
         sx, sy = tile_to_screen(vp, px, py)
         _blit_alpha(canvas, _cached_player_start_icon(idx, ts), sy, sx)
