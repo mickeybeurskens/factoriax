@@ -32,13 +32,19 @@ _TEST_MAX_MACHINES: int = 64
 def state_factory():
     """Factory for creating test states with sensible defaults.
 
-    Returns a function that creates EnvState objects. Only the world_map is
-    required; all other fields have sensible defaults.
+    Returns a function that creates :class:`EnvState` objects. Only
+    ``world_map`` is required; all other fields have sensible defaults.
 
-    Old grid-based keyword arguments (machine_direction, machine_power,
-    buffer_type, buffer_count, asm_in_type, asm_in_count, asm_out_type,
-    asm_out_count) are accepted for backward compatibility and translated
-    into entity arrays automatically.
+    Machine state can be expressed in **grid form** for readability —
+    pass ``machine_types``, ``machine_direction``, ``machine_power``,
+    ``buffer_type``, ``buffer_count``, ``asm_in_type``, ``asm_in_count``,
+    ``asm_out_type``, ``asm_out_count`` as ``(H, W)``-shaped arrays and
+    the factory packs them into the engine's ``ent_*`` entity arrays
+    plus a ``tile_entity`` lookup. This translation is a deliberate
+    test ergonomic, not a compatibility shim: the engine itself reads
+    only the entity arrays; tests just use the grid form so a single
+    setup line can place a machine at ``(y, x)`` with a given facing
+    and buffer state.
 
     Example:
         def test_something(state_factory):
@@ -71,7 +77,9 @@ def state_factory():
         items_mined: jnp.ndarray | None = None,
         science_consumed_step: jnp.ndarray | None = None,
         max_machines: int = _TEST_MAX_MACHINES,
-        # Backward-compat kwargs (ignored in new state)
+        # Catch-all for kwargs that older tests pass under retired
+        # EnvState field names. Silently dropped; new tests should
+        # not rely on this.
         **_kwargs: object,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
@@ -88,14 +96,22 @@ def state_factory():
             num_players: Number of players (for defaults).
             block_resources: Resources per tile.
             machine_types: Machine type per tile.
-            machine_power: Power per machine (grid, translated to entities).
-            machine_direction: Direction per machine (grid, translated).
-            buffer_type: Buffer item type per tile (grid, translated).
-            buffer_count: Buffer item count per tile (grid, translated).
-            asm_in_type: Assembler input types (grid, translated).
-            asm_in_count: Assembler input counts (grid, translated).
-            asm_out_type: Assembler output type (grid, translated).
-            asm_out_count: Assembler output count (grid, translated).
+            machine_power: Power per machine (grid form; packed into
+                ``ent_power``).
+            machine_direction: Direction per machine (grid form; packed
+                into ``ent_direction``).
+            buffer_type: Buffer item type per tile (grid form; packed
+                into ``ent_buf_type``).
+            buffer_count: Buffer item count per tile (grid form; packed
+                into ``ent_buf_count``).
+            asm_in_type: Assembler input types (grid form; packed into
+                ``ent_asm_in_type``).
+            asm_in_count: Assembler input counts (grid form; packed
+                into ``ent_asm_in_count``).
+            asm_out_type: Assembler output type (grid form; packed into
+                ``ent_asm_out_type``).
+            asm_out_count: Assembler output count (grid form; packed
+                into ``ent_asm_out_count``).
             items_mined: Lifetime mined counts.
             science_consumed_step: Per-step science pack consumption
                 delta (from SCIENCE_LAB entities).
