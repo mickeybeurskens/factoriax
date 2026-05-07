@@ -29,6 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+import factoriax
 from baselines.ppo.gae import Transition, compute_gae
 from baselines.ppo.network import ActorCritic
 from baselines.ppo.normalization import (
@@ -50,9 +51,6 @@ from factoriax.benchmarks.rocket import (
     rocket_reward,
 )
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
-from factoriax.envs import FactoriaXEnv
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
 from factoriax.levels import build_state
 from factoriax.state import EnvParams, EnvState
 
@@ -154,7 +152,7 @@ def _ppo_loss(
 
 def _make_env_and_state(
     config: Config,
-) -> tuple[ActionMaskWrapper, EnvState, EnvParams]:
+) -> tuple[Any, EnvState, EnvParams]:
     """Build the wrapped env, initial EnvState, and EnvParams.
 
     Action mask matches the scripted benchmark: ``CRAFT_*`` actions are
@@ -169,18 +167,18 @@ def _make_env_and_state(
     the policy; switching to a local window keeps throughput flat as the
     map grows.
     """
-    base_env = FactoriaXEnv(achievement_fn=rocket_conditions)
-    env = ActionMaskWrapper(
-        LocalObservationWrapper(base_env, radius=config.obs_radius),
-        ROCKET_BLOCKED_ACTIONS,
+    level = build_rocket_level()
+    env, env_params = factoriax.make(
+        level,
+        obs="local",
+        obs_radius=config.obs_radius,
+        achievement_fn=rocket_conditions,
+        blocked_actions=ROCKET_BLOCKED_ACTIONS,
     )
-    env_params = EnvParams(
-        map_width=config.map_size,
-        map_height=config.map_size,
+    env_params = env_params.replace(
         num_players=1,
         max_timesteps=config.max_timesteps,
     )
-    level = build_rocket_level()
     state0 = build_state(level, env_params)
     return env, state0, env_params
 
@@ -243,7 +241,7 @@ def _save_final_model(
 
 def _render_eval_episode(
     config: Config,
-    env: ActionMaskWrapper,
+    env: Any,
     env_params: EnvParams,
     initial_state: EnvState,
     network: ActorCritic,
@@ -297,7 +295,7 @@ def _render_eval_episode(
 
 def _finalize_artifacts(
     config: Config,
-    env: ActionMaskWrapper,
+    env: Any,
     env_params: EnvParams,
     initial_state: EnvState,
     network: ActorCritic,
