@@ -22,7 +22,7 @@ from factoriax.config import (
     resolve_controller_hat,
     resolve_key,
 )
-from factoriax.menu.settings_menu import (
+from factoriax.menu.controls_menu import (
     _format_binding,
     _format_controller_display,
     _format_key_display,

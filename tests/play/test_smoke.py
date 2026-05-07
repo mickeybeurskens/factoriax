@@ -129,7 +129,7 @@ class TestConfigSmoke:
 
     def test_settings_fields_exist_on_env_params(self) -> None:
         """Every field in the settings menu must exist on EnvParams."""
-        from factoriax.menu.settings_menu import _build_sections
+        from factoriax.play.launch_screen import _build_sections
 
         params = EnvParams()
         sections = _build_sections(params)

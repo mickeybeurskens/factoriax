@@ -91,7 +91,7 @@ def _apply_display_config(config: PlayerConfig) -> pygame.Surface:
 
 def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     """Show play settings, then launch the game with chosen parameters."""
-    from factoriax.menu.settings_menu import run_settings_menu
+    from factoriax.play.launch_screen import run_settings_menu
 
     initial_params = config_to_env_params(config)
     params = run_settings_menu(screen, initial_params=initial_params)
@@ -150,7 +150,7 @@ def _handle_editor(screen: pygame.Surface) -> None:
 
 def _handle_settings(screen: pygame.Surface, config: PlayerConfig) -> None:
     """Open the controls/rebinding screen and persist changes."""
-    from factoriax.menu.settings_menu import run_controls_menu
+    from factoriax.menu.controls_menu import run_controls_menu
 
     new_fullscreen, new_scale = run_controls_menu(screen, config)
     config.fullscreen = new_fullscreen
