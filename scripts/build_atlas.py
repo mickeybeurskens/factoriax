@@ -30,8 +30,11 @@ Directional categories carry one cell per
   ``ASSEMBLER``, ``FURNACE``, ``SCIENCE_LAB``, ``ROCKET``) are
   rendered once and duplicated across all four rows so a uniform
   gather works at render time.
-- Player: misc row columns 1-4 hold the same four directions for
-  ``player_idx=0``. Column 0 holds the biter sprite.
+- Player: misc row col 0 holds the biter; cols 1..32 hold eight
+  players × four directions packed as ``(player_idx, direction)``,
+  so player ``p`` direction ``d_idx`` lives at
+  ``1 + p * 4 + d_idx``. Players beyond eight wrap modulo eight to
+  match :data:`factoriax.ui.icons.PLAYER_COLORS`.
 
 Usage::
 
@@ -99,6 +102,12 @@ NUM_ROWS: int = ROW_DIGITS + 1  # 8
 # Misc row column layout.
 COL_MISC_BITER: int = 0
 COL_MISC_PLAYER_BASE: int = 1
+# Eight players × four directions = 32 player cells, packed as
+# (player_idx, direction) starting at COL_MISC_PLAYER_BASE. Player p
+# direction d sits at COL_MISC_PLAYER_BASE + p * NUM_DIRECTIONS + d_idx.
+# Eight matches the distinct PLAYER_COLORS palette in
+# factoriax/ui/icons.py; players beyond 8 wrap modulo 8.
+NUM_PLAYERS: int = 8
 
 
 # Magenta with alpha=255 acts as the "missing sprite" sentinel. The
@@ -204,11 +213,15 @@ def _item_cell(item: ItemType) -> np.ndarray | None:
     return icon.astype(np.uint8)
 
 
-def _player_cell(direction: Direction) -> np.ndarray:
-    """Return the RGBA player sprite (player 0) facing *direction*."""
+def _player_cell(player_idx: int, direction: Direction) -> np.ndarray:
+    """Return the RGBA sprite for *player_idx* facing *direction*.
+
+    Player colors come from :data:`factoriax.ui.icons.PLAYER_COLORS`,
+    which provides a distinct palette per slot.
+    """
     sprite = create_player_texture(
         direction=int(direction),
-        player_idx=0,
+        player_idx=player_idx,
         is_selected=True,
         size=CELL_PX,
     )
@@ -272,10 +285,12 @@ def _build_atlas_array() -> np.ndarray:
             continue
         _put(ROW_ITEMS, int(item), cell)
 
-    # Row 6: misc.
+    # Row 6: misc — biter + per-player directional sprites.
     _put(ROW_MISC, COL_MISC_BITER, _biter_cell())
-    for d_idx, direction in enumerate(_DIRECTION_ORDER):
-        _put(ROW_MISC, COL_MISC_PLAYER_BASE + d_idx, _player_cell(direction))
+    for player_idx in range(NUM_PLAYERS):
+        for d_idx, direction in enumerate(_DIRECTION_ORDER):
+            col = COL_MISC_PLAYER_BASE + player_idx * NUM_DIRECTIONS + d_idx
+            _put(ROW_MISC, col, _player_cell(player_idx, direction))
 
     # Row 7: digits.
     digit_atlas = np.asarray(build_digit_atlas())
@@ -316,10 +331,15 @@ def _build_atlas_json() -> dict:
                 "columns": {
                     "biter": COL_MISC_BITER,
                     **{
-                        f"player_{d.name}": COL_MISC_PLAYER_BASE + i
+                        f"player{p}_{d.name}": (
+                            COL_MISC_PLAYER_BASE + p * NUM_DIRECTIONS + i
+                        )
+                        for p in range(NUM_PLAYERS)
                         for i, d in enumerate(_DIRECTION_ORDER)
                     },
                 },
+                "num_players": NUM_PLAYERS,
+                "directions": direction_axis,
             },
             "digits": {
                 "row": ROW_DIGITS,

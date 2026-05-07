@@ -123,9 +123,15 @@ _ATLAS_ROW_MACHINES_BASE: int = 1
 _ATLAS_NUM_DIRECTIONS: int = 4
 _ATLAS_ROW_ITEMS: int = 5
 _ATLAS_ROW_MISC: int = 6
-# Misc row column layout: col 0 = biter, cols 1..4 = player[direction].
+# Misc row column layout: col 0 = biter, then 8 players × 4 directions
+# packed as (player_idx, direction) starting at col 1. Player p's
+# direction-d cell sits at col 1 + p * 4 + (d - 1). Eight players is
+# the cap because PLAYER_COLORS in factoriax/ui/icons.py defines a
+# distinct palette per slot up to 8; players beyond that wrap modulo
+# 8 (matching the editor and play HUD's color-recycling behavior).
 _ATLAS_MISC_BITER: int = 0
 _ATLAS_MISC_PLAYER_BASE: int = 1
+_ATLAS_NUM_PLAYERS: int = 8
 _ATLAS_ROW_DIGITS: int = 7
 
 
@@ -233,24 +239,31 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
 
 
 def build_player_sprite(tile_px: int) -> jnp.ndarray:
-    """Build the directional player sprite stack from the sprite atlas.
+    """Build the per-player, directional player sprite stack.
 
-    The misc row holds one player cell per
-    :class:`~factoriax.constants.Direction` starting at column
-    :data:`_ATLAS_MISC_PLAYER_BASE`, ordered LEFT, RIGHT, UP, DOWN.
+    The misc row packs eight players × four directions starting at
+    column :data:`_ATLAS_MISC_PLAYER_BASE`. Player ``p`` facing
+    direction ``d`` (1..4) lives at column
+    ``_ATLAS_MISC_PLAYER_BASE + p * _ATLAS_NUM_DIRECTIONS + (d - 1)``.
 
     Args:
         tile_px: Tile side length in pixels.
 
     Returns:
-        JAX array of shape ``(4, tile_px, tile_px, 4)``. Index 0 is
-        direction LEFT, 3 is direction DOWN.
+        JAX array of shape
+        ``(_ATLAS_NUM_PLAYERS, _ATLAS_NUM_DIRECTIONS, tile_px, tile_px, 4)``.
+        Players 0..7 each have four directional cells in the order
+        LEFT, RIGHT, UP, DOWN.
     """
-    sprites = []
-    for d in range(_ATLAS_NUM_DIRECTIONS):
-        cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_PLAYER_BASE + d)
-        sprites.append(_downsample(cell, tile_px))
-    return jnp.array(np.stack(sprites, axis=0))
+    sprites: list[list[np.ndarray]] = []
+    for p in range(_ATLAS_NUM_PLAYERS):
+        per_player: list[np.ndarray] = []
+        for d in range(_ATLAS_NUM_DIRECTIONS):
+            col = _ATLAS_MISC_PLAYER_BASE + p * _ATLAS_NUM_DIRECTIONS + d
+            cell = _atlas_cell(_ATLAS_ROW_MISC, col)
+            per_player.append(_downsample(cell, tile_px))
+        sprites.append(per_player)
+    return jnp.array(np.stack([np.stack(rows, axis=0) for rows in sprites], axis=0))
 
 
 def build_item_color_atlas() -> jnp.ndarray:
@@ -403,8 +416,9 @@ def render_map(
         block_atlas: Shape ``(num_block_types, tile_px, tile_px, 4)``.
         machine_atlas: Shape ``(4, num_machine_types, tile_px, tile_px, 4)``
             indexed by ``(direction - 1, machine_type)``.
-        player_sprite: Shape ``(4, tile_px, tile_px, 4)`` indexed by
-            ``direction - 1``.
+        player_sprite: Shape
+            ``(_ATLAS_NUM_PLAYERS, 4, tile_px, tile_px, 4)`` indexed by
+            ``(player_idx % _ATLAS_NUM_PLAYERS, direction - 1)``.
 
     Returns:
         uint8 RGB image of shape ``(H * tile_px, W * tile_px, 3)``.
@@ -447,7 +461,13 @@ def render_map(
         px = state.player_positions[i, 0].astype(jnp.int32)
         py = state.player_positions[i, 1].astype(jnp.int32)
         pdir = state.player_directions[i].astype(jnp.int32)
-        sprite = player_sprite[jnp.clip(pdir - 1, 0, _ATLAS_NUM_DIRECTIONS - 1)]
+        # Player slot is i mod _ATLAS_NUM_PLAYERS; players beyond the
+        # palette wrap (matches the editor + play HUD).
+        slot = i % _ATLAS_NUM_PLAYERS
+        sprite = player_sprite[
+            slot,
+            jnp.clip(pdir - 1, 0, _ATLAS_NUM_DIRECTIONS - 1),
+        ]
         region = jax.lax.dynamic_slice(
             img, (py * tile_px, px * tile_px, jnp.int32(0)), (tile_px, tile_px, 3)
         )

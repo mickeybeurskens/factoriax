@@ -40,7 +40,7 @@ artifact rather than silent zeros.
 |   3 | machines, dir UP       | `factoriax.constants.MachineType`| 11    | Same, with `direction=UP`. |
 |   4 | machines, dir DOWN     | `factoriax.constants.MachineType`| 11    | Same, with `direction=DOWN`. |
 |   5 | items                  | `factoriax.constants.ItemType`   | 33    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
-|   6 | misc                   | (manually enumerated)            | 5     | col 0 = biter; cols 1-4 = player[LEFT, RIGHT, UP, DOWN] for `player_idx=0`. |
+|   6 | misc                   | (manually enumerated)            | 33    | col 0 = biter; cols 1..32 hold 8 players × 4 directions packed as `(player_idx, direction)` starting at col 1, with `col = 1 + player_idx * 4 + direction_idx`. Player slots beyond 8 wrap modulo 8. |
 |   7 | digits                 | digits 0-9                       | 10    | Each cell is 32×32; the 3×5 glyph is rendered at the cell's top-left, padded with zeros. Alpha=255. |
 
 Width of the atlas is `max(num_cells_per_row) = 33` (driven by
@@ -62,6 +62,11 @@ machines (`PALLET`, `ASSEMBLER`, `FURNACE`, `SCIENCE_LAB`,
 `ROCKET`, `NONE`) render once with `direction=DOWN` and that sprite
 is duplicated across all four direction rows so the renderer's
 gather is uniform.
+
+Player slots use the same `[LEFT, RIGHT, UP, DOWN]` axis but are
+also keyed by `player_idx`. Eight palettes are baked in (the
+distinct entries of `PLAYER_COLORS` in `factoriax/ui/icons.py`);
+players 8 and beyond reuse palette 0 onwards via modulo-8.
 
 ## Sidecar JSON shape
 
@@ -85,9 +90,12 @@ gather is uniform.
     "items":    {"row": 5, "names": ["EMPTY", "COAL", ...], "missing": "magenta"},
     "misc":     {
       "row": 6,
+      "num_players": 8,
+      "directions": ["LEFT", "RIGHT", "UP", "DOWN"],
       "columns": {
         "biter": 0,
-        "player_LEFT": 1, "player_RIGHT": 2, "player_UP": 3, "player_DOWN": 4
+        "player0_LEFT": 1, "player0_RIGHT": 2, "player0_UP": 3, "player0_DOWN": 4,
+        "player1_LEFT": 5, "...": "...", "player7_DOWN": 32
       }
     },
     "digits":   {"row": 7, "names": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]}
@@ -124,9 +132,10 @@ asserts byte-equivalence with the committed copies.
   "machine starved of input", etc. — visual debugging aids.
 - **Glyph atlas**: a richer text atlas to phase out the pygame text
   overlay. Out of scope for v1 by spec decision.
-- **Per-player directional sprites for `player_idx > 0`**: currently
-  only `player_idx=0` has directional cells in the misc row.
-  Multi-player play renders all players with the same sprite.
+- **Per-player directional sprites beyond 8 slots**: currently the
+  misc row caps at 8 distinct palettes. A 9th-or-later player
+  recycles palette 0 onwards. Adding a dedicated row block per
+  player (or sourcing palettes generatively) would lift the cap.
 
 These are listed so the layout doesn't silently invalidate them.
 Adding a row at the bottom is non-breaking; reordering existing
