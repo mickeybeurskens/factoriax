@@ -43,28 +43,42 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     cache entries via ``static_argnames=("self",)`` on :meth:`step`.
     Pass ``None`` to skip the eval pass entirely (zero added cost).
 
+    The ``level`` parameter selects the reset behavior. When ``None``
+    (default), :meth:`reset_env` generates a procedural world from the
+    PRNG key. When a :class:`~factoriax.levels.Level` is supplied,
+    :meth:`reset_env` materializes that fixed level via
+    :func:`~factoriax.levels.build_state` and the PRNG key is unused
+    for layout. gymnax conformance — ``reset_env(key, params)`` is
+    the only reset surface.
+
     Args:
         tile_px: Tile side length in pixels for the JAX renderer.
         achievement_fn: Pure function ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``
             evaluated each step. Returned True bits are OR-folded into
             ``state.achievements_unlocked`` and latch for the rest of
             the episode. ``None`` (default) skips evaluation.
+        level: Fixed :class:`Level` used by :meth:`reset_env`. ``None``
+            (default) means procedural generation from the PRNG key.
     """
 
     def __init__(
         self,
         tile_px: int = 8,
         achievement_fn: AchievementFn | None = None,
+        level: Level | None = None,
     ) -> None:
         """Initialize the environment.
 
         Args:
             tile_px: Tile side length in pixels for the JAX renderer.
             achievement_fn: Optional achievement condition function.
+            level: Fixed level for :meth:`reset_env`, or ``None`` for
+                procedural generation.
         """
         super().__init__()
         self.jax_renderer = JaxRenderer(tile_px=tile_px)
         self._achievement_fn = achievement_fn
+        self._level = level
 
     @property
     def default_params(self) -> EnvParams:
@@ -149,6 +163,12 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     ) -> tuple[jax.Array, EnvState]:
         """Reset the environment to an initial state.
 
+        Dispatches on the env's bound ``level``: when ``None``,
+        procedurally generates a world from the PRNG key; when a
+        :class:`Level` is bound, materializes that level via
+        :func:`~factoriax.levels.build_state` (the key is unused for
+        layout).
+
         Args:
             key: JAX random key for world generation.
             params: Environment parameters.
@@ -156,7 +176,10 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Tuple of (initial_observation, initial_state).
         """
-        state = generate_state(key, params)
+        if self._level is None:
+            state = generate_state(key, params)
+        else:
+            state = build_state(self._level, params)
         obs = self.get_obs(state, params)
         return obs, state
 

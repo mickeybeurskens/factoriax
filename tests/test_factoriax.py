@@ -113,6 +113,42 @@ class TestEnvStateSchema:
         assert not bool(state.achievements_unlocked.any())
 
 
+class TestEnvConstructorLevel:
+    """Tests for the level-on-constructor reset path (gymnax conformance)."""
+
+    def test_default_level_none_resets_procedurally(self) -> None:
+        """FactoriaXEnv(level=None).reset_env produces a procedural state."""
+        from factoriax.envs.factoriax_env import FactoriaXEnv
+
+        env = FactoriaXEnv()  # level=None default
+        params = EnvParams(map_width=8, map_height=8, num_players=1)
+
+        _, state = env.reset_env(random.PRNGKey(0), params)
+
+        assert state.map.shape == (8, 8)
+        # Procedural maps draw from terrain probabilities, so different
+        # seeds produce different layouts.
+        _, state2 = env.reset_env(random.PRNGKey(1), params)
+        assert not jnp.array_equal(state.map, state2.map)
+
+    def test_level_constructor_arg_resets_to_level(self) -> None:
+        """FactoriaXEnv(level=L).reset_env produces a state matching L's geometry."""
+        from factoriax.envs.factoriax_env import FactoriaXEnv
+        from factoriax.levels import get_level
+
+        level = get_level("15x15_resources")
+        env = FactoriaXEnv(level=level)
+        params = EnvParams(map_width=15, map_height=15, num_players=1)
+
+        _, state = env.reset_env(random.PRNGKey(0), params)
+
+        assert state.map.shape == (15, 15)
+        # Level state is deterministic in geometry — different rngs
+        # still produce the same map.
+        _, state2 = env.reset_env(random.PRNGKey(99), params)
+        assert jnp.array_equal(state.map, state2.map)
+
+
 class TestGameLogic:
     """Tests for game logic."""
 
