@@ -26,9 +26,9 @@ from factoriax.game_logic import (
     is_position_walkable,
     move_player,
 )
+from factoriax.levels import generate_state
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.ui.icons import create_default_textures
-from factoriax.world_gen import generate_world
 
 
 class TestConstants:
@@ -42,14 +42,14 @@ class TestConstants:
         assert int(BlockType.COAL) not in solid_set
 
 
-class TestWorldGen:
-    """Tests for world generation."""
+class TestWorldGeneration:
+    """Tests for procedural world generation via ``generate_state``."""
 
-    def test_generate_world_creates_valid_state(self) -> None:
+    def test_generate_state_creates_valid_state(self) -> None:
         """Generated world should have valid state structure."""
         rng = random.PRNGKey(0)
         params = EnvParams()
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         assert state.map.shape == (params.map_height, params.map_width)
         assert state.player_positions.shape == (params.num_players, 2)
@@ -59,17 +59,17 @@ class TestWorldGen:
         """Players should always spawn on dirt tiles."""
         rng = random.PRNGKey(0)
         params = EnvParams()
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         for i in range(params.num_players):
             px, py = state.player_positions[i]
             assert state.map[py, px] == BlockType.DIRT
 
-    def test_world_gen_is_deterministic(self) -> None:
+    def test_generate_state_is_deterministic(self) -> None:
         """Same seed should produce same world."""
         params = EnvParams()
-        state1 = generate_world(random.PRNGKey(42), params)
-        state2 = generate_world(random.PRNGKey(42), params)
+        state1 = generate_state(random.PRNGKey(42), params)
+        state2 = generate_state(random.PRNGKey(42), params)
 
         assert jnp.array_equal(state1.map, state2.map)
         assert jnp.array_equal(state1.player_positions, state2.player_positions)
@@ -77,8 +77,8 @@ class TestWorldGen:
     def test_different_seeds_produce_different_worlds(self) -> None:
         """Different seeds should produce different worlds."""
         params = EnvParams()
-        state1 = generate_world(random.PRNGKey(0), params)
-        state2 = generate_world(random.PRNGKey(1), params)
+        state1 = generate_state(random.PRNGKey(0), params)
+        state2 = generate_state(random.PRNGKey(1), params)
 
         assert not jnp.array_equal(state1.map, state2.map)
 

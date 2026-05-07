@@ -8,8 +8,8 @@ from factoriax.constants import (
     MAX_MACHINE_STACK_SIZE,
     MachineType,
 )
+from factoriax.levels import generate_state
 from factoriax.machines import run_miners, update_all_machines
-from factoriax.world_gen import generate_world
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -29,11 +29,11 @@ def _eid(state: EnvState, y: int, x: int) -> int:
 class TestMachineInitialization:
     """Tests for machine state initialization."""
 
-    def test_world_gen_initializes_no_machines(self) -> None:
+    def test_generate_state_initializes_no_machines(self) -> None:
         """Generated world should have no machines by default."""
         rng = random.PRNGKey(0)
         params = EnvParams()
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         assert jnp.all(state.machine_types == MachineType.NONE)
         assert jnp.all(state.ent_power == 0)
@@ -43,7 +43,7 @@ class TestMachineInitialization:
         """Machine state arrays should have the expected shapes."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=16, map_height=24)
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         assert state.machine_types.shape == state.map.shape
         mm = params.resolved_max_machines()

@@ -11,9 +11,9 @@ from factoriax.constants import (
     PLAYER_MAX_STACK,
 )
 from factoriax.jax_renderer import JaxRenderer
+from factoriax.levels import generate_state
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.state import EnvParams
-from factoriax.world_gen import generate_world
 
 
 class TestInventoryState:
@@ -23,7 +23,7 @@ class TestInventoryState:
         """New world should have empty inventory."""
         rng = random.PRNGKey(0)
         params = EnvParams()
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         assert jnp.all(state.player_inventory == 0)
 
@@ -31,7 +31,7 @@ class TestInventoryState:
         """Inventory array should have shape (num_players, NUM_ITEM_TYPES)."""
         rng = random.PRNGKey(0)
         params = EnvParams()
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         assert state.player_inventory.shape == (
             params.num_players,
@@ -42,7 +42,7 @@ class TestInventoryState:
         """Inventory array should be int16 dtype."""
         rng = random.PRNGKey(0)
         params = EnvParams()
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         assert state.player_inventory.dtype == jnp.int16
 
@@ -134,7 +134,7 @@ class TestInventoryRenderer:
         """The renderer should return an RGB array sized to the map, no menu."""
         rng = random.PRNGKey(0)
         params = EnvParams(map_width=8, map_height=8)
-        state = generate_world(rng, params)
+        state = generate_state(rng, params)
 
         renderer = JaxRenderer(tile_px=BLOCK_PIXEL_SIZE)
         pixels = renderer.jit_render_map(state)

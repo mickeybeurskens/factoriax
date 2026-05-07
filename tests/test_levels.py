@@ -525,13 +525,6 @@ class TestGenerateState:
             if is_ore.any():
                 assert np.all(resources[is_ore] == count)
 
-    def test_backward_compat_shim(self) -> None:
-        """world_gen.generate_world must still work via the shim."""
-        from factoriax.world_gen import generate_world
-
-        state = generate_world(jax.random.PRNGKey(0), EnvParams())
-        assert state.map.shape == (32, 32)
-
 
 # ---------------------------------------------------------------------------
 # FactoriaXEnv(level=...) + reset_env

@@ -25,9 +25,9 @@ Typical usage::
     save_level(level, Path("my_level.json"))
     level = load_level(Path("my_level.json"))
 
-Procedural generation (previously in ``world_gen``) is also here as
-:func:`generate_state`, which produces an :class:`~factoriax.state.EnvState`
-directly from a JAX key — fully JAX-native and JIT-compatible.
+Procedural generation lives here as :func:`generate_state`, which
+produces an :class:`~factoriax.state.EnvState` directly from a JAX
+key — fully JAX-native and JIT-compatible.
 """
 
 from __future__ import annotations
@@ -692,7 +692,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
 
 
 # ---------------------------------------------------------------------------
-# Procedural generation (moved from world_gen)
+# Procedural generation
 # ---------------------------------------------------------------------------
 
 
