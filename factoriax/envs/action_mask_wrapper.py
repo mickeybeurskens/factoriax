@@ -22,7 +22,6 @@ import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
 from factoriax.constants import Action
-from factoriax.levels import Level
 from factoriax.state import EnvParams, EnvState
 
 
@@ -83,14 +82,6 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         params: EnvParams,
     ) -> tuple[jax.Array, Any]:
         result: tuple[jax.Array, Any] = self._inner.reset_env(key, params)
-        return result
-
-    def reset_from_level(
-        self,
-        level: Level,
-        params: EnvParams,
-    ) -> tuple[jax.Array, Any]:
-        result: tuple[jax.Array, Any] = self._inner.reset_from_level(level, params)
         return result
 
     def get_obs(self, state: Any, params: EnvParams) -> jax.Array:

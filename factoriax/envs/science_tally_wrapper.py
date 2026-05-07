@@ -22,7 +22,6 @@ from gymnax.environments import environment, spaces  # type: ignore[import-untyp
 
 from factoriax.constants import NUM_SCIENCE_PACK_TYPES
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import Level
 from factoriax.state import EnvParams, EnvState
 
 
@@ -95,17 +94,6 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
     ) -> tuple[jax.Array, ScienceTallyState]:
         """Reset the inner env and zero the tally."""
         obs, env_state = self._inner.reset_env(key, params)
-        state = ScienceTallyState(
-            env_state=env_state,
-            total_science_consumed=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
-        )
-        return obs, state
-
-    def reset_from_level(
-        self, level: Level, params: EnvParams
-    ) -> tuple[jax.Array, ScienceTallyState]:
-        """Reset to a pre-built level and zero the tally."""
-        obs, env_state = self._inner.reset_from_level(level, params)
         state = ScienceTallyState(
             env_state=env_state,
             total_science_consumed=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),

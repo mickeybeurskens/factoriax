@@ -12,6 +12,7 @@ from factoriax.benchmarks.skills.place_miner import (
     place_miner_level,
 )
 from factoriax.constants import Action, BlockType, ItemType
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import build_state
 
 # -----------------------------------------------------------------------
@@ -98,8 +99,8 @@ class TestMiningReward:
     def test_noop_gives_zero(self) -> None:
         """NOOP should not mine anything."""
         level, params = mining_level()
-        env = MiningSkill()
-        _, state = env.reset_from_level(level, params)
+        env = MiningSkill(inner=FactoriaXEnv(level=level))
+        _, state = env.reset_env(jax.random.PRNGKey(0), params)
         step_fn = jax.jit(env.step_env)
         key = jax.random.PRNGKey(0)
         _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)
@@ -113,8 +114,8 @@ class TestPlaceMinerReward:
     def test_no_miners_gives_zero(self) -> None:
         """With no miners placed, reward should be zero."""
         level, params = place_miner_level()
-        env = PlaceMinerSkill()
-        _, state = env.reset_from_level(level, params)
+        env = PlaceMinerSkill(inner=FactoriaXEnv(level=level))
+        _, state = env.reset_env(jax.random.PRNGKey(0), params)
         step_fn = jax.jit(env.step_env)
         key = jax.random.PRNGKey(0)
         _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)

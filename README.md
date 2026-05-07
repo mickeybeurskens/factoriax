@@ -98,12 +98,14 @@ Every action in the environment follows three properties that make the benchmark
 FactoriaX implements the [gymnax](https://github.com/RobertTLange/gymnax) interface:
 
 ```python
-from factoriax.envs import make_factoriax_env
+from factoriax.envs import FactoriaXEnv
 from factoriax.levels import get_level
+from factoriax.state import EnvParams
 
-env, params = make_factoriax_env()
 level = get_level("15x15_resources")
-obs, state = env.reset_from_level(level, params)
+env = FactoriaXEnv(level=level)
+params = EnvParams(map_width=level.map_width, map_height=level.map_height)
+obs, state = env.reset_env(key, params)
 obs, state, reward, done, info = env.step_env(key, state, action, params)
 ```
 

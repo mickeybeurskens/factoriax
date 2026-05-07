@@ -98,20 +98,6 @@ class MiningSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore
         """
         return self._inner.reset_env(key, params)
 
-    def reset_from_level(
-        self, level: Level, params: EnvParams
-    ) -> tuple[jax.Array, EnvState]:
-        """Reset the environment to a pre-built level.
-
-        Args:
-            level: Level definition.
-            params: Environment parameters.
-
-        Returns:
-            Tuple of (initial_observation, initial_state).
-        """
-        return self._inner.reset_from_level(level, params)
-
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Get observation for the selected player.
 

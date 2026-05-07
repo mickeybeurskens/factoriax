@@ -17,7 +17,6 @@ from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import Level
 from factoriax.state import EnvParams, EnvState
 
 
@@ -126,25 +125,6 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
             Tuple of (initial_observation, wrapped_state).
         """
         obs, env_state = self._inner.reset_env(key, params)
-        state = AutoResetState(
-            env_state=env_state,
-            reset_state=env_state,
-        )
-        return obs, state
-
-    def reset_from_level(
-        self, level: Level, params: EnvParams
-    ) -> tuple[jax.Array, AutoResetState]:
-        """Reset to a level and cache the state for auto-resets.
-
-        Args:
-            level: Level definition.
-            params: Environment parameters.
-
-        Returns:
-            Tuple of (initial_observation, wrapped_state).
-        """
-        obs, env_state = self._inner.reset_from_level(level, params)
         state = AutoResetState(
             env_state=env_state,
             reset_state=env_state,

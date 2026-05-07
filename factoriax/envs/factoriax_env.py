@@ -183,22 +183,6 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         obs = self.get_obs(state, params)
         return obs, state
 
-    def reset_from_level(
-        self, level: Level, params: EnvParams
-    ) -> tuple[jax.Array, EnvState]:
-        """Reset the environment to a pre-built level.
-
-        Args:
-            level: Level definition.
-            params: Environment parameters.
-
-        Returns:
-            Tuple of (initial_observation, initial_state).
-        """
-        state = build_state(level, params)
-        obs = self.get_obs(state, params)
-        return obs, state
-
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Get observation for the selected player.
 

@@ -115,7 +115,7 @@ def play_level(
     if owns_pygame:
         pygame.init()
 
-    env = FactoriaXEnv(achievement_fn=core_game_conditions)
+    env = FactoriaXEnv(achievement_fn=core_game_conditions, level=level)
     params = EnvParams(
         map_width=level.map_width,
         map_height=level.map_height,
@@ -135,15 +135,16 @@ def play_level(
 
     pygame.display.set_caption(f"FactoriaX - {level.name}")
 
+    rng = random.PRNGKey(42)
+    rng, reset_key = random.split(rng)
     reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]
         screen,
         "Building world",
-        lambda: env.reset_from_level(level, params),
+        lambda: env.reset_env(reset_key, params),
     )
     _, state = reset_result
-    rng = random.PRNGKey(42)
 
-    _play_loop(env, state, params, level, screen, rng)
+    _play_loop(env, state, params, screen, rng)
 
     if owns_pygame:
         pygame.quit()
@@ -284,7 +285,6 @@ def _play_loop(
     env: FactoriaXEnv,
     state: EnvState,
     params: EnvParams,
-    level: Level | None,
     screen: pygame.Surface,
     rng: jax.Array,
     kb_lookup: KeyLookup | None = None,
@@ -294,9 +294,10 @@ def _play_loop(
 
     Args:
         env: FactoriaX environment instance with achievement_fn bound.
+            When ``env._level`` is set, resets materialize that level;
+            otherwise resets generate procedurally from the PRNG key.
         state: Initial environment state.
         params: Environment parameters.
-        level: Source level for reset, or ``None`` for procedural reset.
         screen: Pygame display surface.
         rng: JAX random key.
         kb_lookup: Key lookup table from :func:`build_key_lookup`. Built
@@ -404,11 +405,8 @@ def _play_loop(
                 if result.quit:
                     running = False
                 if result.reset:
-                    if level is not None:
-                        _, state = env.reset_from_level(level, params)
-                    else:
-                        rng, reset_key = random.split(rng)
-                        _, state = env.reset_env(reset_key, params)
+                    rng, reset_key = random.split(rng)
+                    _, state = env.reset_env(reset_key, params)
 
         # Per-frame stick polling (lower priority than discrete inputs).
         if (
@@ -447,11 +445,8 @@ def _play_loop(
                 ps.recorded_rewards.append(float(reward))
                 ps.recorded_states.append(state)
             if done:
-                if level is not None:
-                    _, state = env.reset_from_level(level, params)
-                else:
-                    rng, reset_key = random.split(rng)
-                    _, state = env.reset_env(reset_key, params)
+                rng, reset_key = random.split(rng)
+                _, state = env.reset_env(reset_key, params)
 
             if not ps.victory_shown:
                 rocket_unlocked = bool(
@@ -578,5 +573,5 @@ def main() -> None:
     )
     _, state = reset_result
 
-    _play_loop(env, state, params, None, screen, rng)
+    _play_loop(env, state, params, screen, rng)
     pygame.quit()

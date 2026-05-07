@@ -45,6 +45,7 @@ from factoriax.benchmarks.skills.place_miner import (
     place_miner_level,
 )
 from factoriax.constants import NUM_ACTIONS, Action
+from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.state import EnvState
 
 logging.basicConfig(
@@ -216,15 +217,16 @@ def train(config: Config) -> dict[str, float]:
         raise ValueError(
             f"Unknown skill {config.skill_name!r}. Choose from: {list(SKILL_ENVS)}"
         )
-    env = SKILL_ENVS[config.skill_name]()
     level, env_params = _make_level(
         config.skill_name,
         config.map_size,
         config.max_timesteps,
     )
+    inner = FactoriaXEnv(level=level)
+    env = SKILL_ENVS[config.skill_name](inner=inner)
 
     # Build initial state and determine observation shape.
-    initial_obs, initial_state = env.reset_from_level(level, env_params)
+    initial_obs, initial_state = env.reset_env(jax.random.PRNGKey(0), env_params)
     obs_dim = int(initial_obs.shape[0])
 
     logger.info(

@@ -14,7 +14,6 @@ import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import Level
 from factoriax.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
@@ -79,13 +78,6 @@ class LocalObservationWrapper(environment.Environment[EnvState, EnvParams]):  # 
     ) -> tuple[jax.Array, EnvState]:
         """Reset the inner env and return a local observation."""
         _, state = self._inner.reset_env(key, params)
-        return self.get_obs(state, params), state
-
-    def reset_from_level(
-        self, level: Level, params: EnvParams
-    ) -> tuple[jax.Array, EnvState]:
-        """Reset to a pre-built level and return a local observation."""
-        _, state = self._inner.reset_from_level(level, params)
         return self.get_obs(state, params), state
 
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:

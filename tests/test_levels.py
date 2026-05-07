@@ -534,41 +534,41 @@ class TestGenerateState:
 
 
 # ---------------------------------------------------------------------------
-# FactoriaXEnv.reset_from_level
+# FactoriaXEnv(level=...) + reset_env
 # ---------------------------------------------------------------------------
 
 
-class TestResetFromLevel:
-    """FactoriaXEnv.reset_from_level returns correct obs and state."""
+class TestResetWithBoundLevel:
+    """FactoriaXEnv constructed with ``level=`` resets to that level."""
 
     def test_obs_and_state_returned(self) -> None:
         from factoriax import FactoriaXEnv
 
-        env = FactoriaXEnv()
         level = get_level("15x15_resources")
+        env = FactoriaXEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
-        obs, state = env.reset_from_level(level, params)
+        obs, state = env.reset_env(jax.random.PRNGKey(0), params)
         assert obs.ndim == 1
         assert state.map.shape == (15, 15)
 
     def test_obs_shape_matches_observation_space(self) -> None:
         from factoriax import FactoriaXEnv
 
-        env = FactoriaXEnv()
         level = get_level("15x15_resources")
+        env = FactoriaXEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
-        obs, _ = env.reset_from_level(level, params)
+        obs, _ = env.reset_env(jax.random.PRNGKey(0), params)
         expected = env.observation_space(params).shape[0]
         assert obs.shape == (expected,)
 
     def test_deterministic_no_key_needed(self) -> None:
         from factoriax import FactoriaXEnv
 
-        env = FactoriaXEnv()
         level = get_level("15x15_resources")
+        env = FactoriaXEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
-        _, s1 = env.reset_from_level(level, params)
-        _, s2 = env.reset_from_level(level, params)
+        _, s1 = env.reset_env(jax.random.PRNGKey(0), params)
+        _, s2 = env.reset_env(jax.random.PRNGKey(123), params)
         np.testing.assert_array_equal(np.array(s1.map), np.array(s2.map))
         np.testing.assert_array_equal(
             np.array(s1.player_positions), np.array(s2.player_positions)

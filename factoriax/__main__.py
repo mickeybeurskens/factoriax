@@ -133,7 +133,6 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
         env,
         state,
         params,
-        None,
         screen,
         rng,
         kb_lookup=kb_lookup,
