@@ -30,6 +30,8 @@ import numpy as np
 import optax
 
 import factoriax
+from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
+from baselines.ppo.config import PPOConfig
 from baselines.ppo.gae import Transition, compute_gae
 from baselines.ppo.network import ActorCritic
 from baselines.ppo.normalization import (
@@ -66,41 +68,20 @@ logger = logging.getLogger(__name__)
 class Config:
     """Training configuration for PPO on the rocket benchmark.
 
+    Embeds a :class:`PPOConfig` for the shared PPO hyperparameters and
+    keeps rocket-specific fields (map size, episode horizon, LR
+    annealing, post-training artifact toggles) flat at the top level.
     Defaults target a pilot run that finishes in a few minutes on a
     single GPU. Scale ``total_steps`` up for a real baseline.
     """
 
+    ppo: PPOConfig = dataclasses.field(default_factory=PPOConfig)
     map_size: int = 32
     # 8000 matches the scripted-agent benchmark. Naive needs 5907 ticks
     # to reach 38/38; 2000 (the Apr-20 default) caps the policy well
     # short of the rocket chain.
     max_timesteps: int = 8000
-    # Half-width of the local obs window. ``radius=7`` → 15x15 tiles.
-    # The full-map global obs scales quadratically with map size and
-    # dominates the first FC layer; a 15x15 window covers the agent's
-    # immediate factory footprint (furnace + assembler + pallet strips)
-    # without paying the 32x32 cost.
-    obs_radius: int = 7
-    hidden_dims: tuple[int, ...] = (256, 256)
-    num_envs: int = 512
-    rollout_steps: int = 128
-    total_steps: int = 3_000_000
-    learning_rate: float = 2.5e-4
     anneal_lr: bool = True
-    gamma: float = 0.995
-    gae_lambda: float = 0.95
-    clip_eps: float = 0.2
-    value_coef: float = 0.5
-    entropy_coef: float = 0.01
-    update_epochs: int = 4
-    num_minibatches: int = 8
-    max_grad_norm: float = 0.5
-    normalize_obs: bool = True
-    seed: int = 0
-    log_interval: int = 1
-    use_wandb: bool = False
-    wandb_project: str = "factoriax_rocket"
-    wandb_run_name: str | None = None
     # Post-training artifacts. out_dir collects final_model.msgpack and
     # final_rollout.mp4; when use_wandb is on both are also uploaded as
     # wandb artifacts and the video is embedded in the run page.
@@ -122,7 +103,7 @@ def _ppo_loss(
     rets: jax.Array,
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Clipped-surrogate PPO loss with entropy bonus."""
-    norm = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
+    norm = normalize_obs(obs_stats, obs) if config.ppo.normalize_obs else obs
     logits, values = network.apply(params, norm)
     lp_all = jax.nn.log_softmax(logits)
     lp = lp_all[jnp.arange(obs.shape[0]), actions]
@@ -132,21 +113,20 @@ def _ppo_loss(
 
     adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     ratio = jnp.exp(lp - old_lp)
+    clip_eps = config.ppo.clip_eps
     pg_loss = -jnp.minimum(
         ratio * adv,
-        jnp.clip(ratio, 1.0 - config.clip_eps, 1.0 + config.clip_eps) * adv,
+        jnp.clip(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * adv,
     ).mean()
     v_loss = 0.5 * ((values - rets) ** 2).mean()
-    total = pg_loss + config.value_coef * v_loss - config.entropy_coef * entropy
+    total = pg_loss + config.ppo.value_coef * v_loss - config.ppo.entropy_coef * entropy
     return total, {
         "loss/total": total,
         "loss/policy": pg_loss,
         "loss/value": v_loss,
         "loss/entropy": entropy,
         "misc/approx_kl": ((ratio - 1.0) - jnp.log(ratio)).mean(),
-        "misc/clip_frac": (jnp.abs(ratio - 1.0) > config.clip_eps)
-        .astype(jnp.float32)
-        .mean(),
+        "misc/clip_frac": (jnp.abs(ratio - 1.0) > clip_eps).astype(jnp.float32).mean(),
     }
 
 
@@ -162,7 +142,7 @@ def _make_env_and_state(
     solve, making the numbers incomparable.
 
     Observations are a local ``(2r+1) x (2r+1)`` window centered on the
-    player (``config.obs_radius``). The global full-map obs scales
+    player (``config.ppo.obs_radius``). The global full-map obs scales
     quadratically with ``map_size`` and dominates the first FC layer of
     the policy; switching to a local window keeps throughput flat as the
     map grows.
@@ -171,7 +151,7 @@ def _make_env_and_state(
     env, env_params = factoriax.make(
         level,
         obs="local",
-        obs_radius=config.obs_radius,
+        obs_radius=config.ppo.obs_radius,
         achievement_fn=rocket_conditions,
         blocked_actions=ROCKET_BLOCKED_ACTIONS,
     )
@@ -198,7 +178,7 @@ def _resolve_out_dir(config: Config) -> Any:
 
     if config.out_dir is not None:
         return Path(config.out_dir)
-    name = config.wandb_run_name or "default"
+    name = config.ppo.wandb_run_name or "default"
     return Path("runs") / "rocket_ppo" / name
 
 
@@ -262,7 +242,7 @@ def _render_eval_episode(
     """
     jit_step = jax.jit(env.step_env)
     jit_apply = jax.jit(network.apply)
-    rng = jax.random.PRNGKey(config.seed + 4242)
+    rng = jax.random.PRNGKey(config.ppo.seed + 4242)
     state = initial_state
 
     frames: list[np.ndarray] = [compose_frame_with_inventory(state)]
@@ -272,7 +252,7 @@ def _render_eval_episode(
 
     for _ in range(env_params.max_timesteps):
         obs = env.get_obs(state, env_params)
-        norm = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
+        norm = normalize_obs(obs_stats, obs) if config.ppo.normalize_obs else obs
         logits, _ = jit_apply(params, norm)
         rng, k_act = jax.random.split(rng)
         action = jax.random.categorical(k_act, logits)
@@ -432,23 +412,24 @@ def train(config: Config) -> dict[str, float]:
     initial_obs = env.get_obs(initial_state, env_params)
     obs_dim = int(initial_obs.shape[0])
 
+    ppo = config.ppo
     logger.info(
         "Rocket PPO — obs_dim=%d  actions=%d  envs=%d  rollout=%d  total=%dk",
         obs_dim,
         NUM_ACTIONS,
-        config.num_envs,
-        config.rollout_steps,
-        config.total_steps // 1000,
+        ppo.num_envs,
+        ppo.rollout_steps,
+        ppo.total_steps // 1000,
     )
 
     wandb_run = None
-    if config.use_wandb:
+    if ppo.use_wandb:
         try:
             import wandb  # type: ignore[import-untyped]
 
-            run_name = config.wandb_run_name or "ppo_rocket"
+            run_name = ppo.wandb_run_name or "ppo_rocket"
             wandb_run = wandb.init(
-                project=config.wandb_project,
+                project=ppo.wandb_project,
                 name=run_name,
                 config=dataclasses.asdict(config),
                 tags=[
@@ -456,7 +437,7 @@ def train(config: Config) -> dict[str, float]:
                     "ppo",
                     "achievement",
                     "local_observation",
-                    f"obs_radius_{config.obs_radius}",
+                    f"obs_radius_{ppo.obs_radius}",
                 ],
             )
         except ImportError:
@@ -464,28 +445,28 @@ def train(config: Config) -> dict[str, float]:
 
     # Network.
     network = ActorCritic(
-        hidden_dims=config.hidden_dims,
+        hidden_dims=ppo.hidden_dims,
         num_actions=NUM_ACTIONS,
     )
-    rng = jax.random.PRNGKey(config.seed)
+    rng = jax.random.PRNGKey(ppo.seed)
     rng, key_init = jax.random.split(rng)
     params = network.init(key_init, jnp.zeros(obs_dim))
 
     # Optimizer with optional LR annealing.
-    steps_per_iter = config.num_envs * config.rollout_steps
-    num_iters = max(1, config.total_steps // steps_per_iter)
+    steps_per_iter = ppo.num_envs * ppo.rollout_steps
+    num_iters = max(1, ppo.total_steps // steps_per_iter)
     if config.anneal_lr:
-        total_opt_steps = num_iters * config.update_epochs * config.num_minibatches
+        total_opt_steps = num_iters * ppo.update_epochs * ppo.num_minibatches
         lr_schedule = optax.linear_schedule(
-            init_value=config.learning_rate,
+            init_value=ppo.learning_rate,
             end_value=0.0,
             transition_steps=total_opt_steps,
         )
     else:
-        lr_schedule = config.learning_rate
+        lr_schedule = ppo.learning_rate
 
     optimizer = optax.chain(
-        optax.clip_by_global_norm(config.max_grad_norm),
+        optax.clip_by_global_norm(ppo.max_grad_norm),
         optax.adam(lr_schedule, eps=1e-5),
     )
     opt_state = optimizer.init(params)
@@ -495,7 +476,7 @@ def train(config: Config) -> dict[str, float]:
     # Broadcast the initial EnvState to (num_envs, ...).
     def _broadcast(x: jax.Array) -> jax.Array:
         a = jnp.asarray(x)
-        return jnp.broadcast_to(a[None], (config.num_envs,) + a.shape)
+        return jnp.broadcast_to(a[None], (ppo.num_envs,) + a.shape)
 
     fixed_states: EnvState = jax.tree_util.tree_map(_broadcast, initial_state)
 
@@ -503,7 +484,7 @@ def train(config: Config) -> dict[str, float]:
     vmap_obs = jax.vmap(env.get_obs, in_axes=(0, None))
     vmap_reward = jax.vmap(rocket_reward, in_axes=(0, 0, None))
 
-    mb_size = steps_per_iter // config.num_minibatches
+    mb_size = steps_per_iter // ppo.num_minibatches
 
     @jax.jit
     def train_step(
@@ -521,14 +502,12 @@ def train(config: Config) -> dict[str, float]:
             states, cur_obs, key = carry
             key, key_act, key_step = jax.random.split(key, 3)
 
-            norm = (
-                normalize_obs(obs_stats, cur_obs) if config.normalize_obs else cur_obs
-            )
+            norm = normalize_obs(obs_stats, cur_obs) if ppo.normalize_obs else cur_obs
             logits, values = network.apply(params, norm)
             actions = jax.random.categorical(key_act, logits)
-            log_probs = jax.nn.log_softmax(logits)[jnp.arange(config.num_envs), actions]
+            log_probs = jax.nn.log_softmax(logits)[jnp.arange(ppo.num_envs), actions]
 
-            keys = jax.random.split(key_step, config.num_envs)
+            keys = jax.random.split(key_step, ppo.num_envs)
             _, next_states, _env_rewards, dones, _ = vmap_step(
                 keys, states, actions, env_params
             )
@@ -557,9 +536,9 @@ def train(config: Config) -> dict[str, float]:
             _rollout_step,
             (env_states, obs, key_collect),
             None,
-            length=config.rollout_steps,
+            length=ppo.rollout_steps,
         )
-        norm_last = normalize_obs(obs_stats, obs) if config.normalize_obs else obs
+        norm_last = normalize_obs(obs_stats, obs) if ppo.normalize_obs else obs
         _, last_vals = network.apply(params, norm_last)
 
         adv, ret = compute_gae(
@@ -567,14 +546,14 @@ def train(config: Config) -> dict[str, float]:
             traj.value,
             traj.done,
             last_vals,
-            config.gamma,
-            config.gae_lambda,
+            ppo.gamma,
+            ppo.gae_lambda,
         )
 
         flat_obs = traj.obs.reshape((-1, obs_dim))
         obs_stats = (
             update_running_stats(obs_stats, flat_obs)
-            if config.normalize_obs
+            if ppo.normalize_obs
             else obs_stats
         )
 
@@ -597,7 +576,7 @@ def train(config: Config) -> dict[str, float]:
             perm = jax.random.permutation(key_perm, steps_per_iter)
 
             def _reshape(x):
-                return x[perm].reshape((config.num_minibatches, mb_size) + x.shape[1:])
+                return x[perm].reshape((ppo.num_minibatches, mb_size) + x.shape[1:])
 
             mbs = (
                 _reshape(flat_obs),
@@ -613,7 +592,7 @@ def train(config: Config) -> dict[str, float]:
             _epoch,
             (params, opt_state, key_update),
             None,
-            length=config.update_epochs,
+            length=ppo.update_epochs,
         )
         metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
 
@@ -642,8 +621,8 @@ def train(config: Config) -> dict[str, float]:
     obs = vmap_obs(fixed_states, env_params)
     ep_returns: deque[float] = deque(maxlen=500)
     ep_ach_counts: deque[int] = deque(maxlen=500)
-    running_return = np.zeros(config.num_envs, dtype=np.float32)
-    running_peak_mask = np.zeros((config.num_envs, MAX_ACHIEVEMENTS), dtype=bool)
+    running_return = np.zeros(ppo.num_envs, dtype=np.float32)
+    running_peak_mask = np.zeros((ppo.num_envs, MAX_ACHIEVEMENTS), dtype=bool)
     best_ach_count_ever = 0
     per_ach_unlock_total = np.zeros(NUM_ROCKET_ACHIEVEMENTS, dtype=np.int64)
     total_episodes = 0
@@ -688,7 +667,7 @@ def train(config: Config) -> dict[str, float]:
                 running_return[n] = 0.0
                 running_peak_mask[n] = False
 
-        if (it + 1) % config.log_interval == 0 or it == num_iters - 1:
+        if (it + 1) % ppo.log_interval == 0 or it == num_iters - 1:
             elapsed = time.time() - t_start
             sps = current_step / elapsed
             mean_ret = float(np.mean(list(ep_returns))) if ep_returns else 0.0
@@ -793,24 +772,19 @@ def train(config: Config) -> dict[str, float]:
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--num-envs", type=int, default=512)
-    parser.add_argument("--rollout-steps", type=int, default=128)
-    parser.add_argument("--total-steps", type=int, default=3_000_000)
-    parser.add_argument("--max-timesteps", type=int, default=8000)
-    parser.add_argument(
-        "--obs-radius",
-        type=int,
-        default=7,
-        help="Half-width of the local obs window (default 7 → 15x15 tiles).",
+    add_ppo_args(parser)
+    # Rocket-specific defaults override the shared CLI defaults via
+    # set_defaults so a user-supplied --num-envs / --total-steps still
+    # wins. ``ppo_config_from_args(args, **overrides)`` applies its
+    # overrides AFTER the parsed args, which would clobber the CLI.
+    parser.set_defaults(
+        num_envs=512,
+        total_steps=3_000_000,
+        log_interval=1,
+        wandb_project="factoriax_rocket",
     )
-    parser.add_argument("--learning-rate", type=float, default=2.5e-4)
-    parser.add_argument("--entropy-coef", type=float, default=0.01)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--log-interval", type=int, default=1)
+    parser.add_argument("--max-timesteps", type=int, default=8000)
     parser.add_argument("--no-anneal-lr", action="store_true")
-    parser.add_argument("--use-wandb", action="store_true")
-    parser.add_argument("--wandb-project", type=str, default="factoriax_rocket")
-    parser.add_argument("--wandb-run-name", type=str, default=None)
     parser.add_argument(
         "--out-dir",
         type=str,
@@ -833,20 +807,11 @@ def main() -> None:
     parser.add_argument("--video-fps", type=int, default=30)
     args = parser.parse_args()
 
+    ppo = ppo_config_from_args(args)
     config = Config(
-        num_envs=args.num_envs,
-        rollout_steps=args.rollout_steps,
-        total_steps=args.total_steps,
+        ppo=ppo,
         max_timesteps=args.max_timesteps,
-        obs_radius=args.obs_radius,
-        learning_rate=args.learning_rate,
-        entropy_coef=args.entropy_coef,
-        seed=args.seed,
-        log_interval=args.log_interval,
         anneal_lr=not args.no_anneal_lr,
-        use_wandb=args.use_wandb,
-        wandb_project=args.wandb_project,
-        wandb_run_name=args.wandb_run_name,
         out_dir=args.out_dir,
         save_final_model=not args.no_save_model,
         save_final_video=not args.no_save_video,
