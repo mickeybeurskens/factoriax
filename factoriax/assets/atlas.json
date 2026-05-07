@@ -30,7 +30,7 @@
         "8",
         "9"
       ],
-      "row": 4
+      "row": 7
     },
     "items": {
       "missing": "magenta",
@@ -69,9 +69,22 @@
         "SPLITTER",
         "CROSSING"
       ],
-      "row": 2
+      "row": 5
     },
     "machines": {
+      "directional": [
+        "ARM",
+        "CONVEYOR_BELT",
+        "CROSSING",
+        "MINER",
+        "SPLITTER"
+      ],
+      "directions": [
+        "LEFT",
+        "RIGHT",
+        "UP",
+        "DOWN"
+      ],
       "missing": "magenta",
       "names": [
         "NONE",
@@ -86,17 +99,31 @@
         "SPLITTER",
         "CROSSING"
       ],
-      "row": 1
+      "rows": [
+        1,
+        2,
+        3,
+        4
+      ]
     },
     "misc": {
-      "names": [
-        "player",
-        "biter"
-      ],
-      "row": 3
+      "columns": {
+        "biter": 0,
+        "player_DOWN": 4,
+        "player_LEFT": 1,
+        "player_RIGHT": 2,
+        "player_UP": 3
+      },
+      "row": 6
     }
   },
   "cell_px": 32,
   "cols": 33,
-  "rows": 5
+  "direction_axis": [
+    "LEFT",
+    "RIGHT",
+    "UP",
+    "DOWN"
+  ],
+  "rows": 8
 }

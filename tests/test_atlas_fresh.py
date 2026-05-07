@@ -52,8 +52,9 @@ def test_atlas_json_declares_expected_layout() -> None:
     """The committed atlas.json declares the layout from atlas.layout.md."""
     payload = orjson.loads(_COMMITTED_JSON.read_bytes())
     assert payload["cell_px"] == 32
-    assert payload["rows"] == 5
+    assert payload["rows"] == 8
     assert payload["cols"] == 33
+    assert payload["direction_axis"] == ["LEFT", "RIGHT", "UP", "DOWN"]
     assert set(payload["categories"]) == {
         "blocks",
         "machines",
@@ -66,8 +67,23 @@ def test_atlas_json_declares_expected_layout() -> None:
 def test_atlas_png_has_expected_shape() -> None:
     """The committed atlas.png has the dimensions implied by the layout."""
     img = iio.imread(_COMMITTED_PNG)
-    assert img.shape == (160, 1056, 3), (
-        f"Atlas PNG shape {img.shape} doesn't match (160, 1056, 3). "
-        "Layout says 5 rows × 33 cols × 32 px."
+    assert img.shape == (256, 1056, 4), (
+        f"Atlas PNG shape {img.shape} doesn't match (256, 1056, 4). "
+        "Layout says 8 rows × 33 cols × 32 px, RGBA."
     )
     assert img.dtype.name == "uint8"
+
+
+def test_atlas_alpha_channel_is_non_trivial() -> None:
+    """Some atlas cells must use alpha < 255 so render_map's blend works.
+
+    Block cells stay opaque (terrain is always the ground truth) but
+    machine and player cells carry transparent regions so placed
+    objects read as overlays on terrain rather than as solid tiles.
+    """
+    img = iio.imread(_COMMITTED_PNG)
+    transparent_pixels = (img[..., 3] < 255).sum()
+    assert transparent_pixels > 0, (
+        "Atlas has no transparent pixels — alpha compositing in "
+        "render_map will be a no-op. Re-run scripts/build_atlas.py."
+    )

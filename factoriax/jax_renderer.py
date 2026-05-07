@@ -19,15 +19,23 @@ For the full HUD, four additional quadrants are rendered below the map:
 Sprites for blocks, machines, and the player come from the committed
 sprite atlas at ``factoriax/assets/atlas.png``. Per-tile-size atlases
 are derived by slicing the relevant atlas row and downsampling each
-cell from 32×32 to ``tile_px`` via nearest-neighbour. v1 of this
-atlas is a faithful capture of the procedural pixel-art that this
-module used to build directly; replacing the PNG (with the same
-layout, see ``factoriax/assets/atlas.layout.md``) swaps in new art
-without touching this code.
+cell from 32×32 to ``tile_px`` via nearest-neighbour. The atlas is
+RGBA: block cells are fully opaque, while machine and player cells
+carry per-pixel alpha so :func:`render_map` can blend them onto the
+layer underneath instead of overwriting it. Replacing the PNG (with
+the same layout, see ``factoriax/assets/atlas.layout.md``) swaps in
+new art without touching this code.
+
+Directional machines (conveyor belts, miners, arms, splitters,
+crossings) and the player sprite each carry four cells in the atlas,
+one per :class:`~factoriax.constants.Direction`. ``render_map``
+gathers by ``(direction, machine_type)`` for the machine layer and
+by ``player_directions[i]`` for each player so placed objects show
+their orientation.
 
 Item-color and digit-glyph atlases are still procedural — they're
 scalar lookups and bool masks rather than RGB sprites, so they don't
-fit the (cells, 32, 32, 3) shape and don't need to. The atlas's
+fit the (cells, 32, 32, 4) shape and don't need to. The atlas's
 ``items`` and ``digits`` rows are present for completeness but
 unused by this renderer.
 
@@ -108,9 +116,17 @@ _ATLAS_CELL_PX: int = 32
 
 # Row indices in the sprite atlas (must match factoriax/assets/atlas.layout.md).
 _ATLAS_ROW_BLOCKS: int = 0
-_ATLAS_ROW_MACHINES: int = 1
-_ATLAS_ROW_MISC: int = 3
-_ATLAS_MISC_PLAYER: int = 0
+# Machines occupy four rows, one per Direction value (LEFT=1, RIGHT=2,
+# UP=3, DOWN=4). Atlas index = direction - 1, so the layout is:
+#   row 1: LEFT, row 2: RIGHT, row 3: UP, row 4: DOWN.
+_ATLAS_ROW_MACHINES_BASE: int = 1
+_ATLAS_NUM_DIRECTIONS: int = 4
+_ATLAS_ROW_ITEMS: int = 5
+_ATLAS_ROW_MISC: int = 6
+# Misc row column layout: col 0 = biter, cols 1..4 = player[direction].
+_ATLAS_MISC_BITER: int = 0
+_ATLAS_MISC_PLAYER_BASE: int = 1
+_ATLAS_ROW_DIGITS: int = 7
 
 
 @functools.cache
@@ -118,12 +134,15 @@ def _load_atlas_image() -> np.ndarray:
     """Read the sprite atlas PNG once and cache the resulting array.
 
     Returns:
-        uint8 RGB array of shape (rows * 32, cols * 32, 3) where rows
+        uint8 RGBA array of shape (rows * 32, cols * 32, 4) where rows
         and cols are defined in ``factoriax/assets/atlas.layout.md``.
+        If the source PNG is RGB the alpha channel is filled with 255
+        so downstream gathers can assume RGBA uniformly.
     """
     img: np.ndarray = np.asarray(iio.imread(_ATLAS_PATH))
-    if img.ndim == 3 and img.shape[-1] == 4:
-        img = img[..., :3]  # drop alpha if present
+    if img.ndim == 3 and img.shape[-1] == 3:
+        alpha = np.full(img.shape[:2] + (1,), 255, dtype=np.uint8)
+        img = np.concatenate([img, alpha], axis=-1)
     return img
 
 
@@ -135,12 +154,12 @@ def _atlas_row_cells(row: int, n_cols: int) -> np.ndarray:
         n_cols: Number of cells (from column 0) to extract.
 
     Returns:
-        uint8 array of shape (n_cols, 32, 32, 3).
+        uint8 array of shape (n_cols, 32, 32, 4).
     """
     atlas = _load_atlas_image()
     s = _ATLAS_CELL_PX
     y0 = row * s
-    cells = np.empty((n_cols, s, s, 3), dtype=np.uint8)
+    cells = np.empty((n_cols, s, s, 4), dtype=np.uint8)
     for col in range(n_cols):
         x0 = col * s
         cells[col] = atlas[y0 : y0 + s, x0 : x0 + s, :]
@@ -151,7 +170,7 @@ def _atlas_cell(row: int, col: int) -> np.ndarray:
     """Slice a single cell out of the atlas.
 
     Returns:
-        uint8 array of shape (32, 32, 3).
+        uint8 array of shape (32, 32, 4).
     """
     atlas = _load_atlas_image()
     s = _ATLAS_CELL_PX
@@ -182,7 +201,7 @@ def build_block_atlas(tile_px: int) -> jnp.ndarray:
         tile_px: Tile side length in pixels.
 
     Returns:
-        JAX array of shape (num_block_types, tile_px, tile_px, 3).
+        JAX array of shape ``(num_block_types, tile_px, tile_px, 4)``.
     """
     n_cells = max(int(b) for b in BlockType) + 1
     cells = _atlas_row_cells(_ATLAS_ROW_BLOCKS, n_cells)
@@ -190,30 +209,48 @@ def build_block_atlas(tile_px: int) -> jnp.ndarray:
 
 
 def build_machine_atlas(tile_px: int) -> jnp.ndarray:
-    """Build a texture atlas for machine overlays from the sprite atlas.
+    """Build a direction-indexed machine atlas from the sprite atlas.
+
+    The four rows starting at :data:`_ATLAS_ROW_MACHINES_BASE` hold one
+    machine variant per :class:`~factoriax.constants.Direction`, in the
+    order LEFT, RIGHT, UP, DOWN. Non-directional machines are simply
+    duplicated across all four rows so a uniform gather works at render
+    time.
 
     Args:
         tile_px: Tile side length in pixels.
 
     Returns:
-        JAX array of shape (num_machine_types, tile_px, tile_px, 3).
+        JAX array of shape ``(4, num_machine_types, tile_px, tile_px, 4)``.
+        Index 0 is direction LEFT, 3 is direction DOWN.
     """
-    n_cells = max(int(m) for m in MachineType) + 1
-    cells = _atlas_row_cells(_ATLAS_ROW_MACHINES, n_cells)
-    return jnp.array(_downsample(cells, tile_px))
+    n_machines = max(int(m) for m in MachineType) + 1
+    rows = []
+    for d in range(_ATLAS_NUM_DIRECTIONS):
+        cells = _atlas_row_cells(_ATLAS_ROW_MACHINES_BASE + d, n_machines)
+        rows.append(_downsample(cells, tile_px))
+    return jnp.array(np.stack(rows, axis=0))
 
 
 def build_player_sprite(tile_px: int) -> jnp.ndarray:
-    """Build the player sprite from the sprite atlas.
+    """Build the directional player sprite stack from the sprite atlas.
+
+    The misc row holds one player cell per
+    :class:`~factoriax.constants.Direction` starting at column
+    :data:`_ATLAS_MISC_PLAYER_BASE`, ordered LEFT, RIGHT, UP, DOWN.
 
     Args:
         tile_px: Tile side length in pixels.
 
     Returns:
-        JAX array of shape (tile_px, tile_px, 3).
+        JAX array of shape ``(4, tile_px, tile_px, 4)``. Index 0 is
+        direction LEFT, 3 is direction DOWN.
     """
-    cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_PLAYER)
-    return jnp.array(_downsample(cell, tile_px))
+    sprites = []
+    for d in range(_ATLAS_NUM_DIRECTIONS):
+        cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_PLAYER_BASE + d)
+        sprites.append(_downsample(cell, tile_px))
+    return jnp.array(np.stack(sprites, axis=0))
 
 
 def build_item_color_atlas() -> jnp.ndarray:
@@ -323,6 +360,25 @@ def _stamp_number(
 # ---------------------------------------------------------------------------
 
 
+def _alpha_composite(below: jnp.ndarray, above_rgba: jnp.ndarray) -> jnp.ndarray:
+    """Per-pixel ``over`` blend of an RGBA layer onto an RGB layer.
+
+    Args:
+        below: uint8 RGB array of shape ``(..., 3)`` (the background).
+        above_rgba: uint8 RGBA array of shape ``(..., 4)``. The alpha
+            channel acts as the per-pixel blend mask; ``alpha=0`` falls
+            through to ``below``, ``alpha=255`` overwrites it.
+
+    Returns:
+        uint8 RGB array of the same leading shape as ``below``.
+    """
+    rgb_above = above_rgba[..., :3].astype(jnp.float32)
+    alpha = above_rgba[..., 3:4].astype(jnp.float32) / 255.0
+    rgb_below = below.astype(jnp.float32)
+    out = rgb_above * alpha + rgb_below * (1.0 - alpha)
+    return jnp.clip(out, 0.0, 255.0).astype(jnp.uint8)
+
+
 def render_map(
     state: EnvState,
     block_atlas: jnp.ndarray,
@@ -332,48 +388,72 @@ def render_map(
     """Render the map: terrain + machines + players.
 
     Pure JAX, JIT-compilable, vmappable. Tile pixel size is inferred
-    from the block_atlas shape.
+    from the block_atlas shape. Layers composite back-to-front using
+    each layer's alpha channel: terrain is fully opaque; machine and
+    player cells reveal what's underneath wherever ``alpha < 255``.
+
+    Machine and player sprites are direction-indexed: the right cell
+    is selected per tile from ``state.ent_direction[tile_entity]`` and
+    per player from ``state.player_directions[i]``. The atlas builders
+    duplicate non-directional machines across all four direction rows
+    so this gather is uniform.
 
     Args:
         state: Single (non-batched) EnvState.
-        block_atlas: Shape (num_block_types, tile_px, tile_px, 3).
-        machine_atlas: Shape (num_machine_types, tile_px, tile_px, 3).
-        player_sprite: Shape (tile_px, tile_px, 3).
+        block_atlas: Shape ``(num_block_types, tile_px, tile_px, 4)``.
+        machine_atlas: Shape ``(4, num_machine_types, tile_px, tile_px, 4)``
+            indexed by ``(direction - 1, machine_type)``.
+        player_sprite: Shape ``(4, tile_px, tile_px, 4)`` indexed by
+            ``direction - 1``.
 
     Returns:
-        uint8 RGB image of shape (H * tile_px, W * tile_px, 3).
+        uint8 RGB image of shape ``(H * tile_px, W * tile_px, 3)``.
     """
     tile_px = block_atlas.shape[1]
     map_h, map_w = state.map.shape
 
-    # Layer 1: Terrain
+    # Layer 1: Terrain. Block cells are fully opaque, so we drop alpha
+    # to keep the working image RGB and let the blend helper produce
+    # RGB outputs.
     safe_map = jnp.clip(state.map, 0, block_atlas.shape[0] - 1)
-    tile_textures = block_atlas[safe_map]
+    tile_textures = block_atlas[safe_map][..., :3]
     image = tile_textures.transpose(0, 2, 1, 3, 4).reshape(
         map_h * tile_px, map_w * tile_px, 3
     )
 
-    # Layer 2: Machine overlays
-    safe_machines = jnp.clip(state.machine_types, 0, machine_atlas.shape[0] - 1)
-    machine_textures = machine_atlas[safe_machines]
-    machine_image = machine_textures.transpose(0, 2, 1, 3, 4).reshape(
-        map_h * tile_px, map_w * tile_px, 3
+    # Layer 2: Machine overlays. Direction comes from the entity at
+    # each tile; tiles with no entity (tile_entity == -1) read from
+    # entity 0 as a fallback, but the NONE machine cell carries
+    # alpha=0 so those reads are fully discarded by the blend.
+    safe_ent_idx = jnp.maximum(state.tile_entity, 0)
+    direction = state.ent_direction[safe_ent_idx]
+    direction_idx = jnp.clip(
+        direction.astype(jnp.int32) - 1, 0, _ATLAS_NUM_DIRECTIONS - 1
     )
-    has_machine = state.machine_types != int(MachineType.NONE)
-    mask = jnp.repeat(jnp.repeat(has_machine, tile_px, axis=0), tile_px, axis=1)
-    image = jnp.where(mask[:, :, None], machine_image, image)
+    safe_machines = jnp.clip(state.machine_types, 0, machine_atlas.shape[1] - 1)
+    machine_textures = machine_atlas[direction_idx, safe_machines]
+    machine_image = machine_textures.transpose(0, 2, 1, 3, 4).reshape(
+        map_h * tile_px, map_w * tile_px, 4
+    )
+    image = _alpha_composite(image, machine_image)
 
-    # Layer 3: Player sprites
+    # Layer 3: Player sprites. Each player picks its own directional
+    # cell; the 32x32 sprite is composited over the underlying region
+    # so transparent margins reveal the belt/ore/machine the player
+    # stands on.
     num_players = state.player_positions.shape[0]
 
     def _stamp_player(i: int, img: jnp.ndarray) -> jnp.ndarray:
-        # Cast indices to int32 so all three coordinates passed to
-        # ``dynamic_update_slice`` share the same dtype. ``player_positions``
-        # is int16 in level/world states; the literal 0 is int32.
         px = state.player_positions[i, 0].astype(jnp.int32)
         py = state.player_positions[i, 1].astype(jnp.int32)
+        pdir = state.player_directions[i].astype(jnp.int32)
+        sprite = player_sprite[jnp.clip(pdir - 1, 0, _ATLAS_NUM_DIRECTIONS - 1)]
+        region = jax.lax.dynamic_slice(
+            img, (py * tile_px, px * tile_px, jnp.int32(0)), (tile_px, tile_px, 3)
+        )
+        blended = _alpha_composite(region, sprite)
         return jax.lax.dynamic_update_slice(
-            img, player_sprite, (py * tile_px, px * tile_px, jnp.int32(0))
+            img, blended, (py * tile_px, px * tile_px, jnp.int32(0))
         )
 
     composited: jnp.ndarray = jax.lax.fori_loop(0, num_players, _stamp_player, image)

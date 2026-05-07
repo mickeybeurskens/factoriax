@@ -7,7 +7,7 @@ Source of truth for `factoriax/assets/atlas.png` and its sidecar
 
 ## Grid
 
-The atlas is a uniform grid of 32×32 px RGB cells, packed
+The atlas is a uniform grid of 32×32 px **RGBA** cells, packed
 **row-major by category, column-by-enum-value**. Indexing a sprite
 is two integers: `(row, col)`. The renderer reads them via
 `atlas.json`, which the `JaxRenderer` slurps at construction time.
@@ -17,30 +17,51 @@ renderer-construction parameter; downsampling from 32×32 to the
 display size happens at gather time using nearest-neighbour.
 Upsampling (rare; for "zoomed-in" views) uses the same path.
 
-The atlas image dimensions are `(num_rows × 32, num_cols × 32, 3)`
-uint8 with no alpha. Transparency is not used in v1 — every cell
-is a fully-opaque RGB sprite. Layered compositing (machine on top
-of terrain) happens in the renderer via masks derived from
-`state.machine_types`, not via per-pixel alpha in the atlas.
+The atlas image dimensions are `(num_rows × 32, num_cols × 32, 4)`
+uint8. The alpha channel is meaningful: block cells are fully opaque
+(terrain is the ground truth and always paints), while machine and
+player cells carry transparent regions so `render_map` can blend
+them onto whatever sits beneath them. Walking onto a placed belt no
+longer hides the belt because the player sprite's alpha falls
+through to the belt underneath.
 
 ## Rows
 
 Each row corresponds to one enum category. Cells beyond the enum's
 defined values are filled with the row's "missing" color (magenta,
-`(255, 0, 255)`) so a future enum extension produces a visible
+`(255, 0, 255, 255)`) so a future enum extension produces a visible
 artifact rather than silent zeros.
 
-| Row | Category    | Source enum                      | Defined cells | Notes |
-| --: | ----------- | -------------------------------- | ------------: | ----- |
-|   0 | blocks      | `factoriax.constants.BlockType`  | 11            | Solid colors per build_block_atlas (v1). |
-|   1 | machines    | `factoriax.constants.MachineType`| 11            | Solid colors per build_machine_atlas (v1). |
-|   2 | items       | `factoriax.constants.ItemType`   | 33            | Solid colors from `ITEM_COLORS`. |
-|   3 | misc        | (manually enumerated)            | 2             | col 0 = player sprite; col 1 = biter sprite. |
-|   4 | digits      | digits 0-9                       | 10            | Each cell is 32×32; the 3×5 glyph is rendered at the cell's top-left, padded to 32×32 with zeros. |
+| Row | Category               | Source enum                      | Cells | Notes |
+| --: | ---------------------- | -------------------------------- | ----: | ----- |
+|   0 | blocks                 | `factoriax.constants.BlockType`  | 11    | Sourced from `factoriax.ui.icons.get_textures`. Alpha forced to 255 — terrain is opaque. |
+|   1 | machines, dir LEFT     | `factoriax.constants.MachineType`| 11    | Directional machines render with `direction=LEFT`; non-directional machines duplicate the DOWN sprite. |
+|   2 | machines, dir RIGHT    | `factoriax.constants.MachineType`| 11    | Same, with `direction=RIGHT`. |
+|   3 | machines, dir UP       | `factoriax.constants.MachineType`| 11    | Same, with `direction=UP`. |
+|   4 | machines, dir DOWN     | `factoriax.constants.MachineType`| 11    | Same, with `direction=DOWN`. |
+|   5 | items                  | `factoriax.constants.ItemType`   | 33    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
+|   6 | misc                   | (manually enumerated)            | 5     | col 0 = biter; cols 1-4 = player[LEFT, RIGHT, UP, DOWN] for `player_idx=0`. |
+|   7 | digits                 | digits 0-9                       | 10    | Each cell is 32×32; the 3×5 glyph is rendered at the cell's top-left, padded with zeros. Alpha=255. |
 
 Width of the atlas is `max(num_cells_per_row) = 33` (driven by
-`ItemType`). Height is `num_rows = 5`. Atlas image:
-`(5 × 32, 33 × 32, 3) = (160, 1056, 3)` uint8.
+`ItemType`). Height is `num_rows = 8`. Atlas image:
+`(8 × 32, 33 × 32, 4) = (256, 1056, 4)` uint8.
+
+### Direction axis
+
+The directional machine rows (1-4) and the player columns (1-4 of
+the misc row) share a fixed axis order: `[LEFT, RIGHT, UP, DOWN]`.
+This is also published as `direction_axis` in the sidecar JSON.
+Atlas index = `Direction value − 1`, mapping the engine's
+`Direction` enum (LEFT=1, RIGHT=2, UP=3, DOWN=4) onto the four
+rows / columns.
+
+Directional machines (variants drawn per direction):
+`CONVEYOR_BELT`, `MINER`, `ARM`, `SPLITTER`, `CROSSING`. All other
+machines (`PALLET`, `ASSEMBLER`, `FURNACE`, `SCIENCE_LAB`,
+`ROCKET`, `NONE`) render once with `direction=DOWN` and that sprite
+is duplicated across all four direction rows so the renderer's
+gather is uniform.
 
 ## Sidecar JSON shape
 
@@ -49,24 +70,36 @@ Width of the atlas is `max(num_cells_per_row) = 33` (driven by
 ```json
 {
   "cell_px": 32,
-  "rows": 5,
+  "rows": 8,
   "cols": 33,
+  "direction_axis": ["LEFT", "RIGHT", "UP", "DOWN"],
   "categories": {
     "blocks":   {"row": 0, "names": ["INVALID", "OUT_OF_BOUNDS", ...], "missing": "magenta"},
-    "machines": {"row": 1, "names": ["NONE", "MINER", ...], "missing": "magenta"},
-    "items":    {"row": 2, "names": ["EMPTY", "COAL", ...], "missing": "magenta"},
-    "misc":     {"row": 3, "names": ["player", "biter"]},
-    "digits":   {"row": 4, "names": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]}
+    "machines": {
+      "rows": [1, 2, 3, 4],
+      "directions": ["LEFT", "RIGHT", "UP", "DOWN"],
+      "names": ["NONE", "MINER", ...],
+      "directional": ["ARM", "CONVEYOR_BELT", "CROSSING", "MINER", "SPLITTER"],
+      "missing": "magenta"
+    },
+    "items":    {"row": 5, "names": ["EMPTY", "COAL", ...], "missing": "magenta"},
+    "misc":     {
+      "row": 6,
+      "columns": {
+        "biter": 0,
+        "player_LEFT": 1, "player_RIGHT": 2, "player_UP": 3, "player_DOWN": 4
+      }
+    },
+    "digits":   {"row": 7, "names": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]}
   }
 }
 ```
 
 Names within each category appear in enum-value order (so
-`names[i]` lives at `(row, i)`). A renderer that wants the
-`MINER` machine sprite reads
-`(blocks/machines.row, names.index("MINER"))` — for v1 the renderer
-hardcodes the row constants rather than parsing the JSON, but the
-JSON is canonical for tooling and tests.
+`names[i]` lives at `(row, i)` for non-directional categories). The
+machine row lookup is `rows[direction_axis.index(dir)]`. For v1
+the renderer hardcodes the row constants rather than parsing the
+JSON, but the JSON is canonical for tooling and tests.
 
 ## Determinism
 
@@ -77,17 +110,13 @@ The build script must produce byte-identical output across runs:
   uninitialised memory.
 - Encode the PNG with `imageio.imwrite(..., compress_level=6)`
   (default) and a fixed metadata block.
-- Encode the JSON via `orjson.dumps(payload, option=orjson.OPT_INDENT_2)`
-  and a sorted-keys flag at the top level.
+- Encode the JSON via `orjson.dumps(payload, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)`.
 
 `tests/test_atlas_fresh.py` regenerates both files in a tempdir and
 asserts byte-equivalence with the committed copies.
 
-## v2 extensions (not in this spec)
+## Future extensions (not in scope yet)
 
-- **Direction overlays**: 4 cells (one per `Direction`) with arrows
-  drawn over a transparent background. Belt orientation,
-  miner/assembler facing.
 - **Animation frames**: extra columns per cell for sprite cycling
   (e.g. conveyor flow). Renderer reads
   `(row, base_col + state.timestep % num_frames)`.
@@ -95,6 +124,9 @@ asserts byte-equivalence with the committed copies.
   "machine starved of input", etc. — visual debugging aids.
 - **Glyph atlas**: a richer text atlas to phase out the pygame text
   overlay. Out of scope for v1 by spec decision.
+- **Per-player directional sprites for `player_idx > 0`**: currently
+  only `player_idx=0` has directional cells in the misc row.
+  Multi-player play renders all players with the same sprite.
 
 These are listed so the layout doesn't silently invalidate them.
 Adding a row at the bottom is non-breaking; reordering existing

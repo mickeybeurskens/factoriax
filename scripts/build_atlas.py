@@ -9,25 +9,29 @@ machines, and the player flows through it.
 The atlas is sourced from :mod:`factoriax.ui.icons`, which is the
 procedural-art module that the editor and play HUD already use. By
 funneling both renderers' sprites through the same code we avoid the
-play-vs-editor visual divergence that motivated the regen. The icons
-return RGBA; this script flattens to RGB by compositing each sprite
-over a per-category background so transparent regions read sensibly
-inside the JAX renderer's hard-overwrite ``render_map`` (no alpha
-support there in v1).
+play-vs-editor visual divergence the prior flat-color atlas caused.
 
-Per-category background choices:
+Output is RGBA. The JAX renderer's :func:`render_map` blends machine
+and player layers onto the terrain using the alpha channel, so:
 
-- Blocks: textures from :func:`factoriax.ui.icons.get_textures` are
-  fully opaque, so the background is irrelevant; we just drop alpha.
-- Machines: composite the icon's transparent corners over the legacy
-  flat machine-body color (the same value the v1 atlas painted whole
-  cells with). Placed machines therefore read as "machine-color block
-  with detailed interior" rather than "detailed silhouette on black."
-- Items: composite over black. Items aren't drawn by the world
-  renderer; the atlas's items row is reserved for HUD work.
-- Player / biter: composite over the dirt color (matches the most
-  common floor in procedural maps; alternatives like black would
-  paint a black square around the player).
+- Block cells are opaque (alpha=255 everywhere) — terrain is the
+  ground truth and always paints in full.
+- Machine cells keep the transparent corners that
+  :func:`render_item_icon` produces, so placed machines read as
+  objects sitting on terrain.
+- Player and biter cells composite over what's beneath them, so
+  walking onto a belt no longer hides the belt.
+
+Directional categories carry one cell per
+:class:`~factoriax.constants.Direction`:
+
+- Machines: rows 1-4 hold variants for direction LEFT, RIGHT, UP,
+  DOWN respectively. Non-directional machines (``PALLET``,
+  ``ASSEMBLER``, ``FURNACE``, ``SCIENCE_LAB``, ``ROCKET``) are
+  rendered once and duplicated across all four rows so a uniform
+  gather works at render time.
+- Player: misc row columns 1-4 hold the same four directions for
+  ``player_idx=0``. Column 0 holds the biter sprite.
 
 Usage::
 
@@ -67,58 +71,69 @@ from factoriax.ui.icons import (
 logger = logging.getLogger(__name__)
 
 CELL_PX: int = 32
-NUM_ROWS: int = 5
 NUM_COLS: int = 33  # max(num_block, num_machine, num_item, ...) — driven by ItemType
-MISSING_COLOR: tuple[int, int, int] = (255, 0, 255)  # magenta — flags gaps
 
 
-# Row indices — keep in sync with atlas.layout.md.
+# Direction order used for the atlas's directional rows / columns.
+# Index = atlas row offset for machines (0 = LEFT row, 3 = DOWN row),
+# and atlas column offset for the player cells in the misc row
+# (1 + index gives the column, leaving col 0 for the biter sprite).
+_DIRECTION_ORDER: tuple[Direction, ...] = (
+    Direction.LEFT,
+    Direction.RIGHT,
+    Direction.UP,
+    Direction.DOWN,
+)
+NUM_DIRECTIONS: int = len(_DIRECTION_ORDER)
+
+
+# Row indices — keep in sync with atlas.layout.md and with the
+# constants in factoriax/jax_renderer.py.
 ROW_BLOCKS: int = 0
-ROW_MACHINES: int = 1
-ROW_ITEMS: int = 2
-ROW_MISC: int = 3
-ROW_DIGITS: int = 4
+ROW_MACHINES_BASE: int = 1  # rows 1..4 hold one direction each.
+ROW_ITEMS: int = ROW_MACHINES_BASE + NUM_DIRECTIONS  # 5
+ROW_MISC: int = ROW_ITEMS + 1  # 6
+ROW_DIGITS: int = ROW_MISC + 1  # 7
+NUM_ROWS: int = ROW_DIGITS + 1  # 8
+
+# Misc row column layout.
+COL_MISC_BITER: int = 0
+COL_MISC_PLAYER_BASE: int = 1
 
 
-# Legacy machine body colors, used as the per-cell background when
-# flattening RGBA machine icons to RGB. These match the colors the v1
-# atlas painted whole cells with, so the new sprites preserve the
-# silhouette of placed machines on the map.
-_MACHINE_BODY_BG: dict[MachineType, tuple[int, int, int]] = {
-    MachineType.NONE: (0, 0, 0),
-    MachineType.MINER: (0, 200, 0),
-    MachineType.PALLET: (170, 170, 175),
-    MachineType.ASSEMBLER: (160, 80, 200),
-    MachineType.CONVEYOR_BELT: (220, 180, 50),
-    MachineType.ROCKET: (240, 240, 240),
-    MachineType.SCIENCE_LAB: (76, 29, 149),
-    MachineType.FURNACE: (180, 90, 50),
-    MachineType.ARM: (90, 110, 130),
-    MachineType.SPLITTER: (220, 180, 50),
-    MachineType.CROSSING: (220, 180, 50),
-}
-
-# Player / biter sit on top of terrain; flatten over dirt so the
-# transparent margin reads as floor rather than as a black border.
-_DIRT_RGB: tuple[int, int, int] = (139, 90, 43)
+# Magenta with alpha=255 acts as the "missing sprite" sentinel. The
+# alpha is non-zero so a missing entry actually paints, surfacing the
+# gap visually rather than silently blending through.
+MISSING_RGBA: tuple[int, int, int, int] = (255, 0, 255, 255)
 
 
-def _flatten_rgba(rgba: np.ndarray, bg: tuple[int, int, int]) -> np.ndarray:
-    """Composite an RGBA cell over a solid RGB background.
+# Directional machines — these get a distinct sprite per direction.
+# Non-directional machines (PALLET, ASSEMBLER, FURNACE, SCIENCE_LAB,
+# ROCKET, NONE) are rendered once and duplicated across all four
+# direction rows.
+_DIRECTIONAL_MACHINES: frozenset[MachineType] = frozenset(
+    {
+        MachineType.CONVEYOR_BELT,
+        MachineType.MINER,
+        MachineType.ARM,
+        MachineType.SPLITTER,
+        MachineType.CROSSING,
+    }
+)
 
-    Args:
-        rgba: uint8 array of shape ``(H, W, 4)``.
-        bg: RGB triple used wherever alpha < 255.
 
-    Returns:
-        uint8 array of shape ``(H, W, 3)``.
-    """
-    if rgba.shape[-1] == 3:
-        return rgba.astype(np.uint8)
-    rgb = rgba[..., :3].astype(np.float32)
-    alpha = rgba[..., 3:4].astype(np.float32) / 255.0
-    bg_arr = np.broadcast_to(np.array(bg, dtype=np.float32), rgb.shape)
-    return (rgb * alpha + bg_arr * (1.0 - alpha)).astype(np.uint8)
+def _drop_alpha(rgba: np.ndarray) -> np.ndarray:
+    """Strip alpha from an RGBA cell, returning RGB."""
+    return rgba[..., :3].astype(np.uint8)
+
+
+def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
+    """Append a constant alpha channel to an RGB cell."""
+    h, w = rgb.shape[:2]
+    out = np.empty((h, w, 4), dtype=np.uint8)
+    out[..., :3] = rgb[..., :3]
+    out[..., 3] = alpha
+    return out
 
 
 def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
@@ -126,15 +141,14 @@ def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
 
     The procedural digit atlas is 3 wide × 5 tall bool mask. We blit
     it as white-on-black at the top-left of a 32x32 cell so the rest
-    of the cell is unused space.
+    of the cell is unused space. Returned cell is fully opaque.
     """
-    cell = np.zeros((CELL_PX, CELL_PX, 3), dtype=np.uint8)
+    cell = np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
+    cell[..., 3] = 255
     glyph = digit_atlas[digit]  # shape (5, 3) bool
-    cell[: glyph.shape[0], : glyph.shape[1]] = np.where(
-        glyph[:, :, None],
-        np.array([255, 255, 255], dtype=np.uint8),
-        np.array([0, 0, 0], dtype=np.uint8),
-    )
+    white = np.array([255, 255, 255, 255], dtype=np.uint8)
+    black = np.array([0, 0, 0, 255], dtype=np.uint8)
+    cell[: glyph.shape[0], : glyph.shape[1]] = np.where(glyph[:, :, None], white, black)
     return cell
 
 
@@ -144,72 +158,84 @@ def _ordered_enum_names(enum_cls: type) -> list[str]:
 
 
 def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray | None:
-    """Return the RGB block sprite for *block*, or ``None`` to leave magenta."""
+    """Return the RGBA block sprite for *block*, or ``None`` to leave magenta."""
     tex = textures.get(int(block))
     if tex is None:
         return None
-    return _flatten_rgba(tex, _DIRT_RGB)
+    if tex.shape[-1] == 4:
+        # Force opaque — terrain is the ground truth layer.
+        out = tex.copy()
+        out[..., 3] = 255
+        return out
+    return _to_rgba(tex)
 
 
-def _machine_cell(machine: MachineType) -> np.ndarray | None:
-    """Return the RGB machine sprite for *machine*, or ``None`` to leave magenta.
+def _machine_cell(machine: MachineType, direction: Direction) -> np.ndarray | None:
+    """Return the RGBA machine sprite for *machine* facing *direction*.
 
-    The cell is the corresponding item's icon (from MACHINE_TO_ITEM)
-    composited over the legacy machine body color so transparent
-    corners pick up that color rather than black.
+    Non-directional machines ignore *direction*. Returns ``None`` to
+    leave the cell magenta when no item maps to this machine
+    (e.g. ``MachineType.NONE``); the renderer's NONE row is fully
+    transparent so the sentinel never paints in practice.
     """
     if machine == MachineType.NONE:
-        bg = _MACHINE_BODY_BG[MachineType.NONE]
-        return np.full((CELL_PX, CELL_PX, 3), bg, dtype=np.uint8)
+        # Fully transparent — alpha compositing turns this into a no-op.
+        return np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
     item_id = MACHINE_TO_ITEM.get(int(machine))
     if item_id is None:
         return None
-    bg = _MACHINE_BODY_BG.get(machine, (0, 0, 0))
-    icon = render_item_icon(item_id, CELL_PX, direction=int(Direction.DOWN))
-    return _flatten_rgba(icon, bg)
+    icon = render_item_icon(item_id, CELL_PX, direction=int(direction))
+    if icon.shape[-1] == 3:
+        return _to_rgba(icon)
+    return icon.astype(np.uint8)
 
 
 def _item_cell(item: ItemType) -> np.ndarray | None:
-    """Return the RGB item sprite for *item*, or ``None`` to leave magenta.
+    """Return the RGBA item sprite for *item*, or ``None`` to leave magenta.
 
-    Items aren't currently drawn by the world renderer, so the
-    background choice (black) is purely for the HUD strip and
-    debugging atlas inspectors.
+    Items aren't currently drawn by the world renderer, so the cells
+    are reserved for future HUD work.
     """
     if item == ItemType.EMPTY:
-        return np.zeros((CELL_PX, CELL_PX, 3), dtype=np.uint8)
+        return np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
     icon = render_item_icon(int(item), CELL_PX, direction=int(Direction.DOWN))
-    return _flatten_rgba(icon, (0, 0, 0))
+    if icon.shape[-1] == 3:
+        return _to_rgba(icon)
+    return icon.astype(np.uint8)
 
 
-def _player_cell() -> np.ndarray:
-    """Return the RGB player sprite (player 0, facing down)."""
+def _player_cell(direction: Direction) -> np.ndarray:
+    """Return the RGBA player sprite (player 0) facing *direction*."""
     sprite = create_player_texture(
-        direction=int(Direction.DOWN),
+        direction=int(direction),
         player_idx=0,
         is_selected=True,
         size=CELL_PX,
     )
-    return _flatten_rgba(sprite, _DIRT_RGB)
+    if sprite.shape[-1] == 3:
+        return _to_rgba(sprite)
+    return sprite.astype(np.uint8)
 
 
 def _biter_cell() -> np.ndarray:
-    """Return the RGB biter sprite."""
+    """Return the RGBA biter sprite."""
     sprite = create_biter_texture(CELL_PX)
-    return _flatten_rgba(sprite, _DIRT_RGB)
+    if sprite.shape[-1] == 3:
+        return _to_rgba(sprite)
+    return sprite.astype(np.uint8)
 
 
 def _build_atlas_array() -> np.ndarray:
-    """Construct the (160, 1056, 3) uint8 atlas image.
+    """Construct the (NUM_ROWS * 32, NUM_COLS * 32, 4) uint8 atlas image.
 
     Cells beyond a category's defined enum values are filled with
-    MISSING_COLOR so future enum extensions produce a visible
-    artifact rather than silent zeros.
+    MISSING_RGBA so future enum extensions produce a visible artifact
+    rather than silent zeros.
     """
     height = NUM_ROWS * CELL_PX
     width = NUM_COLS * CELL_PX
-    atlas = np.empty((height, width, 3), dtype=np.uint8)
-    atlas[:, :] = MISSING_COLOR
+    atlas = np.empty((height, width, 4), dtype=np.uint8)
+    atlas[:, :] = MISSING_RGBA
 
     def _put(row: int, col: int, cell: np.ndarray) -> None:
         y0, x0 = row * CELL_PX, col * CELL_PX
@@ -224,25 +250,34 @@ def _build_atlas_array() -> np.ndarray:
             continue
         _put(ROW_BLOCKS, int(block), cell)
 
-    # Row 1: machines.
-    for machine in sorted(MachineType, key=int):
-        cell = _machine_cell(machine)
-        if cell is None:
-            continue
-        _put(ROW_MACHINES, int(machine), cell)
+    # Rows 1..4: machines, one row per direction.
+    for d_idx, direction in enumerate(_DIRECTION_ORDER):
+        row = ROW_MACHINES_BASE + d_idx
+        for machine in sorted(MachineType, key=int):
+            # Non-directional machines render with a fixed fallback so
+            # all four rows show the same sprite — keeps the gather
+            # uniform without forcing the editor to know the difference.
+            effective_dir = (
+                direction if machine in _DIRECTIONAL_MACHINES else Direction.DOWN
+            )
+            cell = _machine_cell(machine, effective_dir)
+            if cell is None:
+                continue
+            _put(row, int(machine), cell)
 
-    # Row 2: items.
+    # Row 5: items.
     for item in sorted(ItemType, key=int):
         cell = _item_cell(item)
         if cell is None:
             continue
         _put(ROW_ITEMS, int(item), cell)
 
-    # Row 3: misc.
-    _put(ROW_MISC, 0, _player_cell())
-    _put(ROW_MISC, 1, _biter_cell())
+    # Row 6: misc.
+    _put(ROW_MISC, COL_MISC_BITER, _biter_cell())
+    for d_idx, direction in enumerate(_DIRECTION_ORDER):
+        _put(ROW_MISC, COL_MISC_PLAYER_BASE + d_idx, _player_cell(direction))
 
-    # Row 4: digits.
+    # Row 7: digits.
     digit_atlas = np.asarray(build_digit_atlas())
     for digit in range(10):
         _put(ROW_DIGITS, digit, _digit_cell(digit, digit_atlas))
@@ -252,10 +287,12 @@ def _build_atlas_array() -> np.ndarray:
 
 def _build_atlas_json() -> dict:
     """Construct the sidecar JSON describing the atlas layout."""
+    direction_axis = [d.name for d in _DIRECTION_ORDER]
     return {
         "cell_px": CELL_PX,
         "rows": NUM_ROWS,
         "cols": NUM_COLS,
+        "direction_axis": direction_axis,
         "categories": {
             "blocks": {
                 "row": ROW_BLOCKS,
@@ -263,9 +300,11 @@ def _build_atlas_json() -> dict:
                 "missing": "magenta",
             },
             "machines": {
-                "row": ROW_MACHINES,
+                "rows": [ROW_MACHINES_BASE + i for i in range(NUM_DIRECTIONS)],
+                "directions": direction_axis,
                 "names": _ordered_enum_names(MachineType),
                 "missing": "magenta",
+                "directional": sorted(m.name for m in _DIRECTIONAL_MACHINES),
             },
             "items": {
                 "row": ROW_ITEMS,
@@ -274,7 +313,13 @@ def _build_atlas_json() -> dict:
             },
             "misc": {
                 "row": ROW_MISC,
-                "names": ["player", "biter"],
+                "columns": {
+                    "biter": COL_MISC_BITER,
+                    **{
+                        f"player_{d.name}": COL_MISC_PLAYER_BASE + i
+                        for i, d in enumerate(_DIRECTION_ORDER)
+                    },
+                },
             },
             "digits": {
                 "row": ROW_DIGITS,
