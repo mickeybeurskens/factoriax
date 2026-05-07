@@ -31,6 +31,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+import factoriax
 from baselines.ppo.gae import Transition, compute_gae
 from baselines.ppo.network import ActorCritic
 from baselines.ppo.normalization import (
@@ -45,7 +46,6 @@ from factoriax.benchmarks.skills.place_miner import (
     place_miner_level,
 )
 from factoriax.constants import NUM_ACTIONS, Action
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.state import EnvState
 
 logging.basicConfig(
@@ -222,7 +222,7 @@ def train(config: Config) -> dict[str, float]:
         config.map_size,
         config.max_timesteps,
     )
-    inner = FactoriaXEnv(level=level)
+    inner, _ = factoriax.make(level)
     env = SKILL_ENVS[config.skill_name](inner=inner)
 
     # Build initial state and determine observation shape.
