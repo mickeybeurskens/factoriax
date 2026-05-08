@@ -29,6 +29,12 @@ from factoriax.benchmarks.rocket import (
     rocket_reward,
 )
 from factoriax.benchmarks.runner import BenchmarkRunner
+from factoriax.benchmarks.skills import (
+    SKILLS_ACHIEVEMENT_INFO,
+    SkillsBenchmark,
+    skills_conditions,
+    skills_reward,
+)
 
 __all__ = [
     "MAX_ROCKET_SCORE",
@@ -37,6 +43,7 @@ __all__ = [
     "ROCKET_RECIPE_BALANCE",
     "ROCKET_RECIPE_BOOK",
     "ROCKET_RECIPE_TABLE",
+    "SKILLS_ACHIEVEMENT_INFO",
     "Benchmark",
     "BenchmarkLevel",
     "BenchmarkResult",
@@ -44,7 +51,10 @@ __all__ = [
     "LevelResult",
     "Policy",
     "RocketBenchmark",
+    "SkillsBenchmark",
     "build_rocket_level",
     "rocket_conditions",
     "rocket_reward",
+    "skills_conditions",
+    "skills_reward",
 ]
