@@ -136,23 +136,51 @@ class BenchmarkRunner:
             env = ActionMaskWrapper(env, tuple(blocked_actions))
         return env, jax.jit(env.step_env)
 
-    def _resolve_achievement_fn(self, benchmark: Benchmark) -> AchievementFn | None:
-        """Return the achievement_fn to use for a given run.
+    def _resolve_blocked(
+        self, benchmark: Benchmark, bench_level: BenchmarkLevel
+    ) -> frozenset[int]:
+        """Pick the effective ``blocked_actions`` mask for *bench_level*.
 
-        Explicit runner-level fn wins over a benchmark-advertised fn.
-        Rebuilds the cached env + JIT step when either the resolved
-        achievement function or the benchmark's ``blocked_actions``
-        differ from what is currently wrapped.
+        Per-level ``BenchmarkLevel.blocked_actions`` wins when set —
+        including when set to an empty ``frozenset()``, which means
+        "this level explicitly has no mask". When the per-level field
+        is ``None``, fall back to the benchmark's class-level
+        ``blocked_actions`` attribute (used by ``RocketBenchmark`` to
+        share a single mask across all its levels).
 
         Args:
             benchmark: Benchmark being run.
+            bench_level: Level whose mask we're resolving.
+
+        Returns:
+            Frozen set of action ids to block. Empty set means no mask.
+        """
+        if bench_level.blocked_actions is not None:
+            return frozenset(bench_level.blocked_actions)
+        return frozenset(getattr(benchmark, "blocked_actions", ()) or ())
+
+    def _ensure_env(
+        self, benchmark: Benchmark, bench_level: BenchmarkLevel
+    ) -> AchievementFn | None:
+        """Rebuild the cached env + JIT step when the level's needs change.
+
+        Resolves both the achievement function (runner override beats
+        benchmark-advertised) and the per-level ``blocked_actions``
+        mask. Rebuilds ``self._env`` / ``self._jit_step`` only when one
+        of these differs from what is currently wrapped — important
+        because each rebuild triggers a JAX trace + compile of
+        :meth:`step_env` for that level's shape.
+
+        Args:
+            benchmark: Benchmark being run.
+            bench_level: Level about to execute.
 
         Returns:
             Resolved achievement function, or ``None`` if neither side
             advertises one.
         """
         resolved = self._achievement_fn or getattr(benchmark, "achievement_fn", None)
-        blocked = frozenset(getattr(benchmark, "blocked_actions", ()) or ())
+        blocked = self._resolve_blocked(benchmark, bench_level)
         if resolved is not self._current_fn or blocked != self._current_blocked:
             self._env, self._jit_step = self._build_env(resolved, blocked)
             self._current_fn = resolved
@@ -218,11 +246,11 @@ class BenchmarkRunner:
                 f"{noun}, got {len(policies)}."
             )
 
-        achievement_fn = self._resolve_achievement_fn(benchmark)
         rng = jax.random.PRNGKey(self.seed)
         level_results: list[LevelResult] = []
 
         for bench_level in benchmark.levels():
+            self._ensure_env(benchmark, bench_level)
             rng, subkey = jax.random.split(rng)
             result = self._run_level(
                 benchmark,
@@ -231,7 +259,7 @@ class BenchmarkRunner:
                 subkey,
                 _obs_fn,
                 constraint_fn,
-                achievement_fn,
+                self._current_fn,
             )
             level_results.append(result)
             logger.info(
@@ -293,7 +321,6 @@ class BenchmarkRunner:
                 f"got num_players={benchmark.num_players}."
             )
         _obs_fn = obs_fn if obs_fn is not None else global_array
-        self._resolve_achievement_fn(benchmark)
         num_seeds = len(seeds)
         levels = benchmark.levels()
 
@@ -301,6 +328,7 @@ class BenchmarkRunner:
         level_data: list[tuple[BenchmarkLevel, EnvState, np.ndarray, np.ndarray]] = []
 
         for bench_level in levels:
+            self._ensure_env(benchmark, bench_level)
             params = bench_level.env_params
             state0 = build_state(bench_level.level, params)
             max_steps = params.max_timesteps

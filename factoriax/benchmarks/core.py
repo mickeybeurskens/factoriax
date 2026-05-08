@@ -46,12 +46,20 @@ class BenchmarkLevel:
             makes it difficult.
         level: Factoriax ``Level`` describing the world layout.
         env_params: Runtime constraints. Map dimensions must match the level.
+        blocked_actions: Optional set of action ids to block on this
+            level. When ``None`` (default), the runner falls back to the
+            benchmark's class-level ``blocked_actions`` attribute (if
+            any). When set — including to an empty ``frozenset()`` — it
+            overrides the class-level mask for this level only. Used by
+            curriculum benchmarks where each level exercises a
+            different subset of the action space.
     """
 
     name: str
     description: str
     level: Level
     env_params: EnvParams
+    blocked_actions: frozenset[int] | None = None
 
 
 @dataclasses.dataclass

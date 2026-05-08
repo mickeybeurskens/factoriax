@@ -57,6 +57,38 @@ class TestBenchmarkLevel:
         bl = _make_bench_level()
         assert bl.env_params.max_timesteps == 10
 
+    def test_blocked_actions_default_none(self) -> None:
+        """Default ``blocked_actions`` is ``None`` (fall back to benchmark)."""
+        bl = _make_bench_level()
+        assert bl.blocked_actions is None
+
+    def test_blocked_actions_accepts_frozenset(self) -> None:
+        """Per-level mask can be set at construction time."""
+        level = LevelBuilder(8, 8).fill_rect(0, 0, 3, 3, BlockType.COAL).build("masked")
+        params = EnvParams(map_width=8, map_height=8, num_players=1, max_timesteps=10)
+        bl = BenchmarkLevel(
+            name="masked",
+            description="Masked level.",
+            level=level,
+            env_params=params,
+            blocked_actions=frozenset({5, 9, 10}),
+        )
+        assert bl.blocked_actions == frozenset({5, 9, 10})
+
+    def test_blocked_actions_accepts_empty_override(self) -> None:
+        """Empty ``frozenset()`` is distinct from ``None`` — overrides class-level."""
+        level = LevelBuilder(8, 8).fill_rect(0, 0, 3, 3, BlockType.COAL).build("clear")
+        params = EnvParams(map_width=8, map_height=8, num_players=1, max_timesteps=10)
+        bl = BenchmarkLevel(
+            name="clear",
+            description="Explicitly unmasked level.",
+            level=level,
+            env_params=params,
+            blocked_actions=frozenset(),
+        )
+        assert bl.blocked_actions == frozenset()
+        assert bl.blocked_actions is not None
+
 
 # ---------------------------------------------------------------------------
 # LevelResult
