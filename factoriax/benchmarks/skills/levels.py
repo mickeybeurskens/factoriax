@@ -40,10 +40,13 @@ _MINE_ORE_BLOCKS: tuple[BlockType, ...] = (
 
 _CRAFT_MINER_MAP_SIZE: int = 5
 _CRAFT_MINER_MAX_TIMESTEPS: int = 400
-_CRAFT_MINER_PALLET_INGREDIENTS: tuple[int, ...] = (
-    int(ItemType.IRON_PLATE),
-    int(ItemType.WIRE),
-)
+# Player starts with WIRE in inventory; the lone pallet holds the
+# IRON_PLATE the recipe also needs. This shrinks the solve sequence to
+# walk → face → WITHDRAW → CRAFT_MINER (4 specific choices) so PPO can
+# bootstrap from sparse reward in a reasonable training budget — see
+# the trainer notes in baselines/skills/train_ppo.py.
+_CRAFT_MINER_INVENTORY_ITEM: int = int(ItemType.WIRE)
+_CRAFT_MINER_PALLET_ITEM: int = int(ItemType.IRON_PLATE)
 
 _PLACE_MINER_MAP_SIZE: int = 5
 _PLACE_MINER_MAX_TIMESTEPS: int = 300
@@ -167,31 +170,26 @@ def build_mine_level(
 def build_craft_miner_level(
     seed: int = 0,
 ) -> tuple[Level, EnvParams, frozenset[int]]:
-    """L.3 — withdraw ingredients from two pallets, then craft a miner.
+    """L.3 — withdraw the missing ingredient, then craft a miner.
 
     The miner recipe (``BASE_RECIPE_BOOK``) is
-    ``1 IRON_PLATE + 1 WIRE -> 1 MINER``. The level pre-places two
-    pallets at non-adjacent positions: one holds 1 IRON_PLATE, the
-    other holds 1 WIRE. The player starts with an empty inventory at
-    the centre tile and must walk to each pallet, face it,
-    ``WITHDRAW`` the ingredient, then ``CRAFT_MINER`` once both items
-    are in inventory.
-
-    The pallet positions are 4-neighbour non-adjacent so the agent
-    can't satisfy the level by parking between two adjacent pallets;
-    it has to navigate to each one in turn. Both pallets and the
-    centre spawn occupy distinct tiles.
+    ``1 IRON_PLATE + 1 WIRE -> 1 MINER``. To keep the solve sequence
+    short enough for sparse-reward PPO to bootstrap, the player starts
+    with one ingredient (``WIRE``) pre-loaded in inventory and the
+    other (``IRON_PLATE``) sits in a single pallet at a seed-varying
+    position. The agent has to walk to the pallet, face it,
+    ``WITHDRAW``, then ``CRAFT_MINER``.
 
     Achievement: ``SKILL_CRAFT_MINER`` — bit 2 — fires when player 0
     has at least one ``MINER`` item in inventory.
 
     Action mask: ``MOVE_*``, ``FACE_*``, ``WITHDRAW``,
-    ``CRAFT_MINER``, ``NOOP``. ``MINE`` is blocked (no ore on the map
-    anyway); other ``CRAFT_*`` actions are blocked.
+    ``CRAFT_MINER``, ``NOOP``. ``MINE`` is blocked; other ``CRAFT_*``
+    actions are blocked.
 
     Args:
-        seed: Numpy RNG seed for pallet positions. Default ``0`` is
-            the canonical seed used by :class:`SkillsBenchmark`.
+        seed: Numpy RNG seed for the pallet's position. Default ``0``
+            is the canonical seed used by :class:`SkillsBenchmark`.
 
     Returns:
         Tuple of ``(level, params, blocked_actions)``.
@@ -201,19 +199,16 @@ def build_craft_miner_level(
     builder = LevelBuilder(map_size, map_size)
     centre = map_size // 2
 
-    pallet_positions = _draw_non_adjacent_tiles(
-        rng,
-        map_size,
-        len(_CRAFT_MINER_PALLET_INGREDIENTS),
-        exclude={(centre, centre)},
-    )
-    for (x, y), item_type in zip(
-        pallet_positions, _CRAFT_MINER_PALLET_INGREDIENTS, strict=True
-    ):
-        builder.place_machine(x, y, int(MachineType.PALLET), int(Direction.UP))
-        builder.set_machine_inventory(x, y, item_type, count=1)
+    while True:
+        px = int(rng.integers(0, map_size))
+        py = int(rng.integers(0, map_size))
+        if (px, py) != (centre, centre):
+            break
+    builder.place_machine(px, py, int(MachineType.PALLET), int(Direction.UP))
+    builder.set_machine_inventory(px, py, _CRAFT_MINER_PALLET_ITEM, count=1)
 
     builder.set_player_position(centre, centre)
+    builder.set_player_inventory([(_CRAFT_MINER_INVENTORY_ITEM, 1)])
     level = builder.build(f"skills_craft_miner_seed{seed}")
     params = EnvParams(
         map_width=map_size,

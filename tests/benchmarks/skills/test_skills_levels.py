@@ -161,7 +161,7 @@ class TestMineLevel:
 
 
 class TestCraftMinerLevel:
-    """L.3 craft_miner: empty inventory, two non-adjacent pallets."""
+    """L.3 craft_miner: 1 ingredient pre-loaded, 1 pallet to withdraw from."""
 
     def test_shape_is_5x5(self) -> None:
         level, params, _ = build_craft_miner_level(seed=0)
@@ -178,53 +178,58 @@ class TestCraftMinerLevel:
         _, _, blocked = build_craft_miner_level(seed=0)
         assert blocked is CRAFT_MINER_BLOCKED_ACTIONS
 
-    def test_player_starts_with_empty_inventory(self) -> None:
-        """No ingredients pre-loaded — agent must withdraw from pallets."""
+    def test_player_starts_with_one_ingredient(self) -> None:
+        """Player has one of the two recipe ingredients pre-loaded."""
         level, _, _ = build_craft_miner_level(seed=0)
-        assert level.player_inventory in (None, [])
+        assert level.player_inventory is not None
+        items = dict(level.player_inventory)
+        # Exactly one of IRON_PLATE / WIRE in inventory; the other
+        # should be absent so the agent has to withdraw it.
+        held = {
+            it
+            for it in (int(ItemType.IRON_PLATE), int(ItemType.WIRE))
+            if items.get(it, 0) > 0
+        }
+        assert len(held) == 1, f"player should hold exactly one ingredient, has {held}"
 
-    def test_has_two_pallets(self) -> None:
-        """Each level pre-places exactly two pallets."""
+    def test_has_one_pallet(self) -> None:
+        """Each level pre-places exactly one pallet."""
         from factoriax.constants import MachineType
 
         for seed in range(20):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.machine_types is not None
             pallet_count = int((level.machine_types == int(MachineType.PALLET)).sum())
-            assert pallet_count == 2, f"seed={seed}: {pallet_count} pallets (want 2)"
+            assert pallet_count == 1, f"seed={seed}: {pallet_count} pallets (want 1)"
 
-    def test_pallets_not_adjacent(self) -> None:
-        """Per design rule: the two pallets are not 4-neighbour adjacent."""
+    def test_pallet_holds_complementary_ingredient(self) -> None:
+        """The pallet holds whichever of IRON_PLATE/WIRE the player doesn't have."""
         from factoriax.constants import MachineType
 
-        for seed in range(50):
+        for seed in range(10):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.machine_types is not None
+            assert level.machine_inventory is not None
+            assert level.player_inventory is not None
             ys, xs = np.where(level.machine_types == int(MachineType.PALLET))
-            tiles = list(zip(xs.tolist(), ys.tolist(), strict=True))
-            assert len(tiles) == 2
-            (xi, yi), (xj, yj) = tiles
-            assert abs(xi - xj) + abs(yi - yj) >= 2, (
-                f"seed={seed}: pallets at {tiles[0]} and {tiles[1]} are adjacent"
-            )
-
-    def test_pallets_pre_filled_with_iron_plate_and_wire(self) -> None:
-        """One pallet holds IRON_PLATE, the other holds WIRE."""
-        from factoriax.constants import MachineType
-
-        level, _, _ = build_craft_miner_level(seed=0)
-        assert level.machine_types is not None
-        assert level.machine_inventory is not None
-        ys, xs = np.where(level.machine_types == int(MachineType.PALLET))
-        items_held: list[int] = []
-        for x, y in zip(xs.tolist(), ys.tolist(), strict=True):
-            inv = level.machine_inventory[y, x]
-            for it in range(1, len(inv)):
-                if int(inv[it]) > 0:
-                    items_held.append(it)
-        assert sorted(items_held) == sorted(
-            [int(ItemType.IRON_PLATE), int(ItemType.WIRE)]
-        )
+            assert len(xs) == 1
+            x, y = int(xs[0]), int(ys[0])
+            pallet_items = {
+                it
+                for it in (int(ItemType.IRON_PLATE), int(ItemType.WIRE))
+                if int(level.machine_inventory[y, x, it]) > 0
+            }
+            inv = dict(level.player_inventory)
+            player_items = {
+                it
+                for it in (int(ItemType.IRON_PLATE), int(ItemType.WIRE))
+                if inv.get(it, 0) > 0
+            }
+            assert pallet_items.isdisjoint(player_items)
+            assert pallet_items | player_items == {
+                int(ItemType.IRON_PLATE),
+                int(ItemType.WIRE),
+            }
 
     def test_canonical_seed_is_deterministic(self) -> None:
         l1, _, _ = build_craft_miner_level(seed=0)
@@ -235,23 +240,22 @@ class TestCraftMinerLevel:
         assert l1.player_positions == l2.player_positions
 
     def test_spawn_at_centre(self) -> None:
-        """Spawn fixed at centre (2, 2); pallets always avoid that tile."""
+        """Spawn fixed at centre (2, 2); pallet always avoids that tile."""
         for seed in range(20):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.player_positions == [(2, 2)]
 
-    def test_pallet_layout_varies_with_seed(self) -> None:
-        """Different seeds produce distinct pallet layouts."""
+    def test_pallet_position_varies_with_seed(self) -> None:
+        """Different seeds produce distinct pallet positions."""
         from factoriax.constants import MachineType
 
-        layouts: set[tuple[tuple[int, int], ...]] = set()
+        positions: set[tuple[int, int]] = set()
         for seed in range(20):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.machine_types is not None
             ys, xs = np.where(level.machine_types == int(MachineType.PALLET))
-            tiles = tuple(sorted(zip(xs.tolist(), ys.tolist(), strict=True)))
-            layouts.add(tiles)
-        assert len(layouts) >= 4
+            positions.add((int(xs[0]), int(ys[0])))
+        assert len(positions) >= 4
 
     def test_level_name_includes_seed(self) -> None:
         l0, _, _ = build_craft_miner_level(seed=0)

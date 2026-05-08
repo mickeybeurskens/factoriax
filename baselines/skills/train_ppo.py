@@ -71,18 +71,36 @@ SKILL_NAMES: tuple[str, ...] = (
 
 
 class SkillsRewardEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
-    """Inject :func:`skills_reward` as the per-step reward signal.
+    """Inject :func:`skills_reward` and early-terminate on the target bit.
 
     Wraps :class:`FactoriaXEnv` (with ``skills_conditions`` already
-    bound as the achievement function), runs the inner step, then
-    replaces the returned reward with the time-discounted achievement
-    reward used by :class:`SkillsBenchmark`. The (obs, state, done,
-    info) tuple passes through unchanged.
+    bound as the achievement function), runs the inner step, replaces
+    the returned reward with the time-discounted
+    :func:`skills_reward`, and sets ``done=True`` the moment the
+    level's target achievement bit is unlocked. Without the early
+    terminate, the policy keeps stepping a solved level for the full
+    ``max_timesteps`` budget — which both wastes rollout space and
+    blunts the learning signal (the agent never sees "solving ends
+    the episode" and so can't optimise time-to-solve).
+
+    Args:
+        target_bit: Index into ``state.achievements_unlocked`` for
+            the achievement that should terminate the episode. For
+            the skills curriculum this matches the level's index in
+            ``SkillsBenchmark().levels()``.
+        inner: Optional pre-built inner env. A fresh
+            ``FactoriaXEnv(achievement_fn=skills_conditions)`` is used
+            when ``None``.
     """
 
-    def __init__(self, inner: FactoriaXEnv | None = None) -> None:
+    def __init__(
+        self,
+        target_bit: int,
+        inner: FactoriaXEnv | None = None,
+    ) -> None:
         super().__init__()
         self._inner = inner or FactoriaXEnv(achievement_fn=skills_conditions)
+        self._target_bit = int(target_bit)
 
     @property
     def default_params(self) -> EnvParams:
@@ -97,10 +115,12 @@ class SkillsRewardEnv(environment.Environment[EnvState, EnvParams]):  # type: ig
         params: EnvParams,
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
         prev_state = state
-        obs, new_state, _r, done, info = self._inner.step_env(
+        obs, new_state, _r, inner_done, info = self._inner.step_env(
             key, state, action, params
         )
         reward = skills_reward(prev_state, new_state, params)
+        target_unlocked = new_state.achievements_unlocked[self._target_bit]
+        done = inner_done | target_unlocked
         return obs, new_state, reward, done, info
 
     def reset_env(
@@ -127,19 +147,26 @@ class SkillsRewardEnv(environment.Environment[EnvState, EnvParams]):  # type: ig
         return spaces.Box(0.0, 1.0, shape=(obs_size,), dtype=jnp.float32)
 
 
-def _benchmark_level(skill_name: str) -> BenchmarkLevel:
-    """Look up the BenchmarkLevel by skill name."""
+def _benchmark_level(skill_name: str) -> tuple[int, BenchmarkLevel]:
+    """Look up the BenchmarkLevel by skill name and return ``(index, level)``.
+
+    The index is the level's position in ``SkillsBenchmark().levels()``,
+    which by the curriculum's bit-indexing contract equals the
+    achievement bit the level targets.
+    """
     bench = SkillsBenchmark()
-    for bench_level in bench.levels():
+    for i, bench_level in enumerate(bench.levels()):
         if bench_level.name == skill_name:
-            return bench_level
+            return i, bench_level
     available = [bl.name for bl in bench.levels()]
     raise ValueError(f"Unknown skill: {skill_name!r}. Available: {available}")
 
 
-def _build_env(blocked_actions: frozenset[int]) -> SkillsRewardEnv | Any:
+def _build_env(
+    target_bit: int, blocked_actions: frozenset[int]
+) -> SkillsRewardEnv | Any:
     """Build the wrapped env: SkillsRewardEnv → ActionMaskWrapper if mask set."""
-    inner_env = SkillsRewardEnv()
+    inner_env = SkillsRewardEnv(target_bit=target_bit)
     if not blocked_actions:
         return inner_env
     return ActionMaskWrapper(inner_env, tuple(blocked_actions))
@@ -274,11 +301,11 @@ def train(config: Config) -> dict[str, float]:
     Returns:
         Dict with final metrics (mean_ep_return, sps).
     """
-    bench_level = _benchmark_level(config.skill_name)
+    level_idx, bench_level = _benchmark_level(config.skill_name)
     env_params = bench_level.env_params
     level = bench_level.level
     blocked = bench_level.blocked_actions or frozenset()
-    env = _build_env(blocked)
+    env = _build_env(target_bit=level_idx, blocked_actions=blocked)
 
     # Build initial state from the level (build_state pulls in
     # pre-placed pallets/miners/etc. that ``reset_env`` would skip).
@@ -690,11 +717,7 @@ def _evaluate(
             break
 
     # Inspect the level's target bit on the final state.
-    bench_level = _benchmark_level(config.skill_name)
-    bench = SkillsBenchmark()
-    level_idx = next(
-        i for i, bl in enumerate(bench.levels()) if bl.name == bench_level.name
-    )
+    level_idx, _ = _benchmark_level(config.skill_name)
     achievement_unlocked = bool(jnp.asarray(state.achievements_unlocked)[level_idx])
     total_reward = sum(rewards_log)
     logger.info(
