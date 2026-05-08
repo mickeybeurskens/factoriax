@@ -1,16 +1,13 @@
 """Scripted baseline for the L.4 place_miner skill.
 
-The level holds a 2x2 ore patch in one of four corners; the player
-spawns at the centre with 5 miners in inventory. The policy walks
-toward the patch, stops one tile short, faces the patch, and emits
-``PLACE_MINER`` — placement happens on the tile in front of the
-player. The achievement (``count_miners_on_ore >= 1``) latches as
-soon as the placed miner lands on a mineable tile.
-
-The patch is reachable from spawn in <=4 manhattan steps (centre is
-at (2, 2); nearest patch tile is at (2, 0), (2, 3), (0, 2), or
-(3, 2) depending on which corner the patch sits in). With one face +
-one place, total budget is around 5-6 ticks.
+The level holds three non-adjacent ore patches; the player spawns at
+the centre with 5 miners in inventory. The policy walks toward the
+nearest *un-occupied* ore tile (one that doesn't yet have a placed
+machine on it), stops one tile short, faces the tile, and emits
+``PLACE_MINER``. After placement, the policy retargets the next
+un-occupied ore tile until all three patches have a miner — the
+achievement (``count_miners_on_ore >= 3``) latches when the third
+miner lands.
 """
 
 from __future__ import annotations
@@ -55,12 +52,17 @@ def place_miner_policy(state: EnvState, params: EnvParams) -> jax.Array:
     """
     del params
     map_arr = np.asarray(state.map)
+    machine_types = np.asarray(state.machine_types)
     pos = np.asarray(state.player_positions[0])
     px, py = int(pos[0]), int(pos[1])
     facing = int(np.asarray(state.player_directions[0]))
 
+    # Targets are mineable tiles that don't yet have any machine on
+    # them — those are the ones still missing a miner.
     ore_mask = np.isin(map_arr, _ORE_BLOCK_VALUES)
-    ys, xs = np.where(ore_mask)
+    no_machine_mask = machine_types == 0
+    target_mask = ore_mask & no_machine_mask
+    ys, xs = np.where(target_mask)
     if xs.size == 0:
         return _action(int(Action.NOOP))
 

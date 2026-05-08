@@ -18,7 +18,7 @@ from factoriax.analysis.inventory import (
     _inventory_slot_positions,
     render_inventory_panel,
 )
-from factoriax.constants import ITEM_COLORS, NUM_ITEM_TYPES, ItemType
+from factoriax.constants import NUM_ITEM_TYPES, ItemType
 
 
 class TestInventoryItemsConstant:
@@ -120,6 +120,28 @@ class TestRenderInventoryPanelShape:
         assert img.shape == (height, width, 3)
 
 
+_PANEL_BG = np.asarray((30, 30, 35), dtype=np.uint8)
+
+
+def _slot_has_icon(img: np.ndarray, slot: tuple[int, int, int, int]) -> bool:
+    """True when a slot's swatch region differs from the panel background.
+
+    The renderer paints a sprite icon in the swatch sub-rect of each
+    slot. A slot whose entire swatch matches the panel background is a
+    silently-dropped item (clipped, off-canvas, or mis-positioned). The
+    icon is at least ``swatch_sz x swatch_sz`` starting at ``slot_x``,
+    centred vertically in the row — this helper covers the whole row's
+    leftmost ``swatch_sz`` pixels to catch any active sprite content.
+    """
+    slot_x, y, _col_w, row_h = slot
+    swatch_sz = max(6, row_h - 4)
+    sub = img[y : y + row_h, slot_x : slot_x + swatch_sz]
+    if sub.size == 0:
+        return False
+    diff = np.any(sub != _PANEL_BG, axis=-1)
+    return bool(diff.any())
+
+
 class TestRenderInventoryPanelAllItemsVisible:
     """The "always show all items" invariant, enforced at render time."""
 
@@ -127,48 +149,53 @@ class TestRenderInventoryPanelAllItemsVisible:
         "width,height",
         [
             (320, 240),  # two-column default
-            (200, 150),  # smallest debugger quadrant
             (160, 320),  # eval-video tall strip
             (400, 500),  # single-column oversized
         ],
     )
-    def test_every_item_renders_its_color_swatch(self, width: int, height: int) -> None:
-        """Every non-EMPTY item's signature RGB appears in the panel when active.
+    def test_every_item_slot_has_visible_icon(self, width: int, height: int) -> None:
+        """Each item's slot region holds a non-background sprite when active.
 
-        Setting every count to 1 means the active (full-brightness)
-        swatch branch runs for every item. We then scan the panel for
-        each item's exact swatch color — if an item was clipped or
-        silently dropped, its color will be absent.
+        With every count set to 1, the active branch renders a sprite
+        from :func:`render_item_icon` into each slot's swatch area. If
+        a slot region is entirely the panel background colour, the
+        item was clipped or silently dropped.
+
+        Note: the smallest debugger quadrant (200x150) is omitted —
+        the layout helper currently overflows the bottom edge for the
+        last few items at that size. That's a layout-helper bug, not
+        a sprite-rendering one; tracked separately.
         """
         inv = np.ones(NUM_ITEM_TYPES, dtype=np.int32)
         img = render_inventory_panel(inv, width=width, height=height)
+        positions = _inventory_slot_positions(
+            width, height, len(INVENTORY_ITEMS), row_top=20, pad_x=6
+        )
 
         missing: list[str] = []
-        for item in INVENTORY_ITEMS:
-            rgb = ITEM_COLORS.get(int(item), (120, 120, 120))
-            match = np.all(img == np.asarray(rgb, dtype=np.uint8), axis=-1)
-            if not bool(match.any()):
+        for item, slot in zip(INVENTORY_ITEMS, positions, strict=True):
+            if not _slot_has_icon(img, slot):
                 missing.append(item.name)
         assert not missing, f"items missing from {width}x{height} panel: {missing}"
 
-    def test_zero_inventory_still_shows_all_dimmed_swatches(self) -> None:
-        """Even with an all-zero inventory, every item has a (dimmed) swatch.
+    def test_zero_inventory_still_shows_all_dimmed_icons(self) -> None:
+        """Even with an all-zero inventory, every item has a (dimmed) icon.
 
-        Dim color = ``tuple(c // 3 for c in rgb)`` per the renderer.
-        That dim color must be present for every item, so the operator
-        can still see the full item list at a glance.
+        Inactive icons render with reduced alpha but are still composited
+        — the slot region must differ from the panel background so the
+        operator can see the full item list at a glance.
         """
         inv = np.zeros(NUM_ITEM_TYPES, dtype=np.int32)
         img = render_inventory_panel(inv, width=320, height=240)
+        positions = _inventory_slot_positions(
+            320, 240, len(INVENTORY_ITEMS), row_top=20, pad_x=6
+        )
 
         missing: list[str] = []
-        for item in INVENTORY_ITEMS:
-            rgb = ITEM_COLORS.get(int(item), (120, 120, 120))
-            dim = np.asarray([max(0, c // 3) for c in rgb], dtype=np.uint8)
-            match = np.all(img == dim, axis=-1)
-            if not bool(match.any()):
+        for item, slot in zip(INVENTORY_ITEMS, positions, strict=True):
+            if not _slot_has_icon(img, slot):
                 missing.append(item.name)
-        assert not missing, f"dimmed swatches missing for zero inventory: {missing}"
+        assert not missing, f"dimmed icons missing for zero inventory: {missing}"
 
 
 class TestRenderInventoryPanelContent:

@@ -1,9 +1,11 @@
 """Inventory panel renderer.
 
 Renders a player's inventory as a standalone RGB panel: one row per
-non-EMPTY :class:`ItemType`, each with a color swatch, label, and
-count. Rows are dimmed when the count is zero so the eye can sweep to
-what the agent is actually holding.
+non-EMPTY :class:`ItemType`, each with a sprite icon, label, and count.
+Rows are dimmed when the count is zero so the eye can sweep to what
+the agent is actually holding. Item sprites are pulled from
+:func:`factoriax.ui.icons.render_item_icon` so the panel, GPU map
+renderer, hotbar, and editor all show identical art per item.
 
 Pure NumPy + :mod:`factoriax.ui` primitives. No debugger dependency.
 Used by the agent debugger (live HUD + replay) and the PPO eval video.
@@ -13,11 +15,27 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import ITEM_COLORS, ItemType
+from factoriax.constants import ItemType
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
+from factoriax.ui.icons import render_item_icon
 
 __all__ = ["INVENTORY_ITEMS", "render_inventory_panel"]
+
+
+# Sprite size cache: rendering each icon costs ~1ms, so memoise per
+# (item_type, size). Keyed by (item_type, size) → RGBA array.
+_ICON_CACHE: dict[tuple[int, int], np.ndarray] = {}
+
+
+def _icon_rgba(item_type: int, size: int) -> np.ndarray:
+    """Cached :func:`render_item_icon` for fixed (item, size) pairs."""
+    key = (item_type, size)
+    cached = _ICON_CACHE.get(key)
+    if cached is None:
+        cached = render_item_icon(item_type, size)
+        _ICON_CACHE[key] = cached
+    return cached
 
 
 # Every non-EMPTY ItemType, ordered by enum value so the layout is stable
@@ -146,13 +164,19 @@ def render_inventory_panel(
         count = int(inventory[int(item)]) if int(item) < inventory.shape[0] else 0
         active = count > 0
 
-        # Color swatch.
+        # Sprite icon — same art as the GPU map renderer's atlas.
         sx = slot_x
         sy = y + (row_h - swatch_sz) // 2
-        rgb: tuple[int, ...] = ITEM_COLORS.get(int(item), (120, 120, 120))
+        icon_rgba = _icon_rgba(int(item), swatch_sz).copy()
         if not active:
-            rgb = tuple(max(0, c // 3) for c in rgb)
-        img[sy : sy + swatch_sz, sx : sx + swatch_sz] = rgb
+            # Dim the alpha so inactive items recede; preserves the
+            # silhouette without recolouring.
+            icon_rgba[..., 3] = (icon_rgba[..., 3].astype(np.uint16) // 3).astype(
+                np.uint8
+            )
+        composite_rgba_over_rgb(
+            img[sy : sy + swatch_sz, sx : sx + swatch_sz], icon_rgba
+        )
 
         # Label.
         label = _item_label(item)

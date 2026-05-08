@@ -21,7 +21,7 @@ from factoriax.benchmarks.skills.achievements import (
     NAVIGATE_BLOCKED_ACTIONS,
     PLACE_MINER_BLOCKED_ACTIONS,
 )
-from factoriax.constants import BlockType, ItemType
+from factoriax.constants import BlockType, Direction, ItemType, MachineType
 from factoriax.levels import Level, LevelBuilder
 from factoriax.state import EnvParams
 
@@ -30,8 +30,8 @@ _NAVIGATE_MAX_TIMESTEPS: int = 200
 
 _MINE_MAP_SIZE: int = 5
 _MINE_MAX_TIMESTEPS: int = 200
-_MINE_ORE_FRACTION: float = 0.4
-_MINE_RESOURCES_PER_TILE: int = 3
+_MINE_NUM_ORE_TILES: int = 5
+_MINE_RESOURCES_PER_TILE: int = 1
 _MINE_ORE_BLOCKS: tuple[BlockType, ...] = (
     BlockType.COAL,
     BlockType.IRON,
@@ -40,66 +40,70 @@ _MINE_ORE_BLOCKS: tuple[BlockType, ...] = (
 
 _CRAFT_MINER_MAP_SIZE: int = 5
 _CRAFT_MINER_MAX_TIMESTEPS: int = 400
-_CRAFT_MINER_NUM_COAL_TILES: int = 3
+_CRAFT_MINER_PALLET_INGREDIENTS: tuple[int, ...] = (
+    int(ItemType.IRON_PLATE),
+    int(ItemType.WIRE),
+)
 
 _PLACE_MINER_MAP_SIZE: int = 5
 _PLACE_MINER_MAX_TIMESTEPS: int = 300
-_PLACE_MINER_PATCH_SIZE: int = 2
+_PLACE_MINER_NUM_PATCHES: int = 3
 _PLACE_MINER_INVENTORY_COUNT: int = 5
-# Resources per ore tile must outlast at least one machine tick so the
+# Resources per ore tile must outlast at least one machine tick so each
 # placed miner is still on an ore-typed tile when the achievement
-# evaluates. The miner depletes ``params.miner_mining_rate`` per tick
-# (default 1); 100 is generous and keeps the tile as ore for the full
-# episode budget.
+# evaluates (the achievement counts miners on mineable tiles, and the
+# tile reverts to DIRT once depleted). 100 keeps the patch as ore for
+# the full episode budget.
 _PLACE_MINER_RESOURCES_PER_TILE: int = 100
-_PLACE_MINER_PATCH_CORNERS: tuple[tuple[int, int], ...] = (
-    (0, 0),
-    (0, 3),
-    (3, 0),
-    (3, 3),
-)
 
 
 def build_navigate_level(
     seed: int = 0,
 ) -> tuple[Level, EnvParams, frozenset[int]]:
-    """L.1 — walk to the bottom-right corner of a 5x5 grass map.
+    """L.1 — walk to a single coal patch on a 5x5 grass map.
 
-    The goal tile is fixed at ``(map_size - 1, map_size - 1)`` so the
-    achievement function (``SKILL_NAVIGATE`` — bit 0) is a pure
-    state-only check with no per-level metadata. Only the spawn varies
-    with *seed*; that's enough to prevent overfitting to a single
-    "always step right then down" trajectory without needing to plumb
-    a goal coordinate through ``EnvState``.
+    A single 1x1 coal tile is placed at a seed-varying position; the
+    player spawns elsewhere and must walk onto it. The achievement
+    (``SKILL_NAVIGATE`` — bit 0) fires the moment the player stands
+    on any mineable tile, so it stays layout-invariant — the level
+    can move the coal anywhere without breaking the condition. To
+    keep the navigation non-trivial, the spawn and coal tile are
+    drawn at manhattan distance >= 2.
 
     Action mask: only ``MOVE_*`` and ``NOOP`` are exposed. Every other
-    action is blocked so the agent cannot mine, place, or craft while
-    learning to walk.
+    action is blocked so the agent cannot mine the patch away
+    (``MINE`` would deplete the tile to DIRT and unwind the goal).
 
     Args:
-        seed: Numpy RNG seed for spawn position. Default ``0`` is the
-            canonical seed used by :class:`SkillsBenchmark` for
-            evaluation. Any other seed produces a deterministic spawn.
+        seed: Numpy RNG seed for coal + spawn positions. Default
+            ``0`` is the canonical seed used by
+            :class:`SkillsBenchmark` for evaluation.
 
     Returns:
-        Tuple of ``(level, params, blocked_actions)``. Pass
-        ``blocked_actions`` to :class:`ActionMaskWrapper` (or rely on
-        :class:`BenchmarkRunner` to do it via the per-level field on
-        :class:`BenchmarkLevel`).
+        Tuple of ``(level, params, blocked_actions)``.
     """
     rng = np.random.default_rng(seed)
-    builder = LevelBuilder(_NAVIGATE_MAP_SIZE, _NAVIGATE_MAP_SIZE)
-    goal = (_NAVIGATE_MAP_SIZE - 1, _NAVIGATE_MAP_SIZE - 1)
+    map_size = _NAVIGATE_MAP_SIZE
+    builder = LevelBuilder(map_size, map_size)
+
+    coal_x = int(rng.integers(0, map_size))
+    coal_y = int(rng.integers(0, map_size))
     while True:
-        spawn_x = int(rng.integers(0, _NAVIGATE_MAP_SIZE))
-        spawn_y = int(rng.integers(0, _NAVIGATE_MAP_SIZE))
-        if (spawn_x, spawn_y) != goal:
+        spawn_x = int(rng.integers(0, map_size))
+        spawn_y = int(rng.integers(0, map_size))
+        manhattan = abs(spawn_x - coal_x) + abs(spawn_y - coal_y)
+        if manhattan >= 2:
             break
+
+    # Coal tile carries plenty of resources so that even a single
+    # accidental MINE (if a future change relaxed the mask) wouldn't
+    # deplete it for the whole episode.
+    builder.fill_rect(coal_x, coal_y, 1, 1, BlockType.COAL, resources=100)
     builder.set_player_position(spawn_x, spawn_y)
     level = builder.build(f"skills_navigate_seed{seed}")
     params = EnvParams(
-        map_width=_NAVIGATE_MAP_SIZE,
-        map_height=_NAVIGATE_MAP_SIZE,
+        map_width=map_size,
+        map_height=map_size,
         num_players=1,
         max_timesteps=_NAVIGATE_MAX_TIMESTEPS,
     )
@@ -109,24 +113,22 @@ def build_navigate_level(
 def build_mine_level(
     seed: int = 0,
 ) -> tuple[Level, EnvParams, frozenset[int]]:
-    """L.2 — extract ore from a 5x5 map sprinkled with mineable tiles.
+    """L.2 — mine all five scattered ore tiles on a 5x5 map.
 
-    The map gets ~40% ore tiles drawn uniformly from
-    ``{COAL, IRON, COPPER}`` (the three ore types the player can hold
-    interchangeably for the achievement). Each ore tile carries 3
-    resources — generous for a single mine action but small enough
-    that the agent can't loiter forever scoring multiple unlocks. The
-    player spawns at the centre tile, which is forced to be grass so
-    a fresh ``MINE`` from spawn does nothing — the agent must walk
-    onto an ore tile first.
+    Exactly five 1-resource ore tiles are placed at random positions
+    (drawn from ``{COAL, IRON, COPPER}``). The player spawns at the
+    centre — guaranteed grass — and must walk to each ore tile and
+    ``MINE``. With one resource per tile, every successful ``MINE``
+    depletes the tile to DIRT and increments ``state.items_mined``
+    by 1. The achievement (``SKILL_MINE`` — bit 1) fires when the
+    cumulative ore-mined count reaches 5.
 
-    The achievement (``SKILL_MINE`` — bit 1) fires when player 0's
-    inventory contains at least one ore item of any mineable type. The
-    layout varies with *seed*; the achievement does not depend on
-    layout.
+    Layout-invariant: the achievement counts mined items, not which
+    specific tiles got mined. Different seeds give different ore
+    placements but the same target.
 
-    Action mask: ``MOVE_*``, ``MINE``, ``NOOP``. No facing, no
-    placement, no crafting — pure walk-and-mine.
+    Action mask: ``MOVE_*``, ``MINE``, ``NOOP``. No facing, placement,
+    or crafting.
 
     Args:
         seed: Numpy RNG seed for ore layout. Default ``0`` is the
@@ -141,12 +143,13 @@ def build_mine_level(
     centre = map_size // 2
 
     n_tiles = map_size * map_size
-    n_ore = int(n_tiles * _MINE_ORE_FRACTION)
-    ore_indices = rng.choice(n_tiles, size=n_ore, replace=False)
-    for idx in ore_indices:
+    # Pick five distinct tiles excluding the centre (spawn).
+    candidates = [
+        i for i in range(n_tiles) if (i % map_size, i // map_size) != (centre, centre)
+    ]
+    chosen = rng.choice(candidates, size=_MINE_NUM_ORE_TILES, replace=False)
+    for idx in chosen:
         y, x = divmod(int(idx), map_size)
-        if (x, y) == (centre, centre):
-            continue
         ore_block = _MINE_ORE_BLOCKS[int(rng.integers(0, len(_MINE_ORE_BLOCKS)))]
         builder.fill_rect(x, y, 1, 1, ore_block, resources=_MINE_RESOURCES_PER_TILE)
 
@@ -164,33 +167,31 @@ def build_mine_level(
 def build_craft_miner_level(
     seed: int = 0,
 ) -> tuple[Level, EnvParams, frozenset[int]]:
-    """L.3 — combine ``IRON_PLATE`` + ``WIRE`` to craft a miner.
+    """L.3 — withdraw ingredients from two pallets, then craft a miner.
 
     The miner recipe (``BASE_RECIPE_BOOK``) is
-    ``1 IRON_PLATE + 1 WIRE -> 1 MINER``. With the curriculum mask
-    blocking every ``CRAFT_*`` action *except* ``CRAFT_MINER``, the
-    intermediate items can't be hand-crafted from raw ore — so the
-    player starts with the immediate ingredients pre-loaded into
-    inventory. ``MINE`` and movement remain available so the action
-    space "feels" like hand-crafting (plus a few coal tiles are
-    scattered for ``MINE`` to actually do something), but the
-    achievement (``SKILL_CRAFT_MINER`` — bit 2) only checks for one
-    miner in inventory. A direct ``CRAFT_MINER`` on tick 1 satisfies
-    the condition.
+    ``1 IRON_PLATE + 1 WIRE -> 1 MINER``. The level pre-places two
+    pallets at non-adjacent positions: one holds 1 IRON_PLATE, the
+    other holds 1 WIRE. The player starts with an empty inventory at
+    the centre tile and must walk to each pallet, face it,
+    ``WITHDRAW`` the ingredient, then ``CRAFT_MINER`` once both items
+    are in inventory.
 
-    Layout variation: spawn position and coal tile placements vary
-    with *seed*. Inventory contents and recipe are fixed.
+    The pallet positions are 4-neighbour non-adjacent so the agent
+    can't satisfy the level by parking between two adjacent pallets;
+    it has to navigate to each one in turn. Both pallets and the
+    centre spawn occupy distinct tiles.
 
-    Action mask: ``MOVE_*``, ``MINE``, ``CRAFT_MINER``, ``NOOP``.
+    Achievement: ``SKILL_CRAFT_MINER`` — bit 2 — fires when player 0
+    has at least one ``MINER`` item in inventory.
 
-    Note on random-policy difficulty: with ``CRAFT_MINER`` exposed
-    directly, a uniform random policy will solve the level with high
-    probability over the 400-step budget. The random-floor test
-    (T.2) handles this with a per-skill threshold.
+    Action mask: ``MOVE_*``, ``FACE_*``, ``WITHDRAW``,
+    ``CRAFT_MINER``, ``NOOP``. ``MINE`` is blocked (no ore on the map
+    anyway); other ``CRAFT_*`` actions are blocked.
 
     Args:
-        seed: Numpy RNG seed for spawn + coal layout. Default ``0``
-            is the canonical seed used by :class:`SkillsBenchmark`.
+        seed: Numpy RNG seed for pallet positions. Default ``0`` is
+            the canonical seed used by :class:`SkillsBenchmark`.
 
     Returns:
         Tuple of ``(level, params, blocked_actions)``.
@@ -198,28 +199,21 @@ def build_craft_miner_level(
     rng = np.random.default_rng(seed)
     map_size = _CRAFT_MINER_MAP_SIZE
     builder = LevelBuilder(map_size, map_size)
-    n_tiles = map_size * map_size
+    centre = map_size // 2
 
-    coal_indices = rng.choice(n_tiles, size=_CRAFT_MINER_NUM_COAL_TILES, replace=False)
-    coal_tiles: set[tuple[int, int]] = set()
-    for idx in coal_indices:
-        y, x = divmod(int(idx), map_size)
-        coal_tiles.add((x, y))
-        builder.fill_rect(x, y, 1, 1, BlockType.COAL, resources=2)
-
-    while True:
-        spawn_x = int(rng.integers(0, map_size))
-        spawn_y = int(rng.integers(0, map_size))
-        if (spawn_x, spawn_y) not in coal_tiles:
-            break
-
-    builder.set_player_position(spawn_x, spawn_y)
-    builder.set_player_inventory(
-        [
-            (int(ItemType.IRON_PLATE), 1),
-            (int(ItemType.WIRE), 1),
-        ]
+    pallet_positions = _draw_non_adjacent_tiles(
+        rng,
+        map_size,
+        len(_CRAFT_MINER_PALLET_INGREDIENTS),
+        exclude={(centre, centre)},
     )
+    for (x, y), item_type in zip(
+        pallet_positions, _CRAFT_MINER_PALLET_INGREDIENTS, strict=True
+    ):
+        builder.place_machine(x, y, int(MachineType.PALLET), int(Direction.UP))
+        builder.set_machine_inventory(x, y, item_type, count=1)
+
+    builder.set_player_position(centre, centre)
     level = builder.build(f"skills_craft_miner_seed{seed}")
     params = EnvParams(
         map_width=map_size,
@@ -230,31 +224,69 @@ def build_craft_miner_level(
     return level, params, CRAFT_MINER_BLOCKED_ACTIONS
 
 
+def _draw_non_adjacent_tiles(
+    rng: np.random.Generator,
+    map_size: int,
+    n: int,
+    exclude: set[tuple[int, int]] | None = None,
+) -> list[tuple[int, int]]:
+    """Pick *n* tile coordinates with no two tiles 4-neighbour adjacent.
+
+    Walks every tile in shuffled order and greedily takes the first
+    *n* that don't violate the adjacency constraint or the exclusion
+    set. Retries up to ``max_attempts`` times if the greedy walk
+    fails to fit *n* tiles. Used by :func:`build_place_miner_level`
+    to scatter ore patches per the design rule "no ore should spawn
+    next to each other".
+
+    Raises ``RuntimeError`` if no valid layout fits — shouldn't
+    happen on a 5x5 map with n=3 and a single excluded tile.
+    """
+    excluded = exclude or set()
+    max_attempts = 5000
+    for _ in range(max_attempts):
+        chosen: list[tuple[int, int]] = []
+        order = rng.permutation(map_size * map_size)
+        for idx in order:
+            x = int(idx) % map_size
+            y = int(idx) // map_size
+            if (x, y) in excluded:
+                continue
+            if any(abs(x - cx) + abs(y - cy) <= 1 for cx, cy in chosen):
+                continue
+            chosen.append((x, y))
+            if len(chosen) == n:
+                return chosen
+    raise RuntimeError(
+        f"Could not place {n} non-adjacent tiles on a {map_size}x{map_size} "
+        f"map after {max_attempts} attempts."
+    )
+
+
 def build_place_miner_level(
     seed: int = 0,
 ) -> tuple[Level, EnvParams, frozenset[int]]:
-    """L.4 — drop a miner on an ore tile.
+    """L.4 — place miners on each of three non-adjacent ore patches.
 
-    The map is 5x5 with a single 2x2 iron-ore patch in one of the four
-    corner regions (chosen by *seed*) so the centre spawn never lands
-    on the patch. The player starts with 5 miners in inventory; the
-    achievement (``SKILL_PLACE_MINER`` — bit 3) fires when any active
-    miner entity is sitting on a mineable tile (via
+    The map is 5x5 with three 1x1 iron-ore patches scattered such that
+    no two patches are 4-neighbour adjacent (the centre spawn is also
+    excluded). The player starts with 5 miners in inventory — more
+    than enough for three placements. The achievement
+    (``SKILL_PLACE_MINER`` — bit 3) fires when at least three placed
+    miners are sitting on mineable tiles (via
     :func:`count_miners_on_ore`).
 
     Distinct from L.2: ``MINE`` is blocked, so the agent cannot
-    accidentally satisfy the mine-skill condition (ore in inventory).
-    The agent must ``PLACE_MINER`` on the ore tile in front of it,
-    which requires walking adjacent to the patch and facing into it.
+    satisfy the mine-skill condition (ore in inventory). The agent
+    must walk adjacent to each patch, face it, and ``PLACE_MINER``.
 
     Action mask: ``MOVE_*``, ``FACE_*``, ``PLACE_MINER``, ``NOOP``.
     Other ``PLACE_*`` actions are blocked — only the miner placement
     is exposed.
 
     Args:
-        seed: Numpy RNG seed for patch corner selection. Default
-            ``0`` is the canonical seed used by
-            :class:`SkillsBenchmark`.
+        seed: Numpy RNG seed for patch positions. Default ``0`` is
+            the canonical seed used by :class:`SkillsBenchmark`.
 
     Returns:
         Tuple of ``(level, params, blocked_actions)``.
@@ -264,18 +296,21 @@ def build_place_miner_level(
     builder = LevelBuilder(map_size, map_size)
     centre = map_size // 2
 
-    corner = _PLACE_MINER_PATCH_CORNERS[
-        int(rng.integers(0, len(_PLACE_MINER_PATCH_CORNERS)))
-    ]
-    patch_x, patch_y = corner
-    builder.fill_rect(
-        patch_x,
-        patch_y,
-        _PLACE_MINER_PATCH_SIZE,
-        _PLACE_MINER_PATCH_SIZE,
-        BlockType.IRON,
-        resources=_PLACE_MINER_RESOURCES_PER_TILE,
+    patches = _draw_non_adjacent_tiles(
+        rng,
+        map_size,
+        _PLACE_MINER_NUM_PATCHES,
+        exclude={(centre, centre)},
     )
+    for x, y in patches:
+        builder.fill_rect(
+            x,
+            y,
+            1,
+            1,
+            BlockType.IRON,
+            resources=_PLACE_MINER_RESOURCES_PER_TILE,
+        )
 
     builder.set_player_position(centre, centre)
     builder.set_player_inventory([(int(ItemType.MINER), _PLACE_MINER_INVENTORY_COUNT)])

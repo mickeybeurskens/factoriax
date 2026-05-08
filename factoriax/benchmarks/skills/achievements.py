@@ -34,12 +34,12 @@ SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = [
     AchievementInfo(
         id="skill_navigate",
         name="Skill: Navigate",
-        hint="Walk to the bottom-right corner of the map.",
+        hint="Walk to the coal patch.",
     ),
     AchievementInfo(
         id="skill_mine",
         name="Skill: Mine",
-        hint="Stand on an ore tile and press MINE to extract.",
+        hint="Mine all five scattered ore tiles.",
     ),
     AchievementInfo(
         id="skill_craft_miner",
@@ -49,7 +49,7 @@ SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = [
     AchievementInfo(
         id="skill_place_miner",
         name="Skill: Place Miner",
-        hint="Face an ore tile and PLACE_MINER to drop a miner on it.",
+        hint="Place miners on each of the three scattered ore patches.",
     ),
 ]
 
@@ -109,10 +109,19 @@ MINE_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
     {int(Action.NOOP), int(Action.MINE)} | _MOVE_ACTIONS
 )
 
-#: Skill 3 — craft_miner. Allowed: ``MOVE_*``, ``MINE``, ``CRAFT_MINER``,
-#: ``NOOP``. Only one ``CRAFT_*`` action is exposed.
+#: Skill 3 — craft_miner. Allowed: ``MOVE_*``, ``FACE_*``,
+#: ``WITHDRAW``, ``CRAFT_MINER``, ``NOOP``. The agent withdraws the
+#: recipe ingredients (IRON_PLATE, WIRE) from two pre-placed pallets,
+#: then crafts. Only one ``CRAFT_*`` action is exposed; ``MINE`` is
+#: blocked (no ore on the map anyway).
 CRAFT_MINER_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
-    {int(Action.NOOP), int(Action.MINE), int(Action.CRAFT_MINER)} | _MOVE_ACTIONS
+    {
+        int(Action.NOOP),
+        int(Action.WITHDRAW),
+        int(Action.CRAFT_MINER),
+    }
+    | _MOVE_ACTIONS
+    | _FACE_ACTIONS
 )
 
 #: Skill 4 — place_miner. Allowed: ``MOVE_*``, ``FACE_*``,
@@ -210,29 +219,30 @@ _ORE_ITEM_IDS: jax.Array = jnp.array(
 
 
 def _navigate_condition(state: EnvState) -> jax.Array:
-    """Bit 0 — player 0 is on the bottom-right corner tile.
+    """Bit 0 — player 0 is standing on a mineable tile.
 
-    Layout-invariant: only the spawn position varies with the level
-    builder's ``seed``; the goal stays at ``(map_w - 1, map_h - 1)``.
+    Layout-invariant: any tile in :data:`MINEABLE_BLOCKS` under the
+    player satisfies the condition. The level builder places a single
+    coal patch at a seed-varying position; the agent has to walk to
+    it. ``MINE`` is masked off, so the player can't accidentally
+    mine the tile away — they reach the goal by stepping onto it
+    and the bit latches immediately.
     """
-    map_h, map_w = state.map.shape
     pos = state.player_positions[0]
     px, py = pos[0], pos[1]
-    return (px == map_w - 1) & (py == map_h - 1)
+    block = state.map[py, px]
+    return jnp.any(block == MINEABLE_BLOCKS)
 
 
 def _mine_condition(state: EnvState) -> jax.Array:
-    """Bit 1 — player 0 holds at least one ore item of any mineable type.
+    """Bit 1 — player 0 has mined at least 5 ore items in total.
 
-    Layout-invariant: any of the five ore item types
-    (``COAL``, ``IRON_ORE``, ``COPPER_ORE``, ``TIN_ORE``, ``SILICON``)
-    held in player 0's inventory satisfies the condition. The level
-    builder only places three of them (coal/iron/copper) but the
-    achievement accepts any so the curriculum stays robust to layout
-    changes.
+    Counts the cumulative ``state.items_mined`` for the five mineable
+    item types. Each successful manual ``MINE`` action increments by
+    1, so this fires after the agent has mined five ore tiles.
+    Layout-invariant: doesn't depend on which ore types are placed.
     """
-    inv = state.player_inventory[0]
-    return jnp.any(inv[_ORE_ITEM_IDS] >= 1)
+    return jnp.sum(state.items_mined[_ORE_ITEM_IDS]) >= 5
 
 
 def _craft_miner_condition(state: EnvState) -> jax.Array:
@@ -246,17 +256,16 @@ def _craft_miner_condition(state: EnvState) -> jax.Array:
 
 
 def _place_miner_condition(state: EnvState) -> jax.Array:
-    """Bit 3 — at least one placed miner sits on a mineable tile.
+    """Bit 3 — at least three placed miners sit on mineable tiles.
 
-    Reuses :func:`count_miners_on_ore`, which scans every active miner
-    entity and cross-references its ``(x, y)`` position with the
-    terrain map. Layout-invariant — works regardless of where the ore
-    patch ends up. Distinct from bit 1 (``_mine_condition``): bit 1
-    needs ore in *player inventory*; bit 3 needs a *placed* miner on
-    an ore tile, and the per-level mask blocks ``MINE`` so the two
-    skills don't collapse.
+    The level builder places three non-adjacent single-tile ore patches;
+    success means a miner is sitting on each one. Reuses
+    :func:`count_miners_on_ore`. Distinct from bit 1 (``_mine_condition``)
+    in two ways: the per-level mask blocks ``MINE`` (so manual mining
+    is impossible), and the bit needs a *placed* miner on each ore
+    tile — not items in the player inventory.
     """
-    return count_miners_on_ore(state) >= 1
+    return count_miners_on_ore(state) >= 3
 
 
 def skills_conditions(state: EnvState) -> jax.Array:

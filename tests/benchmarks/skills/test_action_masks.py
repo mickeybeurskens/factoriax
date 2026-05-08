@@ -72,24 +72,35 @@ class TestCraftMinerMask:
             else:
                 assert craft_action in CRAFT_MINER_BLOCKED_ACTIONS
 
-    def test_allows_movement_and_mine(self) -> None:
+    def test_blocks_mine(self) -> None:
+        """No ore on the map, so MINE is blocked along with placement/etc."""
+        assert int(Action.MINE) in CRAFT_MINER_BLOCKED_ACTIONS
+
+    def test_allows_withdraw_and_facing(self) -> None:
+        """Player must FACE pallets and WITHDRAW their contents."""
         allowed = _allowed(CRAFT_MINER_BLOCKED_ACTIONS)
-        assert {
-            int(Action.NOOP),
-            int(Action.UP),
-            int(Action.DOWN),
-            int(Action.LEFT),
-            int(Action.RIGHT),
-            int(Action.MINE),
-            int(Action.CRAFT_MINER),
-        } <= allowed
+        assert int(Action.WITHDRAW) in allowed
+        for face in (
+            Action.FACE_UP,
+            Action.FACE_DOWN,
+            Action.FACE_LEFT,
+            Action.FACE_RIGHT,
+        ):
+            assert int(face) in allowed
+
+    def test_exact_allowed_set(self) -> None:
+        allowed = _allowed(CRAFT_MINER_BLOCKED_ACTIONS)
         assert allowed == {
             int(Action.NOOP),
             int(Action.UP),
             int(Action.DOWN),
             int(Action.LEFT),
             int(Action.RIGHT),
-            int(Action.MINE),
+            int(Action.FACE_UP),
+            int(Action.FACE_DOWN),
+            int(Action.FACE_LEFT),
+            int(Action.FACE_RIGHT),
+            int(Action.WITHDRAW),
             int(Action.CRAFT_MINER),
         }
 

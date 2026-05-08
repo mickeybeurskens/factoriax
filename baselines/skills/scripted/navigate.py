@@ -1,53 +1,68 @@
 """Scripted baseline for the L.1 navigate skill.
 
-Walks the player toward the bottom-right corner using a greedy
-manhattan policy: step right while not yet at the right edge, then
-step down. Reads ``state.player_positions`` directly — scripted
-baselines are state-readers, not obs-readers.
-
-This is the simplest possible solver for the simplest possible level
-in the curriculum. It exists for three reasons: (1) prove the level
-is solvable, (2) provide a deterministic score floor for RL to beat,
-(3) demonstrate the per-skill scripted baseline shape that L.2-L.8
-will follow.
+The level places a single coal tile at a seed-varying position; the
+player must walk onto it. The policy reads the terrain map, finds
+the nearest mineable tile, and steps toward it greedily (manhattan).
+``MINE`` is blocked by the per-level mask, so the policy never tries
+to mine — it just walks until the achievement (player on a mineable
+tile) latches.
 """
 
 from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-from factoriax.constants import Action
+from factoriax.constants import Action, BlockType
 from factoriax.state import EnvParams, EnvState
+
+_ORE_BLOCK_VALUES: tuple[int, ...] = (
+    int(BlockType.COAL),
+    int(BlockType.IRON),
+    int(BlockType.COPPER),
+    int(BlockType.TIN),
+    int(BlockType.SILICON),
+)
+
+
+def _action(a: int) -> jax.Array:
+    """Wrap an int as a JAX int32 scalar."""
+    out: jax.Array = jnp.asarray(a, dtype=jnp.int32)
+    return out
 
 
 def navigate_policy(state: EnvState, params: EnvParams) -> jax.Array:
-    """Greedy manhattan walk to the bottom-right corner.
-
-    Reads the player's ``(x, y)`` position from
-    ``state.player_positions[0]`` and returns ``RIGHT`` until at the
-    right edge, then ``DOWN`` until at the bottom. ``NOOP`` after that
-    (the achievement should already have triggered, so the runner will
-    stop tallying anyway).
+    """Walk greedy-manhattan toward the nearest mineable tile.
 
     Args:
         state: Current environment state.
-        params: Environment parameters (used for map dimensions).
+        params: Environment parameters (unused).
 
     Returns:
         JAX int32 scalar action.
     """
-    pos = state.player_positions[0]
-    px, py = pos[0], pos[1]
-    goal_x = params.map_width - 1
-    goal_y = params.map_height - 1
-    action: jax.Array = jnp.where(
-        px < goal_x,
-        jnp.int32(int(Action.RIGHT)),
-        jnp.where(
-            py < goal_y,
-            jnp.int32(int(Action.DOWN)),
-            jnp.int32(int(Action.NOOP)),
-        ),
-    )
-    return action
+    del params
+    map_arr = np.asarray(state.map)
+    pos = np.asarray(state.player_positions[0])
+    px, py = int(pos[0]), int(pos[1])
+
+    if int(map_arr[py, px]) in _ORE_BLOCK_VALUES:
+        return _action(int(Action.NOOP))
+
+    ys, xs = np.where(np.isin(map_arr, _ORE_BLOCK_VALUES))
+    if xs.size == 0:
+        return _action(int(Action.NOOP))
+    distances = np.abs(xs - px) + np.abs(ys - py)
+    closest = int(np.argmin(distances))
+    target_x, target_y = int(xs[closest]), int(ys[closest])
+
+    if px < target_x:
+        return _action(int(Action.RIGHT))
+    if px > target_x:
+        return _action(int(Action.LEFT))
+    if py < target_y:
+        return _action(int(Action.DOWN))
+    if py > target_y:
+        return _action(int(Action.UP))
+    return _action(int(Action.NOOP))
