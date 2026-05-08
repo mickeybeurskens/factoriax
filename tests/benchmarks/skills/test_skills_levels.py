@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.benchmarks.skills import build_mine_level, build_navigate_level
+from factoriax.benchmarks.skills import (
+    build_craft_miner_level,
+    build_mine_level,
+    build_navigate_level,
+)
 from factoriax.benchmarks.skills.achievements import (
+    CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
 )
-from factoriax.constants import BlockType
+from factoriax.constants import BlockType, ItemType
 
 
 class TestNavigateLevel:
@@ -127,6 +132,61 @@ class TestMineLevel:
     def test_level_name_includes_seed(self) -> None:
         l0, _, _ = build_mine_level(seed=0)
         l7, _, _ = build_mine_level(seed=7)
+        assert l0.name != l7.name
+        assert "seed0" in l0.name
+        assert "seed7" in l7.name
+
+
+class TestCraftMinerLevel:
+    """L.3 craft_miner: pre-loaded ingredients, one-shot CRAFT_MINER."""
+
+    def test_shape_is_5x5(self) -> None:
+        level, params, _ = build_craft_miner_level(seed=0)
+        assert level.map_width == 5
+        assert level.map_height == 5
+        assert params.map_width == 5
+        assert params.map_height == 5
+
+    def test_max_timesteps_is_400(self) -> None:
+        _, params, _ = build_craft_miner_level(seed=0)
+        assert params.max_timesteps == 400
+
+    def test_returns_craft_miner_blocked_actions(self) -> None:
+        _, _, blocked = build_craft_miner_level(seed=0)
+        assert blocked is CRAFT_MINER_BLOCKED_ACTIONS
+
+    def test_starting_inventory_has_iron_plate_and_wire(self) -> None:
+        """Player must start with the immediate ingredients."""
+        level, _, _ = build_craft_miner_level(seed=0)
+        assert level.player_inventory is not None
+        items = dict(level.player_inventory)
+        assert items.get(int(ItemType.IRON_PLATE), 0) >= 1
+        assert items.get(int(ItemType.WIRE), 0) >= 1
+
+    def test_canonical_seed_is_deterministic(self) -> None:
+        l1, _, _ = build_craft_miner_level(seed=0)
+        l2, _, _ = build_craft_miner_level(seed=0)
+        np.testing.assert_array_equal(l1.block_map, l2.block_map)
+        assert l1.player_positions == l2.player_positions
+
+    def test_spawn_never_on_coal_tile(self) -> None:
+        """Spawn always lands on grass so MINE-from-spawn does nothing."""
+        for seed in range(20):
+            level, _, _ = build_craft_miner_level(seed=seed)
+            assert level.player_positions is not None
+            sx, sy = level.player_positions[0]
+            assert int(level.block_map[sy, sx]) != int(BlockType.COAL)
+
+    def test_has_coal_tiles_for_mine_action(self) -> None:
+        """The MINE action in the mask must have somewhere to do work."""
+        for seed in range(10):
+            level, _, _ = build_craft_miner_level(seed=seed)
+            coal_count = int((level.block_map == int(BlockType.COAL)).sum())
+            assert coal_count >= 1
+
+    def test_level_name_includes_seed(self) -> None:
+        l0, _, _ = build_craft_miner_level(seed=0)
+        l7, _, _ = build_craft_miner_level(seed=7)
         assert l0.name != l7.name
         assert "seed0" in l0.name
         assert "seed7" in l7.name

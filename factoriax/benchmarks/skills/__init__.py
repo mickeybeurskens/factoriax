@@ -29,6 +29,7 @@ from factoriax.benchmarks.skills.achievements import (
     skills_conditions,
 )
 from factoriax.benchmarks.skills.levels import (
+    build_craft_miner_level,
     build_mine_level,
     build_navigate_level,
 )
@@ -64,6 +65,7 @@ class SkillsBenchmark:
         """
         navigate_level, navigate_params, navigate_blocked = build_navigate_level(seed=0)
         mine_level, mine_params, mine_blocked = build_mine_level(seed=0)
+        craft_level, craft_params, craft_blocked = build_craft_miner_level(seed=0)
         return [
             BenchmarkLevel(
                 name="navigate",
@@ -84,6 +86,17 @@ class SkillsBenchmark:
                 level=mine_level,
                 env_params=mine_params,
                 blocked_actions=mine_blocked,
+            ),
+            BenchmarkLevel(
+                name="craft_miner",
+                description=(
+                    "Combine 1 IRON_PLATE + 1 WIRE (pre-loaded in "
+                    "inventory) into a miner via CRAFT_MINER. Other "
+                    "CRAFT_* actions are blocked."
+                ),
+                level=craft_level,
+                env_params=craft_params,
+                blocked_actions=craft_blocked,
             ),
         ]
 
@@ -147,6 +160,7 @@ __all__ = [
     "NUM_SKILLS",
     "SKILLS_ACHIEVEMENT_INFO",
     "SkillsBenchmark",
+    "build_craft_miner_level",
     "build_mine_level",
     "build_navigate_level",
     "count_miners_on_ore",

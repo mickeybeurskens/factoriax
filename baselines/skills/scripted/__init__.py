@@ -25,6 +25,7 @@ from collections.abc import Callable
 
 import jax
 
+from baselines.skills.scripted.craft_miner import craft_miner_policy
 from baselines.skills.scripted.mine import mine_policy
 from baselines.skills.scripted.navigate import navigate_policy
 from factoriax.state import EnvParams, EnvState
@@ -38,11 +39,13 @@ ScriptedPolicy = Callable[[EnvState, EnvParams], jax.Array]
 SCRIPTED_POLICIES: dict[str, ScriptedPolicy] = {
     "navigate": navigate_policy,
     "mine": mine_policy,
+    "craft_miner": craft_miner_policy,
 }
 
 __all__ = [
     "SCRIPTED_POLICIES",
     "ScriptedPolicy",
+    "craft_miner_policy",
     "mine_policy",
     "navigate_policy",
 ]

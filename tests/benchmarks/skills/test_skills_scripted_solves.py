@@ -148,6 +148,40 @@ class TestMineScripted:
 
 
 # ---------------------------------------------------------------------------
+# L.3 — craft_miner
+# ---------------------------------------------------------------------------
+
+
+class TestCraftMinerScripted:
+    """The always-CRAFT_MINER policy unlocks bit 2 within a tick or two."""
+
+    def test_solves_canonical_seed(self) -> None:
+        solved, t = _run_scripted(
+            level_idx=2,
+            policy=SCRIPTED_POLICIES["craft_miner"],
+            seed=0,
+        )
+        assert solved, f"craft_miner scripted failed canonical seed (t={t})"
+        # Pre-loaded ingredients + one CRAFT_MINER action = solved on tick 1.
+        assert t <= 3, f"craft_miner solved but took {t} ticks (target: <= 3)"
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
+    def test_solves_other_seeds(self, seed: int) -> None:
+        solved, t = _run_scripted(
+            level_idx=2,
+            policy=SCRIPTED_POLICIES["craft_miner"],
+            seed=seed,
+        )
+        assert solved, f"craft_miner scripted failed seed {seed} (t={t})"
+        assert t <= 3
+
+    def test_level_index_two_is_craft_miner(self) -> None:
+        """Bit 2 / level 2 contract: craft_miner is at index 2."""
+        bench = SkillsBenchmark()
+        assert bench.levels()[2].name == "craft_miner"
+
+
+# ---------------------------------------------------------------------------
 # Aggregate: scripted policies score well above zero on SkillsBenchmark
 # ---------------------------------------------------------------------------
 

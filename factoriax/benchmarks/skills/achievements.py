@@ -41,6 +41,11 @@ SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = [
         name="Skill: Mine",
         hint="Stand on an ore tile and press MINE to extract.",
     ),
+    AchievementInfo(
+        id="skill_craft_miner",
+        name="Skill: Craft Miner",
+        hint="Combine IRON_PLATE and WIRE via CRAFT_MINER.",
+    ),
 ]
 
 #: Number of skills in the curriculum so far. Used by
@@ -225,6 +230,16 @@ def _mine_condition(state: EnvState) -> jax.Array:
     return jnp.any(inv[_ORE_ITEM_IDS] >= 1)
 
 
+def _craft_miner_condition(state: EnvState) -> jax.Array:
+    """Bit 2 — player 0 holds at least one ``MINER`` in inventory.
+
+    Triggered after a successful ``CRAFT_MINER`` action consumes
+    ``IRON_PLATE`` + ``WIRE`` and produces a miner item. Layout- and
+    seed-invariant.
+    """
+    return state.player_inventory[0, int(ItemType.MINER)] >= 1
+
+
 def skills_conditions(state: EnvState) -> jax.Array:
     """Compute the per-skill achievement conditions.
 
@@ -245,6 +260,7 @@ def skills_conditions(state: EnvState) -> jax.Array:
         [
             _navigate_condition(state),  # L.1 (bit 0)
             _mine_condition(state),  # L.2 (bit 1)
+            _craft_miner_condition(state),  # L.3 (bit 2)
         ],
         dtype=jnp.bool_,
     )

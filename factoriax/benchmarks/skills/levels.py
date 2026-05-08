@@ -16,10 +16,11 @@ from __future__ import annotations
 import numpy as np
 
 from factoriax.benchmarks.skills.achievements import (
+    CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
 )
-from factoriax.constants import BlockType
+from factoriax.constants import BlockType, ItemType
 from factoriax.levels import Level, LevelBuilder
 from factoriax.state import EnvParams
 
@@ -35,6 +36,10 @@ _MINE_ORE_BLOCKS: tuple[BlockType, ...] = (
     BlockType.IRON,
     BlockType.COPPER,
 )
+
+_CRAFT_MINER_MAP_SIZE: int = 5
+_CRAFT_MINER_MAX_TIMESTEPS: int = 400
+_CRAFT_MINER_NUM_COAL_TILES: int = 3
 
 
 def build_navigate_level(
@@ -136,3 +141,72 @@ def build_mine_level(
         max_timesteps=_MINE_MAX_TIMESTEPS,
     )
     return level, params, MINE_BLOCKED_ACTIONS
+
+
+def build_craft_miner_level(
+    seed: int = 0,
+) -> tuple[Level, EnvParams, frozenset[int]]:
+    """L.3 — combine ``IRON_PLATE`` + ``WIRE`` to craft a miner.
+
+    The miner recipe (``BASE_RECIPE_BOOK``) is
+    ``1 IRON_PLATE + 1 WIRE -> 1 MINER``. With the curriculum mask
+    blocking every ``CRAFT_*`` action *except* ``CRAFT_MINER``, the
+    intermediate items can't be hand-crafted from raw ore — so the
+    player starts with the immediate ingredients pre-loaded into
+    inventory. ``MINE`` and movement remain available so the action
+    space "feels" like hand-crafting (plus a few coal tiles are
+    scattered for ``MINE`` to actually do something), but the
+    achievement (``SKILL_CRAFT_MINER`` — bit 2) only checks for one
+    miner in inventory. A direct ``CRAFT_MINER`` on tick 1 satisfies
+    the condition.
+
+    Layout variation: spawn position and coal tile placements vary
+    with *seed*. Inventory contents and recipe are fixed.
+
+    Action mask: ``MOVE_*``, ``MINE``, ``CRAFT_MINER``, ``NOOP``.
+
+    Note on random-policy difficulty: with ``CRAFT_MINER`` exposed
+    directly, a uniform random policy will solve the level with high
+    probability over the 400-step budget. The random-floor test
+    (T.2) handles this with a per-skill threshold.
+
+    Args:
+        seed: Numpy RNG seed for spawn + coal layout. Default ``0``
+            is the canonical seed used by :class:`SkillsBenchmark`.
+
+    Returns:
+        Tuple of ``(level, params, blocked_actions)``.
+    """
+    rng = np.random.default_rng(seed)
+    map_size = _CRAFT_MINER_MAP_SIZE
+    builder = LevelBuilder(map_size, map_size)
+    n_tiles = map_size * map_size
+
+    coal_indices = rng.choice(n_tiles, size=_CRAFT_MINER_NUM_COAL_TILES, replace=False)
+    coal_tiles: set[tuple[int, int]] = set()
+    for idx in coal_indices:
+        y, x = divmod(int(idx), map_size)
+        coal_tiles.add((x, y))
+        builder.fill_rect(x, y, 1, 1, BlockType.COAL, resources=2)
+
+    while True:
+        spawn_x = int(rng.integers(0, map_size))
+        spawn_y = int(rng.integers(0, map_size))
+        if (spawn_x, spawn_y) not in coal_tiles:
+            break
+
+    builder.set_player_position(spawn_x, spawn_y)
+    builder.set_player_inventory(
+        [
+            (int(ItemType.IRON_PLATE), 1),
+            (int(ItemType.WIRE), 1),
+        ]
+    )
+    level = builder.build(f"skills_craft_miner_seed{seed}")
+    params = EnvParams(
+        map_width=map_size,
+        map_height=map_size,
+        num_players=1,
+        max_timesteps=_CRAFT_MINER_MAX_TIMESTEPS,
+    )
+    return level, params, CRAFT_MINER_BLOCKED_ACTIONS
