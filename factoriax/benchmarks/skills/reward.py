@@ -27,14 +27,21 @@ def skills_reward(
     prev_state: EnvState,
     new_state: EnvState,
     params: EnvParams,
+    target_bit: int | None = None,
 ) -> jax.Array:
     """Sparse, time-discounted reward for newly-unlocked skill bits.
 
     Computes ``(remaining_steps + 1) / max_timesteps`` once per call,
     multiplies by the count of bits newly latched this step, and
-    returns the result as a float32 scalar. Multi-bit unlocks on the
-    same step share the same time discount — fine in practice since
-    the curriculum is one bit per level.
+    returns the result as a float32 scalar.
+
+    When ``target_bit`` is given, only that single bit's unlock counts
+    — needed to keep training reward aligned with
+    :meth:`SkillsBenchmark.score`, which credits exclusively the
+    level's own achievement. Otherwise the agent harvests free reward
+    from incidentally-triggered bits (e.g., place_miner spawns
+    auto-mining miners that fire the mine bit) and learns to chase
+    those instead of the actual target.
 
     Args:
         prev_state: EnvState immediately before the step. Provides the
@@ -43,12 +50,18 @@ def skills_reward(
             newly-latched mask and the current ``timestep``.
         params: Environment parameters. Reads ``max_timesteps`` for
             the time-discount denominator.
+        target_bit: Index of the achievement bit to credit. When
+            ``None``, every newly-unlocked bit is counted.
 
     Returns:
-        Scalar float32 reward. Zero when no bits unlocked this step.
+        Scalar float32 reward. Zero when the relevant bit (or any
+        bit, in the unfiltered mode) didn't newly unlock this step.
     """
     newly_unlocked = new_state.achievements_unlocked & ~prev_state.achievements_unlocked
-    count = jnp.sum(newly_unlocked.astype(jnp.float32))
+    if target_bit is None:
+        count = jnp.sum(newly_unlocked.astype(jnp.float32))
+    else:
+        count = newly_unlocked[int(target_bit)].astype(jnp.float32)
     max_t = jnp.float32(params.max_timesteps)
     remaining = max_t - jnp.asarray(new_state.timestep, dtype=jnp.float32) + 1.0
     discount = remaining / max_t

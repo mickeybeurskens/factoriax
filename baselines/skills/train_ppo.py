@@ -118,7 +118,9 @@ class SkillsRewardEnv(environment.Environment[EnvState, EnvParams]):  # type: ig
         obs, new_state, _r, inner_done, info = self._inner.step_env(
             key, state, action, params
         )
-        reward = skills_reward(prev_state, new_state, params)
+        reward = skills_reward(
+            prev_state, new_state, params, target_bit=self._target_bit
+        )
         target_unlocked = new_state.achievements_unlocked[self._target_bit]
         done = inner_done | target_unlocked
         return obs, new_state, reward, done, info

@@ -160,3 +160,26 @@ class TestSkillsReward:
         params = EnvParams(map_width=5, map_height=5, num_players=1, max_timesteps=100)
         # 2 newly-unlocked × discount 1.0 = 2.0
         assert float(skills_reward(prev, new, params)) == pytest.approx(2.0)
+
+    def test_target_bit_only_credits_that_bit(self) -> None:
+        """target_bit=2 ignores incidental bit-0/bit-1 unlocks.
+
+        Locks training reward to the level's own achievement so the
+        agent can't farm free score from auto-mining or pass-through
+        navigate that other levels accidentally trigger.
+        """
+        prev = self._state_with_unlocked([])
+        new = self._state_with_unlocked([0, 1], timestep=1)
+        params = EnvParams(map_width=5, map_height=5, num_players=1, max_timesteps=100)
+        assert float(skills_reward(prev, new, params, target_bit=2)) == pytest.approx(
+            0.0
+        )
+
+    def test_target_bit_credits_when_target_unlocks(self) -> None:
+        """target_bit=2 fires reward only when bit 2 latches."""
+        prev = self._state_with_unlocked([0])
+        new = self._state_with_unlocked([0, 2], timestep=1)
+        params = EnvParams(map_width=5, map_height=5, num_players=1, max_timesteps=100)
+        assert float(skills_reward(prev, new, params, target_bit=2)) == pytest.approx(
+            1.0
+        )
