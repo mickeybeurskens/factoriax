@@ -40,17 +40,29 @@ class TestSkillsBenchmarkProtocol:
         assert SkillsBenchmark.achievement_fn is skills_conditions
 
 
-class TestSkillsBenchmarkSkeleton:
-    """The F.2 skeleton ships with zero levels and zero curriculum bits."""
+class TestSkillsBenchmarkCurriculum:
+    """Curriculum length tracks the number of Phase L slices that have landed."""
 
-    def test_levels_empty(self) -> None:
-        assert SkillsBenchmark().levels() == []
+    def test_levels_count_matches_num_skills(self) -> None:
+        """Every entry in ``levels()`` corresponds to one bit in ``NUM_SKILLS``."""
+        assert len(SkillsBenchmark().levels()) == NUM_SKILLS
 
-    def test_achievement_info_empty(self) -> None:
-        assert SKILLS_ACHIEVEMENT_INFO == []
+    def test_achievement_info_count_matches_num_skills(self) -> None:
+        assert len(SKILLS_ACHIEVEMENT_INFO) == NUM_SKILLS
 
-    def test_num_skills_zero(self) -> None:
-        assert NUM_SKILLS == 0
+    def test_level_names_unique(self) -> None:
+        names = [bench_level.name for bench_level in SkillsBenchmark().levels()]
+        assert len(names) == len(set(names))
+
+    def test_first_level_is_navigate(self) -> None:
+        """Bit 0 / level 0 contract: navigate is at index 0 (L.1)."""
+        levels = SkillsBenchmark().levels()
+        assert levels[0].name == "navigate"
+        assert levels[0].blocked_actions is not None
+
+    def test_navigate_bit_is_zero(self) -> None:
+        """SKILLS_ACHIEVEMENT_INFO[0] documents bit 0 = navigate."""
+        assert SKILLS_ACHIEVEMENT_INFO[0].id == "skill_navigate"
 
 
 class TestSkillsBenchmarkScoring:
@@ -77,25 +89,30 @@ class TestSkillsBenchmarkScoring:
 
 
 class TestSkillsConditions:
-    """Skeleton condition function returns a properly-shaped zero mask."""
+    """Condition function returns a correctly-shaped padded mask."""
 
-    def _stub_state(self) -> EnvState:
-        """Build a tiny EnvState — fields used by skills_conditions only."""
-        # skills_conditions in the skeleton ignores its argument entirely
-        # (del state). Pass an EnvState built minimally so the function
-        # signature is exercised without depending on field internals.
-        # We can't construct EnvState by hand cheaply, so call with a
-        # mock: the skeleton's `del state` keeps this safe.
-        return None  # type: ignore[return-value]
+    def _navigate_state(self) -> EnvState:
+        """Build a real state from the canonical navigate level."""
+        from factoriax.benchmarks.skills import build_navigate_level
+        from factoriax.levels import build_state
+
+        level, params, _ = build_navigate_level(seed=0)
+        return build_state(level, params)
 
     def test_returns_bool_array_shape(self) -> None:
-        mask = skills_conditions(self._stub_state())
+        mask = skills_conditions(self._navigate_state())
         assert mask.shape == (MAX_ACHIEVEMENTS,)
         assert mask.dtype == jnp.bool_
 
-    def test_all_false_in_skeleton(self) -> None:
-        mask = skills_conditions(self._stub_state())
-        assert not bool(jnp.any(mask))
+    def test_navigate_bit_zero_at_initial_state(self) -> None:
+        """Spawn isn't on the goal corner, so bit 0 starts as False."""
+        mask = skills_conditions(self._navigate_state())
+        assert not bool(mask[0])
+
+    def test_padding_is_all_false(self) -> None:
+        """Bits beyond ``NUM_SKILLS`` are zero-padded regardless of state."""
+        mask = skills_conditions(self._navigate_state())
+        assert not bool(jnp.any(mask[NUM_SKILLS:]))
 
 
 class TestSkillsReward:

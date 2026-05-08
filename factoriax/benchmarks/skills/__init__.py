@@ -13,10 +13,10 @@ The :class:`SkillsBenchmark` implements the
 :class:`RocketBenchmark` does, so it plugs into
 :class:`BenchmarkRunner` unchanged.
 
-Phase F ships only the skeleton — :meth:`SkillsBenchmark.levels`
-returns an empty list and :func:`skills_conditions` returns an
-all-False mask. Phase L appends one bit + one level + one scripted
-baseline per slice.
+The curriculum grows one slice at a time per the implementation plan
+(``tasks/skills_benchmark_plan.md``). The current set of wired-up
+levels is reflected by ``len(SkillsBenchmark().levels())`` and
+``NUM_SKILLS``.
 """
 
 from __future__ import annotations
@@ -28,18 +28,20 @@ from factoriax.benchmarks.skills.achievements import (
     count_miners_on_ore,
     skills_conditions,
 )
+from factoriax.benchmarks.skills.levels import build_navigate_level
 from factoriax.benchmarks.skills.reward import skills_reward
 
 
 class SkillsBenchmark:
-    """Curriculum of eight skills, evaluated as one time-weighted score.
+    """Curriculum of skills, evaluated as one time-weighted score.
 
     Implements the :class:`Benchmark` protocol. Bit ``i`` of
     ``state.achievements_unlocked`` corresponds to level ``i``'s
     target condition (curriculum order). Aggregate score in ``[0, 1]``.
 
-    The skeleton ships with zero levels; Phase L grows the curriculum
-    one slice at a time.
+    Final curriculum target is eight levels (navigate through
+    mini_factory). Phase L grows the curriculum one slice at a time;
+    inspect ``levels()`` for what is currently wired up.
     """
 
     name: str = "skills"
@@ -49,13 +51,27 @@ class SkillsBenchmark:
     def levels(self) -> list[BenchmarkLevel]:
         """Curriculum levels in solve order (canonical seed = 0).
 
+        Levels are constructed lazily on each call. Each entry uses
+        the matching ``build_*_level(seed=0)`` helper and the
+        skill-specific ``blocked_actions`` mask. Phase L slices append
+        one entry at a time.
+
         Returns:
-            Empty list in the F.2 skeleton. Phase L slices append one
-            ``BenchmarkLevel`` at a time using their per-level
-            ``build_*_level`` helper and the level-specific
-            ``blocked_actions`` mask.
+            ``BenchmarkLevel`` list, currently of length 1 (navigate).
         """
-        return []
+        navigate_level, navigate_params, navigate_blocked = build_navigate_level(seed=0)
+        return [
+            BenchmarkLevel(
+                name="navigate",
+                description=(
+                    "Walk to the bottom-right corner of a 5x5 grass map. "
+                    "Action space is restricted to movement and NOOP."
+                ),
+                level=navigate_level,
+                env_params=navigate_params,
+                blocked_actions=navigate_blocked,
+            ),
+        ]
 
     def score_level(
         self, bench_level: BenchmarkLevel, items_mined: dict[str, int]
@@ -117,6 +133,7 @@ __all__ = [
     "NUM_SKILLS",
     "SKILLS_ACHIEVEMENT_INFO",
     "SkillsBenchmark",
+    "build_navigate_level",
     "count_miners_on_ore",
     "skills_conditions",
     "skills_reward",

@@ -32,6 +32,7 @@ from factoriax.benchmarks.runner import BenchmarkRunner
 from factoriax.benchmarks.skills import (
     SKILLS_ACHIEVEMENT_INFO,
     SkillsBenchmark,
+    build_navigate_level,
     skills_conditions,
     skills_reward,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "Policy",
     "RocketBenchmark",
     "SkillsBenchmark",
+    "build_navigate_level",
     "build_rocket_level",
     "rocket_conditions",
     "rocket_reward",

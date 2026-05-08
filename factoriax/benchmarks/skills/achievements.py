@@ -28,8 +28,14 @@ from factoriax.constants import (
 from factoriax.state import EnvState
 
 #: Per-skill achievement metadata, in curriculum order. Grows by one
-#: entry per Phase L slice. Empty in the F.2 skeleton.
-SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = []
+#: entry per Phase L slice.
+SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = [
+    AchievementInfo(
+        id="skill_navigate",
+        name="Skill: Navigate",
+        hint="Walk to the bottom-right corner of the map.",
+    ),
+]
 
 #: Number of skills in the curriculum so far. Used by
 #: :func:`skills_conditions` to size the boolean output before padding.
@@ -175,16 +181,27 @@ def count_miners_on_ore(state: EnvState) -> jax.Array:
     return jnp.sum(active & is_miner & on_ore)
 
 
+def _navigate_condition(state: EnvState) -> jax.Array:
+    """Bit 0 — player 0 is on the bottom-right corner tile.
+
+    Layout-invariant: only the spawn position varies with the level
+    builder's ``seed``; the goal stays at ``(map_w - 1, map_h - 1)``.
+    """
+    map_h, map_w = state.map.shape
+    pos = state.player_positions[0]
+    px, py = pos[0], pos[1]
+    return (px == map_w - 1) & (py == map_h - 1)
+
+
 def skills_conditions(state: EnvState) -> jax.Array:
     """Compute the per-skill achievement conditions.
 
     Returns a boolean array of shape ``(MAX_ACHIEVEMENTS,)``. Bit ``i``
-    is set when level ``i``'s target condition is satisfied. Bits
-    beyond ``NUM_SKILLS`` are zero-padded.
+    is set when level ``i``'s target condition is satisfied (curriculum
+    order). Bits beyond ``NUM_SKILLS`` are zero-padded.
 
-    In the F.2 skeleton no skills are wired up yet, so the function
-    returns an all-False mask. Each Phase L slice appends one bit by
-    extending the per-skill condition list below.
+    Each Phase L slice appends one bit by extending the per-skill
+    condition list below.
 
     Args:
         state: Current environment state.
@@ -192,12 +209,15 @@ def skills_conditions(state: EnvState) -> jax.Array:
     Returns:
         Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
-    # Per-skill conditions go here, in curriculum order:
-    #   conditions = jnp.array([
-    #       _navigate_condition(state),       # L.1
-    #       _mine_condition(state),           # L.2
-    #       ...
-    #   ], dtype=jnp.bool_)
-    # The skeleton has no conditions yet — return a zero mask.
-    del state
-    return jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
+    conditions = jnp.array(
+        [
+            _navigate_condition(state),  # L.1 (bit 0)
+        ],
+        dtype=jnp.bool_,
+    )
+    return jnp.concatenate(
+        [
+            conditions,
+            jnp.zeros(MAX_ACHIEVEMENTS - NUM_SKILLS, dtype=jnp.bool_),
+        ]
+    )
