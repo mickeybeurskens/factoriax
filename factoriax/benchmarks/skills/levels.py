@@ -15,12 +15,26 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.benchmarks.skills.achievements import NAVIGATE_BLOCKED_ACTIONS
+from factoriax.benchmarks.skills.achievements import (
+    MINE_BLOCKED_ACTIONS,
+    NAVIGATE_BLOCKED_ACTIONS,
+)
+from factoriax.constants import BlockType
 from factoriax.levels import Level, LevelBuilder
 from factoriax.state import EnvParams
 
 _NAVIGATE_MAP_SIZE: int = 5
 _NAVIGATE_MAX_TIMESTEPS: int = 200
+
+_MINE_MAP_SIZE: int = 5
+_MINE_MAX_TIMESTEPS: int = 200
+_MINE_ORE_FRACTION: float = 0.4
+_MINE_RESOURCES_PER_TILE: int = 3
+_MINE_ORE_BLOCKS: tuple[BlockType, ...] = (
+    BlockType.COAL,
+    BlockType.IRON,
+    BlockType.COPPER,
+)
 
 
 def build_navigate_level(
@@ -67,3 +81,58 @@ def build_navigate_level(
         max_timesteps=_NAVIGATE_MAX_TIMESTEPS,
     )
     return level, params, NAVIGATE_BLOCKED_ACTIONS
+
+
+def build_mine_level(
+    seed: int = 0,
+) -> tuple[Level, EnvParams, frozenset[int]]:
+    """L.2 — extract ore from a 5x5 map sprinkled with mineable tiles.
+
+    The map gets ~40% ore tiles drawn uniformly from
+    ``{COAL, IRON, COPPER}`` (the three ore types the player can hold
+    interchangeably for the achievement). Each ore tile carries 3
+    resources — generous for a single mine action but small enough
+    that the agent can't loiter forever scoring multiple unlocks. The
+    player spawns at the centre tile, which is forced to be grass so
+    a fresh ``MINE`` from spawn does nothing — the agent must walk
+    onto an ore tile first.
+
+    The achievement (``SKILL_MINE`` — bit 1) fires when player 0's
+    inventory contains at least one ore item of any mineable type. The
+    layout varies with *seed*; the achievement does not depend on
+    layout.
+
+    Action mask: ``MOVE_*``, ``MINE``, ``NOOP``. No facing, no
+    placement, no crafting — pure walk-and-mine.
+
+    Args:
+        seed: Numpy RNG seed for ore layout. Default ``0`` is the
+            canonical seed used by :class:`SkillsBenchmark`.
+
+    Returns:
+        Tuple of ``(level, params, blocked_actions)``.
+    """
+    rng = np.random.default_rng(seed)
+    map_size = _MINE_MAP_SIZE
+    builder = LevelBuilder(map_size, map_size)
+    centre = map_size // 2
+
+    n_tiles = map_size * map_size
+    n_ore = int(n_tiles * _MINE_ORE_FRACTION)
+    ore_indices = rng.choice(n_tiles, size=n_ore, replace=False)
+    for idx in ore_indices:
+        y, x = divmod(int(idx), map_size)
+        if (x, y) == (centre, centre):
+            continue
+        ore_block = _MINE_ORE_BLOCKS[int(rng.integers(0, len(_MINE_ORE_BLOCKS)))]
+        builder.fill_rect(x, y, 1, 1, ore_block, resources=_MINE_RESOURCES_PER_TILE)
+
+    builder.set_player_position(centre, centre)
+    level = builder.build(f"skills_mine_seed{seed}")
+    params = EnvParams(
+        map_width=map_size,
+        map_height=map_size,
+        num_players=1,
+        max_timesteps=_MINE_MAX_TIMESTEPS,
+    )
+    return level, params, MINE_BLOCKED_ACTIONS

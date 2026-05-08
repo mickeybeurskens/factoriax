@@ -28,7 +28,10 @@ from factoriax.benchmarks.skills.achievements import (
     count_miners_on_ore,
     skills_conditions,
 )
-from factoriax.benchmarks.skills.levels import build_navigate_level
+from factoriax.benchmarks.skills.levels import (
+    build_mine_level,
+    build_navigate_level,
+)
 from factoriax.benchmarks.skills.reward import skills_reward
 
 
@@ -60,6 +63,7 @@ class SkillsBenchmark:
             ``BenchmarkLevel`` list, currently of length 1 (navigate).
         """
         navigate_level, navigate_params, navigate_blocked = build_navigate_level(seed=0)
+        mine_level, mine_params, mine_blocked = build_mine_level(seed=0)
         return [
             BenchmarkLevel(
                 name="navigate",
@@ -70,6 +74,16 @@ class SkillsBenchmark:
                 level=navigate_level,
                 env_params=navigate_params,
                 blocked_actions=navigate_blocked,
+            ),
+            BenchmarkLevel(
+                name="mine",
+                description=(
+                    "Extract at least one ore from a 5x5 map sprinkled "
+                    "with coal/iron/copper. Stand on an ore tile and MINE."
+                ),
+                level=mine_level,
+                env_params=mine_params,
+                blocked_actions=mine_blocked,
             ),
         ]
 
@@ -133,6 +147,7 @@ __all__ = [
     "NUM_SKILLS",
     "SKILLS_ACHIEVEMENT_INFO",
     "SkillsBenchmark",
+    "build_mine_level",
     "build_navigate_level",
     "count_miners_on_ore",
     "skills_conditions",

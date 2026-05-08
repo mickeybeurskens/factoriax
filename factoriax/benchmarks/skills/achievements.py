@@ -23,6 +23,7 @@ from factoriax.constants import (
     MAX_ACHIEVEMENTS,
     MINEABLE_BLOCKS,
     Action,
+    ItemType,
     MachineType,
 )
 from factoriax.state import EnvState
@@ -34,6 +35,11 @@ SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = [
         id="skill_navigate",
         name="Skill: Navigate",
         hint="Walk to the bottom-right corner of the map.",
+    ),
+    AchievementInfo(
+        id="skill_mine",
+        name="Skill: Mine",
+        hint="Stand on an ore tile and press MINE to extract.",
     ),
 ]
 
@@ -181,6 +187,18 @@ def count_miners_on_ore(state: EnvState) -> jax.Array:
     return jnp.sum(active & is_miner & on_ore)
 
 
+_ORE_ITEM_IDS: jax.Array = jnp.array(
+    [
+        int(ItemType.COAL),
+        int(ItemType.IRON_ORE),
+        int(ItemType.COPPER_ORE),
+        int(ItemType.TIN_ORE),
+        int(ItemType.SILICON),
+    ],
+    dtype=jnp.int32,
+)
+
+
 def _navigate_condition(state: EnvState) -> jax.Array:
     """Bit 0 — player 0 is on the bottom-right corner tile.
 
@@ -191,6 +209,20 @@ def _navigate_condition(state: EnvState) -> jax.Array:
     pos = state.player_positions[0]
     px, py = pos[0], pos[1]
     return (px == map_w - 1) & (py == map_h - 1)
+
+
+def _mine_condition(state: EnvState) -> jax.Array:
+    """Bit 1 — player 0 holds at least one ore item of any mineable type.
+
+    Layout-invariant: any of the five ore item types
+    (``COAL``, ``IRON_ORE``, ``COPPER_ORE``, ``TIN_ORE``, ``SILICON``)
+    held in player 0's inventory satisfies the condition. The level
+    builder only places three of them (coal/iron/copper) but the
+    achievement accepts any so the curriculum stays robust to layout
+    changes.
+    """
+    inv = state.player_inventory[0]
+    return jnp.any(inv[_ORE_ITEM_IDS] >= 1)
 
 
 def skills_conditions(state: EnvState) -> jax.Array:
@@ -212,6 +244,7 @@ def skills_conditions(state: EnvState) -> jax.Array:
     conditions = jnp.array(
         [
             _navigate_condition(state),  # L.1 (bit 0)
+            _mine_condition(state),  # L.2 (bit 1)
         ],
         dtype=jnp.bool_,
     )

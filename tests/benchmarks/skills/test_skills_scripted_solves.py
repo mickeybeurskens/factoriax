@@ -112,6 +112,42 @@ class TestNavigateScripted:
 
 
 # ---------------------------------------------------------------------------
+# L.2 — mine
+# ---------------------------------------------------------------------------
+
+
+class TestMineScripted:
+    """The walk-to-nearest-ore policy mines within a tight budget."""
+
+    def test_solves_canonical_seed(self) -> None:
+        solved, t = _run_scripted(
+            level_idx=1,
+            policy=SCRIPTED_POLICIES["mine"],
+            seed=0,
+        )
+        assert solved, f"mine scripted failed canonical seed (t={t})"
+        # On a 5x5 with 40% ore and centre spawn, the nearest ore is
+        # almost always 1-2 tiles away. 30 ticks is the plan's
+        # acceptance ceiling; we want noticeably better.
+        assert t <= 10, f"mine solved but took {t} ticks (target: <= 10)"
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
+    def test_solves_other_seeds(self, seed: int) -> None:
+        solved, t = _run_scripted(
+            level_idx=1,
+            policy=SCRIPTED_POLICIES["mine"],
+            seed=seed,
+        )
+        assert solved, f"mine scripted failed seed {seed} (t={t})"
+        assert t <= 15
+
+    def test_level_index_one_is_mine(self) -> None:
+        """Bit 1 / level 1 contract: mine is at index 1."""
+        bench = SkillsBenchmark()
+        assert bench.levels()[1].name == "mine"
+
+
+# ---------------------------------------------------------------------------
 # Aggregate: scripted policies score well above zero on SkillsBenchmark
 # ---------------------------------------------------------------------------
 
@@ -119,16 +155,15 @@ class TestNavigateScripted:
 class TestScriptedAggregate:
     """Scripted policies as a group score well on the curriculum so far."""
 
-    def test_navigate_alone_yields_high_aggregate(self) -> None:
-        """One level, scripted solves it → aggregate close to 1.0."""
-        solved, t = _run_scripted(
-            level_idx=0,
-            policy=SCRIPTED_POLICIES["navigate"],
-            seed=0,
-        )
-        assert solved
+    def test_curriculum_aggregate_above_floor(self) -> None:
+        """Each scripted policy solves its level; aggregate well above 0.9."""
         bench = SkillsBenchmark()
-        max_t = bench.levels()[0].env_params.max_timesteps
-        # Time-weighted score: (max - used + 1) / max
-        score = (max_t - t + 1) / max_t
-        assert score > 0.9, f"navigate score {score:.3f} below 0.9 floor"
+        scores: list[float] = []
+        for i, bench_level in enumerate(bench.levels()):
+            policy = SCRIPTED_POLICIES[bench_level.name]
+            solved, t = _run_scripted(level_idx=i, policy=policy, seed=0)
+            assert solved, f"{bench_level.name!r} scripted failed (t={t})"
+            max_t = bench_level.env_params.max_timesteps
+            scores.append((max_t - t + 1) / max_t)
+        agg = sum(scores) / len(scores)
+        assert agg > 0.9, f"curriculum aggregate {agg:.3f} below 0.9 floor"

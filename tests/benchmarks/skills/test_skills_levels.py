@@ -7,8 +7,14 @@ stepping.
 
 from __future__ import annotations
 
-from factoriax.benchmarks.skills import build_navigate_level
-from factoriax.benchmarks.skills.achievements import NAVIGATE_BLOCKED_ACTIONS
+import numpy as np
+
+from factoriax.benchmarks.skills import build_mine_level, build_navigate_level
+from factoriax.benchmarks.skills.achievements import (
+    MINE_BLOCKED_ACTIONS,
+    NAVIGATE_BLOCKED_ACTIONS,
+)
+from factoriax.constants import BlockType
 
 
 class TestNavigateLevel:
@@ -58,6 +64,69 @@ class TestNavigateLevel:
         """Per-seed levels are name-distinguishable for caching/debug."""
         l0, _, _ = build_navigate_level(seed=0)
         l7, _, _ = build_navigate_level(seed=7)
+        assert l0.name != l7.name
+        assert "seed0" in l0.name
+        assert "seed7" in l7.name
+
+
+_MINE_BLOCK_VALUES = (
+    int(BlockType.COAL),
+    int(BlockType.IRON),
+    int(BlockType.COPPER),
+)
+
+
+class TestMineLevel:
+    """L.2 mine: 5x5 with ~40% mineable tiles, spawn at centre."""
+
+    def test_shape_is_5x5(self) -> None:
+        level, params, _ = build_mine_level(seed=0)
+        assert level.map_width == 5
+        assert level.map_height == 5
+        assert params.map_width == 5
+        assert params.map_height == 5
+
+    def test_max_timesteps_is_200(self) -> None:
+        _, params, _ = build_mine_level(seed=0)
+        assert params.max_timesteps == 200
+
+    def test_returns_mine_blocked_actions(self) -> None:
+        _, _, blocked = build_mine_level(seed=0)
+        assert blocked is MINE_BLOCKED_ACTIONS
+
+    def test_canonical_seed_is_deterministic(self) -> None:
+        l1, _, _ = build_mine_level(seed=0)
+        l2, _, _ = build_mine_level(seed=0)
+        np.testing.assert_array_equal(l1.block_map, l2.block_map)
+        assert l1.name == l2.name
+
+    def test_at_least_five_ore_tiles_per_seed(self) -> None:
+        """Level builder should produce >= 5 ore tiles for any of the first 10 seeds."""
+        for seed in range(10):
+            level, _, _ = build_mine_level(seed=seed)
+            ore_count = int(np.isin(level.block_map, _MINE_BLOCK_VALUES).sum())
+            assert ore_count >= 5, f"seed={seed}: only {ore_count} ore tiles"
+
+    def test_centre_tile_never_ore(self) -> None:
+        """Spawn tile (2, 2) must be grass — agent can't MINE from spawn."""
+        for seed in range(20):
+            level, _, _ = build_mine_level(seed=seed)
+            centre = level.map_width // 2
+            assert int(level.block_map[centre, centre]) not in _MINE_BLOCK_VALUES
+
+    def test_uses_three_ore_types(self) -> None:
+        """Across enough seeds, at least two distinct ore types appear."""
+        observed_types: set[int] = set()
+        for seed in range(20):
+            level, _, _ = build_mine_level(seed=seed)
+            for v in _MINE_BLOCK_VALUES:
+                if int((level.block_map == v).sum()) > 0:
+                    observed_types.add(v)
+        assert len(observed_types) >= 2
+
+    def test_level_name_includes_seed(self) -> None:
+        l0, _, _ = build_mine_level(seed=0)
+        l7, _, _ = build_mine_level(seed=7)
         assert l0.name != l7.name
         assert "seed0" in l0.name
         assert "seed7" in l7.name
