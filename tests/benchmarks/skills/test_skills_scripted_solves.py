@@ -182,6 +182,70 @@ class TestCraftMinerScripted:
 
 
 # ---------------------------------------------------------------------------
+# L.4 — place_miner
+# ---------------------------------------------------------------------------
+
+
+class TestPlaceMinerScripted:
+    """The walk-adjacent + face + place policy lands a miner on ore."""
+
+    def test_solves_canonical_seed(self) -> None:
+        solved, t = _run_scripted(
+            level_idx=3,
+            policy=SCRIPTED_POLICIES["place_miner"],
+            seed=0,
+        )
+        assert solved, f"place_miner scripted failed canonical seed (t={t})"
+        # Centre to nearest patch tile is <=2 manhattan steps; +1 to face,
+        # +1 to place → ~5 ticks worst case.
+        assert t <= 8, f"place_miner solved but took {t} ticks (target: <= 8)"
+
+    @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
+    def test_solves_other_seeds(self, seed: int) -> None:
+        solved, t = _run_scripted(
+            level_idx=3,
+            policy=SCRIPTED_POLICIES["place_miner"],
+            seed=seed,
+        )
+        assert solved, f"place_miner scripted failed seed {seed} (t={t})"
+        assert t <= 8
+
+    def test_level_index_three_is_place_miner(self) -> None:
+        """Bit 3 / level 3 contract: place_miner is at index 3."""
+        bench = SkillsBenchmark()
+        assert bench.levels()[3].name == "place_miner"
+
+    def test_does_not_unlock_mine_bit(self) -> None:
+        """Distinct from L.2: placing a miner doesn't put ore in inventory."""
+        from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+        from factoriax.envs.factoriax_env import FactoriaXEnv
+        from factoriax.levels import build_state
+
+        bench = SkillsBenchmark()
+        bench_level = bench.levels()[3]
+        params = bench_level.env_params
+        inner = FactoriaXEnv(achievement_fn=skills_conditions)
+        env = ActionMaskWrapper(inner, tuple(bench_level.blocked_actions or ()))
+        jit_step = jax.jit(env.step_env)
+
+        state = build_state(bench_level.level, params)
+        rng = jax.random.PRNGKey(0)
+        policy = SCRIPTED_POLICIES["place_miner"]
+        for _ in range(params.max_timesteps):
+            action = policy(state, params)
+            rng, subkey = jax.random.split(rng)
+            _o, state, _r, _d, _i = jit_step(subkey, state, action, params)
+            mask = jnp.asarray(state.achievements_unlocked)
+            if bool(mask[3]):
+                # Solve fired; verify mine bit (1) did NOT also fire.
+                assert not bool(mask[1]), (
+                    "place_miner accidentally unlocked the mine bit"
+                )
+                return
+        raise AssertionError("place_miner scripted failed to solve in budget")
+
+
+# ---------------------------------------------------------------------------
 # Aggregate: scripted policies score well above zero on SkillsBenchmark
 # ---------------------------------------------------------------------------
 

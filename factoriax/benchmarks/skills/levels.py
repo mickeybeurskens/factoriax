@@ -19,6 +19,7 @@ from factoriax.benchmarks.skills.achievements import (
     CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
+    PLACE_MINER_BLOCKED_ACTIONS,
 )
 from factoriax.constants import BlockType, ItemType
 from factoriax.levels import Level, LevelBuilder
@@ -40,6 +41,23 @@ _MINE_ORE_BLOCKS: tuple[BlockType, ...] = (
 _CRAFT_MINER_MAP_SIZE: int = 5
 _CRAFT_MINER_MAX_TIMESTEPS: int = 400
 _CRAFT_MINER_NUM_COAL_TILES: int = 3
+
+_PLACE_MINER_MAP_SIZE: int = 5
+_PLACE_MINER_MAX_TIMESTEPS: int = 300
+_PLACE_MINER_PATCH_SIZE: int = 2
+_PLACE_MINER_INVENTORY_COUNT: int = 5
+# Resources per ore tile must outlast at least one machine tick so the
+# placed miner is still on an ore-typed tile when the achievement
+# evaluates. The miner depletes ``params.miner_mining_rate`` per tick
+# (default 1); 100 is generous and keeps the tile as ore for the full
+# episode budget.
+_PLACE_MINER_RESOURCES_PER_TILE: int = 100
+_PLACE_MINER_PATCH_CORNERS: tuple[tuple[int, int], ...] = (
+    (0, 0),
+    (0, 3),
+    (3, 0),
+    (3, 3),
+)
 
 
 def build_navigate_level(
@@ -210,3 +228,62 @@ def build_craft_miner_level(
         max_timesteps=_CRAFT_MINER_MAX_TIMESTEPS,
     )
     return level, params, CRAFT_MINER_BLOCKED_ACTIONS
+
+
+def build_place_miner_level(
+    seed: int = 0,
+) -> tuple[Level, EnvParams, frozenset[int]]:
+    """L.4 — drop a miner on an ore tile.
+
+    The map is 5x5 with a single 2x2 iron-ore patch in one of the four
+    corner regions (chosen by *seed*) so the centre spawn never lands
+    on the patch. The player starts with 5 miners in inventory; the
+    achievement (``SKILL_PLACE_MINER`` — bit 3) fires when any active
+    miner entity is sitting on a mineable tile (via
+    :func:`count_miners_on_ore`).
+
+    Distinct from L.2: ``MINE`` is blocked, so the agent cannot
+    accidentally satisfy the mine-skill condition (ore in inventory).
+    The agent must ``PLACE_MINER`` on the ore tile in front of it,
+    which requires walking adjacent to the patch and facing into it.
+
+    Action mask: ``MOVE_*``, ``FACE_*``, ``PLACE_MINER``, ``NOOP``.
+    Other ``PLACE_*`` actions are blocked — only the miner placement
+    is exposed.
+
+    Args:
+        seed: Numpy RNG seed for patch corner selection. Default
+            ``0`` is the canonical seed used by
+            :class:`SkillsBenchmark`.
+
+    Returns:
+        Tuple of ``(level, params, blocked_actions)``.
+    """
+    rng = np.random.default_rng(seed)
+    map_size = _PLACE_MINER_MAP_SIZE
+    builder = LevelBuilder(map_size, map_size)
+    centre = map_size // 2
+
+    corner = _PLACE_MINER_PATCH_CORNERS[
+        int(rng.integers(0, len(_PLACE_MINER_PATCH_CORNERS)))
+    ]
+    patch_x, patch_y = corner
+    builder.fill_rect(
+        patch_x,
+        patch_y,
+        _PLACE_MINER_PATCH_SIZE,
+        _PLACE_MINER_PATCH_SIZE,
+        BlockType.IRON,
+        resources=_PLACE_MINER_RESOURCES_PER_TILE,
+    )
+
+    builder.set_player_position(centre, centre)
+    builder.set_player_inventory([(int(ItemType.MINER), _PLACE_MINER_INVENTORY_COUNT)])
+    level = builder.build(f"skills_place_miner_seed{seed}")
+    params = EnvParams(
+        map_width=map_size,
+        map_height=map_size,
+        num_players=1,
+        max_timesteps=_PLACE_MINER_MAX_TIMESTEPS,
+    )
+    return level, params, PLACE_MINER_BLOCKED_ACTIONS

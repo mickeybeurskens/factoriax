@@ -46,6 +46,11 @@ SKILLS_ACHIEVEMENT_INFO: list[AchievementInfo] = [
         name="Skill: Craft Miner",
         hint="Combine IRON_PLATE and WIRE via CRAFT_MINER.",
     ),
+    AchievementInfo(
+        id="skill_place_miner",
+        name="Skill: Place Miner",
+        hint="Face an ore tile and PLACE_MINER to drop a miner on it.",
+    ),
 ]
 
 #: Number of skills in the curriculum so far. Used by
@@ -240,6 +245,20 @@ def _craft_miner_condition(state: EnvState) -> jax.Array:
     return state.player_inventory[0, int(ItemType.MINER)] >= 1
 
 
+def _place_miner_condition(state: EnvState) -> jax.Array:
+    """Bit 3 — at least one placed miner sits on a mineable tile.
+
+    Reuses :func:`count_miners_on_ore`, which scans every active miner
+    entity and cross-references its ``(x, y)`` position with the
+    terrain map. Layout-invariant — works regardless of where the ore
+    patch ends up. Distinct from bit 1 (``_mine_condition``): bit 1
+    needs ore in *player inventory*; bit 3 needs a *placed* miner on
+    an ore tile, and the per-level mask blocks ``MINE`` so the two
+    skills don't collapse.
+    """
+    return count_miners_on_ore(state) >= 1
+
+
 def skills_conditions(state: EnvState) -> jax.Array:
     """Compute the per-skill achievement conditions.
 
@@ -261,6 +280,7 @@ def skills_conditions(state: EnvState) -> jax.Array:
             _navigate_condition(state),  # L.1 (bit 0)
             _mine_condition(state),  # L.2 (bit 1)
             _craft_miner_condition(state),  # L.3 (bit 2)
+            _place_miner_condition(state),  # L.4 (bit 3)
         ],
         dtype=jnp.bool_,
     )

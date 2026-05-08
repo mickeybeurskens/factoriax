@@ -28,6 +28,7 @@ import jax
 from baselines.skills.scripted.craft_miner import craft_miner_policy
 from baselines.skills.scripted.mine import mine_policy
 from baselines.skills.scripted.navigate import navigate_policy
+from baselines.skills.scripted.place_miner import place_miner_policy
 from factoriax.state import EnvParams, EnvState
 
 #: Function signature every scripted policy implements.
@@ -40,6 +41,7 @@ SCRIPTED_POLICIES: dict[str, ScriptedPolicy] = {
     "navigate": navigate_policy,
     "mine": mine_policy,
     "craft_miner": craft_miner_policy,
+    "place_miner": place_miner_policy,
 }
 
 __all__ = [
@@ -48,4 +50,5 @@ __all__ = [
     "craft_miner_policy",
     "mine_policy",
     "navigate_policy",
+    "place_miner_policy",
 ]

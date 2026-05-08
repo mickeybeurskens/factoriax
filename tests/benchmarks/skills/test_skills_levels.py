@@ -13,11 +13,13 @@ from factoriax.benchmarks.skills import (
     build_craft_miner_level,
     build_mine_level,
     build_navigate_level,
+    build_place_miner_level,
 )
 from factoriax.benchmarks.skills.achievements import (
     CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
+    PLACE_MINER_BLOCKED_ACTIONS,
 )
 from factoriax.constants import BlockType, ItemType
 
@@ -187,6 +189,71 @@ class TestCraftMinerLevel:
     def test_level_name_includes_seed(self) -> None:
         l0, _, _ = build_craft_miner_level(seed=0)
         l7, _, _ = build_craft_miner_level(seed=7)
+        assert l0.name != l7.name
+        assert "seed0" in l0.name
+        assert "seed7" in l7.name
+
+
+class TestPlaceMinerLevel:
+    """L.4 place_miner: 5x5 with 2x2 ore patch in a varying corner."""
+
+    def test_shape_is_5x5(self) -> None:
+        level, params, _ = build_place_miner_level(seed=0)
+        assert level.map_width == 5
+        assert level.map_height == 5
+
+    def test_max_timesteps_is_300(self) -> None:
+        _, params, _ = build_place_miner_level(seed=0)
+        assert params.max_timesteps == 300
+
+    def test_returns_place_miner_blocked_actions(self) -> None:
+        _, _, blocked = build_place_miner_level(seed=0)
+        assert blocked is PLACE_MINER_BLOCKED_ACTIONS
+
+    def test_starting_inventory_has_five_miners(self) -> None:
+        level, _, _ = build_place_miner_level(seed=0)
+        assert level.player_inventory is not None
+        items = dict(level.player_inventory)
+        assert items.get(int(ItemType.MINER), 0) >= 5
+
+    def test_canonical_seed_is_deterministic(self) -> None:
+        l1, _, _ = build_place_miner_level(seed=0)
+        l2, _, _ = build_place_miner_level(seed=0)
+        np.testing.assert_array_equal(l1.block_map, l2.block_map)
+        assert l1.player_positions == l2.player_positions
+
+    def test_spawn_at_centre(self) -> None:
+        """Spawn is fixed at centre (2, 2) — patch corners avoid it."""
+        for seed in range(20):
+            level, _, _ = build_place_miner_level(seed=seed)
+            assert level.player_positions == [(2, 2)]
+
+    def test_has_2x2_ore_patch(self) -> None:
+        """Each level has exactly 4 iron tiles arranged as a 2x2 patch."""
+        for seed in range(20):
+            level, _, _ = build_place_miner_level(seed=seed)
+            iron_count = int((level.block_map == int(BlockType.IRON)).sum())
+            assert iron_count == 4, f"seed={seed}: {iron_count} iron tiles (want 4)"
+
+    def test_centre_tile_never_ore(self) -> None:
+        """The centre (spawn tile) must always be grass."""
+        for seed in range(20):
+            level, _, _ = build_place_miner_level(seed=seed)
+            assert int(level.block_map[2, 2]) != int(BlockType.IRON)
+
+    def test_patch_corner_varies_with_seed(self) -> None:
+        """Different seeds should land the patch in different corners."""
+        corners_seen: set[tuple[int, int]] = set()
+        for seed in range(20):
+            level, _, _ = build_place_miner_level(seed=seed)
+            ys, xs = np.where(level.block_map == int(BlockType.IRON))
+            corners_seen.add((int(xs.min()), int(ys.min())))
+        # At least two distinct top-left corners over 20 seeds.
+        assert len(corners_seen) >= 2
+
+    def test_level_name_includes_seed(self) -> None:
+        l0, _, _ = build_place_miner_level(seed=0)
+        l7, _, _ = build_place_miner_level(seed=7)
         assert l0.name != l7.name
         assert "seed0" in l0.name
         assert "seed7" in l7.name

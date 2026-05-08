@@ -35,6 +35,7 @@ from factoriax.benchmarks.skills import (
     build_craft_miner_level,
     build_mine_level,
     build_navigate_level,
+    build_place_miner_level,
     skills_conditions,
     skills_reward,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "build_craft_miner_level",
     "build_mine_level",
     "build_navigate_level",
+    "build_place_miner_level",
     "build_rocket_level",
     "rocket_conditions",
     "rocket_reward",

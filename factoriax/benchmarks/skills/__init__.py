@@ -32,6 +32,7 @@ from factoriax.benchmarks.skills.levels import (
     build_craft_miner_level,
     build_mine_level,
     build_navigate_level,
+    build_place_miner_level,
 )
 from factoriax.benchmarks.skills.reward import skills_reward
 
@@ -66,6 +67,7 @@ class SkillsBenchmark:
         navigate_level, navigate_params, navigate_blocked = build_navigate_level(seed=0)
         mine_level, mine_params, mine_blocked = build_mine_level(seed=0)
         craft_level, craft_params, craft_blocked = build_craft_miner_level(seed=0)
+        place_level, place_params, place_blocked = build_place_miner_level(seed=0)
         return [
             BenchmarkLevel(
                 name="navigate",
@@ -97,6 +99,17 @@ class SkillsBenchmark:
                 level=craft_level,
                 env_params=craft_params,
                 blocked_actions=craft_blocked,
+            ),
+            BenchmarkLevel(
+                name="place_miner",
+                description=(
+                    "Drop a miner onto a 2x2 ore patch. Player starts "
+                    "with 5 miners; mask exposes movement, facing, and "
+                    "PLACE_MINER only. MINE is blocked."
+                ),
+                level=place_level,
+                env_params=place_params,
+                blocked_actions=place_blocked,
             ),
         ]
 
@@ -163,6 +176,7 @@ __all__ = [
     "build_craft_miner_level",
     "build_mine_level",
     "build_navigate_level",
+    "build_place_miner_level",
     "count_miners_on_ore",
     "skills_conditions",
     "skills_reward",
