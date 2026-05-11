@@ -1,7 +1,6 @@
 \documentclass{article}
 \usepackage[preprint]{ewrl_2026}
 
-\usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{hyperref}
 \usepackage{url}
@@ -12,8 +11,9 @@
 \usepackage{microtype}
 \usepackage{xcolor}
 \usepackage{graphicx}
+\usepackage[acronym]{glossaries}
 
-\title{Factoriax - An Open Ended Multi Agent Factorio Benchmark}
+\title{Factoriax - A GPU-Accelerated Factory Builder In The Style Of Factorio}
 
 \author{
   Mickey Beurskens \\
@@ -21,6 +21,8 @@
   Eindhoven University of Technology \\
   \texttt{m.r.m.beurskens@tue.nl}
 }
+
+\newacronym{rl}{RL}{Reinforcement Learning}
 
 \begin{document}
 \maketitle
@@ -31,27 +33,90 @@
 
 
 \section{Introduction}
+Simulated environments and video games have been core enablers of advancement in the field of \gls{rl} for over at least a decade.
+Simulators provide data that is cheap to collect with respect to the physical world, and due to their portable nature they enable the creation of benchmarks that support the ability to reproduce and compare existing works.  
+Some benchmarks focus on testing capabilities that are directly useful to applications in the real world. 
+The underlying assumption seems to be that the capabilities in such benchmarks will in some way transfer to the non-simulated case. 
+Robotics benchmarks such as .., and domain specific benchmarks like ... are good examples of this type.
+Others have evolved to be something more akin to challenges focused on more specific problems in \gls{rl} such as safety, partial observability or multi-agent coordination.
+In these cases the underlying assumption is that the algorithmic advances will transfer in some way to other applications. 
+This work aims to provide in contribution in line with the latter direction.
+
+Of course there are also benchmarks such as ... that manage to combine both perspectives.
+
+Lately GPU-accelerated simulation environments like ... have dramatically reduced the cost of \gls{rl} experiments and training runs. 
+This has lowered the barrier-to-entry that prevents researchers with less access to compute resources to participate in meaningful research, and simultaneously enables research on a much larger scale for those who do.
+
+In this work we introduce Factoriax, a GPU-accelerated grid-based factory building environment inspired by the factory building mechanics in the game Factorio.
+
+Factoriax ships with three benchmarks, each one focused on a specific algorithmic challenge or perspective in \gls{rl}:
+\begin{itemize}
+  \item Factory maintenance 
+  \item Rocket 
+  \item Skill challenges 
+\end{itemize}
 
 
+In contrast to the Factorio Learning Environment, which provides direct access to the full game, Factoriax offers an engine with vastly simplified mechanics that is able to run at scale, even on local laptop GPUs.  
 
 
+Factoriax, what sets it apart. 
+
+Benchmarks built in Factoriax for this release.
+
+Contributions. 
+
+
+%---%
 \section{Related Work}
+\subsection{Simulation Engines}
+Works like Mujoco, Kinetix.
 
 
+\subsection{RL Capability Transfer Benchmarks}
+Overview of all kinds of RL benchmarks and where Factoriax sits with respect to them. 
+
+
+\subsection{RL Algorithm Transfer Benchmarks}
+
+\subsection{JAX Benchmarks}
+Accelerated benchmarks, comparison methods. JAX, TORCH. 
+
+
+%---%
 \section{Factoriax Engine Design}
 
 
+\subsection{Design Principles}
+
+\subsection{Mechanics}
+
+\subsection{Performance}
+
+
+%---%
 \section{Benchmarks}
 
+\subsection{Rocket}
 
+\subsection{Skill Challenges}
+
+
+%---%
 \section{Experiments}
+\subsection{Rocket}
 
 
+\subsection{Skill Challenges}
+
+
+%---%
 \section{Conclusion}
 
 
 
 
+%---%
 
 \section{Introduction}
 
@@ -61,7 +126,7 @@
 % happens where concerns interact. No fast benchmark tests this.
 % =============================================================================
 
-GPU-accelerated reinforcement learning environments have dramatically reduced the cost of running artificial intelligence experiments and training runs.
+GPU-accelerated gls{rl} environments have dramatically reduced the cost of running artificial intelligence experiments and training runs.
 However, most environments test a narrow band of intelligence, such as continuous control tasks, board games, grid navigation or combinatorial puzzles.
 % [CITE: Brax -- continuous locomotion control. Check Freeman et al. 2021 or latest version]
 % [CITE: Jumanji -- combinatorial optimization. Check Bonnet et al. 2023]
@@ -136,7 +201,7 @@ The division of labor must adapt continuously as the shared factory grows and th
 % other research communities. Light touch, 2-4 sentences.
 % =============================================================================
 
-Beyond reinforcement learning, the structure of Factoriax lends itself to questions that other benchmarks cannot easily pose.
+Beyond gls{rl}, the structure of Factoriax lends itself to questions that other benchmarks cannot easily pose.
 The environment is playable by humans, creating a natural setting for human-AI collaboration research where people and agents build together on the same map.
 % [CITE: look for human-AI teaming / human-in-the-loop RL benchmarks to position against]
 Its multi-agent dynamics and configurable incentive structures make it a candidate testbed for alignment and safety research, where observable agent behavior in a complex but interpretable world can be studied under controlled conditions.
@@ -152,7 +217,7 @@ We make the following contributions:
 \begin{enumerate}
     \item An open-source, fully JAX-native factory-building environment supporting 1 to N agents on a shared map with partial observability, configurable incentives, and open-ended scaling.
     \item A benchmark progression of milestones spanning the full game, providing measurable progress signal while keeping the overall challenge unsolved.
-    \item Baseline reinforcement learning results demonstrating that the environment is learnable but far from solved, with analysis of where current methods break down.
+    \item Baseline gls{rl} results demonstrating that the environment is learnable but far from solved, with analysis of where current methods break down.
     % [TODO: contribution 3 requires running PPO baselines and analyzing failure modes before this is ready]
 \end{enumerate}
 
