@@ -187,46 +187,64 @@ def move_player(
 def mine_block(
     state: EnvState,
     player_idx: int | jax.Array,
+    params: EnvParams,
 ) -> EnvState:
-    """Mine the block at the player's position.
+    """Mine the block on the tile in front of the player.
+
+    Targets the tile in the player's facing direction. NOOP when the
+    target is out of bounds, not a mineable block, depleted, or when
+    the player's inventory has no space for any of the resulting yield.
+    Each successful action extracts up to ``params.player_mining_yield``
+    units, capped by remaining tile resources and remaining inventory
+    stack space.
 
     Args:
         state: Current environment state.
         player_idx: Player index.
+        params: Environment parameters (reads
+            :attr:`EnvParams.player_mining_yield`).
 
     Returns:
-        Updated state.
+        Updated state. Pytree-equal to the input on NOOP.
     """
-    pos = state.player_positions[player_idx]
-    px, py = pos[0], pos[1]
-    block_type = state.map[py, px]
+    tx, ty = get_tile_in_front(state, player_idx)
+    h, w = state.map.shape
+    in_bounds = (tx >= 0) & (tx < w) & (ty >= 0) & (ty < h)
+    sx = jnp.clip(tx, 0, w - 1)
+    sy = jnp.clip(ty, 0, h - 1)
+    block_type = state.map[sy, sx]
 
-    is_mineable = jnp.any(block_type == MINEABLE_BLOCKS)
-    has_resources = state.block_resources[py, px] > 0
+    is_mineable = jnp.any(block_type == MINEABLE_BLOCKS) & in_bounds
+    available = state.block_resources[sy, sx]
+    has_resources = available > 0
     item_type = BLOCK_TO_ITEM_ARRAY[block_type.astype(jnp.int32)]
 
     current_count = state.player_inventory[player_idx, item_type]
-    max_stack = PLAYER_MAX_STACK[item_type]
-    has_space = current_count < max_stack
+    max_stack = PLAYER_MAX_STACK[item_type].astype(jnp.int16)
+    space = jnp.maximum(max_stack - current_count, jnp.int16(0))
+    has_space = space > 0
+
+    desired = jnp.asarray(params.player_mining_yield, dtype=jnp.int16)
+    extracted_raw = jnp.minimum(jnp.minimum(desired, space), available)
     can_mine = is_mineable & has_resources & has_space
+    extracted = jnp.where(can_mine, extracted_raw, jnp.int16(0))
 
-    new_resources = state.block_resources[py, px] - 1
+    new_resources = available - extracted
     is_depleted = new_resources <= 0
-    mine_one = jnp.where(can_mine, jnp.int16(1), jnp.int16(0))
 
-    new_inv = state.player_inventory.at[player_idx, item_type].add(mine_one)
-    new_block_resources = state.block_resources.at[py, px].set(
-        jnp.where(can_mine, new_resources, state.block_resources[py, px]),
+    new_inv = state.player_inventory.at[player_idx, item_type].add(extracted)
+    new_block_resources = state.block_resources.at[sy, sx].set(
+        jnp.where(can_mine, new_resources, available),
     )
-    new_map = state.map.at[py, px].set(
+    new_map = state.map.at[sy, sx].set(
         jnp.where(
             can_mine & is_depleted,
             jnp.int8(BlockType.DIRT),
-            state.map[py, px],
+            state.map[sy, sx],
         ),
     )
     new_items_mined = state.items_mined.at[item_type].add(
-        jnp.where(can_mine, 1, 0),
+        extracted.astype(state.items_mined.dtype),
     )
 
     return state.replace(
@@ -554,7 +572,7 @@ def _handle_player_action(
         cat,
         [
             lambda s: move_player(s, action, player_idx),
-            lambda s: mine_block(s, player_idx),
+            lambda s: mine_block(s, player_idx, params),
             lambda s: craft_recipe(s, params, player_idx, recipe_idx),
             lambda s: place_machine(s, params, player_idx, place_item),
             lambda s: pickup_machine(s, params, player_idx),

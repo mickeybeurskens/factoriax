@@ -104,9 +104,12 @@ NAVIGATE_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
     {int(Action.NOOP)} | _MOVE_ACTIONS
 )
 
-#: Skill 2 — mine. Allowed: ``MOVE_*``, ``MINE``, ``NOOP``.
+#: Skill 2 — mine. Allowed: ``MOVE_*``, ``FACE_*``, ``MINE``, ``NOOP``.
+#: ``FACE_*`` is required because MINE targets the tile in front of the
+#: player; the policy must stand adjacent to ore and rotate to face it
+#: without stepping onto the (walkable) ore tile.
 MINE_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
-    {int(Action.NOOP), int(Action.MINE)} | _MOVE_ACTIONS
+    {int(Action.NOOP), int(Action.MINE)} | _MOVE_ACTIONS | _FACE_ACTIONS
 )
 
 #: Skill 3 — craft_miner. Allowed: ``MOVE_*``, ``FACE_*``,

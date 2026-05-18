@@ -68,6 +68,19 @@ class TestNoRetrace:
             "JIT retraced on different action value. Action may be traced as static."
         )
 
+    def test_repeated_mine_same_params_reuses_cache(self) -> None:
+        """Repeated MINE with the same params must not retrace."""
+        step_fn, state, params, rng = _setup()
+
+        for _ in range(3):
+            rng, k = random.split(rng)
+            _, state, _, _, _ = step_fn(k, state, int(Action.MINE), params)
+
+        assert step_fn._cache_size() == 1, (
+            "JIT retraced on repeated MINE with identical params. "
+            "player_mining_yield should be traced (not static)."
+        )
+
 
 class TestDtypeConsistency:
     """Reset state dtypes must match post-step state dtypes."""

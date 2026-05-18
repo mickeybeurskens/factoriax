@@ -19,6 +19,8 @@ from __future__ import annotations
 import enum
 
 from .world_model import (
+    _DIR_OFFSETS,
+    _DIR_TO_MOVE_ACTION,
     WorldView,
     direction_toward,
     face_action,
@@ -96,28 +98,6 @@ class NavigateTo(Skill):
         return Result.RUNNING, int(path[0])
 
 
-class StandOnAndAct(Skill):
-    """Walk onto *target* and emit *action* on the next tick.
-
-    Direction-agnostic: the action fires regardless of facing. Used
-    for ``MINE``, which reads the block under the player's feet.
-    """
-
-    def __init__(self, target: tuple[int, int], action: int) -> None:
-        self.target = target
-        self.action = int(action)
-        self._navigator = NavigateTo(target)
-        self._fired = False
-
-    def step(self, view: WorldView) -> StepReturn:
-        if self._fired:
-            return Result.DONE, None
-        if view.player.pos != self.target:
-            return self._navigator.step(view)
-        self._fired = True
-        return Result.RUNNING, self.action
-
-
 class FaceAndInteract(Skill):
     """Stand adjacent to *target*, face it, then emit *interact_action*.
 
@@ -137,16 +117,25 @@ class FaceAndInteract(Skill):
         if self._fired:
             return Result.DONE, None
 
+        # Standing on the target itself: most interactions (mine, place, …)
+        # fire into the tile in front, so the player must step off first.
+        # Try each cardinal direction; the first walkable non-target tile
+        # wins. We swap the navigator to a fresh NavigateAdjacent below
+        # so the next tick can re-plan from the new position.
+        if view.player.pos == self.target:
+            step_action = self._step_off_action(view)
+            if step_action is None:
+                return Result.FAIL, None
+            self._navigator = NavigateAdjacent(self.target)
+            return Result.RUNNING, step_action
+
         # Not yet adjacent — let the navigator drive.
-        if view.player.pos != self.target and not self._is_adjacent(view):
+        if not self._is_adjacent(view):
             return self._navigator.step(view)
 
         # Adjacent. Make sure we're facing the target.
         desired_dir = direction_toward(view.player.pos, self.target)
         if desired_dir is None:
-            # Standing on the target itself; most interactions (mine,
-            # place, …) fire into the tile in front, so we can't act on
-            # the current tile. Step off and re-approach.
             return Result.FAIL, None
 
         if view.player.direction != desired_dir:
@@ -160,6 +149,25 @@ class FaceAndInteract(Skill):
 
     def _is_adjacent(self, view: WorldView) -> bool:
         return self.target in view.adjacent_tiles(view.player.pos)
+
+    def _step_off_action(self, view: WorldView) -> int | None:
+        """Return a MOVE_* action that steps the player off ``self.target``.
+
+        Picks the first walkable cardinal neighbour that is not the target
+        tile. Returns ``None`` when no such tile exists (rare: target is
+        surrounded by water / out-of-bounds).
+        """
+        px, py = view.player.pos
+        h, w = view.shape
+        for direction, (dx, dy) in _DIR_OFFSETS.items():
+            nx, ny = px + dx, py + dy
+            if not (0 <= nx < w and 0 <= ny < h):
+                continue
+            if (nx, ny) == self.target:
+                continue
+            if bool(view.walkable[ny, nx]):
+                return _DIR_TO_MOVE_ACTION[direction]
+        return None
 
 
 class PlaceAt(Skill):

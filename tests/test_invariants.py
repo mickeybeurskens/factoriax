@@ -169,6 +169,8 @@ class TestItemConservation:
         Total ore in inventory + remaining block resources must equal
         the initial block resources when only mining (no machines).
         """
+        from factoriax.constants import Direction
+
         world_map = jnp.array(
             [[BlockType.COAL, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
             dtype=jnp.int32,
@@ -176,15 +178,16 @@ class TestItemConservation:
         initial_resources = 10
         state = state_factory(
             world_map=world_map,
-            player_position=(0, 0),
+            player_position=(1, 0),
+            player_direction=int(Direction.LEFT),
             block_resources=jnp.array(
                 [[initial_resources, 0], [0, 0]], dtype=jnp.int16
             ),
         )
 
-        # Mine repeatedly.
+        # Mine the tile in front (COAL at (0, 0)) repeatedly.
         for _ in range(initial_resources + 2):
-            state = mine_block(state, 0)
+            state = mine_block(state, 0, _SMALL_PARAMS)
 
         coal_in_inv = int(state.player_inventory[0, ItemType.COAL])
         remaining = int(state.block_resources[0, 0])

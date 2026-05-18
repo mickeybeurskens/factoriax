@@ -32,7 +32,6 @@ from .skills import (
     PlaceAt,
     Result,
     Skill,
-    StandOnAndAct,
     StepReturn,
 )
 from .world_model import (
@@ -181,9 +180,11 @@ class MineOre(Goal):
             else:
                 return Result.RUNNING, action
 
-        # Select (or re-select) a patch and start a fresh StandOnAndAct.
+        # Select (or re-select) a patch and start a fresh FaceAndInteract
+        # cycle. Mining is look-at: the player must stand adjacent to the
+        # ore and face it, which is exactly what FaceAndInteract drives.
         self._active_target = tiles[0]
-        self._active = StandOnAndAct(self._active_target, int(Action.MINE))
+        self._active = FaceAndInteract(self._active_target, int(Action.MINE))
         return self._active.step(view)
 
 

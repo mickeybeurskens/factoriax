@@ -1,13 +1,50 @@
-"""Tests for the block resource and mining system (pouch model)."""
+"""Tests for the block resource and mining system (pouch model).
 
+Mining targets the tile in front of the player. To exercise the engine
+in these tests the player is placed adjacent to the ore and faced
+toward it (e.g. player at (0, 1) with Direction.RIGHT to mine an ore at
+(1, 1)).
+"""
+
+import jax
 import jax.numpy as jnp
 import pytest
 from jax import random
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
-from factoriax.constants import BLOCK_MAX_RESOURCES, MINEABLE_BLOCKS
+from factoriax.constants import BLOCK_MAX_RESOURCES, MINEABLE_BLOCKS, Direction
 from factoriax.game_logic import mine_block
 from factoriax.levels import generate_state
+
+_PARAMS = EnvParams()
+
+
+def _ore_state(
+    state_factory,
+    *,
+    ore_resources: int = 5,
+    block_type: int = BlockType.COAL,
+    facing: int = Direction.RIGHT,
+) -> EnvState:
+    """Build a 3x3 state with ore at (1, 1) and player adjacent + facing it.
+
+    Default places the player at (0, 1) looking RIGHT toward the ore.
+    """
+    dx_dy = {
+        int(Direction.LEFT): (1, 0),
+        int(Direction.RIGHT): (-1, 0),
+        int(Direction.UP): (0, 1),
+        int(Direction.DOWN): (0, -1),
+    }[int(facing)]
+    player_xy = (1 + dx_dy[0], 1 + dx_dy[1])
+    return state_factory(
+        world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
+        .at[1, 1]
+        .set(block_type),
+        player_position=player_xy,
+        player_direction=int(facing),
+        block_resources=jnp.zeros((3, 3), dtype=jnp.int16).at[1, 1].set(ore_resources),
+    )
 
 
 class TestBlockResources:
@@ -45,74 +82,44 @@ class TestBlockResources:
 class TestMiningResources:
     """Tests for mining with the resource system."""
 
-    @pytest.fixture
-    def coal_state(self, state_factory) -> EnvState:
-        """State with player on a coal block with 5 resources."""
-        return state_factory(
-            world_map=jnp.array(
-                [
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.COAL, BlockType.DIRT],
-                    [BlockType.DIRT, BlockType.DIRT, BlockType.DIRT],
-                ],
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 1),
-            block_resources=jnp.array(
-                [[0, 0, 0], [0, 5, 0], [0, 0, 0]],
-                dtype=jnp.int16,
-            ),
-        )
+    def test_mining_decrements_resources(self, state_factory) -> None:
+        """Facing ore should decrement resources by 1 (default yield)."""
+        state = _ore_state(state_factory, ore_resources=5)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.block_resources[1, 1]) == 4
 
-    def test_mining_decrements_resources(
-        self,
-        coal_state: EnvState,
-    ) -> None:
-        """Mining should decrement resources by 1."""
-        new = mine_block(coal_state, 0)
-        assert new.block_resources[1, 1] == 4
-
-    def test_mining_yields_item(self, coal_state: EnvState) -> None:
+    def test_mining_yields_item(self, state_factory) -> None:
         """Mining should add one item to the player's pouch."""
-        new = mine_block(coal_state, 0)
-        assert new.player_inventory[0, ItemType.COAL] == 1
+        state = _ore_state(state_factory, ore_resources=5)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.player_inventory[0, ItemType.COAL]) == 1
 
-    def test_block_stays_while_resources_remain(
-        self,
-        coal_state: EnvState,
-    ) -> None:
+    def test_items_mined_counter_increments(self, state_factory) -> None:
+        """Successful mine should bump the global items_mined counter."""
+        state = _ore_state(state_factory, ore_resources=5)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.items_mined[ItemType.COAL]) == 1
+
+    def test_block_stays_while_resources_remain(self, state_factory) -> None:
         """Block should remain while resources > 0."""
-        new = mine_block(coal_state, 0)
-        assert new.map[1, 1] == BlockType.COAL
+        state = _ore_state(state_factory, ore_resources=5)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.map[1, 1]) == int(BlockType.COAL)
 
-    def test_block_becomes_dirt_when_depleted(
-        self,
-        state_factory,
-    ) -> None:
+    def test_block_becomes_dirt_when_depleted(self, state_factory) -> None:
         """Block should become dirt when resources reach zero."""
-        state = state_factory(
-            world_map=jnp.array(
-                [[BlockType.COAL]],
-                dtype=jnp.int32,
-            ),
-            block_resources=jnp.array([[1]], dtype=jnp.int16),
-        )
-        new = mine_block(state, 0)
-        assert new.map[0, 0] == BlockType.DIRT
-        assert new.block_resources[0, 0] == 0
-        assert new.player_inventory[0, ItemType.COAL] == 1
+        state = _ore_state(state_factory, ore_resources=1)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.map[1, 1]) == int(BlockType.DIRT)
+        assert int(new.block_resources[1, 1]) == 0
+        assert int(new.player_inventory[0, ItemType.COAL]) == 1
 
     def test_cannot_mine_depleted_block(self, state_factory) -> None:
-        """Should not mine a block with zero resources."""
-        state = state_factory(
-            world_map=jnp.array(
-                [[BlockType.COAL]],
-                dtype=jnp.int32,
-            ),
-            block_resources=jnp.array([[0]], dtype=jnp.int16),
-        )
-        new = mine_block(state, 0)
-        assert new.player_inventory[0, ItemType.COAL] == 0
+        """Mining a tile with zero resources should be NOOP."""
+        state = _ore_state(state_factory, ore_resources=0)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.player_inventory[0, ItemType.COAL]) == 0
+        assert int(new.block_resources[1, 1]) == 0
 
     @pytest.mark.parametrize(
         "block_type, item_type",
@@ -122,43 +129,68 @@ class TestMiningResources:
         ],
         ids=["iron", "copper"],
     )
-    def test_mining_ore_type(
-        self,
-        state_factory,
-        block_type,
-        item_type,
-    ) -> None:
+    def test_mining_ore_type(self, state_factory, block_type, item_type) -> None:
         """Mining should yield the correct ore type."""
-        state = state_factory(
-            world_map=jnp.array(
-                [[block_type]],
-                dtype=jnp.int32,
-            ),
-            block_resources=jnp.array([[5]], dtype=jnp.int16),
-        )
-        new = mine_block(state, 0)
-        assert new.block_resources[0, 0] == 4
-        assert new.player_inventory[0, item_type] == 1
-        assert new.map[0, 0] == block_type
+        state = _ore_state(state_factory, ore_resources=5, block_type=block_type)
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.block_resources[1, 1]) == 4
+        assert int(new.player_inventory[0, item_type]) == 1
+        assert int(new.map[1, 1]) == int(block_type)
 
 
 class TestMiningEdgeCases:
     """Edge case tests for mining."""
 
-    def test_mining_non_mineable_block_does_nothing(
-        self,
-        state_factory,
-    ) -> None:
-        """Mining dirt should have no effect."""
+    def test_mining_non_mineable_in_front_does_nothing(self, state_factory) -> None:
+        """Facing dirt should be a NOOP."""
         state = state_factory(
-            world_map=jnp.array(
-                [[BlockType.DIRT]],
-                dtype=jnp.int32,
-            ),
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=(0, 1),
+            player_direction=int(Direction.RIGHT),
         )
-        new = mine_block(state, 0)
+        new = mine_block(state, 0, _PARAMS)
         assert jnp.all(new.player_inventory[0] == 0)
-        assert new.map[0, 0] == BlockType.DIRT
+        assert int(new.map[1, 1]) == int(BlockType.DIRT)
+
+    def test_standing_on_ore_facing_dirt_is_noop(self, state_factory) -> None:
+        """Standing on ore but facing a non-ore tile must not mine."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
+            .at[1, 1]
+            .set(BlockType.COAL),
+            player_position=(1, 1),
+            player_direction=int(Direction.LEFT),
+            block_resources=jnp.zeros((3, 3), dtype=jnp.int16).at[1, 1].set(5),
+        )
+        new = mine_block(state, 0, _PARAMS)
+        assert int(new.player_inventory[0, ItemType.COAL]) == 0
+        assert int(new.block_resources[1, 1]) == 5
+        assert int(new.items_mined[ItemType.COAL]) == 0
+
+    @pytest.mark.parametrize(
+        "player_xy, facing",
+        [
+            ((0, 0), Direction.LEFT),
+            ((2, 0), Direction.RIGHT),
+            ((0, 0), Direction.UP),
+            ((0, 2), Direction.DOWN),
+        ],
+        ids=["left-edge", "right-edge", "top-edge", "bottom-edge"],
+    )
+    def test_facing_out_of_bounds_is_pytree_equal(
+        self, state_factory, player_xy, facing
+    ) -> None:
+        """Facing OOB on any edge must leave the state pytree-equal."""
+        state = state_factory(
+            world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
+            player_position=player_xy,
+            player_direction=int(facing),
+        )
+        new = mine_block(state, 0, _PARAMS)
+        equal_per_leaf = jax.tree.map(
+            lambda a, b: bool(jnp.array_equal(a, b)), state, new
+        )
+        assert all(jax.tree.leaves(equal_per_leaf))
 
     def test_max_resources_constant_is_30000(self) -> None:
         """BLOCK_MAX_RESOURCES should accommodate the rocket-benchmark
@@ -167,3 +199,32 @@ class TestMiningEdgeCases:
         enough fuel for the full 8000-tick rocket chain.
         """
         assert BLOCK_MAX_RESOURCES == 30000
+
+
+class TestPlayerMiningYield:
+    """Tests for the per-player mining yield parameter."""
+
+    def test_yield_three_extracts_three(self, state_factory) -> None:
+        """With player_mining_yield=3, a successful mine extracts 3."""
+        state = _ore_state(state_factory, ore_resources=10)
+        params = EnvParams(player_mining_yield=3)
+        new = mine_block(state, 0, params)
+        assert int(new.player_inventory[0, ItemType.COAL]) == 3
+        assert int(new.items_mined[ItemType.COAL]) == 3
+        assert int(new.block_resources[1, 1]) == 7
+
+    def test_yield_capped_by_available_resources(self, state_factory) -> None:
+        """Yield should cap at remaining tile resources."""
+        state = _ore_state(state_factory, ore_resources=2)
+        params = EnvParams(player_mining_yield=5)
+        new = mine_block(state, 0, params)
+        assert int(new.player_inventory[0, ItemType.COAL]) == 2
+        assert int(new.block_resources[1, 1]) == 0
+        assert int(new.map[1, 1]) == int(BlockType.DIRT)
+
+
+# NOTE: A JIT cache-size assertion for MINE lives in
+# tests/test_jit_retrace.py — it warms up via env.reset_env so the state
+# has fully-canonicalized JAX-array leaves. state_factory builds states
+# with Python-int leaves (selected_player, timestep) that get promoted
+# on first jit, causing a spurious second trace.

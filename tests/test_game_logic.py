@@ -141,16 +141,18 @@ class TestHandlePlayerAction:
         assert int(new_state.player_directions[0]) == expected_dir
 
     def test_mine_decrements_resources(self, state_factory) -> None:
-        """MINE should extract a resource into the player's pouch."""
+        """MINE should extract a resource from the tile the player faces."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL]],
+                [[BlockType.DIRT, BlockType.COAL]],
                 dtype=jnp.int32,
             ),
-            block_resources=jnp.array([[10]], dtype=jnp.int16),
+            player_position=(0, 0),
+            player_direction=int(Direction.RIGHT),
+            block_resources=jnp.array([[0, 10]], dtype=jnp.int16),
         )
         new_state = _handle_player_action(state, _PARAMS, Action.MINE, 0)
-        assert int(new_state.block_resources[0, 0]) == 9
+        assert int(new_state.block_resources[0, 1]) == 9
         assert int(new_state.player_inventory[0, ItemType.COAL]) == 1
 
     def test_noop_preserves_state(self, state_factory) -> None:
@@ -275,19 +277,21 @@ class TestFactoriaxStep:
         """A step should run player action, crafting, and machines."""
         state = state_factory(
             world_map=jnp.array(
-                [[BlockType.COAL, BlockType.IRON]],
+                [[BlockType.COAL, BlockType.DIRT, BlockType.IRON]],
                 dtype=jnp.int32,
             ),
-            block_resources=jnp.array([[10, 50]], dtype=jnp.int16),
+            player_position=(1, 0),
+            player_direction=int(Direction.LEFT),
+            block_resources=jnp.array([[10, 0, 50]], dtype=jnp.int16),
             machine_types=jnp.array(
-                [[MachineType.NONE, MachineType.MINER]],
+                [[MachineType.NONE, MachineType.NONE, MachineType.MINER]],
                 dtype=jnp.int32,
             ),
-            machine_power=jnp.array([[0, 10]], dtype=jnp.int32),
+            machine_power=jnp.array([[0, 0, 10]], dtype=jnp.int32),
         )
         rng = jax.random.PRNGKey(0)
-        params = EnvParams(map_width=2, map_height=1)
+        params = EnvParams(map_width=3, map_height=1)
         new_state = factoriax_step(rng, state, Action.MINE, params)
 
         assert int(new_state.block_resources[0, 0]) == 9
-        assert int(new_state.block_resources[0, 1]) < 50
+        assert int(new_state.block_resources[0, 2]) < 50

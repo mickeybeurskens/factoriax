@@ -138,19 +138,19 @@ def test_navigate_adjacent_reaches_ore(initial_state, env_params, jit_step):
 # ---------------------------------------------------------------------------
 
 
-def test_stand_on_and_act_mines_one_ore(initial_state, env_params, jit_step):
-    """StandOnAndAct(MINE) on an ore tile should raise ore inventory by 1.
+def test_face_and_interact_mines_one_ore(initial_state, env_params, jit_step):
+    """FaceAndInteract(MINE) should raise ore inventory by 1.
 
-    Mining reads the block under the player (``game_logic.mine_block``
-    uses ``state.player_positions``), so the agent must stand ON the
-    ore tile, not adjacent to it.
+    Mining is look-at: ``game_logic.mine_block`` targets the tile in
+    front of the player. FaceAndInteract navigates to an adjacent
+    tile, issues ``FACE_*`` toward the target, then emits the action.
     """
     env, step_fn = jit_step
     start_view = _view(initial_state, env_params)
     ore_item = ItemType.IRON_ORE
     target = start_view.ore_tiles(ore_item)[0]
 
-    skill = skills.StandOnAndAct(target, int(Action.MINE))
+    skill = skills.FaceAndInteract(target, int(Action.MINE))
     state, actions, verdict = _rollout(
         initial_state,
         skill,
