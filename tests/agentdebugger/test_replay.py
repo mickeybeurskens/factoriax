@@ -502,3 +502,123 @@ class TestLiveModeUnchanged:
         """Live mode has environment references."""
         assert debugger._env is not None
         assert debugger._params is not None
+
+
+# ------------------------------------------------------------------
+# replay_states param reconstruction
+# ------------------------------------------------------------------
+
+
+class TestReplayStatesEnvParamsReconstruction:
+    """``replay_states`` must rebuild EnvParams from env_params_scheme."""
+
+    def test_player_mining_yield_replays_bit_identically(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A yield=3 recording must replay to the same items_mined."""
+        import jax.numpy as jnp
+
+        from factoriax.agentdebugger.replay import replay_states
+        from factoriax.constants import Action, BlockType
+        from factoriax.envs.factoriax_env import FactoriaXEnv
+        from factoriax.levels import Level, build_state
+
+        # 3x3 map: COAL at (1, 1), player spawned at (0, 1).
+        block_map = np.full((3, 3), int(BlockType.DIRT), dtype=np.int32)
+        block_map[1, 1] = int(BlockType.COAL)
+
+        level = Level(
+            name="mine-test",
+            map_width=3,
+            map_height=3,
+            block_map=block_map,
+            player_positions=[(0, 1)],
+        )
+
+        # Mine three times with yield=3 → 9 coal after three actions.
+        params = EnvParams(
+            map_width=3,
+            map_height=3,
+            num_players=1,
+            max_timesteps=10,
+            player_mining_yield=3,
+            base_resources=30,
+        )
+        state = build_state(level, params)
+
+        env = FactoriaXEnv()
+        step_fn = jax.jit(env.step_env)
+        rng = jax.random.PRNGKey(0)
+
+        # Drive: FACE_RIGHT, then three MINEs. Both record and replay
+        # start from the same build_state output so the action sequence
+        # alone reproduces the final state.
+        states = [state]
+        actions: list[int] = [
+            int(Action.FACE_RIGHT),
+            int(Action.MINE),
+            int(Action.MINE),
+            int(Action.MINE),
+        ]
+        for a in actions:
+            rng, k = jax.random.split(rng)
+            _, state, _, _, _ = step_fn(k, state, jnp.int32(a), params)
+            states.append(state)
+
+        recorded_items_mined = np.asarray(states[-1].items_mined)
+        del jnp  # silence unused import — jnp was only needed for the
+        # old build_state override path; keep the import for future
+        # maintenance of this fixture.
+
+        # Build a trajectory with env_params_scheme.
+        act_arr = np.array(actions + [0], dtype=np.int32)
+        traj = states_to_trajectory(states, actions=act_arr, params=params)
+        assert traj.env_params_scheme is not None
+        assert traj.env_params_scheme["player_mining_yield"] == 3
+
+        # Save + load round trip to mirror real usage.
+        path = tmp_path / "yield3.npz"
+        traj.save(str(path))
+        loaded = Trajectory.load(str(path))
+
+        replayed = replay_states(level, loaded)
+        replayed_items_mined = np.asarray(replayed[-1].items_mined)
+
+        # Bit-identical items_mined under the recovered yield.
+        np.testing.assert_array_equal(replayed_items_mined, recorded_items_mined)
+        # Sanity: with yield=3 and three mines, expect 9 coal.
+        from factoriax.constants import ItemType
+
+        assert int(replayed_items_mined[int(ItemType.COAL)]) == 9
+
+    def test_replay_honours_num_players_from_scheme(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """``num_players`` from env_params_scheme overrides the hardcode."""
+        from factoriax.agentdebugger.replay import replay_states
+        from factoriax.config import env_params_to_dict
+        from factoriax.constants import BlockType
+        from factoriax.levels import Level
+
+        block_map = np.full((3, 3), int(BlockType.DIRT), dtype=np.int32)
+        level = Level(
+            name="two-player",
+            map_width=3,
+            map_height=3,
+            block_map=block_map,
+            player_positions=[(0, 0), (2, 2)],
+        )
+        params = EnvParams(map_width=3, map_height=3, num_players=2, max_timesteps=3)
+
+        # Build a 2-player trajectory with env_params_scheme.
+        actions = np.zeros((1, 2, 2), dtype=np.int32)
+        traj = Trajectory(
+            actions=actions,
+            env_params_scheme=env_params_to_dict(params),
+        )
+
+        # Override the hardcoded num_players=1 — should not crash.
+        states = replay_states(level, traj)
+        assert states[0].player_positions.shape[0] == 2

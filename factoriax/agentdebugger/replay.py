@@ -47,11 +47,29 @@ def replay_states(
     """
     from factoriax.envs import FactoriaXEnv
 
+    # Pull engine knobs from the trajectory's captured scheme when
+    # present. ``num_players`` is no longer hardcoded — multi-player
+    # recordings replay against the correct player count, and engine
+    # knobs like ``player_mining_yield`` flow through so ``items_mined``
+    # reproduces bit-identically.
+    scheme: dict[str, Any] = traj.env_params_scheme or {}
+
+    def _scheme_int(name: str, default: int) -> int:
+        val = scheme.get(name)
+        return int(val) if val is not None else default
+
     params = EnvParams(
-        map_width=level.map_width,
-        map_height=level.map_height,
-        num_players=1,
-        max_timesteps=traj.episode_length,
+        map_width=_scheme_int("map_width", level.map_width),
+        map_height=_scheme_int("map_height", level.map_height),
+        num_players=_scheme_int("num_players", 1),
+        max_timesteps=_scheme_int("max_timesteps", traj.episode_length),
+        miner_mining_rate=_scheme_int(
+            "miner_mining_rate", EnvParams().miner_mining_rate
+        ),
+        player_mining_yield=_scheme_int(
+            "player_mining_yield", EnvParams().player_mining_yield
+        ),
+        base_resources=_scheme_int("base_resources", EnvParams().base_resources),
     )
     state = build_state(level, params)
 

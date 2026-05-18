@@ -45,7 +45,7 @@ import numpy as np
 import orjson
 
 if TYPE_CHECKING:
-    from factoriax.state import EnvState
+    from factoriax.state import EnvParams, EnvState
 
 # All optional array fields in the order they are declared.
 # Used by save/load/slice/repr to avoid hardcoding the list in 6 places.
@@ -141,6 +141,12 @@ class Trajectory:
     cost_scheme : dict, optional
         Describes any cost or penalty function applied during training
         (e.g. action penalty scale, entropy bonus coefficient).
+    env_params_scheme : dict, optional
+        Snapshot of :func:`factoriax.config.env_params_to_dict` taken
+        at recording time. Replay tooling rebuilds
+        :class:`~factoriax.state.EnvParams` from this dict so engine
+        knobs like ``player_mining_yield`` and ``miner_mining_rate``
+        reproduce the captured ``items_mined``.
     """
 
     actions: np.ndarray
@@ -182,6 +188,10 @@ class Trajectory:
     observation_scheme: dict[str, object] | None = None
     reward_scheme: dict[str, object] | None = None
     cost_scheme: dict[str, object] | None = None
+    # Snapshot of ``env_params_to_dict(params)`` at recording time so
+    # replay tooling can rebuild :class:`EnvParams` with the live
+    # ``player_mining_yield`` / ``miner_mining_rate`` / etc.
+    env_params_scheme: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         """Coerce actions to numpy and ensure batch dimension."""
@@ -280,6 +290,7 @@ class Trajectory:
         "observation_scheme",
         "reward_scheme",
         "cost_scheme",
+        "env_params_scheme",
     )
 
     def _scheme_kwargs(self) -> dict[str, Any]:
@@ -400,6 +411,7 @@ def states_to_trajectory(
     states: list[EnvState],
     actions: np.ndarray | None = None,
     rewards: np.ndarray | None = None,
+    params: EnvParams | None = None,
 ) -> Trajectory:
     """Convert a sequence of EnvState snapshots into a Trajectory.
 
@@ -411,6 +423,10 @@ def states_to_trajectory(
         actions: Optional action array of shape ``(T,)`` or ``(T, P)``.
             If ``None``, a zeros array is used.
         rewards: Optional reward array of shape ``(T,)``.
+        params: Optional :class:`EnvParams` snapshot. When provided,
+            the dict form is recorded on the returned trajectory as
+            ``env_params_scheme`` so replay tooling can rebuild the
+            exact engine parameters that produced the states.
 
     Returns:
         A ``Trajectory`` with batch dimension 1 and all state fields
@@ -452,6 +468,11 @@ def states_to_trajectory(
         kwargs[traj_name] = arr[np.newaxis, :]  # (1, T, ...)
 
     kwargs["timesteps"] = np.arange(T, dtype=np.int32)[np.newaxis, :]
+
+    if params is not None:
+        from factoriax.config import env_params_to_dict
+
+        kwargs["env_params_scheme"] = env_params_to_dict(params)
 
     return Trajectory(**kwargs)
 

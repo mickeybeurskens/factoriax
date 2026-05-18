@@ -501,6 +501,7 @@ def _play_loop(
             ps.recorded_states,
             ps.recorded_actions,
             ps.recorded_rewards,
+            params,
         )
 
 
@@ -508,6 +509,7 @@ def _save_recorded_trajectory(
     states: list[EnvState],
     actions: list[int],
     rewards: list[float],
+    params: EnvParams,
 ) -> None:
     """Save a recorded play session as a timestamped .npz trajectory.
 
@@ -515,6 +517,9 @@ def _save_recorded_trajectory(
         states: List of EnvState snapshots.
         actions: List of action integers.
         rewards: List of reward floats.
+        params: Live :class:`EnvParams` snapshot. Recorded as
+            ``env_params_scheme`` so replay reproduces the captured
+            ``items_mined`` under non-default yields.
     """
     from datetime import datetime
 
@@ -525,7 +530,7 @@ def _save_recorded_trajectory(
     rew = np.array(rewards + [0.0] * (len(states) - len(rewards)), dtype=np.float32)
     from dataclasses import replace
 
-    traj = states_to_trajectory(states, actions=act, rewards=rew)
+    traj = states_to_trajectory(states, actions=act, rewards=rew, params=params)
     traj = replace(traj, observation_scheme={"type": 3})  # PLAYER
     ts = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
     path = f"trajectory_{ts}.npz"
