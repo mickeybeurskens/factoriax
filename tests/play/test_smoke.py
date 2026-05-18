@@ -128,13 +128,21 @@ class TestConfigSmoke:
         assert config is not None
 
     def test_settings_fields_exist_on_env_params(self) -> None:
-        """Every field in the settings menu must exist on EnvParams."""
+        """Every EnvParams-bound field in the settings menu must exist on it.
+
+        The Seed field reads from :class:`PlayerConfig.seed`, not
+        :class:`EnvParams`, so it is skipped here.
+        """
+        from factoriax.config import PlayerConfig, env_params_to_dict
         from factoriax.play.launch_screen import _build_sections
 
         params = EnvParams()
-        sections = _build_sections(params)
+        config = PlayerConfig(env_params=env_params_to_dict(params))
+        sections = _build_sections(config)
         for section in sections:
             for field in section.fields:
+                if field.name == "seed":
+                    continue
                 assert hasattr(params, field.name), (
                     f"Settings field {field.name!r} not found on EnvParams"
                 )

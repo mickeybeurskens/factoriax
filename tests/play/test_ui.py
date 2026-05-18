@@ -137,6 +137,22 @@ class TestRenderWelcomeScreen:
         record_regions = [r for r in regions if r.action == "toggle_record"]
         assert len(record_regions) == 0
 
+    def test_mine_control_describes_look_at(self) -> None:
+        """The SPACE/mine row should describe the look-at semantic.
+
+        Source-level check: the welcome screen rasterizes text, so we
+        verify the controls list in factoriax.play.ui matches the new
+        phrasing by reading the source.
+        """
+        import inspect
+
+        from factoriax.play import ui
+
+        src = inspect.getsource(ui.render_welcome_screen)
+        # Old bare label is gone; new look-at phrasing is present.
+        assert '"Mine ore"' not in src, "Stale 'Mine ore' label still present"
+        assert '"Mine the tile you face"' in src or "look at" in src.lower()
+
 
 class TestRenderPauseMenu:
     """Output-contract tests for render_pause_menu."""

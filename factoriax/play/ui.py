@@ -521,7 +521,7 @@ def render_welcome_screen(
 
     controls = [
         ("WASD", "Move"),
-        ("SPACE", "Mine ore"),
+        ("SPACE", "Mine the tile you face"),
         ("E", "Place / pick up / craft"),
         ("I", "Inventory & crafting"),
         ("F", "Inspect machine"),

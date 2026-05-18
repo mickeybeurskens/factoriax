@@ -16,7 +16,6 @@ from factoriax.config import (
     build_controller_lookup,
     build_key_lookup,
     config_to_env_params,
-    env_params_to_dict,
     load_config,
     save_config,
 )
@@ -93,13 +92,12 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     """Show play settings, then launch the game with chosen parameters."""
     from factoriax.play.launch_screen import run_settings_menu
 
-    initial_params = config_to_env_params(config)
-    params = run_settings_menu(screen, initial_params=initial_params)
-    if params is None:
-        return
-
-    config.env_params = env_params_to_dict(params)
-    save_config(config)
+    new_config = run_settings_menu(screen, initial_config=config)
+    # Carry the edits back into the caller's config so the rest of the
+    # session sees them (the in-menu save_config has already persisted).
+    config.env_params = new_config.env_params
+    config.seed = new_config.seed
+    params = config_to_env_params(config)
 
     from jax import random
 
@@ -109,7 +107,7 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
 
     env = FactoriaXEnv(achievement_fn=core_game_conditions)
 
-    rng = random.PRNGKey(42)
+    rng = random.PRNGKey(config.seed)
     rng, reset_key = random.split(rng)
     _reset_key = reset_key
 

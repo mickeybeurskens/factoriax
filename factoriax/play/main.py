@@ -97,6 +97,7 @@ def play_level(
     level: Level,
     num_players: int = 1,
     screen: pygame.Surface | None = None,
+    seed: int | None = None,
 ) -> None:
     """Play a level with the full game UI.
 
@@ -110,10 +111,17 @@ def play_level(
         num_players: Number of players to spawn.
         screen: Existing pygame display surface.  If ``None`` a new
             window is created and destroyed on exit.
+        seed: PRNG seed for world generation. When ``None`` the player's
+            stored :attr:`PlayerConfig.seed` is loaded from disk.
     """
     owns_pygame = screen is None
     if owns_pygame:
         pygame.init()
+
+    if seed is None:
+        from factoriax.config import load_config
+
+        seed = int(load_config().seed)
 
     env = FactoriaXEnv(achievement_fn=core_game_conditions, level=level)
     params = EnvParams(
@@ -135,7 +143,7 @@ def play_level(
 
     pygame.display.set_caption(f"FactoriaX - {level.name}")
 
-    rng = random.PRNGKey(42)
+    rng = random.PRNGKey(int(seed))
     rng, reset_key = random.split(rng)
     reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]
         screen,
@@ -563,7 +571,10 @@ def main() -> None:
     env: FactoriaXEnv = env_result[0]  # type: ignore[index]
     params: EnvParams = env_result[1]  # type: ignore[index]
 
-    rng = random.PRNGKey(42)
+    from factoriax.config import load_config
+
+    config = load_config()
+    rng = random.PRNGKey(int(config.seed))
     rng, reset_key = random.split(rng)
 
     reset_result: tuple[jax.Array, EnvState] = _run_with_loading_screen(  # type: ignore[assignment]

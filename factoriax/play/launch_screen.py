@@ -13,17 +13,22 @@ size.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 
 import pygame
 
 from factoriax.config import (
     PlayerAction,
+    PlayerConfig,
     build_controller_lookup,
     build_key_lookup,
+    config_to_env_params,
     default_controller,
     default_keyboard,
+    env_params_to_dict,
     resolve_event,
+    save_config,
 )
 from factoriax.state import EnvParams
 from factoriax.ui import theme as _theme
@@ -89,6 +94,33 @@ class FieldState:
 
 
 @dataclass
+class _Button:
+    """A clickable inline button rendered next to a field.
+
+    Used for the Randomize button on the Seed field. Hit-testing and
+    rendering are handled inline in :func:`run_settings_menu` so the
+    button has no per-instance pygame state of its own.
+
+    Attributes:
+        label: Display text.
+        target_field: Field whose ``edit_buffer`` the click writes to.
+    """
+
+    label: str
+    target_field: FieldState
+
+    def on_click(self) -> None:
+        """Write a freshly generated seed into ``target_field.edit_buffer``.
+
+        Uses :func:`time.time_ns` so two clicks in different sessions
+        almost certainly produce different values. Forces the field
+        into editing mode so the new value renders as the live buffer.
+        """
+        self.target_field.editing = True
+        self.target_field.edit_buffer = str(time.time_ns())
+
+
+@dataclass
 class _Section:
     """A group of fields under a shared heading.
 
@@ -96,10 +128,13 @@ class _Section:
         title: Section heading text.
         fields: Fields belonging to this section, laid out in 2-column
             pairs (left column at even indices, right column at odd).
+        buttons: Optional inline buttons rendered in a row below the
+            section's fields (single-column, left-aligned).
     """
 
     title: str
     fields: list[FieldState] = field(default_factory=list)
+    buttons: list[_Button] = field(default_factory=list)
 
 
 # -- Helpers --------------------------------------------------------------
@@ -138,15 +173,21 @@ def _parse_value(text: str, field_type: str) -> int | float | None:
         return None
 
 
-def _build_sections(params: EnvParams) -> list[_Section]:
-    """Construct the section/field layout from an EnvParams instance.
+def _build_sections(config: PlayerConfig) -> list[_Section]:
+    """Construct the section/field layout from a :class:`PlayerConfig`.
+
+    The Seed field reads from ``config.seed`` and ships with a
+    Randomize button that fills in a fresh ``time.time_ns()`` value.
+    All other fields mirror the ``EnvParams`` mapping derived from
+    ``config.env_params``.
 
     Args:
-        params: The starting parameter values.
+        config: The starting player configuration.
 
     Returns:
         Ordered list of sections, each containing its fields.
     """
+    params = config_to_env_params(config)
 
     def _f(
         name: str,
@@ -161,6 +202,17 @@ def _build_sections(params: EnvParams) -> list[_Section]:
             field_type=field_type,
         )
 
+    seed_field = FieldState(
+        name="seed",
+        label="Seed",
+        value=str(int(config.seed)),
+        field_type="int",
+    )
+    seed_section = _Section(
+        "Seed",
+        [seed_field],
+        buttons=[_Button(label="Randomize", target_field=seed_field)],
+    )
     world = _Section(
         "World",
         [
@@ -180,17 +232,18 @@ def _build_sections(params: EnvParams) -> list[_Section]:
             _f("coal_probability", "Coal Prob", "float"),
             _f("tin_probability", "Tin Prob", "float"),
             _f("silicon_probability", "Silicon Prob", "float"),
+            _f("player_mining_yield", "Player Mining Yield", "int"),
         ],
     )
     machines = _Section(
         "Machines",
         [
             _f("max_machines", "Max Machines", "int"),
-            _f("miner_mining_rate", "Mining Rate", "int"),
+            _f("miner_mining_rate", "Machine Mining Rate", "int"),
             _f("max_assembler_stack_size", "Assembler Stack", "int"),
         ],
     )
-    return [world, resources, machines]
+    return [seed_section, world, resources, machines]
 
 
 def _field_index_in_sections(
@@ -272,28 +325,47 @@ def _cancel_edit(fs: FieldState) -> None:
     fs.edit_buffer = ""
 
 
-def _build_params(sections: list[_Section]) -> EnvParams:
-    """Construct an EnvParams from the current field string values.
+def _build_config(
+    sections: list[_Section],
+    base: PlayerConfig,
+) -> PlayerConfig:
+    """Construct a :class:`PlayerConfig` from the current field values.
 
-    Invalid strings fall back to the EnvParams default for that field.
+    Invalid strings fall back to the EnvParams default for that field
+    (or to ``base.seed`` for the seed field). Bindings, display, and
+    controller settings are carried through from ``base`` unchanged.
 
     Args:
         sections: The populated section list.
+        base: The config that seeded the menu; its non-EnvParams fields
+            (keyboard, controller, display, …) flow through unchanged.
 
     Returns:
-        A new EnvParams instance.
+        A new PlayerConfig reflecting the in-field values.
     """
     defaults = EnvParams()
-    kwargs: dict[str, int | float] = {}
+    env_dict: dict[str, int | float] = dict(base.env_params)
+    seed = int(base.seed)
     for sec in sections:
         for fs in sec.fields:
             parsed = _parse_value(fs.value, fs.field_type)
+            if fs.name == "seed":
+                if parsed is not None:
+                    seed = int(parsed)
+                continue
             if parsed is not None:
-                kwargs[fs.name] = parsed
+                env_dict[fs.name] = parsed
             else:
-                kwargs[fs.name] = getattr(defaults, fs.name)
+                env_dict[fs.name] = getattr(defaults, fs.name)
 
-    return EnvParams(**kwargs)  # type: ignore[arg-type]
+    return PlayerConfig(
+        env_params=env_dict,
+        seed=seed,
+        keyboard=base.keyboard,
+        controller=base.controller,
+        fullscreen=base.fullscreen,
+        ui_scale=base.ui_scale,
+    )
 
 
 _CONFIRM_TIMEOUT_MS: int = 10_000
@@ -450,23 +522,26 @@ def _confirm_scale_change(
 
 def run_settings_menu(
     screen: pygame.Surface,
-    initial_params: EnvParams | None = None,
-) -> EnvParams | None:
-    """Show play settings and return configured EnvParams, or None to go back.
+    initial_config: PlayerConfig | None = None,
+) -> PlayerConfig:
+    """Show play settings and return the resulting :class:`PlayerConfig`.
 
-    Presents all environment parameters organized in sections. Each field
-    can be clicked and edited. The Back button (or closing the window)
-    returns None. The Play button builds an EnvParams from the current
-    field values and returns it.
+    Presents all environment parameters organized in sections, plus a
+    Seed field with a Randomize button. Each field can be clicked and
+    edited. Both the Play button and the Back / Escape / window-close
+    paths now commit the in-field values via :func:`save_config` —
+    leaving the menu always persists whatever the user typed.
 
     Args:
         screen: Pygame display surface.
-        initial_params: Starting parameter values. Defaults to
-            ``EnvParams()`` when ``None``.
+        initial_config: Starting player config. Defaults to a fresh
+            :class:`PlayerConfig` when ``None``.
 
     Returns:
-        EnvParams with user's choices if Play was clicked,
-        None if Back was clicked or window closed.
+        A :class:`PlayerConfig` mirroring the in-field values. The
+        return value is the same regardless of which exit path the
+        user took (Play, Back, Escape, window-close); the caller
+        decides whether to launch the game.
     """
     s = _theme.UI_SCALE
     canvas = ScaledCanvas(1024, s, screen)
@@ -497,8 +572,28 @@ def run_settings_menu(
     play_rect = pygame.Rect(sw - side_pad - btn_w, 8 * s, btn_w, btn_h)
 
     clock = pygame.time.Clock()
-    params = initial_params if initial_params is not None else EnvParams()
-    sections = _build_sections(params)
+    base_config = (
+        initial_config
+        if initial_config is not None
+        else PlayerConfig(
+            env_params=env_params_to_dict(EnvParams()),
+            keyboard=default_keyboard(),
+            controller=default_controller(),
+        )
+    )
+    sections = _build_sections(base_config)
+
+    def _commit_and_close() -> PlayerConfig:
+        """Confirm any active edit, persist via save_config, and return."""
+        for fs in _flat_fields(sections):
+            if fs.editing:
+                _confirm_edit(fs)
+        new_config = _build_config(sections, base_config)
+        try:
+            save_config(new_config)
+        except OSError as exc:
+            logger.error("Failed to persist config from settings menu: %s", exc)
+        return new_config
 
     scroll_offset = 0
     font_header = get_pixel_font(32 * s)
@@ -513,6 +608,8 @@ def run_settings_menu(
         content_h += section_header_h + section_rule_h + section_gap
         num_rows = (len(sec.fields) + 1) // 2
         content_h += num_rows * (row_h + row_gap)
+        if sec.buttons:
+            content_h += row_h + row_gap
         content_h += section_pad_top
 
     while True:
@@ -523,7 +620,7 @@ def run_settings_menu(
         # -- Event handling -----------------------------------------------
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return None
+                return _commit_and_close()
 
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
@@ -536,16 +633,14 @@ def run_settings_menu(
                 mx, my = canvas.to_canvas(*event.pos)
 
                 if back_rect.collidepoint(mx, my):
-                    return None
+                    return _commit_and_close()
                 if play_rect.collidepoint(mx, my):
-                    for fs in _flat_fields(sections):
-                        if fs.editing:
-                            _confirm_edit(fs)
-                    return _build_params(sections)
+                    return _commit_and_close()
 
                 # Content area clicks (adjusted for scroll).
                 cy = top_bar_h + section_pad_top - scroll_offset
                 clicked_field: FieldState | None = None
+                clicked_button: _Button | None = None
 
                 for sec in sections:
                     cy += section_header_h + section_rule_h + section_gap
@@ -562,9 +657,22 @@ def run_settings_menu(
                                 clicked_field = sec.fields[fi]
                         cy += row_h + row_gap
 
+                    # Inline buttons (e.g. Randomize) render in their own
+                    # row after the section's fields.
+                    for b_idx, b in enumerate(sec.buttons):
+                        bx = side_pad + b_idx * (btn_w + col_gap)
+                        by = cy + (row_h - btn_h) // 2
+                        b_rect = pygame.Rect(bx, by, btn_w, btn_h)
+                        if b_rect.collidepoint(mx, my):
+                            clicked_button = b
+                    if sec.buttons:
+                        cy += row_h + row_gap
+
                     cy += section_pad_top
 
-                if clicked_field is not None:
+                if clicked_button is not None:
+                    clicked_button.on_click()
+                elif clicked_field is not None:
                     for fs in _flat_fields(sections):
                         if fs.editing and fs is not clicked_field:
                             _confirm_edit(fs)
@@ -609,9 +717,9 @@ def run_settings_menu(
                         active.edit_buffer += event.unicode
                 else:
                     if event.key == pygame.K_ESCAPE:
-                        return None
+                        return _commit_and_close()
                     if event.key == pygame.K_RETURN:
-                        return _build_params(sections)
+                        return _commit_and_close()
                     if event.key == pygame.K_TAB:
                         flat = _flat_fields(sections)
                         if flat:
@@ -660,15 +768,12 @@ def run_settings_menu(
                         _confirm_edit(active)
                     else:
                         # No field editing → Play.
-                        for fs in _flat_fields(sections):
-                            if fs.editing:
-                                _confirm_edit(fs)
-                        return _build_params(sections)
+                        return _commit_and_close()
                 elif PlayerAction.BACK in nav:
                     if active is not None:
                         _cancel_edit(active)
                     else:
-                        return None
+                        return _commit_and_close()
 
         # -- Drawing ------------------------------------------------------
         surf = canvas.surface
@@ -770,6 +875,21 @@ def run_settings_menu(
                         ),
                     )
 
+                cy += row_h + row_gap
+
+            # Section's inline buttons (e.g. Randomize on Seed).
+            for b_idx, b in enumerate(sec.buttons):
+                bx = side_pad + b_idx * (btn_w + col_gap)
+                by = cy + (row_h - btn_h) // 2
+                b_rect = pygame.Rect(bx, by, btn_w, btn_h)
+                draw_button(
+                    surf,
+                    b_rect,
+                    b.label,
+                    font_btn,
+                    b_rect.collidepoint(mouse_pos),
+                )
+            if sec.buttons:
                 cy += row_h + row_gap
 
             cy += section_pad_top
