@@ -13,14 +13,22 @@
 \usepackage{graphicx}
 \usepackage[acronym]{glossaries}
 
-\title{Factoriax - A GPU-Accelerated Factory Builder In The Style Of Factorio}
+\newcommand{\tristan}[1]{\textcolor{magenta}{\textbf{Tristan:} #1}}
 
-\author{
+\title{Factoriax - A GPU-Accelerated Factory Building Simulator In The Style Of Factorio}
+
+\author{ 
   Mickey Beurskens \\
   Mathematics and Computer Science Department \\
   Eindhoven University of Technology \\
-  \texttt{m.r.m.beurskens@tue.nl}
+  \texttt{m.r.m.beurskens@tue.nl} 
+  \and 
+  Tristan Tomolin \\
+  \and
+  Thiago
 }
+
+
 
 \newacronym{rl}{RL}{Reinforcement Learning}
 
@@ -33,44 +41,54 @@
 
 
 \section{Introduction}
-Simulated environments and video games have been core enablers of advancement in the field of \gls{rl} for over at least a decade.
-Simulators provide data that is cheap to collect with respect to the physical world, and due to their portable nature they enable the creation of benchmarks that support the ability to reproduce and compare existing works.  
-Some benchmarks focus on testing capabilities that are directly useful to applications in the real world. 
-The underlying assumption seems to be that the capabilities in such benchmarks will in some way transfer to the non-simulated case. 
+
+In this work we introduce Factoriax, a GPU-accelerated grid-based factory building simulation inspired by the factory building mechanics of the game Factorio.
+Factoriax is an extensible engine that can be used to create training environments and benchmarks for reinforcement learning. 
+Other GPU-accelerated simulation environments like ... have dramatically reduced the cost of \gls{rl} experiments and training runs.
+Factoriax leverages the same underlying technology to provide similar speedups in a unique setting where resource collection and management need to be balanced against factory design, building and maintenance. 
+In contrast to the Factorio Learning Environment, which provides access to the full game, Factoriax offers an engine with vastly simplified mechanics that in turn is able to run at scale, even on local laptop GPUs.  
+This paper covers the core environment mechanics, examples of how to extend the base environment using a number of included benchmarks, and baseline algorithms for the benchmarks that provide insight into the type of environment designs that Factoriax enables. 
+
+This work is as an extension to the long standing line of \gls{rl} research that uses simulated environments and video games as core enablers of advancement.
+Simulators provide data that is cheap to collect with respect to the physical world, and due to their portable nature they enable the creation of benchmarks that support the ability to reproduce and compare existing works.
+Some benchmarks are based on simulations that are built to closely resembly some aspect of an applied problem. 
+The underlying assumption is that the capabilities in such benchmarks will transfer to some degree to the non-simulated case. 
 Robotics benchmarks such as .., and domain specific benchmarks like ... are good examples of this type.
-Others have evolved to be something more akin to challenges focused on more specific problems in \gls{rl} such as safety, partial observability or multi-agent coordination.
-In these cases the underlying assumption is that the algorithmic advances will transfer in some way to other applications. 
-This work aims to provide in contribution in line with the latter direction.
+Other benchmarks have evolved to be something more akin to challenges focused on specific problems in \gls{rl} such as safe training, partial observability or multi-agent coordination.
+In these cases the underlying assumption is that the algorithmic advances will transfer to other domains.
+Video games are often used in this line of research, as are more specialized benchmarks such as ...
+This work aims to provide a contribution in line with the latter direction.
 
-Of course there are also benchmarks such as ... that manage to combine both perspectives.
-
-Lately GPU-accelerated simulation environments like ... have dramatically reduced the cost of \gls{rl} experiments and training runs. 
-This has lowered the barrier-to-entry that prevents researchers with less access to compute resources to participate in meaningful research, and simultaneously enables research on a much larger scale for those who do.
-
-In this work we introduce Factoriax, a GPU-accelerated grid-based factory building environment inspired by the factory building mechanics in the game Factorio.
-
-Factoriax ships with three benchmarks, each one focused on a specific algorithmic challenge or perspective in \gls{rl}:
-\begin{itemize}
-  \item Factory maintenance 
-  \item Rocket 
-  \item Skill challenges 
-\end{itemize}
-
-
-In contrast to the Factorio Learning Environment, which provides direct access to the full game, Factoriax offers an engine with vastly simplified mechanics that is able to run at scale, even on local laptop GPUs.  
-
-
-Factoriax, what sets it apart. 
-
-Benchmarks built in Factoriax for this release.
-
-Contributions. 
 
 
 %---%
 \section{Related Work}
-\subsection{Simulation Engines}
-Works like Mujoco, Kinetix.
+Simulations and benchmarks of all types have been released over the years, all with their distinct purposes and niches. 
+Regretably in current discourse the terms "benchmark" and "simulation" are being used somewhat interchangeably. 
+In this paper the authors have chosen to maintain stricter definitions in an attempt to disambiguate the conversation surrounding the benchmarking literature.
+Thus an "simulator" refers to the software framework in which all the mechanics are defined and run, although you will find that sometimes they are also called "engines", "frameworks" or "environments".
+A benchmark is usually a specific configuration of a simulator offering a particular challenge.
+Benchmarks are meant to be reproducible setups that are used to compare different models.
+Sometimes a benchmark features a custom simulator created specifically for that benchmark.
+Many video games fall in this category, as the benchmark is usually defined as "beat this game", and the underlying engine code is not available or not straightforward to modify. 
+Other times existing simulator code is modified or extended in order to satify the precise research questions posed by researchers. 
+To facilitate this research process directly instead of treating it as a side effect, Factoriax is designed such that it can be easily modified and extended.  
+
+
+\subsection{Notes On Comparing Results}
+ALE paper gives overview of how this can go wrong: https://www.ijcai.org/proceedings/2018/0787.pdf.
+
+\subsection{Simulators}
+Games are often simulator and benchmark in one.
+Chess, shogi and go.
+Starcraft II and Dota. 
+ALE one of the first, focus on a multitude of single player games. 
+MineRL for minecraft, open ended long horizon.
+
+
+In continuous control Mujoco.
+
+
 
 
 \subsection{RL Capability Transfer Benchmarks}
@@ -126,17 +144,90 @@ Accelerated benchmarks, comparison methods. JAX, TORCH.
 % happens where concerns interact. No fast benchmark tests this.
 % =============================================================================
 
-GPU-accelerated gls{rl} environments have dramatically reduced the cost of running artificial intelligence experiments and training runs.
+Simulated environments such as video games and physics simulators have long played a key role in artificial intelligence research.
+They provide a safe way to explore algorithm design, and can cheaply be configured to the exact needs of researchers focussing on specific problem settings.
+In addition, experiments are often much faster and cheaper to run in simulation than in the physical world, allowing much broader access to these topics by researchers in the community.
+Despite this accessibility, many modern research areas in artificial intelligence research require even more data than can be feasibly generated from these more traditional simulators. 
+This is why the community has invested in building GPU-accelerated environments, which have again dramatically reduced the cost of running data-hungry artificial intelligence experiments and training runs.
+
+MuJoCo MJX targets continuous locomotion control, Jumanji combinatorial optimization, PGX board games, and MiniGrid navigation and instruction following.
+Craftax is currently the closest thing to a long-horizon GPU-accelerated benchmark, testing exploration, survival, and adaptation in a procedurally generated world with an open-ended structure and sparse rewards. 
+However, none of the environments above focus mainly on the ability to design, build, and maintain persistent systems whose structure determines what becomes possible later. 
+It underlies problems ranging from supply chain design to multi-robot construction, where decisions compound through the artifacts they produce, and where an agent cannot optimize construction independently of the maintenance and coordination that follow.
+
+We introduce Factoriax\footnote{GITREPOLINK}, a GPU-accelerated, JAX-native factory-building environment on a 2D grid.
+In Factoriax, one or more agents design and expand a factory on a shared map, mining finite raw materials, crafting them into machines, and placing those machines to automate production. 
+Factoriax draws its mechanics from the game Factorio, but simplifies them substantially.
+The Factorio Learning Environment wraps the Factorio game engine directly, which exposes the full complexity of the game but limits both throughput and modifiability.
+Factoriax is an implementation redesigned from the ground up to run on the GPU, enabling rapid data collection, training, and inference rollouts. 
+To our knowledge, Factoriax is the first GPU-accelerated environment built around constructive intelligence as its central challenge, making long-horizon design problems tractable at a throughput previously unavailable for this class of task.
+
+A note on terminology is in order before we continue. 
+Environments like the ones discussed above are often published and cited as "benchmarks," and we believe this conflation has muddied what benchmarking is actually for. 
+A benchmark and a simulation environment are distinct artifacts serving distinct purposes. 
+A benchmark measures a specific property of an agent or system under fixed conditions. 
+A simulation environment provides the building blocks from which such measurements can be constructed.
+One environment can support many benchmarks, and in practice it usually does. Published "benchmarks" are routinely stripped for their simulation code or heavily modified by later researchers to suit new research goals. 
+Rather than treating this as a side-effect of our release, we have designed Factoriax to make the distinction first-class at the software level. 
+The simulation, the observation and action interfaces, and the specific benchmarks built on top of them are separate, composable components. 
+We hope this enables researchers to adapt Factoriax to their specific research goals.
+
+The separation between environment and benchmarks is reflected directly in the software architecture.
+The simulation core exposes a single underlying world state, and benchmarks are defined as wrappers that select an observation function, a reward function, and a termination condition over that shared state. 
+A researcher can swap any of these without touching the simulation, which is what allows a single environment to support fundamentally different research questions from a shared codebase.
+
+Our three reference benchmarks illustrate this by each adopting a different observation modality. 
+The Skills Curriculum uses a global array view of the full grid, since each level is small and the relevant state fits naturally in a structured observation. 
+Rocket uses a fixed-size local window centered on the agent, reflecting the embodied character of the task and forcing the policy to develop spatial memory rather than relying on full observability. 
+Science Pack Production uses RGB pixels of the local view, providing a stress test for representation learning under long-horizon constructive tasks and making results comparable to vision-based RL benchmarks like Atari and ProcGen. 
+These three modalities are not exhaustive. They are the ones we found most useful, and researchers can define new observation functions over the same simulation state without modifying the environment.
+
+To show that the framework also supports extending formalizations, such as those used constrained reinforcement learning research, we include a small cost-based navigation benchmark as a fourth example.
+EXAMPLE.  
+It demonstrates that Factoriax can serve as a substrate for problems that share its spatial and embodied structure but pursue entirely different objectives.
+
+
+
+---
+
+
+Having made that distinction clear, we ship three benchmarks alongside the environment, chosen to span the kinds of questions a researcher might want to ask about a constructive agent. Rocket is a closed-form efficiency benchmark: the agent must produce a single target machine, called the rocket, in as few turns as possible, measuring planning quality against a known goal. Science pack production is its open-ended counterpart: the agent has limited time and resources and must produce as many science packs as possible, with no ceiling on what a better factory could achieve. Skills curriculum is structurally different again: a graded set of levels designed to isolate and evaluate sub-skills, intended both as a diagnostic tool and as a testbed for curriculum-based training methods. Together, the three demonstrate the environment–benchmark separation in practice. The same simulation supports a closed efficiency task, an open optimization task, and a structured evaluation harness, with no changes to the underlying environment code. We provide reference implementations and baseline results for all three.
+
+
+
+--- notes -----
+
+The maps feature a finite number of resource nodes which the agent needs to exploit. It has to design a production pipeline to turn base resources from half fabricates into machines for production and logistics, which can be used to expand the factory. Agents need to be able to triage the cause of production errors, fix mistakes and rewire parts of the pipeline where resources run out. Any mistake in the factory design will have consequences later, meaning the environment naturally provides a long horizon task with a challenging reward attribution problem, and a focus on exploring different factory designs from the perspective of an engineer embodied in the simulated world. 
+
+
+
+
+
+Often times these environments are called a "benchmark", and are published as such.
+We believe that this has resulted in some confusing terminology in the "benchmarking" space, with a resulting confusion on what benchmarking is supposed to be for. 
+We wish to clarify our position on this topic before explaining our contribution.
+In essence we argue that a benchmark and a simulation environment are two distrinct artifacts. 
+The purpose of a benchmark is to measure some property of a tool, device or agent. 
+A simulation environment provides the components to create those benchmarks. 
+Therefore a simulation environment can be used to create many different benchmarks, and this is reflected in practice.
+Many works that are called benchmarks are either stripped for their simulation code by other researchers, or heavily modified to suit a particular research goal or need. 
+Rather than this being a side-effect of this publication, we have put significant work into making this distinction a first class citizen on the software level. 
+
+
+
+
+
+
 However, most environments test a narrow band of intelligence, such as continuous control tasks, board games, grid navigation or combinatorial puzzles.
 % [CITE: Brax -- continuous locomotion control. Check Freeman et al. 2021 or latest version]
 % [CITE: Jumanji -- combinatorial optimization. Check Bonnet et al. 2023]
 % [CITE: PGX -- board games. Check Koyamada et al. 2023]
 % [CITE: MiniGrid/BabyAI -- grid navigation + language. Check Chevalier-Boisvert et al.]
-Most of these operate on short time scales where actions have no lasting consequences.
+Most of these operate on short time scales where actions have no lasting consequences. \tristan{This sounds more like an assertion.}
 % [CITE: Craftax -- Matthews et al. 2024]
 Craftax is currently the closest thing to a long term GPU accelerated benchmark, testing exploration, survival, and adaptation in a procedurally generated dungeon.
 Its scaling complexity ensures it stays useful as methods improve.
-However, the skills it tests are fundamentally reactive: navigate terrain, gather supplies, respond to threats.
+However, the skills it tests are fundamentally reactive \tristan{I'm not so sure about this. Craftax also has stuff like resource management, potential exploration that might pay off later, and a notion of progression}: navigate terrain, gather supplies, respond to threats.
 
 The most interesting problems in the real world are not like this.
 In supply chain management, an allocation decision is simultaneously a resource commitment, a logistics constraint, and a coordination signal to other actors in the network.
@@ -167,7 +258,7 @@ As the factory grows, so does its vulnerability: the architecture is designed to
 Machines can produce science packs, a dedicated resource that is the environment's measure of productivity.
 Agents can also spend science packs to unlock new technologies in a research tree, gaining access to more advanced machines and recipes.
 The benchmark is never solved: the optimization target is fundamentally open, and there is always a more efficient factory to build.
-Progress is measurable through a series of milestones spanning the full arc from first ore mined to final product launched.
+Progress is measurable through a series of milestones spanning the full arc from first ore mined to final product launched. \tristan{It's not clear what "final product" means nor what does it mean to launch it.}
 % [NOTE: milestone design draws on Craftax and MineRL -- cite both if crediting the pattern]
 The entire step function is JIT-compiled and vectorized, running parallel rollouts across dozens of environments on GPU.
 % [TODO: Add a concrete steps/sec number here once benchmarked.]
@@ -194,6 +285,8 @@ Agents must divide labor, specialize, and coordinate their construction plans, a
 This is a richer coordination problem than existing multi-agent benchmarks offer: agents are not merely sharing a space, they are co-constructing a system whose performance depends on how well their individual contributions fit together.
 A belt network laid by one agent becomes the backbone that another agent's production depends on. A resource patch claimed by one agent forces others to find alternative supply routes.
 The division of labor must adapt continuously as the shared factory grows and the map changes beneath it.
+
+\tristan{The impression I get is that FactoriaX is mainly about resource management and multi-agent coordination, where every action has severe consequences. I'm not sure all these points are the most representative aspects of the platform. I would perhaps put more emphasis elsewhere. Although you are not making these claims about FactoriaX directly, but talking about some real world examples, it gives the impression of a build-up towards that ultimately. You say, for instance, that an agent cannot do X alone. In FactoriaX, the other agents can just stand still and be food for the biters while a single one builds the factory. I'm also not sure if the beam example is the best. If the bottom floors of a building are constructed, indeed you cannot change much. With the Factory, you can fidget around a lot with every part of the pipeline, makes some changes and it continues working.}
 
 % =============================================================================
 % P4: RESEARCH OPPORTUNITIES
