@@ -1,34 +1,60 @@
 \documentclass{article}
-\usepackage[preprint]{ewrl_2026}
 
-\usepackage[T1]{fontenc}
-\usepackage{hyperref}
-\usepackage{url}
-\usepackage{booktabs}
-\usepackage{amsfonts}
-\usepackage{amsmath}
-\usepackage{nicefrac}
-\usepackage{microtype}
-\usepackage{xcolor}
-\usepackage{graphicx}
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading ewrl_2026
+
+
+% ready for submission
+% \usepackage{ewrl_2026}
+
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{ewrl_2026}
+
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+     \usepackage[final]{ewrl_2026}
+
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{ewrl_2026}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
 \usepackage[acronym]{glossaries}
+
+\glsdisablehyper % Disable glossary links
 
 \newcommand{\tristan}[1]{\textcolor{magenta}{\textbf{Tristan:} #1}}
 
 \title{Factoriax - A GPU-Accelerated Factory Building Simulator In The Style Of Factorio}
 
-\author{ 
-  Mickey Beurskens \\
-  Mathematics and Computer Science Department \\
+\author{%
+  \textbf{Mickey Beurskens} \\
+  Department of Mathematics and Computer Science \\
   Eindhoven University of Technology \\
-  \texttt{m.r.m.beurskens@tue.nl} 
-  \and 
-  Tristan Tomolin \\
-  \and
-  Thiago
+  \texttt{m.r.m.beurskens@tue.nl} \\
+  \And 
+  \textbf{Tristan Tomolin} \\
+  Department of Mathematics and Computer Science \\
+  Eindhoven University of Technology \\
+  \texttt{t.tomilin@tue.nl} \\
+  \And
+  \textbf{Thiago D. Simão} \\
+  Department of Mathematics and Computer Science \\
+  Eindhoven University of Technology \\
+  \texttt{t.simao@tue.nl} \\
 }
-
-
 
 \newacronym{rl}{RL}{Reinforcement Learning}
 
@@ -41,6 +67,21 @@
 
 
 \section{Introduction}
+
+Factorio is used to study all kinds of operations research problems. 
+Factorio is not suited for RL, Factoriax is.
+Factorio is "essentially an open-ended collection of operational research and optimization problems".
+Resource busses are an important aspect of early game factorio, and need to be included.
+Should pollution and energy be put back in? -> Future work.
+
+Packing and Facility Layout Design Problems
+Supply Chain Design Problems
+Inventory Management
+Multi Agent Pathing and Routing
+Predictive Maintenance
+Resource Utilization
+Job Shop and Production Scheduling
+Reliability Engineering
 
 In this work we introduce Factoriax, a GPU-accelerated grid-based factory building simulation inspired by the factory building mechanics of the game Factorio.
 Factoriax is an extensible engine that can be used to create training environments and benchmarks for reinforcement learning. 
@@ -76,7 +117,7 @@ To facilitate this research process directly instead of treating it as a side ef
 
 
 \subsection{Notes On Comparing Results}
-ALE paper gives overview of how this can go wrong: https://www.ijcai.org/proceedings/2018/0787.pdf.
+ALE paper gives overview of how this can go wrong: \url{https://www.ijcai.org/proceedings/2018/0787.pdf}.
 
 \subsection{Simulators}
 Games are often simulator and benchmark in one.
@@ -191,7 +232,7 @@ It demonstrates that Factoriax can serve as a substrate for problems that share 
 ---
 
 
-Having made that distinction clear, we ship three benchmarks alongside the environment, chosen to span the kinds of questions a researcher might want to ask about a constructive agent. Rocket is a closed-form efficiency benchmark: the agent must produce a single target machine, called the rocket, in as few turns as possible, measuring planning quality against a known goal. Science pack production is its open-ended counterpart: the agent has limited time and resources and must produce as many science packs as possible, with no ceiling on what a better factory could achieve. Skills curriculum is structurally different again: a graded set of levels designed to isolate and evaluate sub-skills, intended both as a diagnostic tool and as a testbed for curriculum-based training methods. Together, the three demonstrate the environment–benchmark separation in practice. The same simulation supports a closed efficiency task, an open optimization task, and a structured evaluation harness, with no changes to the underlying environment code. We provide reference implementations and baseline results for all three.
+Having made that distinction clear, we ship three benchmarks alongside the environment, chosen to span the kinds of questions a researcher might want to ask about a constructive agent. Rocket is a closed-form efficiency benchmark: the agent must produce a single target machine, called the rocket, in as few turns as possible, measuring planning quality against a known goal. Science pack production is its open-ended counterpart: the agent has limited time and resources and must produce as many science packs as possible, with no ceiling on what a better factory could achieve. Skills curriculum is structurally different again: a graded set of levels designed to isolate and evaluate sub-skills, intended both as a diagnostic tool and as a testbed for curriculum-based training methods. Together, the three demonstrate the environment-benchmark separation in practice. The same simulation supports a closed efficiency task, an open optimization task, and a structured evaluation harness, with no changes to the underlying environment code. We provide reference implementations and baseline results for all three.
 
 
 
