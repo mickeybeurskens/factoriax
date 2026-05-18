@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
+import orjson
 import pygame
 import pytest
 
@@ -248,3 +250,56 @@ class TestLoadSaveConfig:
         path.write_text("not valid json {{{")
         config = load_config(path)
         assert config.env_params["map_width"] == EnvParams().map_width
+
+
+class TestPlayerConfigSeed:
+    """Verify the PlayerConfig.seed field and its persistence."""
+
+    def test_default_seed_is_42(self) -> None:
+        """PlayerConfig should default seed to 42."""
+        assert PlayerConfig().seed == 42
+
+    def test_seed_round_trip(self, tmp_path: Path) -> None:
+        """save_config / load_config should preserve a custom seed."""
+        path = tmp_path / "seed.json"
+        config = PlayerConfig(
+            env_params=env_params_to_dict(EnvParams()),
+            keyboard=default_keyboard(),
+            controller=default_controller(),
+            seed=12345,
+        )
+        save_config(config, path)
+        loaded = load_config(path)
+        assert loaded.seed == 12345
+
+    def test_seed_large_int_round_trip(self, tmp_path: Path) -> None:
+        """Time.time_ns()-magnitude ints (~10^18) must survive round-trip."""
+        path = tmp_path / "big_seed.json"
+        large_seed = time.time_ns()
+        assert large_seed > 10**18
+        config = PlayerConfig(
+            env_params=env_params_to_dict(EnvParams()),
+            keyboard=default_keyboard(),
+            controller=default_controller(),
+            seed=large_seed,
+        )
+        save_config(config, path)
+        loaded = load_config(path)
+        assert loaded.seed == large_seed
+        # Confirm the on-disk value is a plain int, not a float coercion.
+        raw = orjson.loads(path.read_bytes())
+        assert isinstance(raw["seed"], int)
+        assert raw["seed"] == large_seed
+
+    def test_missing_seed_falls_back_to_default(self, tmp_path: Path) -> None:
+        """A config file without `seed` should load to seed=42."""
+        path = tmp_path / "no_seed.json"
+        path.write_bytes(orjson.dumps({"env_params": {}, "keyboard": {}}))
+        loaded = load_config(path)
+        assert loaded.seed == 42
+
+    def test_load_missing_file_returns_default_seed(self, tmp_path: Path) -> None:
+        """Missing config file should yield seed=42."""
+        path = tmp_path / "nope.json"
+        loaded = load_config(path)
+        assert loaded.seed == 42

@@ -117,6 +117,9 @@ class PlayerConfig:
 
     Attributes:
         env_params: EnvParams fields as a plain dict for JSON storage.
+        seed: PRNG seed for world generation. The settings menu exposes
+            a Randomize button that assigns ``time.time_ns()`` so the
+            stored value can be arbitrarily large.
         keyboard: Keyboard binding map (action name -> key names).
         controller: Controller binding map (action name -> button names).
         fullscreen: Whether to launch in fullscreen mode.
@@ -124,6 +127,7 @@ class PlayerConfig:
     """
 
     env_params: dict[str, int | float] = field(default_factory=dict)
+    seed: int = 42
     keyboard: Bindings = field(default_factory=dict)
     controller: Bindings = field(default_factory=dict)
     fullscreen: bool = False
@@ -658,9 +662,11 @@ def load_config(path: Path = CONFIG_PATH) -> PlayerConfig:
     display = raw.get("display", {})
     fullscreen = bool(display.get("fullscreen", False))
     ui_scale = int(display.get("ui_scale", 0))
+    seed = int(raw.get("seed", 42))
 
     return PlayerConfig(
         env_params=env,
+        seed=seed,
         keyboard=keyboard,
         controller=controller,
         fullscreen=fullscreen,
@@ -689,6 +695,7 @@ def save_config(config: PlayerConfig, path: Path = CONFIG_PATH) -> None:
     """
     data = {
         "env_params": config.env_params,
+        "seed": int(config.seed),
         "keyboard": _stringify_bindings(config.keyboard),
         "controller": _stringify_bindings(config.controller),
         "display": {
