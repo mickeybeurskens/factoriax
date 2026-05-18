@@ -550,6 +550,7 @@ _ENV_PARAM_FIELDS: tuple[str, ...] = (
     "silicon_probability",
     "base_resources",
     "miner_mining_rate",
+    "player_mining_yield",
     "max_assembler_stack_size",
 )
 

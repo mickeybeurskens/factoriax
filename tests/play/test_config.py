@@ -181,6 +181,23 @@ class TestEnvParamsConversion:
         assert params.map_width == 16
         assert params.map_height == EnvParams().map_height
 
+    def test_player_mining_yield_default(self) -> None:
+        """EnvParams should expose a default player_mining_yield of 1."""
+        assert EnvParams().player_mining_yield == 1
+
+    def test_player_mining_yield_in_dict(self) -> None:
+        """player_mining_yield should round-trip through env_params_to_dict."""
+        d = env_params_to_dict(EnvParams())
+        assert d["player_mining_yield"] == 1
+
+    def test_player_mining_yield_custom_value(self) -> None:
+        """A non-default player_mining_yield should survive round-trip."""
+        params = EnvParams(player_mining_yield=5)
+        d = env_params_to_dict(params)
+        restored = config_to_env_params(PlayerConfig(env_params=d))
+        assert d["player_mining_yield"] == 5
+        assert restored.player_mining_yield == 5
+
 
 class TestLoadSaveConfig:
     """Verify config persistence."""

@@ -137,7 +137,9 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         tin_probability: Tin ore probability.
         silicon_probability: Silicon probability.
         base_resources: Starting ore count per tile.
-        miner_mining_rate: Ore extracted per tick.
+        miner_mining_rate: Ore extracted per tick by a placed Miner.
+        player_mining_yield: Ore extracted per successful MINE action by
+            the player. Defaults to 1.
         max_assembler_stack_size: Max items per assembler slot.
         recipe_table: Per-recipe balance numbers (input/output counts,
             ticks) and identity arrays (machine type, output items)
@@ -176,6 +178,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     silicon_probability: float = 0.10
     base_resources: int = 1000
     miner_mining_rate: int = 3
+    player_mining_yield: int = 1
     max_assembler_stack_size: int = 1000
     recipe_table: RecipeTable = DEFAULT_RECIPE_TABLE
     machine_config: MachineConfig = DEFAULT_MACHINE_CONFIG
