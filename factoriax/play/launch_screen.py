@@ -240,7 +240,6 @@ def _build_sections(config: PlayerConfig) -> list[_Section]:
         [
             _f("max_machines", "Max Machines", "int"),
             _f("miner_mining_rate", "Machine Mining Rate", "int"),
-            _f("max_assembler_stack_size", "Assembler Stack", "int"),
         ],
     )
     return [seed_section, world, resources, machines]
