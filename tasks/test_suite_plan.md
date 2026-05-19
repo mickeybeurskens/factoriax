@@ -264,6 +264,51 @@ use whichever backend they prefer.*
 
 ---
 
+#### Task 2.1.5: Unify `state_factory` scalar dtypes with `env.reset_env`
+
+**Description:** Task 2.2 discovered that `state_factory` in
+`tests/conftest.py` emits Python-int leaves for `selected_player`
+and `timestep`, while `env.reset_env` (via
+`factoriax/levels.py:686-687`) emits `jnp.int32(0)` for both. The
+pytree-shape mismatch causes `jax.jit(env.step_env)` to retrace
+every time a test feeds in a `state_factory`-built state, even if
+the env, params, and grid shape all match the canonical fixture.
+Wrap the two scalars in `jnp.int32(...)` in `state_factory` so
+state_factory states are bit-identical in pytree shape to
+reset_env states.
+
+This unblocks the same cache-hit speedup for every `state_factory`-
+using migration in Tasks 2.3-2.6. Measured per-test cost of one
+retrace is ~6.5s on the user's box (CPU), so the cumulative payoff
+is large.
+
+**Acceptance criteria:**
+- [ ] `tests/conftest.py` wraps `selected_player` and `timestep` in
+      `jnp.int32(...)` before passing them to `EnvState`.
+- [ ] Audit any other scalar leaves that might differ (e.g. fields
+      defaulted to Python literals); document any deliberate
+      divergence.
+- [ ] Full suite still passes 1355/1355.
+- [ ] `tests/test_science_lab.py::TestLabInEnvStep::test_step_consumes_and_resets`
+      drops from ~6.7s to sub-100ms once Task 2.2's fixture is
+      already loaded.
+
+**Verification:**
+- [ ] `uv run pytest tests/test_science_lab.py tests/analysis/test_trajectory.py -q --durations=0`
+      shows the four migrated tests at well under 13s combined.
+- [ ] `uv run pytest -q`: 1355 passed, coverage >= 37%.
+- [ ] No assertion changed in any test that currently passes.
+
+**Dependencies:** 2.1 (canonical fixture must exist), 2.2 (revealed
+the mismatch).
+
+**Files likely touched:**
+- `tests/conftest.py`
+
+**Estimated scope:** XS (1 file, 2-3 line change).
+
+---
+
 #### Task 2.2: Pilot — migrate `test_science_lab.py` and `analysis/test_trajectory.py`
 
 **Description:** These are the highest-signal targets outside of the

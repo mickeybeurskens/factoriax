@@ -25,8 +25,9 @@ M (3-5 files, ~1-3 hours).
 
 ## Phase 2 — Repo-Wide Rework (gated on Phase 1)
 
-- [ ] 2.1 (S) Pin CPU backend default + canonical fixture in `tests/conftest.py`; centralise pygame init
-- [ ] 2.2 (S) Pilot — migrate `test_science_lab.py` + `analysis/test_trajectory.py`
+- [x] 2.1 (S) Canonical fixture + centralise pygame init in `tests/conftest.py` (CPU pin dropped per Phase 1)
+- [x] 2.2 (S) Pilot — migrate `test_science_lab.py` + `analysis/test_trajectory.py`
+- [ ] 2.1.5 (XS) Unify `state_factory` scalar dtypes (`selected_player`/`timestep`) with `env.reset_env`
 - [ ] 2.3 (S) Migrate `test_achievement_engine.py`
 
 ### Checkpoint — Pilot speedups validated
