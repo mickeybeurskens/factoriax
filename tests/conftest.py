@@ -314,8 +314,13 @@ def state_factory():
                 if player_inventory is not None
                 else jnp.zeros(inv_shape, dtype=jnp.int16)
             ),
-            selected_player=selected_player,
-            timestep=timestep,
+            # Match env.reset_env's pytree shape: factoriax/levels.py:686-687
+            # emits these as jnp.int32(0); a Python-int leaf here would
+            # force jax.jit(env.step_env) to retrace whenever a test feeds
+            # a state_factory state through the canonical_env_8x8_1p
+            # fixture's shared step path.
+            selected_player=jnp.int32(selected_player),
+            timestep=jnp.int32(timestep),
             items_mined=(
                 items_mined
                 if items_mined is not None
