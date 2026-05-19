@@ -32,10 +32,11 @@ next reduction; nothing is "scaffolding for later".
   shape across the suite. It is hoisted once, reused everywhere.
   Modules that genuinely need a different shape keep building their
   own — the fixture is opt-in.
-- **CPU backend pinned in tests, overridable.** `tests/conftest.py`
-  sets `JAX_PLATFORMS=cpu` *before* any JAX import unless the env
-  var is already set. Developers chasing a GPU-specific bug flip it
-  via the env var.
+- ~~**CPU backend pinned in tests, overridable.**~~ Dropped after
+  Phase 1: B2-vs-B1 delta was only 4.3%, so the CPU backend is not
+  load-bearing for the speedup. The session-scoped fixture is the
+  whole mechanism; the suite inherits the developer's default
+  backend.
 - **`test_jit_retrace.py` stays untouched.** Its job is to *catch*
   retrace bugs by JITting from scratch in every test. We verify it
   still passes after Phase 2 but do not migrate it to the canonical
@@ -223,18 +224,21 @@ modules migrated to it, suite green at the end of the commit. Tasks
 are ordered so that the gains are visible early — the pilot in 2.2
 hits the highest-cost cluster from the top-30 durations table first.
 
-#### Task 2.1: Pin CPU backend + canonical fixture in root conftest
+#### Task 2.1: Canonical fixture + centralised pygame init in root conftest
 
-**Description:** Add `os.environ.setdefault("JAX_PLATFORMS", "cpu")`
-at the very top of `tests/conftest.py` (before any JAX import). Add
-a session-scoped `canonical_env_8x8_1p` fixture mirroring the one
-proved in Phase 1. Centralise pygame display + font init at session
-scope in the root conftest; remove the duplicate session fixture in
+**Description:** Add a session-scoped `canonical_env_8x8_1p` fixture
+to `tests/conftest.py` mirroring the one proved in Phase 1.
+Centralise pygame display + font init at session scope in the root
+conftest; remove the duplicate session fixture in
 `tests/test_scaling.py`. Verify no existing test changes behaviour.
 
+*Note: this task no longer pins `JAX_PLATFORMS=cpu`. Phase 1's
+B2-vs-B1 result (4.3% delta) showed the CPU backend isn't load-bearing
+for the speedup, only the fixture scope is. Dropping the pin keeps
+the rollout attributable to a single mechanism and lets developers
+use whichever backend they prefer.*
+
 **Acceptance criteria:**
-- [ ] `JAX_PLATFORMS` defaults to `cpu` for tests but is overridable
-      via the env var.
 - [ ] `canonical_env_8x8_1p` fixture available to every test in
       `tests/` without per-module conftest copies.
 - [ ] `tests/test_scaling.py` no longer defines `_init_pygame`; it
@@ -247,8 +251,6 @@ scope in the root conftest; remove the duplicate session fixture in
 - [ ] `uv run pytest -q` (full suite) reports 1329 passed.
 - [ ] `uv run pytest --collect-only -q` collected count unchanged
       (1355).
-- [ ] `grep -n JAX_PLATFORMS tests/conftest.py` shows the
-      `setdefault` line is *before* `import jax`.
 - [ ] Baseline timing captured for comparison: full suite wall time
       logged in this task's commit message.
 
@@ -595,6 +597,11 @@ Results" section and document the threshold next to it.
    `.git/hooks/`. Pre-commit stays as-is (lint + fast suite with
    coverage); the new pre-push runs the full no-cov suite once per
    push with the wall-time threshold.
+5. **No CPU pin in `tests/conftest.py`** (resolved by Phase 1
+   results). B2-vs-B1 came in at 4.3% — the CPU backend isn't
+   load-bearing. The session-scoped canonical fixture is the whole
+   mechanism. Task 2.1 was rewritten to drop the pin; the suite
+   inherits the developer's default JAX backend.
 
 ## Parallelization
 

@@ -430,9 +430,11 @@ If Phase 1 clears the gate, the rollout looks roughly like:
    map_height=…)` call. Where the test does not actually assert
    anything dimension-specific, switch to the canonical shape. Where
    it does, document why.
-3. **Force `JAX_PLATFORMS=cpu` in `tests/conftest.py`** (before any
-   JAX import) — environment-overridable so a developer can flip back
-   to CUDA when they want to.
+3. ~~**Force `JAX_PLATFORMS=cpu` in `tests/conftest.py`**~~ —
+   dropped after Phase 1's B2-vs-B1 result (4.3% delta). The suite
+   inherits the developer's default backend; the canonical fixture is
+   the whole mechanism. See "Phase 1 Results" at the bottom of this
+   spec.
 4. **Centralize pygame init** in `tests/conftest.py`; remove the
    duplicate fixtures in `tests/play/conftest.py` and
    `tests/test_scaling.py`.
@@ -605,11 +607,52 @@ Phase 2 (only if Phase 1 passes):
    `pytest-cov` configured. Running coverage instrumentation also
    slows the suite. The baseline above was captured with `--no-cov`.
    Is the 50% target measured with or without coverage?
-4. **Backend escape hatch shape.** If Phase 2 pins
-   `JAX_PLATFORMS=cpu` in `tests/conftest.py`, what's the override
-   mechanism? An env var? A pytest CLI flag? A separate marker for
-   the few tests (if any) that genuinely need GPU?
+4. ~~**Backend escape hatch shape.**~~ Resolved by Phase 1: no
+   pin, no escape hatch needed. The suite inherits the developer's
+   default backend.
 
 ## Phase 1 Results
 
-*To be filled in after the experiment runs.*
+Captured 2026-05-19 on the user's local box via
+`uv run python scripts/test_speedup_experiment.py`. Backend selected
+per variant by `JAX_PLATFORMS`; the harness lives at
+`performance_experiments/jit_share/`.
+
+| Variant | Backend | Fixture scope | Tests | Wall time (s) | s / test | Result |
+| ------- | ------- | ------------- | ----- | ------------- | -------- | ------ |
+| A1      | CUDA    | function      | 10    | 73.12         | 7.312    | passed |
+| A2      | CPU     | function      | 10    | 78.85         | 7.885    | passed |
+| B1      | CUDA    | session       | 10    | 13.78         | 1.378    | passed |
+| B2      | CPU     | session       | 10    | 13.19         | 1.319    | passed |
+
+Gate evaluation:
+
+- **B2 vs A1: 82.0% faster** (need ≥ 50%) — **PASS**
+- **B2 vs B1:  4.3% faster** (need ≥ 30%) — **FAIL**
+
+### Verdict: Phase 2 authorised, but without the CPU pin
+
+The mechanism — hoisting `(env, params, jit_step_fn)` to session scope
+so the XLA compile is paid once instead of N times — works as strongly
+as the spec hoped. Class B finishes ten cheap assertions in ~13 seconds,
+one fresh JIT-compile plus nine sub-millisecond cache hits, while Class
+A spends ~73 seconds on ten back-to-back compiles. That's the entire
+ball game for the test suite.
+
+The CPU adjunct hypothesis turned out wrong. The spec assumed kernel
+launch overhead would make CUDA materially slower than CPU at these
+tiny shapes; the data says CPU is barely ahead (1.378s vs 1.319s per
+test) once JIT compile is amortised. The compile itself, not the
+per-step dispatch, was what cost time on CUDA.
+
+Phase 2 therefore proceeds without forcing `JAX_PLATFORMS=cpu` in
+`tests/conftest.py`. The session-scoped canonical fixture remains the
+load-bearing change; the suite inherits the developer's default
+backend. This drops one knob from the rollout and keeps the gain
+attributable to a single mechanism.
+
+The literal-gate FAIL is recorded above for honesty — the spec's
+original prediction missed on the CPU side. The decision to proceed
+is the user's, made on the basis that the *mechanism* gate cleared by
+~30 percentage points and the *CPU* gate was a "would be nice"
+adjunct, not the load-bearing claim.
