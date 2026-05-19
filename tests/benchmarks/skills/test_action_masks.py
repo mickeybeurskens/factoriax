@@ -50,6 +50,9 @@ class TestNavigateMask:
 
 class TestMineMask:
     def test_allows_movement_mine_noop(self) -> None:
+        # FACE_* is required because MINE targets the tile in front of the
+        # player — the policy must rotate to face an adjacent ore tile
+        # without stepping onto it. See MINE_BLOCKED_ACTIONS docstring.
         allowed = _allowed(MINE_BLOCKED_ACTIONS)
         assert allowed == {
             int(Action.NOOP),
@@ -57,6 +60,10 @@ class TestMineMask:
             int(Action.DOWN),
             int(Action.LEFT),
             int(Action.RIGHT),
+            int(Action.FACE_UP),
+            int(Action.FACE_DOWN),
+            int(Action.FACE_LEFT),
+            int(Action.FACE_RIGHT),
             int(Action.MINE),
         }
 
