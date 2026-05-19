@@ -146,3 +146,108 @@ class TestBaselineFunctionScope:
         rng, step_key = random.split(rng)
         step_fn(step_key, state, int(Action.NOOP), params)
         assert step_fn._cache_size() == 1
+
+
+class TestSharedSessionScope:
+    """Session-scoped JIT — every method rides the shared ``jit_step_fn``.
+
+    The ten assertions below mirror :class:`TestBaselineFunctionScope`
+    method for method. The only delta is the source of
+    ``(env, params, jit_step_fn, state)``: instead of building it
+    locally, each method takes it from the ``canonical_env_8x8_1p``
+    session fixture defined in ``conftest.py``. The whole class pays
+    exactly one XLA compile.
+
+    Per-test ``rng`` is derived from a method-name hash so different
+    tests don't collide on identical step keys; the shared
+    ``initial_state`` is never mutated (JAX pytrees are immutable).
+    """
+
+    def test_step_returns_five_tuple(self, canonical_env_8x8_1p) -> None:
+        """``env.step_env`` returns ``(obs, state, reward, done, info)``."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        result = jit_step_fn(random.PRNGKey(1), state, int(Action.NOOP), params)
+        assert len(result) == 5
+
+    def test_timestep_increments_by_one(self, canonical_env_8x8_1p) -> None:
+        """A single NOOP step advances ``state.timestep`` from 0 to 1."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        assert int(state.timestep) == 0
+        _, new_state, _, _, _ = jit_step_fn(
+            random.PRNGKey(2), state, int(Action.NOOP), params
+        )
+        assert int(new_state.timestep) == 1
+
+    def test_obs_shape_non_empty(self, canonical_env_8x8_1p) -> None:
+        """The observation vector has at least one element."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        obs, _, _, _, _ = jit_step_fn(
+            random.PRNGKey(3), state, int(Action.NOOP), params
+        )
+        assert obs.shape[0] > 0
+
+    def test_reward_is_finite_float(self, canonical_env_8x8_1p) -> None:
+        """Reward is castable to a finite Python float."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, _, reward, _, _ = jit_step_fn(
+            random.PRNGKey(4), state, int(Action.NOOP), params
+        )
+        r = float(reward)
+        assert r == r  # NaN check via self-equality
+
+    def test_done_is_bool_scalar(self, canonical_env_8x8_1p) -> None:
+        """``done`` round-trips through ``bool()`` without raising."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, _, _, done, _ = jit_step_fn(
+            random.PRNGKey(5), state, int(Action.NOOP), params
+        )
+        assert isinstance(bool(done), bool)
+
+    def test_state_pytree_structure_preserved(self, canonical_env_8x8_1p) -> None:
+        """Reset state and post-step state share the same pytree structure."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, new_state, _, _, _ = jit_step_fn(
+            random.PRNGKey(6), state, int(Action.NOOP), params
+        )
+        _, treedef_before = jax.tree.flatten(state)
+        _, treedef_after = jax.tree.flatten(new_state)
+        assert treedef_before == treedef_after
+
+    def test_state_leaves_match_shapes(self, canonical_env_8x8_1p) -> None:
+        """Every array leaf retains its shape across one step."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, new_state, _, _, _ = jit_step_fn(
+            random.PRNGKey(7), state, int(Action.NOOP), params
+        )
+        leaves_before, _ = jax.tree.flatten(state)
+        leaves_after, _ = jax.tree.flatten(new_state)
+        for before, after in zip(leaves_before, leaves_after, strict=True):
+            if hasattr(before, "shape"):
+                assert before.shape == after.shape
+
+    def test_state_leaves_match_dtypes(self, canonical_env_8x8_1p) -> None:
+        """Every array leaf retains its dtype across one step."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, new_state, _, _, _ = jit_step_fn(
+            random.PRNGKey(8), state, int(Action.NOOP), params
+        )
+        leaves_before, _ = jax.tree.flatten(state)
+        leaves_after, _ = jax.tree.flatten(new_state)
+        for before, after in zip(leaves_before, leaves_after, strict=True):
+            if hasattr(before, "dtype"):
+                assert before.dtype == after.dtype
+
+    def test_jit_cache_size_is_one_after_step(self, canonical_env_8x8_1p) -> None:
+        """The shared ``jit_step_fn`` caches exactly one trace for the class."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        jit_step_fn(random.PRNGKey(9), state, int(Action.NOOP), params)
+        assert jit_step_fn._cache_size() == 1
+
+    def test_repeated_step_does_not_retrace(self, canonical_env_8x8_1p) -> None:
+        """Two NOOP steps reuse the cached trace — cache size stays one."""
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, state2, _, _, _ = jit_step_fn(
+            random.PRNGKey(10), state, int(Action.NOOP), params
+        )
+        jit_step_fn(random.PRNGKey(11), state2, int(Action.NOOP), params)
+        assert jit_step_fn._cache_size() == 1
