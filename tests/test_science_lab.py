@@ -24,9 +24,7 @@ from factoriax.constants import (
     ItemType,
     MachineType,
 )
-from factoriax.envs import FactoriaXEnv
 from factoriax.game_logic import run_labs
-from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Low-level run_labs tests — exercise the reduction directly without an env.
@@ -169,24 +167,24 @@ class TestRunLabsDelta:
 
 
 class TestLabInEnvStep:
-    """``factoriax_step`` runs the lab and publishes the delta each tick."""
+    """``factoriax_step`` runs the lab and publishes the delta each tick.
 
-    def _env_and_state(self) -> tuple[FactoriaXEnv, EnvParams, object]:
-        env = FactoriaXEnv()
-        params = EnvParams(map_width=8, map_height=8, num_players=1)
-        _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        return env, params, state
+    Consumes ``canonical_env_8x8_1p`` (root conftest, session-scoped)
+    so the JIT compile of ``env.step_env`` is paid once for the entire
+    session instead of twice per test class.
+    """
 
-    def test_delta_resets_each_step(self) -> None:
+    def test_delta_resets_each_step(self, canonical_env_8x8_1p) -> None:
         """With no labs consuming, delta is zero every step."""
-        env, params, state = self._env_and_state()
-        step_fn = jax.jit(env.step_env)
-        _, state, _, _, _ = step_fn(jax.random.PRNGKey(1), state, 0, params)
+        _, params, jit_step_fn, state = canonical_env_8x8_1p
+        _, state, _, _, _ = jit_step_fn(jax.random.PRNGKey(1), state, 0, params)
         assert tuple(state.science_consumed_step.tolist()) == (0, 0)
 
-    def test_step_consumes_and_resets(self, state_factory) -> None:
+    def test_step_consumes_and_resets(
+        self, canonical_env_8x8_1p, state_factory
+    ) -> None:
         """A lab with packs consumes them in one step; next step is zero."""
-        env, params, _ = self._env_and_state()
+        _, params, jit_step_fn, _ = canonical_env_8x8_1p
         # Build a state with one loaded lab.
         state = _lab_state(
             state_factory,
@@ -198,12 +196,11 @@ class TestLabInEnvStep:
             ),
             lab_slot_counts=((3, 2),),
         )
-        step_fn = jax.jit(env.step_env)
-        _, state_after, _, _, _ = step_fn(jax.random.PRNGKey(1), state, 0, params)
+        _, state_after, _, _, _ = jit_step_fn(jax.random.PRNGKey(1), state, 0, params)
         assert tuple(state_after.science_consumed_step.tolist()) == (3, 2)
 
         # Second step: slots were zeroed by the first step, so delta is 0.
-        _, state_after2, _, _, _ = step_fn(
+        _, state_after2, _, _, _ = jit_step_fn(
             jax.random.PRNGKey(2), state_after, 0, params
         )
         assert tuple(state_after2.science_consumed_step.tolist()) == (0, 0)
