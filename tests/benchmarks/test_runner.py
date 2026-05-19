@@ -59,10 +59,8 @@ class _StubBenchmark:
         return sum(r.weighted_score for r in level_results) / len(level_results)
 
 
-@pytest.fixture(scope="session")
-def runner() -> BenchmarkRunner:
-    """Shared runner — JIT compiles the 10×10 shape once per session."""
-    return BenchmarkRunner(seed=0)
+# ``runner`` is provided by ``tests/benchmarks/conftest.py`` so it's
+# also reachable from ``tests/benchmarks/test_rocket_benchmark.py``.
 
 
 @pytest.fixture(scope="session")
@@ -139,7 +137,14 @@ class TestRunnerExecution:
             >= noop.level_results[0].items_mined["coal"]
         )
 
-    def test_reproducible_with_same_seed(self) -> None:
+    def test_reproducible_with_same_seed(self, runner: BenchmarkRunner) -> None:
+        """Same seed + same policy stream produces bit-identical results.
+
+        Uses the shared session-scoped ``runner`` for both calls — the
+        ``BenchmarkRunner`` is stateless across ``.run()`` calls
+        (seed is captured at construction), so reusing it does not
+        affect reproducibility.
+        """
         bench = _StubBenchmark(_stub_level(max_timesteps=10))
         key = jax.random.PRNGKey(7)
 
@@ -149,9 +154,9 @@ class TestRunnerExecution:
             return jax.random.randint(subkey, shape=(), minval=0, maxval=12)
 
         key = jax.random.PRNGKey(7)
-        r1 = BenchmarkRunner(seed=0).run(bench, policies=[_policy])
+        r1 = runner.run(bench, policies=[_policy])
         key = jax.random.PRNGKey(7)
-        r2 = BenchmarkRunner(seed=0).run(bench, policies=[_policy])
+        r2 = runner.run(bench, policies=[_policy])
         assert r1.level_results[0].items_mined == r2.level_results[0].items_mined
         np.testing.assert_array_equal(
             r1.level_results[0].actions, r2.level_results[0].actions
@@ -230,9 +235,17 @@ def _player_x(result: LevelResult) -> int:
 
 
 class TestPerLevelBlockedActions:
-    """Per-level ``blocked_actions`` overrides class-level and masks at runtime."""
+    """Per-level ``blocked_actions`` overrides class-level and masks at runtime.
 
-    def test_per_level_mask_blocks_movement(self) -> None:
+    Every test consumes the shared session-scoped ``runner`` so the
+    runner's constructor-time JIT compile of the no-mask env is paid
+    once across the file; only the per-level mask rebuilds inside
+    ``_ensure_env`` are charged per test. Tests that re-encounter the
+    same ``blocked_actions`` configuration earlier in the session
+    pick up the cached compile.
+    """
+
+    def test_per_level_mask_blocks_movement(self, runner: BenchmarkRunner) -> None:
         """Masking RIGHT keeps a RIGHT-spamming policy pinned at x=0."""
         unmasked = _level_with_mask("unmasked", blocked_actions=None)
         masked = _level_with_mask(
@@ -240,37 +253,35 @@ class TestPerLevelBlockedActions:
         )
         bench = _MultiLevelBenchmark([unmasked, masked])
 
-        result = BenchmarkRunner(seed=0).run(
-            bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))]
-        )
+        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
         unmasked_x = _player_x(result.level_results[0])
         masked_x = _player_x(result.level_results[1])
         assert unmasked_x > 0, "RIGHT should move the player on the unmasked level"
         assert masked_x == 0, "RIGHT should be NOOP'd on the masked level"
 
-    def test_per_level_none_falls_back_to_class_level(self) -> None:
+    def test_per_level_none_falls_back_to_class_level(
+        self, runner: BenchmarkRunner
+    ) -> None:
         """``None`` falls back to the benchmark's class-level mask."""
         only_class_masked = _level_with_mask("class_masked", blocked_actions=None)
         bench = _MultiLevelBenchmark(
             [only_class_masked], class_blocked=frozenset({int(Action.RIGHT)})
         )
-        result = BenchmarkRunner(seed=0).run(
-            bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))]
-        )
+        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
         assert _player_x(result.level_results[0]) == 0
 
-    def test_per_level_empty_overrides_class_level(self) -> None:
+    def test_per_level_empty_overrides_class_level(
+        self, runner: BenchmarkRunner
+    ) -> None:
         """Empty ``frozenset()`` overrides class-level — RIGHT works again."""
         explicit_clear = _level_with_mask("clear", blocked_actions=frozenset())
         bench = _MultiLevelBenchmark(
             [explicit_clear], class_blocked=frozenset({int(Action.RIGHT)})
         )
-        result = BenchmarkRunner(seed=0).run(
-            bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))]
-        )
+        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
         assert _player_x(result.level_results[0]) > 0
 
-    def test_two_different_masks_back_to_back(self) -> None:
+    def test_two_different_masks_back_to_back(self, runner: BenchmarkRunner) -> None:
         """Different per-level masks each take effect — runner rebuilds env between."""
         block_right = _level_with_mask(
             "block_right", blocked_actions=frozenset({int(Action.RIGHT)})
@@ -280,9 +291,7 @@ class TestPerLevelBlockedActions:
         )
         bench = _MultiLevelBenchmark([block_right, block_noop])
 
-        result = BenchmarkRunner(seed=0).run(
-            bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))]
-        )
+        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
         # Level 0 blocks RIGHT → x stays at 0. Level 1 blocks NOOP → RIGHT moves.
         assert _player_x(result.level_results[0]) == 0
         assert _player_x(result.level_results[1]) > 0
