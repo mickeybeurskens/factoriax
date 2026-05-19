@@ -68,10 +68,18 @@ class TestApplyScale:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _init_pygame() -> None:
-    """Initialise pygame display for surface creation."""
-    pygame.display.init()
+@pytest.fixture(scope="module", autouse=True)
+def _scaling_display_surface() -> None:
+    """Re-assert an 800x600 display surface for every scaling test.
+
+    Pygame display + font init lives in the root ``pygame_session``
+    fixture (Task 2.1). The default surface there is 800x600, but
+    other modules — notably ``tests/play/test_launch_screen.py`` —
+    call ``set_mode`` with different dimensions, and pygame keeps that
+    surface for the rest of the session. The hardcoded "Window is
+    800x600" math in the tests below depends on the canonical size,
+    so we re-establish it once when this module loads.
+    """
     pygame.display.set_mode((800, 600))
 
 

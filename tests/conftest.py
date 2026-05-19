@@ -6,16 +6,20 @@
 # calls pygame.display.init() will get the dummy driver, which is
 # side-effect-free but still supports Surface.blit and font rendering.
 import os
+from typing import Any
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
+import pygame  # noqa: E402
 import pytest  # noqa: E402
+from jax import random  # noqa: E402
 
 from factoriax import EnvState  # noqa: E402
-from factoriax.constants import (
+from factoriax.constants import (  # noqa: E402
     BLOCK_RESOURCE_DTYPE,
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
@@ -23,9 +27,54 @@ from factoriax.constants import (
     Direction,
     MachineType,
 )
+from factoriax.envs.factoriax_env import FactoriaXEnv  # noqa: E402
+from factoriax.state import EnvParams  # noqa: E402
 
 # Default entity capacity used by the test factory.
 _TEST_MAX_MACHINES: int = 64
+
+
+@pytest.fixture(scope="session", autouse=True)
+def pygame_session() -> None:
+    """Initialise pygame display + font once per test session.
+
+    SDL drivers are pinned to ``dummy`` above so this is side-effect
+    free. The display surface ``set_mode((800, 600))`` is what
+    :class:`factoriax.ui.scaling.ScaledCanvas` reads via
+    ``pygame.display.get_surface()``; tests in ``tests/test_scaling.py``
+    used to do this in their own session fixture, which is now
+    redundant.
+    """
+    pygame.display.init()
+    pygame.display.set_mode((800, 600))
+    pygame.font.init()
+
+
+@pytest.fixture(scope="session")
+def canonical_env_8x8_1p() -> tuple[FactoriaXEnv, EnvParams, Any, Any]:
+    """Session-scoped 8x8 single-player env + JITted step + reset state.
+
+    The load-bearing fixture for the Phase 2 rollout in
+    ``SPEC_TEST_SUITE.md``. Tests that currently build their own
+    :class:`FactoriaXEnv` + ``jax.jit(env.step_env)`` for the canonical
+    shape switch to consuming this fixture, so the XLA compile of
+    ``env.step_env`` happens exactly once per session instead of once
+    per test.
+
+    Returns:
+        Tuple ``(env, params, jit_step_fn, initial_state)``. The state
+        is the post-reset state at ``timestep == 0`` from
+        ``random.PRNGKey(0)``; tests step *from* it without mutating
+        it (JAX pytrees are immutable by construction).
+
+    Consumers must NOT replace ``initial_state`` in-place — pass a
+    different state forward locally if a test needs to step further.
+    """
+    env = FactoriaXEnv()
+    params = EnvParams(map_width=8, map_height=8, num_players=1)
+    _, initial_state = env.reset_env(random.PRNGKey(0), params)
+    jit_step_fn = jax.jit(env.step_env)
+    return env, params, jit_step_fn, initial_state
 
 
 @pytest.fixture
