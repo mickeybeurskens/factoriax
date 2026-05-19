@@ -66,3 +66,43 @@ M (3-5 files, ~1-3 hours).
       directory and its README too.
 - [ ] Remove the `jit_share/` entry from
       `performance_experiments/README.md` if the directory survives.
+
+---
+
+## Notes / Ideas (for end-of-sprint discussion)
+
+Scratchpad. Not load-bearing tasks — observations and possible
+follow-ups to surface to the user when the immediate work pauses.
+
+- **Task 2.3 fell short of the 50% target on `test_achievement_engine.py`
+  (35.17s → 33.99s, ~3%).** The file's cost is dominated by tests that
+  *intrinsically* exercise JIT/vmap tracing: `env.step` (@jit'd) and
+  `jax.vmap(env.step_env)` each have their own cache entry, and every
+  unique `achievement_fn` forces a fresh `factoriax_step` compile.
+  Sharing the env amortises construction but not the compiles.
+  Question to discuss: do we want to keep this migration anyway for
+  code-pattern consistency, or revert and document why this file is
+  structurally resistant?
+- **The "50% per file" target in the plan was uniform, but the gain
+  is actually highly file-dependent.** Files with N tests sharing the
+  same `(env, achievement_fn, shape)` triple → big wins (2.2, 2.1.5).
+  Files where every test exercises a different JIT/vmap entry point
+  → tiny wins (2.3). Worth revising per-file targets after measuring,
+  rather than pretending one number fits all.
+- **The `state_factory` dtype fix (2.1.5) was a much bigger force
+  multiplier than any single migration.** ~42s saved across the
+  whole suite from one 2-line conftest change. There may be other
+  similar foundation tweaks worth looking for before continuing to
+  migrate one file at a time — e.g. whether other fixtures emit
+  Python-int or weak-typed scalars that retrace silently.
+- **`env.step_env` transparently triggers an internal JIT compile**
+  via `factoriax_step` with `achievement_fn` baked in as a closure
+  variable. Tests that look like "eager calls" actually pay a JIT
+  cost. Worth a one-line comment in `factoriax/envs/factoriax_env.py`
+  so future readers don't assume `step_env` is the eager path.
+- **The pre-commit hook runs the fast suite with coverage every
+  commit (~70s).** Task 2.8's pre-push wall-time threshold will be
+  on the full no-cov suite. Two different measurement modes — worth
+  thinking about whether the spec should publish *both* baselines
+  (fast+cov for the dev loop, full no-cov for the gate) so we can
+  spot regressions in either.
