@@ -54,8 +54,11 @@ def make_env():
     Cached on ``id(achievement_fn)`` so two tests passing the same
     callable share the same env instance, and the JIT cache that
     ``factoriax_step`` builds internally is reused across them.
-    ``params`` is ``env.default_params`` (32x32, 2 players) and
-    ``state`` is the post-reset state from ``random.PRNGKey(0)``.
+    ``params`` is 8x8 1p and ``state`` is the post-reset state from
+    ``random.PRNGKey(0)``. Every assertion in this file is
+    shape-independent (achievements_unlocked properties only), so the
+    smaller shape compiles roughly 4x faster than the prior
+    ``env.default_params`` (32x32 2p) baseline.
 
     Tests that need a non-default shape build their own state and
     pass ``params`` of the right shape to ``env.step_env``; the env
@@ -73,7 +76,7 @@ def make_env():
             if achievement_fn is not None
             else FactoriaXEnv()
         )
-        params = env.default_params
+        params = EnvParams(map_width=8, map_height=8, num_players=1)
         _, state = env.reset_env(random.PRNGKey(0), params)
         cache[key] = (env, params, state)
         return cache[key]

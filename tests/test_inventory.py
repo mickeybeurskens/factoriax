@@ -3,7 +3,6 @@
 import jax.numpy as jnp
 from jax import random
 
-import factoriax
 from factoriax import ItemType
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
@@ -70,13 +69,19 @@ class TestItemType:
 
 
 class TestInventoryObservation:
-    """Tests for inventory data in observations."""
+    """Tests for inventory data in observations.
 
-    def test_observation_includes_inventory(self) -> None:
+    Consumes ``canonical_env_8x8_1p`` (root conftest, session-scoped)
+    instead of building a fresh ``factoriax.make()`` env per test. All
+    assertions compute expected sizes dynamically from ``params``, so
+    the 8x8 1p shape gives identical coverage as the default 32x32 2p
+    at a fraction of the JIT cost.
+    """
+
+    def test_observation_includes_inventory(self, canonical_env_8x8_1p) -> None:
         """Observation should include inventory data."""
-        env, params = factoriax.make()
-        rng = random.PRNGKey(0)
-        obs, state = env.reset_env(rng, params)
+        env, params, _, state = canonical_env_8x8_1p
+        obs = env.get_obs(state, params)
 
         expected_size = (
             NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
@@ -84,20 +89,18 @@ class TestInventoryObservation:
         )
         assert obs.shape == (expected_size,)
 
-    def test_observation_space_matches_observation(self) -> None:
+    def test_observation_space_matches_observation(self, canonical_env_8x8_1p) -> None:
         """Observation shape should match observation_space."""
-        env, params = factoriax.make()
-        rng = random.PRNGKey(0)
-        obs, _ = env.reset_env(rng, params)
+        env, params, _, state = canonical_env_8x8_1p
+        obs = env.get_obs(state, params)
 
         obs_space = env.observation_space(params)
         assert obs.shape == obs_space.shape
 
-    def test_inventory_observation_normalized(self) -> None:
+    def test_inventory_observation_normalized(self, canonical_env_8x8_1p) -> None:
         """Inventory values should be in [0, 1]."""
-        env, params = factoriax.make()
-        rng = random.PRNGKey(0)
-        obs, state = env.reset_env(rng, params)
+        env, params, _, state = canonical_env_8x8_1p
+        obs = env.get_obs(state, params)
 
         spatial_size = NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
         inv_start = spatial_size
@@ -106,11 +109,11 @@ class TestInventoryObservation:
         assert jnp.all(inv_data >= 0.0)
         assert jnp.all(inv_data <= 1.0)
 
-    def test_inventory_observation_encodes_correctly(self) -> None:
+    def test_inventory_observation_encodes_correctly(
+        self, canonical_env_8x8_1p
+    ) -> None:
         """Inventory observation should correctly encode item counts."""
-        env, params = factoriax.make()
-        rng = random.PRNGKey(0)
-        _, state = env.reset_env(rng, params)
+        env, params, _, state = canonical_env_8x8_1p
 
         selected = state.selected_player
         max_coal = int(PLAYER_MAX_STACK[ItemType.COAL])

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import pytest
 
 from factoriax.constants import (
     NUM_SCIENCE_PACK_TYPES,
@@ -30,6 +31,17 @@ from factoriax.state import EnvParams
 
 def _base_params() -> EnvParams:
     return EnvParams(map_width=8, map_height=8, num_players=1)
+
+
+@pytest.fixture(scope="module")
+def tally_env() -> ScienceTallyWrapper:
+    """Module-scoped ``ScienceTallyWrapper(FactoriaXEnv())`` at 8x8 1p.
+
+    All six tests in this file wrap the default env at the same shape;
+    sharing the wrapper instance lets ``factoriax_step``'s internal
+    JIT cache amortise across them instead of compiling per test.
+    """
+    return ScienceTallyWrapper(FactoriaXEnv())
 
 
 def _lab_state_from_factory(
@@ -70,21 +82,18 @@ def _lab_state_from_factory(
 class TestScienceTallyWrapper:
     """End-to-end behaviour of the wrapper."""
 
-    def test_tally_zero_at_reset(self) -> None:
-        env = ScienceTallyWrapper(FactoriaXEnv())
-        _, wrapped = env.reset_env(jax.random.PRNGKey(0), _base_params())
+    def test_tally_zero_at_reset(self, tally_env) -> None:
+        _, wrapped = tally_env.reset_env(jax.random.PRNGKey(0), _base_params())
         assert isinstance(wrapped, ScienceTallyState)
         assert tuple(wrapped.total_science_consumed.tolist()) == (0, 0)
 
-    def test_tally_dtype_and_shape(self) -> None:
-        env = ScienceTallyWrapper(FactoriaXEnv())
-        _, wrapped = env.reset_env(jax.random.PRNGKey(0), _base_params())
+    def test_tally_dtype_and_shape(self, tally_env) -> None:
+        _, wrapped = tally_env.reset_env(jax.random.PRNGKey(0), _base_params())
         assert wrapped.total_science_consumed.shape == (NUM_SCIENCE_PACK_TYPES,)
         assert wrapped.total_science_consumed.dtype == jnp.int32
 
-    def test_tally_accumulates_single_step(self, state_factory) -> None:
+    def test_tally_accumulates_single_step(self, tally_env, state_factory) -> None:
         """One step with a loaded lab adds its delta to the total."""
-        env = ScienceTallyWrapper(FactoriaXEnv())
         params = _base_params()
         inner_state = _lab_state_from_factory(
             state_factory,
@@ -98,12 +107,13 @@ class TestScienceTallyWrapper:
             env_state=inner_state,
             total_science_consumed=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
         )
-        _, wrapped, _, _, _ = env.step_env(jax.random.PRNGKey(1), wrapped, 0, params)
+        _, wrapped, _, _, _ = tally_env.step_env(
+            jax.random.PRNGKey(1), wrapped, 0, params
+        )
         assert tuple(wrapped.total_science_consumed.tolist()) == (5, 3)
 
-    def test_tally_accumulates_across_steps(self, state_factory) -> None:
+    def test_tally_accumulates_across_steps(self, tally_env, state_factory) -> None:
         """Three consecutive consumption steps accumulate correctly."""
-        env = ScienceTallyWrapper(FactoriaXEnv())
         params = _base_params()
 
         total = jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32)
@@ -131,15 +141,14 @@ class TestScienceTallyWrapper:
             wrapped = ScienceTallyState(
                 env_state=inner_state, total_science_consumed=total
             )
-            _, wrapped, _, _, _ = env.step_env(
+            _, wrapped, _, _, _ = tally_env.step_env(
                 jax.random.PRNGKey(42), wrapped, 0, params
             )
             total = wrapped.total_science_consumed
             assert tuple(total.tolist()) == expected
 
-    def test_reset_clears_prior_tally(self, state_factory) -> None:
+    def test_reset_clears_prior_tally(self, tally_env, state_factory) -> None:
         """``reset_env`` zeroes the tally even after prior consumption."""
-        env = ScienceTallyWrapper(FactoriaXEnv())
         params = _base_params()
         inner_state = _lab_state_from_factory(
             state_factory,
@@ -150,22 +159,21 @@ class TestScienceTallyWrapper:
             env_state=inner_state,
             total_science_consumed=jnp.array([100, 50], dtype=jnp.int32),
         )
-        _, wrapped, _, _, _ = env.step_env(jax.random.PRNGKey(0), wrapped, 0, params)
+        _, wrapped, _, _, _ = tally_env.step_env(
+            jax.random.PRNGKey(0), wrapped, 0, params
+        )
         assert tuple(wrapped.total_science_consumed.tolist()) == (108, 50)
 
-        _, wrapped_after_reset = env.reset_env(jax.random.PRNGKey(0), params)
+        _, wrapped_after_reset = tally_env.reset_env(jax.random.PRNGKey(0), params)
         assert tuple(wrapped_after_reset.total_science_consumed.tolist()) == (0, 0)
 
-    def test_obs_passthrough(self) -> None:
+    def test_obs_passthrough(self, tally_env, canonical_env_8x8_1p) -> None:
         """Wrapped ``get_obs`` returns the same array as the inner env's."""
-        inner = FactoriaXEnv()
-        wrapper = ScienceTallyWrapper(inner)
-        params = _base_params()
-        _, inner_state = inner.reset_env(jax.random.PRNGKey(0), params)
+        inner_env, params, _, inner_state = canonical_env_8x8_1p
         wrapped = ScienceTallyState(
             env_state=inner_state,
             total_science_consumed=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
         )
-        obs_inner = inner.get_obs(inner_state, params)
-        obs_wrap = wrapper.get_obs(wrapped, params)
+        obs_inner = inner_env.get_obs(inner_state, params)
+        obs_wrap = tally_env.get_obs(wrapped, params)
         assert jnp.array_equal(obs_inner, obs_wrap)
