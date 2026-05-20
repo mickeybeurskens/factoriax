@@ -2,8 +2,6 @@
 
 install-hooks:
 	ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit
-	ln -sf ../../scripts/hooks/post-commit .git/hooks/post-commit
-	ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push
 	@echo "Hooks installed."
 
 # Full suite, no coverage, run through every failure. The default

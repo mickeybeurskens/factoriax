@@ -725,23 +725,22 @@ explain the gap:
   module-scoped wrapper fixture.
 - **2.7** — Dropped `-x` from default pytest `addopts`. Added
   `make test` and `make test-fast-fail` targets.
-- **2.8** — Added `scripts/hooks/pre-push` regression guard with a
-  450s wall-time threshold (~14% headroom over the ~395s post-Phase
-  2 number to absorb run-to-run JIT-compile variance, while still
-  catching real regressions). Honours
-  `FACTORIAX_SKIP_PRE_PUSH=1` and skips when no `factoriax/`,
-  `tests/`, or dependency-manifest files changed in the push range.
+- **2.8** — Originally added a `scripts/hooks/pre-push` wall-time
+  regression guard at 450s. The hook was subsequently removed at
+  user request: tests run only in the pre-commit hook now, with no
+  automated guard on push. The reasoning: the 450s threshold sat
+  ~14% above the ~395s wall time and would fire infrequently in
+  practice, while pushing the full suite per push adds ~7 minutes
+  to the dev loop. Perf regressions get caught manually via
+  `make test` or `uv run pytest --no-cov`.
 
-### Threshold rationale (pre-push regression guard)
+### Hook layout (post-cleanup)
 
-The original plan called for a 400s threshold. Empirical run-to-run
-variance during the Phase 2 measurements ranged from 395s to 423s on
-the same hardware — about a 7% spread. A 400s threshold would
-false-positive on warm-cache and thermal-throttling noise. The
-450s threshold gives ~14% headroom over the current ~395s number,
-which catches a real regression but tolerates noise. Raise this
-number when the suite genuinely speeds up further; do not lower it
-without a recorded reason here.
+Only `scripts/hooks/pre-commit` survives. It runs the fast suite
+with coverage and the ruff lint+format checks on staged Python
+files. The previous `post-commit` (perf-benchmark prompt) and
+`pre-push` (wall-time regression guard) hooks were removed at user
+request to keep the surface minimal.
 
 ### `test_jit_retrace.py` untouched
 
