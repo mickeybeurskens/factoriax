@@ -31,6 +31,27 @@ def env_and_state():
     return env, params, state
 
 
+@pytest.fixture(scope="module")
+def vmap_step_n8():
+    """Module-scoped vmap'd step path: 8 envs at 16x16 1p.
+
+    Moves the vmap'd reset + ``jax.jit(jax.vmap(env.step_env))``
+    compile out of ``test_vmapped_step`` and into fixture setup so the
+    durations table shows the compile cost separately from the test
+    body. There is only one consumer in this file, so the total wall
+    time is unchanged; the migration is for consistency with the
+    canonical fixture pattern used elsewhere in the suite.
+
+    Returns ``(params, vmap_step, initial_states)``.
+    """
+    env = FactoriaXEnv()
+    params = EnvParams(map_width=16, map_height=16, num_players=1)
+    keys = jax.random.split(jax.random.key(42), 8)
+    _, initial_states = jax.vmap(env.reset_env, in_axes=(0, None))(keys, params)
+    vmap_step = jax.jit(jax.vmap(env.step_env, in_axes=(0, 0, 0, None)))
+    return params, vmap_step, initial_states
+
+
 class TestRendererSmoke:
     """Renderer should produce an image from any valid state."""
 
@@ -197,24 +218,15 @@ class TestEnvStepSmoke:
         assert state2.timestep == 1
         assert obs.shape[0] > 0
 
-    def test_vmapped_step(self) -> None:
+    def test_vmapped_step(self, vmap_step_n8) -> None:
         """Vmapped step works across a batch."""
-        env = FactoriaXEnv()
-        params = EnvParams(map_width=16, map_height=16, num_players=1)
-        n = 8
-        keys = jax.random.split(jax.random.key(42), n)
-        _, states = jax.vmap(env.reset_env, in_axes=(0, None))(
-            keys,
-            params,
-        )
-        vmap_step = jax.jit(
-            jax.vmap(env.step_env, in_axes=(0, 0, 0, None)),
-        )
+        params, vmap_step, initial_states = vmap_step_n8
+        n = initial_states.timestep.shape[0]
         step_keys = jax.random.split(jax.random.key(99), n)
         actions = jnp.zeros(n, dtype=jnp.int32)
         _, states2, _, _, _ = vmap_step(
             step_keys,
-            states,
+            initial_states,
             actions,
             params,
         )

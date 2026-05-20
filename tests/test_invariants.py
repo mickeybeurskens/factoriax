@@ -38,27 +38,20 @@ _SMALL_PARAMS = EnvParams(map_width=8, map_height=8, max_timesteps=200)
 _NUM_RANDOM_STEPS = 100
 
 
-def _run_random_episode(
-    rng: jax.Array,
-    env: FactoriaXEnv,
-    params: EnvParams,
-    num_steps: int,
-) -> tuple[EnvState, EnvState]:
-    """Run *num_steps* random actions and return (initial, final) states.
+@pytest.fixture(scope="module")
+def random_episode():
+    """Module-scoped JIT'd 100-step random rollout for 8x8 2p.
 
-    Args:
-        rng: JAX random key.
-        env: FactoriaX environment instance.
-        params: Environment parameters.
-        num_steps: Number of steps to execute.
-
-    Returns:
-        Tuple of (initial_state, final_state).
+    Returns ``(env, params, run_fn)``. The ``run_fn`` is a JIT-compiled
+    function ``rng -> final_state`` that runs ``_NUM_RANDOM_STEPS``
+    random actions under ``_SMALL_PARAMS``. Tests vary the seed but
+    share the trace: the costly ``lax.scan`` over ``factoriax_step``
+    is compiled exactly once for the file instead of once per test.
     """
-    rng, reset_key = random.split(rng)
-    _, init_state = env.reset_env(reset_key, params)
+    env = FactoriaXEnv()
+    params = _SMALL_PARAMS
 
-    def step_fn(
+    def _step(
         carry: tuple[EnvState, jax.Array], _: None
     ) -> tuple[tuple[EnvState, jax.Array], None]:
         state, key = carry
@@ -67,8 +60,16 @@ def _run_random_episode(
         state = factoriax_step(step_key, state, action, params)
         return (state, key), None
 
-    (final_state, _), _ = lax.scan(step_fn, (init_state, rng), None, length=num_steps)
-    return init_state, final_state
+    @jax.jit
+    def run(rng: jax.Array) -> EnvState:
+        rng, reset_key = random.split(rng)
+        _, init_state = env.reset_env(reset_key, params)
+        (final_state, _), _ = lax.scan(
+            _step, (init_state, rng), None, length=_NUM_RANDOM_STEPS
+        )
+        return final_state
+
+    return env, params, run
 
 
 # ---------------------------------------------------------------------------
@@ -79,57 +80,47 @@ def _run_random_episode(
 class TestStateConsistency:
     """Invariants on the raw state arrays after random play."""
 
-    def test_player_positions_in_bounds(self) -> None:
+    def test_player_positions_in_bounds(self, random_episode) -> None:
         """Player positions must stay within map boundaries."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(42), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        _, params, run = random_episode
+        final = run(random.PRNGKey(42))
 
         assert jnp.all(final.player_positions[:, 0] >= 0)
-        assert jnp.all(final.player_positions[:, 0] < _SMALL_PARAMS.map_width)
+        assert jnp.all(final.player_positions[:, 0] < params.map_width)
         assert jnp.all(final.player_positions[:, 1] >= 0)
-        assert jnp.all(final.player_positions[:, 1] < _SMALL_PARAMS.map_height)
+        assert jnp.all(final.player_positions[:, 1] < params.map_height)
 
-    def test_inventory_counts_non_negative(self) -> None:
+    def test_inventory_counts_non_negative(self, random_episode) -> None:
         """No inventory count should go below zero."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(7), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        _, _, run = random_episode
+        final = run(random.PRNGKey(7))
 
         assert jnp.all(final.player_inventory >= 0)
 
-    def test_inventory_counts_within_stack_limit(self) -> None:
+    def test_inventory_counts_within_stack_limit(self, random_episode) -> None:
         """Player inventory counts must not exceed per-type stack limits."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(55), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        _, _, run = random_episode
+        final = run(random.PRNGKey(55))
 
         assert jnp.all(final.player_inventory <= PLAYER_MAX_STACK)
 
-    def test_machine_inventory_within_limits(self) -> None:
+    def test_machine_inventory_within_limits(self, random_episode) -> None:
         """Entity buffer counts must be non-negative and within stack limits."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(21), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        _, _, run = random_episode
+        final = run(random.PRNGKey(21))
 
         ent_cap = MACHINE_MAX_STACK[final.ent_type]
         assert jnp.all(final.ent_buf_count >= 0)
         assert jnp.all(final.ent_buf_count <= ent_cap)
 
-    def test_block_resources_non_negative(self) -> None:
+    def test_block_resources_non_negative(self, random_episode) -> None:
         """Block resources must never go negative."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(77), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        _, _, run = random_episode
+        final = run(random.PRNGKey(77))
 
         assert jnp.all(final.block_resources >= 0)
 
-    def test_ent_health_within_bounds(self) -> None:
+    def test_ent_health_within_bounds(self, random_episode) -> None:
         """Active entities have ``0 <= ent_health <= max_health[type]``;
         inactive slots hold ``ent_health == 0``.
 
@@ -138,12 +129,10 @@ class TestStateConsistency:
         invariant we check here is structural: bounds and inactive-slot
         zeroing.
         """
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(101), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        _, params, run = random_episode
+        final = run(random.PRNGKey(101))
 
-        max_health_per_type = _SMALL_PARAMS.machine_config.max_health
+        max_health_per_type = params.machine_config.max_health
         cap = max_health_per_type[final.ent_type]
         active = final.ent_y >= 0
         # For active entities: 0 <= ent_health <= max_health[type].
@@ -247,26 +236,22 @@ class TestObservationFidelity:
 
         assert obs.shape == obs_space.shape
 
-    def test_observation_values_in_range(self) -> None:
+    def test_observation_values_in_range(self, random_episode) -> None:
         """All observation values must be in [0, 1] after random play."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(3), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        env, params, run = random_episode
+        final = run(random.PRNGKey(3))
 
-        obs = env.get_obs(final, _SMALL_PARAMS)
+        obs = env.get_obs(final, params)
         assert jnp.all(obs >= 0.0)
         assert jnp.all(obs <= 1.0)
 
-    def test_observation_shape_after_random_play(self) -> None:
+    def test_observation_shape_after_random_play(self, random_episode) -> None:
         """Observation shape must remain consistent after random play."""
-        env = FactoriaXEnv()
-        _, final = _run_random_episode(
-            random.PRNGKey(5), env, _SMALL_PARAMS, _NUM_RANDOM_STEPS
-        )
+        env, params, run = random_episode
+        final = run(random.PRNGKey(5))
 
-        obs = env.get_obs(final, _SMALL_PARAMS)
-        obs_space = env.observation_space(_SMALL_PARAMS)
+        obs = env.get_obs(final, params)
+        obs_space = env.observation_space(params)
         assert obs.shape == obs_space.shape
 
     def test_inventory_observation_encodes_state(self) -> None:
