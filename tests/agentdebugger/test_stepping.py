@@ -9,11 +9,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import factoriax
 from factoriax.agentdebugger.main import Debugger
 from factoriax.constants import Action
 from factoriax.observations import global_array
-from factoriax.state import EnvParams
 
 # Each test steps a real env through the debugger, triggering the env
 # JIT compile. Gated behind ``@slow`` for the pre-commit inner loop.
@@ -193,15 +191,14 @@ class TestMultiPlayer:
     """Tests for multi-player stepping behavior."""
 
     @pytest.fixture
-    def mp_debugger(self) -> Debugger:
-        """Two-player debugger where human controls player 0."""
-        env, _ = factoriax.make()
-        params = EnvParams(
-            map_width=8,
-            map_height=8,
-            num_players=2,
-        )
-        _, state = env.reset_env(jax.random.PRNGKey(0), params)
+    def mp_debugger(self, env_and_state_2p, _cached_step_fn_2p) -> Debugger:
+        """Two-player debugger where human controls player 0.
+
+        Consumes the module-scoped 2-player env + pre-warmed step_fn
+        from ``agentdebugger/conftest.py`` so the XLA compile is paid
+        once across this class instead of once per test.
+        """
+        env, params, state = env_and_state_2p
 
         actions_seen: list[int] = []
 
@@ -218,6 +215,7 @@ class TestMultiPlayer:
             player_idx=0,
             seed=0,
         )
+        dbg._step_fn = _cached_step_fn_2p  # noqa: SLF001 — surgical compile reuse
         dbg._policy_calls = actions_seen  # type: ignore[attr-defined]
         return dbg
 
