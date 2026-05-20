@@ -656,3 +656,110 @@ original prediction missed on the CPU side. The decision to proceed
 is the user's, made on the basis that the *mechanism* gate cleared by
 ~30 percentage points and the *CPU* gate was a "would be nice"
 adjunct, not the load-bearing claim.
+
+## Phase 2 Results
+
+Final numbers after eight Phase 2 commits (2.1 through 2.8):
+
+| Stage                  | Wall time | Δ vs baseline |
+| ---------------------- | --------- | ------------- |
+| Baseline (post-fix)    | 766s      | —             |
+| After Task 2.1         | 786s      | +20 (variance) |
+| After Task 2.2         | 776s      | -10           |
+| After Task 2.1.5       | 733s      | -33           |
+| After Task 2.3         | 712s      | -54           |
+| After Task 2.4         | 684s      | -82           |
+| After Task 2.5         | 625s      | -141          |
+| After Task 2.6         | 423s      | -343          |
+| After Task 2.6.5       | 395s      | -371          |
+| After Task 2.6.6       | 396s      | -370          |
+| **Final**              | **~396s** | **~48% reduction** |
+
+The 50% target (≤ 367s) was missed by ~29s. Two structural caps
+explain the gap:
+
+1. **No production-code changes.** The spec's Boundaries section
+   forbids modifying `factoriax/` to make tests faster. That rules
+   out the multi-entry cache in `BenchmarkRunner._ensure_env` (~14s
+   saving), memoizing `factoriax.make()` for the test session
+   (~10-15s), and refactoring `replay_states` to accept an injected
+   env (~13s). Together, these three production-side fixes would
+   close the gap and then some — but they're a separate decision,
+   not in scope here.
+2. **Some tests are inherently JIT/vmap-tracing regression guards.**
+   Their cost is the assertion. `test_jit_retrace.py` and
+   `test_core_game_conditions_vmaps` *are* the JIT compile — sharing
+   the compile would defeat what they verify.
+
+### Per-task summary
+
+- **2.1** — Canonical `canonical_env_8x8_1p` fixture; centralised
+  pygame init. Foundation, no immediate gain.
+- **2.2** — Migrated `test_science_lab.py` + `analysis/test_trajectory.py`.
+- **2.1.5** — Unified `state_factory` scalar dtypes with `env.reset_env`
+  (`selected_player` / `timestep` as `jnp.int32`). The biggest
+  force-multiplier change: a 2-line conftest fix that unblocked
+  cache hits across many tests at once.
+- **2.3** — Migrated `test_achievement_engine.py` via a `make_env`
+  factory. Structurally-capped file: ~3% reduction. Documented as
+  the canonical "structural cap" case in the working rule.
+- **2.4** — Shared `BenchmarkRunner` fixture across benchmark test
+  files; `TestPerLevelBlockedActions` and `test_reproducible_with_same_seed`
+  now consume it.
+- **2.5** — Module-scoped JIT'd `random_episode` fixture in
+  `test_invariants.py`: 8 tests went from ~7s each (own compile) to
+  one shared compile + 7 cache hits.
+- **2.6** — Per-`level_idx` JIT cache in
+  `tests/benchmarks/skills/test_skills_scripted_solves.py`. 25 tests
+  across 4 levels collapsed to 4 compiles. Biggest single-task win
+  (202s saved). Examples skipped (couldn't share without
+  production-code changes).
+- **2.6.5** — Three approved deletions/migrations: dropped
+  `test_core_game_conditions_jits_via_step` (subsumed by the vmap
+  test), dropped `play/test_smoke.py::test_vmapped_step` (redundant
+  with the achievement-engine vmap test), migrated the surviving
+  vmap test to 8×8 1p.
+- **2.6.6** — Final env-bundling pass: 3 achievement_engine default-shape
+  tests to 8×8 1p, `test_inventory.py::TestInventoryObservation` to
+  the canonical fixture, `test_science_tally_wrapper.py` to a
+  module-scoped wrapper fixture.
+- **2.7** — Dropped `-x` from default pytest `addopts`. Added
+  `make test` and `make test-fast-fail` targets.
+- **2.8** — Added `scripts/hooks/pre-push` regression guard with a
+  450s wall-time threshold (~14% headroom over the ~395s post-Phase
+  2 number to absorb run-to-run JIT-compile variance, while still
+  catching real regressions). Honours
+  `FACTORIAX_SKIP_PRE_PUSH=1` and skips when no `factoriax/`,
+  `tests/`, or dependency-manifest files changed in the push range.
+
+### Threshold rationale (pre-push regression guard)
+
+The original plan called for a 400s threshold. Empirical run-to-run
+variance during the Phase 2 measurements ranged from 395s to 423s on
+the same hardware — about a 7% spread. A 400s threshold would
+false-positive on warm-cache and thermal-throttling noise. The
+450s threshold gives ~14% headroom over the current ~395s number,
+which catches a real regression but tolerates noise. Raise this
+number when the suite genuinely speeds up further; do not lower it
+without a recorded reason here.
+
+### `test_jit_retrace.py` untouched
+
+Per the spec's explicit carve-out, all four tests in this file
+continue to JIT from scratch via `_setup()`. Their function is to
+catch retrace bugs — they *must* see `step_fn._cache_size() == 1`
+starting from a cold state, which sharing would defeat. Verified
+passing across every Phase 2 checkpoint.
+
+### Test count delta
+
+1355 → 1353 collected tests. Two redundant tests were deleted with
+explicit user approval (Task 2.6.5). Coverage remained at 38.34% at
+every commit, above the 37.0% floor.
+
+### Sign-off
+
+Phase 2 ships at ~48% reduction. Future work to close the remaining
+~4% would need to lift the no-production-code boundary. Three
+concrete targets are documented above for if/when that decision is
+made.
