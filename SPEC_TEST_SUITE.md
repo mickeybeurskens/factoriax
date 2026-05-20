@@ -659,7 +659,7 @@ adjunct, not the load-bearing claim.
 
 ## Phase 2 Results
 
-Final numbers after eight Phase 2 commits (2.1 through 2.8):
+Final numbers after nine Phase 2 commits (2.1 through 2.9):
 
 | Stage                  | Wall time | Δ vs baseline |
 | ---------------------- | --------- | ------------- |
@@ -673,23 +673,28 @@ Final numbers after eight Phase 2 commits (2.1 through 2.8):
 | After Task 2.6         | 423s      | -343          |
 | After Task 2.6.5       | 395s      | -371          |
 | After Task 2.6.6       | 396s      | -370          |
-| **Final**              | **~396s** | **~48% reduction** |
+| **After Task 2.9**     | **317s**  | **-449 (~59%)** |
 
-The 50% target (≤ 367s) was missed by ~29s. Two structural caps
-explain the gap:
+The 50% target (≤ 367s) was met and exceeded by ~50s. Task 2.9
+landed after the formal plan checkpoint when an end-of-sprint
+duration audit revealed `tests/agentdebugger/test_stepping.py` as a
+~109s cluster nobody had touched: 16 tests each paying a ~7s
+`Debugger.__init__`-time `jax.jit(env.step_env)` compile despite a
+module-scoped `env_and_state`. A surgical no-production-code fix
+(module-scoped warm-up via a temp Debugger, swap into each fresh
+Debugger's `_step_fn`) collapsed that to 18s and pushed the suite
+through the target.
 
-1. **No production-code changes.** The spec's Boundaries section
-   forbids modifying `factoriax/` to make tests faster. That rules
-   out the multi-entry cache in `BenchmarkRunner._ensure_env` (~14s
-   saving), memoizing `factoriax.make()` for the test session
-   (~10-15s), and refactoring `replay_states` to accept an injected
-   env (~13s). Together, these three production-side fixes would
-   close the gap and then some — but they're a separate decision,
-   not in scope here.
-2. **Some tests are inherently JIT/vmap-tracing regression guards.**
-   Their cost is the assertion. `test_jit_retrace.py` and
-   `test_core_game_conditions_vmaps` *are* the JIT compile — sharing
-   the compile would defeat what they verify.
+The remaining ~317s is dominated by structurally-unavoidable cost:
+
+1. **Inherent JIT/vmap regression tests.** `test_jit_retrace.py` and
+   `test_core_game_conditions_vmaps` *are* the JIT compile they
+   verify — sharing the compile would defeat what they assert.
+2. **Production-code-owned compiles.** `replay_states` builds its
+   own env+JIT internally per call; the examples each construct
+   their own wrapper stacks inside `main()`. Lifting these would
+   need `factoriax/` changes that the spec's Boundaries section
+   excluded from scope.
 
 ### Per-task summary
 
@@ -733,6 +738,18 @@ explain the gap:
   practice, while pushing the full suite per push adds ~7 minutes
   to the dev loop. Perf regressions get caught manually via
   `make test` or `uv run pytest --no-cov`.
+- **2.9** — Out-of-plan addition. End-of-sprint duration audit
+  revealed `tests/agentdebugger/test_stepping.py` at 109s — never
+  in the original plan's scope. Sixteen tests paid fresh
+  `jax.jit(env.step_env)` compiles via `Debugger.__init__` despite
+  the module-scoped `env_and_state` fixture. Fixed by adding a
+  `_cached_step_fn` module fixture that warms the cache via a temp
+  Debugger's `_execute_step` (matching the call signature
+  consumers use, not the obvious `jnp.int32(NOOP)` wrong-cache-slot
+  pattern). The function-scoped `debugger` fixture overwrites
+  `dbg._step_fn` with the cached wrapper for each fresh Debugger.
+  Saved 79s on the full suite; file went 109s → 18s (~83% local
+  reduction). Largest single-task win in the project.
 
 ### Hook layout (post-cleanup)
 
@@ -758,7 +775,8 @@ every commit, above the 37.0% floor.
 
 ### Sign-off
 
-Phase 2 ships at ~48% reduction. Future work to close the remaining
-~4% would need to lift the no-production-code boundary. Three
-concrete targets are documented above for if/when that decision is
-made.
+Phase 2 ships at ~59% reduction (766s → 317s). The 50% target was
+met and exceeded; remaining cost is dominated by tests whose
+*purpose is to verify JIT/vmap tracing* (compile cost == assertion)
+plus a handful of production-code-internal compiles that the spec
+boundary excluded from scope.
