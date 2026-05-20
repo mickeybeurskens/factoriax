@@ -133,16 +133,20 @@ def test_core_game_conditions_unlock_through_engine(make_env, state_factory) -> 
     assert bool(state.achievements_unlocked[_achievement_index("first_ore")])
 
 
-def test_core_game_conditions_jits_via_step(make_env) -> None:
-    """core_game_conditions must JIT-trace cleanly when used as env.step."""
-    env, params, state = make_env(core_game_conditions)
-    # env.step is JIT-decorated. If achievement_fn doesn't trace, this raises.
-    _ = env.step(random.PRNGKey(1), state, 0, params)
+def test_core_game_conditions_vmaps() -> None:
+    """``core_game_conditions`` must vmap across batched envs.
 
+    Uses 8x8 1p instead of the default 32x32 2p — the assertion is on
+    ``achievements_unlocked.shape``, which depends on ``MAX_ACHIEVEMENTS``
+    (not on map dimensions or player count), so the smaller shape gives
+    identical coverage at a fraction of the vmap compile cost.
 
-def test_core_game_conditions_vmaps(make_env) -> None:
-    """core_game_conditions must vmap across batched envs."""
-    env, params, _ = make_env(core_game_conditions)
+    A passing vmap also implies a passing plain-jit, so the previously
+    separate ``test_core_game_conditions_jits_via_step`` was strictly
+    subsumed and removed.
+    """
+    env = FactoriaXEnv(achievement_fn=core_game_conditions)
+    params = EnvParams(map_width=8, map_height=8, num_players=1)
 
     reset_keys = random.split(random.PRNGKey(0), 4)
     _, states = jax.vmap(env.reset_env, in_axes=(0, None))(reset_keys, params)
