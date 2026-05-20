@@ -48,6 +48,16 @@ next reduction; nothing is "scaffolding for later".
   `pytest-benchmark`. The experiment proves the speedup with
   fixture scope + backend alone. Parallelization stays a separate
   future investigation.
+- **Beat 50% per file if a small tweak can get us there; otherwise
+  move on.** Each Phase 2 task aims for ≥50% wall-time reduction on
+  its target files. After the obvious fixture migration lands, try
+  one or two small follow-up tweaks (action-arg type, dtype unify,
+  pre-warm cache, fixture parameterisation) if the first pass falls
+  short. If those don't close the gap, ship the partial win and
+  proceed to the next task — don't sink hours into squeezing a
+  structurally-bounded file (cf. Task 2.3 where intrinsic JIT/vmap
+  tracing caps the gain at ~3%). Capture the why in the commit
+  message so future readers know it's not laziness.
 
 ## Task List
 

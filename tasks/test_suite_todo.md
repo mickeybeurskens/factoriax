@@ -69,6 +69,15 @@ M (3-5 files, ~1-3 hours).
 
 ---
 
+## Working rules added during execution
+
+- **Try small follow-up tweaks to beat 50% on each task, but don't
+  hunt forever.** First pass: the prescribed migration. If it falls
+  short of 50%, try one or two small tweaks (action-arg type
+  unification, pre-warm a cache, parameterise a fixture, etc.). If
+  those don't close the gap, ship the partial win and move to the
+  next task. Document why in the commit message.
+
 ## Notes / Ideas (for end-of-sprint discussion)
 
 Scratchpad. Not load-bearing tasks — observations and possible
