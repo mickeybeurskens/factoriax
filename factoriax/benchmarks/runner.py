@@ -102,10 +102,33 @@ class BenchmarkRunner:
                 are set.
         """
         self._achievement_fn: AchievementFn | None = achievement_fn
+        # Multi-entry cache keyed on (id(achievement_fn), blocked_actions).
+        # A single-entry cache thrashes when consecutive levels use
+        # different masks (each switch costs one full XLA compile of
+        # step_env). The dict keeps every config compiled at most once
+        # across the runner's lifetime.
+        self._env_cache: dict[
+            tuple[int | None, frozenset[int]], tuple[Any, Callable[..., Any]]
+        ] = {}
+        # ``_current_fn`` tracks the resolved achievement_fn for the
+        # most recent ``_ensure_env`` call so ``_achievements`` and the
+        # ``run()`` loop can read it without re-resolving. Not used for
+        # cache keying — that's ``_env_cache``.
         self._current_fn: AchievementFn | None = achievement_fn
-        self._current_blocked: frozenset[int] = frozenset()
-        self._env, self._jit_step = self._build_env(achievement_fn, frozenset())
+        self._env, self._jit_step = self._cached_env(achievement_fn, frozenset())
         self.seed = seed
+
+    def _cached_env(
+        self,
+        achievement_fn: AchievementFn | None,
+        blocked_actions: frozenset[int],
+    ) -> tuple[Any, Callable[..., Any]]:
+        """Return cached ``(env, jit_step)`` for this config, building if missing."""
+        fn_key = id(achievement_fn) if achievement_fn is not None else None
+        key = (fn_key, blocked_actions)
+        if key not in self._env_cache:
+            self._env_cache[key] = self._build_env(achievement_fn, blocked_actions)
+        return self._env_cache[key]
 
     def _build_env(
         self,
@@ -181,10 +204,8 @@ class BenchmarkRunner:
         """
         resolved = self._achievement_fn or getattr(benchmark, "achievement_fn", None)
         blocked = self._resolve_blocked(benchmark, bench_level)
-        if resolved is not self._current_fn or blocked != self._current_blocked:
-            self._env, self._jit_step = self._build_env(resolved, blocked)
-            self._current_fn = resolved
-            self._current_blocked = blocked
+        self._env, self._jit_step = self._cached_env(resolved, blocked)
+        self._current_fn = resolved
         return resolved
 
     def _achievements(self, state: EnvState) -> np.ndarray | None:
