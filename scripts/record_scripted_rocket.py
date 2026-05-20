@@ -1,14 +1,12 @@
-"""Record a complete scripted-rocket-agent run as a debugger trajectory.
+"""Record a complete scripted-rocket-agent run as a trajectory file.
 
 Drives :func:`baselines.rocket.scripted.agent.make_scripted_rocket_agent`
 through the rocket benchmark level and saves the full per-tick
-``EnvState`` history to a ``.npz`` trajectory file that the agent
-debugger can replay.
+``EnvState`` history to a ``.npz`` trajectory file for offline analysis.
 
 Usage::
 
     uv run python scripts/record_scripted_rocket.py
-    uv run python -m factoriax.agentdebugger /tmp/scripted_rocket.npz
 
 The agent runs against ``FactoriaXEnv`` with no ``achievement_fn``
 bound so the saved states' ``achievements_unlocked`` field stays at
@@ -202,10 +200,7 @@ def main() -> None:
     )
     if summary["unlocked"]:
         logger.info("Unlocked: %s", ", ".join(summary["unlocked"]))
-    logger.info(
-        "Replay with: uv run python -m factoriax.agentdebugger %s",
-        args.out,
-    )
+    logger.info("Trajectory saved to %s", args.out)
 
 
 if __name__ == "__main__":

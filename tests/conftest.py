@@ -16,10 +16,6 @@ Catalogue (env, wrapper, shape -> fixture name @ file):
 - 8x8 1p plain ``FactoriaXEnv()``
     -> ``canonical_env_8x8_1p`` @ this file
        returns ``(env, params, jit_step_fn, state)``
-- 8x8 1p via ``factoriax.make()``
-    -> ``env_and_state`` @ ``tests/agentdebugger/conftest.py``
-- 8x8 2p via ``factoriax.make()``
-    -> ``env_and_state_2p`` @ ``tests/agentdebugger/conftest.py``
 - 8x8 1p with ``ScienceTallyWrapper``
     -> ``tally_env`` @ ``tests/test_science_tally_wrapper.py``
 - 10x10 1p inside ``BenchmarkRunner``
@@ -30,12 +26,6 @@ Catalogue (env, wrapper, shape -> fixture name @ file):
        ``tests/benchmarks/skills/test_skills_scripted_solves.py``
 - 8x8 1p with custom ``achievement_fn``
     -> ``make_env(achievement_fn)`` @ ``tests/test_achievement_engine.py``
-
-Pre-warmed step_fn variants (call-signature matched, cache-hit ready):
-
-- ``_cached_step_fn`` 8x8 1p @ ``tests/agentdebugger/conftest.py``
-  Auto-swapped into the function-scoped ``debugger`` fixture.
-- ``_cached_step_fn_2p`` 8x8 2p @ ``tests/agentdebugger/conftest.py``
 
 Rule of thumb when adding a new test:
 
