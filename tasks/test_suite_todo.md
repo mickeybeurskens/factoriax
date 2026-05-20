@@ -62,12 +62,12 @@ M (3-5 files, ~1-3 hours).
 
 ## Cleanup (after Phase 2 sign-off)
 
-- [ ] Delete `performance_experiments/jit_share/` — the gate question
-      is answered; the harness has done its job.
-- [ ] If `performance_experiments/` is otherwise empty, delete the
-      directory and its README too.
-- [ ] Remove the `jit_share/` entry from
-      `performance_experiments/README.md` if the directory survives.
+- [x] Delete `performance_experiments/jit_share/` — gate question
+      answered, harness done its job.
+- [x] `performance_experiments/` directory + README removed (was
+      otherwise empty).
+- [x] Deleted `scripts/test_speedup_experiment.py` (the four-variant
+      runner had no remaining purpose).
 
 ---
 
