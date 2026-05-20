@@ -28,7 +28,12 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-x -q"
+# Default to running the full suite through all failures so a single
+# broken test doesn't mask the rest. Use ``make test-fast-fail`` (or
+# ``pytest -x`` explicitly) to stop at the first failure when
+# iterating on a known-broken test. The pre-commit hook continues to
+# pass ``-x`` itself — the dev loop wants fast feedback.
+addopts = "-q"
 markers = [
     "slow: marks tests as slow (e.g. CPU JIT compilation)",
 ]
