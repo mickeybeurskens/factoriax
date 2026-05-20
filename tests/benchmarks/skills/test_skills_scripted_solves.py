@@ -27,49 +27,63 @@ from factoriax.state import EnvState
 pytestmark = pytest.mark.slow
 
 
-def _run_scripted(
-    level_idx: int,
-    policy: ScriptedPolicy,
-    seed: int = 0,
-) -> tuple[bool, int]:
-    """Drive ``policy`` through ``SkillsBenchmark.levels()[level_idx]``.
+@pytest.fixture(scope="module")
+def run_scripted():
+    """Module-scoped ``_run_scripted`` with a per-level_idx JIT cache.
 
-    Builds env + state, wraps in :class:`ActionMaskWrapper` with the
-    level's mask, JIT-compiles ``step_env`` once, then loops calling
-    ``policy(state, params)`` until the target achievement bit
-    unlocks or the step budget runs out.
-
-    Args:
-        level_idx: Index into ``SkillsBenchmark().levels()``. Bit
-            ``level_idx`` of ``state.achievements_unlocked`` is the
-            unlock to watch.
-        policy: Scripted policy with signature
-            ``(state, params) -> action``.
-        seed: PRNG seed for ``step_env`` (deterministic episode).
-
-    Returns:
-        ``(solved, timesteps_used)`` — whether the bit unlocked, and
-        how many steps the policy took to do it.
+    Each unique ``level_idx`` builds its (env, jit_step) once and the
+    seed-parametrized tests beneath that level share the compile via
+    the cache. ``TestScriptedAggregate`` iterates over all four levels
+    and picks up every cache entry built by earlier tests in the
+    module, so it pays essentially zero JIT cost.
     """
     bench = SkillsBenchmark()
-    bench_level = bench.levels()[level_idx]
-    params = bench_level.env_params
+    cache: dict[int, tuple] = {}
 
-    inner = FactoriaXEnv(achievement_fn=skills_conditions)
-    blocked = bench_level.blocked_actions or frozenset()
-    env = ActionMaskWrapper(inner, tuple(blocked)) if blocked else inner
-    jit_step = jax.jit(env.step_env)
+    def _ensure(level_idx: int):
+        if level_idx in cache:
+            return cache[level_idx]
+        bench_level = bench.levels()[level_idx]
+        params = bench_level.env_params
+        inner = FactoriaXEnv(achievement_fn=skills_conditions)
+        blocked = bench_level.blocked_actions or frozenset()
+        env = ActionMaskWrapper(inner, tuple(blocked)) if blocked else inner
+        jit_step = jax.jit(env.step_env)
+        cache[level_idx] = (bench_level, params, jit_step)
+        return cache[level_idx]
 
-    state: EnvState = build_state(bench_level.level, params)
-    rng = jax.random.PRNGKey(seed)
+    def _run(
+        level_idx: int,
+        policy: ScriptedPolicy,
+        seed: int = 0,
+    ) -> tuple[bool, int]:
+        """Drive ``policy`` through ``SkillsBenchmark.levels()[level_idx]``.
 
-    for t in range(params.max_timesteps):
-        action = policy(state, params)
-        rng, subkey = jax.random.split(rng)
-        _obs, state, _r, _done, _info = jit_step(subkey, state, action, params)
-        if bool(jnp.asarray(state.achievements_unlocked)[level_idx]):
-            return True, t + 1
-    return False, params.max_timesteps
+        Args:
+            level_idx: Index into ``SkillsBenchmark().levels()``. Bit
+                ``level_idx`` of ``state.achievements_unlocked`` is the
+                unlock to watch.
+            policy: Scripted policy with signature
+                ``(state, params) -> action``.
+            seed: PRNG seed for ``step_env`` (deterministic episode).
+
+        Returns:
+            ``(solved, timesteps_used)`` — whether the bit unlocked,
+            and how many steps the policy took to do it.
+        """
+        bench_level, params, jit_step = _ensure(level_idx)
+        state: EnvState = build_state(bench_level.level, params)
+        rng = jax.random.PRNGKey(seed)
+
+        for t in range(params.max_timesteps):
+            action = policy(state, params)
+            rng, subkey = jax.random.split(rng)
+            _obs, state, _r, _done, _info = jit_step(subkey, state, action, params)
+            if bool(jnp.asarray(state.achievements_unlocked)[level_idx]):
+                return True, t + 1
+        return False, params.max_timesteps
+
+    return _run
 
 
 # ---------------------------------------------------------------------------
@@ -80,9 +94,9 @@ def _run_scripted(
 class TestNavigateScripted:
     """The greedy manhattan policy reaches the coal patch."""
 
-    def test_solves_canonical_seed(self) -> None:
+    def test_solves_canonical_seed(self, run_scripted) -> None:
         """Seed 0 solves; the scripted policy walks straight to the coal tile."""
-        solved, t = _run_scripted(
+        solved, t = run_scripted(
             level_idx=0,
             policy=SCRIPTED_POLICIES["navigate"],
             seed=0,
@@ -93,9 +107,9 @@ class TestNavigateScripted:
         assert t <= 10, f"navigate solved but took {t} ticks (budget hint: ≤ 10)"
 
     @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
-    def test_solves_other_seeds(self, seed: int) -> None:
+    def test_solves_other_seeds(self, run_scripted, seed: int) -> None:
         """Layout variation: scripted policy solves regardless of spawn."""
-        solved, t = _run_scripted(
+        solved, t = run_scripted(
             level_idx=0,
             policy=SCRIPTED_POLICIES["navigate"],
             seed=seed,
@@ -117,8 +131,8 @@ class TestNavigateScripted:
 class TestMineScripted:
     """Walk-to-nearest-ore + MINE clears all five tiles."""
 
-    def test_solves_canonical_seed(self) -> None:
-        solved, t = _run_scripted(
+    def test_solves_canonical_seed(self, run_scripted) -> None:
+        solved, t = run_scripted(
             level_idx=1,
             policy=SCRIPTED_POLICIES["mine"],
             seed=0,
@@ -130,8 +144,8 @@ class TestMineScripted:
         assert t <= 30, f"mine solved but took {t} ticks (target: <= 30)"
 
     @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
-    def test_solves_other_seeds(self, seed: int) -> None:
-        solved, t = _run_scripted(
+    def test_solves_other_seeds(self, run_scripted, seed: int) -> None:
+        solved, t = run_scripted(
             level_idx=1,
             policy=SCRIPTED_POLICIES["mine"],
             seed=seed,
@@ -153,8 +167,8 @@ class TestMineScripted:
 class TestCraftMinerScripted:
     """Walk → face → WITHDRAW twice, then CRAFT_MINER."""
 
-    def test_solves_canonical_seed(self) -> None:
-        solved, t = _run_scripted(
+    def test_solves_canonical_seed(self, run_scripted) -> None:
+        solved, t = run_scripted(
             level_idx=2,
             policy=SCRIPTED_POLICIES["craft_miner"],
             seed=0,
@@ -165,8 +179,8 @@ class TestCraftMinerScripted:
         assert t <= 30, f"craft_miner solved but took {t} ticks (target: <= 30)"
 
     @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
-    def test_solves_other_seeds(self, seed: int) -> None:
-        solved, t = _run_scripted(
+    def test_solves_other_seeds(self, run_scripted, seed: int) -> None:
+        solved, t = run_scripted(
             level_idx=2,
             policy=SCRIPTED_POLICIES["craft_miner"],
             seed=seed,
@@ -188,8 +202,8 @@ class TestCraftMinerScripted:
 class TestPlaceMinerScripted:
     """Walk-adjacent + face + place lands miners on each of three patches."""
 
-    def test_solves_canonical_seed(self) -> None:
-        solved, t = _run_scripted(
+    def test_solves_canonical_seed(self, run_scripted) -> None:
+        solved, t = run_scripted(
             level_idx=3,
             policy=SCRIPTED_POLICIES["place_miner"],
             seed=0,
@@ -200,8 +214,8 @@ class TestPlaceMinerScripted:
         assert t <= 30, f"place_miner solved but took {t} ticks (target: <= 30)"
 
     @pytest.mark.parametrize("seed", [1, 2, 3, 7, 13, 42])
-    def test_solves_other_seeds(self, seed: int) -> None:
-        solved, t = _run_scripted(
+    def test_solves_other_seeds(self, run_scripted, seed: int) -> None:
+        solved, t = run_scripted(
             level_idx=3,
             policy=SCRIPTED_POLICIES["place_miner"],
             seed=seed,
@@ -231,13 +245,13 @@ class TestPlaceMinerScripted:
 class TestScriptedAggregate:
     """Scripted policies as a group score well on the curriculum so far."""
 
-    def test_curriculum_aggregate_above_floor(self) -> None:
+    def test_curriculum_aggregate_above_floor(self, run_scripted) -> None:
         """Each scripted policy solves its level; aggregate well above 0.9."""
         bench = SkillsBenchmark()
         scores: list[float] = []
         for i, bench_level in enumerate(bench.levels()):
             policy = SCRIPTED_POLICIES[bench_level.name]
-            solved, t = _run_scripted(level_idx=i, policy=policy, seed=0)
+            solved, t = run_scripted(level_idx=i, policy=policy, seed=0)
             assert solved, f"{bench_level.name!r} scripted failed (t={t})"
             max_t = bench_level.env_params.max_timesteps
             scores.append((max_t - t + 1) / max_t)
