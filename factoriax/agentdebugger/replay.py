@@ -25,6 +25,9 @@ def replay_states(
     traj: Trajectory,
     episode: int = 0,
     player: int = 0,
+    *,
+    env: Any = None,
+    step_fn: Any = None,
 ) -> list[EnvState]:
     """Replay a trajectory's actions on a level and collect env states.
 
@@ -40,6 +43,14 @@ def replay_states(
         player: Player index whose actions to replay (for multi-player
             trajectories with sequential player cycling, only player 0's
             actions drive the environment).
+        env: Optional pre-built :class:`FactoriaXEnv`. Defaults to a
+            fresh instance. Callers that also drive the env directly
+            (e.g. recording then replaying in the same test) can share
+            their env so the ``jax.jit(env.step_env)`` cache is reused.
+        step_fn: Optional pre-built JITted step function. Defaults to
+            ``jax.jit(env.step_env)``. When both ``env`` and ``step_fn``
+            are passed, ``step_fn`` is used as-is; no consistency check
+            is performed.
 
     Returns:
         List of :class:`EnvState`, one per timestep plus a final state
@@ -73,8 +84,11 @@ def replay_states(
     )
     state = build_state(level, params)
 
-    env = FactoriaXEnv()
-    jit_step = jax.jit(env.step_env)
+    if env is None:
+        env = FactoriaXEnv()
+    if step_fn is None:
+        step_fn = jax.jit(env.step_env)
+    jit_step = step_fn
     rng = jax.random.PRNGKey(0)
 
     ep = traj.episode(episode)

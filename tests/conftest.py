@@ -1,4 +1,60 @@
-"""Shared test fixtures and utilities."""
+"""Shared test fixtures and utilities.
+
+============================================================================
+Standard env fixtures across the test suite — pick one before you make your own.
+============================================================================
+
+JIT cache thrash is the single biggest driver of test wall time on this
+project. Every fresh ``FactoriaXEnv(...)`` + ``jax.jit(env.step_env)``
+combination triggers a ~7s XLA compile. The catalogue below lists the
+fixtures that already exist; consume them in preference to building your
+own env. If you must build your own, add a comment naming the property
+you assert that prevents you from using a standard.
+
+Catalogue (env, wrapper, shape -> fixture name @ file):
+
+- 8x8 1p plain ``FactoriaXEnv()``
+    -> ``canonical_env_8x8_1p`` @ this file
+       returns ``(env, params, jit_step_fn, state)``
+- 8x8 1p via ``factoriax.make()``
+    -> ``env_and_state`` @ ``tests/agentdebugger/conftest.py``
+- 8x8 2p via ``factoriax.make()``
+    -> ``env_and_state_2p`` @ ``tests/agentdebugger/conftest.py``
+- 8x8 1p with ``ScienceTallyWrapper``
+    -> ``tally_env`` @ ``tests/test_science_tally_wrapper.py``
+- 10x10 1p inside ``BenchmarkRunner``
+    -> ``runner`` @ ``tests/benchmarks/conftest.py``
+       (multi-entry cache; new ``blocked_actions`` configs compile once)
+- 5x5 1p per skill level
+    -> ``run_scripted(level_idx, policy)`` @
+       ``tests/benchmarks/skills/test_skills_scripted_solves.py``
+- 8x8 1p with custom ``achievement_fn``
+    -> ``make_env(achievement_fn)`` @ ``tests/test_achievement_engine.py``
+
+Pre-warmed step_fn variants (call-signature matched, cache-hit ready):
+
+- ``_cached_step_fn`` 8x8 1p @ ``tests/agentdebugger/conftest.py``
+  Auto-swapped into the function-scoped ``debugger`` fixture.
+- ``_cached_step_fn_2p`` 8x8 2p @ ``tests/agentdebugger/conftest.py``
+
+Rule of thumb when adding a new test:
+
+1. If the test asserts something shape-independent (observation
+   structure, machine logic, achievement latching, etc.), consume
+   ``canonical_env_8x8_1p`` and call it done.
+2. If the test wraps the env (custom achievement_fn, action mask,
+   etc.) and the wrapper already has a fixture above, use it.
+3. If the test asserts a *specific* shape's behaviour (obs space
+   dimensions at 32x32, level builder validation, etc.), build your
+   own env and add a one-line comment naming the assertion.
+4. If the test introduces a new wrapper used by more than one
+   assertion, add a module-scoped fixture for it next to the test —
+   then add a row to this catalogue.
+
+Background: ``SPEC_TEST_SUITE.md`` walks through Phase 2 (Tasks
+2.1-2.11) which collapsed ~60% of wall time by hoisting these
+fixtures from per-test construction to shared scope.
+"""
 
 # Force headless rendering for every test in the suite. Setting these
 # BEFORE pygame is imported anywhere is what keeps test runs from

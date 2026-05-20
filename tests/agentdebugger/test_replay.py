@@ -553,7 +553,10 @@ class TestReplayStatesEnvParamsReconstruction:
 
         # Drive: FACE_RIGHT, then three MINEs. Both record and replay
         # start from the same build_state output so the action sequence
-        # alone reproduces the final state.
+        # alone reproduces the final state. We pass env+step_fn into
+        # replay_states below to share this compile across the two
+        # otherwise-independent JIT call sites (test's own loop +
+        # replay_states' internal loop).
         states = [state]
         actions: list[int] = [
             int(Action.FACE_RIGHT),
@@ -582,7 +585,7 @@ class TestReplayStatesEnvParamsReconstruction:
         traj.save(str(path))
         loaded = Trajectory.load(str(path))
 
-        replayed = replay_states(level, loaded)
+        replayed = replay_states(level, loaded, env=env, step_fn=step_fn)
         replayed_items_mined = np.asarray(replayed[-1].items_mined)
 
         # Bit-identical items_mined under the recovered yield.
