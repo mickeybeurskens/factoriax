@@ -97,13 +97,19 @@ class TestMiningReward:
     """Verify mining skill reward computation."""
 
     def test_noop_gives_zero(self) -> None:
-        """NOOP should not mine anything."""
+        """NOOP should not mine anything.
+
+        Calls ``env.step_env`` eagerly (no ``jax.jit`` wrapper): the
+        test does exactly one step, and the ~7s XLA compile a wrapper
+        would trigger dwarfs the ~1s cost of running step eagerly.
+        Breakeven is ~15 calls — keep this in mind if expanding the
+        test.
+        """
         level, params = mining_level()
         env = MiningSkill(inner=FactoriaXEnv(level=level))
         _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        step_fn = jax.jit(env.step_env)
         key = jax.random.PRNGKey(0)
-        _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)
+        _, _, reward, _, _ = env.step_env(key, state, int(Action.NOOP), params)
         assert float(reward) == 0.0
 
 
@@ -112,11 +118,14 @@ class TestPlaceMinerReward:
     """Verify place miner skill reward computation."""
 
     def test_no_miners_gives_zero(self) -> None:
-        """With no miners placed, reward should be zero."""
+        """With no miners placed, reward should be zero.
+
+        Eager ``env.step_env`` — see ``TestMiningReward`` for the
+        rationale on dropping the explicit ``jax.jit``.
+        """
         level, params = place_miner_level()
         env = PlaceMinerSkill(inner=FactoriaXEnv(level=level))
         _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        step_fn = jax.jit(env.step_env)
         key = jax.random.PRNGKey(0)
-        _, _, reward, _, _ = step_fn(key, state, int(Action.NOOP), params)
+        _, _, reward, _, _ = env.step_env(key, state, int(Action.NOOP), params)
         assert float(reward) == 0.0
