@@ -71,6 +71,13 @@ THRESHOLD_SECONDS=450
 
 # --- Run --------------------------------------------------------------------
 
+# Keep the SSH connection to the remote alive during the long suite
+# run — GitHub's sshd otherwise idle-times out after ~5 min and the
+# subsequent push fails with "Connection closed by remote host" even
+# though every check passes. Setting these here only affects the
+# child process inheriting the env (git's push), not unrelated shells.
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=10}"
+
 echo "[pre-push] Running full no-cov test suite (threshold ${THRESHOLD_SECONDS}s)..."
 START_NS=$(date +%s%N)
 if ! uv run pytest --no-cov -q; then
