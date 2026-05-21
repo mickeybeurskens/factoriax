@@ -178,14 +178,16 @@ class TestEnvStepSmoke:
     map size. Slow but load-bearing — gated behind ``-m slow``.
     """
 
-    @pytest.mark.parametrize("size", [16, 32])
+    @pytest.mark.parametrize("size", [16])
     def test_reset_and_step(self, size: int) -> None:
-        """Reset + step completes without error at each map size.
+        """Reset + step completes without error at the canonical map size.
 
-        Dropped the 64x64 case in the replacement-for-speedup pass —
-        it cost ~4.8s of unique XLA compile but added no signal beyond
-        16x16 + 32x32. The scaling property the parametrize verifies
-        ('env works at multiple shapes') is preserved with two cases.
+        Dropped 32x32 and 64x64 in the replacement-for-speedup pass:
+        each was a unique XLA compile (~4.5s / ~4.8s) but the rest of
+        the suite already covers 32x32 implicitly (rocket benchmark
+        params are 32x32) and 64x64 had no other consumer. The 16x16
+        case shares compile with TestRendererSmoke and TestPlayUISmoke
+        in this file, so its cost is near-free.
         """
         env = FactoriaXEnv()
         params = EnvParams(

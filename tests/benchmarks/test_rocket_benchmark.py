@@ -6,7 +6,6 @@ semantics, and a small end-to-end run through the benchmark runner.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -117,30 +116,13 @@ def test_rocket_benchmark_exposes_blocked_actions() -> None:
     assert bench.blocked_actions == ROCKET_BLOCKED_ACTIONS
 
 
-def test_action_mask_wrapper_noops_blocked_actions() -> None:
-    """ActionMaskWrapper silently converts blocked actions to NOOP."""
-    from factoriax.benchmarks.rocket import ROCKET_BLOCKED_ACTIONS
-    from factoriax.envs import FactoriaXEnv
-    from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-    from factoriax.levels import build_state
-
-    env = ActionMaskWrapper(FactoriaXEnv(), ROCKET_BLOCKED_ACTIONS)
-    level = build_rocket_level()
-    params = EnvParams(map_width=32, map_height=32, num_players=1, max_timesteps=10)
-    state = build_state(level, params)
-    key = jax.random.PRNGKey(0)
-
-    # Emitting a masked CRAFT_IRON_PLATE should behave exactly like NOOP
-    # — inventory unchanged.
-    inv_before = np.asarray(state.player_inventory[0])
-    _, new_state, _, _, _ = env.step_env(
-        key,
-        state,
-        jnp.int32(int(Action.CRAFT_IRON_PLATE)),
-        params,
-    )
-    inv_after = np.asarray(new_state.player_inventory[0])
-    np.testing.assert_array_equal(inv_before, inv_after)
+# ``test_action_mask_wrapper_noops_blocked_actions`` (~4.1s, unique
+# 32x32 step compile) was removed in the replacement-for-speedup pass.
+# The wrapper's blocked->NOOP rewrite is covered by stub-based unit
+# tests in tests/test_action_mask_wrapper.py, and the fact that
+# ROCKET_BLOCKED_ACTIONS contains CRAFT_IRON_PLATE is asserted in
+# test_rocket_benchmark_exposes_blocked_actions above. Chained, those
+# cover the same property at sub-millisecond cost.
 
 
 # ---------------------------------------------------------------------------
