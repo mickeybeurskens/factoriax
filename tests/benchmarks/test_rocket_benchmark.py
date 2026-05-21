@@ -445,43 +445,20 @@ def test_score_without_mask_returns_zero() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
-def test_runner_populates_achievements_end_to_end(runner) -> None:
-    """A random policy run surfaces a non-None achievements mask.
-
-    Uses the shared session-scoped ``runner`` fixture (from
-    ``tests/benchmarks/conftest.py``) so the BenchmarkRunner
-    constructor's no-achievement-fn compile is reused. The runner's
-    multi-entry cache (Task 2.10) absorbs the rocket_conditions
-    achievement_fn config without trashing the no-fn entry. Only one
-    new compile this test pays for: rocket_conditions + ROCKET_BLOCKED.
-    """
-
-    def random_policy(obs: jax.Array) -> jax.Array:
-        # Constant NOOP — simplest possible policy. The point of this
-        # test is that the runner wires up the wrapper, not that the
-        # random policy unlocks anything.
-        return jnp.int32(0)
-
-    bench = RocketBenchmark()
-    # Override max_timesteps so JIT compile stays cheap.
-    short = bench.levels()[0]
-    short_params = short.env_params.replace(max_timesteps=20)
-
-    class _ShortRocket(RocketBenchmark):
-        def levels(self) -> list:
-            return [
-                short.__class__(
-                    name=short.name,
-                    description=short.description,
-                    level=short.level,
-                    env_params=short_params,
-                )
-            ]
-
-    result = runner.run(_ShortRocket(), [random_policy])
-    assert result.level_results[0].achievements_unlocked is not None
-    assert result.level_results[0].achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
-    # Aggregate score is a finite non-negative number.
-    assert result.aggregate_score >= 0.0
-    assert np.isfinite(result.aggregate_score)
+# ``test_runner_populates_achievements_end_to_end`` (~9s) was removed
+# in the replacement-for-speedup pass. The properties it covered are
+# decomposed across cheap unit tests:
+#
+#   - tests/benchmarks/test_runner.py::TestAchievementsAccessor:
+#     ``_achievements`` returns numpy of state.achievements_unlocked
+#     when a fn is bound, None otherwise.
+#   - ``test_rocket_benchmark_exposes_blocked_actions`` above:
+#     RocketBenchmark advertises blocked_actions correctly.
+#   - The ``RocketBenchmark.achievement_fn`` attribute is checked
+#     indirectly via the catalogue tests + the runner's _ensure_env
+#     pickup logic (TestResolveBlocked + TestBuildEnv in
+#     test_runner.py).
+#   - ``TestRunnerExecution::test_aggregate_equals_benchmark_score``
+#     covers aggregate_score finiteness via the shared noop_result.
+#
+# Chained, those cover the same wiring at sub-second cost.

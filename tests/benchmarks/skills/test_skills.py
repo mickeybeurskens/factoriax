@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import jax
+import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from factoriax.benchmarks.skills.mining import MiningSkill, mining_level
 from factoriax.benchmarks.skills.place_miner import (
@@ -12,7 +12,6 @@ from factoriax.benchmarks.skills.place_miner import (
     place_miner_level,
 )
 from factoriax.constants import Action, BlockType, ItemType
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import build_state
 
 # -----------------------------------------------------------------------
@@ -92,40 +91,87 @@ class TestPlaceMinerLevel:
 # -----------------------------------------------------------------------
 
 
-@pytest.mark.slow
+class _StubInner:
+    """Stand-in inner env: ``step_env`` returns a post-step state controlled
+    by an injected mutator. Lets the skill-wrapper reward tests below
+    exercise the wrappers without paying real ``FactoriaXEnv.step_env``
+    compile cost.
+    """
+
+    def __init__(self, mutate=lambda state: state) -> None:
+        self._mutate = mutate
+
+    @property
+    def default_params(self):
+        return None
+
+    def step_env(self, key, state, action, params):
+        return (
+            jnp.zeros(1),
+            self._mutate(state),
+            jnp.float32(0.0),
+            jnp.bool_(False),
+            {},
+        )
+
+    def reset_env(self, key, params):
+        return jnp.zeros(1), object()
+
+    def get_obs(self, state, params):
+        return jnp.zeros(1)
+
+    def is_terminal(self, state, params):
+        return jnp.bool_(False)
+
+    def action_space(self, params):
+        return None
+
+    def observation_space(self, params):
+        return None
+
+
 class TestMiningReward:
-    """Verify mining skill reward computation."""
+    """``MiningSkill.step_env`` reward = sum(new.items_mined - prev.items_mined).
 
-    def test_noop_gives_zero(self) -> None:
-        """NOOP should not mine anything.
+    Stub-based unit tests; no XLA compile. Replaces the previous
+    integration that built MiningSkill(inner=FactoriaXEnv(level=...))
+    and paid ~3.3s per call for the unique wrapper compile.
+    """
 
-        Calls ``env.step_env`` eagerly (no ``jax.jit`` wrapper): the
-        test does exactly one step, and the ~7s XLA compile a wrapper
-        would trigger dwarfs the ~1s cost of running step eagerly.
-        Breakeven is ~15 calls — keep this in mind if expanding the
-        test.
-        """
-        level, params = mining_level()
-        env = MiningSkill(inner=FactoriaXEnv(level=level))
-        _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        key = jax.random.PRNGKey(0)
-        _, _, reward, _, _ = env.step_env(key, state, int(Action.NOOP), params)
+    def test_noop_gives_zero(self, canonical_env_8x8_1p) -> None:
+        _, params, _, state = canonical_env_8x8_1p
+        state = state.replace(items_mined=jnp.zeros_like(state.items_mined))
+        skill = MiningSkill(inner=_StubInner(mutate=lambda s: s))
+        _, _, reward, _, _ = skill.step_env(
+            jax.random.PRNGKey(0), state, int(Action.NOOP), params
+        )
         assert float(reward) == 0.0
 
+    def test_items_mined_delta_becomes_reward(self, canonical_env_8x8_1p) -> None:
+        _, params, _, state = canonical_env_8x8_1p
+        state = state.replace(items_mined=jnp.zeros_like(state.items_mined))
 
-@pytest.mark.slow
+        def _add_three_coal(s):
+            return s.replace(items_mined=s.items_mined.at[int(ItemType.COAL)].set(3))
+
+        skill = MiningSkill(inner=_StubInner(mutate=_add_three_coal))
+        _, _, reward, _, _ = skill.step_env(
+            jax.random.PRNGKey(0), state, int(Action.MINE), params
+        )
+        assert float(reward) == 3.0
+
+
 class TestPlaceMinerReward:
-    """Verify place miner skill reward computation."""
+    """``PlaceMinerSkill.step_env`` reward = count_miners_on_ore(new_state).
 
-    def test_no_miners_gives_zero(self) -> None:
-        """With no miners placed, reward should be zero.
+    Stub-based unit tests; no XLA compile.
+    """
 
-        Eager ``env.step_env`` — see ``TestMiningReward`` for the
-        rationale on dropping the explicit ``jax.jit``.
-        """
-        level, params = place_miner_level()
-        env = PlaceMinerSkill(inner=FactoriaXEnv(level=level))
-        _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        key = jax.random.PRNGKey(0)
-        _, _, reward, _, _ = env.step_env(key, state, int(Action.NOOP), params)
+    def test_no_miners_gives_zero(self, canonical_env_8x8_1p) -> None:
+        _, params, _, state = canonical_env_8x8_1p
+        # canonical state has no machines placed → reward is zero.
+        skill = PlaceMinerSkill(inner=_StubInner(mutate=lambda s: s))
+        _, _, reward, _, _ = skill.step_env(
+            jax.random.PRNGKey(0), state, int(Action.NOOP), params
+        )
         assert float(reward) == 0.0

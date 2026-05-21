@@ -227,6 +227,50 @@ class _MultiLevelBenchmark:
         return sum(r.weighted_score for r in level_results) / len(level_results)
 
 
+class TestAchievementsAccessor:
+    """Unit tests for ``BenchmarkRunner._achievements``.
+
+    Replaces the ~9s ``test_runner_populates_achievements_end_to_end``
+    in ``test_rocket_benchmark.py``: instead of building a real
+    ``RocketBenchmark`` and running it through the runner (unique
+    config compile), exercise the accessor directly. The wiring it
+    used to cover is split across:
+
+      - This file: ``_achievements`` returns numpy of unlocks when
+        an ``achievement_fn`` is bound.
+      - This file: ``_ensure_env`` resolves benchmark.achievement_fn
+        (covered indirectly by TestBuildEnv + TestResolveBlocked).
+      - ``test_rocket_benchmark.py``: RocketBenchmark.achievement_fn
+        attribute is set to ``rocket_conditions``.
+      - ``test_runner.py::TestRunnerExecution`` tests: aggregate_score
+        is a finite float.
+    """
+
+    def test_returns_none_when_no_fn(self) -> None:
+        """``_achievements`` returns None when the runner has no fn."""
+        r = BenchmarkRunner(seed=0)  # no achievement_fn
+        # Build a stub state with an achievements_unlocked field.
+        state = type(
+            "S", (), {"achievements_unlocked": jnp.zeros(3, dtype=jnp.bool_)}
+        )()
+        assert r._achievements(state) is None
+
+    def test_returns_numpy_array_when_fn_set(self) -> None:
+        """``_achievements`` returns numpy of state.achievements_unlocked."""
+
+        # achievement_fn doesn't matter for this test — just needs to be
+        # something non-None so _current_fn is set after construction.
+        def _fn(state):
+            return state.achievements_unlocked
+
+        r = BenchmarkRunner(seed=0, achievement_fn=_fn)
+        unlocks = jnp.array([True, False, True])
+        state = type("S", (), {"achievements_unlocked": unlocks})()
+        result = r._achievements(state)
+        assert result is not None
+        np.testing.assert_array_equal(result, np.array([True, False, True]))
+
+
 class TestBuildEnv:
     """Unit tests for ``BenchmarkRunner._build_env`` wrapper application.
 
