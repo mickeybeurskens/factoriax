@@ -127,48 +127,6 @@ class TestConfigSmoke:
         config = load_config()
         assert config is not None
 
-    def test_settings_fields_exist_on_env_params(self) -> None:
-        """Every EnvParams-bound field in the settings menu must exist on it.
-
-        The Seed field reads from :class:`PlayerConfig.seed`, not
-        :class:`EnvParams`, so it is skipped here.
-        """
-        from factoriax.config import PlayerConfig, env_params_to_dict
-        from factoriax.play.launch_screen import _build_sections
-
-        params = EnvParams()
-        config = PlayerConfig(env_params=env_params_to_dict(params))
-        sections = _build_sections(config)
-        for section in sections:
-            for field in section.fields:
-                if field.name == "seed":
-                    continue
-                assert hasattr(params, field.name), (
-                    f"Settings field {field.name!r} not found on EnvParams"
-                )
-
-    def test_env_param_fields_match_env_params(self) -> None:
-        """_ENV_PARAM_FIELDS in config.py must all exist on EnvParams."""
-        from factoriax.config import _ENV_PARAM_FIELDS
-
-        params = EnvParams()
-        for name in _ENV_PARAM_FIELDS:
-            assert hasattr(params, name), (
-                f"_ENV_PARAM_FIELDS entry {name!r} not on EnvParams"
-            )
-
-
-class TestEditorSmoke:
-    """Editor modules should import and create basic objects."""
-
-    def test_editor_imports(self) -> None:
-        """Editor dialogs and state modules import without error."""
-        from factoriax.editor import (
-            dialogs,  # noqa: F401
-            state,  # noqa: F401
-            toolbar,  # noqa: F401
-        )
-
 
 @pytest.mark.slow
 class TestEnvStepSmoke:

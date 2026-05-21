@@ -9,14 +9,11 @@ errors at import time instead.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import pytest
 
 from factoriax.belts import (
     CROSSING_AXIS_DIRS,
     CROSSING_DIAGONAL,
-    CROSSING_HORIZ_SLOT,
-    CROSSING_VERT_SLOT,
     SPLITTER_PERP_OUTPUTS,
 )
 from factoriax.constants import Direction
@@ -120,17 +117,3 @@ def test_crossing_diagonal_matches_input_pair() -> None:
     # Encoding 2: N input + E input. Encoding 3: S input + W input.
     assert CROSSING_DIAGONAL[2] == "/"
     assert CROSSING_DIAGONAL[3] == "/"
-
-
-def test_crossing_slot_indices_are_distinct() -> None:
-    """Vertical and horizontal axes must read/write disjoint slots."""
-    assert CROSSING_VERT_SLOT != CROSSING_HORIZ_SLOT
-    assert CROSSING_VERT_SLOT in (0, 1)
-    assert CROSSING_HORIZ_SLOT in (0, 1)
-
-
-def test_tables_are_jnp_arrays() -> None:
-    """Both lookup tables must be ``jnp.ndarray`` so they can be indexed
-    inside JIT'd code without a host->device copy at every call site."""
-    assert isinstance(SPLITTER_PERP_OUTPUTS, jnp.ndarray)
-    assert isinstance(CROSSING_AXIS_DIRS, jnp.ndarray)

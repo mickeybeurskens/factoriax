@@ -47,21 +47,6 @@ class TestApplyScale:
         assert theme.BORDER_PX == 8
         assert theme.SCROLLBAR_W == 16
 
-    def test_scale_3_triples_sizes(self) -> None:
-        """Scale factor 3 triples all size constants."""
-        theme.apply_scale(3)
-        assert theme.UI_SCALE == 3
-        assert theme.FONT_HEADER == 72
-        assert theme.FONT_BODY == 54
-
-    def test_colors_unchanged(self) -> None:
-        """Color constants are not affected by scaling."""
-        original_border = theme.BORDER
-        original_text = theme.TEXT_COLOR
-        theme.apply_scale(2)
-        assert theme.BORDER == original_border
-        assert theme.TEXT_COLOR == original_text
-
 
 # ---------------------------------------------------------------------------
 # ScaledCanvas

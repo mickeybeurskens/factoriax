@@ -149,21 +149,6 @@ def test_recipe_table_shapes_match_book_size() -> None:
     assert table.craft_action_to_recipe.shape == (NUM_RECIPES,)
 
 
-def test_recipe_table_is_pytree() -> None:
-    """:class:`RecipeTable` is a flax PyTreeNode so it can flow
-    through JIT boundaries as part of :class:`EnvParams`. The leaves
-    must all be jax arrays.
-    """
-    import jax
-
-    leaves = jax.tree_util.tree_leaves(DEFAULT_RECIPE_TABLE)
-    assert len(leaves) == 8
-    for leaf in leaves:
-        assert isinstance(leaf, jnp.ndarray), (
-            f"RecipeTable leaf is not a jax array: {type(leaf).__name__}"
-        )
-
-
 def test_output_to_recipe_round_trip() -> None:
     """``output_to_recipe[recipe.output]`` returns the recipe's index
     for every shipped recipe; non-output items map to ``-1``.

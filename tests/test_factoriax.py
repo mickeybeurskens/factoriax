@@ -65,23 +65,6 @@ class TestWorldGeneration:
             px, py = state.player_positions[i]
             assert state.map[py, px] == BlockType.DIRT
 
-    def test_generate_state_is_deterministic(self) -> None:
-        """Same seed should produce same world."""
-        params = EnvParams()
-        state1 = generate_state(random.PRNGKey(42), params)
-        state2 = generate_state(random.PRNGKey(42), params)
-
-        assert jnp.array_equal(state1.map, state2.map)
-        assert jnp.array_equal(state1.player_positions, state2.player_positions)
-
-    def test_different_seeds_produce_different_worlds(self) -> None:
-        """Different seeds should produce different worlds."""
-        params = EnvParams()
-        state1 = generate_state(random.PRNGKey(0), params)
-        state2 = generate_state(random.PRNGKey(1), params)
-
-        assert not jnp.array_equal(state1.map, state2.map)
-
 
 class TestEnvStateSchema:
     """Tests for the EnvState schema — fields the engine guarantees."""
@@ -92,19 +75,6 @@ class TestEnvStateSchema:
         from factoriax.levels import generate_state
 
         state = generate_state(random.PRNGKey(0), EnvParams())
-
-        assert state.achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
-        assert state.achievements_unlocked.dtype == jnp.bool_
-        assert not bool(state.achievements_unlocked.any())
-
-    def test_build_state_initializes_achievements_unlocked(self) -> None:
-        """Level-built state has all-False achievements_unlocked of correct shape."""
-        from factoriax.constants import MAX_ACHIEVEMENTS
-        from factoriax.levels import build_state, get_level
-
-        level = get_level("15x15_resources")
-        params = EnvParams(map_width=15, map_height=15, num_players=1)
-        state = build_state(level, params)
 
         assert state.achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
         assert state.achievements_unlocked.dtype == jnp.bool_

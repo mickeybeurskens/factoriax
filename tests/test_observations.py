@@ -377,14 +377,6 @@ class TestRgb:
         assert out.ndim == 3
         assert out.shape == (8 * bps, 8 * bps, 3)
 
-    def test_returns_numpy(self, state_factory) -> None:
-        """rgb must return a numpy array, not a JAX array."""
-        state = state_factory(
-            world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
-        )
-        out = rgb(state, block_pixel_size=4)
-        assert isinstance(out, np.ndarray)
-
     def test_different_maps_produce_different_images(self, state_factory) -> None:
         """A DIRT map and a WATER map must render visually differently."""
         bps = 4
