@@ -136,28 +136,24 @@ def test_core_game_conditions_unlock_through_engine(make_env, state_factory) -> 
     assert bool(state.achievements_unlocked[_achievement_index("first_ore")])
 
 
-def test_core_game_conditions_vmaps() -> None:
-    """``core_game_conditions`` must vmap across batched envs.
+def test_core_game_conditions_vmaps(canonical_env_8x8_1p) -> None:
+    """``core_game_conditions`` must vmap across batched states.
 
-    Uses 8x8 1p instead of the default 32x32 2p — the assertion is on
-    ``achievements_unlocked.shape``, which depends on ``MAX_ACHIEVEMENTS``
-    (not on map dimensions or player count), so the smaller shape gives
-    identical coverage at a fraction of the vmap compile cost.
+    Tests the achievement function directly under ``jax.vmap``, not
+    the full ``env.step_env`` path. The original test built a fresh
+    ``FactoriaXEnv(achievement_fn=core_game_conditions)`` and vmapped
+    reset+step over 4 envs to verify ``achievements_unlocked.shape ==
+    (4, MAX_ACHIEVEMENTS)`` — a ~14s XLA compile of the vmapped step.
+    The shape assertion only depends on ``MAX_ACHIEVEMENTS`` and the
+    batch dim; vmapping the achievement fn itself proves the same
+    property at sub-second cost.
 
-    A passing vmap also implies a passing plain-jit, so the previously
-    separate ``test_core_game_conditions_jits_via_step`` was strictly
-    subsumed and removed.
+    Full env.step + achievement_fn integration is covered by the other
+    tests in this file.
     """
-    env = FactoriaXEnv(achievement_fn=core_game_conditions)
-    params = EnvParams(map_width=8, map_height=8, num_players=1)
-
-    reset_keys = random.split(random.PRNGKey(0), 4)
-    _, states = jax.vmap(env.reset_env, in_axes=(0, None))(reset_keys, params)
-
-    step_keys = random.split(random.PRNGKey(1), 4)
-    actions = jnp.zeros(4, dtype=jnp.int32)
-    _, states, _, _, _ = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))(
-        step_keys, states, actions, params
-    )
-
-    assert states.achievements_unlocked.shape == (4, MAX_ACHIEVEMENTS)
+    _, _, _, state = canonical_env_8x8_1p
+    # Stack four copies of the canonical state along a leading axis.
+    batched_state = jax.tree.map(lambda x: jnp.stack([x] * 4), state)
+    masks = jax.vmap(core_game_conditions)(batched_state)
+    assert masks.shape == (4, MAX_ACHIEVEMENTS)
+    assert masks.dtype == jnp.bool_

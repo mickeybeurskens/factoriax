@@ -15,7 +15,6 @@ from factoriax.benchmarks import (
     MAX_ROCKET_SCORE,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_ACHIEVEMENT_WEIGHTS,
-    BenchmarkRunner,
     LevelResult,
     RocketBenchmark,
     build_rocket_level,
@@ -447,8 +446,16 @@ def test_score_without_mask_returns_zero() -> None:
 
 
 @pytest.mark.slow
-def test_runner_populates_achievements_end_to_end() -> None:
-    """A random policy run surfaces a non-None achievements mask."""
+def test_runner_populates_achievements_end_to_end(runner) -> None:
+    """A random policy run surfaces a non-None achievements mask.
+
+    Uses the shared session-scoped ``runner`` fixture (from
+    ``tests/benchmarks/conftest.py``) so the BenchmarkRunner
+    constructor's no-achievement-fn compile is reused. The runner's
+    multi-entry cache (Task 2.10) absorbs the rocket_conditions
+    achievement_fn config without trashing the no-fn entry. Only one
+    new compile this test pays for: rocket_conditions + ROCKET_BLOCKED.
+    """
 
     def random_policy(obs: jax.Array) -> jax.Array:
         # Constant NOOP — simplest possible policy. The point of this
@@ -472,7 +479,6 @@ def test_runner_populates_achievements_end_to_end() -> None:
                 )
             ]
 
-    runner = BenchmarkRunner(seed=0)
     result = runner.run(_ShortRocket(), [random_policy])
     assert result.level_results[0].achievements_unlocked is not None
     assert result.level_results[0].achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
