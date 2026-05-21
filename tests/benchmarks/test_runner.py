@@ -86,9 +86,14 @@ class TestRunnerValidation:
         with pytest.raises(ValueError, match="2 policies"):
             BenchmarkRunner(seed=0).run(bench, policies=[lambda obs: jnp.array(0)])
 
-    def test_correct_count_does_not_raise(self, runner: BenchmarkRunner) -> None:
-        bench = _StubBenchmark(_stub_level(), num_players=1)
-        assert runner.run(bench, policies=[lambda obs: jnp.array(0)]) is not None
+    # ``test_correct_count_does_not_raise`` was removed: the
+    # ``noop_result`` fixture (TestRunnerExecution) builds a
+    # ``_StubBenchmark`` with one player and runs it through the same
+    # runner with a single policy. If that fixture's run had raised,
+    # every TestRunnerExecution test below would fail at setup. The
+    # dedicated "doesn't raise" assertion paid the first ~7s
+    # ``step_env`` compile for the file but added nothing the fixture
+    # didn't already cover.
 
 
 # ---------------------------------------------------------------------------
