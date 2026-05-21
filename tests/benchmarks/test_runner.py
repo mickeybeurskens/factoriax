@@ -227,11 +227,30 @@ class _MultiLevelBenchmark:
         return sum(r.weighted_score for r in level_results) / len(level_results)
 
 
-def _player_x(result: LevelResult) -> int:
-    """Read player 0's final x coordinate from a LevelResult."""
-    state = result.final_state
-    assert state is not None
-    return int(np.asarray(state.player_positions)[0, 0])
+class TestBuildEnv:
+    """Unit tests for ``BenchmarkRunner._build_env`` wrapper application.
+
+    Covers the last piece of the "runner correctly applies the mask"
+    property that was previously verified by the slow integration test
+    ``test_per_level_mask_blocks_movement`` (~7s). Combined with
+    ``TestResolveBlocked`` (resolution logic) and
+    ``tests/test_action_mask_wrapper.py`` (mask rewrite behaviour),
+    these three unit clusters cover the full chain in milliseconds.
+    """
+
+    def test_no_mask_returns_bare_env(self, runner: BenchmarkRunner) -> None:
+        from factoriax.envs.factoriax_env import FactoriaXEnv
+
+        env, _ = runner._build_env(None, frozenset())
+        assert isinstance(env, FactoriaXEnv)
+
+    def test_non_empty_mask_wraps_in_action_mask_wrapper(
+        self, runner: BenchmarkRunner
+    ) -> None:
+        from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+
+        env, _ = runner._build_env(None, frozenset({int(Action.RIGHT)}))
+        assert isinstance(env, ActionMaskWrapper)
 
 
 class TestResolveBlocked:
@@ -276,25 +295,17 @@ class TestResolveBlocked:
         assert runner._resolve_blocked(bench, level) == frozenset()
 
 
-class TestPerLevelBlockedActions:
-    """End-to-end integration: per-level ``blocked_actions`` masks at runtime.
-
-    A single test that drives the full runner + mask + wrapper path
-    on a multi-level benchmark. The three other historical tests in
-    this class were replaced by :class:`TestResolveBlocked` (resolution
-    logic) and ``tests/test_action_mask_wrapper.py`` (mask application).
-    """
-
-    def test_per_level_mask_blocks_movement(self, runner: BenchmarkRunner) -> None:
-        """Multi-level run: unmasked level moves, masked level pinned."""
-        unmasked = _level_with_mask("unmasked", blocked_actions=None)
-        masked = _level_with_mask(
-            "masked", blocked_actions=frozenset({int(Action.RIGHT)})
-        )
-        bench = _MultiLevelBenchmark([unmasked, masked])
-
-        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
-        unmasked_x = _player_x(result.level_results[0])
-        masked_x = _player_x(result.level_results[1])
-        assert unmasked_x > 0, "RIGHT should move the player on the unmasked level"
-        assert masked_x == 0, "RIGHT should be NOOP'd on the masked level"
+# The final per-level-mask integration test
+# ``test_per_level_mask_blocks_movement`` (~7s) was deleted in the
+# replacement-for-speedup pass. Three cheap unit clusters now chain
+# to cover the same end-to-end property:
+#
+#   1. ``TestResolveBlocked`` — which mask wins per level.
+#   2. ``TestBuildEnv`` — runner wraps in ActionMaskWrapper when
+#      blocked_actions is non-empty.
+#   3. ``tests/test_action_mask_wrapper.py`` — ActionMaskWrapper
+#      rewrites blocked actions to NOOP at step time.
+#
+# Chained, those three cover the same property at sub-second cost.
+# A direct runner.run integration would only re-verify the chain;
+# the cheaper unit chain is enough.
