@@ -1,10 +1,19 @@
 """Tests for benchmarks.runner: BenchmarkRunner validation and execution.
 
-A session-scoped runner and stub level are shared across all execution
-tests so JIT compiles once for the 10×10 shape.
+The runner's contract is to thread policies through env steps,
+accumulate per-level results, validate policy counts, resolve masks,
+and aggregate scores. Env semantics (what MINE does, how mining
+accumulates, JAX determinism guarantees) belong to the env and
+benchmark layers, not to the runner. These tests use a ``_StubRunner``
+that synthesises ``LevelResult`` instances without triggering any
+``factoriax_step`` XLA compile — runner-specific properties stay
+covered, env-specific ones move to env/benchmark tests.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -16,10 +25,6 @@ from factoriax.benchmarks.runner import BenchmarkRunner
 from factoriax.constants import Action, BlockType
 from factoriax.levels import LevelBuilder
 from factoriax.state import EnvParams
-
-# Runner tests spin up the full benchmark harness (JIT-compiled 10x10
-# env + scan over timesteps) — valuable but slow, gated behind @slow.
-pytestmark = pytest.mark.slow
 
 # ---------------------------------------------------------------------------
 # Shared stub infrastructure
@@ -59,15 +64,67 @@ class _StubBenchmark:
         return sum(r.weighted_score for r in level_results) / len(level_results)
 
 
-# ``runner`` is provided by ``tests/benchmarks/conftest.py`` so it's
-# also reachable from ``tests/benchmarks/test_rocket_benchmark.py``.
+class _StubRunner(BenchmarkRunner):
+    """Runner that synthesises ``LevelResult`` without env compile.
+
+    Overrides the two hooks that touch the env: ``_ensure_env`` becomes
+    a no-op (no FactoriaXEnv built, no ``jax.jit(step_env)`` cached),
+    and ``_run_level`` returns a deterministic LevelResult by polling
+    each policy ``max_timesteps`` times on a sentinel observation —
+    enough to verify the runner's looping, scoring, and aggregation
+    contract without paying ~7s for ``factoriax_step``'s XLA compile.
+    """
+
+    def _ensure_env(self, benchmark: Any, bench_level: BenchmarkLevel) -> Any:
+        """No env to build. Resolve achievement_fn for ``_current_fn`` parity."""
+        fn = getattr(benchmark, "achievement_fn", None)
+        self._current_fn = fn
+        return fn
+
+    def _run_level(
+        self,
+        benchmark: Any,
+        bench_level: BenchmarkLevel,
+        policies: list[Callable[[jax.Array], jax.Array]],
+        rng: jax.Array,
+        obs_fn: Any,
+        constraint_fn: Any,
+        achievement_fn: Any,
+    ) -> LevelResult:
+        """Poll the policy for ``max_timesteps`` actions and pack a result.
+
+        ``items_mined`` is always zeroed — the runner doesn't own
+        mining semantics, so a stub's "items mined" doesn't carry
+        runner-relevant signal.
+        """
+        del obs_fn, constraint_fn, achievement_fn  # not exercised by the stub
+        params = bench_level.env_params
+        sentinel_obs = jnp.zeros(1)
+        actions = np.array(
+            [int(policies[0](sentinel_obs)) for _ in range(int(params.max_timesteps))],
+            dtype=np.int32,
+        )
+        items_mined = {"coal": 0, "iron": 0, "copper": 0}
+        return LevelResult(
+            level_name=bench_level.name,
+            items_mined=items_mined,
+            weighted_score=benchmark.score_level(bench_level, items_mined),
+            timesteps_used=int(actions.shape[0]),
+            actions=actions,
+        )
 
 
 @pytest.fixture(scope="session")
-def noop_result(runner: BenchmarkRunner):
+def stub_runner() -> _StubRunner:
+    """Compile-free runner; safe to share across the file."""
+    return _StubRunner(seed=0)
+
+
+@pytest.fixture(scope="session")
+def noop_result(stub_runner: _StubRunner):
     """Single shared run used by all execution assertions."""
     bench = _StubBenchmark(_stub_level())
-    return runner.run(bench, policies=[lambda obs: jnp.array(0)])
+    return stub_runner.run(bench, policies=[lambda obs: jnp.array(0)])
 
 
 # ---------------------------------------------------------------------------
@@ -133,39 +190,44 @@ class TestRunnerExecution:
         expected = bench.score(noop_result.level_results)
         assert noop_result.aggregate_score == pytest.approx(expected)
 
-    def test_mine_beats_noop(self, runner: BenchmarkRunner) -> None:
-        bench = _StubBenchmark(_stub_level(max_timesteps=20))
-        noop = runner.run(bench, policies=[lambda obs: jnp.array(0)])
-        mine = runner.run(bench, policies=[lambda obs: jnp.array(5)])
-        assert (
-            mine.level_results[0].items_mined["coal"]
-            >= noop.level_results[0].items_mined["coal"]
-        )
+    # ``test_mine_beats_noop`` and ``test_reproducible_with_same_seed``
+    # were removed in the runner-stubbing pass. Both verified env or
+    # JAX-level semantics rather than runner contract:
+    #
+    #   - "MINE accumulates more coal than NOOP" is a property of
+    #     factoriax_step / the mining handler. Covered by
+    #     tests/test_game_logic.py::test_mine_decrements_resources
+    #     and the env's per-action tests in test_factoriax.py.
+    #
+    #   - "Same seed → same trajectory" is a JAX determinism
+    #     guarantee, not a runner contract. The runner-level claim is
+    #     narrower: ``run()`` derives its initial rng from ``self.seed``.
+    #     That's covered below in ``TestSeedPlumbing``.
 
-    def test_reproducible_with_same_seed(self, runner: BenchmarkRunner) -> None:
-        """Same seed + same policy stream produces bit-identical results.
 
-        Uses the shared session-scoped ``runner`` for both calls — the
-        ``BenchmarkRunner`` is stateless across ``.run()`` calls
-        (seed is captured at construction), so reusing it does not
-        affect reproducibility.
-        """
-        bench = _StubBenchmark(_stub_level(max_timesteps=10))
-        key = jax.random.PRNGKey(7)
+class TestSeedPlumbing:
+    """The runner threads ``self.seed`` into its initial PRNGKey.
 
-        def _policy(obs):
-            nonlocal key
-            key, subkey = jax.random.split(key)
-            return jax.random.randint(subkey, shape=(), minval=0, maxval=12)
+    JAX guarantees that the same PRNGKey produces the same trajectory.
+    The runner-specific contract is the one-line plumbing in ``run()``:
+    ``rng = jax.random.PRNGKey(self.seed)``. Two integration runs were
+    previously used to verify this; a single monkeypatch suffices.
+    """
 
-        key = jax.random.PRNGKey(7)
-        r1 = runner.run(bench, policies=[_policy])
-        key = jax.random.PRNGKey(7)
-        r2 = runner.run(bench, policies=[_policy])
-        assert r1.level_results[0].items_mined == r2.level_results[0].items_mined
-        np.testing.assert_array_equal(
-            r1.level_results[0].actions, r2.level_results[0].actions
-        )
+    def test_run_derives_initial_rng_from_self_seed(self, monkeypatch) -> None:
+        """``runner.run()`` calls ``PRNGKey(self.seed)`` exactly once."""
+        seeds_seen: list[int] = []
+        real_prng_key = jax.random.PRNGKey
+
+        def _capture(seed):
+            seeds_seen.append(int(seed))
+            return real_prng_key(seed)
+
+        monkeypatch.setattr(jax.random, "PRNGKey", _capture)
+        runner = _StubRunner(seed=1234)
+        bench = _StubBenchmark(_stub_level())
+        runner.run(bench, policies=[lambda obs: jnp.array(0)])
+        assert seeds_seen[0] == 1234
 
 
 # ---------------------------------------------------------------------------

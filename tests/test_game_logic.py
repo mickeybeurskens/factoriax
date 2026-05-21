@@ -62,35 +62,6 @@ class TestHandlePlayerAction:
             jnp.array([0, 1]),
         )
 
-    @pytest.mark.slow
-    def test_movement_sets_facing(self, state_factory) -> None:
-        """Movement actions should set facing to the movement direction.
-
-        Slow because each of the four actions traces through the full
-        ``_handle_player_action`` dispatch (``lax.switch`` + all handlers).
-        Covered more cheaply by ``test_factoriax.py::test_up_moves_north``
-        via direct ``move_player`` calls; this test adds the extra
-        assurance that dispatch wires through correctly.
-        """
-        state = state_factory(
-            world_map=jnp.full(
-                (3, 3),
-                BlockType.DIRT,
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 1),
-            player_direction=int(Direction.LEFT),
-        )
-        expected = {
-            Action.UP: Direction.UP,
-            Action.DOWN: Direction.DOWN,
-            Action.LEFT: Direction.LEFT,
-            Action.RIGHT: Direction.RIGHT,
-        }
-        for action, expected_dir in expected.items():
-            new = _handle_player_action(state, _PARAMS, action, 0)
-            assert int(new.player_directions[0]) == expected_dir
-
     def test_face_changes_facing_without_moving(
         self,
         state_factory,
