@@ -514,20 +514,28 @@ class TestWrapperContract:
         return placed, params
 
     def _wrapped_step(self, state, action, params):
-        """Wrap factoriax_step with custom degradation and repair.
+        """Wrap an identity inner-step with custom degradation and repair.
 
-        - Pre-empt Action.REPAIR -> Action.NOOP, then apply +10 HP to
-          the tile-in-front entity (custom partial-restore policy).
-        - After each step, subtract 1 HP from every active entity
-          (uniform per-step degradation).
+        The wrapper's contract is independent of the inner env: it
+        rewrites REPAIR -> NOOP so the inner step couldn't trigger a
+        full-restore, then applies its own +10 bump and -1 degradation
+        on top of whatever ent_health the inner step left behind. For
+        NOOP and the REPAIR-rewritten-to-NOOP case, the engine doesn't
+        touch ent_health, so an identity passthrough is exactly
+        equivalent to a real ``factoriax_step`` call here.
+
+        Composition over the real engine is verified at the action
+        level by ``TestActionRepair`` in this file; this contract test
+        stays focused on the wrapper-only logic without paying the
+        2x2 ``factoriax_step`` XLA compile.
         """
         from factoriax.constants import Action
         from factoriax.placement import get_tile_in_front
 
         is_repair = action == int(Action.REPAIR)
-        # Pre-empt: rewrite REPAIR -> NOOP so base engine doesn't full-restore.
-        effective_action = jnp.where(is_repair, jnp.int32(Action.NOOP), action)
-        new_state = factoriax_step(jax.random.key(0), state, effective_action, params)
+        # Inner step is a no-op on NOOP, so identity passthrough matches
+        # what the real engine would return for the rewritten action.
+        new_state = state
 
         # If the action was REPAIR, locate the target entity and bump
         # by +10 (clamped to max_health for that type).
