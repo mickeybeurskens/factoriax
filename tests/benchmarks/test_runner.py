@@ -234,19 +234,59 @@ def _player_x(result: LevelResult) -> int:
     return int(np.asarray(state.player_positions)[0, 0])
 
 
-class TestPerLevelBlockedActions:
-    """Per-level ``blocked_actions`` overrides class-level and masks at runtime.
+class TestResolveBlocked:
+    """Unit tests for ``BenchmarkRunner._resolve_blocked``.
 
-    Every test consumes the shared session-scoped ``runner`` so the
-    runner's constructor-time JIT compile of the no-mask env is paid
-    once across the file; only the per-level mask rebuilds inside
-    ``_ensure_env`` are charged per test. Tests that re-encounter the
-    same ``blocked_actions`` configuration earlier in the session
-    pick up the cached compile.
+    Replaces three of the four mask integration tests below (~22s of
+    XLA compile) with millisecond-scale unit tests covering the
+    resolution logic alone. The one surviving integration test
+    (``test_per_level_mask_blocks_movement``) verifies the full
+    runner+mask+wrapper wiring; the unit tests here pin the resolution
+    semantics with finer diagnostics.
+    """
+
+    def test_per_level_mask_wins(self, runner: BenchmarkRunner) -> None:
+        """Per-level mask is used when set (even alongside class-level)."""
+        level = _level_with_mask("lvl", blocked_actions=frozenset({int(Action.MINE)}))
+        bench = _MultiLevelBenchmark(
+            [level], class_blocked=frozenset({int(Action.RIGHT)})
+        )
+        assert runner._resolve_blocked(bench, level) == frozenset({int(Action.MINE)})
+
+    def test_per_level_none_falls_back_to_class(self, runner: BenchmarkRunner) -> None:
+        """``None`` per-level falls back to the benchmark's class-level mask."""
+        level = _level_with_mask("lvl", blocked_actions=None)
+        bench = _MultiLevelBenchmark(
+            [level], class_blocked=frozenset({int(Action.RIGHT)})
+        )
+        assert runner._resolve_blocked(bench, level) == frozenset({int(Action.RIGHT)})
+
+    def test_per_level_empty_overrides_class(self, runner: BenchmarkRunner) -> None:
+        """Empty ``frozenset()`` per-level overrides class-level (means 'no mask')."""
+        level = _level_with_mask("lvl", blocked_actions=frozenset())
+        bench = _MultiLevelBenchmark(
+            [level], class_blocked=frozenset({int(Action.RIGHT)})
+        )
+        assert runner._resolve_blocked(bench, level) == frozenset()
+
+    def test_both_none_returns_empty(self, runner: BenchmarkRunner) -> None:
+        """No per-level mask and no class-level attr → empty frozenset."""
+        level = _level_with_mask("lvl", blocked_actions=None)
+        bench = _MultiLevelBenchmark([level])  # no class_blocked
+        assert runner._resolve_blocked(bench, level) == frozenset()
+
+
+class TestPerLevelBlockedActions:
+    """End-to-end integration: per-level ``blocked_actions`` masks at runtime.
+
+    A single test that drives the full runner + mask + wrapper path
+    on a multi-level benchmark. The three other historical tests in
+    this class were replaced by :class:`TestResolveBlocked` (resolution
+    logic) and ``tests/test_action_mask_wrapper.py`` (mask application).
     """
 
     def test_per_level_mask_blocks_movement(self, runner: BenchmarkRunner) -> None:
-        """Masking RIGHT keeps a RIGHT-spamming policy pinned at x=0."""
+        """Multi-level run: unmasked level moves, masked level pinned."""
         unmasked = _level_with_mask("unmasked", blocked_actions=None)
         masked = _level_with_mask(
             "masked", blocked_actions=frozenset({int(Action.RIGHT)})
@@ -258,40 +298,3 @@ class TestPerLevelBlockedActions:
         masked_x = _player_x(result.level_results[1])
         assert unmasked_x > 0, "RIGHT should move the player on the unmasked level"
         assert masked_x == 0, "RIGHT should be NOOP'd on the masked level"
-
-    def test_per_level_none_falls_back_to_class_level(
-        self, runner: BenchmarkRunner
-    ) -> None:
-        """``None`` falls back to the benchmark's class-level mask."""
-        only_class_masked = _level_with_mask("class_masked", blocked_actions=None)
-        bench = _MultiLevelBenchmark(
-            [only_class_masked], class_blocked=frozenset({int(Action.RIGHT)})
-        )
-        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
-        assert _player_x(result.level_results[0]) == 0
-
-    def test_per_level_empty_overrides_class_level(
-        self, runner: BenchmarkRunner
-    ) -> None:
-        """Empty ``frozenset()`` overrides class-level — RIGHT works again."""
-        explicit_clear = _level_with_mask("clear", blocked_actions=frozenset())
-        bench = _MultiLevelBenchmark(
-            [explicit_clear], class_blocked=frozenset({int(Action.RIGHT)})
-        )
-        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
-        assert _player_x(result.level_results[0]) > 0
-
-    def test_two_different_masks_back_to_back(self, runner: BenchmarkRunner) -> None:
-        """Different per-level masks each take effect — runner rebuilds env between."""
-        block_right = _level_with_mask(
-            "block_right", blocked_actions=frozenset({int(Action.RIGHT)})
-        )
-        block_noop = _level_with_mask(
-            "block_noop", blocked_actions=frozenset({int(Action.NOOP)})
-        )
-        bench = _MultiLevelBenchmark([block_right, block_noop])
-
-        result = runner.run(bench, policies=[lambda obs: jnp.array(int(Action.RIGHT))])
-        # Level 0 blocks RIGHT → x stays at 0. Level 1 blocks NOOP → RIGHT moves.
-        assert _player_x(result.level_results[0]) == 0
-        assert _player_x(result.level_results[1]) > 0
