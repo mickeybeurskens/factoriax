@@ -1,18 +1,18 @@
-"""Tests for benchmarks.core: types and the Benchmark protocol."""
+"""Tests for scenarios.core: types and the Scenario protocol."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from factoriax.benchmarks.core import (
-    Benchmark,
-    BenchmarkLevel,
-    BenchmarkResult,
-    LevelResult,
-)
 from factoriax.constants import BlockType
 from factoriax.levels import LevelBuilder
+from factoriax.scenarios.core import (
+    LevelResult,
+    Scenario,
+    ScenarioLevel,
+    ScenarioResult,
+)
 from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
@@ -20,10 +20,10 @@ from factoriax.state import EnvParams
 # ---------------------------------------------------------------------------
 
 
-def _make_bench_level(name: str = "test") -> BenchmarkLevel:
+def _make_bench_level(name: str = "test") -> ScenarioLevel:
     level = LevelBuilder(8, 8).fill_rect(0, 0, 3, 3, BlockType.COAL).build(name)
     params = EnvParams(map_width=8, map_height=8, num_players=1, max_timesteps=10)
-    return BenchmarkLevel(
+    return ScenarioLevel(
         name=name, description="A test level.", level=level, env_params=params
     )
 
@@ -39,12 +39,12 @@ def _make_level_result(name: str = "test", score: float = 5.0) -> LevelResult:
 
 
 # ---------------------------------------------------------------------------
-# BenchmarkLevel
+# ScenarioLevel
 # ---------------------------------------------------------------------------
 
 
-class TestBenchmarkLevel:
-    """BenchmarkLevel stores level and params correctly."""
+class TestScenarioLevel:
+    """ScenarioLevel stores level and params correctly."""
 
     def test_fields_accessible(self) -> None:
         bl = _make_bench_level("my_level")
@@ -58,7 +58,7 @@ class TestBenchmarkLevel:
         assert bl.env_params.max_timesteps == 10
 
     def test_blocked_actions_default_none(self) -> None:
-        """Default ``blocked_actions`` is ``None`` (fall back to benchmark)."""
+        """Default ``blocked_actions`` is ``None`` (fall back to scenario)."""
         bl = _make_bench_level()
         assert bl.blocked_actions is None
 
@@ -66,7 +66,7 @@ class TestBenchmarkLevel:
         """Per-level mask can be set at construction time."""
         level = LevelBuilder(8, 8).fill_rect(0, 0, 3, 3, BlockType.COAL).build("masked")
         params = EnvParams(map_width=8, map_height=8, num_players=1, max_timesteps=10)
-        bl = BenchmarkLevel(
+        bl = ScenarioLevel(
             name="masked",
             description="Masked level.",
             level=level,
@@ -79,7 +79,7 @@ class TestBenchmarkLevel:
         """Empty ``frozenset()`` is distinct from ``None`` — overrides class-level."""
         level = LevelBuilder(8, 8).fill_rect(0, 0, 3, 3, BlockType.COAL).build("clear")
         params = EnvParams(map_width=8, map_height=8, num_players=1, max_timesteps=10)
-        bl = BenchmarkLevel(
+        bl = ScenarioLevel(
             name="clear",
             description="Explicitly unmasked level.",
             level=level,
@@ -112,28 +112,28 @@ class TestLevelResult:
 
 
 # ---------------------------------------------------------------------------
-# BenchmarkResult
+# ScenarioResult
 # ---------------------------------------------------------------------------
 
 
-class TestBenchmarkResult:
-    """BenchmarkResult aggregates level results correctly."""
+class TestScenarioResult:
+    """ScenarioResult aggregates level results correctly."""
 
     def test_fields_accessible(self) -> None:
         lr1 = _make_level_result("l1", 10.0)
         lr2 = _make_level_result("l2", 20.0)
-        br = BenchmarkResult(
-            benchmark_name="test_bench",
+        br = ScenarioResult(
+            scenario_name="test_bench",
             level_results=[lr1, lr2],
             aggregate_score=15.0,
         )
-        assert br.benchmark_name == "test_bench"
+        assert br.scenario_name == "test_bench"
         assert len(br.level_results) == 2
         assert br.aggregate_score == pytest.approx(15.0)
 
     def test_empty_level_results_allowed(self) -> None:
-        br = BenchmarkResult(
-            benchmark_name="empty",
+        br = ScenarioResult(
+            scenario_name="empty",
             level_results=[],
             aggregate_score=0.0,
         )
@@ -141,15 +141,15 @@ class TestBenchmarkResult:
 
 
 # ---------------------------------------------------------------------------
-# Benchmark Protocol (runtime_checkable)
+# Scenario Protocol (runtime_checkable)
 # ---------------------------------------------------------------------------
 
 
 class TestBenchmarkProtocol:
-    """Benchmark is a runtime-checkable Protocol."""
+    """Scenario is a runtime-checkable Protocol."""
 
     def test_non_conforming_object_fails(self) -> None:
-        assert not isinstance("not a benchmark", Benchmark)
+        assert not isinstance("not a scenario", Scenario)
 
     def test_conforming_class_passes(self) -> None:
         """A class that implements all required methods satisfies the Protocol."""
@@ -163,15 +163,15 @@ class TestBenchmarkProtocol:
             def num_players(self) -> int:
                 return 1
 
-            def levels(self) -> list[BenchmarkLevel]:
+            def levels(self) -> list[ScenarioLevel]:
                 return []
 
             def score_level(
-                self, bench_level: BenchmarkLevel, items_mined: dict
+                self, scenario_level: ScenarioLevel, items_mined: dict
             ) -> float:
                 return 0.0
 
             def score(self, level_results: list[LevelResult]) -> float:
                 return 0.0
 
-        assert isinstance(_MockBenchmark(), Benchmark)
+        assert isinstance(_MockBenchmark(), Scenario)

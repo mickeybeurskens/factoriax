@@ -136,7 +136,7 @@ def diff_layout(view: WorldView, expected: ExpectedLayout) -> list[LayoutMismatc
       agent placed something we didn't ask for (``STRAY``). Sanity
       check; this should never fire for a clean plan.
 
-    Pre-placed machines (the rocket benchmark's pre-spawned furnace
+    Pre-placed machines (the rocket scenario's pre-spawned furnace
     + assembler) are not in the expected dict; they show up as
     ``STRAY``. Callers that want to ignore those should pre-populate
     their expected dict with the pre-placed entries.

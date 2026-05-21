@@ -1,4 +1,4 @@
-"""Achievement conditions for the skills challenge benchmark.
+"""Achievement conditions for the skills challenge scenario.
 
 The curriculum has eight skill levels, each contributing one achievement
 bit. Bit ``i`` corresponds to the ``i``-th level returned by
@@ -177,7 +177,7 @@ ARM_TRANSFER_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
 )
 
 #: Skill 8 — mini_factory. Every action *except* all ``CRAFT_*``.
-#: Mirrors the rocket benchmark's "production must flow through
+#: Mirrors the rocket scenario's "production must flow through
 #: machines" stance.
 MINI_FACTORY_BLOCKED_ACTIONS: frozenset[int] = _CRAFT_ACTIONS
 
@@ -190,7 +190,7 @@ def count_miners_on_ore(state: EnvState) -> jax.Array:
     are masked out. Fully vectorized, JIT and vmap compatible.
 
     Used by the ``place_miner`` skill condition (Phase L.4) and
-    re-exported from :mod:`factoriax.benchmarks.skills` for backward
+    re-exported from :mod:`factoriax.scenarios.skills` for backward
     compatibility with the deprecated per-skill modules
     (:mod:`mining`, :mod:`place_miner`) until those are removed in D.1.
 

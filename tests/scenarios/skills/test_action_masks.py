@@ -1,15 +1,16 @@
 """Verify per-level action masks expose exactly the spec's allowed actions.
 
-The masks defined in :mod:`factoriax.benchmarks.skills.achievements`
+The masks defined in :mod:`factoriax.scenarios.skills.achievements`
 are the contract between the curriculum and the runner — each level
 sees only the action subset that exercises its skill. Drift here would
-quietly change what the benchmark measures, so each mask is pinned by
+quietly change what the scenario measures, so each mask is pinned by
 exact-set comparison rather than spot checks.
 """
 
 from __future__ import annotations
 
-from factoriax.benchmarks.skills.achievements import (
+from factoriax.constants import Action
+from factoriax.scenarios.skills.achievements import (
     ARM_TRANSFER_BLOCKED_ACTIONS,
     BELT_LINE_BLOCKED_ACTIONS,
     CRAFT_MINER_BLOCKED_ACTIONS,
@@ -19,7 +20,6 @@ from factoriax.benchmarks.skills.achievements import (
     NAVIGATE_BLOCKED_ACTIONS,
     PLACE_MINER_BLOCKED_ACTIONS,
 )
-from factoriax.constants import Action
 
 NUM_ACTIONS = len(Action)
 

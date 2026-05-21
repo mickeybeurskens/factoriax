@@ -25,7 +25,7 @@ recipe rebalance auto-resizes mining / smelting / crafting without
 hand edits.
 
 Map layout the agent assumes (v2; see
-:func:`factoriax.benchmarks.rocket.build_rocket_level`)::
+:func:`factoriax.scenarios.rocket.build_rocket_level`)::
 
       0 1 2 3 4 5 6 7 8 9 ...
     9 # · · I I · · . O . . .       (M=miner, .=belt, F=furnace,
@@ -77,7 +77,7 @@ from .recipe_planning import (
     sum_inventories,
 )
 
-# Pre-placed machinery from the rocket benchmark level — included in
+# Pre-placed machinery from the rocket scenario level — included in
 # every stage's ``VerifyLayout`` expected map so the helper doesn't
 # flag them as STRAY.
 _PRE_PLACED_FURNACE_TILE: tuple[int, int] = (15, 16)
@@ -1482,7 +1482,7 @@ def build_advanced_factory_goals(
     # only on-belt (no Phase 0 hand-craft path), so the player has
     # never held one. WithdrawFromBusAt drains a single unit from
     # each live output pallet, which is enough to unlock the
-    # craft_motor / craft_sensor achievements (the benchmark checks
+    # craft_motor / craft_sensor achievements (the scenario checks
     # player inventory, not pallet contents).
     goals.append(
         WithdrawFromBusAt(

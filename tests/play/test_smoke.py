@@ -142,7 +142,7 @@ class TestEnvStepSmoke:
 
         Dropped 32x32 and 64x64 in the replacement-for-speedup pass:
         each was a unique XLA compile (~4.5s / ~4.8s) but the rest of
-        the suite already covers 32x32 implicitly (rocket benchmark
+        the suite already covers 32x32 implicitly (rocket scenario
         params are 32x32) and 64x64 had no other consumer. The 16x16
         case shares compile with TestRendererSmoke and TestPlayUISmoke
         in this file, so its cost is near-free.

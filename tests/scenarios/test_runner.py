@@ -1,13 +1,13 @@
-"""Tests for benchmarks.runner: BenchmarkRunner validation and execution.
+"""Tests for scenarios.runner: ScenarioRunner validation and execution.
 
 The runner's contract is to thread policies through env steps,
 accumulate per-level results, validate policy counts, resolve masks,
 and aggregate scores. Env semantics (what MINE does, how mining
 accumulates, JAX determinism guarantees) belong to the env and
-benchmark layers, not to the runner. These tests use a ``_StubRunner``
+scenario layers, not to the runner. These tests use a ``_StubRunner``
 that synthesises ``LevelResult`` instances without triggering any
 ``factoriax_step`` XLA compile — runner-specific properties stay
-covered, env-specific ones move to env/benchmark tests.
+covered, env-specific ones move to env/scenario tests.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
-from factoriax.benchmarks.runner import BenchmarkRunner
 from factoriax.constants import Action, BlockType
 from factoriax.levels import LevelBuilder
+from factoriax.scenarios.core import LevelResult, ScenarioLevel
+from factoriax.scenarios.runner import ScenarioRunner
 from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
@@ -31,40 +31,38 @@ from factoriax.state import EnvParams
 # ---------------------------------------------------------------------------
 
 
-def _stub_level(name: str = "stub", max_timesteps: int = 5) -> BenchmarkLevel:
+def _stub_level(name: str = "stub", max_timesteps: int = 5) -> ScenarioLevel:
     level = LevelBuilder(10, 10).fill_rect(2, 2, 3, 3, BlockType.COAL).build(name)
     params = EnvParams(
         map_width=10, map_height=10, num_players=1, max_timesteps=max_timesteps
     )
-    return BenchmarkLevel(
-        name=name, description="Stub.", level=level, env_params=params
-    )
+    return ScenarioLevel(name=name, description="Stub.", level=level, env_params=params)
 
 
-class _StubBenchmark:
-    def __init__(self, bench_level: BenchmarkLevel, num_players: int = 1) -> None:
-        self._level = bench_level
+class _StubScenario:
+    def __init__(self, scenario_level: ScenarioLevel, num_players: int = 1) -> None:
+        self._level = scenario_level
         self._num_players = num_players
 
     @property
     def name(self) -> str:
-        return "stub_benchmark"
+        return "stub_scenario"
 
     @property
     def num_players(self) -> int:
         return self._num_players
 
-    def levels(self) -> list[BenchmarkLevel]:
+    def levels(self) -> list[ScenarioLevel]:
         return [self._level]
 
-    def score_level(self, bench_level: BenchmarkLevel, items_mined: dict) -> float:
+    def score_level(self, scenario_level: ScenarioLevel, items_mined: dict) -> float:
         return float(items_mined.get("coal", 0))
 
     def score(self, level_results: list[LevelResult]) -> float:
         return sum(r.weighted_score for r in level_results) / len(level_results)
 
 
-class _StubRunner(BenchmarkRunner):
+class _StubRunner(ScenarioRunner):
     """Runner that synthesises ``LevelResult`` without env compile.
 
     Overrides the two hooks that touch the env: ``_ensure_env`` becomes
@@ -75,16 +73,16 @@ class _StubRunner(BenchmarkRunner):
     contract without paying ~7s for ``factoriax_step``'s XLA compile.
     """
 
-    def _ensure_env(self, benchmark: Any, bench_level: BenchmarkLevel) -> Any:
+    def _ensure_env(self, scenario: Any, scenario_level: ScenarioLevel) -> Any:
         """No env to build. Resolve achievement_fn for ``_current_fn`` parity."""
-        fn = getattr(benchmark, "achievement_fn", None)
+        fn = getattr(scenario, "achievement_fn", None)
         self._current_fn = fn
         return fn
 
     def _run_level(
         self,
-        benchmark: Any,
-        bench_level: BenchmarkLevel,
+        scenario: Any,
+        scenario_level: ScenarioLevel,
         policies: list[Callable[[jax.Array], jax.Array]],
         rng: jax.Array,
         obs_fn: Any,
@@ -98,7 +96,7 @@ class _StubRunner(BenchmarkRunner):
         runner-relevant signal.
         """
         del obs_fn, constraint_fn, achievement_fn  # not exercised by the stub
-        params = bench_level.env_params
+        params = scenario_level.env_params
         sentinel_obs = jnp.zeros(1)
         actions = np.array(
             [int(policies[0](sentinel_obs)) for _ in range(int(params.max_timesteps))],
@@ -106,9 +104,9 @@ class _StubRunner(BenchmarkRunner):
         )
         items_mined = {"coal": 0, "iron": 0, "copper": 0}
         return LevelResult(
-            level_name=bench_level.name,
+            level_name=scenario_level.name,
             items_mined=items_mined,
-            weighted_score=benchmark.score_level(bench_level, items_mined),
+            weighted_score=scenario.score_level(scenario_level, items_mined),
             timesteps_used=int(actions.shape[0]),
             actions=actions,
         )
@@ -123,8 +121,8 @@ def stub_runner() -> _StubRunner:
 @pytest.fixture(scope="session")
 def noop_result(stub_runner: _StubRunner):
     """Single shared run used by all execution assertions."""
-    bench = _StubBenchmark(_stub_level())
-    return stub_runner.run(bench, policies=[lambda obs: jnp.array(0)])
+    scenario = _StubScenario(_stub_level())
+    return stub_runner.run(scenario, policies=[lambda obs: jnp.array(0)])
 
 
 # ---------------------------------------------------------------------------
@@ -134,18 +132,18 @@ def noop_result(stub_runner: _StubRunner):
 
 class TestRunnerValidation:
     def test_wrong_policy_count_raises(self) -> None:
-        bench = _StubBenchmark(_stub_level(), num_players=1)
+        scenario = _StubScenario(_stub_level(), num_players=1)
         with pytest.raises(ValueError, match="1 policy"):
-            BenchmarkRunner(seed=0).run(bench, policies=[])
+            ScenarioRunner(seed=0).run(scenario, policies=[])
 
     def test_two_players_wrong_count_raises(self) -> None:
-        bench = _StubBenchmark(_stub_level(), num_players=2)
+        scenario = _StubScenario(_stub_level(), num_players=2)
         with pytest.raises(ValueError, match="2 policies"):
-            BenchmarkRunner(seed=0).run(bench, policies=[lambda obs: jnp.array(0)])
+            ScenarioRunner(seed=0).run(scenario, policies=[lambda obs: jnp.array(0)])
 
     # ``test_correct_count_does_not_raise`` was removed: the
     # ``noop_result`` fixture (TestRunnerExecution) builds a
-    # ``_StubBenchmark`` with one player and runs it through the same
+    # ``_StubScenario`` with one player and runs it through the same
     # runner with a single policy. If that fixture's run had raised,
     # every TestRunnerExecution test below would fail at setup. The
     # dedicated "doesn't raise" assertion paid the first ~7s
@@ -159,8 +157,8 @@ class TestRunnerValidation:
 
 
 class TestRunnerExecution:
-    def test_benchmark_name(self, noop_result) -> None:
-        assert noop_result.benchmark_name == "stub_benchmark"
+    def test_scenario_name(self, noop_result) -> None:
+        assert noop_result.scenario_name == "stub_scenario"
 
     def test_one_level_result(self, noop_result) -> None:
         assert len(noop_result.level_results) == 1
@@ -185,9 +183,9 @@ class TestRunnerExecution:
     def test_items_mined_non_negative(self, noop_result) -> None:
         assert all(v >= 0 for v in noop_result.level_results[0].items_mined.values())
 
-    def test_aggregate_equals_benchmark_score(self, noop_result) -> None:
-        bench = _StubBenchmark(_stub_level())
-        expected = bench.score(noop_result.level_results)
+    def test_aggregate_equals_scenario_score(self, noop_result) -> None:
+        scenario = _StubScenario(_stub_level())
+        expected = scenario.score(noop_result.level_results)
         assert noop_result.aggregate_score == pytest.approx(expected)
 
     # ``test_mine_beats_noop`` and ``test_reproducible_with_same_seed``
@@ -225,8 +223,8 @@ class TestSeedPlumbing:
 
         monkeypatch.setattr(jax.random, "PRNGKey", _capture)
         runner = _StubRunner(seed=1234)
-        bench = _StubBenchmark(_stub_level())
-        runner.run(bench, policies=[lambda obs: jnp.array(0)])
+        scenario = _StubScenario(_stub_level())
+        runner.run(scenario, policies=[lambda obs: jnp.array(0)])
         assert seeds_seen[0] == 1234
 
 
@@ -239,7 +237,7 @@ def _level_with_mask(
     name: str,
     blocked_actions: frozenset[int] | None,
     max_timesteps: int = 20,
-) -> BenchmarkLevel:
+) -> ScenarioLevel:
     """Build a stub level optionally carrying a per-level mask.
 
     Player is pinned at ``(0, 0)`` so the policy can spam ``RIGHT`` and
@@ -255,7 +253,7 @@ def _level_with_mask(
     params = EnvParams(
         map_width=10, map_height=10, num_players=1, max_timesteps=max_timesteps
     )
-    return BenchmarkLevel(
+    return ScenarioLevel(
         name=name,
         description=f"Mask test for {name}.",
         level=level,
@@ -265,11 +263,11 @@ def _level_with_mask(
 
 
 class _MultiLevelBenchmark:
-    """Stub benchmark with multiple levels and an optional class-level mask."""
+    """Stub scenario with multiple levels and an optional class-level mask."""
 
     def __init__(
         self,
-        levels: list[BenchmarkLevel],
+        levels: list[ScenarioLevel],
         class_blocked: frozenset[int] | None = None,
     ) -> None:
         self._levels = levels
@@ -284,10 +282,10 @@ class _MultiLevelBenchmark:
     def num_players(self) -> int:
         return 1
 
-    def levels(self) -> list[BenchmarkLevel]:
+    def levels(self) -> list[ScenarioLevel]:
         return self._levels
 
-    def score_level(self, bench_level: BenchmarkLevel, items_mined: dict) -> float:
+    def score_level(self, scenario_level: ScenarioLevel, items_mined: dict) -> float:
         return float(items_mined.get("coal", 0))
 
     def score(self, level_results: list[LevelResult]) -> float:
@@ -295,19 +293,19 @@ class _MultiLevelBenchmark:
 
 
 class TestAchievementsAccessor:
-    """Unit tests for ``BenchmarkRunner._achievements``.
+    """Unit tests for ``ScenarioRunner._achievements``.
 
     Replaces the ~9s ``test_runner_populates_achievements_end_to_end``
     in ``test_rocket_benchmark.py``: instead of building a real
-    ``RocketBenchmark`` and running it through the runner (unique
+    ``RocketScenario`` and running it through the runner (unique
     config compile), exercise the accessor directly. The wiring it
     used to cover is split across:
 
       - This file: ``_achievements`` returns numpy of unlocks when
         an ``achievement_fn`` is bound.
-      - This file: ``_ensure_env`` resolves benchmark.achievement_fn
+      - This file: ``_ensure_env`` resolves scenario.achievement_fn
         (covered indirectly by TestBuildEnv + TestResolveBlocked).
-      - ``test_rocket_benchmark.py``: RocketBenchmark.achievement_fn
+      - ``test_rocket_benchmark.py``: RocketScenario.achievement_fn
         attribute is set to ``rocket_conditions``.
       - ``test_runner.py::TestRunnerExecution`` tests: aggregate_score
         is a finite float.
@@ -315,7 +313,7 @@ class TestAchievementsAccessor:
 
     def test_returns_none_when_no_fn(self) -> None:
         """``_achievements`` returns None when the runner has no fn."""
-        r = BenchmarkRunner(seed=0)  # no achievement_fn
+        r = ScenarioRunner(seed=0)  # no achievement_fn
         # Build a stub state with an achievements_unlocked field.
         state = type(
             "S", (), {"achievements_unlocked": jnp.zeros(3, dtype=jnp.bool_)}
@@ -330,7 +328,7 @@ class TestAchievementsAccessor:
         def _fn(state):
             return state.achievements_unlocked
 
-        r = BenchmarkRunner(seed=0, achievement_fn=_fn)
+        r = ScenarioRunner(seed=0, achievement_fn=_fn)
         unlocks = jnp.array([True, False, True])
         state = type("S", (), {"achievements_unlocked": unlocks})()
         result = r._achievements(state)
@@ -339,7 +337,7 @@ class TestAchievementsAccessor:
 
 
 class TestBuildEnv:
-    """Unit tests for ``BenchmarkRunner._build_env`` wrapper application.
+    """Unit tests for ``ScenarioRunner._build_env`` wrapper application.
 
     Covers the last piece of the "runner correctly applies the mask"
     property that was previously verified by the slow integration test
@@ -349,14 +347,14 @@ class TestBuildEnv:
     these three unit clusters cover the full chain in milliseconds.
     """
 
-    def test_no_mask_returns_bare_env(self, runner: BenchmarkRunner) -> None:
+    def test_no_mask_returns_bare_env(self, runner: ScenarioRunner) -> None:
         from factoriax.envs.factoriax_env import FactoriaXEnv
 
         env, _ = runner._build_env(None, frozenset())
         assert isinstance(env, FactoriaXEnv)
 
     def test_non_empty_mask_wraps_in_action_mask_wrapper(
-        self, runner: BenchmarkRunner
+        self, runner: ScenarioRunner
     ) -> None:
         from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 
@@ -365,7 +363,7 @@ class TestBuildEnv:
 
 
 class TestResolveBlocked:
-    """Unit tests for ``BenchmarkRunner._resolve_blocked``.
+    """Unit tests for ``ScenarioRunner._resolve_blocked``.
 
     Replaces three of the four mask integration tests below (~22s of
     XLA compile) with millisecond-scale unit tests covering the
@@ -375,35 +373,36 @@ class TestResolveBlocked:
     semantics with finer diagnostics.
     """
 
-    def test_per_level_mask_wins(self, runner: BenchmarkRunner) -> None:
+    def test_per_level_mask_wins(self, runner: ScenarioRunner) -> None:
         """Per-level mask is used when set (even alongside class-level)."""
         level = _level_with_mask("lvl", blocked_actions=frozenset({int(Action.MINE)}))
-        bench = _MultiLevelBenchmark(
+        scenario = _MultiLevelBenchmark(
             [level], class_blocked=frozenset({int(Action.RIGHT)})
         )
-        assert runner._resolve_blocked(bench, level) == frozenset({int(Action.MINE)})
+        assert runner._resolve_blocked(scenario, level) == frozenset({int(Action.MINE)})
 
-    def test_per_level_none_falls_back_to_class(self, runner: BenchmarkRunner) -> None:
-        """``None`` per-level falls back to the benchmark's class-level mask."""
+    def test_per_level_none_falls_back_to_class(self, runner: ScenarioRunner) -> None:
+        """``None`` per-level falls back to the scenario's class-level mask."""
         level = _level_with_mask("lvl", blocked_actions=None)
-        bench = _MultiLevelBenchmark(
+        scenario = _MultiLevelBenchmark(
             [level], class_blocked=frozenset({int(Action.RIGHT)})
         )
-        assert runner._resolve_blocked(bench, level) == frozenset({int(Action.RIGHT)})
+        expected = frozenset({int(Action.RIGHT)})
+        assert runner._resolve_blocked(scenario, level) == expected
 
-    def test_per_level_empty_overrides_class(self, runner: BenchmarkRunner) -> None:
+    def test_per_level_empty_overrides_class(self, runner: ScenarioRunner) -> None:
         """Empty ``frozenset()`` per-level overrides class-level (means 'no mask')."""
         level = _level_with_mask("lvl", blocked_actions=frozenset())
-        bench = _MultiLevelBenchmark(
+        scenario = _MultiLevelBenchmark(
             [level], class_blocked=frozenset({int(Action.RIGHT)})
         )
-        assert runner._resolve_blocked(bench, level) == frozenset()
+        assert runner._resolve_blocked(scenario, level) == frozenset()
 
-    def test_both_none_returns_empty(self, runner: BenchmarkRunner) -> None:
+    def test_both_none_returns_empty(self, runner: ScenarioRunner) -> None:
         """No per-level mask and no class-level attr → empty frozenset."""
         level = _level_with_mask("lvl", blocked_actions=None)
-        bench = _MultiLevelBenchmark([level])  # no class_blocked
-        assert runner._resolve_blocked(bench, level) == frozenset()
+        scenario = _MultiLevelBenchmark([level])  # no class_blocked
+        assert runner._resolve_blocked(scenario, level) == frozenset()
 
 
 # The final per-level-mask integration test

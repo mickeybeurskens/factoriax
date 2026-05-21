@@ -1,13 +1,13 @@
-"""Shared fixtures for the benchmark test package.
+"""Shared fixtures for the scenario test package.
 
 The ``state_factory`` fixture is inherited from the root
 ``tests/conftest.py``. The two fixtures below are session-scoped so
-the BenchmarkRunner's internal JIT cache for the 10x10 stub-level
-shape is built exactly once across every benchmark test that consumes
-them — including tests in :mod:`tests.benchmarks.test_runner` and
-:mod:`tests.benchmarks.test_rocket_benchmark`.
+the ScenarioRunner's internal JIT cache for the 10x10 stub-level
+shape is built exactly once across every scenario test that consumes
+them — including tests in :mod:`tests.scenarios.test_runner` and
+:mod:`tests.scenarios.test_rocket_benchmark`.
 
-Tests that exercise BenchmarkRunner *error paths* (mis-counted
+Tests that exercise ScenarioRunner *error paths* (mis-counted
 policies, etc.) deliberately keep building their own runner so the
 shared fixture's JIT cache isn't polluted by an aborted run.
 """
@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import pytest
 
-from factoriax.benchmarks.runner import BenchmarkRunner
+from factoriax.scenarios.runner import ScenarioRunner
 
 
 @pytest.fixture(scope="session")
-def runner() -> BenchmarkRunner:
-    """Shared BenchmarkRunner — its ``_build_env`` JIT compiles once.
+def runner() -> ScenarioRunner:
+    """Shared ScenarioRunner — its ``_build_env`` JIT compiles once.
 
     The constructor builds the default (no-mask, no-achievement-fn)
     env and JIT-compiles ``step_env`` for the canonical 10x10 shape;
@@ -30,4 +30,4 @@ def runner() -> BenchmarkRunner:
     feed it through ``runner.run(...)`` and pay only the per-config
     rebuild cost in ``_ensure_env``, not the constructor compile.
     """
-    return BenchmarkRunner(seed=0)
+    return ScenarioRunner(seed=0)

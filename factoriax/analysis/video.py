@@ -1,6 +1,6 @@
 """Frame composition and MP4 encoding for episode rollouts.
 
-Used by both the PPO eval pipeline and the scripted-agent benchmarks
+Used by both the PPO eval pipeline and the scripted-agent scenarios
 to produce wandb-friendly map+inventory videos. Keep this module
 free of training-loop dependencies — only :class:`EnvState` is
 needed.

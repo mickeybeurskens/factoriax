@@ -1,4 +1,4 @@
-"""Skills challenge benchmark — curriculum of foundational mechanics.
+"""Skills challenge scenario — curriculum of foundational mechanics.
 
 Eight levels in the order navigate, mine, craft_miner, place_miner,
 fuel_and_collect, belt_line, arm_transfer, mini_factory. Each level
@@ -9,9 +9,9 @@ Score is time-weighted:
 mean across levels.
 
 The :class:`SkillsBenchmark` implements the
-:class:`~factoriax.benchmarks.core.Benchmark` protocol the same way
-:class:`RocketBenchmark` does, so it plugs into
-:class:`BenchmarkRunner` unchanged.
+:class:`~factoriax.scenarios.core.Scenario` protocol the same way
+:class:`RocketScenario` does, so it plugs into
+:class:`ScenarioRunner` unchanged.
 
 The curriculum grows one slice at a time per the implementation plan
 (``tasks/skills_benchmark_plan.md``). The current set of wired-up
@@ -21,26 +21,26 @@ levels is reflected by ``len(SkillsBenchmark().levels())`` and
 
 from __future__ import annotations
 
-from factoriax.benchmarks.core import Benchmark, BenchmarkLevel, LevelResult
-from factoriax.benchmarks.skills.achievements import (
+from factoriax.scenarios.core import LevelResult, Scenario, ScenarioLevel
+from factoriax.scenarios.skills.achievements import (
     NUM_SKILLS,
     SKILLS_ACHIEVEMENT_INFO,
     count_miners_on_ore,
     skills_conditions,
 )
-from factoriax.benchmarks.skills.levels import (
+from factoriax.scenarios.skills.levels import (
     build_craft_miner_level,
     build_mine_level,
     build_navigate_level,
     build_place_miner_level,
 )
-from factoriax.benchmarks.skills.reward import skills_reward
+from factoriax.scenarios.skills.reward import skills_reward
 
 
 class SkillsBenchmark:
     """Curriculum of skills, evaluated as one time-weighted score.
 
-    Implements the :class:`Benchmark` protocol. Bit ``i`` of
+    Implements the :class:`Scenario` protocol. Bit ``i`` of
     ``state.achievements_unlocked`` corresponds to level ``i``'s
     target condition (curriculum order). Aggregate score in ``[0, 1]``.
 
@@ -53,7 +53,7 @@ class SkillsBenchmark:
     num_players: int = 1
     achievement_fn = staticmethod(skills_conditions)
 
-    def levels(self) -> list[BenchmarkLevel]:
+    def levels(self) -> list[ScenarioLevel]:
         """Curriculum levels in solve order (canonical seed = 0).
 
         Levels are constructed lazily on each call. Each entry uses
@@ -62,14 +62,14 @@ class SkillsBenchmark:
         one entry at a time.
 
         Returns:
-            ``BenchmarkLevel`` list, currently of length 1 (navigate).
+            ``ScenarioLevel`` list, currently of length 1 (navigate).
         """
         navigate_level, navigate_params, navigate_blocked = build_navigate_level(seed=0)
         mine_level, mine_params, mine_blocked = build_mine_level(seed=0)
         craft_level, craft_params, craft_blocked = build_craft_miner_level(seed=0)
         place_level, place_params, place_blocked = build_place_miner_level(seed=0)
         return [
-            BenchmarkLevel(
+            ScenarioLevel(
                 name="navigate",
                 description=(
                     "Walk to the bottom-right corner of a 5x5 grass map. "
@@ -79,7 +79,7 @@ class SkillsBenchmark:
                 env_params=navigate_params,
                 blocked_actions=navigate_blocked,
             ),
-            BenchmarkLevel(
+            ScenarioLevel(
                 name="mine",
                 description=(
                     "Extract at least one ore from a 5x5 map sprinkled "
@@ -89,7 +89,7 @@ class SkillsBenchmark:
                 env_params=mine_params,
                 blocked_actions=mine_blocked,
             ),
-            BenchmarkLevel(
+            ScenarioLevel(
                 name="craft_miner",
                 description=(
                     "Combine 1 IRON_PLATE + 1 WIRE (pre-loaded in "
@@ -100,7 +100,7 @@ class SkillsBenchmark:
                 env_params=craft_params,
                 blocked_actions=craft_blocked,
             ),
-            BenchmarkLevel(
+            ScenarioLevel(
                 name="place_miner",
                 description=(
                     "Drop a miner onto a 2x2 ore patch. Player starts "
@@ -114,7 +114,7 @@ class SkillsBenchmark:
         ]
 
     def score_level(
-        self, bench_level: BenchmarkLevel, items_mined: dict[str, int]
+        self, scenario_level: ScenarioLevel, items_mined: dict[str, int]
     ) -> float:
         """Per-level placeholder — real scoring happens in :meth:`score`.
 
@@ -124,7 +124,7 @@ class SkillsBenchmark:
         protocol is satisfied; aggregate callers should use
         :meth:`score`.
         """
-        del bench_level, items_mined
+        del scenario_level, items_mined
         return 0.0
 
     def score(self, level_results: list[LevelResult]) -> float:
@@ -132,7 +132,7 @@ class SkillsBenchmark:
 
         For each ``LevelResult``:
 
-        - Look up the matching ``BenchmarkLevel`` by index (curriculum
+        - Look up the matching ``ScenarioLevel`` by index (curriculum
           order). The achievement bit for level ``i`` is bit ``i``.
         - If the bit is unlocked, contribute
           ``(max_timesteps - timesteps_used + 1) / max_timesteps``;
@@ -142,7 +142,7 @@ class SkillsBenchmark:
 
         Args:
             level_results: Per-level outcomes from
-                :class:`BenchmarkRunner`, in evaluation order.
+                :class:`ScenarioRunner`, in evaluation order.
 
         Returns:
             Aggregate score in ``[0, 1]``.
@@ -184,7 +184,7 @@ __all__ = [
 
 
 # Runtime-checkable conformance: SkillsBenchmark satisfies the protocol.
-assert isinstance(SkillsBenchmark(), Benchmark), (
-    "SkillsBenchmark must implement the Benchmark protocol — "
+assert isinstance(SkillsBenchmark(), Scenario), (
+    "SkillsBenchmark must implement the Scenario protocol — "
     "check name, num_players, levels(), score_level(), score()."
 )

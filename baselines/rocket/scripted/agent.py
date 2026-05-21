@@ -38,7 +38,7 @@ from .world_model import WorldView, decode_observation
 
 
 class ScriptedAgent:
-    """Hand-authored rocket-benchmark agent."""
+    """Hand-authored rocket-scenario agent."""
 
     def __init__(self, env_params: EnvParams, planner: Planner) -> None:
         self.env_params = env_params
@@ -64,7 +64,7 @@ class ScriptedAgent:
 
 
 # ---------------------------------------------------------------------------
-# Rocket-benchmark phase list
+# Rocket-scenario phase list
 # ---------------------------------------------------------------------------
 
 
@@ -135,11 +135,11 @@ def _any_assembler_has_output_predicate() -> Callable[[WorldView], bool]:
 
 
 def build_rocket_goals() -> list[Goal]:
-    """Full goal list for completing every rocket-benchmark achievement.
+    """Full goal list for completing every rocket-scenario achievement.
 
     Uses only the pre-placed furnace + assembler (plus mining for raw
     ore + placements for the rest of the factory). Hand-crafting is
-    masked by the benchmark, so every intermediate flows through
+    masked by the scenario, so every intermediate flows through
     :func:`ProduceInFurnace` / :func:`ProduceInAssembler`.
 
     Budget derivation (rocket + every placeable machine achievement):
@@ -215,5 +215,5 @@ def build_rocket_goals() -> list[Goal]:
 
 
 def make_scripted_rocket_agent(env_params: EnvParams) -> ScriptedAgent:
-    """Factory: scripted agent configured for the rocket benchmark."""
+    """Factory: scripted agent configured for the rocket scenario."""
     return ScriptedAgent(env_params, Planner(build_rocket_goals()))

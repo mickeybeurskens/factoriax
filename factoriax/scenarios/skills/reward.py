@@ -1,17 +1,17 @@
 """Time-discounted achievement reward for skills training.
 
-Mirrors the benchmark's scoring formula
+Mirrors the scenario's scoring formula
 ``solved * (max_timesteps - timesteps_used + 1) / max_timesteps`` —
 the policy gets ``1.0`` for unlocking a skill on tick 1 and a small
 fraction for unlocking on the final tick. This trains policies that
 solve quickly rather than ones that stall and then trigger the
 condition right before the budget runs out.
 
-Why this lives next to the benchmark, not in :mod:`factoriax.rewards`:
+Why this lives next to the scenario, not in :mod:`factoriax.rewards`:
 the reward is *specific* to the skills curriculum's scoring shape.
-Rocket and any future benchmark with different scoring should not
+Rocket and any future scenario with different scoring should not
 share this function. ``factoriax.rewards.achievement_reward`` remains
-the generic per-bit-weighted shim for benchmarks that don't care about
+the generic per-bit-weighted shim for scenarios that don't care about
 solve speed.
 """
 

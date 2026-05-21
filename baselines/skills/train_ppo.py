@@ -1,4 +1,4 @@
-"""Train PPO on factoriax skill benchmarks.
+"""Train PPO on factoriax skill scenarios.
 
 Drives :class:`SkillsBenchmark` levels with sparse, time-discounted
 :func:`skills_reward`. Each level uses its per-level
@@ -42,16 +42,16 @@ from baselines.ppo.normalization import (
     normalize_obs,
     update_running_stats,
 )
-from factoriax.benchmarks.core import BenchmarkLevel
-from factoriax.benchmarks.skills import (
-    SkillsBenchmark,
-    skills_conditions,
-    skills_reward,
-)
 from factoriax.constants import NUM_ACTIONS, Action
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.scenarios.core import ScenarioLevel
+from factoriax.scenarios.skills import (
+    SkillsBenchmark,
+    skills_conditions,
+    skills_reward,
+)
 from factoriax.state import EnvParams, EnvState
 
 logging.basicConfig(
@@ -149,18 +149,18 @@ class SkillsRewardEnv(environment.Environment[EnvState, EnvParams]):  # type: ig
         return spaces.Box(0.0, 1.0, shape=(obs_size,), dtype=jnp.float32)
 
 
-def _benchmark_level(skill_name: str) -> tuple[int, BenchmarkLevel]:
-    """Look up the BenchmarkLevel by skill name and return ``(index, level)``.
+def _benchmark_level(skill_name: str) -> tuple[int, ScenarioLevel]:
+    """Look up the ScenarioLevel by skill name and return ``(index, level)``.
 
     The index is the level's position in ``SkillsBenchmark().levels()``,
     which by the curriculum's bit-indexing contract equals the
     achievement bit the level targets.
     """
-    bench = SkillsBenchmark()
-    for i, bench_level in enumerate(bench.levels()):
-        if bench_level.name == skill_name:
-            return i, bench_level
-    available = [bl.name for bl in bench.levels()]
+    scenario = SkillsBenchmark()
+    for i, scenario_level in enumerate(scenario.levels()):
+        if scenario_level.name == skill_name:
+            return i, scenario_level
+    available = [bl.name for bl in scenario.levels()]
     raise ValueError(f"Unknown skill: {skill_name!r}. Available: {available}")
 
 
@@ -188,7 +188,7 @@ def _git_sha_short() -> str:
 
 @dataclasses.dataclass
 class Config:
-    """Training configuration for PPO on skill benchmarks.
+    """Training configuration for PPO on skill scenarios.
 
     Attributes:
         skill_name: Which skill to train on.
@@ -295,7 +295,7 @@ def _ppo_loss(
 
 
 def train(config: Config) -> dict[str, float]:
-    """Train a PPO agent on one skill benchmark.
+    """Train a PPO agent on one skill scenario.
 
     Args:
         config: Training configuration.
@@ -303,10 +303,10 @@ def train(config: Config) -> dict[str, float]:
     Returns:
         Dict with final metrics (mean_ep_return, sps).
     """
-    level_idx, bench_level = _benchmark_level(config.skill_name)
-    env_params = bench_level.env_params
-    level = bench_level.level
-    blocked = bench_level.blocked_actions or frozenset()
+    level_idx, scenario_level = _benchmark_level(config.skill_name)
+    env_params = scenario_level.env_params
+    level = scenario_level.level
+    blocked = scenario_level.blocked_actions or frozenset()
     env = _build_env(target_bit=level_idx, blocked_actions=blocked)
 
     # Build initial state from the level (build_state pulls in
@@ -770,7 +770,7 @@ def _evaluate(
 def main() -> None:
     """Parse arguments and run training."""
     parser = argparse.ArgumentParser(
-        description="Train PPO on factoriax skill benchmarks.",
+        description="Train PPO on factoriax skill scenarios.",
     )
     parser.add_argument(
         "skill",

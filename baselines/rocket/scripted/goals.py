@@ -524,7 +524,7 @@ class PlaceMachineFromBackAt(Goal):
     Use sparingly — every other placement should pick a stand tile
     on the back of the machine via :class:`PlaceMachineAt`. The
     rotate step burns one extra tick and assumes the rotate-action
-    space is unblocked (rocket benchmark allows it; check before
+    space is unblocked (rocket scenario allows it; check before
     porting elsewhere).
     """
 
@@ -1181,7 +1181,7 @@ def build_smelter_cell_at(
     """Place a smelter cell anchored at ``furnace_tile``.
 
     Layout for the default ``facing=RIGHT`` (the one used by the
-    rocket benchmark's iron, tin, and silicon cells)::
+    rocket scenario's iron, tin, and silicon cells)::
 
            ore_pallet  (fx,   fy-1)  pre-existing, NOT placed here
                 furnace(fx,   fy)    facing RIGHT
@@ -1191,7 +1191,7 @@ def build_smelter_cell_at(
 
     Setting ``facing=LEFT`` mirrors the cell across the y-axis (the
     arm and plate-bus move to the *west* of the furnace). The rocket
-    benchmark's copper cell uses this orientation so its plate
+    scenario's copper cell uses this orientation so its plate
     output sits on the same row 11 as iron's, between the two
     patches, instead of east of the copper patch where it would
     require routing belts back across the map.
@@ -1227,7 +1227,7 @@ def build_smelter_cell_at(
     splitter is the extractor).
 
     The ore pallet to the north is assumed to be placed separately
-    (Phase A's auto-miner pattern in the rocket benchmark): the
+    (Phase A's auto-miner pattern in the rocket scenario): the
     furnace's :func:`run_assemblers` Phase 0 auto-pulls one ore per
     tick from that pallet and one coal per tick from the coal buffer
     south, so no extra arm orchestration is needed for the inputs.
@@ -1248,7 +1248,7 @@ def build_smelter_cell_at(
             — the cell's plate-output side. Other directions raise
             ``ValueError`` (UP/DOWN would put the plate-bus on the
             ore-pallet column or the coal-buffer column, both
-            non-walkable in the rocket benchmark layout).
+            non-walkable in the rocket scenario layout).
         extract_facing: Optional one of UP/DOWN/LEFT/RIGHT. When
             set, places an extractor arm at
             ``plate_bus + unit(extract_facing)`` facing
@@ -1803,7 +1803,7 @@ def build_inter_cell_chain(
 
 # Per-item bootstrap cost of one ore-extraction node placed via
 # :func:`place_ore_node_at`. The pallet is optional (set
-# ``with_pallet=False`` for the rocket benchmark's coal node, which
+# ``with_pallet=False`` for the rocket scenario's coal node, which
 # pushes directly onto a belt instead of a buffer pallet); when
 # omitted, only the miner is needed.
 _ORE_NODE_INVENTORY_WITH_PALLET: tuple[tuple[int, int], ...] = (
@@ -1821,7 +1821,7 @@ def ore_node_inventory(*, with_pallet: bool = True) -> dict[int, int]:
     Maps :class:`ItemType` integer ids to the count required in the
     player's inventory before issuing the goals from
     :func:`place_ore_node_at`. Pass ``with_pallet=False`` for the
-    rocket benchmark's coal node, where the miner pushes onto the
+    rocket scenario's coal node, where the miner pushes onto the
     coal trunk's first belt instead of into a holding pallet.
     """
     src = (
@@ -1848,7 +1848,7 @@ def place_ore_node(
     tile to buffer the output; downstream goals (a smelter cell, a
     withdraw goal, a coal trunk) drain it from there. When
     ``with_pallet=False``, no pallet is placed — useful when the
-    miner pushes directly onto a belt, as the rocket benchmark's
+    miner pushes directly onto a belt, as the rocket scenario's
     coal node does to feed the iron trunk.
 
     Bootstrap inventory: ``1 MINER + 1 PALLET`` (or just ``1 MINER``
@@ -1863,7 +1863,7 @@ def place_ore_node(
 
     Args:
         miner_tile: ``(x, y)`` for the miner. For the rocket
-            benchmark's south-edge pattern this is
+            scenario's south-edge pattern this is
             ``(patch_x + 1, patch_y + 2)`` — the south-edge
             centre of a 3x3 patch starting at ``(patch_x, patch_y)``.
         direction: Push direction. Must be one of ``Direction.UP``,
@@ -1959,7 +1959,7 @@ def wire_coal_feed(
     the miner first would block the belt's only legal stand tile).
     Otherwise the miner is placed first so it starts pushing as
     soon as the first belt arrives. The two cases that hit the
-    trunk-first branch in the rocket benchmark are tin's
+    trunk-first branch in the rocket scenario are tin's
     ``(7, 24) DOWN`` miner with trunk starting at ``(7, 25) DOWN``
     (belt stand = ``(7, 24)``) and silicon's ``(7, 22) UP`` miner
     with trunk starting at ``(7, 21) UP`` (belt stand = ``(7, 22)``).
@@ -3071,7 +3071,7 @@ class CraftFromBus(Goal):
        the player with exactly enough material for ``count`` crafts.
     2. One :class:`ProduceInMachine` cycle for the actual production
        (deposit inputs into the nearest furnace/assembler, wait for
-       the recipe ticks, withdraw the output). The rocket benchmark
+       the recipe ticks, withdraw the output). The rocket scenario
        masks every ``CRAFT_*`` action, so production must flow
        through a placed machine — hand-crafting in player inventory
        isn't an option.
@@ -3216,7 +3216,7 @@ class BuildSmelterCell(Goal):
         patch_x: Top-left column of the 3x3 ore patch.
         patch_y_top: Top-left row of the 3x3 ore patch.
         patch_size: Side length of the patch in tiles. Defaults to 3
-            (rocket benchmark). Other sizes shift the miner tile
+            (rocket scenario). Other sizes shift the miner tile
             accordingly.
 
     Sub-goals run sequentially via the same Goal-of-goals pattern as
@@ -3317,7 +3317,7 @@ class BuildCoalTrunk(Goal):
     3. Caller follows up with a pallet placement on the (now-arm's-
        behind) tile via a different stand tile.
 
-    For the rocket benchmark this means the coal-extraction cell
+    For the rocket scenario this means the coal-extraction cell
     (miner + pallet on the coal patch) is built *after* the trunk's
     arm, with the pallet's PlaceMachineAt using a non-default facing
     direction so its stand tile sits on the patch instead of on the

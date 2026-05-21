@@ -1,1 +1,1 @@
-"""PPO baselines for factoriax skill benchmarks."""
+"""PPO baselines for factoriax skill scenarios."""

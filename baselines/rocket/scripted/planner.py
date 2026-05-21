@@ -112,7 +112,7 @@ class Planner:
                 :attr:`Result.FAIL` from :meth:`step`, propagating to
                 the run loop. When ``False``, the planner logs the
                 failure and advances as if DONE — useful for
-                benchmark runs where we want to score whatever was
+                scenario runs where we want to score whatever was
                 achieved without aborting the episode.
         """
         self._queue: list[_PhaseEntry] = [

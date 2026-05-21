@@ -18,12 +18,12 @@ Catalogue (env, wrapper, shape -> fixture name @ file):
        returns ``(env, params, jit_step_fn, state)``
 - 8x8 1p with ``ScienceTallyWrapper``
     -> ``tally_env`` @ ``tests/test_science_tally_wrapper.py``
-- 10x10 1p inside ``BenchmarkRunner``
-    -> ``runner`` @ ``tests/benchmarks/conftest.py``
+- 10x10 1p inside ``ScenarioRunner``
+    -> ``runner`` @ ``tests/scenarios/conftest.py``
        (multi-entry cache; new ``blocked_actions`` configs compile once)
 - 5x5 1p per skill level
     -> ``run_scripted(level_idx, policy)`` @
-       ``tests/benchmarks/skills/test_skills_scripted_solves.py``
+       ``tests/scenarios/skills/test_skills_scripted_solves.py``
 - 8x8 1p with custom ``achievement_fn``
     -> ``make_env(achievement_fn)`` @ ``tests/test_achievement_engine.py``
 

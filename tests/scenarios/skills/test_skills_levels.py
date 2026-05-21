@@ -9,19 +9,19 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.benchmarks.skills import (
+from factoriax.constants import BlockType, ItemType
+from factoriax.scenarios.skills import (
     build_craft_miner_level,
     build_mine_level,
     build_navigate_level,
     build_place_miner_level,
 )
-from factoriax.benchmarks.skills.achievements import (
+from factoriax.scenarios.skills.achievements import (
     CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
     PLACE_MINER_BLOCKED_ACTIONS,
 )
-from factoriax.constants import BlockType, ItemType
 
 
 class TestNavigateLevel:

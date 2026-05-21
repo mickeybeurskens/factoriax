@@ -1,4 +1,4 @@
-"""Unit tests for benchmark skill wrappers and level generators."""
+"""Unit tests for scenario skill wrappers and level generators."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.benchmarks.skills.mining import MiningSkill, mining_level
-from factoriax.benchmarks.skills.place_miner import (
+from factoriax.constants import Action, BlockType, ItemType
+from factoriax.levels import build_state
+from factoriax.scenarios.skills.mining import MiningSkill, mining_level
+from factoriax.scenarios.skills.place_miner import (
     PlaceMinerSkill,
     place_miner_level,
 )
-from factoriax.constants import Action, BlockType, ItemType
-from factoriax.levels import build_state
 
 # -----------------------------------------------------------------------
 # Level generator tests

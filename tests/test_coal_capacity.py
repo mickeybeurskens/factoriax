@@ -1,4 +1,4 @@
-"""Regression test for the rocket-benchmark coal-patch resource cap.
+"""Regression test for the rocket-scenario coal-patch resource cap.
 
 The advanced factory agent runs four parallel smelters that pull
 coal from the v2 left-edge coal column. A starved coal supply
@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.benchmarks.rocket import build_rocket_level
 from factoriax.constants import BLOCK_MAX_RESOURCES, BlockType
 from factoriax.levels import build_state
+from factoriax.scenarios.rocket import build_rocket_level
 from factoriax.state import EnvParams
 
 
@@ -35,8 +35,8 @@ def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
     iron_tiles = block_map == int(BlockType.IRON)
 
     # v2 layout: coal column (1x32 = 32 tiles), iron patch (2x2 = 4 tiles).
-    assert int(coal_tiles.sum()) == 32, "Rocket benchmark expects a 1x32 coal column."
-    assert int(iron_tiles.sum()) == 4, "Rocket benchmark expects a 2x2 iron patch."
+    assert int(coal_tiles.sum()) == 32, "Rocket scenario expects a 1x32 coal column."
+    assert int(iron_tiles.sum()) == 4, "Rocket scenario expects a 2x2 iron patch."
 
     coal_per_tile = int(jnp.unique(resources[coal_tiles])[0])
     iron_per_tile = int(jnp.unique(resources[iron_tiles])[0])

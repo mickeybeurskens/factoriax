@@ -95,7 +95,7 @@ def test_recipe_output_counts_defaults_to_one() -> None:
 def test_every_furnace_recipe_is_two_input() -> None:
     """After the LIMESTONE addition every furnace recipe takes two
     inputs. This is a load-bearing structural property the rocket
-    benchmark's belt-logistics layout relies on (no single-input
+    scenario's belt-logistics layout relies on (no single-input
     outliers that would need a special-case feeder shape).
     """
     for idx, recipe in enumerate(BASE_RECIPES):

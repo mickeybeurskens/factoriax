@@ -1,7 +1,7 @@
 """Gymnax wrapper that converts masked actions to ``NOOP`` before stepping.
 
-Used by benchmarks that want to exclude a subset of the action space —
-e.g. the rocket benchmark masks all hand-crafting actions so the agent
+Used by scenarios that want to exclude a subset of the action space —
+e.g. the rocket scenario masks all hand-crafting actions so the agent
 must use placed machines for production.
 
 The mask is a frozen ``jnp.ndarray`` of shape ``(NUM_ACTIONS,)`` bool,

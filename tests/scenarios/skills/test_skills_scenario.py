@@ -1,6 +1,6 @@
 """Skeleton + protocol conformance tests for :class:`SkillsBenchmark`.
 
-Phase F.2 ships the benchmark class shell with no levels yet. These
+Phase F.2 ships the scenario class shell with no levels yet. These
 tests pin the public shape so subsequent Phase L slices can append
 levels without breaking consumers. Tests are fast — no JIT, no env
 construction.
@@ -12,23 +12,23 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.benchmarks import (
-    Benchmark,
+from factoriax.constants import MAX_ACHIEVEMENTS
+from factoriax.scenarios import (
     LevelResult,
+    Scenario,
     SkillsBenchmark,
     skills_conditions,
     skills_reward,
 )
-from factoriax.benchmarks.skills import NUM_SKILLS, SKILLS_ACHIEVEMENT_INFO
-from factoriax.constants import MAX_ACHIEVEMENTS
+from factoriax.scenarios.skills import NUM_SKILLS, SKILLS_ACHIEVEMENT_INFO
 from factoriax.state import EnvParams, EnvState
 
 
 class TestSkillsBenchmarkProtocol:
-    """SkillsBenchmark satisfies the Benchmark protocol."""
+    """SkillsBenchmark satisfies the Scenario protocol."""
 
     def test_is_benchmark(self) -> None:
-        assert isinstance(SkillsBenchmark(), Benchmark)
+        assert isinstance(SkillsBenchmark(), Scenario)
 
     def test_name_is_skills(self) -> None:
         assert SkillsBenchmark().name == "skills"
@@ -51,7 +51,7 @@ class TestSkillsBenchmarkCurriculum:
         assert len(SKILLS_ACHIEVEMENT_INFO) == NUM_SKILLS
 
     def test_level_names_unique(self) -> None:
-        names = [bench_level.name for bench_level in SkillsBenchmark().levels()]
+        names = [scenario_level.name for scenario_level in SkillsBenchmark().levels()]
         assert len(names) == len(set(names))
 
     def test_first_level_is_navigate(self) -> None:
@@ -93,8 +93,8 @@ class TestSkillsConditions:
 
     def _navigate_state(self) -> EnvState:
         """Build a real state from the canonical navigate level."""
-        from factoriax.benchmarks.skills import build_navigate_level
         from factoriax.levels import build_state
+        from factoriax.scenarios.skills import build_navigate_level
 
         level, params, _ = build_navigate_level(seed=0)
         return build_state(level, params)

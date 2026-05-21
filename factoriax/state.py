@@ -71,7 +71,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             condition function bound at env-construction time inside
             :func:`~factoriax.game_logic.factoriax_step` and folds the
             result in with ``|``. Wrappers, observations, rewards, and
-            benchmarks read this field directly — no wrapper needed.
+            scenarios read this field directly — no wrapper needed.
     """
 
     # Grid (terrain + spatial lookup)

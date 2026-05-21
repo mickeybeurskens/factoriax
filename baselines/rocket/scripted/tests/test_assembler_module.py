@@ -32,10 +32,6 @@ import pytest
 
 from baselines.rocket.scripted import goals, skills
 from baselines.rocket.scripted.world_model import decode_observation
-from factoriax.benchmarks.rocket import (
-    ROCKET_BLOCKED_ACTIONS,
-    rocket_conditions,
-)
 from factoriax.constants import (
     Action,
     Direction,
@@ -46,6 +42,10 @@ from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.observations import global_array
+from factoriax.scenarios.rocket import (
+    ROCKET_BLOCKED_ACTIONS,
+    rocket_conditions,
+)
 from factoriax.state import EnvParams
 
 pytestmark = pytest.mark.slow
@@ -577,7 +577,7 @@ def test_assembler_module_produces_tier4_recipes(
 def test_assembler_module_produces_rocket_when_fed_subassemblies() -> None:
     """The rocket sink: a single assembler module crafts a ROCKET.
 
-    ROCKET is the terminal recipe in the rocket benchmark — a single
+    ROCKET is the terminal recipe in the rocket scenario — a single
     craft consumes 6 HULL + 4 ROCKET_CORE and runs for 300 ticks. It
     sits on top of the entire factory chain (ore -> plates ->
     intermediates -> sub-assemblies -> rocket) and is what the

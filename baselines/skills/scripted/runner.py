@@ -39,10 +39,10 @@ import numpy as np
 
 from baselines.skills.scripted import SCRIPTED_POLICIES, ScriptedPolicy
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
-from factoriax.benchmarks.skills import SkillsBenchmark, skills_conditions
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import build_state
+from factoriax.scenarios.skills import SkillsBenchmark, skills_conditions
 from factoriax.state import EnvState
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
@@ -95,16 +95,16 @@ def run_level(
         :class:`RolloutOutcome` with score, solve flag, and recorded
         states/actions for video rendering.
     """
-    bench = SkillsBenchmark()
-    bench_level = bench.levels()[level_idx]
-    params = bench_level.env_params
+    scenario = SkillsBenchmark()
+    scenario_level = scenario.levels()[level_idx]
+    params = scenario_level.env_params
 
     inner = FactoriaXEnv(achievement_fn=skills_conditions)
-    blocked = bench_level.blocked_actions or frozenset()
+    blocked = scenario_level.blocked_actions or frozenset()
     env = ActionMaskWrapper(inner, tuple(blocked)) if blocked else inner
     jit_step = jax.jit(env.step_env)
 
-    state: EnvState = build_state(bench_level.level, params)
+    state: EnvState = build_state(scenario_level.level, params)
     rng = jax.random.PRNGKey(seed)
 
     states: list[EnvState] = [state]
@@ -126,7 +126,7 @@ def run_level(
     max_t = params.max_timesteps
     score = (max_t - timesteps + 1) / max_t if solved else 0.0
     return RolloutOutcome(
-        level_name=bench_level.name,
+        level_name=scenario_level.name,
         solved=solved,
         timesteps_used=timesteps,
         score=score,
@@ -304,8 +304,8 @@ def run_one(
     fps: int = 2,
 ) -> RolloutOutcome:
     """Run + render + (optionally) upload one level. Returns the outcome."""
-    bench = SkillsBenchmark()
-    level_names = [bl.name for bl in bench.levels()]
+    scenario = SkillsBenchmark()
+    level_names = [bl.name for bl in scenario.levels()]
     if level_name not in level_names:
         raise ValueError(f"Unknown level {level_name!r}. Available: {level_names}")
     level_idx = level_names.index(level_name)
@@ -395,9 +395,9 @@ def main(argv: list[str] | None = None) -> None:
     sha_short = _git_sha_short()
     out_root = Path(args.out_root)
 
-    bench = SkillsBenchmark()
+    scenario = SkillsBenchmark()
     if args.level == "all":
-        level_names = [bl.name for bl in bench.levels()]
+        level_names = [bl.name for bl in scenario.levels()]
     else:
         level_names = [args.level]
 

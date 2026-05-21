@@ -1,7 +1,7 @@
-"""Tests for the rocket benchmark.
+"""Tests for the rocket scenario.
 
 Covers the achievement catalogue, per-condition correctness, reward
-semantics, and a small end-to-end run through the benchmark runner.
+semantics, and a small end-to-end run through the scenario runner.
 """
 
 from __future__ import annotations
@@ -10,16 +10,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.benchmarks import (
-    MAX_ROCKET_SCORE,
-    ROCKET_ACHIEVEMENT_INFO,
-    ROCKET_ACHIEVEMENT_WEIGHTS,
-    LevelResult,
-    RocketBenchmark,
-    build_rocket_level,
-    rocket_conditions,
-    rocket_reward,
-)
 from factoriax.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
@@ -27,6 +17,16 @@ from factoriax.constants import (
     BlockType,
     ItemType,
     MachineType,
+)
+from factoriax.scenarios import (
+    MAX_ROCKET_SCORE,
+    ROCKET_ACHIEVEMENT_INFO,
+    ROCKET_ACHIEVEMENT_WEIGHTS,
+    LevelResult,
+    RocketScenario,
+    build_rocket_level,
+    rocket_conditions,
+    rocket_reward,
 )
 from factoriax.state import EnvParams, EnvState
 
@@ -56,12 +56,12 @@ def test_all_ids_unique() -> None:
     assert len(set(ids)) == len(ids)
 
 
-def test_benchmark_construction() -> None:
-    """RocketBenchmark has one level at the advertised dimensions."""
-    bench = RocketBenchmark()
-    assert bench.name == "rocket"
-    assert bench.num_players == 1
-    levels = bench.levels()
+def test_scenario_construction() -> None:
+    """RocketScenario has one level at the advertised dimensions."""
+    scenario = RocketScenario()
+    assert scenario.name == "rocket"
+    assert scenario.num_players == 1
+    levels = scenario.levels()
     assert len(levels) == 1
     params = levels[0].env_params
     assert params.max_timesteps == 8000
@@ -94,15 +94,15 @@ def test_build_rocket_level_preplaces_furnace_and_assembler() -> None:
 
 
 def test_rocket_benchmark_exposes_blocked_actions() -> None:
-    """The benchmark advertises every CRAFT_* action as blocked."""
-    from factoriax.benchmarks.rocket import ROCKET_BLOCKED_ACTIONS
+    """The scenario advertises every CRAFT_* action as blocked."""
+    from factoriax.scenarios.rocket import ROCKET_BLOCKED_ACTIONS
 
-    bench = RocketBenchmark()
+    scenario = RocketScenario()
     # All 18 CRAFT_* actions (IRON_PLATE .. ROCKET) must be blocked.
-    assert len(bench.blocked_actions) == 18
-    assert Action.CRAFT_IRON_PLATE in bench.blocked_actions
-    assert Action.CRAFT_ROCKET in bench.blocked_actions
-    assert Action.CRAFT_BASIC_SCIENCE in bench.blocked_actions
+    assert len(scenario.blocked_actions) == 18
+    assert Action.CRAFT_IRON_PLATE in scenario.blocked_actions
+    assert Action.CRAFT_ROCKET in scenario.blocked_actions
+    assert Action.CRAFT_BASIC_SCIENCE in scenario.blocked_actions
     # Movement / mining / placement actions must NOT be blocked.
     for allowed in (
         Action.NOOP,
@@ -112,8 +112,8 @@ def test_rocket_benchmark_exposes_blocked_actions() -> None:
         Action.WITHDRAW,
         Action.DEPOSIT_COAL,
     ):
-        assert int(allowed) not in bench.blocked_actions
-    assert bench.blocked_actions == ROCKET_BLOCKED_ACTIONS
+        assert int(allowed) not in scenario.blocked_actions
+    assert scenario.blocked_actions == ROCKET_BLOCKED_ACTIONS
 
 
 # ``test_action_mask_wrapper_noops_blocked_actions`` (~4.1s, unique
@@ -393,7 +393,7 @@ def test_rocket_reward_no_unlock_is_zero() -> None:
 
 def test_score_reads_achievement_mask() -> None:
     """score() weights each slot in the result mask correctly."""
-    bench = RocketBenchmark()
+    scenario = RocketScenario()
     mask = np.zeros(MAX_ACHIEVEMENTS, dtype=bool)
     mask[_index_of("collect_iron")] = True  # +1
     mask[_index_of("place_rocket")] = True  # +8
@@ -405,12 +405,12 @@ def test_score_reads_achievement_mask() -> None:
         actions=np.zeros((0,), dtype=np.int32),
         achievements_unlocked=mask,
     )
-    assert bench.score([result]) == pytest.approx(9.0)
+    assert scenario.score([result]) == pytest.approx(9.0)
 
 
 def test_score_without_mask_returns_zero() -> None:
     """Defensive: missing achievements mask scores as zero."""
-    bench = RocketBenchmark()
+    scenario = RocketScenario()
     result = LevelResult(
         level_name="rocket_v1",
         items_mined={"coal": 0, "iron": 0, "copper": 0},
@@ -419,7 +419,7 @@ def test_score_without_mask_returns_zero() -> None:
         actions=np.zeros((0,), dtype=np.int32),
         achievements_unlocked=None,
     )
-    assert bench.score([result]) == pytest.approx(0.0)
+    assert scenario.score([result]) == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -431,16 +431,16 @@ def test_score_without_mask_returns_zero() -> None:
 # in the replacement-for-speedup pass. The properties it covered are
 # decomposed across cheap unit tests:
 #
-#   - tests/benchmarks/test_runner.py::TestAchievementsAccessor:
+#   - tests/scenarios/test_runner.py::TestAchievementsAccessor:
 #     ``_achievements`` returns numpy of state.achievements_unlocked
 #     when a fn is bound, None otherwise.
 #   - ``test_rocket_benchmark_exposes_blocked_actions`` above:
-#     RocketBenchmark advertises blocked_actions correctly.
-#   - The ``RocketBenchmark.achievement_fn`` attribute is checked
+#     RocketScenario advertises blocked_actions correctly.
+#   - The ``RocketScenario.achievement_fn`` attribute is checked
 #     indirectly via the catalogue tests + the runner's _ensure_env
 #     pickup logic (TestResolveBlocked + TestBuildEnv in
 #     test_runner.py).
-#   - ``TestRunnerExecution::test_aggregate_equals_benchmark_score``
+#   - ``TestRunnerExecution::test_aggregate_equals_scenario_score``
 #     covers aggregate_score finiteness via the shared noop_result.
 #
 # Chained, those cover the same wiring at sub-second cost.

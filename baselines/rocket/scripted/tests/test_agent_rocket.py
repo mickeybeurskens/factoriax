@@ -1,6 +1,6 @@
 """End-to-end tests for the scripted rocket agent.
 
-Runs the agent against the real ``RocketBenchmark`` env (with the
+Runs the agent against the real ``RocketScenario`` env (with the
 hand-craft action mask applied) and reports which achievements fire.
 If a subset is missing the assertion message lists the exact unfired
 ids and their unlock timesteps — the scripted agent doubles as the
@@ -15,24 +15,24 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted.agent import make_scripted_rocket_agent
-from factoriax.benchmarks.rocket import (
+from factoriax.envs import FactoriaXEnv
+from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.levels import build_state
+from factoriax.observations import global_array
+from factoriax.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.envs import FactoriaXEnv
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.levels import build_state
-from factoriax.observations import global_array
 from factoriax.state import EnvParams
 
 pytestmark = pytest.mark.slow
 
 
 def _run_agent(max_steps: int, seed: int = 0):
-    """Drive the scripted rocket agent through the masked benchmark env.
+    """Drive the scripted rocket agent through the masked scenario env.
 
     Returns:
         Tuple ``(final_mask, unlock_timestep)`` where ``final_mask`` is
@@ -106,7 +106,7 @@ def test_rocket_agent_unlocks_basic_tier() -> None:
 def test_rocket_agent_unlocks_all_achievements() -> None:
     """The scripted agent should unlock all 38 rocket achievements.
 
-    Uses the 8000-step benchmark budget — the naive serial plan
+    Uses the 8000-step scenario budget — the naive serial plan
     completes in ~5100 ticks.
     """
     mask, timing = _run_agent(max_steps=8000)

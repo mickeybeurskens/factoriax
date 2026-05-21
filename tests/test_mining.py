@@ -193,7 +193,7 @@ class TestMiningEdgeCases:
         assert all(jax.tree.leaves(equal_per_leaf))
 
     def test_max_resources_constant_is_30000(self) -> None:
-        """BLOCK_MAX_RESOURCES should accommodate the rocket-benchmark
+        """BLOCK_MAX_RESOURCES should accommodate the rocket-scenario
         coal patch, which carries 28000 per tile (10x the other ore
         patches at 2800/tile) so four parallel smelter cells have
         enough fuel for the full 8000-tick rocket chain.

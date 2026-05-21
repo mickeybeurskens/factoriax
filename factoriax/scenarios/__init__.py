@@ -1,35 +1,35 @@
-"""Factoriax benchmarks.
+"""Factoriax scenarios.
 
-A benchmark is a pre-configured set of challenges that researchers use to
+A scenario is a pre-configured set of challenges that researchers use to
 compare agents on the factoriax simulation environment. This package is a
 consumer of factoriax — factoriax has no knowledge of it. The simulation
-engine stays unchanged; benchmarks layer on top.
+engine stays unchanged; scenarios layer on top.
 
-All benchmarks follow the same entry point: construct a ``Benchmark``,
-construct a ``BenchmarkRunner``, call ``runner.run(benchmark, policies)``.
+All scenarios follow the same entry point: construct a ``Scenario``,
+construct a ``ScenarioRunner``, call ``runner.run(scenario, policies)``.
 """
 
-from factoriax.benchmarks.core import (
-    Benchmark,
-    BenchmarkLevel,
-    BenchmarkResult,
+from factoriax.scenarios.core import (
     LevelResult,
     Policy,
+    Scenario,
+    ScenarioLevel,
+    ScenarioResult,
 )
-from factoriax.benchmarks.rocket import (
+from factoriax.scenarios.rocket import (
     MAX_ROCKET_SCORE,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_ACHIEVEMENT_WEIGHTS,
     ROCKET_RECIPE_BALANCE,
     ROCKET_RECIPE_BOOK,
     ROCKET_RECIPE_TABLE,
-    RocketBenchmark,
+    RocketScenario,
     build_rocket_level,
     rocket_conditions,
     rocket_reward,
 )
-from factoriax.benchmarks.runner import BenchmarkRunner
-from factoriax.benchmarks.skills import (
+from factoriax.scenarios.runner import ScenarioRunner
+from factoriax.scenarios.skills import (
     SKILLS_ACHIEVEMENT_INFO,
     SkillsBenchmark,
     build_craft_miner_level,
@@ -48,13 +48,13 @@ __all__ = [
     "ROCKET_RECIPE_BOOK",
     "ROCKET_RECIPE_TABLE",
     "SKILLS_ACHIEVEMENT_INFO",
-    "Benchmark",
-    "BenchmarkLevel",
-    "BenchmarkResult",
-    "BenchmarkRunner",
+    "Scenario",
+    "ScenarioLevel",
+    "ScenarioResult",
+    "ScenarioRunner",
     "LevelResult",
     "Policy",
-    "RocketBenchmark",
+    "RocketScenario",
     "SkillsBenchmark",
     "build_craft_miner_level",
     "build_mine_level",

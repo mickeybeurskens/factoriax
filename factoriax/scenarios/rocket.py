@@ -1,6 +1,6 @@
-"""Rocket benchmark — achievement-based reward signal with the rocket as capstone.
+"""Rocket scenario — achievement-based reward signal with the rocket as capstone.
 
-The benchmark defines 38 achievements tiered Craftax-style (1/3/5/8 points,
+The scenario defines 38 achievements tiered Craftax-style (1/3/5/8 points,
 max 140), ordered to teach the game's natural learning path: gather raw ore,
 refine intermediates via a furnace and assembler, build and deploy the rest
 of the factory, assemble the three rocket sub-components (hull, engine,
@@ -15,8 +15,8 @@ Setup:
 - All direct player-crafting actions (``CRAFT_IRON_PLATE`` through
   ``CRAFT_ROCKET``) are **masked** — the env silently replaces them with
   ``NOOP``. Production must flow through the furnace / assembler pipeline.
-- ``RocketBenchmark`` exposes ``achievement_fn`` and ``blocked_actions``
-  attributes the :class:`~factoriax.benchmarks.runner.BenchmarkRunner`
+- ``RocketScenario`` exposes ``achievement_fn`` and ``blocked_actions``
+  attributes the :class:`~factoriax.scenarios.runner.ScenarioRunner`
   picks up automatically; callers stepping the env directly should wrap
   with :class:`~factoriax.envs.action_mask_wrapper.ActionMaskWrapper`
   themselves (see :data:`ROCKET_BLOCKED_ACTIONS`).
@@ -28,7 +28,6 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.achievements import AchievementInfo
-from factoriax.benchmarks.core import BenchmarkLevel, LevelResult
 from factoriax.constants import (
     MAX_ACHIEVEMENTS,
     Action,
@@ -46,6 +45,7 @@ from factoriax.recipes import (
     RecipeTable,
 )
 from factoriax.rewards import achievement_reward
+from factoriax.scenarios.core import LevelResult, ScenarioLevel
 from factoriax.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
 
 
 def rocket_conditions(state: EnvState) -> jax.Array:
-    """Compute the 38 rocket-benchmark achievement conditions.
+    """Compute the 38 rocket-scenario achievement conditions.
 
     Every condition is a pure function of ``state``. The returned array
     is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
@@ -339,7 +339,7 @@ def rocket_conditions(state: EnvState) -> jax.Array:
 def rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Sparse reward for newly-unlocked rocket-benchmark achievements.
+    """Sparse reward for newly-unlocked rocket-scenario achievements.
 
     Thin wrapper around :func:`factoriax.rewards.achievement_reward`
     bound to :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. Assumes *prev_state*
@@ -378,7 +378,7 @@ ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
     )
 )
 
-#: :class:`RecipeBook` used by the rocket benchmark — applies
+#: :class:`RecipeBook` used by the rocket scenario — applies
 #: :data:`ROCKET_RECIPE_BALANCE` over :data:`BASE_RECIPE_BOOK`.
 #: Pass to recipe-driven scripted agents (e.g.
 #: :func:`make_advanced_factory_rocket_agent`) so their BOM math
@@ -436,7 +436,7 @@ _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
 
 
 def build_rocket_level() -> Level:
-    """Construct the canonical 32x32 rocket benchmark level.
+    """Construct the canonical 32x32 rocket scenario level.
 
     Player spawns at :data:`_SPAWN`. Five 2x2 ore patches (iron,
     copper, tin, silicon, limestone) sit on cols 3-4, vertically
@@ -448,7 +448,7 @@ def build_rocket_level() -> Level:
     respectively.
 
     Returns:
-        Deterministic :class:`Level` used as the benchmark's only level.
+        Deterministic :class:`Level` used as the scenario's only level.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     # Coal column — one tile wide, full map height.
@@ -489,7 +489,7 @@ def build_rocket_level() -> Level:
 # Action mask
 # ---------------------------------------------------------------------------
 
-# The rocket benchmark forbids all direct player crafting; production
+# The rocket scenario forbids all direct player crafting; production
 # must flow through the pre-placed furnace / assembler. The mask covers
 # every CRAFT_* action from IRON_PLATE through ROCKET (recipe actions
 # 18–35).
@@ -499,16 +499,16 @@ ROCKET_BLOCKED_ACTIONS: frozenset[int] = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# Benchmark class
+# Scenario class
 # ---------------------------------------------------------------------------
 
 
-class RocketBenchmark:
-    """Achievement-based benchmark where the goal is placing a rocket.
+class RocketScenario:
+    """Achievement-based scenario where the goal is placing a rocket.
 
-    Implements the :class:`~factoriax.benchmarks.core.Benchmark`
+    Implements the :class:`~factoriax.scenarios.core.Scenario`
     protocol. The ``achievement_fn`` attribute is read by
-    :class:`~factoriax.benchmarks.runner.BenchmarkRunner`, which wraps
+    :class:`~factoriax.scenarios.runner.ScenarioRunner`, which wraps
     the env so that ``LevelResult.achievements_unlocked`` is populated
     on each run. Scoring is done in :meth:`score` from the latched
     unlock mask — ``score_level`` returns a placeholder because the
@@ -519,14 +519,14 @@ class RocketBenchmark:
     name: str = "rocket"
     num_players: int = 1
     achievement_fn = staticmethod(rocket_conditions)
-    # Hand-craft actions are blocked for this benchmark; production
+    # Hand-craft actions are blocked for this scenario; production
     # must flow through the pre-placed furnace + assembler. Callers
-    # (e.g. :class:`BenchmarkRunner`) are expected to wrap the env with
+    # (e.g. :class:`ScenarioRunner`) are expected to wrap the env with
     # :class:`~factoriax.envs.action_mask_wrapper.ActionMaskWrapper`
     # using this set.
     blocked_actions: frozenset[int] = ROCKET_BLOCKED_ACTIONS
 
-    def levels(self) -> list[BenchmarkLevel]:
+    def levels(self) -> list[ScenarioLevel]:
         """Return the single canonical rocket level."""
         # Step budget set at 8000 — enough headroom for a
         # factory-scale plan that parallelises smelts and assemblies
@@ -539,7 +539,7 @@ class RocketBenchmark:
             recipe_table=ROCKET_RECIPE_TABLE,
         )
         return [
-            BenchmarkLevel(
+            ScenarioLevel(
                 name="rocket_v1",
                 description=(
                     "Rocket from ore patches on a 32x32 map. Furnace and "
@@ -553,7 +553,7 @@ class RocketBenchmark:
         ]
 
     def score_level(
-        self, bench_level: BenchmarkLevel, items_mined: dict[str, int]
+        self, scenario_level: ScenarioLevel, items_mined: dict[str, int]
     ) -> float:
         """Per-level placeholder score.
 
@@ -570,7 +570,7 @@ class RocketBenchmark:
         Reads each result's ``achievements_unlocked`` mask, weights it
         by :data:`ROCKET_ACHIEVEMENT_WEIGHTS`, and returns the mean.
         Results without an unlock mask contribute zero (defensive — the
-        runner should always populate the mask for this benchmark).
+        runner should always populate the mask for this scenario).
 
         Args:
             level_results: Per-level outcomes from the runner.

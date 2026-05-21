@@ -4,7 +4,7 @@ The wrapper rewrites blocked actions to ``Action.NOOP`` before calling
 ``inner.step_env``. These tests exercise the rewriting logic directly
 on a stub inner env so the wrapper's masking can be validated without
 paying a real env compile. The previous coverage came indirectly via
-``tests/benchmarks/test_runner.py``'s per-level mask integration tests
+``tests/scenarios/test_runner.py``'s per-level mask integration tests
 (~21s of XLA compile across three tests); the unit tests below run in
 milliseconds and exercise the same property.
 """

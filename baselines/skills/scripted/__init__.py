@@ -16,7 +16,7 @@ Scripted policies are *state-readers* — they peek at :class:`EnvState`
 directly. They are baselines, not agents under evaluation. The signature
 ``Callable[[EnvState, EnvParams], jax.Array]`` keeps this explicit; the
 test harness drives the env step-by-step rather than going through
-:class:`BenchmarkRunner`'s obs-only interface.
+:class:`ScenarioRunner`'s obs-only interface.
 """
 
 from __future__ import annotations

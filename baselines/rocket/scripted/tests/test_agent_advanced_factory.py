@@ -80,7 +80,12 @@ from baselines.rocket.scripted.goals import (
     Wait,
     WaitUntil,
 )
-from factoriax.benchmarks.rocket import (
+from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.envs import FactoriaXEnv
+from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.levels import build_state
+from factoriax.observations import global_array
+from factoriax.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_BLOCKED_ACTIONS,
@@ -89,11 +94,6 @@ from factoriax.benchmarks.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.constants import Direction, ItemType, MachineType
-from factoriax.envs import FactoriaXEnv
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.levels import build_state
-from factoriax.observations import global_array
 from factoriax.state import EnvParams
 
 _EXPECTED_UNLOCKS: tuple[str, ...] = (
@@ -158,7 +158,7 @@ def test_goal_list_constructs_under_default_book() -> None:
 
 
 def test_goal_list_constructs_under_rocket_book() -> None:
-    """The agent works against the rocket benchmark's recipe overlay."""
+    """The agent works against the rocket scenario's recipe overlay."""
     goals = build_advanced_factory_goals(book=ROCKET_RECIPE_BOOK)
     assert len(goals) > 0
 
@@ -872,7 +872,7 @@ def test_recipe_overlay_changes_bom_quantities() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Slow smoke — full env rollout under the rocket benchmark
+# Slow smoke — full env rollout under the rocket scenario
 # ---------------------------------------------------------------------------
 
 

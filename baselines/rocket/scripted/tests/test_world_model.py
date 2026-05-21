@@ -1,7 +1,7 @@
 """Tests for baselines.rocket.scripted.world_model.
 
 The decoder is validated by round-tripping: construct a known state via
-the benchmark's level builder, generate its global observation, decode
+the scenario's level builder, generate its global observation, decode
 it with :func:`decode_observation`, and check that every derived view
 matches the original state.
 """
@@ -13,7 +13,6 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted import world_model as wm
-from factoriax.benchmarks.rocket import build_rocket_level, rocket_conditions
 from factoriax.constants import (
     Action,
     Direction,
@@ -23,6 +22,7 @@ from factoriax.constants import (
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
 from factoriax.observations import global_array
+from factoriax.scenarios.rocket import build_rocket_level, rocket_conditions
 from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ from factoriax.state import EnvParams
 
 @pytest.fixture(scope="module")
 def rocket_env_params() -> EnvParams:
-    """Rocket benchmark EnvParams (32x32, 2000 steps)."""
+    """Rocket scenario EnvParams (32x32, 2000 steps)."""
     return EnvParams(map_width=32, map_height=32, num_players=1, max_timesteps=2000)
 
 
@@ -171,7 +171,7 @@ def test_decode_inventory_round_trip(
     )
     expected = np.asarray(rocket_initial_state.player_inventory[0])
     np.testing.assert_array_equal(view.player.inventory, expected)
-    # Rocket benchmark starts with empty inventory.
+    # Rocket scenario starts with empty inventory.
     assert view.player.inventory.sum() == 0
 
 

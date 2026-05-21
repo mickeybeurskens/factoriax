@@ -1,8 +1,8 @@
 """Each scripted baseline solves its level under the per-level mask.
 
 Drives the env step-by-step rather than going through
-:class:`BenchmarkRunner` — scripted policies read state directly, so
-the obs-only ``BenchmarkRunner.run`` interface doesn't fit. Each test
+:class:`ScenarioRunner` — scripted policies read state directly, so
+the obs-only ``ScenarioRunner.run`` interface doesn't fit. Each test
 builds the level, wraps the env in :class:`ActionMaskWrapper` with the
 level's blocked_actions, and runs the policy until the target
 achievement bit unlocks (or the budget runs out).
@@ -18,10 +18,10 @@ import jax.numpy as jnp
 import pytest
 
 from baselines.skills.scripted import SCRIPTED_POLICIES, ScriptedPolicy
-from factoriax.benchmarks.skills import SkillsBenchmark, skills_conditions
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.levels import build_state
+from factoriax.scenarios.skills import SkillsBenchmark, skills_conditions
 from factoriax.state import EnvState
 
 pytestmark = pytest.mark.slow
@@ -37,19 +37,19 @@ def run_scripted():
     and picks up every cache entry built by earlier tests in the
     module, so it pays essentially zero JIT cost.
     """
-    bench = SkillsBenchmark()
+    scenario = SkillsBenchmark()
     cache: dict[int, tuple] = {}
 
     def _ensure(level_idx: int):
         if level_idx in cache:
             return cache[level_idx]
-        bench_level = bench.levels()[level_idx]
-        params = bench_level.env_params
+        scenario_level = scenario.levels()[level_idx]
+        params = scenario_level.env_params
         inner = FactoriaXEnv(achievement_fn=skills_conditions)
-        blocked = bench_level.blocked_actions or frozenset()
+        blocked = scenario_level.blocked_actions or frozenset()
         env = ActionMaskWrapper(inner, tuple(blocked)) if blocked else inner
         jit_step = jax.jit(env.step_env)
-        cache[level_idx] = (bench_level, params, jit_step)
+        cache[level_idx] = (scenario_level, params, jit_step)
         return cache[level_idx]
 
     def _run(
@@ -71,8 +71,8 @@ def run_scripted():
             ``(solved, timesteps_used)`` — whether the bit unlocked,
             and how many steps the policy took to do it.
         """
-        bench_level, params, jit_step = _ensure(level_idx)
-        state: EnvState = build_state(bench_level.level, params)
+        scenario_level, params, jit_step = _ensure(level_idx)
+        state: EnvState = build_state(scenario_level.level, params)
         rng = jax.random.PRNGKey(seed)
 
         for t in range(params.max_timesteps):
@@ -119,8 +119,8 @@ class TestNavigateScripted:
 
     def test_level_index_zero_is_navigate(self) -> None:
         """Bit 0 / level 0 contract: navigate is at index 0."""
-        bench = SkillsBenchmark()
-        assert bench.levels()[0].name == "navigate"
+        scenario = SkillsBenchmark()
+        assert scenario.levels()[0].name == "navigate"
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +155,8 @@ class TestMineScripted:
 
     def test_level_index_one_is_mine(self) -> None:
         """Bit 1 / level 1 contract: mine is at index 1."""
-        bench = SkillsBenchmark()
-        assert bench.levels()[1].name == "mine"
+        scenario = SkillsBenchmark()
+        assert scenario.levels()[1].name == "mine"
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +190,8 @@ class TestCraftMinerScripted:
 
     def test_level_index_two_is_craft_miner(self) -> None:
         """Bit 2 / level 2 contract: craft_miner is at index 2."""
-        bench = SkillsBenchmark()
-        assert bench.levels()[2].name == "craft_miner"
+        scenario = SkillsBenchmark()
+        assert scenario.levels()[2].name == "craft_miner"
 
 
 # ---------------------------------------------------------------------------
@@ -225,8 +225,8 @@ class TestPlaceMinerScripted:
 
     def test_level_index_three_is_place_miner(self) -> None:
         """Bit 3 / level 3 contract: place_miner is at index 3."""
-        bench = SkillsBenchmark()
-        assert bench.levels()[3].name == "place_miner"
+        scenario = SkillsBenchmark()
+        assert scenario.levels()[3].name == "place_miner"
 
     # Note: under the harder mine condition (``items_mined.sum() >= 5``,
     # which counts ore from BOTH manual MINEs and automated placed
@@ -247,13 +247,13 @@ class TestScriptedAggregate:
 
     def test_curriculum_aggregate_above_floor(self, run_scripted) -> None:
         """Each scripted policy solves its level; aggregate well above 0.9."""
-        bench = SkillsBenchmark()
+        scenario = SkillsBenchmark()
         scores: list[float] = []
-        for i, bench_level in enumerate(bench.levels()):
-            policy = SCRIPTED_POLICIES[bench_level.name]
+        for i, scenario_level in enumerate(scenario.levels()):
+            policy = SCRIPTED_POLICIES[scenario_level.name]
             solved, t = run_scripted(level_idx=i, policy=policy, seed=0)
-            assert solved, f"{bench_level.name!r} scripted failed (t={t})"
-            max_t = bench_level.env_params.max_timesteps
+            assert solved, f"{scenario_level.name!r} scripted failed (t={t})"
+            max_t = scenario_level.env_params.max_timesteps
             scores.append((max_t - t + 1) / max_t)
         agg = sum(scores) / len(scores)
         assert agg > 0.9, f"curriculum aggregate {agg:.3f} below 0.9 floor"

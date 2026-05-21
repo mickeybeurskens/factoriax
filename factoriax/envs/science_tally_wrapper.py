@@ -45,7 +45,7 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
     Reads ``new_env_state.science_consumed_step`` after every step and
     adds it to ``total_science_consumed``. Exposes the total through the
     wrapped state; does not inject it into the observation vector (that
-    decision is left to the benchmark that composes this wrapper).
+    decision is left to the scenario that composes this wrapper).
 
     Args:
         inner: Any gymnax-compatible env whose state type is :class:`EnvState`

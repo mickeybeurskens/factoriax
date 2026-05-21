@@ -1,1 +1,1 @@
-"""PPO baseline for the rocket achievement benchmark."""
+"""PPO baseline for the rocket achievement scenario."""

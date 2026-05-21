@@ -10,7 +10,7 @@ This separation is intentional.  Rewards and constraints live side by
 side in the step loop, stored in different fields of the result, so
 researchers can combine them however they like: as Lagrangian
 penalties, as hard filters, as separate CMDP cost channels, or purely
-as diagnostic metrics.  The benchmark infrastructure never blends
+as diagnostic metrics.  The scenario infrastructure never blends
 them automatically.
 
 Each constraint function has a companion ``*_names()`` function that

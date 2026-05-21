@@ -21,10 +21,6 @@ import pytest
 
 from baselines.rocket.scripted import goals, skills
 from baselines.rocket.scripted.world_model import decode_observation
-from factoriax.benchmarks.rocket import (
-    ROCKET_BLOCKED_ACTIONS,
-    rocket_conditions,
-)
 from factoriax.constants import (
     Direction,
     ItemType,
@@ -34,6 +30,10 @@ from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import LevelBuilder, build_state
 from factoriax.observations import global_array
+from factoriax.scenarios.rocket import (
+    ROCKET_BLOCKED_ACTIONS,
+    rocket_conditions,
+)
 from factoriax.state import EnvParams
 
 pytestmark = pytest.mark.slow
@@ -83,7 +83,7 @@ def _build_test_env(
         place_assembler: When true, drop a single assembler at
             :data:`_ASSEMBLER_TILE` so :class:`CraftFromBus` (which
             routes recipes through a placed machine) has somewhere
-            to push inputs. The rocket benchmark masks every
+            to push inputs. The rocket scenario masks every
             ``CRAFT_*`` action, so production must flow through a
             machine — hand-crafting isn't available.
 

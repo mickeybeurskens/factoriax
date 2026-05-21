@@ -1,4 +1,4 @@
-"""Tests for the v2 streamlined rocket benchmark map.
+"""Tests for the v2 streamlined rocket scenario map.
 
 The v2 layout is:
 
@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.benchmarks import build_rocket_level
 from factoriax.constants import BlockType, Direction, MachineType
+from factoriax.scenarios import build_rocket_level
 
 _MAP_SIZE = 32
 _PATCH_SIZE = 2

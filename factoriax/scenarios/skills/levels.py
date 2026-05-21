@@ -8,21 +8,21 @@ seeds are available for training-time variation.
 
 Achievement conditions are designed to be **layout-invariant** so the
 seed only varies spawn / source positions / distractors, not the target
-the agent must hit. See :mod:`factoriax.benchmarks.skills.achievements`.
+the agent must hit. See :mod:`factoriax.scenarios.skills.achievements`.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from factoriax.benchmarks.skills.achievements import (
+from factoriax.constants import BlockType, Direction, ItemType, MachineType
+from factoriax.levels import Level, LevelBuilder
+from factoriax.scenarios.skills.achievements import (
     CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
     PLACE_MINER_BLOCKED_ACTIONS,
 )
-from factoriax.constants import BlockType, Direction, ItemType, MachineType
-from factoriax.levels import Level, LevelBuilder
 from factoriax.state import EnvParams
 
 _NAVIGATE_MAP_SIZE: int = 5

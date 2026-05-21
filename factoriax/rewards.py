@@ -349,7 +349,7 @@ def player_inventory_reward(
 
 
 # ---------------------------------------------------------------------------
-# Dense reward functions for basic_skills benchmark levels
+# Dense reward functions for basic_skills scenario levels
 # ---------------------------------------------------------------------------
 
 

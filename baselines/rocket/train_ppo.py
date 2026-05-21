@@ -1,6 +1,6 @@
-"""Train PPO on the rocket achievement benchmark.
+"""Train PPO on the rocket achievement scenario.
 
-Builds :class:`~factoriax.envs.FactoriaXEnv` with the rocket benchmark's
+Builds :class:`~factoriax.envs.FactoriaXEnv` with the rocket scenario's
 :func:`rocket_conditions` bound as ``achievement_fn``, then uses
 :func:`rocket_reward` as the training signal — Craftax-style sparse
 reward of +weight on each newly-unlocked achievement.
@@ -42,7 +42,9 @@ from baselines.ppo.normalization import (
 )
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
-from factoriax.benchmarks.rocket import (
+from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
+from factoriax.levels import build_state
+from factoriax.scenarios.rocket import (
     MAX_ROCKET_SCORE,
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -52,8 +54,6 @@ from factoriax.benchmarks.rocket import (
     rocket_conditions,
     rocket_reward,
 )
-from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
-from factoriax.levels import build_state
 from factoriax.state import EnvParams, EnvState
 
 logging.basicConfig(
@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class Config:
-    """Training configuration for PPO on the rocket benchmark.
+    """Training configuration for PPO on the rocket scenario.
 
     Embeds a :class:`PPOConfig` for the shared PPO hyperparameters and
     keeps rocket-specific fields (map size, episode horizon, LR
@@ -77,7 +77,7 @@ class Config:
 
     ppo: PPOConfig = dataclasses.field(default_factory=PPOConfig)
     map_size: int = 32
-    # 8000 matches the scripted-agent benchmark. Naive needs 5907 ticks
+    # 8000 matches the scripted-agent scenario. Naive needs 5907 ticks
     # to reach 38/38; 2000 (the Apr-20 default) caps the policy well
     # short of the rocket chain.
     max_timesteps: int = 8000
@@ -135,7 +135,7 @@ def _make_env_and_state(
 ) -> tuple[Any, EnvState, EnvParams]:
     """Build the wrapped env, initial EnvState, and EnvParams.
 
-    Action mask matches the scripted benchmark: ``CRAFT_*`` actions are
+    Action mask matches the scripted scenario: ``CRAFT_*`` actions are
     blocked so the policy has to produce intermediates through machines
     (furnaces/assemblers) rather than handcrafting. Without the mask the
     PPO task would be strictly easier than what the scripted agents
@@ -407,7 +407,7 @@ def _finalize_artifacts(
 
 
 def train(config: Config) -> dict[str, float]:
-    """Train PPO against the rocket benchmark and return final metrics."""
+    """Train PPO against the rocket scenario and return final metrics."""
     env, initial_state, env_params = _make_env_and_state(config)
     initial_obs = env.get_obs(initial_state, env_params)
     obs_dim = int(initial_obs.shape[0])
