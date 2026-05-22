@@ -129,6 +129,8 @@ def run_scenarios_menu(
                 return None
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return None
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
                 for i, rect in enumerate(row_rects):
