@@ -152,10 +152,13 @@ class TestResolveKey:
         result = resolve_key(lookup, pygame.K_F12)
         assert len(result) == 0
 
-    def test_escape_not_in_lookup(self, lookup: KeyLookup) -> None:
-        """Escape is hardcoded, not in the binding map."""
+    def test_escape_resolves_to_quit(self, lookup: KeyLookup) -> None:
         result = resolve_key(lookup, pygame.K_ESCAPE)
-        assert len(result) == 0
+        assert PlayerAction.QUIT in result
+
+    def test_backspace_resolves_to_back(self, lookup: KeyLookup) -> None:
+        result = resolve_key(lookup, pygame.K_BACKSPACE)
+        assert PlayerAction.BACK in result
 
 
 class TestEnvParamsConversion:

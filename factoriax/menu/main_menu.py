@@ -159,14 +159,15 @@ def run_main_menu(
                 return None
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return None
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
                 for i, rect in enumerate(row_rects):
                     if rect.collidepoint(mx, my):
                         return _resolve(_OPTIONS[i].action)
             actions = resolve_event(event, kb_lookup, ctrl_lookup)
+            if PlayerAction.QUIT in actions:
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return None
             if PlayerAction.CONFIRM in actions:
                 return _resolve(_OPTIONS[selected_idx].action)
             if PlayerAction.BACK in actions:
@@ -207,7 +208,7 @@ def run_main_menu(
             surf,
             sw,
             hint_y,
-            "Up/Down select   Enter confirm   Esc quit",
+            "Up/Down select   Enter confirm   Backspace back   Escape quit",
             hint_font,
         )
 

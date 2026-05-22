@@ -129,8 +129,6 @@ def run_scenarios_menu(
                 return None
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return None
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
                 for i, rect in enumerate(row_rects):
@@ -140,6 +138,9 @@ def run_scenarios_menu(
                         doc_scroll = 0
                         break
             actions = resolve_event(event, kb_lookup, ctrl_lookup)
+            if PlayerAction.QUIT in actions:
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return None
             if PlayerAction.BACK in actions:
                 return None
             if PlayerAction.CONFIRM in actions and entries:
@@ -201,7 +202,8 @@ def run_scenarios_menu(
             surf,
             sw,
             hint_y,
-            "Up/Down select   Tab focus desc   Enter play   Esc back",
+            "Up/Down select   Tab focus desc   Enter play   "
+            "Backspace back   Delete quit",
             hint_font,
         )
 

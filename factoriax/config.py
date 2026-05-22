@@ -91,6 +91,7 @@ class PlayerAction(StrEnum):
     NAV_RIGHT = "nav_right"
     CONFIRM = "confirm"
     BACK = "back"
+    QUIT = "quit"
 
     OPEN_INVENTORY = "open_inventory"
     OPEN_ACHIEVEMENTS = "open_achievements"
@@ -182,9 +183,8 @@ def default_keyboard() -> Bindings:
         PlayerAction.NAV_LEFT: ["K_a", "K_LEFT"],
         PlayerAction.NAV_RIGHT: ["K_d", "K_RIGHT"],
         PlayerAction.CONFIRM: ["K_RETURN", "K_e"],
-        # BACK is handled by hardcoded Escape for keyboard.
-        # Included here for controller remapping only.
-        PlayerAction.BACK: [],
+        PlayerAction.BACK: ["K_BACKSPACE"],
+        PlayerAction.QUIT: ["K_ESCAPE"],
         # Navigation: toggles
         PlayerAction.OPEN_INVENTORY: ["K_i"],
         PlayerAction.OPEN_ACHIEVEMENTS: ["K_p"],
@@ -226,6 +226,7 @@ def default_controller() -> Bindings:
         PlayerAction.NAV_RIGHT: ["HAT_0_RIGHT"],
         PlayerAction.CONFIRM: ["BUTTON_0"],
         PlayerAction.BACK: ["BUTTON_1"],
+        PlayerAction.QUIT: [],
         # Toggles
         PlayerAction.OPEN_INVENTORY: ["BUTTON_3"],
         PlayerAction.TOGGLE_HOTBAR: ["BUTTON_4"],
