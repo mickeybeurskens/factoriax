@@ -54,6 +54,8 @@ def _run() -> None:
 
         if choice == "play":
             _handle_play(screen, config)
+        elif choice == "scenarios":
+            _handle_scenarios(screen, config)
         elif choice == "editor":
             _handle_editor(screen)
         elif choice == "settings":
@@ -129,6 +131,66 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     pygame.display.set_caption("FactoriaX")
     _play_loop(
         env,
+        state,
+        params,
+        screen,
+        rng,
+        kb_lookup=kb_lookup,
+        ctrl_lookup=ctrl_lookup,
+    )
+
+
+def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
+    """Show the scenarios menu, then launch the chosen scenario in the play loop."""
+    import os
+
+    from jax import random
+
+    from factoriax import scenarios as scenarios_pkg
+    from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+    from factoriax.envs.factoriax_env import FactoriaXEnv
+    from factoriax.menu.scenarios_menu import run_scenarios_menu
+    from factoriax.play.main import _play_loop, _run_with_loading_screen
+
+    kb_lookup = build_key_lookup(config.keyboard)
+    ctrl_lookup = build_controller_lookup(config.controller)
+
+    chosen = run_scenarios_menu(screen, kb_lookup, ctrl_lookup)
+    pygame.display.set_caption("FactoriaX")
+    if chosen is None:
+        return
+
+    cls = getattr(scenarios_pkg, chosen)
+    scenario_seed = int.from_bytes(os.urandom(4), "little")
+    try:
+        scenario = cls(seed=scenario_seed)
+    except TypeError:
+        scenario = cls()
+    [scenario_level] = scenario.levels()
+
+    env: FactoriaXEnv = FactoriaXEnv(
+        achievement_fn=scenario.achievement_fn,
+        level=scenario_level.level,
+    )
+    params = scenario_level.env_params
+    blocked: frozenset[int] = getattr(scenario, "blocked_actions", frozenset())
+    play_env: Any = ActionMaskWrapper(env, tuple(blocked)) if blocked else env
+
+    rng = random.PRNGKey(scenario_seed)
+    rng, reset_key = random.split(rng)
+    reset_result = cast(
+        "tuple[Any, Any]",
+        _run_with_loading_screen(
+            screen,
+            f"Loading {scenario.name}",
+            lambda: play_env.reset_env(reset_key, params),
+        ),
+    )
+    _, state = reset_result
+
+    pygame.display.set_caption("FactoriaX")
+    _play_loop(
+        play_env,
         state,
         params,
         screen,

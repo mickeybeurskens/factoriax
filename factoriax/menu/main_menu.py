@@ -152,7 +152,8 @@ def run_main_menu(
         ctrl_lookup: Controller lookup (built from defaults when ``None``).
 
     Returns:
-        ``"play"``, ``"editor"``, ``"settings"``, or ``None`` (quit).
+        ``"play"``, ``"scenarios"``, ``"editor"``, ``"settings"``, or
+        ``None`` (quit).
     """
     from factoriax.config import (
         build_controller_lookup,
@@ -208,7 +209,9 @@ def run_main_menu(
     deco_y = title_y + title_h + 8 * s
     deco_bottom = deco_y + icon_size
 
-    num_btns = 4
+    labels = ["Play", "Scenarios", "Editor", "Settings", "Quit"]
+    button_actions: list[str] = ["play", "scenarios", "editor", "settings", "quit"]
+    num_btns = len(labels)
     btn_block_h = btn_h * num_btns + btn_gap * (num_btns - 1)
     btn_top = max(deco_bottom + 16 * s, int(sh * 0.50) - btn_block_h // 2)
     btn_x = (sw - btn_w) // 2
@@ -216,8 +219,6 @@ def run_main_menu(
     # Click regions for hit testing (canvas coordinates). The Quit
     # button uses the "quit" action sentinel; the caller maps it back
     # to ``None`` so :class:`ClickRegion.action` can stay typed as ``str``.
-    labels = ["Play", "Editor", "Settings", "Quit"]
-    button_actions: list[str] = ["play", "editor", "settings", "quit"]
     regions = [
         ClickRegion(
             btn_x,
