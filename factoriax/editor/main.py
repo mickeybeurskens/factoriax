@@ -1236,11 +1236,19 @@ def main(screen: pygame.Surface | None = None) -> None:
             MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT,
         ),
     )
-    window_w, window_h = calculate_window_size(base_w, base_h)
-    screen = pygame.display.set_mode(
-        (window_w, window_h),
-        pygame.RESIZABLE,
-    )
+    if owns_pygame:
+        # Standalone launch: open at the editor's preferred size.
+        window_w, window_h = calculate_window_size(base_w, base_h)
+        screen = pygame.display.set_mode(
+            (window_w, window_h),
+            pygame.RESIZABLE,
+        )
+    else:
+        # Embedded launch (from the main menu): reuse the existing window so
+        # the user does not see the window flicker on entry/exit. ``_recalc_layout``
+        # adapts to whatever size the caller's window happens to be.
+        assert screen is not None
+        window_w, window_h = screen.get_size()
     pygame.display.set_caption("FactoriaX Editor")
     clock = pygame.time.Clock()
     base_w, base_h, scale = _recalc_layout(vp, window_w, window_h)
