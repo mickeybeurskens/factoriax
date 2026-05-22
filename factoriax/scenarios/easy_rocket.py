@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import jax
+import jax.numpy as jnp
 
-from factoriax.constants import BlockType, ItemType
+from factoriax.constants import (
+    MAX_ACHIEVEMENTS,
+    BlockType,
+    ItemType,
+    MachineType,
+)
 from factoriax.levels import Level, LevelBuilder
 from factoriax.recipes import Recipe, RecipeBook, RecipeTable
+from factoriax.state import EnvState
 
 _MAP_SIZE: int = 16
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
@@ -137,3 +144,126 @@ EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
 EASY_ROCKET_RECIPE_BOOK: RecipeBook = RecipeBook(recipes=EASY_ROCKET_RECIPES)
 
 EASY_ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(EASY_ROCKET_RECIPE_BOOK)
+
+
+NUM_EASY_ROCKET_ACHIEVEMENTS: int = 13
+
+_RAW_ORE_ITEMS: tuple[int, ...] = (
+    int(ItemType.IRON_ORE),
+    int(ItemType.COPPER_ORE),
+    int(ItemType.TIN_ORE),
+    int(ItemType.SILICON),
+    int(ItemType.COAL),
+    int(ItemType.LIMESTONE),
+)
+
+# Ores needed to craft a miner: trace MINER <- IRON_PLATE + WIRE, where
+# IRON_PLATE <- IRON_ORE + COAL and WIRE <- COPPER_PLATE + TIN_PLATE.
+_MINER_CRAFT_ORES: tuple[int, ...] = (
+    int(ItemType.IRON_ORE),
+    int(ItemType.COPPER_ORE),
+    int(ItemType.TIN_ORE),
+    int(ItemType.COAL),
+)
+
+_ORE_BLOCKS: tuple[int, ...] = (
+    int(BlockType.IRON),
+    int(BlockType.COPPER),
+    int(BlockType.TIN),
+    int(BlockType.SILICON),
+    int(BlockType.COAL),
+    int(BlockType.LIMESTONE),
+)
+
+
+def _holds_item(state: EnvState, item: int) -> jax.Array:
+    return jnp.sum(state.player_inventory[:, item]) >= 1
+
+
+def _holds_at_least(state: EnvState, item: int, threshold: int) -> jax.Array:
+    return jnp.sum(state.player_inventory[:, item]) >= threshold
+
+
+def _count_machines(state: EnvState, machine_type: int) -> jax.Array:
+    return jnp.sum(state.machine_types == machine_type)
+
+
+def _blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
+    """Return (active_mask, block_at_pos) over all entity slots.
+
+    ``active_mask`` is True for slots that hold an active miner. ``block_at_pos``
+    is the block under the entity's ``(ent_y, ent_x)`` tile, computed with
+    clamped indices so inactive slots stay JIT-safe.
+    """
+    active = (state.ent_type == int(MachineType.MINER)) & (state.ent_y >= 0)
+    safe_y = jnp.maximum(state.ent_y, 0)
+    safe_x = jnp.maximum(state.ent_x, 0)
+    blocks = state.map[safe_y, safe_x]
+    return active, blocks
+
+
+def _any_miner_on_ore(state: EnvState) -> jax.Array:
+    active, blocks = _blocks_under_active_miners(state)
+    is_ore = jnp.zeros_like(blocks, dtype=jnp.bool_)
+    for ore_block in _ORE_BLOCKS:
+        is_ore = is_ore | (blocks == ore_block)
+    return jnp.any(active & is_ore)
+
+
+def _distinct_ore_types_under_miners(state: EnvState) -> jax.Array:
+    active, blocks = _blocks_under_active_miners(state)
+    presence = jnp.stack(
+        [jnp.any(active & (blocks == ore_block)) for ore_block in _ORE_BLOCKS]
+    )
+    result: jax.Array = jnp.sum(presence.astype(jnp.int32)) >= 3
+    return result
+
+
+def easy_rocket_conditions(state: EnvState) -> jax.Array:
+    """Compute the 13 easy-rocket achievement bits, zero-padded to MAX_ACHIEVEMENTS.
+
+    The four belt-network achievements (indices 7, 9, 10, 11) are stubs that
+    always read False; they unlock once the entity connection graph lands.
+    """
+    has_any_raw_ore = jnp.any(
+        jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
+    )
+    has_each_raw_ore = jnp.all(
+        jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
+    )
+    has_ten_of_each_miner_craft_ore = jnp.all(
+        jnp.stack([_holds_at_least(state, item, 10) for item in _MINER_CRAFT_ORES])
+    )
+
+    has_miner_in_inventory = _holds_item(state, int(ItemType.MINER))
+    has_assembler_in_inventory = _holds_item(state, int(ItemType.ASSEMBLER))
+    has_belt_in_inventory = _holds_item(state, int(ItemType.CONVEYOR_BELT))
+
+    miner_on_ore = _any_miner_on_ore(state)
+    three_ore_types = _distinct_ore_types_under_miners(state)
+    rocket_placed = _count_machines(state, int(MachineType.ROCKET)) >= 1
+
+    stub = jnp.bool_(False)
+    conditions = jnp.stack(
+        [
+            has_any_raw_ore,
+            has_each_raw_ore,
+            has_ten_of_each_miner_craft_ore,
+            has_miner_in_inventory,
+            has_assembler_in_inventory,
+            has_belt_in_inventory,
+            miner_on_ore,
+            stub,
+            three_ore_types,
+            stub,
+            stub,
+            stub,
+            rocket_placed,
+        ]
+    )
+    return jnp.concatenate(
+        [
+            conditions,
+            jnp.zeros(MAX_ACHIEVEMENTS - NUM_EASY_ROCKET_ACHIEVEMENTS, dtype=jnp.bool_),
+        ]
+    )

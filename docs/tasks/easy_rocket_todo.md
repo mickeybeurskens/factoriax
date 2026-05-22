@@ -31,24 +31,20 @@ parallel. Slices 4, 5, 6 are sequential.
       determinism, key variation, invariants (all ores present, no
       overlaps). (M)
 
-## Slice 3 — Shared condition helpers
+## Slice 3 — Shared condition helpers — DROPPED
 
-- [ ] 3.1 Lift `_holds_item`, `_count_machines`,
-      `_any_entity_buf_nonempty`, `_any_assembler_has_output` from
-      `factoriax/scenarios/rocket.py` to
-      `factoriax/scenarios/_common.py`. Pure code motion. Existing
-      rocket-scenario tests are the regression guard. (S)
-- [ ] 3.2 Add `_block_under_entity` and
-      `_distinct_blocks_under_machines` to `_common.py`. Unit-tested
-      directly against `state_factory` fixtures in a new
-      `tests/scenarios/test_common.py`. (S)
+Skipped in favour of inlining the two helpers easy-rocket actually needs
+(`_holds_item`, `_count_machines`) directly in `easy_rocket.py`. The other
+two rocket-scenario helpers (`_any_entity_buf_nonempty`,
+`_any_assembler_has_output`) belong to the graph-gated achievements
+that ship as always-False stubs in v1, so they have no use here.
+Block-under-miner logic lives inline in the condition function.
 
 ## Slice 4 — Condition function
 
-- [ ] 4.1 Implement `easy_rocket_conditions(state)`: 13 achievements,
-      v1 ones wired (1, 2, 3, 4, 5, 6, 7, 9, 13), graph-gated ones
-      stubbed to always-False (8, 10, 11, 12) with `TODO` comments
-      pointing at `docs/specs/2026_entity_connection_graph.md`. Tests:
+- [x] 4.1 Implement `easy_rocket_conditions(state)`: 13 achievements,
+      v1 ones wired (indices 0, 1, 2, 3, 4, 5, 6, 8, 12), graph-gated
+      ones stubbed to always-False (indices 7, 9, 10, 11). Tests:
       positive + negative fixture per v1 achievement; one test asserts
       graph-gated stubs always read False even under fixtures designed
       to look like they should unlock. (M)
