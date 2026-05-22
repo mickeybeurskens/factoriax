@@ -24,13 +24,30 @@ _BASE_SEP_H: int = 4
 _BASE_HINT_HEIGHT: int = 24
 _BASE_SCROLL_STEP: int = 24
 _BASE_SCROLLBAR_W: int = 8
+_BASE_PAGE_PAD: int = 32
+_BASE_PANEL_GUTTER: int = 24
+_BASE_PANEL_TITLE_GAP: int = 8
+_BASE_ROW_H: int = 36
+_BASE_ROW_PAD: int = 16
+_BASE_DOC_PAD: int = 20
+_BASE_DOC_LINE_GAP: int = 4
+_BASE_BORDER_RADIUS: int = 12
 
 # ---------------------------------------------------------------------------
 # Color constants (scale-independent)
 # ---------------------------------------------------------------------------
 
+PAGE_BG: tuple[int, int, int] = (20, 20, 25)
 PANEL_BG: tuple[int, int, int, int] = (22, 22, 22, 228)
+MENU_PANEL_BG: tuple[int, int, int] = (28, 28, 32)
+BUTTON_FILL: tuple[int, int, int] = (35, 35, 40)
+BUTTON_HOVER: tuple[int, int, int] = (55, 55, 60)
 BORDER: tuple[int, int, int, int] = (190, 165, 55, 255)
+BORDER_INACTIVE: tuple[int, int, int] = (
+    int(BORDER[0] * 0.55),
+    int(BORDER[1] * 0.55),
+    int(BORDER[2] * 0.55),
+)
 TEXT_COLOR: tuple[int, int, int] = (220, 215, 180)
 HINT_COLOR: tuple[int, int, int] = (180, 175, 140)
 SLOT_COUNT_COLOR: tuple[int, int, int] = (220, 215, 180)
@@ -50,6 +67,14 @@ SEP_H: int = _BASE_SEP_H
 HINT_HEIGHT: int = _BASE_HINT_HEIGHT
 SCROLL_STEP: int = _BASE_SCROLL_STEP
 SCROLLBAR_W: int = _BASE_SCROLLBAR_W
+PAGE_PAD: int = _BASE_PAGE_PAD
+PANEL_GUTTER: int = _BASE_PANEL_GUTTER
+PANEL_TITLE_GAP: int = _BASE_PANEL_TITLE_GAP
+ROW_H: int = _BASE_ROW_H
+ROW_PAD: int = _BASE_ROW_PAD
+DOC_PAD: int = _BASE_DOC_PAD
+DOC_LINE_GAP: int = _BASE_DOC_LINE_GAP
+BORDER_RADIUS: int = _BASE_BORDER_RADIUS
 
 
 def apply_scale(factor: int) -> None:
@@ -64,6 +89,8 @@ def apply_scale(factor: int) -> None:
     global UI_SCALE
     global BORDER_PX, FONT_HEADER, FONT_BODY, FONT_HINT
     global HEADER_H, SEP_H, HINT_HEIGHT, SCROLL_STEP, SCROLLBAR_W
+    global PAGE_PAD, PANEL_GUTTER, PANEL_TITLE_GAP
+    global ROW_H, ROW_PAD, DOC_PAD, DOC_LINE_GAP, BORDER_RADIUS
 
     UI_SCALE = factor
     BORDER_PX = _BASE_BORDER_PX * factor
@@ -75,3 +102,11 @@ def apply_scale(factor: int) -> None:
     HINT_HEIGHT = _BASE_HINT_HEIGHT * factor
     SCROLL_STEP = _BASE_SCROLL_STEP * factor
     SCROLLBAR_W = _BASE_SCROLLBAR_W * factor
+    PAGE_PAD = _BASE_PAGE_PAD * factor
+    PANEL_GUTTER = _BASE_PANEL_GUTTER * factor
+    PANEL_TITLE_GAP = _BASE_PANEL_TITLE_GAP * factor
+    ROW_H = _BASE_ROW_H * factor
+    ROW_PAD = _BASE_ROW_PAD * factor
+    DOC_PAD = _BASE_DOC_PAD * factor
+    DOC_LINE_GAP = _BASE_DOC_LINE_GAP * factor
+    BORDER_RADIUS = _BASE_BORDER_RADIUS * factor
