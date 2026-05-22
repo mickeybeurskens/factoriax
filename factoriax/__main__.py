@@ -59,9 +59,13 @@ def _run() -> None:
         elif choice == "editor":
             _handle_editor(screen)
         elif choice == "settings":
+            prev_fs, prev_scale = config.fullscreen, config.ui_scale
             _handle_settings(screen, config)
-            # Rebuild window in case scale or fullscreen changed.
-            screen = _apply_display_config(config)
+            # Only rebuild the window if display settings actually changed;
+            # rebuilding unconditionally causes a visible window flicker on
+            # every settings-menu close (even for pure key-rebind sessions).
+            if (config.fullscreen, config.ui_scale) != (prev_fs, prev_scale):
+                screen = _apply_display_config(config)
 
     pygame.quit()
 
