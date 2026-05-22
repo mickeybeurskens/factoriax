@@ -1,30 +1,33 @@
-"""Headless integration tests for the play settings menu.
-
-Drives :func:`factoriax.play.launch_screen.run_settings_menu` via a
-prebuilt event queue so the menu's text rendering, signature, and
-return value can be asserted without an interactive window.
-"""
+"""Tests for the launch screen."""
 
 from __future__ import annotations
 
-import pygame
+import os
 
-from factoriax.config import (
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+import pygame  # noqa: E402
+
+from factoriax.config import (  # noqa: E402
     PlayerConfig,
     default_controller,
     default_keyboard,
     env_params_to_dict,
 )
-from factoriax.play.launch_screen import (
-    _build_sections,
-    _Button,
+from factoriax.play.launch_screen import (  # noqa: E402
+    _PAGE_OPTIONS,
+    _SETTING_FIELDS,
+    _clamp,
+    _get_value,
+    _reset_to_defaults,
+    _set_value,
     run_settings_menu,
 )
-from factoriax.state import EnvParams
+from factoriax.state import EnvParams  # noqa: E402
 
 
 def _make_config(seed: int = 42, player_mining_yield: int = 1) -> PlayerConfig:
-    """Build a PlayerConfig with the given seed and yield."""
     env = env_params_to_dict(EnvParams(player_mining_yield=player_mining_yield))
     return PlayerConfig(
         env_params=env,
@@ -34,69 +37,83 @@ def _make_config(seed: int = 42, player_mining_yield: int = 1) -> PlayerConfig:
     )
 
 
-class TestSectionLayout:
-    """Static checks on the section / field layout."""
-
+class TestSettingFields:
     def test_seed_field_present(self) -> None:
-        """The Seed field should be in the section layout."""
-        sections = _build_sections(_make_config())
-        names = [fs.name for sec in sections for fs in sec.fields]
-        assert "seed" in names
+        keys = [f.key for f in _SETTING_FIELDS]
+        assert "seed" in keys
 
-    def test_player_mining_yield_field_present(self) -> None:
-        """player_mining_yield should be in the section layout."""
-        sections = _build_sections(_make_config())
-        names = [fs.name for sec in sections for fs in sec.fields]
-        assert "player_mining_yield" in names
+    def test_required_env_params_present(self) -> None:
+        required = {
+            "map_width",
+            "map_height",
+            "num_players",
+            "max_timesteps",
+            "water_probability",
+            "iron_probability",
+            "copper_probability",
+            "coal_probability",
+            "tin_probability",
+            "silicon_probability",
+            "base_resources",
+            "max_machines",
+            "miner_mining_rate",
+            "player_mining_yield",
+        }
+        keys = {f.key for f in _SETTING_FIELDS}
+        assert required.issubset(keys)
 
-    def test_machine_mining_rate_label(self) -> None:
-        """miner_mining_rate should be labelled 'Machine Mining Rate'."""
-        sections = _build_sections(_make_config())
-        labels = {fs.name: fs.label for sec in sections for fs in sec.fields}
-        assert labels["miner_mining_rate"] == "Machine Mining Rate"
-
-    def test_player_mining_yield_label(self) -> None:
-        """player_mining_yield should be labelled 'Player Mining Yield'."""
-        sections = _build_sections(_make_config())
-        labels = {fs.name: fs.label for sec in sections for fs in sec.fields}
-        assert labels["player_mining_yield"] == "Player Mining Yield"
-
-    def test_no_bare_mining_rate_label(self) -> None:
-        """The bare label 'Mining Rate' (no qualifier) must be gone."""
-        sections = _build_sections(_make_config())
-        labels = [fs.label for sec in sections for fs in sec.fields]
-        assert "Mining Rate" not in labels
+    def test_page_options_are_play_settings_reset(self) -> None:
+        assert [o.action for o in _PAGE_OPTIONS] == ["play", "settings", "reset"]
 
 
-class TestRandomizeButton:
-    """Verify the Randomize button on the Seed field."""
+class TestValueOps:
+    def test_get_value_reads_seed_from_top_level(self) -> None:
+        config = _make_config(seed=99)
+        seed_field = next(f for f in _SETTING_FIELDS if f.key == "seed")
+        assert int(_get_value(config, seed_field)) == 99
 
-    def test_randomize_button_assigns_positive_time_ns(self) -> None:
-        """Clicking Randomize should write a positive int to the seed field."""
+    def test_set_value_writes_seed_back(self) -> None:
+        config = _make_config(seed=1)
+        seed_field = next(f for f in _SETTING_FIELDS if f.key == "seed")
+        _set_value(config, seed_field, 7.0)
+        assert config.seed == 7
+
+    def test_set_value_casts_int_for_int_field(self) -> None:
+        config = _make_config()
+        field = next(f for f in _SETTING_FIELDS if f.key == "map_width")
+        _set_value(config, field, 17.0)
+        assert config.env_params["map_width"] == 17
+        assert isinstance(config.env_params["map_width"], int)
+
+    def test_clamp_respects_min_max_for_int(self) -> None:
+        field = next(f for f in _SETTING_FIELDS if f.key == "num_players")
+        assert _clamp(0, field) == field.min_value
+        assert _clamp(99, field) == field.max_value
+
+    def test_clamp_rounds_float_to_two_decimals(self) -> None:
+        field = next(f for f in _SETTING_FIELDS if f.key == "iron_probability")
+        assert _clamp(0.123456, field) == 0.12
+
+
+class TestResetToDefaults:
+    def test_replaces_env_params_with_defaults(self) -> None:
+        config = _make_config(player_mining_yield=9)
+        _reset_to_defaults(config)
+        defaults = env_params_to_dict(EnvParams())
+        for key, default in defaults.items():
+            assert config.env_params[key] == default
+
+    def test_picks_new_seed(self) -> None:
         config = _make_config(seed=42)
-        sections = _build_sections(config)
-        seed_field = next(
-            fs for sec in sections for fs in sec.fields if fs.name == "seed"
-        )
-        seed_field.editing = True
-        seed_field.edit_buffer = "42"
-
-        button = _Button(label="Randomize", target_field=seed_field)
-        button.on_click()
-        assert seed_field.edit_buffer.isdigit()
-        assert int(seed_field.edit_buffer) > 0
-        assert int(seed_field.edit_buffer) != 42
+        _reset_to_defaults(config)
+        assert config.seed != 42
 
 
 class TestRunSettingsMenu:
-    """End-to-end pygame drive of run_settings_menu."""
-
-    def test_menu_returns_player_config(self) -> None:
-        """Closing the menu via Escape returns a PlayerConfig."""
+    def test_menu_returns_player_config_on_backspace(self) -> None:
         initial = _make_config(seed=12345, player_mining_yield=2)
-        # Drive: post ESCAPE so the menu exits immediately.
         pygame.event.clear()
-        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE))
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE))
 
         screen = pygame.display.set_mode((640, 640))
         result = run_settings_menu(screen, initial_config=initial)
@@ -105,8 +122,7 @@ class TestRunSettingsMenu:
         assert result.seed == 12345
         assert result.env_params["player_mining_yield"] == 2
 
-    def test_menu_save_called_on_close(self, monkeypatch, tmp_path) -> None:
-        """save_config should fire on Escape exit (commit-on-close)."""
+    def test_menu_save_called_on_close(self, monkeypatch) -> None:
         initial = _make_config()
         calls: list[PlayerConfig] = []
 
@@ -116,9 +132,9 @@ class TestRunSettingsMenu:
         monkeypatch.setattr("factoriax.play.launch_screen.save_config", fake_save)
 
         pygame.event.clear()
-        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE))
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE))
 
         screen = pygame.display.set_mode((640, 640))
         run_settings_menu(screen, initial_config=initial)
 
-        assert calls, "save_config was not invoked on Escape close"
+        assert calls, "save_config was not invoked on close"
