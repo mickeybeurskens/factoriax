@@ -181,6 +181,20 @@ class SettingSection:
     fields: tuple[SettingField, ...]
 
 
+@dataclass(frozen=True)
+class LabelValueSection:
+    """A titled group of ``(label, value)`` rows for read-only / non-numeric display.
+
+    Companion to :class:`SettingSection`: same visual layout, but values are
+    arbitrary strings the caller pre-formats (key bindings, toggle state,
+    enum-style choices). The active row gets the gold-fill highlight but no
+    chevron decoration — there are no arrow-adjust semantics to advertise.
+    """
+
+    title: str
+    labels: tuple[str, ...]
+
+
 _SECTION_GAP: int = 14
 _HEADING_GAP: int = 6
 _DIVIDER_H: int = 1
@@ -277,6 +291,99 @@ def draw_setting_sections(
         value_text = fld.format(value)
         decorated = f"<  {value_text}  >" if active else value_text
         value_surf = font.render(decorated, False, text_color)
+        surf.blit(
+            value_surf,
+            (
+                row_rect.right - _theme.ROW_PAD // 2 - value_surf.get_width(),
+                row_rect.y + (_theme.ROW_H - value_surf.get_height()) // 2,
+            ),
+        )
+
+    return row_rects, bottom_y
+
+
+def label_value_section_layout(
+    rect: pygame.Rect,
+    sections: tuple[LabelValueSection, ...] | list[LabelValueSection],
+    heading_h: int,
+) -> tuple[list[pygame.Rect], list[tuple[int, int]], int]:
+    """Per-row rects, heading positions, and bottom y for label/value sections."""
+    inner_x = rect.left + _theme.ROW_PAD
+    inner_w = rect.width - 2 * _theme.ROW_PAD
+    row_rects: list[pygame.Rect] = []
+    heading_positions: list[tuple[int, int]] = []
+    y = rect.top + _theme.ROW_PAD
+
+    for sec_i, sec in enumerate(sections):
+        if sec_i > 0:
+            y += _SECTION_GAP
+        heading_positions.append((inner_x, y))
+        y += heading_h + _HEADING_GAP
+        y += _DIVIDER_H + _HEADING_GAP
+
+        for i in range(len(sec.labels)):
+            row_rects.append(pygame.Rect(inner_x, y, inner_w, _theme.ROW_H))
+            y += _theme.ROW_H
+            if i < len(sec.labels) - 1:
+                y += 4
+    return row_rects, heading_positions, y
+
+
+def draw_label_value_sections(
+    surf: pygame.Surface,
+    rect: pygame.Rect,
+    sections: tuple[LabelValueSection, ...] | list[LabelValueSection],
+    values: list[str],
+    selected_idx: int,
+    focused: bool,
+    font: pygame.font.Font,
+    heading_font: pygame.font.Font,
+) -> tuple[list[pygame.Rect], int]:
+    """Render sectioned label/value rows for bindings, toggles, choices.
+
+    Same visual treatment as :func:`draw_setting_sections` but values are
+    arbitrary strings supplied by the caller; the active row gets the gold
+    highlight without chevron decoration. ``values`` is a flat list aligned
+    with the concatenation of every section's ``labels``.
+    """
+    heading_h = heading_font.get_height()
+    row_rects, heading_positions, bottom_y = label_value_section_layout(
+        rect, sections, heading_h
+    )
+    inner_w = rect.width - 2 * _theme.ROW_PAD
+
+    for sec, (hx, hy) in zip(sections, heading_positions, strict=True):
+        heading_surf = heading_font.render(sec.title.upper(), False, _theme.TEXT_COLOR)
+        surf.blit(heading_surf, (hx, hy))
+        divider_y = hy + heading_h + _HEADING_GAP
+        pygame.draw.rect(
+            surf, _theme.BORDER_INACTIVE, (hx, divider_y, inner_w, _DIVIDER_H)
+        )
+
+    flat_labels = [lab for sec in sections for lab in sec.labels]
+    for i, (label, value, row_rect) in enumerate(
+        zip(flat_labels, values, row_rects, strict=True)
+    ):
+        active = focused and i == selected_idx
+        if active:
+            pygame.draw.rect(
+                surf,
+                _theme.BORDER[:3],
+                row_rect,
+                border_radius=_theme.BORDER_RADIUS // 2,
+            )
+            text_color: tuple[int, int, int] = _theme.PAGE_BG
+        else:
+            text_color = _theme.TEXT_COLOR
+        label_surf = font.render(label, False, text_color)
+        surf.blit(
+            label_surf,
+            (
+                row_rect.x + _theme.ROW_PAD // 2,
+                row_rect.y + (_theme.ROW_H - label_surf.get_height()) // 2,
+            ),
+        )
+        value_surf = font.render(value, False, text_color)
         surf.blit(
             value_surf,
             (
