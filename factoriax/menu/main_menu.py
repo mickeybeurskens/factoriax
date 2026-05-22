@@ -1,14 +1,13 @@
 """Title screen for FactoriaX.
 
-Renders a full-screen menu with the game title, a decorative row of game
-textures, and Play / Editor / Settings / Quit buttons. All drawing happens
-on a fixed-resolution canvas that is integer-scaled to the window, so the
-layout is pixel-perfect at any window size.
+Two-panel layout mirroring :mod:`factoriax.menu.scenarios_menu`: a list of
+menu options on the left, an explanation panel on the right.
 """
 
 from __future__ import annotations
 
-import numpy as np
+from dataclasses import dataclass
+
 import pygame
 
 from factoriax.config import (
@@ -17,121 +16,71 @@ from factoriax.config import (
     PlayerAction,
     resolve_event,
 )
-from factoriax.constants import Direction, ItemType
+from factoriax.ui import panels
 from factoriax.ui import theme as _theme
-from factoriax.ui.fonts import get_pixel_font, render_text_rgba
-from factoriax.ui.icons import create_player_texture, render_item_icon
-from factoriax.ui.primitives import ClickRegion, hit_test_regions
+from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.scaling import ScaledCanvas
 
-# -- Colours -----------------------------------------------------------------
-
-_BG_COLOR: tuple[int, int, int] = (20, 20, 25)
-_BTN_FILL: tuple[int, int, int, int] = (35, 35, 40, 255)
-_BTN_HOVER: tuple[int, int, int, int] = (55, 55, 60, 255)
-
-# -- Base layout values (multiplied by UI_SCALE at runtime) ------------------
-
-_BASE_BTN_W: int = 400
-_BASE_BTN_H: int = 80
-_BASE_BTN_GAP: int = 30
+_BASE_TITLE_FONT: int = 48
 _BASE_ICON_SIZE: int = 32
-_BASE_ICON_GAP: int = 8
-_BASE_TITLE_FONT: int = 192
-_BASE_BTN_FONT: int = 44
+_BASE_HEADER_GAP: int = 24
 _FPS: int = 30
-_ANIM_STEP_MS: int = 700
-_ANIM_CYCLE_LEN: int = 6
 
 
-# -- Helpers -----------------------------------------------------------------
+@dataclass(frozen=True)
+class _MenuOption:
+    action: str
+    label: str
+    description: str
 
 
-def _rgba_to_surface(rgba: np.ndarray) -> pygame.Surface:
-    """Convert an RGBA numpy array to a pygame Surface with per-pixel alpha.
-
-    Args:
-        rgba: uint8 array of shape ``(H, W, 4)``.
-
-    Returns:
-        A ``pygame.Surface`` with ``SRCALPHA``.
-    """
-    h, w = rgba.shape[:2]
-    surface = pygame.Surface((w, h), pygame.SRCALPHA)
-    pygame.surfarray.blit_array(surface, rgba[:, :, :3].transpose(1, 0, 2))
-    alpha_arr = rgba[:, :, 3].T
-    pygame.surfarray.pixels_alpha(surface)[:] = alpha_arr
-    return surface
-
-
-def _build_decoration_surfaces(icon_size: int) -> list[pygame.Surface]:
-    """Build the list of pygame surfaces for the decoration row.
-
-    Args:
-        icon_size: Pixel size for each decoration icon.
-
-    Returns:
-        Ordered surfaces: player, miner, 4x belt, arm, pallet.
-    """
-    surfaces: list[pygame.Surface] = []
-
-    player = create_player_texture(
-        direction=Direction.RIGHT,
-        player_idx=0,
-        is_selected=True,
-        size=icon_size,
-    )
-    surfaces.append(_rgba_to_surface(player))
-
-    miner = render_item_icon(ItemType.MINER, icon_size)
-    surfaces.append(_rgba_to_surface(miner))
-
-    belt = render_item_icon(ItemType.CONVEYOR_BELT, icon_size)
-    belt_surf = _rgba_to_surface(belt)
-    for _ in range(4):
-        surfaces.append(belt_surf)
-
-    pallet = render_item_icon(ItemType.PALLET, icon_size)
-    surfaces.append(_rgba_to_surface(pallet))
-
-    return surfaces
-
-
-def _draw_button(
-    surface: pygame.Surface,
-    x: int,
-    y: int,
-    w: int,
-    h: int,
-    label: str,
-    font: pygame.font.Font,
-    hovered: bool,
-    focused: bool,
-) -> None:
-    """Draw a single menu button with optional hover and focus highlights.
-
-    Args:
-        surface: Target surface.
-        x: Left edge.
-        y: Top edge.
-        w: Width.
-        h: Height.
-        label: Button text.
-        font: Font for the label.
-        hovered: Whether the mouse is over this button.
-        focused: Whether keyboard focus is on this button.
-    """
-    fill = _BTN_HOVER if hovered or focused else _BTN_FILL
-    rect = pygame.Rect(x, y, w, h)
-    pygame.draw.rect(surface, fill[:3], rect)
-    pygame.draw.rect(surface, _theme.BORDER[:3], rect, _theme.BORDER_PX)
-
-    text_surf = font.render(label, False, _theme.TEXT_COLOR)
-    tw, th = text_surf.get_size()
-    surface.blit(text_surf, (x + (w - tw) // 2, y + (h - th) // 2))
-
-
-# -- Public API --------------------------------------------------------------
+_OPTIONS: tuple[_MenuOption, ...] = (
+    _MenuOption(
+        action="play",
+        label="Play",
+        description=(
+            "Start a new game with custom environment parameters and a "
+            "seed of your choice. The world is generated procedurally "
+            "from the engine's general terrain sampler — no pre-built "
+            "level, no achievement scoring. Use this for free-form "
+            "experimentation."
+        ),
+    ),
+    _MenuOption(
+        action="scenarios",
+        label="Scenarios",
+        description=(
+            "Pick a research scenario with pre-configured rules, "
+            "achievements, and reward signals. Each scenario fixes the "
+            "map, the recipe book, and the per-step budget, so runs are "
+            "comparable across agents and seeds."
+        ),
+    ),
+    _MenuOption(
+        action="editor",
+        label="Editor",
+        description=(
+            "Open the level editor to author custom maps. Place "
+            "machines, paint resource patches, set starting positions, "
+            "save and load level files. Useful for authoring fixtures "
+            "for new scenarios."
+        ),
+    ),
+    _MenuOption(
+        action="settings",
+        label="Settings",
+        description=(
+            "Adjust display settings, UI scale, fullscreen mode, and "
+            "key / controller bindings. Changes persist to the config "
+            "file on disk."
+        ),
+    ),
+    _MenuOption(
+        action="quit",
+        label="Quit",
+        description="Exit FactoriaX.",
+    ),
+)
 
 
 def run_main_menu(
@@ -141,19 +90,9 @@ def run_main_menu(
 ) -> str | None:
     """Show the main menu and return the user's choice.
 
-    Blocks until the player clicks a button or closes the window.
-    Renders to a fixed-size canvas that is integer-scaled to the window.
-    Accepts optional key/controller lookups so navigation uses the
-    same configured bindings as the in-game menus.
-
-    Args:
-        screen: Pygame display surface.
-        kb_lookup: Keyboard lookup (built from defaults when ``None``).
-        ctrl_lookup: Controller lookup (built from defaults when ``None``).
-
     Returns:
         ``"play"``, ``"scenarios"``, ``"editor"``, ``"settings"``, or
-        ``None`` (quit).
+        ``None`` (quit / window closed).
     """
     from factoriax.config import (
         build_controller_lookup,
@@ -166,146 +105,109 @@ def run_main_menu(
         kb_lookup = build_key_lookup(default_keyboard())
     if ctrl_lookup is None:
         ctrl_lookup = build_controller_lookup(default_controller())
+
     s = _theme.UI_SCALE
     canvas = ScaledCanvas(1024, s, screen)
     clock = pygame.time.Clock()
-    sw, sh = canvas.width, canvas.height
 
-    # Scaled layout constants.
-    btn_w = _BASE_BTN_W * s
-    btn_h = _BASE_BTN_H * s
-    btn_gap = _BASE_BTN_GAP * s
-    icon_size = _BASE_ICON_SIZE * s
-    icon_gap = _BASE_ICON_GAP * s
-    title_font_size = _BASE_TITLE_FONT * s
-    btn_font_size = _BASE_BTN_FONT * s
+    header_font = get_pixel_font(_BASE_TITLE_FONT * s)
+    panel_title_font = get_pixel_font(_theme.FONT_BODY)
+    body_font = get_pixel_font(_theme.FONT_BODY)
+    list_font = get_pixel_font(_theme.FONT_BODY)
+    hint_font = get_pixel_font(_theme.FONT_HINT)
 
-    # Fonts.
-    title_font = get_pixel_font(title_font_size)
-    btn_font = get_pixel_font(btn_font_size)
+    header_surf = header_font.render("FACTORIAX", False, _theme.TEXT_COLOR)
+    title_w, title_h = header_surf.get_size()
+    strip = panels.DecorationStrip.factoriax_default(icon_size=_BASE_ICON_SIZE * s)
+    header_gap = _BASE_HEADER_GAP * s
+    header_band_h = max(title_h, strip.height)
+    hint_h = hint_font.get_height()
 
-    # Pre-render title text as a pygame surface for fast blitting.
-    title_rgba = render_text_rgba("FACTORIAX", title_font, _theme.TEXT_COLOR)
-    title_surf = _rgba_to_surface(title_rgba)
-    title_w, title_h = title_surf.get_size()
-
-    # Decoration row surfaces.
-    deco_surfs = _build_decoration_surfaces(icon_size)
-    deco_total_w = sum(sf.get_width() for sf in deco_surfs) + icon_gap * (
-        len(deco_surfs) - 1
-    )
-
-    # Iron ore icon for the belt animation (half-size, centered on slots).
-    ore_size = max(8, icon_size // 2)
-    ore_rgba = render_item_icon(ItemType.COAL, ore_size)
-    ore_surf = _rgba_to_surface(ore_rgba)
-    # Animation target: slot indices where the iron travels.
-    # Row is: [0]player [1]miner [2]belt [3]belt [4]belt [5]belt [6]arm [7]pallet
-    # Steps 0-3: iron on belts (indices 2-5), step 4: iron on arm (index 6).
-    anim_slot_targets = [2, 3, 4, 5, 6]
-
-    # Vertical positions: title at 25%, buttons at 50%, with overlap guard.
-    title_y = int(sh * 0.25) - title_h // 2
-    deco_y = title_y + title_h + 8 * s
-    deco_bottom = deco_y + icon_size
-
-    labels = ["Play", "Scenarios", "Editor", "Settings", "Quit"]
-    button_actions: list[str] = ["play", "scenarios", "editor", "settings", "quit"]
-    num_btns = len(labels)
-    btn_block_h = btn_h * num_btns + btn_gap * (num_btns - 1)
-    btn_top = max(deco_bottom + 16 * s, int(sh * 0.50) - btn_block_h // 2)
-    btn_x = (sw - btn_w) // 2
-
-    # Click regions for hit testing (canvas coordinates). The Quit
-    # button uses the "quit" action sentinel; the caller maps it back
-    # to ``None`` so :class:`ClickRegion.action` can stay typed as ``str``.
-    regions = [
-        ClickRegion(
-            btn_x,
-            btn_top + i * (btn_h + btn_gap),
-            btn_w,
-            btn_h,
-            button_actions[i],
-            i,
-        )
-        for i in range(num_btns)
-    ]
+    selected_idx = 0
 
     def _resolve(action: str) -> str | None:
         return None if action == "quit" else action
 
-    focus_idx = 0
-
     while True:
+        sw, sh = canvas.width, canvas.height
+
+        header_y = _theme.PAGE_PAD
+        block_w = title_w + header_gap + strip.total_width
+        block_x = (sw - block_w) // 2
+        title_x = block_x
+        title_y = header_y + (header_band_h - title_h) // 2
+        strip_x = block_x + title_w + header_gap
+        strip_y = header_y + (header_band_h - strip.height) // 2
+
+        panels_top = header_y + header_band_h + _theme.PANEL_TITLE_GAP * 2
+        hint_y = sh - _theme.PAGE_PAD - hint_h
+        panels_bottom = hint_y - _theme.PANEL_TITLE_GAP * 2
+        panels_h = panels_bottom - panels_top
+
+        panels_x = _theme.PAGE_PAD
+        panels_w = sw - 2 * _theme.PAGE_PAD
+        list_w = (panels_w - _theme.PANEL_GUTTER) // 4
+        desc_w = panels_w - _theme.PANEL_GUTTER - list_w
+        list_rect = pygame.Rect(panels_x, panels_top, list_w, panels_h)
+        desc_rect = pygame.Rect(
+            panels_x + list_w + _theme.PANEL_GUTTER, panels_top, desc_w, panels_h
+        )
+        row_rects = panels.list_row_rects(list_rect, len(_OPTIONS))
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return None
-
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
-
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
-                hit = hit_test_regions(regions, mx, my)
-                if hit is not None:
-                    return _resolve(hit.action)
-
-            player_actions = resolve_event(event, kb_lookup, ctrl_lookup)
-            if PlayerAction.CONFIRM in player_actions:
-                return _resolve(regions[focus_idx].action)
-            if PlayerAction.BACK in player_actions:
+                for i, rect in enumerate(row_rects):
+                    if rect.collidepoint(mx, my):
+                        return _resolve(_OPTIONS[i].action)
+            actions = resolve_event(event, kb_lookup, ctrl_lookup)
+            if PlayerAction.CONFIRM in actions:
+                return _resolve(_OPTIONS[selected_idx].action)
+            if PlayerAction.BACK in actions:
                 return None
-            if PlayerAction.NAV_DOWN in player_actions:
-                focus_idx = (focus_idx + 1) % len(regions)
-            elif PlayerAction.NAV_UP in player_actions:
-                focus_idx = (focus_idx - 1) % len(regions)
-            # Keep Tab as a direct key for convenience.
+            if PlayerAction.NAV_DOWN in actions:
+                selected_idx = (selected_idx + 1) % len(_OPTIONS)
+            elif PlayerAction.NAV_UP in actions:
+                selected_idx = (selected_idx - 1) % len(_OPTIONS)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
-                focus_idx = (focus_idx + 1) % len(regions)
+                selected_idx = (selected_idx + 1) % len(_OPTIONS)
 
-        # -- Draw to canvas --------------------------------------------------
-        surf = canvas.surface
-        surf.fill(_BG_COLOR)
-
-        # Title (centered horizontally).
-        surf.blit(title_surf, ((sw - title_w) // 2, title_y))
-
-        # Decoration row (centered horizontally).
-        deco_start_x = (sw - deco_total_w) // 2
-        slot_positions: list[int] = []
-        dx = deco_start_x
-        for deco in deco_surfs:
-            slot_positions.append(dx)
-            surf.blit(deco, (dx, deco_y))
-            dx += deco.get_width() + icon_gap
-
-        # Iron ore animation: travels from miner across belts to arm.
-        anim_step = (pygame.time.get_ticks() // _ANIM_STEP_MS) % _ANIM_CYCLE_LEN
-        if anim_step < len(anim_slot_targets):
-            target_idx = anim_slot_targets[anim_step]
-            if target_idx < len(slot_positions):
-                ore_x = slot_positions[target_idx] + (icon_size - ore_size) // 2
-                ore_y = deco_y + (icon_size - ore_size) // 2
-                surf.blit(ore_surf, (ore_x, ore_y))
-
-        # Buttons.
+        # Mouse hover overrides keyboard focus for the highlight.
         mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
-        for i, region in enumerate(regions):
-            hovered = (
-                region.x <= mx < region.x + region.w
-                and region.y <= my < region.y + region.h
-            )
-            _draw_button(
-                surf,
-                region.x,
-                region.y,
-                region.w,
-                region.h,
-                labels[i],
-                btn_font,
-                hovered=hovered,
-                focused=(i == focus_idx and not hovered),
-            )
+        hovered_idx = next(
+            (i for i, rect in enumerate(row_rects) if rect.collidepoint(mx, my)),
+            None,
+        )
+        active_idx = hovered_idx if hovered_idx is not None else selected_idx
+
+        surf = canvas.surface
+        surf.fill(_theme.PAGE_BG)
+
+        surf.blit(header_surf, (title_x, title_y))
+        strip.draw(surf, strip_x, strip_y, pygame.time.get_ticks())
+
+        panels.draw_panel(surf, list_rect, "Menu", panel_title_font, focused=True)
+        panels.draw_panel(
+            surf, desc_rect, "Description", panel_title_font, focused=False
+        )
+        panels.draw_list_rows(
+            surf, list_rect, [o.label for o in _OPTIONS], active_idx, list_font
+        )
+        panels.draw_description(
+            surf, desc_rect, _OPTIONS[active_idx].description, 0, body_font
+        )
+
+        panels.draw_hint_bar(
+            surf,
+            sw,
+            hint_y,
+            "Up/Down select   Enter confirm   Esc quit",
+            hint_font,
+        )
 
         canvas.present(screen)
         clock.tick(_FPS)
