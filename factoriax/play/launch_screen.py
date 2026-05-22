@@ -170,14 +170,15 @@ _RANDOMIZE_IDX: int = len(_SETTING_FIELDS)
 def run_settings_menu(
     screen: pygame.Surface,
     initial_config: PlayerConfig | None = None,
-) -> PlayerConfig:
-    """Show the launch screen and return the (possibly edited) config.
+) -> PlayerConfig | None:
+    """Show the launch screen and return the user's choice.
 
     Returns:
-        The :class:`PlayerConfig` that the caller should hand to the play
-        loop. If the user backs out, the config is returned unchanged.
-        Edits are persisted via :func:`factoriax.config.save_config` before
-        the function returns.
+        The :class:`PlayerConfig` if the user pressed Enter on *Play* (the
+        caller should hand it to the play loop), or ``None`` if the user
+        backed out via Backspace (return to main menu). Edits are persisted
+        via :func:`factoriax.config.save_config` before the function returns
+        in either case.
     """
     from factoriax.config import load_config
 
@@ -213,14 +214,21 @@ def run_settings_menu(
     # Persist the user's choice on exit; Play uses this to launch.
     saved = False
 
-    def _save_and_return() -> PlayerConfig:
+    def _persist() -> None:
         nonlocal saved
         if not saved:
             save_config(config)
             # config_to_env_params validates types; call it to surface errors early.
             config_to_env_params(config)
             saved = True
+
+    def _launch() -> PlayerConfig:
+        _persist()
         return config
+
+    def _cancel() -> None:
+        _persist()
+        return None
 
     def _adjust_setting(field: SettingField, direction: int) -> None:
         if direction == 0:
@@ -264,7 +272,8 @@ def run_settings_menu(
         # ----- Events -----------------------------------------------------
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return _save_and_return()
+                _cancel()
+                return None
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -285,12 +294,14 @@ def run_settings_menu(
             actions = resolve_event(event, kb_lookup, ctrl_lookup)
             if PlayerAction.QUIT in actions:
                 pygame.event.post(pygame.event.Event(pygame.QUIT))
-                return _save_and_return()
+                _cancel()
+                return None
             if PlayerAction.BACK in actions:
                 if focus_right:
                     focus_right = False
                 else:
-                    return _save_and_return()
+                    _cancel()
+                    return None
                 continue
             if PlayerAction.CONFIRM in actions:
                 if focus_right:
@@ -301,7 +312,7 @@ def run_settings_menu(
                 else:
                     action = selected_option.action
                     if action == "play":
-                        return _save_and_return()
+                        return _launch()
                     if action == "settings":
                         focus_right = True
                         settings_idx = 0

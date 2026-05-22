@@ -109,7 +109,7 @@ class TestResetToDefaults:
 
 
 class TestRunSettingsMenu:
-    def test_menu_returns_player_config_on_backspace(self) -> None:
+    def test_menu_returns_none_on_backspace_cancel(self) -> None:
         initial = _make_config(seed=12345, player_mining_yield=2)
         pygame.event.clear()
         pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE))
@@ -117,9 +117,7 @@ class TestRunSettingsMenu:
         screen = pygame.display.set_mode((640, 640))
         result = run_settings_menu(screen, initial_config=initial)
 
-        assert isinstance(result, PlayerConfig)
-        assert result.seed == 12345
-        assert result.env_params["player_mining_yield"] == 2
+        assert result is None
 
     def test_menu_save_called_on_close(self, monkeypatch) -> None:
         initial = _make_config()

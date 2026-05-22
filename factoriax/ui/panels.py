@@ -244,9 +244,7 @@ def draw_setting_sections(
     inner_w = rect.width - 2 * _theme.ROW_PAD
 
     for sec, (hx, hy) in zip(sections, heading_positions, strict=True):
-        heading_surf = heading_font.render(
-            sec.title.upper(), False, _theme.BORDER_INACTIVE
-        )
+        heading_surf = heading_font.render(sec.title.upper(), False, _theme.TEXT_COLOR)
         surf.blit(heading_surf, (hx, hy))
         divider_y = hy + heading_h + _HEADING_GAP
         pygame.draw.rect(

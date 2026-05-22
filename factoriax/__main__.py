@@ -95,6 +95,9 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     from factoriax.play.launch_screen import run_settings_menu
 
     new_config = run_settings_menu(screen, initial_config=config)
+    if new_config is None:
+        # User backed out of the launch screen — return to the main menu.
+        return
     # Carry the edits back into the caller's config so the rest of the
     # session sees them (the in-menu save_config has already persisted).
     config.env_params = new_config.env_params
