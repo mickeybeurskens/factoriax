@@ -169,6 +169,127 @@ def list_row_rects(rect: pygame.Rect, n_rows: int) -> list[pygame.Rect]:
     return rects
 
 
+@dataclass(frozen=True)
+class SettingSection:
+    """A titled group of related :class:`SettingField` rows.
+
+    Used by :func:`draw_setting_sections` to render an editable settings list
+    with elegant headings and dividers between groups.
+    """
+
+    title: str
+    fields: tuple[SettingField, ...]
+
+
+_SECTION_GAP: int = 14
+_HEADING_GAP: int = 6
+_DIVIDER_H: int = 1
+
+
+def setting_section_layout(
+    rect: pygame.Rect,
+    sections: tuple[SettingSection, ...] | list[SettingSection],
+    heading_h: int,
+) -> tuple[list[pygame.Rect], list[tuple[int, int]], int]:
+    """Compute per-field row rects, per-section heading positions, and bottom y.
+
+    Single source of truth for the sectioned-settings layout; the drawer and
+    callers that need to position a button below the block (or hit-test the
+    rows) share these coordinates.
+    """
+    inner_x = rect.left + _theme.ROW_PAD
+    inner_w = rect.width - 2 * _theme.ROW_PAD
+    row_rects: list[pygame.Rect] = []
+    heading_positions: list[tuple[int, int]] = []
+    y = rect.top + _theme.ROW_PAD
+
+    for sec_i, sec in enumerate(sections):
+        if sec_i > 0:
+            y += _SECTION_GAP
+        heading_positions.append((inner_x, y))
+        y += heading_h + _HEADING_GAP
+        y += _DIVIDER_H + _HEADING_GAP
+
+        for i in range(len(sec.fields)):
+            row_rects.append(pygame.Rect(inner_x, y, inner_w, _theme.ROW_H))
+            y += _theme.ROW_H
+            if i < len(sec.fields) - 1:
+                y += 4
+    return row_rects, heading_positions, y
+
+
+def draw_setting_sections(
+    surf: pygame.Surface,
+    rect: pygame.Rect,
+    sections: tuple[SettingSection, ...] | list[SettingSection],
+    values: list[float],
+    selected_idx: int,
+    focused: bool,
+    font: pygame.font.Font,
+    heading_font: pygame.font.Font,
+) -> tuple[list[pygame.Rect], int]:
+    """Render sectioned setting rows with headings and dividers.
+
+    ``values`` is a flat list aligned with the concatenation of every
+    section's ``fields``; ``selected_idx`` indexes into that same flat list.
+
+    Returns:
+        ``(row_rects, bottom_y)`` — for hit-testing and positioning content
+        below the rendered block.
+    """
+    heading_h = heading_font.get_height()
+    row_rects, heading_positions, bottom_y = setting_section_layout(
+        rect, sections, heading_h
+    )
+    inner_w = rect.width - 2 * _theme.ROW_PAD
+
+    for sec, (hx, hy) in zip(sections, heading_positions, strict=True):
+        heading_surf = heading_font.render(
+            sec.title.upper(), False, _theme.BORDER_INACTIVE
+        )
+        surf.blit(heading_surf, (hx, hy))
+        divider_y = hy + heading_h + _HEADING_GAP
+        pygame.draw.rect(
+            surf, _theme.BORDER_INACTIVE, (hx, divider_y, inner_w, _DIVIDER_H)
+        )
+
+    flat_fields = [f for sec in sections for f in sec.fields]
+    for i, (fld, value, row_rect) in enumerate(
+        zip(flat_fields, values, row_rects, strict=True)
+    ):
+        active = focused and i == selected_idx
+        if active:
+            pygame.draw.rect(
+                surf,
+                _theme.BORDER[:3],
+                row_rect,
+                border_radius=_theme.BORDER_RADIUS // 2,
+            )
+            text_color: tuple[int, int, int] = _theme.PAGE_BG
+        else:
+            text_color = _theme.TEXT_COLOR
+        label_surf = font.render(fld.label, False, text_color)
+        surf.blit(
+            label_surf,
+            (
+                row_rect.x + _theme.ROW_PAD // 2,
+                row_rect.y + (_theme.ROW_H - label_surf.get_height()) // 2,
+            ),
+        )
+        value_text = fld.format(value)
+        decorated = f"<  {value_text}  >" if active else value_text
+        value_surf = font.render(decorated, False, text_color)
+        surf.blit(
+            value_surf,
+            (
+                row_rect.right - _theme.ROW_PAD // 2 - value_surf.get_width(),
+                row_rect.y + (_theme.ROW_H - value_surf.get_height()) // 2,
+            ),
+        )
+
+    return row_rects, bottom_y
+
+
 def draw_setting_rows(
     surf: pygame.Surface,
     rect: pygame.Rect,

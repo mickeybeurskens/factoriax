@@ -35,7 +35,7 @@ from factoriax.ui import panels
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.forms import GOLD, LABEL_COLOR
-from factoriax.ui.panels import SettingField
+from factoriax.ui.panels import SettingField, SettingSection
 from factoriax.ui.scaling import ScaledCanvas
 from factoriax.ui.window import auto_ui_scale, calculate_window_size
 
@@ -47,22 +47,44 @@ _RESET_FLASH_MS: int = 1500
 _SEED_MAX: int = 2**32 - 1
 
 
-_SETTING_FIELDS: tuple[SettingField, ...] = (
-    SettingField("map_width", "Map width", False, 1, 8, 64),
-    SettingField("map_height", "Map height", False, 1, 8, 64),
-    SettingField("num_players", "Players", False, 1, 1, 4),
-    SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
-    SettingField("water_probability", "Water probability", True, 0.01, 0.0, 1.0),
-    SettingField("iron_probability", "Iron probability", True, 0.01, 0.0, 1.0),
-    SettingField("copper_probability", "Copper probability", True, 0.01, 0.0, 1.0),
-    SettingField("coal_probability", "Coal probability", True, 0.01, 0.0, 1.0),
-    SettingField("tin_probability", "Tin probability", True, 0.01, 0.0, 1.0),
-    SettingField("silicon_probability", "Silicon probability", True, 0.01, 0.0, 1.0),
-    SettingField("base_resources", "Base resources", False, 100, 100, 10_000),
-    SettingField("max_machines", "Max machines", False, 16, 0, 1024),
-    SettingField("miner_mining_rate", "Miner mining rate", False, 1, 1, 20),
-    SettingField("player_mining_yield", "Player mining yield", False, 1, 1, 10),
-    SettingField("seed", "Seed", False, 1, 0, _SEED_MAX),
+_SECTIONS: tuple[SettingSection, ...] = (
+    SettingSection(
+        "World",
+        (
+            SettingField("map_width", "Map width", False, 1, 8, 64),
+            SettingField("map_height", "Map height", False, 1, 8, 64),
+            SettingField("num_players", "Players", False, 1, 1, 4),
+            SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
+        ),
+    ),
+    SettingSection(
+        "Resources",
+        (
+            SettingField("water_probability", "Water prob.", True, 0.01, 0.0, 1.0),
+            SettingField("iron_probability", "Iron prob.", True, 0.01, 0.0, 1.0),
+            SettingField("copper_probability", "Copper prob.", True, 0.01, 0.0, 1.0),
+            SettingField("coal_probability", "Coal prob.", True, 0.01, 0.0, 1.0),
+            SettingField("tin_probability", "Tin prob.", True, 0.01, 0.0, 1.0),
+            SettingField("silicon_probability", "Silicon prob.", True, 0.01, 0.0, 1.0),
+            SettingField("base_resources", "Base resources", False, 100, 100, 10_000),
+        ),
+    ),
+    SettingSection(
+        "Machines",
+        (
+            SettingField("max_machines", "Max machines", False, 16, 0, 1024),
+            SettingField("miner_mining_rate", "Miner mining rate", False, 1, 1, 20),
+            SettingField("player_mining_yield", "Player mining yield", False, 1, 1, 10),
+        ),
+    ),
+    SettingSection(
+        "Seed",
+        (SettingField("seed", "Seed", False, 1, 0, _SEED_MAX),),
+    ),
+)
+
+_SETTING_FIELDS: tuple[SettingField, ...] = tuple(
+    f for sec in _SECTIONS for f in sec.fields
 )
 
 
@@ -93,7 +115,7 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
     ),
     _PageOption(
         action="reset",
-        label="Reset to defaults",
+        label="Reset Settings",
         description=(
             "Replace every setting with the engine's default value and "
             "pick a fresh random seed."
@@ -128,13 +150,12 @@ def _reset_to_defaults(config: PlayerConfig) -> None:
     config.seed = int.from_bytes(os.urandom(4), "little")
 
 
-def _randomize_button_rect(rect: pygame.Rect, scale: int) -> pygame.Rect:
-    """Compact button right-aligned under the last setting row."""
+def _randomize_button_rect(rect: pygame.Rect, scale: int, bottom_y: int) -> pygame.Rect:
+    """Compact button right-aligned under the rendered settings block."""
     btn_w = _BASE_BUTTON_W * scale
     btn_h = _BASE_BUTTON_H * scale
-    rows_below = rect.top + _theme.ROW_PAD + len(_SETTING_FIELDS) * (_theme.ROW_H + 4)
     btn_x = rect.right - _theme.ROW_PAD - btn_w
-    return pygame.Rect(btn_x, rows_below + 4, btn_w, btn_h)
+    return pygame.Rect(btn_x, bottom_y + 8, btn_w, btn_h)
 
 
 # ---------------------------------------------------------------------------
@@ -230,11 +251,15 @@ def run_settings_menu(
 
         selected_option = _PAGE_OPTIONS[left_idx]
         in_settings = selected_option.action == "settings"
-        randomize_rect = (
-            _randomize_button_rect(desc_rect, s)
-            if in_settings
-            else pygame.Rect(0, 0, 0, 0)
-        )
+        heading_font = get_pixel_font(_theme.FONT_HINT)
+        if in_settings:
+            setting_rects, _, settings_bottom_y = panels.setting_section_layout(
+                desc_rect, _SECTIONS, heading_font.get_height()
+            )
+            randomize_rect = _randomize_button_rect(desc_rect, s, settings_bottom_y)
+        else:
+            setting_rects = []
+            randomize_rect = pygame.Rect(0, 0, 0, 0)
 
         # ----- Events -----------------------------------------------------
         for event in pygame.event.get():
@@ -249,9 +274,6 @@ def run_settings_menu(
                         left_idx = i
                         focus_right = False
                 if in_settings:
-                    setting_rects = panels.list_row_rects(
-                        desc_rect, len(_SETTING_FIELDS)
-                    )
                     for i, row_rect in enumerate(setting_rects):
                         if row_rect.collidepoint(mx, my):
                             focus_right = True
@@ -353,14 +375,15 @@ def run_settings_menu(
 
         if in_settings:
             current_values = [_get_value(config, f) for f in _SETTING_FIELDS]
-            panels.draw_setting_rows(
+            panels.draw_setting_sections(
                 surf,
                 desc_rect,
-                _SETTING_FIELDS,
+                _SECTIONS,
                 current_values,
                 settings_idx,
                 focus_right,
                 setting_font,
+                heading_font,
             )
             panels.draw_button(
                 surf,
