@@ -51,7 +51,7 @@ Block-under-miner logic lives inline in the condition function.
 
 ## Slice 5 — Reward and scoring
 
-- [ ] 5.1 Add `EASY_ROCKET_ACHIEVEMENT_WEIGHTS` (all 1.0),
+- [x] 5.1 Add `EASY_ROCKET_ACHIEVEMENT_WEIGHTS` (all 1.0),
       `MAX_EASY_ROCKET_SCORE = 13.0`, and `easy_rocket_reward` (thin
       `achievement_reward` wrapper). Tests: single-unlock reward
       equals weight, no-unlock reward is zero. (S)

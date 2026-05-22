@@ -17,11 +17,16 @@ from factoriax.constants import (
 from factoriax.levels import Level
 from factoriax.recipes import RecipeBook, RecipeTable
 from factoriax.scenarios.easy_rocket import (
+    EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     EASY_ROCKET_RECIPE_BOOK,
     EASY_ROCKET_RECIPE_TABLE,
+    MAX_EASY_ROCKET_SCORE,
+    NUM_EASY_ROCKET_ACHIEVEMENTS,
     build_easy_rocket_level,
     easy_rocket_conditions,
+    easy_rocket_reward,
 )
+from factoriax.state import EnvParams
 
 _SPAWN: tuple[int, int] = (8, 8)
 _FORBID_RADIUS: int = 1
@@ -331,3 +336,47 @@ def test_conditions_graph_stubs_always_false(state_factory) -> None:
     mask = easy_rocket_conditions(state)
     for idx in _GRAPH_GATED_INDICES:
         assert not bool(mask[idx]), f"graph-gated achievement #{idx} should stay False"
+
+
+def test_max_easy_rocket_score_is_13() -> None:
+    assert MAX_EASY_ROCKET_SCORE == 13.0
+    assert float(jnp.sum(EASY_ROCKET_ACHIEVEMENT_WEIGHTS)) == MAX_EASY_ROCKET_SCORE
+
+
+def test_weights_shape_and_values() -> None:
+    assert EASY_ROCKET_ACHIEVEMENT_WEIGHTS.shape == (MAX_ACHIEVEMENTS,)
+    assert EASY_ROCKET_ACHIEVEMENT_WEIGHTS.dtype == jnp.float32
+    # First 13 slots are 1.0, the rest are 0.0.
+    head = EASY_ROCKET_ACHIEVEMENT_WEIGHTS[:NUM_EASY_ROCKET_ACHIEVEMENTS]
+    tail = EASY_ROCKET_ACHIEVEMENT_WEIGHTS[NUM_EASY_ROCKET_ACHIEVEMENTS:]
+    assert bool(jnp.all(head == 1.0))
+    assert bool(jnp.all(tail == 0.0))
+
+
+def _ach_state(state_factory, mask_indices: list[int]):
+    base = state_factory(world_map=_dirt_map())
+    mask = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
+    if mask_indices:
+        mask = mask.at[jnp.array(mask_indices)].set(True)
+    return base.replace(achievements_unlocked=mask)
+
+
+def test_reward_single_unlock_returns_weight(state_factory) -> None:
+    prev = _ach_state(state_factory, [])
+    new = _ach_state(state_factory, [_A_CRAFT_MINER])
+    reward = easy_rocket_reward(prev, new, EnvParams())
+    assert float(reward) == 1.0
+
+
+def test_reward_no_unlock_is_zero(state_factory) -> None:
+    same = _ach_state(state_factory, [_A_CRAFT_MINER])
+    reward = easy_rocket_reward(same, same, EnvParams())
+    assert float(reward) == 0.0
+
+
+def test_reward_only_counts_newly_unlocked(state_factory) -> None:
+    # Already-unlocked bits do not re-fire reward.
+    prev = _ach_state(state_factory, [_A_CRAFT_MINER])
+    new = _ach_state(state_factory, [_A_CRAFT_MINER, _A_CRAFT_ASSEMBLER])
+    reward = easy_rocket_reward(prev, new, EnvParams())
+    assert float(reward) == 1.0

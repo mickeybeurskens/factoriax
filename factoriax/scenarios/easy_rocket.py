@@ -13,7 +13,8 @@ from factoriax.constants import (
 )
 from factoriax.levels import Level, LevelBuilder
 from factoriax.recipes import Recipe, RecipeBook, RecipeTable
-from factoriax.state import EnvState
+from factoriax.rewards import achievement_reward
+from factoriax.state import EnvParams, EnvState
 
 _MAP_SIZE: int = 16
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
@@ -266,4 +267,21 @@ def easy_rocket_conditions(state: EnvState) -> jax.Array:
             conditions,
             jnp.zeros(MAX_ACHIEVEMENTS - NUM_EASY_ROCKET_ACHIEVEMENTS, dtype=jnp.bool_),
         ]
+    )
+
+
+EASY_ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = (
+    jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
+    .at[:NUM_EASY_ROCKET_ACHIEVEMENTS]
+    .set(1.0)
+)
+
+MAX_EASY_ROCKET_SCORE: float = float(NUM_EASY_ROCKET_ACHIEVEMENTS)
+
+
+def easy_rocket_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    return achievement_reward(
+        prev_state, new_state, params, weights=EASY_ROCKET_ACHIEVEMENT_WEIGHTS
     )
