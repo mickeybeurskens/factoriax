@@ -58,15 +58,15 @@ Block-under-miner logic lives inline in the condition function.
 
 ## Slice 6 — Scenario class, exports, observation shape
 
-- [ ] 6.1 Implement `EasyRocketScenario(seed=0)` with `levels()`,
+- [x] 6.1 Implement `EasyRocketScenario(seed=0)` with `levels()`,
       `score_level`, `score`, and class attrs (`name`, `num_players`,
       `achievement_fn`, `blocked_actions`). Tests: construction,
       protocol conformance, `env_params` fields, seed varies layout,
       score returns `MAX_EASY_ROCKET_SCORE` for all-True mask. (M)
-- [ ] 6.2 Add observation-shape test: `local_array(state, params, 0,
+- [x] 6.2 Add observation-shape test: `local_array(state, params, 0,
       radius=5)` on a hand-built 16x16 state returns the documented
       shape and dtype. No env stepping. (S)
-- [ ] 6.3 Export new public symbols from
+- [x] 6.3 Export new public symbols from
       `factoriax/scenarios/__init__.py` (alphabetised). Test: each
       symbol imports at the top level. (S)
 

@@ -14,6 +14,7 @@ from factoriax.constants import (
 from factoriax.levels import Level, LevelBuilder
 from factoriax.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.rewards import achievement_reward
+from factoriax.scenarios.core import LevelResult, ScenarioLevel
 from factoriax.state import EnvParams, EnvState
 
 _MAP_SIZE: int = 16
@@ -285,3 +286,54 @@ def easy_rocket_reward(
     return achievement_reward(
         prev_state, new_state, params, weights=EASY_ROCKET_ACHIEVEMENT_WEIGHTS
     )
+
+
+class EasyRocketScenario:
+    """16x16 rocket scenario with 2000-step budget for fast RL iteration."""
+
+    name: str = "easy_rocket"
+    num_players: int = 1
+    achievement_fn = staticmethod(easy_rocket_conditions)
+    blocked_actions: frozenset[int] = frozenset()
+
+    def __init__(self, seed: int = 0) -> None:
+        self._seed = seed
+
+    def levels(self) -> list[ScenarioLevel]:
+        params = EnvParams(
+            max_timesteps=2000,
+            map_width=_MAP_SIZE,
+            map_height=_MAP_SIZE,
+            num_players=1,
+            recipe_table=EASY_ROCKET_RECIPE_TABLE,
+        )
+        return [
+            ScenarioLevel(
+                name="easy_rocket_v1",
+                description=(
+                    "Build a rocket from raw ore on a 16x16 procgen map. "
+                    "Episode ends at T=2000; score is the unweighted sum of "
+                    "unlocked achievements."
+                ),
+                level=build_easy_rocket_level(jax.random.PRNGKey(self._seed)),
+                env_params=params,
+            )
+        ]
+
+    def score_level(
+        self, scenario_level: ScenarioLevel, items_mined: dict[str, int]
+    ) -> float:
+        return 0.0
+
+    def score(self, level_results: list[LevelResult]) -> float:
+        weights = jnp.asarray(EASY_ROCKET_ACHIEVEMENT_WEIGHTS)
+        scores: list[float] = []
+        for result in level_results:
+            mask = result.achievements_unlocked
+            if mask is None:
+                scores.append(0.0)
+                continue
+            scores.append(float(jnp.sum(weights * jnp.asarray(mask))))
+        if not scores:
+            return 0.0
+        return sum(scores) / len(scores)
