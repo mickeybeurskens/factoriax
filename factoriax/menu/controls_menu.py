@@ -22,13 +22,12 @@ from factoriax.config import (
     default_keyboard,
     resolve_event,
 )
-from factoriax.play.launch_screen import _confirm_scale_change
+from factoriax.play.launch_screen import _confirm_display_change
 from factoriax.ui import panels
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.panels import LabelValueSection
 from factoriax.ui.scaling import ScaledCanvas
-from factoriax.ui.window import auto_ui_scale
 
 _BASE_TITLE_FONT: int = 48
 _FPS: int = 30
@@ -392,17 +391,17 @@ def run_controls_menu(
                     if page in {"keyboard", "controller"}:
                         listening_action = _FLAT_BINDING_ROWS[right_idx].action
                     elif page == "display":
+                        new_fs, new_scale = fullscreen, ui_scale
                         if right_idx == 0:
-                            fullscreen = not fullscreen
+                            new_fs = not fullscreen
                         elif right_idx == 1:
                             new_scale = _cycle_ui_scale(1)
-                            if new_scale != ui_scale:
-                                confirmed = _confirm_scale_change(screen, new_scale)
-                                if confirmed:
-                                    ui_scale = new_scale
-                                applied = ui_scale if ui_scale > 0 else auto_ui_scale()
-                                _theme.apply_scale(applied)
-                                return fullscreen, ui_scale
+                        if (new_fs, new_scale) != (fullscreen, ui_scale):
+                            if _confirm_display_change(
+                                fullscreen, ui_scale, new_fs, new_scale
+                            ):
+                                fullscreen, ui_scale = new_fs, new_scale
+                            return fullscreen, ui_scale
                 else:
                     if page == "reset":
                         _reset_bindings()
@@ -418,31 +417,6 @@ def run_controls_menu(
                     right_idx = (right_idx + 1) % n_right_items
                 elif PlayerAction.NAV_UP in actions and n_right_items > 0:
                     right_idx = (right_idx - 1) % n_right_items
-                elif page == "display":
-                    if PlayerAction.NAV_RIGHT in actions:
-                        if right_idx == 0:
-                            fullscreen = not fullscreen
-                        elif right_idx == 1:
-                            new_scale = _cycle_ui_scale(1)
-                            if new_scale != ui_scale:
-                                confirmed = _confirm_scale_change(screen, new_scale)
-                                if confirmed:
-                                    ui_scale = new_scale
-                                applied = ui_scale if ui_scale > 0 else auto_ui_scale()
-                                _theme.apply_scale(applied)
-                                return fullscreen, ui_scale
-                    elif PlayerAction.NAV_LEFT in actions:
-                        if right_idx == 0:
-                            fullscreen = not fullscreen
-                        elif right_idx == 1:
-                            new_scale = _cycle_ui_scale(-1)
-                            if new_scale != ui_scale:
-                                confirmed = _confirm_scale_change(screen, new_scale)
-                                if confirmed:
-                                    ui_scale = new_scale
-                                applied = ui_scale if ui_scale > 0 else auto_ui_scale()
-                                _theme.apply_scale(applied)
-                                return fullscreen, ui_scale
             else:
                 if PlayerAction.NAV_DOWN in actions:
                     left_idx = (left_idx + 1) % len(_PAGE_OPTIONS)
@@ -527,7 +501,7 @@ def run_controls_menu(
         elif focus_right and page in {"keyboard", "controller"}:
             hint = "Up/Down field   Enter add key   Delete clear   Backspace back"
         elif focus_right and page == "display":
-            hint = "Up/Down field   Left/Right adjust   Backspace back"
+            hint = "Up/Down field   Enter apply   Backspace back"
         else:
             hint = "Up/Down select   Enter confirm   Backspace back   Escape quit"
         panels.draw_hint_bar(surf, sw, hint_y, hint, hint_font)

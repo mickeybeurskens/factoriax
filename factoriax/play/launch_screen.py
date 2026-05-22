@@ -430,74 +430,78 @@ def run_settings_menu(
 _CONFIRM_TIMEOUT_MS: int = 10_000
 
 
-def _confirm_scale_change(
-    screen: pygame.Surface,
-    new_scale_value: int,
-) -> bool:
-    """Apply a new UI scale and wait for user confirmation.
-
-    Shows a centered dialog with a countdown timer. The new scale is applied
-    immediately so the user can see the result. If the user presses Enter or
-    clicks "Keep", the change is confirmed. If the timer expires or Escape
-    is pressed, the change is reverted.
-
-    Args:
-        screen: Pygame display surface.
-        new_scale_value: The ``ui_scale`` config value to try (0-3).
-
-    Returns:
-        ``True`` if the user confirmed the new scale, ``False`` if reverted.
-    """
-    new_s = new_scale_value if new_scale_value > 0 else auto_ui_scale()
-    _theme.apply_scale(new_s)
-    canvas_size = 1024 * new_s
+def _apply_display_state(fullscreen: bool, ui_scale: int) -> pygame.Surface:
+    """Reapply theme scale and recreate the pygame display surface."""
+    applied = ui_scale if ui_scale > 0 else auto_ui_scale()
+    _theme.apply_scale(applied)
+    if fullscreen:
+        return pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    canvas_size = 1024 * applied
     w, h = calculate_window_size(canvas_size, canvas_size)
-    screen = pygame.display.set_mode((w, h))
-    canvas = ScaledCanvas(1024, new_s, screen)
+    return pygame.display.set_mode((w, h))
+
+
+def _confirm_display_change(
+    old_fullscreen: bool,
+    old_ui_scale: int,
+    new_fullscreen: bool,
+    new_ui_scale: int,
+) -> bool:
+    """Apply the new (fullscreen, ui_scale) state and prompt to keep or revert.
+
+    Shows a centered Keep / Revert dialog with a countdown. On revert (or
+    timeout, Escape, or Backspace), restores the previous display state and
+    returns ``False``. On confirm (Enter / Keep), returns ``True`` and leaves
+    the new state applied.
+    """
+    screen = _apply_display_state(new_fullscreen, new_ui_scale)
+    applied = new_ui_scale if new_ui_scale > 0 else auto_ui_scale()
+    canvas = ScaledCanvas(1024, applied, screen)
     clock = pygame.time.Clock()
     deadline = pygame.time.get_ticks() + _CONFIRM_TIMEOUT_MS
 
-    font = get_pixel_font(28 * new_s)
+    font = get_pixel_font(28 * applied)
     sw, sh = canvas.width, canvas.height
-    box_w = 500 * new_s
-    box_h = 140 * new_s
+    box_w = 500 * applied
+    box_h = 140 * applied
     box_x = (sw - box_w) // 2
     box_y = (sh - box_h) // 2
-    btn_w = 140 * new_s
-    btn_h = 50 * new_s
-    btn_gap = 24 * new_s
+    btn_w = 140 * applied
+    btn_h = 50 * applied
+    btn_gap = 24 * applied
     keep_x = box_x + (box_w - 2 * btn_w - btn_gap) // 2
     revert_x = keep_x + btn_w + btn_gap
-    btn_y = box_y + box_h - btn_h - 16 * new_s
+    btn_y = box_y + box_h - btn_h - 16 * applied
+
+    def _finish(confirmed: bool) -> bool:
+        if not confirmed:
+            _apply_display_state(old_fullscreen, old_ui_scale)
+        return confirmed
+
+    kb = build_key_lookup(default_keyboard())
+    cl = build_controller_lookup(default_controller())
 
     while True:
         remaining = max(0, deadline - pygame.time.get_ticks())
         if remaining == 0:
-            return False
+            return _finish(False)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return False
+                return _finish(False)
             if event.type == pygame.VIDEORESIZE:
                 canvas.handle_resize(event.w, event.h)
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return True
-                if event.key == pygame.K_ESCAPE:
-                    return False
-            kb = build_key_lookup(default_keyboard())
-            cl = build_controller_lookup(default_controller())
             nav = resolve_event(event, kb, cl)
             if PlayerAction.CONFIRM in nav:
-                return True
-            if PlayerAction.BACK in nav:
-                return False
+                return _finish(True)
+            if PlayerAction.BACK in nav or PlayerAction.QUIT in nav:
+                return _finish(False)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = canvas.to_canvas(*event.pos)
                 if pygame.Rect(keep_x, btn_y, btn_w, btn_h).collidepoint(mx, my):
-                    return True
+                    return _finish(True)
                 if pygame.Rect(revert_x, btn_y, btn_w, btn_h).collidepoint(mx, my):
-                    return False
+                    return _finish(False)
 
         surf = canvas.surface
         surf.fill((15, 15, 20))
@@ -506,11 +510,11 @@ def _confirm_scale_change(
 
         secs = (remaining + 999) // 1000
         msg = font.render(
-            f"Keep this scale? Reverting in {secs}s...",
+            f"Keep these display settings? Reverting in {secs}s...",
             False,
             LABEL_COLOR,
         )
-        surf.blit(msg, (box_x + (box_w - msg.get_width()) // 2, box_y + 20 * new_s))
+        surf.blit(msg, (box_x + (box_w - msg.get_width()) // 2, box_y + 20 * applied))
 
         mouse_pos = canvas.to_canvas(*pygame.mouse.get_pos())
         for label, rect in (
