@@ -35,6 +35,7 @@ from factoriax.ui import panels
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.forms import GOLD, LABEL_COLOR
+from factoriax.ui.panels import SettingField
 from factoriax.ui.scaling import ScaledCanvas
 from factoriax.ui.window import auto_ui_scale, calculate_window_size
 
@@ -46,37 +47,22 @@ _RESET_FLASH_MS: int = 1500
 _SEED_MAX: int = 2**32 - 1
 
 
-# ---------------------------------------------------------------------------
-# Field metadata
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class _SettingField:
-    key: str
-    label: str
-    is_float: bool
-    step: float
-    min_value: float
-    max_value: float
-
-
-_SETTING_FIELDS: tuple[_SettingField, ...] = (
-    _SettingField("map_width", "Map width", False, 1, 8, 64),
-    _SettingField("map_height", "Map height", False, 1, 8, 64),
-    _SettingField("num_players", "Players", False, 1, 1, 4),
-    _SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
-    _SettingField("water_probability", "Water probability", True, 0.01, 0.0, 1.0),
-    _SettingField("iron_probability", "Iron probability", True, 0.01, 0.0, 1.0),
-    _SettingField("copper_probability", "Copper probability", True, 0.01, 0.0, 1.0),
-    _SettingField("coal_probability", "Coal probability", True, 0.01, 0.0, 1.0),
-    _SettingField("tin_probability", "Tin probability", True, 0.01, 0.0, 1.0),
-    _SettingField("silicon_probability", "Silicon probability", True, 0.01, 0.0, 1.0),
-    _SettingField("base_resources", "Base resources", False, 100, 100, 10_000),
-    _SettingField("max_machines", "Max machines", False, 16, 0, 1024),
-    _SettingField("miner_mining_rate", "Miner mining rate", False, 1, 1, 20),
-    _SettingField("player_mining_yield", "Player mining yield", False, 1, 1, 10),
-    _SettingField("seed", "Seed", False, 1, 0, _SEED_MAX),
+_SETTING_FIELDS: tuple[SettingField, ...] = (
+    SettingField("map_width", "Map width", False, 1, 8, 64),
+    SettingField("map_height", "Map height", False, 1, 8, 64),
+    SettingField("num_players", "Players", False, 1, 1, 4),
+    SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
+    SettingField("water_probability", "Water probability", True, 0.01, 0.0, 1.0),
+    SettingField("iron_probability", "Iron probability", True, 0.01, 0.0, 1.0),
+    SettingField("copper_probability", "Copper probability", True, 0.01, 0.0, 1.0),
+    SettingField("coal_probability", "Coal probability", True, 0.01, 0.0, 1.0),
+    SettingField("tin_probability", "Tin probability", True, 0.01, 0.0, 1.0),
+    SettingField("silicon_probability", "Silicon probability", True, 0.01, 0.0, 1.0),
+    SettingField("base_resources", "Base resources", False, 100, 100, 10_000),
+    SettingField("max_machines", "Max machines", False, 16, 0, 1024),
+    SettingField("miner_mining_rate", "Miner mining rate", False, 1, 1, 20),
+    SettingField("player_mining_yield", "Player mining yield", False, 1, 1, 10),
+    SettingField("seed", "Seed", False, 1, 0, _SEED_MAX),
 )
 
 
@@ -121,7 +107,7 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
 # ---------------------------------------------------------------------------
 
 
-def _get_value(config: PlayerConfig, field: _SettingField) -> float:
+def _get_value(config: PlayerConfig, field: SettingField) -> float:
     if field.key == "seed":
         return float(config.seed)
     raw = config.env_params.get(field.key)
@@ -130,24 +116,11 @@ def _get_value(config: PlayerConfig, field: _SettingField) -> float:
     return float(raw)
 
 
-def _set_value(config: PlayerConfig, field: _SettingField, value: float) -> None:
+def _set_value(config: PlayerConfig, field: SettingField, value: float) -> None:
     if field.key == "seed":
         config.seed = int(value)
         return
     config.env_params[field.key] = float(value) if field.is_float else int(value)
-
-
-def _clamp(value: float, field: _SettingField) -> float:
-    value = max(field.min_value, min(field.max_value, value))
-    if not field.is_float:
-        return float(int(value))
-    return round(value, 2)
-
-
-def _format_value(field: _SettingField, value: float) -> str:
-    if field.is_float:
-        return f"{value:.2f}"
-    return str(int(value))
 
 
 def _reset_to_defaults(config: PlayerConfig) -> None:
@@ -155,98 +128,13 @@ def _reset_to_defaults(config: PlayerConfig) -> None:
     config.seed = int.from_bytes(os.urandom(4), "little")
 
 
-# ---------------------------------------------------------------------------
-# Settings panel rendering
-# ---------------------------------------------------------------------------
-
-
-def _row_y(rect: pygame.Rect, idx: int) -> int:
-    return rect.top + _theme.ROW_PAD + idx * (_theme.ROW_H + 4)
-
-
-def _draw_setting_rows(
-    surf: pygame.Surface,
-    rect: pygame.Rect,
-    config: PlayerConfig,
-    selected_idx: int,
-    panel_focused: bool,
-    font: pygame.font.Font,
-) -> list[pygame.Rect]:
-    """Render all setting rows; return their rects for hit-testing."""
-    row_rects: list[pygame.Rect] = []
-    inner_x = rect.left + _theme.ROW_PAD
-    inner_w = rect.width - 2 * _theme.ROW_PAD
-    for i, fld in enumerate(_SETTING_FIELDS):
-        y = _row_y(rect, i)
-        row_rect = pygame.Rect(inner_x, y, inner_w, _theme.ROW_H)
-        row_rects.append(row_rect)
-        active = panel_focused and i == selected_idx
-        if active:
-            pygame.draw.rect(
-                surf, GOLD, row_rect, border_radius=_theme.BORDER_RADIUS // 2
-            )
-            label_color = _theme.PAGE_BG
-            value_color = _theme.PAGE_BG
-        else:
-            label_color = _theme.TEXT_COLOR
-            value_color = _theme.TEXT_COLOR
-
-        label_surf = font.render(fld.label, False, label_color)
-        surf.blit(
-            label_surf,
-            (
-                row_rect.x + _theme.ROW_PAD // 2,
-                row_rect.y + (_theme.ROW_H - label_surf.get_height()) // 2,
-            ),
-        )
-
-        value_text = _format_value(fld, _get_value(config, fld))
-        decorated = f"<  {value_text}  >" if active else value_text
-        value_surf = font.render(decorated, False, value_color)
-        surf.blit(
-            value_surf,
-            (
-                row_rect.right - _theme.ROW_PAD // 2 - value_surf.get_width(),
-                row_rect.y + (_theme.ROW_H - value_surf.get_height()) // 2,
-            ),
-        )
-    return row_rects
-
-
 def _randomize_button_rect(rect: pygame.Rect, scale: int) -> pygame.Rect:
     """Compact button right-aligned under the last setting row."""
     btn_w = _BASE_BUTTON_W * scale
     btn_h = _BASE_BUTTON_H * scale
-    btn_y = _row_y(rect, len(_SETTING_FIELDS)) + 4
+    rows_below = rect.top + _theme.ROW_PAD + len(_SETTING_FIELDS) * (_theme.ROW_H + 4)
     btn_x = rect.right - _theme.ROW_PAD - btn_w
-    return pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-
-
-def _draw_randomize_button(
-    surf: pygame.Surface,
-    button_rect: pygame.Rect,
-    font: pygame.font.Font,
-    *,
-    active: bool,
-) -> None:
-    fill = _theme.BUTTON_HOVER if active else _theme.BUTTON_FILL
-    border = GOLD if active else _theme.BORDER_INACTIVE
-    pygame.draw.rect(surf, fill, button_rect, border_radius=_theme.BORDER_RADIUS // 2)
-    pygame.draw.rect(
-        surf,
-        border,
-        button_rect,
-        _theme.BORDER_PX,
-        border_radius=_theme.BORDER_RADIUS // 2,
-    )
-    label = font.render("Randomize", False, _theme.TEXT_COLOR)
-    surf.blit(
-        label,
-        (
-            button_rect.x + (button_rect.w - label.get_width()) // 2,
-            button_rect.y + (button_rect.h - label.get_height()) // 2,
-        ),
-    )
+    return pygame.Rect(btn_x, rows_below + 4, btn_w, btn_h)
 
 
 # ---------------------------------------------------------------------------
@@ -313,12 +201,11 @@ def run_settings_menu(
             saved = True
         return config
 
-    def _adjust_setting(field: _SettingField, direction: int) -> None:
+    def _adjust_setting(field: SettingField, direction: int) -> None:
         if direction == 0:
             return
         current = _get_value(config, field)
-        new_value = _clamp(current + field.step * direction, field)
-        _set_value(config, field, new_value)
+        _set_value(config, field, field.clamp(current + field.step * direction))
 
     def _randomize_seed() -> None:
         config.seed = int.from_bytes(os.urandom(4), "little")
@@ -362,14 +249,10 @@ def run_settings_menu(
                         left_idx = i
                         focus_right = False
                 if in_settings:
-                    for i in range(len(_SETTING_FIELDS)):
-                        y = _row_y(desc_rect, i)
-                        row_rect = pygame.Rect(
-                            desc_rect.left + _theme.ROW_PAD,
-                            y,
-                            desc_rect.width - 2 * _theme.ROW_PAD,
-                            _theme.ROW_H,
-                        )
+                    setting_rects = panels.list_row_rects(
+                        desc_rect, len(_SETTING_FIELDS)
+                    )
+                    for i, row_rect in enumerate(setting_rects):
                         if row_rect.collidepoint(mx, my):
                             focus_right = True
                             settings_idx = i
@@ -469,19 +352,22 @@ def run_settings_menu(
         )
 
         if in_settings:
-            _draw_setting_rows(
+            current_values = [_get_value(config, f) for f in _SETTING_FIELDS]
+            panels.draw_setting_rows(
                 surf,
                 desc_rect,
-                config,
+                _SETTING_FIELDS,
+                current_values,
                 settings_idx,
                 focus_right,
                 setting_font,
             )
-            _draw_randomize_button(
+            panels.draw_button(
                 surf,
                 randomize_rect,
+                "Randomize",
                 btn_font,
-                active=focus_right and settings_idx == _RANDOMIZE_IDX,
+                focused=focus_right and settings_idx == _RANDOMIZE_IDX,
             )
         else:
             text = selected_option.description

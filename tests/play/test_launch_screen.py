@@ -18,7 +18,6 @@ from factoriax.config import (  # noqa: E402
 from factoriax.play.launch_screen import (  # noqa: E402
     _PAGE_OPTIONS,
     _SETTING_FIELDS,
-    _clamp,
     _get_value,
     _reset_to_defaults,
     _set_value,
@@ -85,14 +84,14 @@ class TestValueOps:
         assert config.env_params["map_width"] == 17
         assert isinstance(config.env_params["map_width"], int)
 
-    def test_clamp_respects_min_max_for_int(self) -> None:
+    def test_field_clamp_respects_min_max_for_int(self) -> None:
         field = next(f for f in _SETTING_FIELDS if f.key == "num_players")
-        assert _clamp(0, field) == field.min_value
-        assert _clamp(99, field) == field.max_value
+        assert field.clamp(0) == field.min_value
+        assert field.clamp(99) == field.max_value
 
-    def test_clamp_rounds_float_to_two_decimals(self) -> None:
+    def test_field_clamp_rounds_float_to_two_decimals(self) -> None:
         field = next(f for f in _SETTING_FIELDS if f.key == "iron_probability")
-        assert _clamp(0.123456, field) == 0.12
+        assert field.clamp(0.123456) == 0.12
 
 
 class TestResetToDefaults:

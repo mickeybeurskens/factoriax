@@ -117,6 +117,42 @@ def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     return lines
 
 
+@dataclass(frozen=True)
+class SettingField:
+    """One editable numeric setting in a settings menu.
+
+    Attributes:
+        key: Identifier the menu uses to look up / write the value (e.g. the
+            attribute name on an ``EnvParams`` or a key in a config dict).
+        label: Human-readable label shown on the left side of the row.
+        is_float: ``True`` for continuous values (probabilities); ``False``
+            for integer-typed settings. Controls formatting and rounding.
+        step: Amount added or subtracted by one tap of Left/Right.
+        min_value: Lower bound, inclusive.
+        max_value: Upper bound, inclusive.
+    """
+
+    key: str
+    label: str
+    is_float: bool
+    step: float
+    min_value: float
+    max_value: float
+
+    def clamp(self, value: float) -> float:
+        """Clamp ``value`` to ``[min_value, max_value]`` and cast to the type."""
+        value = max(self.min_value, min(self.max_value, value))
+        if not self.is_float:
+            return float(int(value))
+        return round(value, 2)
+
+    def format(self, value: float) -> str:
+        """Format ``value`` for display in the right-hand column."""
+        if self.is_float:
+            return f"{value:.2f}"
+        return str(int(value))
+
+
 def list_row_rects(rect: pygame.Rect, n_rows: int) -> list[pygame.Rect]:
     """Return per-row rects laid out top-to-bottom inside ``rect``.
 
@@ -130,6 +166,58 @@ def list_row_rects(rect: pygame.Rect, n_rows: int) -> list[pygame.Rect]:
     for _ in range(n_rows):
         rects.append(pygame.Rect(inner_x, y, inner_w, _theme.ROW_H))
         y += _theme.ROW_H + 4
+    return rects
+
+
+def draw_setting_rows(
+    surf: pygame.Surface,
+    rect: pygame.Rect,
+    fields: tuple[SettingField, ...] | list[SettingField],
+    values: list[float],
+    selected_idx: int,
+    focused: bool,
+    font: pygame.font.Font,
+) -> list[pygame.Rect]:
+    """Render ``label … value`` rows for an editable settings list.
+
+    When ``focused`` and ``i == selected_idx``, the row gets a gold fill and
+    the value is wrapped with ``<  value  >`` chevrons to signal that
+    Left/Right adjusts it. Returns the row rects so the caller can hit-test
+    mouse clicks against the same coordinates.
+    """
+    rects = list_row_rects(rect, len(fields))
+    for i, (fld, value, row_rect) in enumerate(zip(fields, values, rects, strict=True)):
+        active = focused and i == selected_idx
+        if active:
+            pygame.draw.rect(
+                surf,
+                _theme.BORDER[:3],
+                row_rect,
+                border_radius=_theme.BORDER_RADIUS // 2,
+            )
+            text_color: tuple[int, int, int] = _theme.PAGE_BG
+        else:
+            text_color = _theme.TEXT_COLOR
+
+        label_surf = font.render(fld.label, False, text_color)
+        surf.blit(
+            label_surf,
+            (
+                row_rect.x + _theme.ROW_PAD // 2,
+                row_rect.y + (_theme.ROW_H - label_surf.get_height()) // 2,
+            ),
+        )
+
+        value_text = fld.format(value)
+        decorated = f"<  {value_text}  >" if active else value_text
+        value_surf = font.render(decorated, False, text_color)
+        surf.blit(
+            value_surf,
+            (
+                row_rect.right - _theme.ROW_PAD // 2 - value_surf.get_width(),
+                row_rect.y + (_theme.ROW_H - value_surf.get_height()) // 2,
+            ),
+        )
     return rects
 
 
