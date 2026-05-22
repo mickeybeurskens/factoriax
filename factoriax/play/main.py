@@ -130,16 +130,13 @@ def play_level(
         num_players=num_players,
     )
 
-    prev_size = screen.get_size() if screen is not None else None
-    scaled = _BASE_UI_SIZE * _play_theme.UI_SCALE
-    game_win_w, game_win_h = calculate_window_size(scaled, scaled)
     if screen is None:
+        # Standalone launch: open at the play window's preferred size.
+        scaled = _BASE_UI_SIZE * _play_theme.UI_SCALE
+        game_win_w, game_win_h = calculate_window_size(scaled, scaled)
         screen = pygame.display.set_mode((game_win_w, game_win_h))
-    else:
-        screen = pygame.display.set_mode(
-            (game_win_w, game_win_h),
-            pygame.RESIZABLE,
-        )
+    # Embedded launch (editor playtest): reuse the existing window — no resize
+    # flicker on entry or exit. The play loop adapts via its ScaledCanvas.
 
     pygame.display.set_caption(f"FactoriaX - {level.name}")
 
@@ -156,8 +153,6 @@ def play_level(
 
     if owns_pygame:
         pygame.quit()
-    elif prev_size is not None:
-        pygame.display.set_mode(prev_size, pygame.RESIZABLE)
 
 
 _BASE_UI_SIZE = 1024
