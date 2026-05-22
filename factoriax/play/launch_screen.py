@@ -211,6 +211,7 @@ def run_settings_menu(
     focus_right = False  # only meaningful when left_idx selects "settings"
     settings_idx = 0  # index into _SETTING_FIELDS + randomize button
     reset_flash_until = 0
+    input_source = panels.InputSourceTracker()
     # Persist the user's choice on exit; Play uses this to launch.
     saved = False
 
@@ -338,12 +339,16 @@ def run_settings_menu(
             else:
                 if PlayerAction.NAV_DOWN in actions:
                     left_idx = (left_idx + 1) % len(_PAGE_OPTIONS)
+                    input_source.mark_keyboard()
                 elif PlayerAction.NAV_UP in actions:
                     left_idx = (left_idx - 1) % len(_PAGE_OPTIONS)
+                    input_source.mark_keyboard()
 
-        # ----- Mouse hover for the left list ------------------------------
-        mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
-        if not focus_right:
+        # Hover commits left_idx — mouse only wins when it's the most recent
+        # input, and only when focus is on the left panel.
+        input_source.tick()
+        if input_source.mouse_active and not focus_right:
+            mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
             hovered_left = next(
                 (
                     i
@@ -352,9 +357,8 @@ def run_settings_menu(
                 ),
                 None,
             )
-            display_left_idx = hovered_left if hovered_left is not None else left_idx
-        else:
-            display_left_idx = left_idx
+            if hovered_left is not None:
+                left_idx = hovered_left
 
         # ----- Draw -------------------------------------------------------
         surf = canvas.surface
@@ -380,7 +384,7 @@ def run_settings_menu(
             surf,
             list_rect,
             [o.label for o in _PAGE_OPTIONS],
-            display_left_idx,
+            left_idx,
             list_font,
         )
 

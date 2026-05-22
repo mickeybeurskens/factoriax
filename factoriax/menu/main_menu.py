@@ -124,6 +124,7 @@ def run_main_menu(
     hint_h = hint_font.get_height()
 
     selected_idx = 0
+    input_source = panels.InputSourceTracker()
 
     def _resolve(action: str) -> str | None:
         return None if action == "quit" else action
@@ -174,18 +175,26 @@ def run_main_menu(
                 return None
             if PlayerAction.NAV_DOWN in actions:
                 selected_idx = (selected_idx + 1) % len(_OPTIONS)
+                input_source.mark_keyboard()
             elif PlayerAction.NAV_UP in actions:
                 selected_idx = (selected_idx - 1) % len(_OPTIONS)
+                input_source.mark_keyboard()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
                 selected_idx = (selected_idx + 1) % len(_OPTIONS)
+                input_source.mark_keyboard()
 
-        # Mouse hover overrides keyboard focus for the highlight.
-        mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
-        hovered_idx = next(
-            (i for i, rect in enumerate(row_rects) if rect.collidepoint(mx, my)),
-            None,
-        )
-        active_idx = hovered_idx if hovered_idx is not None else selected_idx
+        # Hover commits to selected_idx, but only when the mouse is the most
+        # recent input — otherwise the stationary cursor would drag the
+        # selection back over a fresh keyboard press.
+        input_source.tick()
+        if input_source.mouse_active:
+            mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
+            hovered_idx = next(
+                (i for i, rect in enumerate(row_rects) if rect.collidepoint(mx, my)),
+                None,
+            )
+            if hovered_idx is not None:
+                selected_idx = hovered_idx
 
         surf = canvas.surface
         surf.fill(_theme.PAGE_BG)
@@ -198,10 +207,10 @@ def run_main_menu(
             surf, desc_rect, "Description", panel_title_font, focused=False
         )
         panels.draw_list_rows(
-            surf, list_rect, [o.label for o in _OPTIONS], active_idx, list_font
+            surf, list_rect, [o.label for o in _OPTIONS], selected_idx, list_font
         )
         panels.draw_description(
-            surf, desc_rect, _OPTIONS[active_idx].description, 0, body_font
+            surf, desc_rect, _OPTIONS[selected_idx].description, 0, body_font
         )
 
         panels.draw_hint_bar(

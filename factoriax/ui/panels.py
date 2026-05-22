@@ -15,6 +15,33 @@ import pygame
 from factoriax.ui import theme as _theme
 
 
+class InputSourceTracker:
+    """Tracks whether mouse motion or keyboard nav last moved the selection.
+
+    Menus use this to decide when mouse hover should commit to the selection:
+    only while :attr:`mouse_active` is ``True``. The flag flips to ``True``
+    when the cursor position changes between :meth:`tick` calls; the caller
+    invokes :meth:`mark_keyboard` on every keyboard navigation action so a
+    stationary cursor doesn't immediately drag the highlight back to wherever
+    the mouse happens to rest.
+    """
+
+    def __init__(self) -> None:
+        self._prev_mouse: tuple[int, int] = pygame.mouse.get_pos()
+        self.mouse_active: bool = False
+
+    def tick(self) -> None:
+        """Sample the cursor; sets ``mouse_active`` True if it moved this frame."""
+        current = pygame.mouse.get_pos()
+        if current != self._prev_mouse:
+            self.mouse_active = True
+        self._prev_mouse = current
+
+    def mark_keyboard(self) -> None:
+        """The keyboard just navigated — mouse hover takes a back seat."""
+        self.mouse_active = False
+
+
 def rgba_to_surface(rgba: np.ndarray) -> pygame.Surface:
     """Convert an RGBA uint8 array of shape ``(H, W, 4)`` to a Surface."""
     h, w = rgba.shape[:2]

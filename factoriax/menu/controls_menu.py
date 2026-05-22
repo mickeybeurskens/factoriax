@@ -265,6 +265,7 @@ def run_controls_menu(
     right_idx = 0
     listening_action: PlayerAction | None = None
     reset_flash_until = 0
+    input_source = panels.InputSourceTracker()
 
     def _bindings_for(device: str) -> dict[str, list[str]]:
         return config.keyboard if device == "keyboard" else config.controller
@@ -415,17 +416,23 @@ def run_controls_menu(
             if focus_right:
                 if PlayerAction.NAV_DOWN in actions and n_right_items > 0:
                     right_idx = (right_idx + 1) % n_right_items
+                    input_source.mark_keyboard()
                 elif PlayerAction.NAV_UP in actions and n_right_items > 0:
                     right_idx = (right_idx - 1) % n_right_items
+                    input_source.mark_keyboard()
             else:
                 if PlayerAction.NAV_DOWN in actions:
                     left_idx = (left_idx + 1) % len(_PAGE_OPTIONS)
+                    input_source.mark_keyboard()
                 elif PlayerAction.NAV_UP in actions:
                     left_idx = (left_idx - 1) % len(_PAGE_OPTIONS)
+                    input_source.mark_keyboard()
 
-        # ----- Mouse hover for the left list -----------------------------
-        mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
-        if not focus_right:
+        # Hover commits left_idx — mouse only wins when it's the most recent
+        # input, and only when focus is on the left panel.
+        input_source.tick()
+        if input_source.mouse_active and not focus_right:
+            mx, my = canvas.to_canvas(*pygame.mouse.get_pos())
             hovered_left = next(
                 (
                     i
@@ -434,9 +441,8 @@ def run_controls_menu(
                 ),
                 None,
             )
-            display_left_idx = hovered_left if hovered_left is not None else left_idx
-        else:
-            display_left_idx = left_idx
+            if hovered_left is not None:
+                left_idx = hovered_left
 
         # ----- Draw ------------------------------------------------------
         surf = canvas.surface
@@ -463,7 +469,7 @@ def run_controls_menu(
             surf,
             list_rect,
             [o.label for o in _PAGE_OPTIONS],
-            display_left_idx,
+            left_idx,
             list_font,
         )
 
