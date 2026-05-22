@@ -92,6 +92,7 @@ class PlayerAction(StrEnum):
     CONFIRM = "confirm"
     BACK = "back"
     QUIT = "quit"
+    CLEAR_BINDING = "clear_binding"
 
     OPEN_INVENTORY = "open_inventory"
     OPEN_ACHIEVEMENTS = "open_achievements"
@@ -185,6 +186,7 @@ def default_keyboard() -> Bindings:
         PlayerAction.CONFIRM: ["K_RETURN", "K_e"],
         PlayerAction.BACK: ["K_BACKSPACE"],
         PlayerAction.QUIT: ["K_ESCAPE"],
+        PlayerAction.CLEAR_BINDING: ["K_DELETE"],
         # Navigation: toggles
         PlayerAction.OPEN_INVENTORY: ["K_i"],
         PlayerAction.OPEN_ACHIEVEMENTS: ["K_p"],
@@ -227,6 +229,7 @@ def default_controller() -> Bindings:
         PlayerAction.CONFIRM: ["BUTTON_0"],
         PlayerAction.BACK: ["BUTTON_1"],
         PlayerAction.QUIT: [],
+        PlayerAction.CLEAR_BINDING: [],
         # Toggles
         PlayerAction.OPEN_INVENTORY: ["BUTTON_3"],
         PlayerAction.TOGGLE_HOTBAR: ["BUTTON_4"],

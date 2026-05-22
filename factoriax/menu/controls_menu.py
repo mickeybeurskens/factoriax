@@ -324,9 +324,16 @@ def run_controls_menu(
 
             # --- Listening: capture the next input -------------------
             if listening_action is not None and page in {"keyboard", "controller"}:
+                # Backspace / Escape cancel listening without capturing.
+                cancel = resolve_event(event, kb_lookup, ctrl_lookup)
+                if PlayerAction.BACK in cancel or PlayerAction.QUIT in cancel:
+                    listening_action = None
+                    continue
                 if page == "keyboard" and event.type == pygame.KEYDOWN:
                     name = event_to_key_name(event.key, pygame.key.get_mods())
-                    config.keyboard[listening_action] = [name]
+                    existing = config.keyboard.get(listening_action, [])
+                    if name not in existing:
+                        config.keyboard[listening_action] = [*existing, name]
                     listening_action = None
                     kb_lookup = build_key_lookup(config.keyboard)
                     continue
@@ -337,7 +344,12 @@ def run_controls_menu(
                 ):
                     ctrl_name = controller_event_to_name(event)
                     if ctrl_name is not None:
-                        config.controller[listening_action] = [ctrl_name]
+                        existing = config.controller.get(listening_action, [])
+                        if ctrl_name not in existing:
+                            config.controller[listening_action] = [
+                                *existing,
+                                ctrl_name,
+                            ]
                         listening_action = None
                         ctrl_lookup = build_controller_lookup(config.controller)
                     continue
@@ -360,6 +372,20 @@ def run_controls_menu(
                     focus_right = False
                 else:
                     return fullscreen, ui_scale
+                continue
+            if (
+                PlayerAction.CLEAR_BINDING in actions
+                and focus_right
+                and page in {"keyboard", "controller"}
+                and n_right_items > 0
+            ):
+                action_to_clear = _FLAT_BINDING_ROWS[right_idx].action
+                if page == "keyboard":
+                    config.keyboard[action_to_clear] = []
+                    kb_lookup = build_key_lookup(config.keyboard)
+                else:
+                    config.controller[action_to_clear] = []
+                    ctrl_lookup = build_controller_lookup(config.controller)
                 continue
             if PlayerAction.CONFIRM in actions:
                 if focus_right:
@@ -499,7 +525,7 @@ def run_controls_menu(
         if listening_action is not None:
             hint = "Press a key to bind...   Backspace cancel"
         elif focus_right and page in {"keyboard", "controller"}:
-            hint = "Up/Down field   Enter rebind   Backspace back"
+            hint = "Up/Down field   Enter add key   Delete clear   Backspace back"
         elif focus_right and page == "display":
             hint = "Up/Down field   Left/Right adjust   Backspace back"
         else:
