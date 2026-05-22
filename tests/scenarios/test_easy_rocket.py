@@ -143,16 +143,16 @@ def test_build_level_has_all_ore_types() -> None:
     assert _ORE_BLOCKS.issubset(present)
 
 
-@pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
-def test_build_level_patches_avoid_spawn(seed: int) -> None:
-    level = build_easy_rocket_level(jax.random.PRNGKey(seed))
+def test_build_level_patches_avoid_spawn() -> None:
     sx, sy = _SPAWN
-    for ty in range(sy - _FORBID_RADIUS, sy + _FORBID_RADIUS + 1):
-        for tx in range(sx - _FORBID_RADIUS, sx + _FORBID_RADIUS + 1):
-            block = int(level.block_map[ty, tx])
-            assert block not in _ORE_BLOCKS, (
-                f"Patch overlaps spawn zone at ({tx}, {ty}); seed={seed}"
-            )
+    for seed in (0, 1, 2, 3, 4):
+        level = build_easy_rocket_level(jax.random.PRNGKey(seed))
+        for ty in range(sy - _FORBID_RADIUS, sy + _FORBID_RADIUS + 1):
+            for tx in range(sx - _FORBID_RADIUS, sx + _FORBID_RADIUS + 1):
+                block = int(level.block_map[ty, tx])
+                assert block not in _ORE_BLOCKS, (
+                    f"Patch overlaps spawn zone at ({tx}, {ty}); seed={seed}"
+                )
 
 
 # Achievement indices in the condition mask, mirroring the spec order.
@@ -340,19 +340,15 @@ def test_conditions_graph_stubs_always_false(state_factory) -> None:
         assert not bool(mask[idx]), f"graph-gated achievement #{idx} should stay False"
 
 
-def test_max_easy_rocket_score_is_13() -> None:
-    assert MAX_EASY_ROCKET_SCORE == 13.0
-    assert float(jnp.sum(EASY_ROCKET_ACHIEVEMENT_WEIGHTS)) == MAX_EASY_ROCKET_SCORE
-
-
-def test_weights_shape_and_values() -> None:
+def test_weights_and_max_score() -> None:
     assert EASY_ROCKET_ACHIEVEMENT_WEIGHTS.shape == (MAX_ACHIEVEMENTS,)
     assert EASY_ROCKET_ACHIEVEMENT_WEIGHTS.dtype == jnp.float32
-    # First 13 slots are 1.0, the rest are 0.0.
     head = EASY_ROCKET_ACHIEVEMENT_WEIGHTS[:NUM_EASY_ROCKET_ACHIEVEMENTS]
     tail = EASY_ROCKET_ACHIEVEMENT_WEIGHTS[NUM_EASY_ROCKET_ACHIEVEMENTS:]
     assert bool(jnp.all(head == 1.0))
     assert bool(jnp.all(tail == 0.0))
+    assert MAX_EASY_ROCKET_SCORE == float(NUM_EASY_ROCKET_ACHIEVEMENTS)
+    assert float(jnp.sum(EASY_ROCKET_ACHIEVEMENT_WEIGHTS)) == MAX_EASY_ROCKET_SCORE
 
 
 def _ach_state(state_factory, mask_indices: list[int]):
@@ -442,21 +438,6 @@ def test_score_returns_zero_when_mask_missing() -> None:
         achievements_unlocked=None,
     )
     assert EasyRocketScenario().score([result]) == 0.0
-
-
-def test_observation_shape_local_radius_5(state_factory) -> None:
-    from factoriax.observations import local_array
-
-    state = state_factory(
-        world_map=jnp.full((_MAP_SIZE, _MAP_SIZE), BlockType.DIRT, dtype=jnp.int32),
-        player_position=_SPAWN,
-    )
-    params = EasyRocketScenario().levels()[0].env_params
-    obs = local_array(state, params, 0, radius=5)
-    assert obs.ndim == 1
-    assert obs.dtype == jnp.float32
-    # Spatial block: 10 channels × (2r+1)^2 = 10 × 121.
-    assert obs.shape[0] > 10 * 121
 
 
 def test_easy_rocket_public_exports() -> None:

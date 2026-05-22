@@ -57,6 +57,14 @@ from typing import Any
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+# Pin JAX to the CPU backend for unit tests. The suite is dominated by
+# small ops (single-tile states, MAX_ACHIEVEMENTS-sized masks) where
+# CUDA autotuning costs far more than the kernels themselves; on a GPU
+# host the full suite is ~110s, on CPU it is ~70s. Benchmarks or
+# scripts that legitimately need GPU can override this by exporting
+# ``JAX_PLATFORMS`` before invoking pytest.
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
+
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
