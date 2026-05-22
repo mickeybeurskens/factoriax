@@ -40,7 +40,7 @@ class ResourceBrush:
 
     mode: str = "exact"
     exact_value: int = BLOCK_MAX_RESOURCES
-    range_min: int = 0
+    range_min: int = 1
     range_max: int = BLOCK_MAX_RESOURCES
 
 

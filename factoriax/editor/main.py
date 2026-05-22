@@ -90,7 +90,7 @@ from factoriax.ui.window import calculate_window_size
 
 _PAN_SPEED = 1.0
 _RES_STEP = 10
-_MIN_RES = 0
+_MIN_RES = 1
 
 _DIR_CYCLE = [
     int(Direction.DOWN),
@@ -492,22 +492,25 @@ def _handle_toolbar_click(
         ts.brush.mode = "range" if ts.brush.mode == "exact" else "exact"
     elif hit.action == "edit_res_exact":
         return NumberInputDialog(
-            label=f"Amount (0-{BLOCK_MAX_RESOURCES}):",
+            label=f"Amount ({_MIN_RES}-{BLOCK_MAX_RESOURCES}):",
             text="",
+            min_value=_MIN_RES,
             max_value=BLOCK_MAX_RESOURCES,
             default=ts.brush.exact_value,
         )
     elif hit.action == "edit_res_min":
         return NumberInputDialog(
-            label=f"Min (0-{BLOCK_MAX_RESOURCES}):",
+            label=f"Min ({_MIN_RES}-{BLOCK_MAX_RESOURCES}):",
             text="",
+            min_value=_MIN_RES,
             max_value=BLOCK_MAX_RESOURCES,
             default=ts.brush.range_min,
         )
     elif hit.action == "edit_res_max":
         return NumberInputDialog(
-            label=f"Max (0-{BLOCK_MAX_RESOURCES}):",
+            label=f"Max ({_MIN_RES}-{BLOCK_MAX_RESOURCES}):",
             text="",
+            min_value=_MIN_RES,
             max_value=BLOCK_MAX_RESOURCES,
             default=ts.brush.range_max,
         )
