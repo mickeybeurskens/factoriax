@@ -145,7 +145,7 @@ The full test list, all expected to run in well under a second total:
    patch positions. Generator runs as plain JAX numpy ops — no env
    compile.
 3. **Procgen invariants** — across **5** sampled keys (not 100):
-   every level has all five required ore blocks present, no patches
+   every level has all six required ore blocks present, no patches
    overlap, no patch overlaps spawn or the furnace/assembler tiles,
    and every patch is at least `forbid_radius` from spawn (Chebyshev).
    Five keys is enough to catch a broken generator with high
@@ -226,9 +226,9 @@ contract, those existing tests catch it.
 
 - 16x16 square map. Spawn at the centre, `(8, 8)`.
 - No pre-placed devices.
-- Five 2x2 patches are placed procedurally: iron, copper, tin,
-  silicon, coal. Patch positions are sampled uniformly per PRNG key
-  with rejection sampling so:
+- Six 2x2 patches are placed procedurally: iron, copper, tin,
+  silicon, coal, limestone. Patch positions are sampled uniformly per
+  PRNG key with rejection sampling so:
   - No two patches overlap.
   - No patch overlaps the spawn or the furnace/assembler tiles.
   - Every patch sits at least `forbid_radius=1` tile away from spawn
@@ -346,7 +346,8 @@ status flag (**v1** = wired in the first easy-rocket release;
 1. **Mine 1 Ore** — agent holds ≥1 of any raw ore (iron, copper,
    tin, silicon, or coal). Status: **v1**. Trivial inventory sum.
 2. **Mine 1 Ore of each** — agent holds ≥1 of every raw ore type
-   present on the map (iron, copper, tin, silicon, coal). Status:
+   present on the map (iron, copper, tin, silicon, coal, limestone).
+   Status:
    **v1**. Per-type inventory check.
 3. **Mine 10 Ore of each** — agent holds ≥10 of each ore needed to
    craft a miner. Tracing the base recipes, the miner needs

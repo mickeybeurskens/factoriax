@@ -192,8 +192,8 @@ adjustments and the smelt/intermediate fill-in as their own work.
 
 **Description:** Pure function returning a `Level`. Takes a
 `jax.Array` PRNG key and produces a 16x16 map with a player at the
-centre `(8, 8)`, no pre-placed machines, and five 2x2 ore patches
-(iron, copper, tin, silicon, coal) placed by uniform sampling with
+centre `(8, 8)`, no pre-placed machines, and six 2x2 ore patches
+(iron, copper, tin, silicon, coal, limestone) placed by uniform sampling with
 rejection. Reject samples where (a) the patch overlaps another
 placed patch, (b) the patch overlaps the spawn or its
 `forbid_radius=1` Chebyshev ring.
@@ -214,7 +214,7 @@ mis-tuned `forbid_radius`; mean attempts will be ~1).
   (`np.array_equal` across every array field).
 - Two calls with different keys produce different ore positions in
   at least one patch on most samples.
-- All five ore block types are present in the returned level's
+- All six ore block types are present in the returned level's
   block map.
 - No patch overlaps the spawn tile or its 3x3 forbidden zone.
 
@@ -223,7 +223,7 @@ mis-tuned `forbid_radius`; mean attempts will be ~1).
 - `test_build_level_determinism` — same key → equal `Level`.
 - `test_build_level_keys_vary` — across 5 keys, at least one patch
   position differs from key 0.
-- `test_build_level_invariants` — across 5 keys, all five ores
+- `test_build_level_invariants` — across 5 keys, all six ores
   present, no patch overlaps spawn, no patches overlap each other.
 
 **Files:** `factoriax/scenarios/easy_rocket.py` (extended),

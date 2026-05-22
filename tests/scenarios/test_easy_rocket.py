@@ -2,12 +2,54 @@
 
 from __future__ import annotations
 
-from factoriax.constants import ItemType
+import jax
+import numpy as np
+import pytest
+
+from factoriax.constants import BlockType, ItemType
+from factoriax.levels import Level
 from factoriax.recipes import RecipeBook, RecipeTable
 from factoriax.scenarios.easy_rocket import (
     EASY_ROCKET_RECIPE_BOOK,
     EASY_ROCKET_RECIPE_TABLE,
+    build_easy_rocket_level,
 )
+
+_SPAWN: tuple[int, int] = (8, 8)
+_FORBID_RADIUS: int = 1
+_MAP_SIZE: int = 16
+
+_ORE_BLOCKS: frozenset[int] = frozenset(
+    {
+        int(BlockType.IRON),
+        int(BlockType.COPPER),
+        int(BlockType.TIN),
+        int(BlockType.SILICON),
+        int(BlockType.COAL),
+        int(BlockType.LIMESTONE),
+    }
+)
+
+
+def _levels_equal(a: Level, b: Level) -> bool:
+    if (a.name, a.map_width, a.map_height) != (b.name, b.map_width, b.map_height):
+        return False
+    for field in (
+        "block_map",
+        "block_resources",
+        "machine_types",
+        "machine_directions",
+        "machine_inventory",
+        "machine_selected_recipe",
+    ):
+        av = getattr(a, field)
+        bv = getattr(b, field)
+        if (av is None) != (bv is None):
+            return False
+        if av is not None and not np.array_equal(av, bv):
+            return False
+    return a.player_positions == b.player_positions
+
 
 _EXPECTED_OUTPUTS: frozenset[int] = frozenset(
     {
@@ -54,3 +96,45 @@ def test_recipe_book_rocket_takes_hull_and_engine_unit() -> None:
         assert not (input_set & forbidden), (
             f"Recipe {recipe.name!r} references forbidden input {forbidden & input_set}"
         )
+
+
+def test_build_level_dimensions() -> None:
+    level = build_easy_rocket_level(jax.random.PRNGKey(0))
+    assert level.map_width == _MAP_SIZE
+    assert level.map_height == _MAP_SIZE
+    assert level.player_positions == [_SPAWN]
+    assert level.machine_types is None
+
+
+def test_build_level_determinism() -> None:
+    key = jax.random.PRNGKey(42)
+    assert _levels_equal(build_easy_rocket_level(key), build_easy_rocket_level(key))
+
+
+def test_build_level_keys_vary() -> None:
+    base = build_easy_rocket_level(jax.random.PRNGKey(0))
+    found_difference = False
+    for seed in (1, 2, 3, 4, 5):
+        other = build_easy_rocket_level(jax.random.PRNGKey(seed))
+        if not np.array_equal(base.block_map, other.block_map):
+            found_difference = True
+            break
+    assert found_difference
+
+
+def test_build_level_has_all_ore_types() -> None:
+    level = build_easy_rocket_level(jax.random.PRNGKey(7))
+    present = {int(b) for b in np.unique(level.block_map).tolist()}
+    assert _ORE_BLOCKS.issubset(present)
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
+def test_build_level_patches_avoid_spawn(seed: int) -> None:
+    level = build_easy_rocket_level(jax.random.PRNGKey(seed))
+    sx, sy = _SPAWN
+    for ty in range(sy - _FORBID_RADIUS, sy + _FORBID_RADIUS + 1):
+        for tx in range(sx - _FORBID_RADIUS, sx + _FORBID_RADIUS + 1):
+            block = int(level.block_map[ty, tx])
+            assert block not in _ORE_BLOCKS, (
+                f"Patch overlaps spawn zone at ({tx}, {ty}); seed={seed}"
+            )

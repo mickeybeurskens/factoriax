@@ -11,7 +11,7 @@ parallel. Slices 4, 5, 6 are sequential.
 
 ## Slice 1 — Recipe book
 
-- [ ] 1.1 Define `EASY_ROCKET_RECIPE_BOOK` with exactly the eight
+- [x] 1.1 Define `EASY_ROCKET_RECIPE_BOOK` with exactly the eight
       user-owned recipes: `MINER`, `ASSEMBLER`, `CONVEYOR_BELT`,
       `SPLITTER`, `CROSSING`, `HULL`, `ENGINE_UNIT` copied from
       `BASE_RECIPES`, plus a rewired
@@ -24,11 +24,12 @@ parallel. Slices 4, 5, 6 are sequential.
 
 ## Slice 2 — Level builder
 
-- [ ] 2.1 Implement `build_easy_rocket_level(key)`: 16x16 map, spawn
-      at (8, 8), five 2x2 ore patches placed by uniform sampling with
-      rejection, `forbid_radius=1` ring around spawn. Tests:
-      dimensions, determinism, key variation, invariants (all ores
-      present, no overlaps). (M)
+- [x] 2.1 Implement `build_easy_rocket_level(key)`: 16x16 map, spawn
+      at (8, 8), six 2x2 ore patches (iron, copper, tin, silicon,
+      coal, limestone) placed by uniform sampling with rejection,
+      `forbid_radius=1` ring around spawn. Tests: dimensions,
+      determinism, key variation, invariants (all ores present, no
+      overlaps). (M)
 
 ## Slice 3 — Shared condition helpers
 
