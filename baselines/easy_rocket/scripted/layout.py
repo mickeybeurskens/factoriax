@@ -103,6 +103,23 @@ class BeltPlan:
 
 
 @dataclasses.dataclass(frozen=True)
+class CrossingPlan:
+    """One crossing tile carrying two perpendicular flows.
+
+    ``ent_direction`` follows the convention in
+    ``factoriax/belts.py::CROSSING_AXIS_DIRS``:
+
+    - 1: vertical N→S + horizontal W→E
+    - 2: vertical N→S + horizontal E→W
+    - 3: vertical S→N + horizontal W→E
+    - 4: vertical S→N + horizontal E→W
+    """
+
+    pos: tuple[int, int]
+    ent_direction: int
+
+
+@dataclasses.dataclass(frozen=True)
 class FactoryLayout:
     """Full factory blueprint produced by :func:`plan_factory`."""
 
@@ -110,9 +127,37 @@ class FactoryLayout:
     assemblers: tuple[AssemblerPlan, ...]
     arms: tuple[ArmPlan, ...]
     belts: tuple[BeltPlan, ...]
+    crossings: tuple[CrossingPlan, ...]
     rocket_tile: tuple[int, int]
     valid: bool
     error: str | None
+
+
+# Map (vertical_flow_dir, horizontal_flow_dir) -> CROSSING ent_direction.
+# Matches CROSSING_AXIS_DIRS in factoriax/belts.py.
+_CROSSING_DIR_BY_FLOWS: dict[tuple[int, int], int] = {
+    (int(Direction.DOWN), int(Direction.RIGHT)): 1,
+    (int(Direction.DOWN), int(Direction.LEFT)): 2,
+    (int(Direction.UP), int(Direction.RIGHT)): 3,
+    (int(Direction.UP), int(Direction.LEFT)): 4,
+}
+
+
+def _is_horizontal(direction: int) -> bool:
+    """True for LEFT or RIGHT (the horizontal axis)."""
+    return direction in (int(Direction.LEFT), int(Direction.RIGHT))
+
+
+def _crossing_direction(facing_a: int, facing_b: int) -> int:
+    """Encode two perpendicular flow directions into CROSSING ent_direction.
+
+    Arguments may be in either order — one horizontal, one vertical.
+    """
+    if _is_horizontal(facing_a):
+        horiz, vert = facing_a, facing_b
+    else:
+        vert, horiz = facing_a, facing_b
+    return _CROSSING_DIR_BY_FLOWS[(vert, horiz)]
 
 
 # ---------------------------------------------------------------------------
@@ -283,50 +328,85 @@ def _bfs_belt_route(
     start: tuple[int, int],
     end: tuple[int, int],
     reserved: set[tuple[int, int]],
-) -> list[tuple[int, int]] | None:
+    belt_tile_facing: dict[tuple[int, int], int] | None = None,
+) -> tuple[list[tuple[int, int]], set[tuple[int, int]]] | None:
     """Find a BFS path of free tiles from ``start`` to ``end``.
 
     Tiles in ``reserved`` are off-limits except for ``start`` and
     ``end`` themselves (the endpoints are typically machine positions
-    occupied by miners / assemblers — the path is the belt tiles
-    *between* them). Returns the intermediate tiles only (excludes
-    both endpoints). Returns ``None`` if no route exists.
+    occupied by miners / assemblers).
+
+    If ``belt_tile_facing`` is supplied, tiles already occupied by a
+    single belt may be crossed via a CROSSING, provided the new
+    route's axis at that tile is perpendicular to the existing belt's
+    facing and the new route passes straight through (no turn at the
+    crossing).
+
+    Returns ``(path, crossing_tiles)``: ``path`` is the intermediate
+    tiles (excluding both endpoints), ``crossing_tiles`` is the
+    subset of path tiles where a CROSSING is needed. Returns
+    ``None`` if no route exists.
     """
-    came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
-    frontier: deque[tuple[int, int]] = deque([start])
-    found = False
+    belt_tile_facing = belt_tile_facing or {}
+
+    # State is (tile, direction_into_tile). The direction is needed
+    # to enforce pass-through at crossing tiles (you can't turn at a
+    # crossing).
+    state_t = tuple[tuple[int, int], int | None]
+    initial: state_t = (start, None)
+    came_from: dict[state_t, state_t | None] = {initial: None}
+    frontier: deque[state_t] = deque([initial])
+    found_state: state_t | None = None
     while frontier:
-        cur = frontier.popleft()
-        if cur == end:
-            found = True
+        cur_state = frontier.popleft()
+        cur_tile, in_dir = cur_state
+        if cur_tile == end:
+            found_state = cur_state
             break
-        for dx, dy in _DIR_OFFSETS.values():
-            nx, ny = cur[0] + dx, cur[1] + dy
-            nxt = (nx, ny)
-            if nxt in came_from:
+        # At a crossing tile (entered) the only valid continuation is
+        # the same direction we arrived from (straight through).
+        if in_dir is not None and cur_tile in belt_tile_facing and cur_tile != start:
+            allowed_dirs = [in_dir]
+        else:
+            allowed_dirs = list(_DIR_OFFSETS.keys())
+        for d in allowed_dirs:
+            dx, dy = _DIR_OFFSETS[d]
+            nx, ny = cur_tile[0] + dx, cur_tile[1] + dy
+            nxt_tile = (nx, ny)
+            nxt_state: state_t = (nxt_tile, d)
+            if nxt_state in came_from:
                 continue
-            if nxt == end:
-                came_from[nxt] = cur
-                frontier.append(nxt)
+            if nxt_tile == end:
+                came_from[nxt_state] = cur_state
+                frontier.append(nxt_state)
                 continue
-            if nxt in reserved:
+            # Crossing-eligible tile: passable only if perpendicular
+            # to the existing belt's facing.
+            if nxt_tile in belt_tile_facing:
+                existing = belt_tile_facing[nxt_tile]
+                if _is_horizontal(d) == _is_horizontal(existing):
+                    continue  # parallel — can't share
+                came_from[nxt_state] = cur_state
+                frontier.append(nxt_state)
+                continue
+            if nxt_tile in reserved:
                 continue
             if not tile_free(state, nx, ny):
                 continue
-            came_from[nxt] = cur
-            frontier.append(nxt)
-    if not found:
+            came_from[nxt_state] = cur_state
+            frontier.append(nxt_state)
+    if found_state is None:
         return None
-    path: list[tuple[int, int]] = []
-    cur = end
-    while came_from[cur] is not None:
-        prev = came_from[cur]
-        assert prev is not None
-        path.append(cur)
-        cur = prev
-    path.reverse()
-    # Drop the endpoint; intermediates are the belt tiles.
-    return path[:-1]
+    # Walk back through the came_from chain.
+    path_states: list[state_t] = []
+    s: state_t | None = found_state
+    while s is not None and came_from[s] is not None:
+        path_states.append(s)
+        s = came_from[s]
+    path_states.reverse()
+    path = [ps[0] for ps in path_states][:-1]  # drop the end tile
+    crossing_tiles = {p for p in path if p in belt_tile_facing}
+    return path, crossing_tiles
 
 
 def _describe_blocked_tile(
@@ -436,6 +516,7 @@ def _invalid(error: str) -> FactoryLayout:
         assemblers=(),
         arms=(),
         belts=(),
+        crossings=(),
         rocket_tile=(0, 0),
         valid=False,
         error=error,
@@ -526,9 +607,45 @@ def _try_layout(
     # ---- Place factory miners + route their input belts (interleaved) ----
     # For each factory job, try patch tiles in order of distance to
     # the consuming assembler. Commit the first (tile, route) pair
-    # that BFS can find. This handles cramped layouts where a fixed
-    # tile choice would leave the miner with no route out.
-    belt_plans: list[BeltPlan] = []
+    # that BFS can find. Routes may pass through existing perpendicular
+    # belts, upgrading them to crossings on materialisation.
+    belts_by_tile: dict[tuple[int, int], BeltPlan] = {}
+    crossing_plans: list[CrossingPlan] = []
+    belt_tile_facing: dict[tuple[int, int], int] = {}
+
+    def _commit_route(
+        path: list[tuple[int, int]],
+        crossing_tiles: set[tuple[int, int]],
+        dest: tuple[int, int],
+        label: str,
+    ) -> None:
+        """Materialise a routed path into belts and crossings."""
+        for i, pos in enumerate(path):
+            next_tile = path[i + 1] if i + 1 < len(path) else dest
+            new_facing = _direction_between(pos, next_tile)
+            if pos in crossing_tiles:
+                # Upgrade the existing belt to a CROSSING. The old
+                # belt's facing combined with the new flow direction
+                # determines the CROSSING's ent_direction.
+                existing_facing = belt_tile_facing.pop(pos)
+                del belts_by_tile[pos]
+                crossing_plans.append(
+                    CrossingPlan(
+                        pos=pos,
+                        ent_direction=_crossing_direction(existing_facing, new_facing),
+                    )
+                )
+                reserved_by[pos] = f"crossing ({label})"
+            else:
+                belts_by_tile[pos] = BeltPlan(pos=pos, facing=new_facing)
+                belt_tile_facing[pos] = new_facing
+                _reserve(
+                    pos,
+                    f"input belt ({label})"
+                    if "input" in label
+                    else f"output belt ({label})",
+                )
+
     for ore, role, consumer in miner_jobs:
         if role != "factory":
             continue
@@ -544,13 +661,14 @@ def _try_layout(
         candidates.sort(key=lambda t: abs(t[0] - asm_pos[0]) + abs(t[1] - asm_pos[1]))
         chosen_pos: tuple[int, int] | None = None
         chosen_path: list[tuple[int, int]] | None = None
+        chosen_crossings: set[tuple[int, int]] | None = None
         last_failure: str | None = None
         for cand in candidates:
             # Tentatively reserve the candidate so BFS doesn't route
             # through the miner's own tile, then route.
             reserved.add(cand)
-            path = _bfs_belt_route(state, cand, asm_pos, reserved)
-            if path is None:
+            result = _bfs_belt_route(state, cand, asm_pos, reserved, belt_tile_facing)
+            if result is None:
                 last_failure = _bfs_failure_message(
                     state,
                     cand,
@@ -564,11 +682,10 @@ def _try_layout(
                 continue
             # Commit.
             chosen_pos = cand
-            chosen_path = path
-            # Keep the reservation; also label it.
+            chosen_path, chosen_crossings = result
             reserved_by[cand] = f"factory miner ({ItemType(ore).name})"
             break
-        if chosen_pos is None or chosen_path is None:
+        if chosen_pos is None or chosen_path is None or chosen_crossings is None:
             return _invalid(
                 f"could not place {ItemType(ore).name} factory miner feeding "
                 f"{ItemType(consumer).name}; last attempt:\n{last_failure}"
@@ -583,13 +700,12 @@ def _try_layout(
                 consumer_recipe_output=consumer,
             )
         )
-        new_belts = _belts_along(chosen_path, dest=asm_pos)
-        belt_plans.extend(new_belts)
-        for b in new_belts:
-            _reserve(
-                b.pos,
-                f"input belt ({ItemType(ore).name} -> {ItemType(consumer).name})",
-            )
+        _commit_route(
+            chosen_path,
+            chosen_crossings,
+            dest=asm_pos,
+            label=f"input {ItemType(ore).name} -> {ItemType(consumer).name}",
+        )
 
     # ---- Materialise arm plans from the pre-reserved slots ----
     arm_plans: list[ArmPlan] = []
@@ -623,12 +739,16 @@ def _try_layout(
         dx, dy = _DIR_OFFSETS[arm.facing]
         start_pos = (arm.pos[0] + dx, arm.pos[1] + dy)
         dst_asm = assembler_plans[asm_idx_by_output[target]]
-        path = _bfs_belt_route(state, start_pos, dst_asm.pos, reserved)
-        if path is None:
+        result = _bfs_belt_route(
+            state, start_pos, dst_asm.pos, reserved, belt_tile_facing
+        )
+        if result is None:
             # Fall back to starting from the arm's own tile in case
             # the forward step is blocked.
-            path = _bfs_belt_route(state, arm.pos, dst_asm.pos, reserved)
-        if path is None:
+            result = _bfs_belt_route(
+                state, arm.pos, dst_asm.pos, reserved, belt_tile_facing
+            )
+        if result is None:
             label = (
                 f"{ItemType(src_asm.recipe_output).name} output belt -> "
                 f"{ItemType(target).name} assembler"
@@ -638,19 +758,20 @@ def _try_layout(
                     state, start_pos, dst_asm.pos, reserved, reserved_by, label
                 )
             )
-        new_belts = _belts_along(path, dest=dst_asm.pos)
-        belt_plans.extend(new_belts)
-        for b in new_belts:
-            _reserve(
-                b.pos,
-                f"output belt ({ItemType(src_asm.recipe_output).name})",
-            )
+        path, crossing_tiles = result
+        _commit_route(
+            path,
+            crossing_tiles,
+            dest=dst_asm.pos,
+            label=f"output {ItemType(src_asm.recipe_output).name}",
+        )
 
     return FactoryLayout(
         miners=tuple(miner_plans),
         assemblers=tuple(assembler_plans),
         arms=tuple(arm_plans),
-        belts=tuple(belt_plans),
+        belts=tuple(belts_by_tile.values()),
+        crossings=tuple(crossing_plans),
         rocket_tile=rocket_tile,
         valid=True,
         error=None,
