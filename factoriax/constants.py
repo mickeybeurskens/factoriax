@@ -170,21 +170,6 @@ BLOCK_TO_ITEM: dict[int, int] = {
     BlockType.LIMESTONE: ItemType.LIMESTONE,
 }
 
-# Human-readable display names for each MachineType.
-MACHINE_TYPE_NAMES: dict[int, str] = {
-    int(MachineType.NONE): "None",
-    int(MachineType.MINER): "Miner",
-    int(MachineType.PALLET): "Pallet",
-    int(MachineType.ASSEMBLER): "Assembler",
-    int(MachineType.CONVEYOR_BELT): "Conveyor Belt",
-    int(MachineType.ARM): "Arm",
-    int(MachineType.ROCKET): "Rocket",
-    int(MachineType.FURNACE): "Furnace",
-    int(MachineType.SCIENCE_LAB): "Science Lab",
-    int(MachineType.SPLITTER): "Splitter",
-    int(MachineType.CROSSING): "Crossing",
-}
-
 # Recipes are defined in factoriax.recipes (single source of truth).
 from factoriax.recipes import (  # noqa: E402, F401
     BASE_RECIPES,

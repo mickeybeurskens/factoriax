@@ -18,7 +18,6 @@ import pygame
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
-    MACHINE_TYPE_NAMES,
     MAX_MACHINE_STACK_SIZE,
     ItemType,
     MachineType,
@@ -28,6 +27,7 @@ from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.icons import render_item_icon
+from factoriax.ui.labels import MACHINE_TYPE_NAMES
 
 _BG = (22, 22, 22, 228)
 _BORDER = (190, 165, 55, 255)

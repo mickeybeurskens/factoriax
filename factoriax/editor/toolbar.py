@@ -14,7 +14,6 @@ import pygame
 from factoriax.constants import (
     MACHINE_SLOT_ROLES,
     MACHINE_TO_ITEM_ARRAY,
-    MACHINE_TYPE_NAMES,
     BlockType,
     ItemType,
     MachineType,
@@ -27,6 +26,7 @@ from factoriax.ui.icons import (
     get_textures,
     render_item_icon,
 )
+from factoriax.ui.labels import MACHINE_TYPE_NAMES
 from factoriax.ui.primitives import ClickRegion
 
 TOOLBAR_WIDTH = 120
