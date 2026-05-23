@@ -691,10 +691,15 @@ def _try_layout(
                 f"{ItemType(consumer).name}; last attempt:\n{last_failure}"
             )
         used_tiles_by_ore[ore].add(chosen_pos)
+        # Factory miners face toward the first tile in their output
+        # belt chain (or directly at the assembler if there's no
+        # intermediate belt). Items produced by the miner flow into
+        # that tile, which is the start of the belt to the consumer.
+        first_downstream = chosen_path[0] if chosen_path else asm_pos
         miner_plans.append(
             MinerPlan(
                 pos=chosen_pos,
-                facing=int(Direction.RIGHT),
+                facing=_direction_between(chosen_pos, first_downstream),
                 role="factory",
                 source_ore=ore,
                 consumer_recipe_output=consumer,

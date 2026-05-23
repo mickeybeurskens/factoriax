@@ -1,16 +1,17 @@
-"""Drive a scripted policy through one easy_rocket episode.
+"""Drive the scripted agent through one easy_rocket episode.
 
-Minimal plumbing: builds the easy_rocket env the same way the PPO
-training script does, runs a user-supplied policy step-by-step until
-``done`` or ``max_timesteps``, and writes the rollout to mp4. No
-registry, plots, or W&B integration yet — those land with the new
-scripted-agent structure.
+Builds the easy_rocket env, constructs the
+:class:`~baselines.easy_rocket.scripted.agent.ScriptedAgent` from the
+initial state, runs it tick-by-tick to ``done`` or
+``max_timesteps``, then writes the rollout to mp4 plus a per-phase
+status report.
 
 Usage::
 
     uv run python -m baselines.easy_rocket.scripted.runner
+    uv run python -m baselines.easy_rocket.scripted.runner --seed 7
     uv run python -m baselines.easy_rocket.scripted.runner \\
-        --out-dir /tmp/easy_rocket_scripted --no-save-video
+        --out-dir /tmp/scripted --no-save-video
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
 import factoriax
@@ -43,18 +43,6 @@ logger = logging.getLogger("easy_rocket_scripted")
 #: Signature every scripted policy implements. State-reader: takes the
 #: full ``EnvState`` and returns the chosen action as a JAX scalar.
 ScriptedPolicy = Callable[[EnvState, EnvParams], jax.Array]
-
-
-def noop_policy(state: EnvState, params: EnvParams) -> jax.Array:
-    """Floor baseline. Always returns ``Action.NOOP``.
-
-    Useful for measuring what the bench scores under "the agent does
-    nothing" — the achievement reward should be zero, the player
-    inventory should stay empty, and the rocket scenario obviously
-    never completes.
-    """
-    del state, params
-    return jnp.asarray(int(Action.NOOP))
 
 
 def _make_env_and_state(
@@ -127,16 +115,23 @@ def main() -> None:
     parser.add_argument(
         "--out-dir",
         type=str,
-        default="runs/easy_rocket_scripted/noop",
+        default="runs/easy_rocket_scripted",
         help="Directory for the rollout video.",
     )
     parser.add_argument("--no-save-video", action="store_true")
     parser.add_argument("--video-fps", type=int, default=30)
     args = parser.parse_args()
 
+    from baselines.easy_rocket.scripted.agent import (  # noqa: PLC0415
+        ScriptedAgent,
+    )
+
+    _, init_state, _ = _make_env_and_state(args.seed, args.max_timesteps)
+    agent = ScriptedAgent(init_state, EASY_ROCKET_RECIPE_TABLE)
+
     t0 = time.perf_counter()
     states, actions = run_policy(
-        noop_policy, seed=args.seed, max_timesteps=args.max_timesteps
+        agent, seed=args.seed, max_timesteps=args.max_timesteps
     )
     elapsed = time.perf_counter() - t0
 
@@ -156,10 +151,19 @@ def main() -> None:
         100.0 * action_counts[top1] / max(1, len(actions)),
         elapsed,
     )
+    logger.info("Phase report:")
+    for name, ok, ticks in agent.report.phase_outcomes:
+        logger.info(
+            "  %-40s %s  ticks=%d",
+            name,
+            "OK" if ok else "FAIL",
+            ticks,
+        )
+    if agent.report.halted:
+        logger.info("HALTED: %s", agent.report.halt_reason)
 
     if not args.no_save_video:
-        out_dir = Path(args.out_dir)
-        _save_video(states, out_dir / "rollout.mp4", args.video_fps)
+        _save_video(states, Path(args.out_dir) / "rollout.mp4", args.video_fps)
 
 
 if __name__ == "__main__":
