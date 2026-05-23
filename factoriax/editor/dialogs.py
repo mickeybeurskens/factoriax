@@ -20,12 +20,11 @@ from factoriax.constants import (
     MACHINE_SLOT_ROLES,
     MACHINE_TYPE_NAMES,
     MAX_MACHINE_STACK_SIZE,
-    SLOT_ROLE_COLORS,
-    SLOT_ROLE_LABELS,
     ItemType,
     MachineType,
     SlotRole,
 )
+from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.icons import render_item_icon

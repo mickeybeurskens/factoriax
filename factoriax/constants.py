@@ -600,18 +600,3 @@ MACHINE_SLOT_ROLES = np.array(
     ],
     dtype=np.int32,
 )
-
-SLOT_ROLE_LABELS: dict[int, str] = {
-    0: "",
-    1: "IN",
-    2: "OUT",
-    3: "STORE",
-    4: "FUEL",
-}
-SLOT_ROLE_COLORS: dict[int, tuple[int, int, int]] = {
-    0: (40, 40, 40),
-    1: (190, 120, 40),
-    2: (40, 170, 140),
-    3: (80, 115, 175),
-    4: (200, 60, 60),
-}

@@ -15,10 +15,9 @@ from factoriax.constants import (
     MACHINE_TYPE_NAMES,
     MAX_MACHINE_INVENTORY_SLOTS,
     NUM_INVENTORY_SLOTS,
-    SLOT_ROLE_COLORS,
-    SLOT_ROLE_LABELS,
     ItemType,
 )
+from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.editor.state import (
     EditorState,
     InvTarget,
