@@ -8,12 +8,12 @@ from pathlib import Path
 import numpy as np
 
 from factoriax.constants import (
-    BLOCK_PIXEL_SIZE,
     ITEM_TO_MACHINE,
     BlockType,
     Direction,
     ItemType,
 )
+from factoriax.ui.theme import BLOCK_PIXEL_SIZE
 
 ASSETS_PATH = Path(__file__).parent.parent / "assets"
 

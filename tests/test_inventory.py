@@ -5,7 +5,6 @@ from jax import random
 
 from factoriax import ItemType
 from factoriax.constants import (
-    BLOCK_PIXEL_SIZE,
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
 )
@@ -13,6 +12,7 @@ from factoriax.jax_renderer import JaxRenderer
 from factoriax.levels import generate_state
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.state import EnvParams
+from factoriax.ui.theme import BLOCK_PIXEL_SIZE
 
 
 class TestInventoryState:

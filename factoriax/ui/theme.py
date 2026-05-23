@@ -11,6 +11,10 @@ UI scale factor. Color constants are scale-independent.
 
 UI_SCALE: int = 1
 
+# Base render resolution: pixels per block at 1x scale. Default tile and
+# texture size for the renderer and icon generation.
+BLOCK_PIXEL_SIZE: int = 32
+
 # ---------------------------------------------------------------------------
 # Base values at 1x scale (private, never imported directly)
 # ---------------------------------------------------------------------------
