@@ -47,9 +47,12 @@ from baselines.ppo.normalization import (
     normalize_obs,
     update_running_stats,
 )
+from factoriax.analysis.eval import EvalRollout, generate_eval_plots
+from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
 from factoriax.levels import build_state
 from factoriax.scenarios.easy_rocket import (
+    EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     EASY_ROCKET_RECIPE_TABLE,
     MAX_EASY_ROCKET_SCORE,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
@@ -71,6 +74,26 @@ logger = logging.getLogger(__name__)
 # the soft ceiling the policy can hit is 9. Surface both numbers in
 # logs so a plateau at 9 reads as expected, not a bug.
 REACHABLE_ACHIEVEMENTS: int = 9
+
+# Display labels for the 13 easy_rocket achievements, in the order the
+# scenario's ``easy_rocket_conditions`` stacks them. The four belt-
+# network stubs are labelled explicitly so the unreachable-by-design
+# bits are easy to spot in the achievement-timing plot.
+EASY_ROCKET_ACHIEVEMENT_LABELS: tuple[str, ...] = (
+    "has_any_raw_ore",
+    "has_each_raw_ore",
+    "ten_of_each_miner_craft_ore",
+    "has_miner_in_inventory",
+    "has_assembler_in_inventory",
+    "has_belt_in_inventory",
+    "miner_on_ore",
+    "stub_belt_0",
+    "three_ore_types_under_miners",
+    "stub_belt_1",
+    "stub_belt_2",
+    "stub_belt_3",
+    "rocket_placed",
+)
 
 
 @dataclasses.dataclass
@@ -166,6 +189,236 @@ def _make_env_and_state(config: Config) -> tuple[Any, EnvState, EnvParams]:
     return env, state0, env_params
 
 
+def _resolve_out_dir(config: Config) -> Any:
+    """Return the directory where final artifacts are written.
+
+    Uses ``config.out_dir`` when set; otherwise derives
+    ``runs/easy_rocket_ppo/{wandb_run_name or "default"}``.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    if config.out_dir is not None:
+        return Path(config.out_dir)
+    name = config.ppo.wandb_run_name or "default"
+    return Path("runs") / "easy_rocket_ppo" / name
+
+
+def _save_final_model(
+    path: Any,
+    params: Any,
+    obs_stats: RunningStats,
+    config: Config,
+) -> None:
+    """Serialize params + obs_stats to msgpack and config to sibling JSON."""
+    from pathlib import Path  # noqa: PLC0415
+
+    import orjson  # noqa: PLC0415
+    from flax import serialization  # type: ignore[import-untyped]
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "params": params,
+        "obs_stats": {
+            "count": np.asarray(obs_stats.count),
+            "mean": np.asarray(obs_stats.mean),
+            "var": np.asarray(obs_stats.var),
+        },
+    }
+    path.write_bytes(serialization.msgpack_serialize(payload))
+    config_path = path.with_suffix(".config.json")
+    config_path.write_bytes(
+        orjson.dumps(
+            dataclasses.asdict(config),
+            option=orjson.OPT_INDENT_2 | orjson.OPT_SERIALIZE_NUMPY,
+        ),
+    )
+
+
+def _render_eval_episode(
+    config: Config,
+    env: Any,
+    env_params: EnvParams,
+    initial_state: EnvState,
+    network: ActorCritic,
+    params: Any,
+    obs_stats: RunningStats,
+) -> EvalRollout:
+    """Run one eval episode and return collected artifacts.
+
+    Python-side per-step loop so the underlying ``EnvState`` can be
+    snapshotted at every tick for rendering and trajectory analysis.
+    Fine here because the eval is a one-shot ~2000-step rollout, not
+    a hot path.
+    """
+    jit_step = jax.jit(env.step_env)
+    jit_apply = jax.jit(network.apply)
+    rng = jax.random.PRNGKey(config.ppo.seed + 4242)
+    state = initial_state
+
+    frames: list[np.ndarray] = [compose_frame_with_inventory(state)]
+    env_states: list[Any] = [state]
+    ach_per_step: list[np.ndarray] = [np.asarray(state.achievements_unlocked)]
+    actions_log: list[int] = []
+
+    for _ in range(env_params.max_timesteps):
+        obs = env.get_obs(state, env_params)
+        norm = normalize_obs(obs_stats, obs) if config.ppo.normalize_obs else obs
+        logits, _ = jit_apply(params, norm)
+        rng, k_act = jax.random.split(rng)
+        action = jax.random.categorical(k_act, logits)
+        rng, k_step = jax.random.split(rng)
+        _, state, _, done, _ = jit_step(k_step, state, action, env_params)
+        actions_log.append(int(action))
+        frames.append(compose_frame_with_inventory(state))
+        env_states.append(state)
+        ach_per_step.append(np.asarray(state.achievements_unlocked))
+        if bool(done):
+            break
+
+    return EvalRollout(
+        frames=frames,
+        actions=np.asarray(actions_log, dtype=np.int32),
+        env_states=env_states,
+        ach_per_step=np.stack(ach_per_step, axis=0),
+    )
+
+
+def _finalize_artifacts(
+    config: Config,
+    env: Any,
+    env_params: EnvParams,
+    initial_state: EnvState,
+    network: ActorCritic,
+    params: Any,
+    obs_stats: RunningStats,
+    wandb_run: Any | None,
+    current_step: int,
+) -> None:
+    """Write final model + rollout video + analysis plots.
+
+    Runs strictly after training completes; never touches the hot
+    loop. Uploads the model, video, and PNGs as W&B Artifacts and
+    inline images when ``wandb_run is not None``.
+    """
+    out_dir = _resolve_out_dir(config)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = None
+    if config.save_final_model:
+        model_path = out_dir / "final_model.msgpack"
+        _save_final_model(model_path, params, obs_stats, config)
+        logger.info("Saved final model: %s", model_path)
+
+    video_path = None
+    plot_paths: dict[str, Any] = {}
+    ach_mask = None
+
+    if config.save_final_video:
+        logger.info("Rendering final eval rollout...")
+        rollout = _render_eval_episode(
+            config,
+            env,
+            env_params,
+            initial_state,
+            network,
+            params,
+            obs_stats,
+        )
+        ach_mask = rollout.final_ach_mask
+
+        video_path = out_dir / "final_rollout.mp4"
+        try:
+            assert rollout.frames is not None
+            write_video(video_path, rollout.frames, config.video_fps)
+            logger.info(
+                "Saved final rollout video: %s (%d frames, %d unique actions)",
+                video_path,
+                len(rollout.frames),
+                int(np.unique(rollout.actions).size),
+            )
+        except ImportError:
+            logger.error("imageio[ffmpeg] missing; final video skipped.")
+            video_path = None
+
+        plot_paths = generate_eval_plots(
+            rollout,
+            out_dir,
+            achievement_labels=list(EASY_ROCKET_ACHIEVEMENT_LABELS),
+            num_achievements=NUM_EASY_ROCKET_ACHIEVEMENTS,
+            title_prefix="Final rollout",
+        )
+        for name, path in plot_paths.items():
+            logger.info("Saved %s plot: %s", name, path)
+
+    if wandb_run is None:
+        return
+
+    import wandb  # noqa: PLC0415  # type: ignore[import-untyped]
+
+    run_id = getattr(wandb_run, "id", "run")
+
+    if model_path is not None:
+        artifact = wandb.Artifact(f"easy-rocket-ppo-model-{run_id}", type="model")
+        artifact.add_file(str(model_path))
+        wandb_run.log_artifact(artifact)
+        logger.info("Uploaded model artifact to wandb.")
+
+    if video_path is not None:
+        vid_artifact = wandb.Artifact(f"easy-rocket-ppo-video-{run_id}", type="video")
+        vid_artifact.add_file(str(video_path))
+        wandb_run.log_artifact(vid_artifact)
+        wandb_run.log(
+            {
+                "final/rollout": wandb.Video(
+                    str(video_path),
+                    fps=config.video_fps,
+                    format="mp4",
+                ),
+            },
+            step=current_step,
+        )
+        logger.info("Uploaded video artifact + inline video to wandb.")
+
+    if plot_paths:
+        plots_artifact = wandb.Artifact(
+            f"easy-rocket-ppo-plots-{run_id}",
+            type="analysis",
+        )
+        inline: dict[str, Any] = {}
+        for name, path in plot_paths.items():
+            plots_artifact.add_file(str(path))
+            inline[f"final/plots/{name}"] = wandb.Image(str(path))
+        wandb_run.log_artifact(plots_artifact)
+        wandb_run.log(inline, step=current_step)
+        logger.info("Uploaded %d analysis plot(s) to wandb.", len(plot_paths))
+
+    if ach_mask is not None:
+        unlocked_labels = [
+            EASY_ROCKET_ACHIEVEMENT_LABELS[i]
+            for i in range(NUM_EASY_ROCKET_ACHIEVEMENTS)
+            if bool(ach_mask[i])
+        ]
+        score = float(
+            np.sum(
+                np.asarray(EASY_ROCKET_ACHIEVEMENT_WEIGHTS)[
+                    :NUM_EASY_ROCKET_ACHIEVEMENTS
+                ]
+                * ach_mask[:NUM_EASY_ROCKET_ACHIEVEMENTS]
+            )
+        )
+        unlocked_str = ", ".join(unlocked_labels) if unlocked_labels else "(none)"
+        ach_count = int(ach_mask[:NUM_EASY_ROCKET_ACHIEVEMENTS].sum())
+        wandb_run.log(
+            {
+                "final/achievements_count": ach_count,
+                "final/score": score,
+                "final/unlocked": unlocked_str,
+            },
+            step=current_step,
+        )
+
+
 def train(config: Config) -> dict[str, float]:
     """Train PPO against the easy_rocket scenario and return final metrics."""
     env, initial_state, env_params = _make_env_and_state(config)
@@ -181,6 +434,21 @@ def train(config: Config) -> dict[str, float]:
         ppo.rollout_steps,
         ppo.total_steps // 1000,
     )
+
+    wandb_run = None
+    if ppo.use_wandb:
+        try:
+            import wandb  # type: ignore[import-untyped]
+
+            run_name = ppo.wandb_run_name or "ppo_easy_rocket"
+            wandb_run = wandb.init(
+                project=ppo.wandb_project,
+                name=run_name,
+                config=dataclasses.asdict(config),
+                tags=["easy_rocket", "ppo", "achievement", "global_observation"],
+            )
+        except ImportError:
+            logger.error("wandb not installed. Run: uv add wandb")
 
     network = ActorCritic(
         hidden_dims=ppo.hidden_dims,
@@ -436,6 +704,18 @@ def train(config: Config) -> dict[str, float]:
                 act_str,
             )
 
+            if wandb_run is not None:
+                log_data: dict[str, float] = {
+                    "train/step": float(current_step),
+                    "train/sps": sps,
+                    "train/mean_ep_return": mean_ret,
+                    "train/mean_ep_achievements": mean_ach,
+                    "train/best_achievements_ever": float(best_ach_count_ever),
+                }
+                for k, v in metrics.items():
+                    log_data[f"train/{k}"] = float(v)
+                wandb_run.log(log_data, step=current_step)
+
     elapsed = time.time() - t_start
     mean_ret = float(np.mean(list(ep_returns))) if ep_returns else 0.0
     mean_ach = float(np.mean(list(ep_ach_counts))) if ep_ach_counts else 0.0
@@ -454,6 +734,24 @@ def train(config: Config) -> dict[str, float]:
         best_ach_count_ever,
         total_episodes,
     )
+
+    try:
+        _finalize_artifacts(
+            config=config,
+            env=env,
+            env_params=env_params,
+            initial_state=initial_state,
+            network=network,
+            params=params,
+            obs_stats=obs_stats,
+            wandb_run=wandb_run,
+            current_step=current_step,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Final artifact generation failed (training itself OK).")
+
+    if wandb_run is not None:
+        wandb_run.finish()
 
     return {
         "mean_ep_return": mean_ret,
@@ -477,6 +775,26 @@ def main() -> None:
     )
     parser.add_argument("--max-timesteps", type=int, default=2000)
     parser.add_argument("--no-anneal-lr", action="store_true")
+    parser.add_argument(
+        "--out-dir",
+        type=str,
+        default=None,
+        help=(
+            "Directory for final artifacts (model + video). "
+            "Defaults to runs/easy_rocket_ppo/<wandb_run_name or 'default'>."
+        ),
+    )
+    parser.add_argument(
+        "--no-save-model",
+        action="store_true",
+        help="Skip saving the final model msgpack.",
+    )
+    parser.add_argument(
+        "--no-save-video",
+        action="store_true",
+        help="Skip rendering and saving the final rollout MP4.",
+    )
+    parser.add_argument("--video-fps", type=int, default=30)
     args = parser.parse_args()
 
     ppo = ppo_config_from_args(args)
@@ -484,6 +802,10 @@ def main() -> None:
         ppo=ppo,
         max_timesteps=args.max_timesteps,
         anneal_lr=not args.no_anneal_lr,
+        out_dir=args.out_dir,
+        save_final_model=not args.no_save_model,
+        save_final_video=not args.no_save_video,
+        video_fps=args.video_fps,
     )
     train(config)
 
