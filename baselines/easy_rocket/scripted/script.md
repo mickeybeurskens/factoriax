@@ -30,52 +30,89 @@ suggestions to be reorganized.
 
 ### Success criteria
 
-- On any easy_rocket seed `s ∈ [0, 100)`, the agent reaches
+- **Ore-layout robustness.** On any easy_rocket seed
+  `s ∈ [0, 100)`, the agent reaches
   `state.achievements_unlocked[rocket_placed] == True` within
-  `env_params.max_timesteps = 2000`.
-- Each of the seven phases has a binary success predicate that
-  evaluates against `EnvState` only. The agent halts fail-fast
-  on the first phase whose predicate goes false past its deadline.
-- The runner reports, for every run: the phase outcomes
-  (success/failure/timeout per phase), the tick the rocket placed
-  at, and the final achievement bitmask.
-- No phase hand-mines after phase 2 finishes — all subsequent ore
-  comes from placed miners.
-- The agent works without modifying anything under `factoriax/`
-  or `baselines/easy_rocket/train_ppo.py`. New code lives only
-  under `baselines/easy_rocket/scripted/`.
+  `env_params.max_timesteps = 2000`. Layout-affecting reads come
+  only from `state.map`; no `(x, y)` coordinate is ever hardcoded.
+- **Recipe-book robustness.** The agent solves the rocket goal
+  for any recipe book whose DAG (a) ultimately produces
+  `ItemType.ROCKET`, (b) leaves resolve to ore types present on
+  the map, and (c) keeps `MINER`, `ASSEMBLER`, and
+  `CONVEYOR_BELT` hand-craftable from base ores. The layout
+  planner re-derives the assembler set and per-ore miner count
+  from the runtime `recipe_table`; the phase drivers index into
+  these derived structures, not into hardcoded item names. A
+  smoke test exercises this by passing a tweaked recipe book
+  (e.g. tick counts doubled, an extra intermediate inserted)
+  and confirming the agent still solves.
+- **Phase predicates evaluate against `EnvState` only.** The
+  agent halts fail-fast on the first phase whose predicate goes
+  false past its deadline.
+- **Runner reporting.** For every run: per-phase outcome
+  (success/failure/timeout), the tick the rocket placed at, the
+  final achievement bitmask.
+- **No hand-mining after phase 2.** Subsequent ore comes from
+  placed miners.
+- **Implementation scope.** Code lives only under
+  `baselines/easy_rocket/scripted/`. No modifications to
+  `factoriax/` or `baselines/easy_rocket/train_ppo.py`.
 
-### Recipe arithmetic (binding constraints)
+### Recipe-derived layout (two DAG passes, no throughput math)
 
-The recipe book is fixed and small. The agent's plan is derived
-from it.
+The agent's plan is **derived from the recipe book at runtime**
+by two passes over the recipe DAG. There is no tick-budget
+calculation; phases simply wait for inventory to accumulate
+before proceeding.
+
+**Pass 1 — assemblers in the automated chain.**
+Walk the recipe graph backwards from the target. Every recipe
+encountered becomes one assembler in the automated factory. For
+easy_rocket targeting `ROCKET`:
+
+- `ROCKET` recipe → 1 assembler (consumes HULL + ENGINE_UNIT).
+- `HULL` recipe → 1 assembler (consumes IRON + LIMESTONE).
+- `ENGINE_UNIT` recipe → 1 assembler (consumes COPPER + LIMESTONE).
+- Three assemblers total. The other recipes
+  (MINER, ASSEMBLER, CONVEYOR_BELT, SPLITTER, CROSSING) are
+  hand-crafted by the agent and need no assembler station.
+
+**Pass 2 — miner allocation.**
+For each ore type touched anywhere in the recipe DAG:
 
 ```
-MINER          ← LIMESTONE + COPPER         (6 ticks)
-ASSEMBLER      ← COAL + SILICON             (8 ticks)
-CONVEYOR_BELT  ← COAL + IRON                (4 ticks)
-SPLITTER       ← COPPER + IRON              (4 ticks)
-CROSSING       ← TIN + IRON                 (4 ticks)
-HULL           ← IRON*2 + LIMESTONE*2       (8 ticks)
-ENGINE_UNIT    ← COPPER*2 + LIMESTONE*1     (8 ticks)
-ROCKET         ← HULL*200 + ENGINE_UNIT*200 (5 ticks)
+manual_miners(ore)  = 1                                          # always
+factory_miners(ore) = number of automated assemblers consuming ore
+total(ore)          = manual + factory
 ```
 
-To place one rocket the agent needs 200 hulls and 200 engines.
-That works out to:
+The manual miner is what the agent personally empties to
+hand-craft every machine (more miners, assemblers, belts,
+splitters, crossings). The factory miners feed the automated
+chain via belts. For easy_rocket:
 
-- **IRON**: 400 (hulls) + N_belts + N_splitters + N_crossings
-- **COPPER**: 400 (engines) + N_miners + N_splitters
-- **LIMESTONE**: 400 (hulls) + 200 (engines) + N_miners
-- **COAL**: N_assemblers + N_belts
-- **SILICON**: N_assemblers
-- **TIN**: N_crossings (zero if the belt layout avoids them)
+| ore       | manual | factory consumers      | factory | total |
+|-----------|-------:|------------------------|--------:|------:|
+| IRON      |      1 | HULL                   |       1 |     2 |
+| COPPER    |      1 | ENGINE_UNIT            |       1 |     2 |
+| LIMESTONE |      1 | HULL + ENGINE_UNIT     |       2 |     3 |
+| COAL      |      1 | —                      |       0 |     1 |
+| SILICON   |      1 | —                      |       0 |     1 |
 
-With one assembler producing one item per 8 ticks, 200 hulls in a
-single assembler takes 1600 ticks — already over 80 % of the
-episode budget. The plan therefore needs **multiple assemblers per
-section** running in parallel. With four hull assemblers and four
-engine assemblers, the per-section production tail is ~400 ticks.
+Sum: **9 miners, 0 splitters.** TIN gets a miner only if the
+belt layout uses CROSSING entities.
+
+**Patch capacity.** Each 2x2 ore patch is 4 tiles, so it fits up
+to 4 miners. The LIMESTONE case (3 miners) sits well within
+capacity — no splitter sharing needed.
+
+**No throughput math.**
+The planner stops here. No estimate of "how long the rocket
+takes," no parallelism sizing, no tick-budget allocation. Each
+phase below waits for `EnvState`-readable inventory or
+ent-buffer thresholds before proceeding, so the agent
+automatically adapts to whatever the real production rate ends
+up being.
 
 ### Miner role split
 
@@ -142,8 +179,12 @@ Typecheck:           uv run mypy baselines/easy_rocket/scripted
   - Run `pytest`, `ruff`, `mypy` before each commit. Tests are
     optional per the above; the lint/typecheck gate isn't.
 - **Ask first:**
-  - Any change to the recipe book or
-    `factoriax/scenarios/easy_rocket.py`.
+  - Any change to `factoriax/scenarios/easy_rocket.py` or
+    anything else under `factoriax/`. Note this does **not**
+    include the recipe book at runtime — the agent must already
+    handle arbitrary recipe DAGs that produce `ROCKET`. This
+    boundary is about the engine source tree, not the bench's
+    recipe configuration.
   - Adding action masks to the runner. Easy_rocket has
     `blocked_actions = frozenset()` by design.
   - Any deviation from the seven-phase production order.
@@ -203,13 +244,16 @@ baselines/easy_rocket/scripted/
 Sizes (estimated):
 
 - `agent.py` — 100–150 lines.
-- `layout.py` — 200–300 lines (the hardest module).
+- `layout.py` — 150–250 lines (DAG walk + BFS routing; smaller now
+  that there is no throughput math).
 - `phases.py` — 300–400 lines (seven phases × predicate + driver).
-- `skills.py` — 200–300 lines (movement pathfinding, hand-craft sequences).
+- `skills.py` — 200–300 lines (movement pathfinding, hand-craft
+  sequences).
 - `state_reader.py` — 100–150 lines.
 
-Total ≈ 1000–1500 lines. Larger than the train script. The layout
-planner is the algorithmic centerpiece; the rest is mechanical.
+Total ≈ 850–1250 lines. Larger than the train script but smaller
+than the rocket scripted agent. The wait-and-check phase pattern
+keeps each phase short.
 
 ### Dependency graph
 
@@ -270,218 +314,231 @@ Each entry below pins the driver behaviour, the success predicate,
 the failure-mode signature, and the tick-budget intuition. Predicates
 are written against `EnvState` only.
 
+**Recipe-DAG generalization.** Phases 4–6 are described below
+using easy_rocket's specific intermediates (engine, hull, rocket)
+for readability. The code generalizes: for an arbitrary recipe
+book, the planner produces `layout.sections: list[Section]`, one
+per intermediate recipe in the DAG, plus a `final_section` for
+the recipe whose output equals the target item. Phases 4..(K-1)
+iterate over `layout.sections[0..K-2]` building each intermediate
+section in the order the DAG requires (topologically); the
+penultimate phase builds `final_section`; phase K-1 (the last)
+waits for the target item and places it. For easy_rocket this
+reduces to two intermediate phases (engine + hull, in either
+order) and one final-section phase, matching the seven-phase
+breakdown shown.
+
 #### Phase 1 — Plan factory layout
 
-**Driver.** Pure-Python at phase start (no env action emitted). Reads
-`state.map` to locate the six ore patches by `block_resources > 0`.
-For each patch, identifies the ore type, the 2x2 footprint, and the
-two tile coordinates available for miners. Assigns roles:
+**Driver.** Pure-Python at phase start (no env action emitted).
 
-- LIMESTONE patch → 1 manual miner + 1 factory miner.
-- COPPER patch → 1 manual miner + 1 factory miner.
-- IRON patch → 2 factory miners (high volume).
-- COAL patch → 1 factory miner.
-- SILICON patch → 1 factory miner.
-- TIN patch → 1 factory miner (optional; only if crossings used).
+1. Read `state.map` to locate every ore patch by
+   `block_resources > 0`. Record each patch's ore type and the
+   tile coordinates available for miners.
+2. Walk the `recipe_table` graph backwards from `ROCKET` to
+   compute the assembler set (Pass 1 above) and the miner counts
+   per ore type (Pass 2 above).
+3. Place each ore patch's manual miner on a fixed corner of the
+   patch (e.g. the top-left tile); place factory miners on the
+   remaining patch tiles.
+4. Choose tiles for the three automated assemblers (HULL, ENGINE,
+   ROCKET) using a "near the consuming miners" heuristic plus
+   distance from the spawn zone.
+5. BFS-route belts from each factory miner to its consuming
+   assembler's input side, and from HULL/ENGINE outputs to ROCKET
+   inputs. Tiles consumed by one belt are off-limits for the
+   next.
+6. Reserve a free tile adjacent to the ROCKET assembler's output
+   for the agent to eventually place the `ROCKET` machine.
 
-Plans assembler positions in three sections:
-
-- **Engine section** — four assemblers, fed by belts from the
-  COPPER and LIMESTONE factory miners. Output buffered for the
-  rocket section.
-- **Hull section** — four assemblers, fed by belts from the IRON
-  and LIMESTONE factory miners. Output buffered for the rocket
-  section.
-- **Rocket section** — one assembler, fed by belts from the engine
-  and hull section outputs. Output: one ROCKET item, placed as a
-  machine by the agent.
-
-Plans belt routes from each factory miner to each consuming
-assembler, and from each section's output to the rocket section's
-inputs. Uses a BFS pathfinder on the map's free tiles.
-
-After this is done the first tick, the driver emits `NOOP` and the
-phase succeeds immediately on the next predicate evaluation. No
-in-world action is needed for phase 1.
+Phase 1 emits one `NOOP` and the predicate flips true on the
+next tick.
 
 **Success predicate.** `agent.layout is not None and
-agent.layout.valid` — set by the planner. `valid` is true when:
+agent.layout.valid`. `valid` is true when:
 
-- Every ore type required by the recipe chain has at least one
-  patch present in the map.
-- Every planned miner / assembler / belt position is on a free
-  tile.
-- A path exists from every factory miner to its consuming
-  assembler.
-- A free tile exists for the eventual ROCKET placement adjacent
-  to the rocket-section assembler's output.
+- Every ore type referenced by the recipe DAG has a patch on the
+  map.
+- Every planned miner / assembler / belt / rocket position is on
+  a currently-free tile.
+- BFS found a route for every (factory miner → assembler) pair
+  and every (section output → rocket input) pair.
 
-**Deadline.** 1 tick. Layout planning is in-Python.
+**Deadline.** 1 tick.
 
-**Failure modes.** Map missing an ore type (shouldn't happen for
-easy_rocket but defensible). No path between a miner and its
-intended assembler (rare; report which pair and the tiles
-considered).
+**Failure modes.** Map missing an ore type. BFS can't route a
+belt within the map (in which case the planner relocates the
+assembler closer to its source and retries once; halt if still
+unroutable).
 
-#### Phase 2 — Hand-mine bootstrap resources
+#### Phase 2 — Hand-mine the manual miners
 
-**Driver.** Walk to each critical ore patch (LIMESTONE, COPPER) and
-hand-mine the per-tile blocks. Uses the navigate + `Action.MINE`
-sub-skills. Bootstrap target inventory:
+**Driver.** Hand-mine the **only** thing this phase produces:
+the `layout.manual_miners` set. For each manual miner that means
+1 LIMESTONE + 1 COPPER (from the `MINER` recipe). The agent
+alternates `navigate_to(ore_patch)` and `Action.MINE` until
+inventory holds N × LIMESTONE + N × COPPER, where N is the
+number of manual miners, then fires `CRAFT_MINER × N`.
 
-- LIMESTONE: 5 (for 5 miners)
-- COPPER: 5 (for 5 miners)
-- COAL: 2 (for 1 first assembler + 2 first belts)
-- SILICON: 1 (for the first assembler)
-- IRON: 2 (for the first 2 belts)
+Belts, splitters, and assemblers are **not** crafted here. Each
+section (Phase 4 / 5 / 6) crafts the belts and the one assembler
+it needs, on demand, from material the manual miners have
+delivered by then.
 
-After the inventory threshold is met, hand-craft the bootstrap:
+**Success predicate.** Player inventory holds N `ItemType.MINER`,
+where N = `len(layout.manual_miners)`. The predicate watches
+inventory directly — it does not estimate how long mining will
+take.
 
-- `CRAFT_MINER × 5` (consumes 5 LIMESTONE + 5 COPPER).
-- `CRAFT_ASSEMBLER × 1` (consumes 1 COAL + 1 SILICON).
-- `CRAFT_CONVEYOR_BELT × 2` (consumes 2 COAL + 2 IRON).
+**Deadline.** 1000-tick safety cap so a broken navigation never
+burns the whole episode silently. In practice the phase finishes
+in well under 200 ticks.
 
-**Success predicate.** Player inventory holds 5 MINER + 1
-ASSEMBLER + 2 CONVEYOR_BELT items. No remaining LIMESTONE/COPPER
-required to craft them (i.e. they were actually crafted, not just
-mined as raw ore).
+**Failure modes.** Patch geometrically unreachable (planner bug;
+caught by Phase 1 predicate). `CRAFT_MINER` emits but inventory
+doesn't update — defensive predicate catches it.
 
-**Deadline.** 250 ticks. Hand-mining is slow; this is a generous
-budget but should not need anything near it.
+#### Phase 3 — Place manual miners
 
-**Failure modes.** Patch unreachable (should never happen at 16×16
-spawn-centered layouts). Mining yields fewer items than expected
-(possible if patch resources depleted by an earlier place — but
-this is the first phase to mine).
+**Driver.** Walk to each `layout.manual_miners[i].position` and
+place a `MachineType.MINER` facing the patch's resource tile so
+the miner actively extracts. Order doesn't matter; the agent
+picks the nearest unplaced site each tick.
 
-#### Phase 3 — Place bootstrap miners
+**Success predicate.** For every entry in
+`layout.manual_miners`, a `MachineType.MINER` entity exists at
+the expected `(x, y)`.
 
-**Driver.** Walk to each of the 5 designated manual-miner positions
-(2 LIMESTONE + 2 COPPER + 1 IRON or similar, defined in phase 1's
-layout). Place a miner at each, facing a direction that puts the
-output side over the patch tile so it actively mines.
+**Deadline.** 200-tick safety cap.
 
-**Success predicate.** 5 MachineType.MINER entities exist, each
-sitting on a tile whose `block_resources > 0`.
-
-**Deadline.** 100 ticks.
-
-**Failure modes.** Targeted tile not free (a tree or another entity
-landed there since planning). The planner re-checks free-tile
-status at place time and falls back to a contingency tile if
-possible; if no fallback, halt.
+**Failure modes.** Targeted tile not free (re-checked at place
+time). Halt with the failing position recorded.
 
 #### Phase 4 — Build engine section
 
-**Driver.** Loop until the engine section is fully built:
+**Driver.** Loop:
 
-1. Walk to a manual miner with non-empty `ent_buf`. Pick up.
-2. Craft (hand) any needed COPPER+LIMESTONE-based items for the
-   section's bootstrap: more belts (CONVEYOR_BELT), splitters if
-   the layout uses them, the section's four assemblers.
-3. Walk to each engine-section position from layout, place the
-   appropriate machine, face it correctly.
-4. Walk to each engine-section factory miner position, place
-   miners on COPPER and LIMESTONE patches there (these miners feed
-   the engine section assemblers via belts).
+1. Check inventory against what the engine section still needs
+   to be fully built (the 1 ENGINE assembler + its belts + its
+   COPPER and LIMESTONE factory miners).
+2. If inventory is short of any item, walk to a manual miner with
+   non-empty `ent_buf` for the relevant ore, pick up, then
+   hand-craft the missing item. Repeat until inventory holds the
+   full engine-section bill of materials.
+3. Once inventory is complete: walk and place each engine-section
+   entity — factory miners on their patches, belts along the
+   planned route, the ENGINE assembler. Face each correctly.
 
-**Success predicate.** All four engine-section assemblers exist at
-their layout-prescribed tiles. All engine-section belts exist on
-their prescribed paths. Engine factory miners exist on COPPER and
-LIMESTONE patches. At least one engine-section assembler has
-non-zero `ent_asm_in_count` for both COPPER and LIMESTONE (the
-belt is actually flowing).
+The "wait for resources" step uses no time estimate; it just
+polls inventory and the manual miners' buffers each tick.
 
-**Deadline.** 400 ticks.
+**Success predicate.**
+- Engine factory miners exist at layout positions on COPPER and
+  LIMESTONE patches.
+- Engine-section belt entities exist at every layout-prescribed
+  position.
+- ENGINE assembler exists at its layout tile.
+- At least one engine-section assembler shows non-zero
+  `ent_asm_in_count` for both COPPER and LIMESTONE — confirming
+  the belt is actually flowing material in, not just placed.
 
-**Failure modes.** Manual miner runs dry before phase finishes (the
-planner under-budgeted the bootstrap; halt and report which
-material the agent is short on). Tile occupation conflict.
+**Deadline.** 600-tick safety cap.
+
+**Failure modes.** Manual miner sits empty too long (mining
+saturation lower than expected; agent walks between miners
+emptying each but inventory never reaches target). Halt and
+report the binding ore. Tile occupation conflict at place time.
 
 #### Phase 5 — Build hull section
 
-**Driver.** Mirror of phase 4 with IRON+LIMESTONE inputs and
-hull-section positions. Reuses skills and the layout's hull-section
-plan.
+**Driver.** Mirror of phase 4 with IRON + LIMESTONE inputs and
+hull-section positions. The agent inventories what's needed,
+walks the manual miners until inventory has it, then places
+the HULL assembler, its factory miners (IRON and LIMESTONE),
+and the connecting belts.
 
-**Success predicate.** Hull-section assemblers + belts + factory
-miners (IRON and LIMESTONE) placed and connected. At least one
-hull-section assembler showing non-zero `ent_asm_in_count` for
-both IRON and LIMESTONE.
+**Success predicate.** Hull factory miners exist on IRON and
+LIMESTONE patches at layout positions; hull-section belts
+placed; HULL assembler placed; the assembler shows non-zero
+`ent_asm_in_count` for both IRON and LIMESTONE.
 
-**Deadline.** 400 ticks.
+**Deadline.** 600-tick safety cap.
 
 #### Phase 6 — Build rocket section
 
-**Driver.** Build the final assembler that takes HULL+ENGINE_UNIT
-inputs (one per recipe call, batched 200 times). Lay belts from
-the engine-section output buffer and the hull-section output
-buffer to this assembler. The agent does not need to place
-additional miners.
+**Driver.** Same wait-craft-place pattern, but now the inputs
+are the HULL and ENGINE_UNIT items being produced upstream — no
+miners are placed in this phase. The agent waits for the engine
+and hull sections to start producing (visible via their
+assemblers' `ent_asm_out_count` > 0), then crafts the belts
+that carry HULL and ENGINE_UNIT from the upstream sections into
+the ROCKET assembler. Finally places the ROCKET assembler and
+the belts.
 
-**Success predicate.** Rocket-section assembler exists at its
-prescribed tile. Belts from engine and hull sections terminate
-adjacent to the rocket-section assembler's input sides. The
-assembler's `ent_asm_in_count[HULL]` is non-zero or the upstream
-sections have visible hull/engine output ready to flow.
+**Success predicate.** ROCKET assembler exists at its layout
+tile. Belts from the hull and engine sections terminate at the
+ROCKET assembler's input sides. The assembler shows non-zero
+`ent_asm_in_count` for either HULL or ENGINE_UNIT (whichever
+the upstream produced first).
 
-**Deadline.** 200 ticks.
+**Deadline.** 400-tick safety cap.
 
-#### Phase 7 — Wait for rocket production
+#### Phase 7 — Wait for rocket, then place it
 
-**Driver.** Emit `NOOP` every tick. The agent's job in phase 7 is
-strictly to wait — production happens autonomously now. The only
-exception: once `ItemType.ROCKET` appears in the player's
-inventory (or in a pallet adjacent to the rocket-section
-assembler), the agent walks to it, picks it up, and places it as
-a `MachineType.ROCKET`.
+**Driver.** Two sub-modes:
 
-**Success predicate.** `_count_machines(state, MachineType.ROCKET)
->= 1` (the same predicate easy_rocket's `rocket_placed`
-achievement uses).
+1. **Waiting**: emit `NOOP`. Watch the ROCKET assembler's
+   `ent_asm_out_count` (and the player inventory, in case a
+   pallet routes the rocket back). The factory runs autonomously
+   at this point.
+2. **Placing**: once an `ItemType.ROCKET` is reachable (in the
+   ROCKET assembler's output buffer or in the player's
+   inventory), navigate to it, pick it up, and place it as a
+   `MachineType.ROCKET` at the layout's reserved rocket tile.
 
-**Deadline.** Whatever remains of the 2000-tick episode budget
-after the earlier phases. In practice this is the bulk of the
-time.
+**Success predicate.** `_count_machines(state,
+MachineType.ROCKET) >= 1` (matches the `rocket_placed`
+achievement's predicate).
 
-**Failure modes.** Production stalls (assembler input dries up).
-The driver logs the most-recent ent_asm_in counts so the failure
-trace points to which intermediate ran out.
+**Deadline.** Whatever remains of the 2000-tick episode budget.
+
+**Failure modes.** Production stalls — `ent_asm_in_count` on
+some upstream assembler drops to zero and stays there. The
+driver logs the most recent counts every 100 ticks so the
+failure trace points to which intermediate dried up.
 
 ### Risks
 
-- **A — Layout planner complexity.** Pathfinding belts on a tight
-  16×16 grid with 6 patches + 9 assemblers + several miners is the
-  most likely place to spend a day fighting edge cases. Mitigate
-  by starting with the simplest layout topology (sections arranged
-  in concentric rings or quadrants) and only adding splitter /
-  crossing routing if a path doesn't fit.
+- **A — Belt routing on a 16×16 grid.** With ~9 miners +
+  3 assemblers + the rocket + the belts connecting them, the
+  BFS routing can fail to fit on adversarial seeds. Mitigate by
+  ordering BFS routes longest-first and falling back to splitter
+  shares when capacity is tight.
 - **B — Hand-craft action timing.** Hand-crafting takes ticks
   (per the recipe `ticks` field). The driver must wait between
   `CRAFT_*` calls and verify the item landed in inventory before
-  moving on. Easy to write a busy-wait loop that emits NOOP until
-  inventory updates.
+  moving on. The wait-and-check phase pattern handles this
+  naturally — every phase already polls inventory each tick.
 - **C — Miner output side mechanics.** A miner outputs to its
   facing tile, and only if that tile holds an entity capable of
   receiving (a belt). If the agent places a miner with no belt
-  adjacent yet, the miner's `ent_buf` accumulates locally and is
-  pickable but isn't fed onward. Planner must place the miner's
-  output-side belt *first* (or at least before the buffer
-  saturates).
+  adjacent yet, the miner's `ent_buf` accumulates locally
+  (still pickable by hand). Factory miners must have their
+  output-side belt placed first.
 - **D — Assembler input wiring.** Assemblers have two input slots.
   A belt arriving on an input side deposits items into the slot
   matching that side's role. The planner must know which side is
-  which (helper exists in `factoriax/belts.py`). Get this wrong
-  and the assembler never starts producing.
-- **E — Tile budget.** 16×16 = 256 tiles. Subtract spawn-centered
-  3×3 blocked area (9), 6 ore patches × 4 tiles (24), and you
-  have ~223 free tiles. Nine assemblers + ~12 miners + the rocket
-  + ~50 belts = ~72 entities. Comfortable, but tight enough that
-  the planner can't be lazy.
-- **F — Single-seed overfit.** The agent must work on more than
+  which (helper in `factoriax/belts.py`). Get this wrong and the
+  assembler never starts producing.
+- **E — Single-seed overfit.** The agent must work on more than
   seed 0. Easy to accidentally encode "the LIMESTONE patch is at
   (3, 5)" and have the agent fall over on seed 1. Mitigation: run
   on 5+ seeds before considering any phase done.
+- **F — Bootstrap saturation.** Phase 4–6 wait on manual miners
+  to produce. If the agent walks slowly between miners and the
+  manual miners' `ent_buf` saturates (default cap is small),
+  throughput tanks. Mitigate by emptying buffers eagerly even
+  before the agent needs the items — pickup is cheap.
 
 ---
 
@@ -541,7 +598,7 @@ Sizes: S (~30–90 min), M (~1–3 hours).
 - [ ] **Checkpoint D:** agent reaches `rocket_placed` on seed 0
       within budget. Lint + typecheck clean.
 
-### Phase E — Multi-seed validation
+### Phase E — Multi-seed and multi-recipe validation
 
 - [ ] E.1 (S) Run on seeds 0–4. Record per-seed outcome (rocket
       placed yes/no, tick of placement, failing phase if any).
@@ -550,8 +607,17 @@ Sizes: S (~30–90 min), M (~1–3 hours).
 - [ ] E.3 (S) Once 5/5 succeed, run on seeds 5–19 for a wider
       smoke. Capture the agent's wall-clock and tick-count
       distribution.
-- [ ] **Checkpoint E:** report agent's success rate and
-      tick-cost distribution. Compare to PPO numbers in
+- [ ] E.4 (S) **Recipe-book robustness.** Construct a tweaked
+      recipe book (e.g. all `ticks` doubled; or an extra
+      intermediate inserted; or a recipe input swapped to a
+      different existing ore) and pass it to the agent via a
+      direct `RecipeTable` instantiation in a smoke test. Verify
+      the agent re-derives its plan and still hits
+      `rocket_placed`. Don't write a generator for arbitrary
+      recipe books — just hand-author 2–3 perturbations that
+      cover the cases the planner is supposed to flex on.
+- [ ] **Checkpoint E:** report agent's success rate across seeds
+      and recipe-book perturbations. Compare to PPO numbers in
       `experiments/easy_rocket_ppo_initial.md`.
 
 ### Phase F — Documentation & comparison
