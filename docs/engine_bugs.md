@@ -150,4 +150,122 @@ cleared. The condition never observed a positive value.
 having content signals the assembler produced output. Adjacent to an
 engine bug but the fix is in the benchmark condition (which we own).
 
+## 6. Hand-crafting (`CRAFT_*`) reads the wrong recipe in scenarios with custom recipe tables
+
+**Symptom**: `CRAFT_MINER`, `CRAFT_ARM`, and other `CRAFT_*` actions
+silently NOOP when emitted against a scenario whose recipe table is
+smaller than (or differently ordered from) `BASE_RECIPES`. The action
+returns success, no exception is raised, no log line is emitted, but
+the player's inventory is unchanged.
+
+Reproducible against `EASY_ROCKET_RECIPE_TABLE` (9 recipes in a
+different order from `BASE_RECIPES`'s 26 recipes). The
+`DEFAULT_RECIPE_TABLE` scenarios (rocket benchmark, skills benchmark)
+are unaffected because their tables match `BASE_RECIPES` exactly.
+
+**Minimal reproduction** (clean repo state, no patches applied):
+
+```python
+import jax, jax.numpy as jnp
+import factoriax
+from factoriax.constants import Action, ItemType
+from factoriax.levels import build_state
+from factoriax.scenarios.easy_rocket import (
+    EASY_ROCKET_RECIPE_TABLE,
+    build_easy_rocket_level,
+    easy_rocket_conditions,
+)
+
+level = build_easy_rocket_level(jax.random.PRNGKey(0))
+env, params = factoriax.make(level, obs="global", achievement_fn=easy_rocket_conditions)
+params = params.replace(
+    num_players=1,
+    max_timesteps=2000,
+    recipe_table=EASY_ROCKET_RECIPE_TABLE,
+)
+state = build_state(level, params)
+
+# Give the player enough raw ore for one MINER (recipe: LIMESTONE + SILICON).
+state = state.replace(
+    player_inventory=state.player_inventory
+        .at[0, int(ItemType.LIMESTONE)].set(5)
+        .at[0, int(ItemType.SILICON)].set(5)
+)
+
+_, state, *_ = jax.jit(env.step_env)(
+    jax.random.PRNGKey(0),
+    state,
+    jnp.asarray(int(Action.CRAFT_MINER), dtype=jnp.int32),
+    params,
+)
+
+# Expected: 1 MINER, 4 LIMESTONE, 4 SILICON.
+# Actual:   0 MINER, 5 LIMESTONE, 5 SILICON.
+print(f"MINER={int(state.player_inventory[0, int(ItemType.MINER)])}")
+print(f"LIMESTONE={int(state.player_inventory[0, int(ItemType.LIMESTONE)])}")
+print(f"SILICON={int(state.player_inventory[0, int(ItemType.SILICON)])}")
+```
+
+**Root cause**: `factoriax/game_logic.py:532` computes the recipe
+index from the action directly:
+
+```python
+recipe_idx = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
+```
+
+with `CRAFT_BASE = int(Action.CRAFT_IRON_PLATE) = 21` and
+`NUM_RECIPES = len(BASE_RECIPES) = 26`. For
+`Action.CRAFT_MINER = 31` this gives `recipe_idx = 10` — correct in
+`BASE_RECIPES` (where MINER is at index 10) but **out of bounds** in
+`EASY_ROCKET_RECIPE_TABLE` (8 rows; MINER at index 0). JAX silently
+clamps the gather to the last valid row, so the dispatcher reads
+`table.outputs[7] = ROCKET`, checks ROCKET's affordability (needs 200
+HULL + 200 ENGINE_UNIT), fails (the player has neither), and returns
+without crafting. When the player's materials *do* coincidentally
+match the wrongly-selected recipe's inputs, the wrong item is
+crafted — the failure mode is silently incorrect output rather than
+silent NOOP.
+
+`RecipeTable` already declares a `craft_action_to_recipe` field whose
+docstring explicitly says it exists *"so a future re-ordering can
+rewire the mapping cheaply"*. The dispatcher does not read it. The
+remapping is half-implemented: the field exists and is correctly
+populated for `BASE_RECIPES`-shaped tables (as the identity
+`arange(n)`), but the dispatcher hardwires the identity in
+`game_logic.py` rather than reading the field.
+
+**Impact**: every `CRAFT_*` action is broken for any scenario whose
+recipe set is smaller than or reordered relative to `BASE_RECIPES`.
+PPO training on easy_rocket did not surface this because the high
+entropy of an untrained policy means CRAFT actions are emitted with
+random inputs; the silent NOOP looks no different from "I lacked the
+materials." Achievement chains that require hand-crafted items (e.g.
+`has_miner_in_inventory`, `has_assembler_in_inventory`,
+`has_belt_in_inventory` in easy_rocket) are unreachable from any
+external interface as a result, capping the bench's reachable score.
+
+**Fix not yet landed**. Suggested fix:
+
+1. Edit `factoriax/game_logic.py:532` to read the remapping:
+   ```python
+   craft_offset = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
+   recipe_idx = params.recipe_table.craft_action_to_recipe[craft_offset]
+   ```
+2. Resize `RecipeTable.craft_action_to_recipe` to length `NUM_RECIPES`
+   (currently `n`, the book's recipe count). Populate it by walking
+   each `BASE_RECIPES` slot, looking up whether the book contains a
+   recipe for the same output item, and storing the book's local index
+   (or `-1` for "no recipe").
+3. The dispatcher must no-op when `recipe_idx < 0`. Either gate the
+   `cat=2` branch with a "valid recipe" predicate, or rely on a clamped
+   read combined with an explicit "action is valid" mask.
+
+**Verification after fix**: the reproduction snippet above prints
+`MINER=1` and `LIMESTONE`/`SILICON` drop to `4`. A non-regression
+check should confirm `DEFAULT_RECIPE_TABLE` users still craft
+correctly (`baselines/rocket/scripted/` test suite stays green). Add a
+scenario-level regression test that gives a player the inputs for a
+`CRAFT_MINER` in `EASY_ROCKET_RECIPE_TABLE`, fires the action, and
+asserts the inventory delta.
+
 ## (reserved for further bugs as they surface)
