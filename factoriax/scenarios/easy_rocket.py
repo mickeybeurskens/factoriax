@@ -124,6 +124,12 @@ EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
         name="Crossing",
     ),
     Recipe(
+        output=int(ItemType.ARM),
+        inputs=((int(ItemType.TIN_ORE), 1), (int(ItemType.COPPER_ORE), 1)),
+        ticks=4,
+        name="Arm",
+    ),
+    Recipe(
         output=int(ItemType.HULL),
         inputs=((int(ItemType.IRON_ORE), 2), (int(ItemType.LIMESTONE), 2)),
         ticks=8,
