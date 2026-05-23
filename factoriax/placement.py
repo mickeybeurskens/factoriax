@@ -12,12 +12,16 @@ from factoriax.constants import (
     DIRECTIONS,
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_TO_ITEM_ARRAY,
-    PLACEABLE_ITEMS,
+    PLACEABLE_ITEM_LIST,
     PLAYER_MAX_STACK,
     SOLID_BLOCKS,
     MachineType,
 )
 from factoriax.state import EnvParams, EnvState
+
+# Dense membership array for the placeability check below, projected from
+# the canonical PLACEABLE_ITEM_LIST.
+PLACEABLE_ITEMS = jnp.array(PLACEABLE_ITEM_LIST, dtype=jnp.int32)
 
 
 def get_tile_in_front(

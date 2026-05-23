@@ -224,9 +224,9 @@ class TestScienceConstants:
         assert int(SCIENCE_PACK_INDEX[int(ItemType.EMPTY)]) == -1
 
     def test_science_lab_is_placeable(self) -> None:
-        from factoriax.constants import PLACEABLE_ITEM_SET
+        from factoriax.constants import PLACEABLE_ITEM_LIST
 
-        assert int(ItemType.SCIENCE_LAB) in PLACEABLE_ITEM_SET
+        assert int(ItemType.SCIENCE_LAB) in PLACEABLE_ITEM_LIST
 
     def test_lab_slot_roles(self) -> None:
         """The lab has two INPUT slots in MACHINE_SLOT_ROLES."""

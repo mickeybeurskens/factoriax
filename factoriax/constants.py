@@ -222,22 +222,9 @@ IS_SCIENCE_PACK = (
 # Placeable items and machine mappings
 # ---------------------------------------------------------------------------
 
-PLACEABLE_ITEMS = jnp.array(
-    [
-        ItemType.MINER,
-        ItemType.PALLET,
-        ItemType.CONVEYOR_BELT,
-        ItemType.ASSEMBLER,
-        ItemType.ARM,
-        ItemType.ROCKET,
-        ItemType.FURNACE,
-        ItemType.SCIENCE_LAB,
-        ItemType.SPLITTER,
-        ItemType.CROSSING,
-    ],
-    dtype=jnp.int32,
-)
-
+# Items that place a machine when used, in PLACE_* action / UI palette
+# order. Canonical pure-Python definition; the jnp membership array is
+# built in factoriax.placement, its sole engine consumer.
 PLACEABLE_ITEM_LIST: tuple[int, ...] = (
     int(ItemType.MINER),
     int(ItemType.PALLET),
@@ -251,10 +238,8 @@ PLACEABLE_ITEM_LIST: tuple[int, ...] = (
     int(ItemType.CROSSING),
 )
 
-PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
-
 RESOURCE_ITEM_LIST: tuple[int, ...] = tuple(
-    i for i in range(1, NUM_ITEM_TYPES) if i not in PLACEABLE_ITEM_SET
+    i for i in range(1, NUM_ITEM_TYPES) if i not in PLACEABLE_ITEM_LIST
 )
 
 ITEM_TO_MACHINE = {

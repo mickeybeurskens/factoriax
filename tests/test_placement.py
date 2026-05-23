@@ -6,9 +6,12 @@ import pytest
 
 from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import (
+    ITEM_TO_MACHINE_ARRAY,
+    MACHINE_TO_ITEM_ARRAY,
     MAX_HEALTH,
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
+    PLACEABLE_ITEM_LIST,
     Action,
     MachineType,
 )
@@ -24,6 +27,24 @@ from factoriax.placement import (
     place_machine,
 )
 from factoriax.state import EnvParams
+
+
+def test_placeable_items_are_exactly_the_non_none_machines() -> None:
+    """The placeable set is exactly the items of the non-NONE machines.
+
+    Every placeable item maps to a real machine, and every real machine's
+    item is placeable. This anchors the placeable definition on
+    ``MachineType`` so the two can't drift apart.
+    """
+    placeable = set(PLACEABLE_ITEM_LIST)
+    for item in placeable:
+        assert int(ITEM_TO_MACHINE_ARRAY[item]) != int(MachineType.NONE), (
+            f"placeable item {ItemType(item).name} maps to no machine"
+        )
+    machine_items = {
+        int(MACHINE_TO_ITEM_ARRAY[int(m)]) for m in MachineType if m != MachineType.NONE
+    }
+    assert machine_items == placeable
 
 
 class TestEntHealth:

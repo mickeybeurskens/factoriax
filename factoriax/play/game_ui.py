@@ -32,7 +32,6 @@ from factoriax.constants import (
     DEPOSIT_BASE,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
-    PLACEABLE_ITEMS,
     ROTATE_BASE,
     TURN_RIGHT_MAP,
     Action,
@@ -74,7 +73,7 @@ def _renderer_for(tile_px: int) -> JaxRenderer:
     return renderer
 
 
-_PLACEABLE_ITEM_SET: frozenset[int] = frozenset(int(x) for x in PLACEABLE_ITEMS)
+_PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
 
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.MINER): int(Action.PLACE_MINER),
