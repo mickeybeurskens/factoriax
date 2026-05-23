@@ -21,7 +21,6 @@ from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
-    ITEM_COLORS,
     MACHINE_TYPE_NAMES,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
@@ -51,7 +50,7 @@ from factoriax.ui.compositing import (
 )
 from factoriax.ui.fonts import get_pixel_font  # noqa: F401
 from factoriax.ui.fonts import render_text_rgba as _render_text_rgba  # noqa: F401
-from factoriax.ui.icons import PLAYER_COLORS, render_item_icon
+from factoriax.ui.icons import ITEM_COLORS, PLAYER_COLORS, render_item_icon
 from factoriax.ui.primitives import (
     ClickRegion,  # noqa: F401
     draw_panel,  # noqa: F401

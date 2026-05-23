@@ -9,7 +9,6 @@ import numpy as np
 
 from factoriax.constants import (
     BLOCK_PIXEL_SIZE,
-    ITEM_COLORS,
     ITEM_TO_MACHINE,
     BlockType,
     Direction,
@@ -17,6 +16,41 @@ from factoriax.constants import (
 )
 
 ASSETS_PATH = Path(__file__).parent.parent / "assets"
+
+ITEM_COLORS: dict[int, tuple[int, int, int]] = {
+    ItemType.COAL: (54, 54, 54),
+    ItemType.IRON_ORE: (160, 140, 130),
+    ItemType.COPPER_ORE: (170, 100, 50),
+    ItemType.TIN_ORE: (170, 180, 185),
+    ItemType.SILICON: (80, 105, 140),
+    ItemType.IRON_PLATE: (192, 192, 192),
+    ItemType.COPPER_PLATE: (184, 115, 51),
+    ItemType.TIN_PLATE: (200, 200, 190),
+    ItemType.WAFER: (80, 90, 140),
+    ItemType.FRAME: (140, 150, 165),
+    ItemType.CIRCUIT: (40, 160, 80),
+    ItemType.WIRE: (200, 140, 60),
+    ItemType.MOTOR: (100, 100, 180),
+    ItemType.SENSOR: (180, 80, 80),
+    ItemType.CONVEYOR_BELT: (220, 180, 50),
+    ItemType.MINER: (0, 200, 0),
+    ItemType.ASSEMBLER: (160, 80, 200),
+    ItemType.PALLET: (170, 170, 175),
+    ItemType.ARM: (220, 160, 100),
+    ItemType.BASIC_SCIENCE_PACK: (200, 50, 50),
+    ItemType.ADVANCED_SCIENCE_PACK: (50, 50, 200),
+    ItemType.ROCKET: (240, 240, 240),
+    ItemType.FURNACE: (120, 60, 40),
+    ItemType.REFRACTORY: (210, 170, 120),
+    ItemType.HULL: (150, 160, 170),
+    ItemType.ENGINE_UNIT: (220, 140, 60),
+    ItemType.AVIONICS: (80, 200, 220),
+    ItemType.ROCKET_CORE: (160, 100, 200),
+    ItemType.SCIENCE_LAB: (76, 29, 149),
+    ItemType.LIMESTONE: (215, 200, 165),
+    ItemType.SPLITTER: (240, 195, 70),
+    ItemType.CROSSING: (200, 165, 60),
+}
 
 # ---------------------------------------------------------------------------
 # Block textures
