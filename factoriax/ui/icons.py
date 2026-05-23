@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+from pathlib import Path
 
 import numpy as np
 
@@ -13,8 +14,9 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    load_all_textures,
 )
+
+ASSETS_PATH = Path(__file__).parent.parent / "assets"
 
 # ---------------------------------------------------------------------------
 # Block textures
@@ -92,6 +94,48 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
         tex = _solid_texture(size, rgb)
         _draw_ore_patches(tex, rgb, seed=block_id, crystalline=crystalline)
         textures[block_id] = tex
+    return textures
+
+
+def load_texture(name: str) -> np.ndarray:
+    """Load a texture from the assets directory.
+
+    Args:
+        name: Name of the texture file (without extension).
+
+    Returns:
+        RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4).
+
+    Raises:
+        FileNotFoundError: If the texture file does not exist.
+    """
+    import imageio.v3 as iio
+
+    path = ASSETS_PATH / f"{name}.png"
+    if not path.exists():
+        raise FileNotFoundError(f"Texture not found: {path}")
+    return iio.imread(path)
+
+
+def load_all_textures() -> dict[int, np.ndarray]:
+    """Load all block textures into a dictionary.
+
+    Returns:
+        Dictionary mapping BlockType values to RGBA texture arrays.
+    """
+    textures: dict[int, np.ndarray] = {}
+    texture_names = {
+        BlockType.DIRT: "dirt",
+        BlockType.WATER: "water",
+        BlockType.IRON: "iron",
+        BlockType.COPPER: "copper",
+        BlockType.COAL: "coal",
+        BlockType.TIN: "tin",
+        BlockType.SILICON: "silicon",
+        BlockType.LIMESTONE: "limestone",
+    }
+    for block_type, name in texture_names.items():
+        textures[int(block_type)] = load_texture(name)
     return textures
 
 
