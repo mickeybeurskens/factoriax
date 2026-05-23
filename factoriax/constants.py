@@ -471,28 +471,9 @@ CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
 DEPOSIT_BASE: int = Action.DEPOSIT_COAL
 ROTATE_BASE: int = Action.ROTATE_LEFT
 
-# Maps PLACE_* action offset (0..9) to the ItemType of the machine placed.
-PLACE_ACTION_TO_ITEM = jnp.array(
-    [
-        ItemType.MINER,
-        ItemType.PALLET,
-        ItemType.CONVEYOR_BELT,
-        ItemType.ASSEMBLER,
-        ItemType.ARM,
-        ItemType.ROCKET,
-        ItemType.FURNACE,
-        ItemType.SCIENCE_LAB,
-        ItemType.SPLITTER,
-        ItemType.CROSSING,
-    ],
-    dtype=jnp.int32,
-)
-
-# Maps ROTATE_* action offset (0..3) to Direction values.
-ROTATE_ACTION_TO_DIR = jnp.array(
-    [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
-    dtype=jnp.int32,
-)
+# The PLACE_* / ROTATE_* / CRAFT_* action-offset resolution tables live with
+# the step dispatcher in factoriax.game_logic — they are dispatch wiring, not
+# environment constants.
 
 # ---------------------------------------------------------------------------
 # Block/terrain constants

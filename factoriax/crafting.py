@@ -87,6 +87,12 @@ def craft_recipe(
         Updated state with recipe crafted (or unchanged).
     """
     table = params.recipe_table
+    # ``recipe_idx`` is -1 when the active table has no recipe for the
+    # requested item (e.g. a CRAFT_* action whose output isn't in this
+    # scenario's table). Clamp the gather to a valid row and gate the craft
+    # off ``valid`` so the read is safe and the action no-ops.
+    valid = jnp.asarray(recipe_idx) >= 0
+    recipe_idx = jnp.maximum(jnp.asarray(recipe_idx), 0)
     can_craft = can_afford_recipe(state, params, player_idx, recipe_idx)
 
     output_item = table.outputs[recipe_idx]
@@ -94,7 +100,7 @@ def craft_recipe(
     output_max = PLAYER_MAX_STACK[output_item]
     yield_count = table.output_counts[recipe_idx]
     has_space = output_count + yield_count <= output_max
-    should_craft = can_craft & has_space
+    should_craft = valid & can_craft & has_space
 
     # Consume inputs.
     inv = state.player_inventory[player_idx]

@@ -15,10 +15,8 @@ from factoriax.constants import (
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
-    PLACE_ACTION_TO_ITEM,
     PLACE_BASE,
     PLAYER_MAX_STACK,
-    ROTATE_ACTION_TO_DIR,
     ROTATE_BASE,
     SCIENCE_PACK_INDEX,
     Action,
@@ -36,8 +34,70 @@ from factoriax.placement import (
     place_machine,
     set_machine_direction,
 )
-from factoriax.recipes import NUM_RECIPES
 from factoriax.state import EnvParams, EnvState
+
+# ---------------------------------------------------------------------------
+# Action-dispatch resolution tables
+#
+# Each maps a compound action's offset (``action - <X>_BASE``) to the thing
+# the action refers to. They are private wiring for the step dispatcher in
+# this module, not environment constants, so they live next to the dispatch.
+# ---------------------------------------------------------------------------
+
+# PLACE_* offset (0..9) -> ItemType of the machine placed.
+PLACE_ACTION_TO_ITEM = jnp.array(
+    [
+        ItemType.MINER,
+        ItemType.PALLET,
+        ItemType.CONVEYOR_BELT,
+        ItemType.ASSEMBLER,
+        ItemType.ARM,
+        ItemType.ROCKET,
+        ItemType.FURNACE,
+        ItemType.SCIENCE_LAB,
+        ItemType.SPLITTER,
+        ItemType.CROSSING,
+    ],
+    dtype=jnp.int32,
+)
+
+# ROTATE_* offset (0..3) -> Direction value.
+ROTATE_ACTION_TO_DIR = jnp.array(
+    [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
+    dtype=jnp.int32,
+)
+
+# CRAFT_* offset (0..20) -> ItemType the action crafts. Crafting resolves
+# action -> item here, then item -> recipe row via the active recipe table's
+# ``output_to_recipe`` (-1 when the table has no such recipe). Routing through
+# the output item keeps recipe-list order out of the dispatch entirely, so a
+# scenario with a reordered or subset recipe table craft-dispatches correctly.
+CRAFT_ACTION_TO_ITEM = jnp.array(
+    [
+        ItemType.IRON_PLATE,
+        ItemType.COPPER_PLATE,
+        ItemType.TIN_PLATE,
+        ItemType.WAFER,
+        ItemType.FRAME,
+        ItemType.CIRCUIT,
+        ItemType.WIRE,
+        ItemType.MOTOR,
+        ItemType.SENSOR,
+        ItemType.CONVEYOR_BELT,
+        ItemType.MINER,
+        ItemType.ASSEMBLER,
+        ItemType.PALLET,
+        ItemType.ARM,
+        ItemType.FURNACE,
+        ItemType.BASIC_SCIENCE_PACK,
+        ItemType.ADVANCED_SCIENCE_PACK,
+        ItemType.ROCKET,
+        ItemType.SCIENCE_LAB,
+        ItemType.SPLITTER,
+        ItemType.CROSSING,
+    ],
+    dtype=jnp.int32,
+)
 
 
 def is_position_in_bounds(
@@ -529,7 +589,12 @@ def _handle_player_action(
         Updated environment state.
     """
     # Pre-compute all derived action parameters (cheap indexing).
-    recipe_idx = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
+    # CRAFT dispatch: action -> output item (fixed) -> recipe row in the
+    # active table (-1 when this table has no recipe for that item). Routing
+    # through the item keeps recipe-list order out of the dispatch.
+    craft_offset = jnp.clip(action - CRAFT_BASE, 0, len(CRAFT_ACTION_TO_ITEM) - 1)
+    craft_item = CRAFT_ACTION_TO_ITEM[craft_offset]
+    recipe_idx = params.recipe_table.output_to_recipe[craft_item]
     place_item = PLACE_ACTION_TO_ITEM[
         jnp.clip(action - PLACE_BASE, 0, len(PLACE_ACTION_TO_ITEM) - 1)
     ]

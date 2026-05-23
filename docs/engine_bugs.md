@@ -244,28 +244,23 @@ materials." Achievement chains that require hand-crafted items (e.g.
 `has_belt_in_inventory` in easy_rocket) are unreachable from any
 external interface as a result, capping the bench's reachable score.
 
-**Fix not yet landed**. Suggested fix:
+**Fix landed**: crafting now resolves through the output *item*, not a
+positional recipe index. `factoriax/game_logic.py` defines
+`CRAFT_ACTION_TO_ITEM` (CRAFT_* offset -> output `ItemType`) and the
+dispatcher computes
+`recipe_idx = params.recipe_table.output_to_recipe[CRAFT_ACTION_TO_ITEM[offset]]`
+(`-1` when the active table has no recipe for that item);
+`crafting.py::craft_recipe` no-ops on a negative index. This is a cleaner
+route than the originally-suggested `craft_action_to_recipe` remap — that
+field is left unused (dead plumbing, to be removed when the
+constants/recipes re-export is untangled). Recipe-list order is no longer
+a dispatch join key, so reordered/subset tables craft correctly.
 
-1. Edit `factoriax/game_logic.py:532` to read the remapping:
-   ```python
-   craft_offset = jnp.clip(action - CRAFT_BASE, 0, NUM_RECIPES - 1)
-   recipe_idx = params.recipe_table.craft_action_to_recipe[craft_offset]
-   ```
-2. Resize `RecipeTable.craft_action_to_recipe` to length `NUM_RECIPES`
-   (currently `n`, the book's recipe count). Populate it by walking
-   each `BASE_RECIPES` slot, looking up whether the book contains a
-   recipe for the same output item, and storing the book's local index
-   (or `-1` for "no recipe").
-3. The dispatcher must no-op when `recipe_idx < 0`. Either gate the
-   `cat=2` branch with a "valid recipe" predicate, or rely on a clamped
-   read combined with an explicit "action is valid" mask.
-
-**Verification after fix**: the reproduction snippet above prints
-`MINER=1` and `LIMESTONE`/`SILICON` drop to `4`. A non-regression
-check should confirm `DEFAULT_RECIPE_TABLE` users still craft
-correctly (`baselines/rocket/scripted/` test suite stays green). Add a
-scenario-level regression test that gives a player the inputs for a
-`CRAFT_MINER` in `EASY_ROCKET_RECIPE_TABLE`, fires the action, and
-asserts the inventory delta.
+The `PLACE_*` / `ROTATE_*` / `CRAFT_*` offset-resolution tables also moved
+from `constants.py` to `game_logic.py` (they are dispatch wiring, not
+environment constants). Guarded by the alternate-book dispatch tests in
+`tests/test_recipe_book.py`, which build a reordered/subset recipe book
+and assert every `CRAFT_*` action resolves to a recipe whose output is the
+action's item (absent items resolve to `-1`).
 
 ## (reserved for further bugs as they surface)

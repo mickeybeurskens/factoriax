@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax.constants import ItemType, MachineType
+from factoriax.game_logic import CRAFT_ACTION_TO_ITEM
 from factoriax.recipes import (
     BASE_RECIPE_BOOK,
     BASE_RECIPES,
@@ -188,3 +189,70 @@ def test_furnace_recipes_assigned_furnace_machine_type() -> None:
             f"Recipe {idx} ({ItemType(recipe.output).name}) machine_type "
             f"mismatch: got {int(table.machine_type[idx])}, expected {expected}"
         )
+
+
+def _two_tier_book() -> RecipeBook:
+    """A 4-recipe, 2-tier book whose row order deliberately differs from
+    the CRAFT_* action order.
+
+    Tier 1 smelts ore into plates; tier 2 assembles plates into parts.
+    Rows are scrambled so a positional ``action - CRAFT_BASE`` dispatch
+    would resolve the wrong recipe — only output-keyed resolution gets it
+    right. A subset of craftable items, so the rest must resolve to -1.
+    """
+    iron_plate = Recipe(
+        output=int(ItemType.IRON_PLATE),
+        inputs=((int(ItemType.IRON_ORE), 1), (int(ItemType.COAL), 1)),
+        ticks=2,
+        name="iron-plate",
+    )
+    copper_plate = Recipe(
+        output=int(ItemType.COPPER_PLATE),
+        inputs=((int(ItemType.COPPER_ORE), 1), (int(ItemType.COAL), 1)),
+        ticks=2,
+        name="copper-plate",
+    )
+    wire = Recipe(  # tier 2: consumes a tier-1 plate
+        output=int(ItemType.WIRE),
+        inputs=((int(ItemType.COPPER_PLATE), 1), (int(ItemType.TIN_ORE), 1)),
+        ticks=4,
+        name="wire",
+    )
+    frame = Recipe(  # tier 2: consumes a tier-1 plate
+        output=int(ItemType.FRAME),
+        inputs=((int(ItemType.IRON_PLATE), 2), (int(ItemType.SILICON), 1)),
+        ticks=4,
+        name="frame",
+    )
+    return RecipeBook(recipes=(wire, iron_plate, frame, copper_plate))
+
+
+def _assert_craft_dispatch_resolves_by_output(table: RecipeTable) -> None:
+    """Every CRAFT_* action resolves through ``output_to_recipe`` to a
+    recipe whose output is exactly the action's item; items absent from
+    the table resolve to -1 (the dispatch no-ops). Pure indexing on the
+    table arrays — no env, no step, no JIT."""
+    present = {int(output) for output in table.outputs.tolist()}
+    for offset, item in enumerate(CRAFT_ACTION_TO_ITEM.tolist()):
+        row = int(table.output_to_recipe[item])
+        if item in present:
+            assert row >= 0, f"offset {offset}: {ItemType(item).name} missing"
+            got = ItemType(int(table.outputs[row])).name
+            assert int(table.outputs[row]) == item, (
+                f"offset {offset}: resolved to {got}, expected {ItemType(item).name}"
+            )
+        else:
+            assert row == -1, (
+                f"offset {offset}: absent {ItemType(item).name} should resolve to -1"
+            )
+
+
+def test_craft_dispatch_resolves_by_output_default_book() -> None:
+    """Canonical BASE_RECIPES table: every craft action resolves correctly."""
+    _assert_craft_dispatch_resolves_by_output(DEFAULT_RECIPE_TABLE)
+
+
+def test_craft_dispatch_resolves_by_output_alternate_book() -> None:
+    """A reordered, subset 2-tier book resolves by output item, not list
+    position (engine bug #6 guard)."""
+    _assert_craft_dispatch_resolves_by_output(RecipeTable.from_book(_two_tier_book()))
