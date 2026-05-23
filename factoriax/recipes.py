@@ -245,11 +245,21 @@ class RecipeBook:
                 frozenset(int(item) for item, _ in recipe.inputs),
             )
             if key in seen_keys:
+                other_idx = seen_keys[key]
+                other = self.recipes[other_idx]
+                input_names = ", ".join(ItemType(item).name for item in sorted(key[2]))
                 raise ValueError(
-                    f"Recipe {idx} ({ItemType(recipe.output).name}) shares "
-                    f"input type-set {sorted(key[2])} at arity {key[1]} with "
-                    f"recipe {seen_keys[key]} on machine type {key[0]}. "
-                    f"The Phase 3 forward-match would be ambiguous."
+                    f"Recipe {idx} ({ItemType(recipe.output).name}, "
+                    f"{recipe.name!r}) and recipe {other_idx} "
+                    f"({ItemType(other.output).name}, {other.name!r}) both "
+                    f"consume the input set {{{input_names}}} as "
+                    f"{key[1]}-input recipes on machine "
+                    f"{MachineType(key[0]).name}. The forward-match in "
+                    f"run_combiners dispatches a machine's input buffers to a "
+                    f"recipe by input item-types alone (counts are ignored), "
+                    f"so it cannot tell these two apart. Give one recipe a "
+                    f"distinct input item-type set, or a different number of "
+                    f"input types."
                 )
             seen_keys[key] = idx
 

@@ -76,7 +76,7 @@ def test_unique_input_pair_constraint_raises() -> None:
             name="arm-conflict",
         ),
     )
-    with pytest.raises(ValueError, match="shares input type-set"):
+    with pytest.raises(ValueError, match="both consume the input set"):
         RecipeBook(recipes=same_machine_same_inputs)
 
 
