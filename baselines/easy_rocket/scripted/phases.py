@@ -34,6 +34,7 @@ from baselines.easy_rocket.scripted.layout import (
     CrossingPlan,
     FactoryLayout,
     MinerPlan,
+    PalletPlan,
 )
 from baselines.easy_rocket.scripted.skills import (
     craft_action,
@@ -152,25 +153,39 @@ class PhasePlanLayout(Phase):
 
 
 class PhaseBootstrapMining(Phase):
-    """Hand-mine ores and craft every manual miner.
+    """Hand-mine ores and craft the bootstrap machines.
 
-    The miner recipe takes 1 LIMESTONE + 1 SILICON. The phase
-    interleaves mining and crafting: as soon as we have one of each
-    in inventory, we craft a miner; otherwise we mine whichever ore
-    is shorter.
+    The bootstrap is the manual miners plus one pallet each (the
+    pallet buffers the miner's output). The phase batch-mines every
+    ore the bootstrap recipes need — visiting each patch once — then
+    crafts all miners and pallets. Mining strictly precedes crafting
+    so the ore-gather never thrashes once crafting starts consuming.
     """
 
-    name = "2: bootstrap mining + craft miners"
+    name = "2: bootstrap mining + craft miners/pallets"
     deadline = 1000
 
-    def __init__(self, layout: FactoryLayout, patches: list[OrePatch]) -> None:
+    def __init__(
+        self,
+        layout: FactoryLayout,
+        patches: list[OrePatch],
+        recipe_inputs: RecipeInputs,
+    ) -> None:
         super().__init__(layout, patches)
-        self._n_manual = sum(1 for m in layout.miners if m.role == "manual")
-        # Inputs of the MINER recipe (one of each per miner).
-        self._miner_inputs: tuple[int, int] = (
-            int(ItemType.LIMESTONE),
-            int(ItemType.SILICON),
-        )
+        self._recipe_inputs = recipe_inputs
+        n_manual = sum(1 for m in layout.miners if m.role == "manual")
+        n_pallets = len(layout.pallets)
+        # Bootstrap bill of materials and the total ore it consumes.
+        self._bom: dict[int, int] = {
+            int(ItemType.MINER): n_manual,
+            int(ItemType.PALLET): n_pallets,
+        }
+        self._ore_need: dict[int, int] = {}
+        for item, count in self._bom.items():
+            for inp_item, inp_count in recipe_inputs.get(item, []):
+                self._ore_need[inp_item] = (
+                    self._ore_need.get(inp_item, 0) + count * inp_count
+                )
 
     def _mine(self, state: EnvState, ore_item: int) -> int:
         patch = _patch_for_ore(self.patches, ore_item)
@@ -181,30 +196,32 @@ class PhaseBootstrapMining(Phase):
             return int(Action.NOOP)
         return _walk_face_act(state, tile, int(Action.MINE))
 
+    def _can_craft(self, state: EnvState, item: int) -> bool:
+        return all(
+            inv_count(state, inp) >= cnt
+            for inp, cnt in self._recipe_inputs.get(item, [])
+        )
+
     def step(self, state: EnvState, params: EnvParams) -> int:
         del params
-        n = self._n_manual
-        a, b = self._miner_inputs
-        crafted = inv_count(state, int(ItemType.MINER))
-        if crafted >= n:
+        if self.success(state):
             return int(Action.NOOP)
 
-        # Batch-mine: gather all N of input A, then all N of input B,
-        # before crafting any miner. Visiting each patch exactly once
-        # avoids shuttling. The ``crafted == 0`` guard keeps us from
-        # returning to mining once crafting (which consumes the ores)
-        # has begun.
-        if crafted == 0:
-            if inv_count(state, a) < n:
-                return self._mine(state, a)
-            if inv_count(state, b) < n:
-                return self._mine(state, b)
+        # Phase A — gather ALL ore first (crafting hasn't started yet).
+        crafted_total = sum(inv_count(state, item) for item in self._bom)
+        if crafted_total == 0:
+            for ore, need in self._ore_need.items():
+                if inv_count(state, ore) < need:
+                    return self._mine(state, ore)
 
-        # We hold N of each input (or are mid-crafting) — craft miners.
-        return craft_action(int(ItemType.MINER))
+        # Phase B — craft the bootstrap items.
+        for item, count in self._bom.items():
+            if inv_count(state, item) < count and self._can_craft(state, item):
+                return craft_action(item)
+        return int(Action.NOOP)
 
     def success(self, state: EnvState) -> bool:
-        return inv_count(state, int(ItemType.MINER)) >= self._n_manual
+        return all(inv_count(state, item) >= count for item, count in self._bom.items())
 
 
 logger = logging.getLogger("easy_rocket_scripted.phases")
@@ -350,32 +367,34 @@ class _Placer:
 
 
 class PhasePlaceManualMiners(Phase):
-    """Walk to each manual miner's planned tile and place it.
+    """Place each manual miner and its output pallet.
 
-    Each manual miner sits directly on an ore tile of its patch.
-    Facing matters less for manual miners (the agent drains their
-    buffer by hand), so the planner's RIGHT default is fine — the
-    player just needs to be standing on the correct stand-tile while
-    facing the machine_pos when emitting PLACE_MINER.
+    The manual miner sits on an ore tile and faces its pallet (on an
+    adjacent free tile), pushing mined ore into the pallet's large
+    buffer. The agent later drains the pallet with WITHDRAW. Pallets
+    are placed first so they exist before the miner is oriented at
+    them (cosmetic ordering — rotation works regardless).
     """
 
-    name = "3: place manual miners"
-    deadline = 400
+    name = "3: place manual miners + pallets"
+    deadline = 600
 
     def __init__(self, layout: FactoryLayout, patches: list[OrePatch]) -> None:
         super().__init__(layout, patches)
-        # Manual miners need no facing (drained by hand from any side).
-        targets = [
-            _Target(
-                pos=m.pos,
-                item=int(ItemType.MINER),
-                machine_type=int(MachineType.MINER),
-                facing=None,
+        targets: list[_Target] = []
+        # Pallets first (no facing).
+        for pal in layout.pallets:
+            targets.append(
+                _Target(pal.pos, int(ItemType.PALLET), int(MachineType.PALLET), None)
             )
-            for m in layout.miners
-            if m.role == "manual"
-        ]
-        self._placer = _Placer(targets, label="phase3/manual-miners")
+        # Then manual miners, each facing its pallet.
+        for m in layout.miners:
+            if m.role != "manual":
+                continue
+            targets.append(
+                _Target(m.pos, int(ItemType.MINER), int(MachineType.MINER), m.facing)
+            )
+        self._placer = _Placer(targets, label="phase3/manual-miners+pallets")
 
     def step(self, state: EnvState, params: EnvParams) -> int:
         del params
@@ -389,23 +408,24 @@ class PhasePlaceManualMiners(Phase):
         return f"{self.name} pos={player_pos(state)} pending={pending}"
 
 
-def _pickup_from_miner_step(
-    state: EnvState, miners: list[MinerPlan], wanted_ore: int
+def _withdraw_from_pallet_step(
+    state: EnvState, pallets: tuple[PalletPlan, ...], wanted_ore: int
 ) -> int | None:
-    """Walk + face + PICKUP a manual miner whose buffer has ``wanted_ore``.
+    """Walk + face + WITHDRAW a pallet holding ``wanted_ore``.
 
-    Returns ``None`` if no miner currently holds the wanted ore — the
-    caller should NOOP that tick and check again next tick.
+    Returns ``None`` if no pallet currently holds the wanted ore — the
+    caller should NOOP that tick and check again next tick (the manual
+    miner is still filling it).
     """
-    for miner in miners:
-        if miner.source_ore != wanted_ore:
+    for pal in pallets:
+        if pal.source_ore != wanted_ore:
             continue
-        eidx = entity_at(state, miner.pos[0], miner.pos[1])
+        eidx = entity_at(state, pal.pos[0], pal.pos[1])
         if eidx < 0:
             continue
         buf_type, buf_count = ent_buf_lookup(state, eidx)
         if buf_count > 0 and buf_type == wanted_ore:
-            return _walk_face_act(state, miner.pos, int(Action.WITHDRAW))
+            return _walk_face_act(state, pal.pos, int(Action.WITHDRAW))
     return None
 
 
@@ -458,9 +478,7 @@ class PhaseSection(Phase):
         self._crossings: list[CrossingPlan] = [
             c for c in layout.crossings if c.consumer_recipe_output == section_output
         ]
-        self._manual_miners: list[MinerPlan] = [
-            m for m in layout.miners if m.role == "manual"
-        ]
+        self._pallets: tuple[PalletPlan, ...] = layout.pallets
         # Build placement targets in placement order: assembler first
         # (facing irrelevant), belts downstream-first (reversed),
         # crossings, factory miners last. Belts/crossings/miners
@@ -536,9 +554,7 @@ class PhaseSection(Phase):
                 continue
             for inp_item, inp_count in self._recipe_inputs.get(item, []):
                 if inv_count(state, inp_item) < inp_count:
-                    action = _pickup_from_miner_step(
-                        state, self._manual_miners, inp_item
-                    )
+                    action = _withdraw_from_pallet_step(state, self._pallets, inp_item)
                     if action is not None:
                         return action
         # Everything craftable is crafted — place + orient.
@@ -600,9 +616,7 @@ class PhaseRocketSection(Phase):
         self._crossings: list[CrossingPlan] = [
             c for c in layout.crossings if c.consumer_recipe_output == target
         ]
-        self._manual_miners: list[MinerPlan] = [
-            m for m in layout.miners if m.role == "manual"
-        ]
+        self._pallets: tuple[PalletPlan, ...] = layout.pallets
         # Targets in placement order: assembler, output belts
         # downstream-first (reversed), crossings, arms last (an arm
         # sits upstream of its output belt, so placing it last keeps
@@ -667,9 +681,7 @@ class PhaseRocketSection(Phase):
                 continue
             for inp_item, inp_count in self._recipe_inputs.get(item, []):
                 if inv_count(state, inp_item) < inp_count:
-                    action = _pickup_from_miner_step(
-                        state, self._manual_miners, inp_item
-                    )
+                    action = _withdraw_from_pallet_step(state, self._pallets, inp_item)
                     if action is not None:
                         return action
         return self._placer.next_action(state)
@@ -774,21 +786,18 @@ def build_phases(
     recipe_inputs = _recipe_inputs_from_table(recipe_table)
     phases: list[Phase] = [
         PhasePlanLayout(layout, patches),
-        PhaseBootstrapMining(layout, patches),
+        PhaseBootstrapMining(layout, patches, recipe_inputs),
         PhasePlaceManualMiners(layout, patches),
     ]
     non_target_outputs = [
         a.recipe_output for a in layout.assemblers if a.recipe_output != target
     ]
-    # TEMPORARY: only build the first section (HULL) while debugging the
-    # crossing-flow problem in the later sections. Re-enable the rest by
-    # dropping the [:1] slice and uncommenting the rocket/wait phases.
-    for i, output in enumerate(non_target_outputs[:1]):
+    for i, output in enumerate(non_target_outputs):
         section = PhaseSection(layout, patches, output, recipe_inputs)
         section.name = f"{4 + i}: section {ItemType(output).name}"
         phases.append(section)
-    # phases.append(PhaseRocketSection(layout, patches, target, recipe_inputs))
-    # phases[-1].name = f"{4 + len(non_target_outputs)}: rocket section"
-    # phases.append(PhaseWaitAndPlaceRocket(layout, patches, target))
-    # phases[-1].name = f"{5 + len(non_target_outputs)}: wait + place rocket"
+    phases.append(PhaseRocketSection(layout, patches, target, recipe_inputs))
+    phases[-1].name = f"{4 + len(non_target_outputs)}: rocket section"
+    phases.append(PhaseWaitAndPlaceRocket(layout, patches, target))
+    phases[-1].name = f"{5 + len(non_target_outputs)}: wait + place rocket"
     return phases

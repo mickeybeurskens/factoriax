@@ -131,6 +131,19 @@ class CrossingPlan:
 
 
 @dataclasses.dataclass(frozen=True)
+class PalletPlan:
+    """A pallet buffering a manual miner's output.
+
+    The manual miner faces this pallet and pushes ore into it; the
+    agent drains the pallet with WITHDRAW. ``source_ore`` is the ore
+    type the feeding miner produces.
+    """
+
+    pos: tuple[int, int]
+    source_ore: int
+
+
+@dataclasses.dataclass(frozen=True)
 class FactoryLayout:
     """Full factory blueprint produced by :func:`plan_factory`."""
 
@@ -139,6 +152,7 @@ class FactoryLayout:
     arms: tuple[ArmPlan, ...]
     belts: tuple[BeltPlan, ...]
     crossings: tuple[CrossingPlan, ...]
+    pallets: tuple[PalletPlan, ...]
     rocket_tile: tuple[int, int]
     valid: bool
     error: str | None
@@ -515,6 +529,7 @@ def _invalid(error: str) -> FactoryLayout:
         arms=(),
         belts=(),
         crossings=(),
+        pallets=(),
         rocket_tile=(0, 0),
         valid=False,
         error=error,
@@ -530,6 +545,7 @@ def _try_layout(
     patch_by_ore: dict[int, OrePatch],
     miner_jobs: list[tuple[int, str, int]],
     base_manual_plans: list[MinerPlan],
+    base_pallet_plans: list[PalletPlan],
     asm_positions: dict[int, tuple[int, int]],
 ) -> FactoryLayout:
     """Complete the layout given a specific set of assembler positions.
@@ -552,6 +568,9 @@ def _try_layout(
     for m in base_manual_plans:
         used_tiles_by_ore[m.source_ore].add(m.pos)
         _reserve(m.pos, f"manual miner ({ItemType(m.source_ore).name})")
+    # Reserve the manual miners' pallet tiles so belts route around them.
+    for pal in base_pallet_plans:
+        _reserve(pal.pos, f"pallet ({ItemType(pal.source_ore).name})")
 
     # Reserve the caller-supplied assembler positions.
     assembler_plans: list[AssemblerPlan] = []
@@ -601,6 +620,11 @@ def _try_layout(
             )
         arm_slots[i] = chosen
         _reserve(chosen[0], f"reserved arm slot ({ItemType(asm.recipe_output).name})")
+        # Reserve the arm's output tile too, so an input belt can't
+        # take it — it becomes the first belt of this arm's output run.
+        adx, ady = _DIR_OFFSETS[chosen[1]]
+        out_tile = (chosen[0][0] + adx, chosen[0][1] + ady)
+        _reserve(out_tile, f"reserved arm output ({ItemType(asm.recipe_output).name})")
 
     # ---- Place factory miners + route their input belts (interleaved) ----
     # For each factory job, try patch tiles in order of distance to
@@ -756,12 +780,6 @@ def _try_layout(
             state, start_pos, dst_asm.pos, reserved, belt_tile_facing
         )
         if result is None:
-            # Fall back to starting from the arm's own tile in case
-            # the forward step is blocked.
-            result = _bfs_belt_route(
-                state, arm.pos, dst_asm.pos, reserved, belt_tile_facing
-            )
-        if result is None:
             label = (
                 f"{ItemType(src_asm.recipe_output).name} output belt -> "
                 f"{ItemType(target).name} assembler"
@@ -772,8 +790,13 @@ def _try_layout(
                 )
             )
         path, crossing_tiles = result
+        # The BFS excludes its start tile, but ``start_pos`` is exactly
+        # the tile the arm outputs into — it must hold the first belt,
+        # or there's a one-tile gap between the arm and the chain.
+        # Prepend it.
+        full_path = [start_pos, *path]
         _commit_route(
-            path,
+            full_path,
             crossing_tiles,
             dest=dst_asm.pos,
             label=f"output {ItemType(src_asm.recipe_output).name}",
@@ -786,6 +809,7 @@ def _try_layout(
         arms=tuple(arm_plans),
         belts=tuple(belts_by_tile.values()),
         crossings=tuple(crossing_plans),
+        pallets=tuple(base_pallet_plans),
         rocket_tile=rocket_tile,
         valid=True,
         error=None,
@@ -831,8 +855,15 @@ def plan_factory(
             + ", ".join(ItemType(o).name for o in missing)
         )
 
-    # ---- Place manual miners (same across every backtracking attempt) ----
+    # ---- Place manual miners + their pallets (fixed across every
+    # backtracking attempt) ----
+    # Each manual miner faces an adjacent free tile that holds a
+    # pallet. The miner pushes ore into the pallet (large buffer);
+    # the agent drains the pallet with WITHDRAW. Reserving both the
+    # miner and pallet tiles keeps later belt routing clear of them.
     base_manual_plans: list[MinerPlan] = []
+    base_pallet_plans: list[PalletPlan] = []
+    base_reserved = set()
     manual_used: dict[int, set[tuple[int, int]]] = {ore: set() for ore in ore_items}
     for ore, role, consumer in miner_jobs:
         if role != "manual":
@@ -845,17 +876,35 @@ def plan_factory(
             )
         pos = avail[0]
         manual_used[ore].add(pos)
+        # Choose a pallet tile: an adjacent free (non-ore, unreserved)
+        # tile. The miner faces it.
+        pallet_dir: int | None = None
+        pallet_pos: tuple[int, int] | None = None
+        for d, (dx, dy) in _DIR_OFFSETS.items():
+            cand = (pos[0] + dx, pos[1] + dy)
+            if cand in base_reserved:
+                continue
+            if not tile_free(state, cand[0], cand[1]):
+                continue
+            pallet_dir, pallet_pos = d, cand
+            break
+        if pallet_pos is None or pallet_dir is None:
+            return _invalid(
+                f"no free adjacent tile for {ItemType(ore).name} manual miner's "
+                f"pallet at {pos}"
+            )
         base_manual_plans.append(
             MinerPlan(
                 pos=pos,
-                facing=int(Direction.RIGHT),
+                facing=pallet_dir,
                 role="manual",
                 source_ore=ore,
                 consumer_recipe_output=consumer,
             )
         )
-
-    base_reserved: set[tuple[int, int]] = {m.pos for m in base_manual_plans}
+        base_pallet_plans.append(PalletPlan(pos=pallet_pos, source_ore=ore))
+        base_reserved.add(pos)
+        base_reserved.add(pallet_pos)
 
     # ---- Generate candidate assembler positions ----
     # Each automated assembler gets a handful of candidate positions
@@ -863,7 +912,7 @@ def plan_factory(
     # The product of these lists is searched until one combination
     # yields a complete layout.
     candidates_per_assembler = 16
-    min_assembler_separation = 2
+    min_assembler_separation = 6
     asm_candidates: dict[int, list[tuple[int, int]]] = {}
     for output in automated_outputs:
         consuming_ores = [
@@ -921,6 +970,7 @@ def plan_factory(
             patch_by_ore=patch_by_ore,
             miner_jobs=miner_jobs,
             base_manual_plans=base_manual_plans,
+            base_pallet_plans=base_pallet_plans,
             asm_positions=asm_positions,
         )
         if result.valid:

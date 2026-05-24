@@ -73,6 +73,7 @@ _EXPECTED_OUTPUTS: frozenset[int] = frozenset(
         int(ItemType.SPLITTER),
         int(ItemType.CROSSING),
         int(ItemType.ARM),
+        int(ItemType.PALLET),
         int(ItemType.MINER),
         int(ItemType.HULL),
         int(ItemType.ENGINE_UNIT),
@@ -87,7 +88,7 @@ def test_recipe_book_constructs() -> None:
 
     actual_outputs = frozenset(r.output for r in EASY_ROCKET_RECIPE_BOOK.recipes)
     assert actual_outputs == _EXPECTED_OUTPUTS
-    assert len(EASY_ROCKET_RECIPE_BOOK.recipes) == 9
+    assert len(EASY_ROCKET_RECIPE_BOOK.recipes) == 10
 
 
 def test_recipe_book_rocket_takes_hull_and_engine_unit() -> None:

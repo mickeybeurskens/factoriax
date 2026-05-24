@@ -130,6 +130,12 @@ EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
         name="Arm",
     ),
     Recipe(
+        output=int(ItemType.PALLET),
+        inputs=((int(ItemType.SILICON), 1), (int(ItemType.IRON_ORE), 1)),
+        ticks=4,
+        name="Pallet",
+    ),
+    Recipe(
         output=int(ItemType.HULL),
         inputs=((int(ItemType.IRON_ORE), 2), (int(ItemType.LIMESTONE), 2)),
         ticks=8,
