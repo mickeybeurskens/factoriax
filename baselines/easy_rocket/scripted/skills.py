@@ -18,7 +18,10 @@ from __future__ import annotations
 
 from collections import deque
 
-from baselines.easy_rocket.scripted.state_reader import player_pos, tile_free
+from baselines.easy_rocket.scripted.state_reader import (
+    player_pos,
+    tile_walkable_for_player,
+)
 from factoriax.constants import Action, Direction, ItemType, MachineType
 from factoriax.state import EnvState
 
@@ -45,6 +48,15 @@ DIR_TO_FACE_ACTION: dict[int, int] = {
     int(Direction.RIGHT): int(Action.FACE_RIGHT),
     int(Direction.UP): int(Action.FACE_UP),
     int(Direction.DOWN): int(Action.FACE_DOWN),
+}
+
+# Rotate actions per direction. Each rotates the machine in front of
+# the player to face that direction (absolute, not relative).
+DIR_TO_ROTATE_ACTION: dict[int, int] = {
+    int(Direction.LEFT): int(Action.ROTATE_LEFT),
+    int(Direction.RIGHT): int(Action.ROTATE_RIGHT),
+    int(Direction.UP): int(Action.ROTATE_UP),
+    int(Direction.DOWN): int(Action.ROTATE_DOWN),
 }
 
 # Hand-craftable items and their CRAFT actions. Items that can only
@@ -146,6 +158,11 @@ def face_action(direction: int) -> int:
     return DIR_TO_FACE_ACTION[direction]
 
 
+def rotate_action(direction: int) -> int:
+    """Return the ROTATE_* action that sets the in-front machine to ``direction``."""
+    return DIR_TO_ROTATE_ACTION[direction]
+
+
 def move_action(direction: int) -> int:
     """Return the move action that walks one tile in ``direction``."""
     return DIR_TO_MOVE_ACTION[direction]
@@ -168,6 +185,48 @@ def place_action(item: int) -> int:
         KeyError: When ``item`` is not placeable.
     """
     return ITEM_TO_PLACE_ACTION[item]
+
+
+def step_toward_tile(state: EnvState, tx: int, ty: int, player: int = 0) -> int:
+    """Emit one movement action that brings the player closer to ``(tx, ty)``.
+
+    Unlike :func:`step_toward_adjacent`, the target tile itself must
+    be walkable and the player ends up standing exactly on it. Use
+    when the next action needs the player at a specific stand-tile
+    (e.g. controlled-facing placement).
+    """
+    start = player_pos(state, player)
+    if start == (tx, ty):
+        return int(Action.NOOP)
+    if not tile_walkable_for_player(state, tx, ty):
+        return int(Action.NOOP)
+    came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+    frontier: deque[tuple[int, int]] = deque([start])
+    found = False
+    while frontier:
+        cur = frontier.popleft()
+        if cur == (tx, ty):
+            found = True
+            break
+        for dx, dy in DIR_OFFSETS.values():
+            nx, ny = cur[0] + dx, cur[1] + dy
+            if (nx, ny) in came_from:
+                continue
+            if not tile_walkable_for_player(state, nx, ny):
+                continue
+            came_from[(nx, ny)] = cur
+            frontier.append((nx, ny))
+    if not found:
+        return int(Action.NOOP)
+    step = (tx, ty)
+    while came_from[step] != start:
+        prev = came_from[step]
+        assert prev is not None
+        step = prev
+    direction = direction_to(start, step)
+    if direction is None:
+        return int(Action.NOOP)
+    return move_action(direction)
 
 
 def step_toward_adjacent(state: EnvState, tx: int, ty: int, player: int = 0) -> int:
@@ -197,7 +256,7 @@ def step_toward_adjacent(state: EnvState, tx: int, ty: int, player: int = 0) -> 
             nx, ny = cur[0] + dx, cur[1] + dy
             if (nx, ny) in came_from:
                 continue
-            if not tile_free(state, nx, ny):
+            if not tile_walkable_for_player(state, nx, ny):
                 continue
             came_from[(nx, ny)] = cur
             frontier.append((nx, ny))

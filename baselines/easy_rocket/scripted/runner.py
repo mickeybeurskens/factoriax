@@ -73,12 +73,19 @@ def run_policy(
     policy: ScriptedPolicy,
     seed: int = 0,
     max_timesteps: int = 2000,
+    debug_every: int = 0,
+    agent_for_debug: object | None = None,
 ) -> tuple[list[EnvState], list[int]]:
     """Drive *policy* through one easy_rocket episode.
 
     Steps the JIT'd env, calling *policy* with the current state at
     each tick. Stops at ``done`` or ``max_timesteps``. Returns the
     full state and action trajectories for downstream rendering.
+
+    When ``debug_every > 0`` and ``agent_for_debug`` is a
+    :class:`ScriptedAgent`, the runner logs the agent's per-phase
+    debug status every ``debug_every`` ticks plus once on every
+    phase transition.
     """
     env, state, env_params = _make_env_and_state(seed, max_timesteps)
     jit_step = jax.jit(env.step_env)
@@ -86,9 +93,25 @@ def run_policy(
 
     states: list[EnvState] = [state]
     actions: list[int] = []
+    last_phase = -1
 
-    for _ in range(env_params.max_timesteps):
+    for tick in range(env_params.max_timesteps):
         action = policy(state, env_params)
+        if agent_for_debug is not None and debug_every > 0:
+            cur_phase = getattr(agent_for_debug, "current_phase", -1)
+            phase_changed = cur_phase != last_phase
+            if phase_changed or (tick > 0 and tick % debug_every == 0):
+                phases = getattr(agent_for_debug, "phases", [])
+                if 0 <= cur_phase < len(phases):
+                    ph = phases[cur_phase]
+                    status = ph.debug_status(state)
+                    logger.info(
+                        "  t=%4d a=%-22s %s",
+                        tick,
+                        Action(int(action)).name,
+                        status,
+                    )
+                last_phase = cur_phase
         rng, subkey = jax.random.split(rng)
         _obs, state, _r, done, _info = jit_step(subkey, state, action, env_params)
         actions.append(int(action))
@@ -120,6 +143,12 @@ def main() -> None:
     )
     parser.add_argument("--no-save-video", action="store_true")
     parser.add_argument("--video-fps", type=int, default=30)
+    parser.add_argument(
+        "--debug-every",
+        type=int,
+        default=0,
+        help="Log agent status every N ticks (0 = off). Also logs on phase change.",
+    )
     args = parser.parse_args()
 
     from baselines.easy_rocket.scripted.agent import (  # noqa: PLC0415
@@ -131,7 +160,11 @@ def main() -> None:
 
     t0 = time.perf_counter()
     states, actions = run_policy(
-        agent, seed=args.seed, max_timesteps=args.max_timesteps
+        agent,
+        seed=args.seed,
+        max_timesteps=args.max_timesteps,
+        debug_every=args.debug_every,
+        agent_for_debug=agent,
     )
     elapsed = time.perf_counter() - t0
 

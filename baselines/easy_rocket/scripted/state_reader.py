@@ -120,6 +120,27 @@ def entity_at(state: EnvState, x: int, y: int) -> int:
     return int(np.asarray(state.tile_entity)[y, x])
 
 
+def ent_direction_at(state: EnvState, x: int, y: int) -> int:
+    """Return the ``ent_direction`` of the machine at ``(x, y)``; 0 if none."""
+    eidx = entity_at(state, x, y)
+    if eidx < 0:
+        return 0
+    return int(np.asarray(state.ent_direction)[eidx])
+
+
+def ent_buf(state: EnvState, ent_idx: int) -> tuple[int, int]:
+    """Return ``(buf_type, buf_count)`` for entity ``ent_idx``.
+
+    For miners and pallets, this is the accumulated ore in their
+    buffer. Returns ``(0, 0)`` for a negative index (no entity).
+    """
+    if ent_idx < 0:
+        return 0, 0
+    buf_type = int(np.asarray(state.ent_buf_type)[ent_idx])
+    buf_count = int(np.asarray(state.ent_buf_count)[ent_idx])
+    return buf_type, buf_count
+
+
 def tile_free(state: EnvState, x: int, y: int) -> bool:
     """Return True if ``(x, y)`` is walkable and unoccupied by a machine.
 
@@ -127,7 +148,7 @@ def tile_free(state: EnvState, x: int, y: int) -> bool:
     :data:`_WALKABLE_BLOCKS` (DIRT or INVALID at start) and no machine
     occupies the tile. Ore tiles, water, and out-of-bounds are not
     free. The planner uses this to validate every candidate placement
-    site before committing it.
+    site for a *non-miner* machine.
     """
     map_arr = np.asarray(state.map)
     h, w = map_arr.shape
@@ -136,5 +157,26 @@ def tile_free(state: EnvState, x: int, y: int) -> bool:
     if int(map_arr[y, x]) not in _WALKABLE_BLOCKS:
         return False
     if int(np.asarray(state.machine_types)[y, x]) != int(MachineType.NONE):
+        return False
+    return True
+
+
+def tile_walkable_for_player(state: EnvState, x: int, y: int) -> bool:
+    """Return True if the player can step onto ``(x, y)``.
+
+    Mirrors :func:`factoriax.game_logic.is_position_walkable`: in
+    bounds, not water, and either no machine or a CONVEYOR_BELT
+    (which the player can walk over). Ore tiles are walkable —
+    they're solid block types but not water.
+    """
+    map_arr = np.asarray(state.map)
+    h, w = map_arr.shape
+    if not (0 <= x < w and 0 <= y < h):
+        return False
+    block = int(map_arr[y, x])
+    if block in (int(BlockType.WATER), int(BlockType.OUT_OF_BOUNDS)):
+        return False
+    mt = int(np.asarray(state.machine_types)[y, x])
+    if mt != int(MachineType.NONE) and mt != int(MachineType.CONVEYOR_BELT):
         return False
     return True

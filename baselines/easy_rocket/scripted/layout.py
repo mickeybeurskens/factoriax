@@ -96,10 +96,17 @@ class ArmPlan:
 
 @dataclasses.dataclass(frozen=True)
 class BeltPlan:
-    """One conveyor belt tile."""
+    """One conveyor belt tile.
+
+    ``consumer_recipe_output`` tags the belt with the assembler it
+    ultimately feeds. Phase drivers filter ``layout.belts`` on this
+    tag to find their section's belts (e.g. Phase 4 places only
+    belts whose consumer is the ENGINE assembler).
+    """
 
     pos: tuple[int, int]
     facing: int  # direction items flow on this tile
+    consumer_recipe_output: int
 
 
 @dataclasses.dataclass(frozen=True)
@@ -113,10 +120,14 @@ class CrossingPlan:
     - 2: vertical N→S + horizontal E→W
     - 3: vertical S→N + horizontal W→E
     - 4: vertical S→N + horizontal E→W
+
+    ``consumer_recipe_output`` matches the belt convention — the
+    section this crossing was created for.
     """
 
     pos: tuple[int, int]
     ent_direction: int
+    consumer_recipe_output: int
 
 
 @dataclasses.dataclass(frozen=True)
@@ -491,19 +502,6 @@ def _direction_between(src: tuple[int, int], dst: tuple[int, int]) -> int:
     raise ValueError(f"non-adjacent tiles: {src} -> {dst}")
 
 
-def _belts_along(path: list[tuple[int, int]], dest: tuple[int, int]) -> list[BeltPlan]:
-    """Turn a sequence of belt tiles into ``BeltPlan``s with facings.
-
-    Each belt's facing points at the next belt in the chain, or at
-    ``dest`` for the last belt.
-    """
-    plans: list[BeltPlan] = []
-    for i, pos in enumerate(path):
-        nxt = path[i + 1] if i + 1 < len(path) else dest
-        plans.append(BeltPlan(pos=pos, facing=_direction_between(pos, nxt)))
-    return plans
-
-
 # ---------------------------------------------------------------------------
 # Top-level planner
 # ---------------------------------------------------------------------------
@@ -618,8 +616,14 @@ def _try_layout(
         crossing_tiles: set[tuple[int, int]],
         dest: tuple[int, int],
         label: str,
+        consumer: int,
     ) -> None:
-        """Materialise a routed path into belts and crossings."""
+        """Materialise a routed path into belts and crossings.
+
+        ``consumer`` is the recipe output of the assembler the route
+        feeds — stored on each BeltPlan/CrossingPlan so phase drivers
+        can filter the layout for their section's items.
+        """
         for i, pos in enumerate(path):
             next_tile = path[i + 1] if i + 1 < len(path) else dest
             new_facing = _direction_between(pos, next_tile)
@@ -633,11 +637,14 @@ def _try_layout(
                     CrossingPlan(
                         pos=pos,
                         ent_direction=_crossing_direction(existing_facing, new_facing),
+                        consumer_recipe_output=consumer,
                     )
                 )
                 reserved_by[pos] = f"crossing ({label})"
             else:
-                belts_by_tile[pos] = BeltPlan(pos=pos, facing=new_facing)
+                belts_by_tile[pos] = BeltPlan(
+                    pos=pos, facing=new_facing, consumer_recipe_output=consumer
+                )
                 belt_tile_facing[pos] = new_facing
                 _reserve(
                     pos,
@@ -710,6 +717,7 @@ def _try_layout(
             chosen_crossings,
             dest=asm_pos,
             label=f"input {ItemType(ore).name} -> {ItemType(consumer).name}",
+            consumer=consumer,
         )
 
     # ---- Materialise arm plans from the pre-reserved slots ----
@@ -769,6 +777,7 @@ def _try_layout(
             crossing_tiles,
             dest=dst_asm.pos,
             label=f"output {ItemType(src_asm.recipe_output).name}",
+            consumer=target,
         )
 
     return FactoryLayout(

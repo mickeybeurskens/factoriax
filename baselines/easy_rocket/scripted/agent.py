@@ -20,7 +20,7 @@ import jax.numpy as jnp
 from baselines.easy_rocket.scripted.layout import FactoryLayout, plan_factory
 from baselines.easy_rocket.scripted.phases import Phase, build_phases
 from baselines.easy_rocket.scripted.state_reader import find_patches
-from factoriax.constants import Action
+from factoriax.constants import Action, ItemType
 from factoriax.recipes import RecipeTable
 from factoriax.state import EnvParams, EnvState
 
@@ -62,12 +62,16 @@ class ScriptedAgent:
             target_item: Item the factory should produce. Defaults to
                 ``ItemType.ROCKET`` via :func:`plan_factory`.
         """
-        if target_item is None:
-            self.layout: FactoryLayout = plan_factory(initial_state, recipe_table)
-        else:
-            self.layout = plan_factory(initial_state, recipe_table, target=target_item)
+        self._target_item = (
+            target_item if target_item is not None else int(ItemType.ROCKET)
+        )
+        self.layout: FactoryLayout = plan_factory(
+            initial_state, recipe_table, target=self._target_item
+        )
         self.patches = find_patches(initial_state)
-        self.phases: list[Phase] = build_phases(self.layout, self.patches)
+        self.phases: list[Phase] = build_phases(
+            self.layout, self.patches, recipe_table, target=self._target_item
+        )
         self.current_phase: int = 0
         self.phase_start_tick: int = 0
         self.report: AgentReport = AgentReport()
