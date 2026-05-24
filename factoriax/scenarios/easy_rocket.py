@@ -149,7 +149,7 @@ EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
     ),
     Recipe(
         output=int(ItemType.ROCKET),
-        inputs=((int(ItemType.HULL), 200), (int(ItemType.ENGINE_UNIT), 200)),
+        inputs=((int(ItemType.HULL), 100), (int(ItemType.ENGINE_UNIT), 100)),
         ticks=5,
         name="Rocket",
     ),
