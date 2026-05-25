@@ -476,7 +476,7 @@ class PhaseSection(Phase):
             b for b in layout.belts if b.consumer_recipe_output == section_output
         ]
         self._crossings: list[CrossingPlan] = [
-            c for c in layout.crossings if c.consumer_recipe_output == section_output
+            c for c in layout.crossings if section_output in c.consumers
         ]
         self._pallets: tuple[PalletPlan, ...] = layout.pallets
         # Build placement targets in placement order: assembler first
@@ -614,7 +614,7 @@ class PhaseRocketSection(Phase):
             b for b in layout.belts if b.consumer_recipe_output == target
         ]
         self._crossings: list[CrossingPlan] = [
-            c for c in layout.crossings if c.consumer_recipe_output == target
+            c for c in layout.crossings if target in c.consumers
         ]
         self._pallets: tuple[PalletPlan, ...] = layout.pallets
         # Targets in placement order: assembler, output belts

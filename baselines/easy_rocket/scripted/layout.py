@@ -172,13 +172,17 @@ class CrossingPlan:
     - 3: vertical S→N + horizontal W→E
     - 4: vertical S→N + horizontal E→W
 
-    ``consumer_recipe_output`` matches the belt convention — the
-    section this crossing was created for.
+    A crossing is the intersection of two sections' belt paths, so
+    ``consumers`` holds both owning sections' recipe outputs. Every
+    section whose flow runs through it lists it as a build target; the
+    first to reach it places it and the rest skip on the already-placed
+    check. Tagging a single owner would leave the other section's chain
+    with a gap exactly here.
     """
 
     pos: tuple[int, int]
     ent_direction: int
-    consumer_recipe_output: int
+    consumers: tuple[int, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -706,13 +710,13 @@ def _try_layout(
                 # Upgrade the existing belt to a CROSSING. The old
                 # belt's facing combined with the new flow direction
                 # determines the CROSSING's ent_direction.
+                existing_belt = belts_by_tile.pop(pos)
                 existing_facing = belt_tile_facing.pop(pos)
-                del belts_by_tile[pos]
                 crossing_plans.append(
                     CrossingPlan(
                         pos=pos,
                         ent_direction=_crossing_direction(existing_facing, new_facing),
-                        consumer_recipe_output=consumer,
+                        consumers=(existing_belt.consumer_recipe_output, consumer),
                     )
                 )
                 reserved_by[pos] = f"crossing ({label})"
