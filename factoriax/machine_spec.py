@@ -1,0 +1,143 @@
+"""Per-machine definitions — the single source of truth for machine config.
+
+Each machine type is defined once, completely, as a :class:`MachineSpec`
+record. The ``MachineType``-indexed arrays the engine and editor index
+(``MACHINE_NUM_SLOTS``, ``MACHINE_SLOT_ROLES``, ``MACHINE_MAX_STACK``,
+``MACHINE_MAX_TYPES``) are derived from those records and validated at
+construction, so a machine's slot count, slot roles, buffer cap, and type
+cap can no longer drift apart the way separate hand-maintained arrays did.
+
+This mirrors the records-to-derived-arrays shape of
+:mod:`factoriax.recipes` — independently; the two share no data, only the
+pattern. It imports only the ``MachineType`` / ``SlotRole`` enums (and the
+default-health scalar) from :mod:`factoriax.constants`; consumers import
+the derived arrays from here.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import jax.numpy as jnp
+import numpy as np
+
+from factoriax.constants import MAX_HEALTH, MachineType, SlotRole
+
+
+@dataclass(frozen=True)
+class MachineSpec:
+    """Complete definition of one machine type.
+
+    Attributes:
+        machine_type: The ``MachineType`` this record defines.
+        slots: Role of each logical inventory slot, in order. The length
+            is the machine's slot count and the editor displays exactly
+            these slots.
+        buffer_stack: Per-machine buffer capacity (items per buffer slot)
+            the engine enforces. Applies even to slot-less machines whose
+            ``ent_buf`` carries items in transit (e.g. ARM).
+        max_types: Distinct item types the buffer may hold at once.
+        max_health: Default maximum health; ``MachineConfig`` seeds from it.
+    """
+
+    machine_type: MachineType
+    slots: tuple[SlotRole, ...]
+    buffer_stack: int
+    max_types: int
+    max_health: int
+
+    @property
+    def num_slots(self) -> int:
+        """Number of logical inventory slots."""
+        return len(self.slots)
+
+
+# One record per MachineType, in value order; index == MachineType value.
+MACHINE_SPECS: tuple[MachineSpec, ...] = (
+    MachineSpec(MachineType.NONE, (), 0, 0, MAX_HEALTH),
+    MachineSpec(MachineType.MINER, (SlotRole.OUTPUT,), 64, 2, MAX_HEALTH),
+    MachineSpec(MachineType.PALLET, (SlotRole.STORAGE,), 256, 1, MAX_HEALTH),
+    MachineSpec(
+        MachineType.ASSEMBLER,
+        (SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT),
+        1000,
+        4,
+        MAX_HEALTH,
+    ),
+    MachineSpec(MachineType.CONVEYOR_BELT, (SlotRole.STORAGE,), 3, 1, MAX_HEALTH),
+    MachineSpec(MachineType.ARM, (), 1, 1, MAX_HEALTH),
+    MachineSpec(MachineType.ROCKET, (), 0, 0, MAX_HEALTH),
+    MachineSpec(
+        MachineType.FURNACE,
+        (SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT),
+        1000,
+        2,
+        MAX_HEALTH,
+    ),
+    MachineSpec(
+        MachineType.SCIENCE_LAB,
+        (SlotRole.INPUT, SlotRole.INPUT),
+        1000,
+        2,
+        MAX_HEALTH,
+    ),
+    MachineSpec(MachineType.SPLITTER, (SlotRole.STORAGE,), 2, 1, MAX_HEALTH),
+    MachineSpec(
+        MachineType.CROSSING,
+        (SlotRole.STORAGE, SlotRole.STORAGE),
+        2,
+        2,
+        MAX_HEALTH,
+    ),
+)
+
+
+def _validate(specs: tuple[MachineSpec, ...]) -> None:
+    """Validate the spec table at import time.
+
+    Args:
+        specs: The full machine spec table.
+
+    Raises:
+        ValueError: If the table does not hold exactly one record per
+            ``MachineType`` in value order, or a record has a negative
+            capacity.
+    """
+    if len(specs) != len(MachineType):
+        raise ValueError(
+            f"MACHINE_SPECS has {len(specs)} records; expected one per "
+            f"MachineType ({len(MachineType)})."
+        )
+    for i, spec in enumerate(specs):
+        if spec.machine_type != MachineType(i):
+            raise ValueError(
+                f"MACHINE_SPECS[{i}] defines {spec.machine_type!r}; expected "
+                f"{MachineType(i)!r} (records must be in MachineType order)."
+            )
+        if min(spec.buffer_stack, spec.max_types, spec.max_health) < 0:
+            raise ValueError(f"{spec.machine_type!r} has a negative capacity.")
+
+
+_validate(MACHINE_SPECS)
+
+# --- Derived arrays — the engine and editor index these --------------------
+
+#: Logical slot count per machine. numpy int32 to match the editor.
+MACHINE_NUM_SLOTS = np.array([s.num_slots for s in MACHINE_SPECS], dtype=np.int32)
+
+#: Editor slot-view width: the largest slot count across all machines.
+MAX_MACHINE_INVENTORY_SLOTS: int = int(MACHINE_NUM_SLOTS.max())
+
+#: Per-slot role per machine, padded to the view width with NONE.
+MACHINE_SLOT_ROLES = np.zeros(
+    (len(MACHINE_SPECS), MAX_MACHINE_INVENTORY_SLOTS), dtype=np.int32
+)
+for _i, _spec in enumerate(MACHINE_SPECS):
+    for _j, _role in enumerate(_spec.slots):
+        MACHINE_SLOT_ROLES[_i, _j] = int(_role)
+
+#: Per-machine buffer capacity. jnp int16 (the engine reads it as int16).
+MACHINE_MAX_STACK = jnp.array([s.buffer_stack for s in MACHINE_SPECS], dtype=jnp.int16)
+
+#: Distinct item types each buffer may hold. jnp int32.
+MACHINE_MAX_TYPES = jnp.array([s.max_types for s in MACHINE_SPECS], dtype=jnp.int32)
