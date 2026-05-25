@@ -318,6 +318,11 @@ class EasyRocketScenario:
             map_height=_MAP_SIZE,
             num_players=1,
             recipe_table=EASY_ROCKET_RECIPE_TABLE,
+            # The full automated factory runs to ~80 entities, above the
+            # auto default of max(64, area // 4) = 64 for a 16x16 map, so
+            # the rocket section would overflow the entity arrays
+            # mid-build. Budget the whole factory with headroom.
+            max_machines=100,
         )
         return [
             ScenarioLevel(
