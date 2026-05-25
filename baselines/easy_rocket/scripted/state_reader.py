@@ -161,6 +161,22 @@ def tile_free(state: EnvState, x: int, y: int) -> bool:
     return True
 
 
+def walkable_grid(state: EnvState) -> np.ndarray:
+    """Return a boolean grid that is True wherever :func:`tile_free` is.
+
+    Mirrors :func:`tile_free` over the whole map in one vectorised pass:
+    the tile's block is walkable terrain and no machine occupies it.
+    Callers route belts over this cached grid instead of calling
+    ``tile_free`` per tile, which re-converts the JAX-backed ``state.map``
+    (a device-to-host copy) on every check inside hot BFS loops.
+    """
+    map_arr = np.asarray(state.map)
+    machines = np.asarray(state.machine_types)
+    return np.isin(map_arr, list(_WALKABLE_BLOCKS)) & (
+        machines == int(MachineType.NONE)
+    )
+
+
 def tile_walkable_for_player(state: EnvState, x: int, y: int) -> bool:
     """Return True if the player can step onto ``(x, y)``.
 

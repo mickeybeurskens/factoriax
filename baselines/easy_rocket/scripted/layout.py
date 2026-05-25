@@ -31,6 +31,7 @@ from baselines.easy_rocket.scripted.state_reader import (
     find_patches,
     player_pos,
     tile_free,
+    walkable_grid,
 )
 from factoriax.constants import BlockType, Direction, ItemType
 from factoriax.recipes import RecipeTable
@@ -372,35 +373,54 @@ def _free_tile_near(
     return None
 
 
-def _free_tiles_near(
-    state: EnvState,
+def _spread_tiles(
     cx: int,
     cy: int,
     reserved: set[tuple[int, int]],
     count: int,
+    walkable: np.ndarray,
 ) -> list[tuple[int, int]]:
-    """Return up to ``count`` free tiles nearest to ``(cx, cy)``.
+    """Return up to ``count`` free tiles spread across the whole map.
 
-    Used by the placement backtracking loop: each automated assembler
-    gets a handful of candidate positions ordered by distance to its
-    desired centroid; the planner tries them in order until one leads
-    to a successful complete layout.
+    Used by the placement backtracking loop. Selecting the *nearest*
+    ``count`` tiles clusters every candidate around the centroid, so on
+    a cramped map where that region cannot be routed the whole search
+    fails the same way. Instead this samples positions spanning the map
+    via farthest-point traversal (seeded at the centroid-nearest tile),
+    so the backtracking explores globally distinct placements; a higher
+    ``count`` simply refines the resolution. The returned tiles are
+    ordered by distance to ``(cx, cy)`` so short-belt placements are
+    still tried first.
     """
-    h, w = state.map.shape
-    found: list[tuple[int, int]] = []
-    for r in range(max(h, w)):
-        for dy in range(-r, r + 1):
-            for dx in range(-r, r + 1):
-                if max(abs(dx), abs(dy)) != r:
-                    continue
-                x, y = cx + dx, cy + dy
-                if (x, y) in reserved:
-                    continue
-                if tile_free(state, x, y):
-                    found.append((x, y))
-                    if len(found) >= count:
-                        return found
-    return found
+    h, w = walkable.shape
+    free = [
+        (x, y)
+        for y in range(h)
+        for x in range(w)
+        if walkable[y, x] and (x, y) not in reserved
+    ]
+
+    def _centroid_dist(t: tuple[int, int]) -> int:
+        return abs(t[0] - cx) + abs(t[1] - cy)
+
+    if len(free) <= count:
+        free.sort(key=_centroid_dist)
+        return free
+
+    # Farthest-point sampling: greedily add the tile maximising its
+    # minimum distance to the already-picked set.
+    start = min(free, key=_centroid_dist)
+    picked = [start]
+    min_dist = {t: abs(t[0] - start[0]) + abs(t[1] - start[1]) for t in free}
+    while len(picked) < count:
+        nxt = max(free, key=lambda t: min_dist[t])
+        picked.append(nxt)
+        for t in free:
+            d = abs(t[0] - nxt[0]) + abs(t[1] - nxt[1])
+            if d < min_dist[t]:
+                min_dist[t] = d
+    picked.sort(key=_centroid_dist)
+    return picked
 
 
 def _bfs_belt_route(
@@ -410,6 +430,8 @@ def _bfs_belt_route(
     reserved: set[tuple[int, int]],
     belt_tile_facing: dict[tuple[int, int], int] | None = None,
     protected: set[tuple[int, int]] | None = None,
+    forbid_start_crossing: bool = False,
+    walkable: np.ndarray | None = None,
 ) -> tuple[list[tuple[int, int]], set[tuple[int, int]]] | None:
     """Find a BFS path of free tiles from ``start`` to ``end``.
 
@@ -430,6 +452,16 @@ def _bfs_belt_route(
     the assembler pulls from — is always a plain belt, never a crossing
     (an assembler's directional pull only reads a belt neighbour).
 
+    ``forbid_start_crossing`` applies the same rule at the source end:
+    the first tile leaving ``start`` may not be a crossing. A miner can
+    only push into a belt (it writes ``ent_buf``, which a crossing never
+    propagates), so a miner's output tile must stay a plain belt.
+
+    ``walkable`` is the cached free-terrain grid from
+    :func:`walkable_grid`; when given, tile freedom is a grid lookup
+    rather than a per-tile :func:`tile_free` call (which re-copies the
+    JAX-backed map each time).
+
     Returns ``(path, crossing_tiles)``: ``path`` is the intermediate
     tiles (excluding both endpoints), ``crossing_tiles`` is the
     subset of path tiles where a CROSSING is needed. Returns
@@ -437,6 +469,7 @@ def _bfs_belt_route(
     """
     belt_tile_facing = belt_tile_facing or {}
     protected = protected or set()
+    h, w = state.map.shape
 
     # State is (tile, direction_into_tile). The direction is needed
     # to enforce pass-through at crossing tiles (you can't turn at a
@@ -481,6 +514,10 @@ def _bfs_belt_route(
             # Crossing-eligible tile: passable only if perpendicular
             # to the existing belt's facing.
             if nxt_tile in belt_tile_facing:
+                # The source's own output tile must be a plain belt — a
+                # miner can't push into a crossing.
+                if forbid_start_crossing and cur_tile == start:
+                    continue
                 existing = belt_tile_facing[nxt_tile]
                 if _is_horizontal(d) == _is_horizontal(existing):
                     continue  # parallel — can't share
@@ -489,7 +526,12 @@ def _bfs_belt_route(
                 continue
             if nxt_tile in reserved:
                 continue
-            if not tile_free(state, nx, ny):
+            if not (0 <= nx < w and 0 <= ny < h):
+                continue
+            if walkable is not None:
+                if not walkable[ny, nx]:
+                    continue
+            elif not tile_free(state, nx, ny):
                 continue
             came_from[nxt_state] = cur_state
             frontier.append(nxt_state)
@@ -620,6 +662,8 @@ def _try_layout(
     base_manual_plans: list[MinerPlan],
     base_pallet_plans: list[PalletPlan],
     asm_positions: dict[int, tuple[int, int]],
+    walkable: np.ndarray,
+    base_reserved_by: dict[tuple[int, int], str],
 ) -> FactoryLayout:
     """Complete the layout given a specific set of assembler positions.
 
@@ -627,8 +671,10 @@ def _try_layout(
     one of the structured ``valid=False`` errors used by
     :func:`plan_factory` to drive backtracking.
     """
-    reserved: set[tuple[int, int]] = set()
-    reserved_by: dict[tuple[int, int], str] = {}
+    # Manual-miner/pallet reservations are identical across every combo,
+    # so copy the precomputed labelled set instead of rebuilding it.
+    reserved: set[tuple[int, int]] = set(base_reserved_by)
+    reserved_by: dict[tuple[int, int], str] = dict(base_reserved_by)
 
     def _reserve(pos: tuple[int, int], label: str) -> None:
         reserved.add(pos)
@@ -640,10 +686,6 @@ def _try_layout(
     }
     for m in base_manual_plans:
         used_tiles_by_ore[m.source_ore].add(m.pos)
-        _reserve(m.pos, f"manual miner ({ItemType(m.source_ore).name})")
-    # Reserve the manual miners' pallet tiles so belts route around them.
-    for pal in base_pallet_plans:
-        _reserve(pal.pos, f"pallet ({ItemType(pal.source_ore).name})")
 
     # Reserve the caller-supplied assembler positions.
     assembler_plans: list[AssemblerPlan] = []
@@ -723,11 +765,14 @@ def _try_layout(
 
         ``consumer`` is the recipe output of the assembler the route
         feeds — stored on each BeltPlan/CrossingPlan so phase drivers
-        can filter the layout for their section's items. The terminus
-        tile (last in ``path``, adjacent to ``dest``) is protected so no
-        later route can upgrade it to a crossing.
+        can filter the layout for their section's items. Both end tiles
+        (first in ``path``, fed by the miner/arm; last, feeding the
+        assembler) are protected so no later route can upgrade them to a
+        crossing — neither a miner nor an assembler can exchange items
+        with a crossing.
         """
         if path:
+            protected.add(path[0])
             protected.add(path[-1])
         for i, pos in enumerate(path):
             next_tile = path[i + 1] if i + 1 < len(path) else dest
@@ -774,24 +819,27 @@ def _try_layout(
         chosen_pos: tuple[int, int] | None = None
         chosen_path: list[tuple[int, int]] | None = None
         chosen_crossings: set[tuple[int, int]] | None = None
-        last_failure: str | None = None
+        # Record only the cheap (tile, reason) of the last failed
+        # candidate. The human-readable failure message (a 16x16 ASCII
+        # map + neighbour analysis) is built once on the error path, not
+        # for every failed candidate across every backtracking combo.
+        last_fail: tuple[tuple[int, int], str] | None = None
         for cand in candidates:
             # Tentatively reserve the candidate so BFS doesn't route
             # through the miner's own tile, then route.
             reserved.add(cand)
             result = _bfs_belt_route(
-                state, cand, asm_pos, reserved, belt_tile_facing, protected
+                state,
+                cand,
+                asm_pos,
+                reserved,
+                belt_tile_facing,
+                protected,
+                forbid_start_crossing=True,
+                walkable=walkable,
             )
             if result is None:
-                last_failure = _bfs_failure_message(
-                    state,
-                    cand,
-                    asm_pos,
-                    reserved,
-                    reserved_by,
-                    label=f"{ItemType(ore).name} input belt -> "
-                    f"{ItemType(consumer).name} assembler",
-                )
+                last_fail = (cand, "noroute")
                 reserved.discard(cand)
                 continue
             if not result[0]:
@@ -799,10 +847,7 @@ def _try_layout(
                 # can't push into a combiner, and the assembler pulls only
                 # from a belt neighbour — so a directly-adjacent miner can
                 # never feed it. Require at least one belt tile between.
-                last_failure = (
-                    f"{ItemType(ore).name} miner at {cand} abuts the "
-                    f"{ItemType(consumer).name} assembler with no belt gap"
-                )
+                last_fail = (cand, "abut")
                 reserved.discard(cand)
                 continue
             # Commit.
@@ -811,9 +856,26 @@ def _try_layout(
             reserved_by[cand] = f"factory miner ({ItemType(ore).name})"
             break
         if chosen_pos is None or chosen_path is None or chosen_crossings is None:
+            label = (
+                f"{ItemType(ore).name} input belt -> "
+                f"{ItemType(consumer).name} assembler"
+            )
+            if last_fail is None:
+                detail = "no candidate patch tiles available"
+            elif last_fail[1] == "abut":
+                detail = (
+                    f"{ItemType(ore).name} miner at {last_fail[0]} abuts the "
+                    f"{ItemType(consumer).name} assembler with no belt gap"
+                )
+            else:
+                reserved.add(last_fail[0])
+                detail = _bfs_failure_message(
+                    state, last_fail[0], asm_pos, reserved, reserved_by, label=label
+                )
+                reserved.discard(last_fail[0])
             return _invalid(
                 f"could not place {ItemType(ore).name} factory miner feeding "
-                f"{ItemType(consumer).name}; last attempt:\n{last_failure}"
+                f"{ItemType(consumer).name}; last attempt:\n{detail}"
             )
         used_tiles_by_ore[ore].add(chosen_pos)
         # Factory miners face toward the first tile in their output
@@ -871,7 +933,13 @@ def _try_layout(
         start_pos = (arm.pos[0] + dx, arm.pos[1] + dy)
         dst_asm = assembler_plans[asm_idx_by_output[target]]
         result = _bfs_belt_route(
-            state, start_pos, dst_asm.pos, reserved, belt_tile_facing, protected
+            state,
+            start_pos,
+            dst_asm.pos,
+            reserved,
+            belt_tile_facing,
+            protected,
+            walkable=walkable,
         )
         if result is None:
             label = (
@@ -1040,13 +1108,23 @@ def plan_factory(
         base_reserved.add(pos)
         base_reserved.add(pallet_pos)
 
+    # Data shared by every backtracking attempt — computed once here so
+    # _try_layout copies it rather than rebuilding it per combo: the
+    # static free-terrain grid and the labelled manual/pallet reservations.
+    walkable = walkable_grid(state)
+    base_reserved_by: dict[tuple[int, int], str] = {}
+    for m in base_manual_plans:
+        base_reserved_by[m.pos] = f"manual miner ({ItemType(m.source_ore).name})"
+    for pal in base_pallet_plans:
+        base_reserved_by[pal.pos] = f"pallet ({ItemType(pal.source_ore).name})"
+
     # ---- Generate candidate assembler positions ----
     # Each automated assembler gets a handful of candidate positions
     # ordered by distance to the centroid of its consuming patches.
     # The product of these lists is searched until one combination
     # yields a complete layout.
-    candidates_per_assembler = 16
-    min_assembler_separation = 6
+    candidates_per_assembler = 20
+    min_assembler_separation = 5
     asm_candidates: dict[int, list[tuple[int, int]]] = {}
     for output in automated_outputs:
         consuming_ores = [
@@ -1060,8 +1138,8 @@ def plan_factory(
         else:
             h_, w_ = state.map.shape
             cx, cy = w_ // 2, h_ // 2
-        asm_candidates[output] = _free_tiles_near(
-            state, cx, cy, base_reserved, candidates_per_assembler
+        asm_candidates[output] = _spread_tiles(
+            cx, cy, base_reserved, candidates_per_assembler, walkable
         )
         if not asm_candidates[output]:
             return _invalid(
@@ -1106,6 +1184,8 @@ def plan_factory(
             base_manual_plans=base_manual_plans,
             base_pallet_plans=base_pallet_plans,
             asm_positions=asm_positions,
+            walkable=walkable,
+            base_reserved_by=base_reserved_by,
         )
         if result.valid:
             return result
