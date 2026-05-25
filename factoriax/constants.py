@@ -366,10 +366,6 @@ MAX_ACHIEVEMENTS = 64
 # Machine defaults
 # ---------------------------------------------------------------------------
 
-#: Default maximum health for every placeable machine. Wrappers can
-#: tune per-type values via :class:`~factoriax.machine_config.MachineConfig`.
-MAX_HEALTH: int = 256
-
 # Machine inventory shape (DEF1 cluster). Both are hand-maintained and
 # over-allocated -- the real maximum slot count is 3, but the editor's
 # flattened slot view and MACHINE_SLOT_ROLES are width-8 in lockstep.

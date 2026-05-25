@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import MAX_HEALTH, MachineType, SlotRole
+from factoriax.constants import MachineType, SlotRole
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,11 @@ class MachineSpec:
         """Number of logical inventory slots."""
         return len(self.slots)
 
+
+#: Default maximum health every machine spec is built with. ``MachineConfig``
+#: seeds per-type health from the specs (via ``MACHINE_MAX_HEALTH``); wrappers
+#: can override per machine type.
+MAX_HEALTH: int = 256
 
 # One record per MachineType, in value order; index == MachineType value.
 MACHINE_SPECS: tuple[MachineSpec, ...] = (
@@ -141,3 +146,6 @@ MACHINE_MAX_STACK = jnp.array([s.buffer_stack for s in MACHINE_SPECS], dtype=jnp
 
 #: Distinct item types each buffer may hold. jnp int32.
 MACHINE_MAX_TYPES = jnp.array([s.max_types for s in MACHINE_SPECS], dtype=jnp.int32)
+
+#: Default maximum health per machine. jnp int16; MachineConfig seeds from it.
+MACHINE_MAX_HEALTH = jnp.array([s.max_health for s in MACHINE_SPECS], dtype=jnp.int16)

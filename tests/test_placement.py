@@ -6,7 +6,6 @@ import pytest
 
 from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import (
-    MAX_HEALTH,
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
@@ -16,6 +15,7 @@ from factoriax.constants import (
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step
 from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfigOverride
+from factoriax.machine_spec import MAX_HEALTH
 from factoriax.placement import (
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_TO_ITEM_ARRAY,

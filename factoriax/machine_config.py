@@ -31,8 +31,8 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import MAX_HEALTH, MachineType
-from factoriax.machine_spec import MACHINE_MAX_STACK
+from factoriax.constants import MachineType
+from factoriax.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 
 
 @dataclass(frozen=True)
@@ -85,12 +85,12 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         Returns:
             :class:`MachineConfig` whose ``max_stack`` mirrors
             :data:`~factoriax.machine_spec.MACHINE_MAX_STACK` and whose
-            ``max_health`` is :data:`~factoriax.constants.MAX_HEALTH`
-            for every machine type.
+            ``max_health`` mirrors
+            :data:`~factoriax.machine_spec.MACHINE_MAX_HEALTH`.
         """
         return cls(
             max_stack=jnp.asarray(MACHINE_MAX_STACK, dtype=jnp.int16),
-            max_health=jnp.full(len(MachineType), MAX_HEALTH, dtype=jnp.int16),
+            max_health=jnp.asarray(MACHINE_MAX_HEALTH, dtype=jnp.int16),
         )
 
     def with_overrides(

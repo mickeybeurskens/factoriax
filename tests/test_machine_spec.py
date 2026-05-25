@@ -27,7 +27,6 @@ from factoriax import machine_spec
 from factoriax.constants import (
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
-    MAX_HEALTH,
     MAX_MACHINE_INVENTORY_SLOTS,
     MachineType,
 )
@@ -71,8 +70,12 @@ def test_slot_roles_snapshot() -> None:
 
 
 def test_scalars_snapshot() -> None:
-    """The machine-config scalars match the locked golden values."""
-    assert int(MAX_HEALTH) == _GOLDEN_MAX_HEALTH
+    """The machine-config scalars match the locked golden values.
+
+    ``MAX_HEALTH`` now lives in ``machine_spec``; the editor slot-view
+    width still reads 8 in constants until S4 moves it.
+    """
+    assert int(machine_spec.MAX_HEALTH) == _GOLDEN_MAX_HEALTH
     assert int(MAX_MACHINE_INVENTORY_SLOTS) == _GOLDEN_MAX_INVENTORY_SLOTS
 
 
@@ -119,6 +122,13 @@ def test_derived_max_types_match_golden() -> None:
     """Derived ``MACHINE_MAX_TYPES`` is byte-identical to the golden values."""
     got = tuple(np.asarray(machine_spec.MACHINE_MAX_TYPES).tolist())
     assert got == _GOLDEN_MAX_TYPES
+
+
+def test_derived_max_health_is_default_for_every_machine() -> None:
+    """Derived ``MACHINE_MAX_HEALTH`` is the default health per machine."""
+    arr = np.asarray(machine_spec.MACHINE_MAX_HEALTH)
+    assert arr.shape == (len(MachineType),)
+    assert bool((arr == _GOLDEN_MAX_HEALTH).all())
 
 
 def test_derived_width_shrinks_to_real_max() -> None:
