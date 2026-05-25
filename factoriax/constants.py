@@ -161,21 +161,6 @@ BLOCK_TO_ITEM: dict[int, int] = {
     BlockType.LIMESTONE: ItemType.LIMESTONE,
 }
 
-# Recipes are defined in factoriax.recipes (single source of truth).
-from factoriax.recipes import (  # noqa: E402, F401
-    BASE_RECIPES,
-    CRAFT_ACTION_TO_RECIPE,
-    MAX_RECIPE_INPUTS,
-    NUM_RECIPES,
-    OUTPUT_TO_RECIPE,
-    RECIPE_INPUT_COUNTS,
-    RECIPE_INPUT_ITEMS,
-    RECIPE_NAMES,
-    RECIPE_OUTPUT_COUNTS,
-    RECIPE_OUTPUTS,
-    RECIPE_TICKS,
-)
-
 # ---------------------------------------------------------------------------
 # Science packs
 # ---------------------------------------------------------------------------
