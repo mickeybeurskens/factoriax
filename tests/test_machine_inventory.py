@@ -10,13 +10,13 @@ import jax
 import jax.numpy as jnp
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
-from factoriax.constants import (
-    MAX_MACHINE_STACK_SIZE,
-    MachineType,
-)
+from factoriax.constants import MachineType
 from factoriax.levels import generate_state
-from factoriax.machine_spec import MACHINE_MAX_TYPES
+from factoriax.machine_spec import MACHINE_MAX_STACK, MACHINE_MAX_TYPES
 from factoriax.machines import run_miners, update_all_machines
+
+# The miner's buffer capacity — a "full" buffer value for the stop test.
+_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(MachineType.MINER)])
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -109,14 +109,14 @@ class TestMinerInventory:
                 dtype=jnp.int8,
             ),
             buffer_count=jnp.array(
-                [[MAX_MACHINE_STACK_SIZE]],
+                [[_MINER_BUF_CAP]],
                 dtype=jnp.int16,
             ),
         )
         params = EnvParams(map_width=1, map_height=1, num_players=1)
         new = run_miners(state, params)
         eid = _eid(new, 0, 0)
-        assert int(new.ent_buf_count[eid]) == MAX_MACHINE_STACK_SIZE
+        assert int(new.ent_buf_count[eid]) == _MINER_BUF_CAP
         assert int(new.block_resources[0, 0]) == 50
 
 

@@ -5,12 +5,15 @@ from jax import random
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
 from factoriax.constants import (
-    MAX_MACHINE_STACK_SIZE,
     Direction,
     MachineType,
 )
 from factoriax.levels import generate_state
+from factoriax.machine_spec import MACHINE_MAX_STACK
 from factoriax.machines import run_conveyor_belts, run_miners, update_all_machines
+
+# The miner's buffer capacity — a "full" buffer value for the stop tests.
+_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(MachineType.MINER)])
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -80,7 +83,7 @@ class TestMinerOperation:
             machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array(
-                [[MAX_MACHINE_STACK_SIZE]],
+                [[_MINER_BUF_CAP]],
                 dtype=jnp.int16,
             ),
         )
@@ -90,7 +93,7 @@ class TestMinerOperation:
 
         eid = _eid(new_state, 0, 0)
         assert new_state.block_resources[0, 0] == 50
-        assert new_state.ent_buf_count[eid] == MAX_MACHINE_STACK_SIZE
+        assert new_state.ent_buf_count[eid] == _MINER_BUF_CAP
 
     def test_miner_stops_when_no_resources(self, state_factory) -> None:
         """Miner should stop when block has no resources."""

@@ -16,13 +16,12 @@ import numpy as np
 import pygame
 
 from factoriax.constants import (
-    MAX_MACHINE_STACK_SIZE,
     ItemType,
     MachineType,
     SlotRole,
 )
 from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
-from factoriax.machine_spec import MACHINE_NUM_SLOTS, MACHINE_SLOT_ROLES
+from factoriax.machine_spec import MACHINE_NUM_SLOTS, MACHINE_SLOT_ROLES, MACHINE_SPECS
 from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.icons import render_item_icon
@@ -571,6 +570,11 @@ class MachineInspectorDialog:
         """Number of active slots for this machine type."""
         return int(MACHINE_NUM_SLOTS[self.machine_type])
 
+    @property
+    def max_count(self) -> int:
+        """Per-slot count cap for this machine type (its buffer capacity)."""
+        return MACHINE_SPECS[self.machine_type].buffer_stack
+
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Process a pygame event.
 
@@ -679,7 +683,7 @@ class MachineInspectorDialog:
                 val = int(self.count_text)
             except ValueError:
                 val = 0
-            val = max(0, min(MAX_MACHINE_STACK_SIZE, val))
+            val = max(0, min(self.max_count, val))
             self.inv_counts[self.editing_slot] = val
             if val == 0:
                 self.inv_items[self.editing_slot] = 0
@@ -873,9 +877,7 @@ class MachineInspectorDialog:
             overlay[cy : cy + ch, cx + i] = _BORDER
             overlay[cy : cy + ch, cx + cw - 1 - i] = _BORDER
 
-        lbl = _render_text_rgba(
-            f"Count (0-{MAX_MACHINE_STACK_SIZE}):", small, _LABEL_COLOR
-        )
+        lbl = _render_text_rgba(f"Count (0-{self.max_count}):", small, _LABEL_COLOR)
         _blit_rgba(overlay, lbl, cy + 6, cx + 8)
 
         fy = cy + 22
