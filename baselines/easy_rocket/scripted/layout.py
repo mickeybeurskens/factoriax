@@ -409,6 +409,7 @@ def _bfs_belt_route(
     end: tuple[int, int],
     reserved: set[tuple[int, int]],
     belt_tile_facing: dict[tuple[int, int], int] | None = None,
+    protected: set[tuple[int, int]] | None = None,
 ) -> tuple[list[tuple[int, int]], set[tuple[int, int]]] | None:
     """Find a BFS path of free tiles from ``start`` to ``end``.
 
@@ -422,12 +423,20 @@ def _bfs_belt_route(
     facing and the new route passes straight through (no turn at the
     crossing).
 
+    ``protected`` holds tiles that feed an assembler (the terminus of a
+    committed input/output route). They must stay plain belts, so the
+    BFS never routes through or crosses them. The route also refuses to
+    enter ``end`` from a crossing tile, so its own terminus — the tile
+    the assembler pulls from — is always a plain belt, never a crossing
+    (an assembler's directional pull only reads a belt neighbour).
+
     Returns ``(path, crossing_tiles)``: ``path`` is the intermediate
     tiles (excluding both endpoints), ``crossing_tiles`` is the
     subset of path tiles where a CROSSING is needed. Returns
     ``None`` if no route exists.
     """
     belt_tile_facing = belt_tile_facing or {}
+    protected = protected or set()
 
     # State is (tile, direction_into_tile). The direction is needed
     # to enforce pass-through at crossing tiles (you can't turn at a
@@ -457,8 +466,17 @@ def _bfs_belt_route(
             if nxt_state in came_from:
                 continue
             if nxt_tile == end:
+                # The terminus (``cur_tile``) is what the assembler pulls
+                # from, so it must be a plain belt. Refuse to reach the
+                # assembler from a crossing tile.
+                if cur_tile in belt_tile_facing and cur_tile != start:
+                    continue
                 came_from[nxt_state] = cur_state
                 frontier.append(nxt_state)
+                continue
+            # A protected terminus feeds another assembler — never route
+            # through it or upgrade it to a crossing.
+            if nxt_tile in protected:
                 continue
             # Crossing-eligible tile: passable only if perpendicular
             # to the existing belt's facing.
@@ -689,6 +707,10 @@ def _try_layout(
     belts_by_tile: dict[tuple[int, int], BeltPlan] = {}
     crossing_plans: list[CrossingPlan] = []
     belt_tile_facing: dict[tuple[int, int], int] = {}
+    # Terminus tiles that feed an assembler. They must stay plain belts
+    # (an assembler pulls inputs only from a belt neighbour, never a
+    # crossing), so later routes route around them rather than crossing.
+    protected: set[tuple[int, int]] = set()
 
     def _commit_route(
         path: list[tuple[int, int]],
@@ -701,8 +723,12 @@ def _try_layout(
 
         ``consumer`` is the recipe output of the assembler the route
         feeds — stored on each BeltPlan/CrossingPlan so phase drivers
-        can filter the layout for their section's items.
+        can filter the layout for their section's items. The terminus
+        tile (last in ``path``, adjacent to ``dest``) is protected so no
+        later route can upgrade it to a crossing.
         """
+        if path:
+            protected.add(path[-1])
         for i, pos in enumerate(path):
             next_tile = path[i + 1] if i + 1 < len(path) else dest
             new_facing = _direction_between(pos, next_tile)
@@ -753,7 +779,9 @@ def _try_layout(
             # Tentatively reserve the candidate so BFS doesn't route
             # through the miner's own tile, then route.
             reserved.add(cand)
-            result = _bfs_belt_route(state, cand, asm_pos, reserved, belt_tile_facing)
+            result = _bfs_belt_route(
+                state, cand, asm_pos, reserved, belt_tile_facing, protected
+            )
             if result is None:
                 last_failure = _bfs_failure_message(
                     state,
@@ -832,7 +860,7 @@ def _try_layout(
         start_pos = (arm.pos[0] + dx, arm.pos[1] + dy)
         dst_asm = assembler_plans[asm_idx_by_output[target]]
         result = _bfs_belt_route(
-            state, start_pos, dst_asm.pos, reserved, belt_tile_facing
+            state, start_pos, dst_asm.pos, reserved, belt_tile_facing, protected
         )
         if result is None:
             label = (
