@@ -240,10 +240,13 @@ ITEM_TO_MACHINE = {
 }
 
 # Items that place a machine when used -- exactly the keys of the mapping
-# above, so the two cannot drift. Membership only: the PLACE_* action and
-# UI palette order are interface concerns owned by their dispatchers, not
-# this definition. The jnp membership array is built in factoriax.placement,
-# its sole engine consumer.
+# above, so the two cannot drift. This is a membership definition; its
+# sequence order is incidental (it inherits the mapping's key order). The
+# agent action layer (PLACE_ACTION_TO_ITEM in game_logic) is independent
+# and resolves by item identity, so reordering the mapping only reshuffles
+# the play-UI machine palette, which renders in this order -- it has no
+# functional effect. The jnp membership array is built in
+# factoriax.placement, its sole engine consumer.
 PLACEABLE_ITEM_LIST: tuple[int, ...] = tuple(int(it) for it in ITEM_TO_MACHINE)
 
 RESOURCE_ITEM_LIST: tuple[int, ...] = tuple(
