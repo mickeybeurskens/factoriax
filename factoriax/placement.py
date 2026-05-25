@@ -163,6 +163,18 @@ def place_machine(
         state.ent_health.at[safe_idx].set(full_hp.astype(jnp.int16)),
         state.ent_health,
     )
+    # Clear the reused slot's buffer so a new machine never inherits
+    # stale contents left in a previously-inactive slot.
+    new_ent_buf_type = jnp.where(
+        should_place,
+        state.ent_buf_type.at[safe_idx].set(jnp.int8(0)),
+        state.ent_buf_type,
+    )
+    new_ent_buf_count = jnp.where(
+        should_place,
+        state.ent_buf_count.at[safe_idx].set(jnp.int16(0)),
+        state.ent_buf_count,
+    )
     new_tile_entity = jnp.where(
         should_place,
         state.tile_entity.at[sy, sx].set(safe_idx.astype(jnp.int16)),
@@ -180,6 +192,8 @@ def place_machine(
         ent_type=new_ent_type,
         ent_direction=new_ent_dir,
         ent_health=new_ent_health,
+        ent_buf_type=new_ent_buf_type,
+        ent_buf_count=new_ent_buf_count,
     )
 
 

@@ -263,6 +263,40 @@ class TestMachinePlacement:
         assert new_state.player_inventory[0, ItemType.COAL] == 5
 
 
+class TestPlacementClearsInheritedBuffer:
+    """Regression: a freshly-placed machine must start with an empty buffer.
+
+    ``place_machine`` reuses the first inactive entity slot. If that slot
+    carries stale buffer contents (e.g. ore that leaked in while it was
+    inactive), the new machine must not inherit it.
+    """
+
+    def test_place_machine_clears_polluted_slot(self, state_factory) -> None:
+        """A machine placed into a polluted slot starts empty."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.MINER].set(1)
+
+        state = state_factory(
+            world_map=jnp.array([[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32),
+            player_position=(0, 0),
+            player_direction=Direction.RIGHT,
+            player_inventory=inv,
+        )
+        # No machines on the grid, so slot 0 is the first inactive slot
+        # that place_machine will allocate. Pollute its buffer.
+        state = state.replace(
+            ent_buf_type=state.ent_buf_type.at[0].set(jnp.int8(int(ItemType.COAL))),
+            ent_buf_count=state.ent_buf_count.at[0].set(jnp.int16(99)),
+        )
+
+        new_state = place_machine(state, EnvParams(), 0, int(ItemType.MINER))
+
+        assert int(new_state.tile_entity[0, 1]) == 0
+        assert new_state.machine_types[0, 1] == MachineType.MINER
+        assert int(new_state.ent_buf_count[0]) == 0
+        assert int(new_state.ent_buf_type[0]) == 0
+
+
 class TestPlacementInitializesHealth:
     """Placement must seed ent_health to the configured max for the type."""
 
