@@ -70,8 +70,8 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         max_stack: Per-machine buffer cap, shape
             ``(len(MachineType),)``, int16.
         max_health: Per-machine maximum health, shape
-            ``(len(MachineType),)``, int16. Default is
-            :data:`~factoriax.constants.MAX_HEALTH` for every type;
+            ``(len(MachineType),)``, int16. Default mirrors
+            :data:`~factoriax.machine_spec.MACHINE_MAX_HEALTH`;
             wrappers tune via :meth:`with_overrides`.
     """
 
