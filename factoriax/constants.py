@@ -475,23 +475,6 @@ MINEABLE_BLOCKS = jnp.array(
     ],
 )
 
-BLOCK_TO_ITEM_ARRAY = jnp.array(
-    [
-        ItemType.EMPTY,  # INVALID
-        ItemType.EMPTY,  # OUT_OF_BOUNDS
-        ItemType.EMPTY,  # DIRT
-        ItemType.EMPTY,  # WATER
-        ItemType.IRON_ORE,  # IRON
-        ItemType.COPPER_ORE,  # COPPER
-        ItemType.COAL,  # COAL
-        ItemType.TIN_ORE,  # TIN
-        ItemType.SILICON,  # SILICON
-        ItemType.EMPTY,  # NEST (not a mineable block)
-        ItemType.LIMESTONE,  # LIMESTONE
-    ],
-    dtype=jnp.int32,
-)
-
 SOLID_BLOCKS = jnp.array(
     [BlockType.WATER, BlockType.OUT_OF_BOUNDS],
     dtype=jnp.int32,

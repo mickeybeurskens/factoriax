@@ -16,7 +16,7 @@ from factoriax.belts import (
     CROSSING_VERT_SLOT,
 )
 from factoriax.constants import (
-    BLOCK_TO_ITEM_ARRAY,
+    BLOCK_TO_ITEM,
     BlockType,
     ItemType,
     MachineType,
@@ -26,6 +26,15 @@ from factoriax.state import EnvParams, EnvState
 
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
 _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
+
+# Block-id -> mined item, indexed by ``BlockType`` value over the full enum
+# range so it can be gathered by a raw block id in the mining hot path.
+# Derived from the ``BLOCK_TO_ITEM`` definition; non-mineable blocks stay
+# EMPTY. game_logic imports this from here (it already depends on machines).
+_block_to_item = [int(ItemType.EMPTY)] * len(BlockType)
+for _block, _item in BLOCK_TO_ITEM.items():
+    _block_to_item[int(_block)] = int(_item)
+BLOCK_TO_ITEM_ARRAY = jnp.array(_block_to_item, dtype=jnp.int32)
 
 # Miner output slot holds at most one mining cycle's worth. Combined
 # with ``miner_mining_rate`` this means a miner tops up in one tick

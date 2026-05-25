@@ -8,7 +8,6 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.constants import (
-    BLOCK_TO_ITEM_ARRAY,
     CRAFT_BASE,
     DEPOSIT_BASE,
     DIRECTIONS,
@@ -26,7 +25,7 @@ from factoriax.constants import (
     MachineType,
 )
 from factoriax.crafting import craft_recipe
-from factoriax.machines import update_all_machines
+from factoriax.machines import BLOCK_TO_ITEM_ARRAY, update_all_machines
 from factoriax.placement import (
     apply_repair,
     get_tile_in_front,
