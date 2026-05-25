@@ -215,7 +215,7 @@ class TestScienceConstants:
     """New constants declared in factoriax.constants cohere."""
 
     def test_science_pack_index_maps_both_packs(self) -> None:
-        from factoriax.constants import SCIENCE_PACK_INDEX
+        from factoriax.game_logic import SCIENCE_PACK_INDEX
 
         assert int(SCIENCE_PACK_INDEX[int(ItemType.BASIC_SCIENCE_PACK)]) == 0
         assert int(SCIENCE_PACK_INDEX[int(ItemType.ADVANCED_SCIENCE_PACK)]) == 1

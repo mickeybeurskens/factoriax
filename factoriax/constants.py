@@ -189,32 +189,13 @@ from factoriax.recipes import (  # noqa: E402, F401
 
 # Tracked per-type by SCIENCE_LAB entities. The per-step delta vector
 # in EnvState.science_consumed_step is sized to NUM_SCIENCE_PACK_TYPES
-# and indexed by position in SCIENCE_PACK_TYPES.
-NUM_SCIENCE_PACK_TYPES: int = 2
+# and indexed by position in SCIENCE_PACK_TYPES. The jnp item->index
+# projection is built in factoriax.game_logic, its sole engine consumer.
 SCIENCE_PACK_TYPES: tuple[int, ...] = (
     int(ItemType.BASIC_SCIENCE_PACK),
     int(ItemType.ADVANCED_SCIENCE_PACK),
 )
-
-# Inverse lookup: ItemType -> index in SCIENCE_PACK_TYPES (0 or 1),
-# or -1 for non-pack items. Used by lab consumption logic to bucket
-# arbitrary slot contents into the delta vector.
-SCIENCE_PACK_INDEX = (
-    jnp.full(NUM_ITEM_TYPES, -1, dtype=jnp.int8)
-    .at[ItemType.BASIC_SCIENCE_PACK]
-    .set(0)
-    .at[ItemType.ADVANCED_SCIENCE_PACK]
-    .set(1)
-)
-
-# Whether an item type is a science pack that a lab will consume.
-IS_SCIENCE_PACK = (
-    jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.bool_)
-    .at[ItemType.BASIC_SCIENCE_PACK]
-    .set(True)
-    .at[ItemType.ADVANCED_SCIENCE_PACK]
-    .set(True)
-)
+NUM_SCIENCE_PACK_TYPES: int = len(SCIENCE_PACK_TYPES)
 
 # ---------------------------------------------------------------------------
 # Placeable items and machine mappings

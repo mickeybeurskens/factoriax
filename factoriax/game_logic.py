@@ -17,7 +17,7 @@ from factoriax.constants import (
     PLACE_BASE,
     PLAYER_MAX_STACK,
     ROTATE_BASE,
-    SCIENCE_PACK_INDEX,
+    SCIENCE_PACK_TYPES,
     Action,
     BlockType,
     Direction,
@@ -97,6 +97,15 @@ CRAFT_ACTION_TO_ITEM = jnp.array(
     ],
     dtype=jnp.int32,
 )
+
+# Inverse lookup: ItemType -> index in SCIENCE_PACK_TYPES (0-based), or -1
+# for non-pack items. run_labs uses it to bucket arbitrary lab-slot
+# contents into the science_consumed_step delta vector. Derived from the
+# canonical SCIENCE_PACK_TYPES so the two cannot drift.
+_science_pack_index = [-1] * NUM_ITEM_TYPES
+for _pack_pos, _pack_item in enumerate(SCIENCE_PACK_TYPES):
+    _science_pack_index[_pack_item] = _pack_pos
+SCIENCE_PACK_INDEX = jnp.array(_science_pack_index, dtype=jnp.int8)
 
 
 def is_position_in_bounds(
