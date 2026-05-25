@@ -16,10 +16,11 @@ single-slot spec.
 
 from __future__ import annotations
 
+import jax.numpy as jnp
 import numpy as np
 
 from factoriax import machine_spec
-from factoriax.constants import MachineType
+from factoriax.constants import BlockType, MachineType, SlotRole
 
 # --- Golden values: the per-machine config as it shipped pre-refactor ------
 # Indexed by MachineType value: NONE, MINER, PALLET, ASSEMBLER, CONVEYOR_BELT,
@@ -128,3 +129,42 @@ def test_specs_cover_machinetypes_in_order() -> None:
     assert len(machine_spec.MACHINE_SPECS) == len(MachineType)
     for i, spec in enumerate(machine_spec.MACHINE_SPECS):
         assert spec.machine_type == MachineType(i)
+
+
+# --- S5: the spec agrees with the engine's real buffer structure -----------
+# The engine stores a machine's slots in one ``ent_buf`` plus the columns of
+# ``ent_asm_in``. These read the real buffer shapes off a constructed state
+# so the spec can't drift from what the engine can physically hold.
+
+
+def test_spec_width_matches_engine_buffer_capacity(state_factory) -> None:
+    """Editor slot-view width equals the engine's per-entity slot capacity.
+
+    Capacity is one ``ent_buf`` slot plus the columns of ``ent_asm_in``; the
+    derived width must equal it so the editor shows exactly the slots the
+    engine can store — no more, no fewer.
+    """
+    state = state_factory(
+        world_map=jnp.full((2, 2), int(BlockType.DIRT), dtype=jnp.int32)
+    )
+    ent_asm_in_width = int(state.ent_asm_in_type.shape[1])
+    engine_capacity = 1 + ent_asm_in_width
+    assert machine_spec.MAX_MACHINE_INVENTORY_SLOTS == engine_capacity
+
+
+def test_no_machine_exceeds_engine_capacity(state_factory) -> None:
+    """No spec claims more slots than the engine can hold.
+
+    Total slots fit in ``ent_buf`` + ``ent_asm_in``; INPUT slots specifically
+    live in ``ent_asm_in``, so a machine cannot declare more inputs than it
+    has columns.
+    """
+    state = state_factory(
+        world_map=jnp.full((2, 2), int(BlockType.DIRT), dtype=jnp.int32)
+    )
+    ent_asm_in_width = int(state.ent_asm_in_type.shape[1])
+    capacity = 1 + ent_asm_in_width
+    for spec in machine_spec.MACHINE_SPECS:
+        assert spec.num_slots <= capacity, spec.machine_type.name
+        n_input = sum(1 for role in spec.slots if int(role) == int(SlotRole.INPUT))
+        assert n_input <= ent_asm_in_width, spec.machine_type.name
