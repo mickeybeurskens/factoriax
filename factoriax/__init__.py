@@ -12,7 +12,6 @@ from typing import Any, Literal
 import jax
 
 from factoriax.constants import (
-    MAX_STACK_SIZE,
     NUM_ITEM_TYPES,
     Action,
     BlockType,
@@ -127,7 +126,6 @@ __all__ = [
     "Level",
     "LevelBuilder",
     "LocalObservationWrapper",
-    "MAX_STACK_SIZE",
     "NUM_ITEM_TYPES",
     "ScienceTallyWrapper",
     "build_state",

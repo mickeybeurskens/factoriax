@@ -89,7 +89,6 @@ class MachineType(IntEnum):
 
 
 NUM_ITEM_TYPES = len(ItemType)
-MAX_STACK_SIZE = 64
 MAX_MACHINE_STACK_SIZE = 64
 
 # Canonical dtypes for state arrays.

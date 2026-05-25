@@ -59,7 +59,7 @@ def test_all_symbols_have_docstrings() -> None:
     for name in factoriax.__all__:
         symbol = getattr(factoriax, name)
         if isinstance(symbol, (int, str, float, bool, dict, list, tuple)):
-            # Module-level constants (e.g. MAX_STACK_SIZE, LEVELS) carry
+            # Module-level constants (e.g. NUM_ITEM_TYPES, LEVELS) carry
             # their documentation in the module that defines them; the
             # `__all__` docstring rule applies to callables and classes.
             continue

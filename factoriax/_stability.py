@@ -31,7 +31,6 @@ STABILITY: dict[str, StabilityTier] = {
     "BlockType": "Stable",
     "Direction": "Stable",
     "ItemType": "Stable",
-    "MAX_STACK_SIZE": "Stable",
     "NUM_ITEM_TYPES": "Stable",
     # --- engine: state + params PyTrees (Stable; the data contract
     # between the engine and everything that reads from it).

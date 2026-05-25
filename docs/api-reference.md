@@ -19,7 +19,6 @@ Stability tiers come from `factoriax/_stability.py`. **Stable** symbols carry th
 | Stable | `Level` | class |  | Serializable description of an initial world state. |
 | Stable | `LevelBuilder` | class |  | Fluent builder for constructing :class:`Level` objects programmatically. |
 | Stable | `LocalObservationWrapper` | class |  | Replace the inner env's full-map obs with a local radius-R window. |
-| Stable | `MAX_STACK_SIZE` | constant |  |  |
 | Stable | `NUM_ITEM_TYPES` | constant |  |  |
 | Stable | `build_state` | function | `(level: 'Level', params: 'EnvParams') -> 'EnvState'` | Construct a JAX :class:`~factoriax.state.EnvState` from a :class:`Level`. |
 | Stable | `generate_state` | function | `(rng: 'jax.Array', params: 'EnvParams') -> 'EnvState'` | Generate a procedural world state from a random key. |
