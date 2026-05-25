@@ -24,9 +24,12 @@ from __future__ import annotations
 import dataclasses
 from collections import deque
 
+import numpy as np
+
 from baselines.easy_rocket.scripted.state_reader import (
     OrePatch,
     find_patches,
+    player_pos,
     tile_free,
 )
 from factoriax.constants import BlockType, Direction, ItemType
@@ -63,6 +66,54 @@ _DIR_OFFSETS: dict[int, tuple[int, int]] = {
     int(Direction.UP): (0, -1),
     int(Direction.DOWN): (0, 1),
 }
+
+# Terrain the player can never cross, regardless of machines.
+_IMPASSABLE_BLOCKS: frozenset[int] = frozenset(
+    {int(BlockType.WATER), int(BlockType.OUT_OF_BOUNDS)}
+)
+
+
+def _reachable_from(
+    state: EnvState,
+    start: tuple[int, int],
+    blockers: set[tuple[int, int]],
+) -> set[tuple[int, int]]:
+    """BFS the tiles the player can reach on foot from ``start``.
+
+    Movement crosses any in-bounds, non-water tile (ore and belts
+    included) that is not in ``blockers``. ``blockers`` holds the tiles
+    taken by planned miners and pallets — machines the player cannot
+    walk through. The grid carries no machines at plan time, so this set
+    is the only obstacle beyond the terrain itself. The returned set
+    includes ``start``.
+    """
+    map_arr = np.asarray(state.map)
+    h, w = map_arr.shape
+    seen = {start}
+    queue = deque([start])
+    while queue:
+        x, y = queue.popleft()
+        for dx, dy in _DIR_OFFSETS.values():
+            nx, ny = x + dx, y + dy
+            nxt = (nx, ny)
+            if nxt in seen or not (0 <= nx < w and 0 <= ny < h):
+                continue
+            if int(map_arr[ny, nx]) in _IMPASSABLE_BLOCKS or nxt in blockers:
+                continue
+            seen.add(nxt)
+            queue.append(nxt)
+    return seen
+
+
+def _pallet_reachable(
+    pallet_pos: tuple[int, int],
+    reachable: set[tuple[int, int]],
+) -> bool:
+    """True if any neighbour of the pallet is a reachable standing tile."""
+    return any(
+        (pallet_pos[0] + dx, pallet_pos[1] + dy) in reachable
+        for dx, dy in _DIR_OFFSETS.values()
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -803,6 +854,28 @@ def _try_layout(
             consumer=target,
         )
 
+    # ---- Validate pallet reachability against the finished layout ----
+    # Plan-time placement only knew the manual miners and pallets. Now
+    # that the second-stage machines are down, re-check that the agent
+    # can still stand next to every pallet to WITHDRAW. Belts stay
+    # walkable, but assemblers, arms, factory miners, and crossings
+    # block — any of them can box in a pallet's only access tile. A
+    # combo that does so is rejected so backtracking tries another.
+    blockers: set[tuple[int, int]] = set()
+    blockers.update(m.pos for m in miner_plans)
+    blockers.update(a.pos for a in assembler_plans)
+    blockers.update(a.pos for a in arm_plans)
+    blockers.update(p.pos for p in base_pallet_plans)
+    blockers.update(c.pos for c in crossing_plans)
+    reachable = _reachable_from(state, player_pos(state), blockers)
+    for pal in base_pallet_plans:
+        if not _pallet_reachable(pal.pos, reachable):
+            return _invalid(
+                f"pallet for {ItemType(pal.source_ore).name} at {pal.pos} is "
+                "unreachable in the finished layout (boxed in by second-stage "
+                "machines)"
+            )
+
     return FactoryLayout(
         miners=tuple(miner_plans),
         assemblers=tuple(assembler_plans),
@@ -858,13 +931,18 @@ def plan_factory(
     # ---- Place manual miners + their pallets (fixed across every
     # backtracking attempt) ----
     # Each manual miner faces an adjacent free tile that holds a
-    # pallet. The miner pushes ore into the pallet (large buffer);
-    # the agent drains the pallet with WITHDRAW. Reserving both the
-    # miner and pallet tiles keeps later belt routing clear of them.
+    # pallet. The miner pushes ore into the pallet (large buffer); the
+    # agent drains the pallet with WITHDRAW, so the pallet must have a
+    # tile the agent can stand on and reach on foot. Among the
+    # (miner tile, pallet direction) candidates — taken in patch and
+    # direction order so pallets keep hugging the patch edge and stay
+    # out of belt lanes — pick the first whose pallet is reachable.
+    # Reserving both tiles keeps later belt routing clear of them.
     base_manual_plans: list[MinerPlan] = []
     base_pallet_plans: list[PalletPlan] = []
     base_reserved = set()
     manual_used: dict[int, set[tuple[int, int]]] = {ore: set() for ore in ore_items}
+    start = player_pos(state)
     for ore, role, consumer in miner_jobs:
         if role != "manual":
             continue
@@ -874,25 +952,38 @@ def plan_factory(
             return _invalid(
                 f"patch for {ItemType(ore).name} has no free tile for the manual miner"
             )
-        pos = avail[0]
-        manual_used[ore].add(pos)
-        # Choose a pallet tile: an adjacent free (non-ore, unreserved)
-        # tile. The miner faces it.
-        pallet_dir: int | None = None
-        pallet_pos: tuple[int, int] | None = None
-        for d, (dx, dy) in _DIR_OFFSETS.items():
-            cand = (pos[0] + dx, pos[1] + dy)
-            if cand in base_reserved:
-                continue
-            if not tile_free(state, cand[0], cand[1]):
-                continue
-            pallet_dir, pallet_pos = d, cand
-            break
-        if pallet_pos is None or pallet_dir is None:
+        # Score every (miner tile, pallet direction) candidate and keep
+        # the best. A candidate must be reachable on foot now; among
+        # those, prefer the pallet with the most free neighbours, since
+        # a pallet hemmed in on three sides is one second-stage machine
+        # away from being stranded. Ordered enumeration breaks ties, so
+        # placement stays deterministic and edge-hugging.
+        best_key: tuple[int, int] | None = None
+        chosen: tuple[tuple[int, int], int, tuple[int, int]] | None = None
+        for miner_pos in avail:
+            for d, (dx, dy) in _DIR_OFFSETS.items():
+                cand = (miner_pos[0] + dx, miner_pos[1] + dy)
+                if cand in base_reserved or not tile_free(state, cand[0], cand[1]):
+                    continue
+                blockers = base_reserved | {miner_pos, cand}
+                reachable = _reachable_from(state, start, blockers)
+                free_neighbours = sum(
+                    1
+                    for ex, ey in _DIR_OFFSETS.values()
+                    if (cand[0] + ex, cand[1] + ey) not in base_reserved
+                    and (cand[0] + ex, cand[1] + ey) != miner_pos
+                    and tile_free(state, cand[0] + ex, cand[1] + ey)
+                )
+                key = (int(_pallet_reachable(cand, reachable)), free_neighbours)
+                if best_key is None or key > best_key:
+                    best_key = key
+                    chosen = (miner_pos, d, cand)
+        if chosen is None:
             return _invalid(
-                f"no free adjacent tile for {ItemType(ore).name} manual miner's "
-                f"pallet at {pos}"
+                f"no free adjacent tile for {ItemType(ore).name} manual miner's pallet"
             )
+        pos, pallet_dir, pallet_pos = chosen
+        manual_used[ore].add(pos)
         base_manual_plans.append(
             MinerPlan(
                 pos=pos,
