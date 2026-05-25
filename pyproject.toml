@@ -39,26 +39,26 @@ markers = [
 ]
 
 [tool.coverage.run]
-# Coverage targets the production tree (factoriax/) and the ahead-
-# of-time training code (baselines/). Tests, scripts, and vendored
-# craftax/ are excluded — they're either the measurement instrument
-# or out-of-tree references.
-source = ["factoriax", "baselines"]
+# Coverage targets the core environment tree (factoriax/) only. The
+# baselines/ training code, tests, scripts, and vendored craftax/ are
+# excluded — they're either the measurement instrument, out-of-tree
+# references, or ahead-of-time agent code whose churn shouldn't move
+# the floor that gates the engine.
+source = ["factoriax"]
 omit = [
     "factoriax/__main__.py",
     "factoriax/*/__main__.py",
 ]
 
 [tool.coverage.report]
-# Floor measured at the close of Phase C item 8 (37.61% over the
-# fast suite, with UI-only ``__main__.py`` shims omitted). The
-# pre-commit hook enforces this number — a PR that drops coverage
-# below it fails to commit. Raising the floor is a deliberate act:
-# bump this number when adding tests, never lower it. Phase D's
-# docs ratchet (cookbook examples + their tests) is the next
-# natural lift; the ratchet practice itself is the load-bearing
-# part, not the absolute number.
-fail_under = 37
+# Floor re-measured at 64.43% over the fast suite once coverage was
+# narrowed to the factoriax/ core (baselines/ dropped from scope, so
+# its agent churn no longer dilutes the engine number). The pre-commit
+# hook enforces this — a PR that drops coverage below it fails to
+# commit. Raising the floor is a deliberate act: bump this number when
+# adding tests, never lower it. The ratchet practice itself is the
+# load-bearing part, not the absolute number.
+fail_under = 64
 show_missing = false
 skip_covered = true
 

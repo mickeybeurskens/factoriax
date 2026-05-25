@@ -37,7 +37,7 @@ else
     # [tool.coverage.report]. The hook fails when coverage drops
     # below it; raising the floor is a deliberate act in a follow-up.
     uv run pytest tests/ -x -q -m "not slow" \
-        --cov=factoriax --cov=baselines --cov-report=term:skip-covered
+        --cov=factoriax --cov-report=term:skip-covered
 fi
 
 echo "[pre-commit] All checks passed."
