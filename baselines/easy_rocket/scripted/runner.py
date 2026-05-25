@@ -30,9 +30,8 @@ from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.constants import NUM_ACTIONS, Action
 from factoriax.levels import build_state
 from factoriax.scenarios.easy_rocket import (
-    EASY_ROCKET_RECIPE_TABLE,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
-    build_easy_rocket_level,
+    EasyRocketScenario,
     easy_rocket_conditions,
 )
 from factoriax.state import EnvParams, EnvState
@@ -45,25 +44,22 @@ logger = logging.getLogger("easy_rocket_scripted")
 ScriptedPolicy = Callable[[EnvState, EnvParams], jax.Array]
 
 
-def _make_env_and_state(
-    seed: int, max_timesteps: int
-) -> tuple[object, EnvState, EnvParams]:
+def _make_env_and_state(seed: int) -> tuple[object, EnvState, EnvParams]:
     """Build the easy_rocket env, initial state, and params.
 
-    Mirrors ``baselines.easy_rocket.train_ppo._make_env_and_state``:
-    global observation, no action mask,
-    ``recipe_table=EASY_ROCKET_RECIPE_TABLE``.
+    Level and params both come from :class:`EasyRocketScenario` — the
+    single source of truth for the scenario's runtime config (recipe
+    table, episode budget, entity budget). The runner applies no
+    overrides; to change a setting, change the scenario. ``make`` builds
+    only the env/wrapper stack; its generic default params are discarded
+    in favour of the scenario's.
     """
-    level = build_easy_rocket_level(jax.random.PRNGKey(seed))
-    env, env_params = factoriax.make(
+    scenario_level = EasyRocketScenario(seed=seed).levels()[0]
+    level, env_params = scenario_level.level, scenario_level.env_params
+    env, _ = factoriax.make(
         level,
         obs="global",
         achievement_fn=easy_rocket_conditions,
-    )
-    env_params = env_params.replace(
-        num_players=1,
-        max_timesteps=max_timesteps,
-        recipe_table=EASY_ROCKET_RECIPE_TABLE,
     )
     state0 = build_state(level, env_params)
     return env, state0, env_params
@@ -72,22 +68,22 @@ def _make_env_and_state(
 def run_policy(
     policy: ScriptedPolicy,
     seed: int = 0,
-    max_timesteps: int = 2000,
     debug_every: int = 0,
     agent_for_debug: object | None = None,
 ) -> tuple[list[EnvState], list[int]]:
     """Drive *policy* through one easy_rocket episode.
 
     Steps the JIT'd env, calling *policy* with the current state at
-    each tick. Stops at ``done`` or ``max_timesteps``. Returns the
-    full state and action trajectories for downstream rendering.
+    each tick. Stops at ``done`` or the scenario's episode budget
+    (``env_params.max_timesteps``). Returns the full state and action
+    trajectories for downstream rendering.
 
     When ``debug_every > 0`` and ``agent_for_debug`` is a
     :class:`ScriptedAgent`, the runner logs the agent's per-phase
     debug status every ``debug_every`` ticks plus once on every
     phase transition.
     """
-    env, state, env_params = _make_env_and_state(seed, max_timesteps)
+    env, state, env_params = _make_env_and_state(seed)
     jit_step = jax.jit(env.step_env)
     rng = jax.random.PRNGKey(seed)
 
@@ -134,7 +130,6 @@ def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--max-timesteps", type=int, default=2000)
     parser.add_argument(
         "--out-dir",
         type=str,
@@ -155,14 +150,13 @@ def main() -> None:
         ScriptedAgent,
     )
 
-    _, init_state, _ = _make_env_and_state(args.seed, args.max_timesteps)
-    agent = ScriptedAgent(init_state, EASY_ROCKET_RECIPE_TABLE)
+    _, init_state, env_params = _make_env_and_state(args.seed)
+    agent = ScriptedAgent(init_state, env_params.recipe_table)
 
     t0 = time.perf_counter()
     states, actions = run_policy(
         agent,
         seed=args.seed,
-        max_timesteps=args.max_timesteps,
         debug_every=args.debug_every,
         agent_for_debug=agent,
     )
