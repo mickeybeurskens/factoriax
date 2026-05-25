@@ -222,26 +222,10 @@ IS_SCIENCE_PACK = (
 # Placeable items and machine mappings
 # ---------------------------------------------------------------------------
 
-# Items that place a machine when used, in PLACE_* action / UI palette
-# order. Canonical pure-Python definition; the jnp membership array is
-# built in factoriax.placement, its sole engine consumer.
-PLACEABLE_ITEM_LIST: tuple[int, ...] = (
-    int(ItemType.MINER),
-    int(ItemType.PALLET),
-    int(ItemType.CONVEYOR_BELT),
-    int(ItemType.ASSEMBLER),
-    int(ItemType.ARM),
-    int(ItemType.ROCKET),
-    int(ItemType.FURNACE),
-    int(ItemType.SCIENCE_LAB),
-    int(ItemType.SPLITTER),
-    int(ItemType.CROSSING),
-)
-
-RESOURCE_ITEM_LIST: tuple[int, ...] = tuple(
-    i for i in range(1, NUM_ITEM_TYPES) if i not in PLACEABLE_ITEM_LIST
-)
-
+# The item<->machine bijection: every placeable item and the machine it
+# becomes when placed. This is the anchor for the machine cluster -- the
+# placeable set below and the jnp gather arrays in factoriax.placement are
+# all projections of it.
 ITEM_TO_MACHINE = {
     ItemType.MINER: MachineType.MINER,
     ItemType.PALLET: MachineType.PALLET,
@@ -254,6 +238,17 @@ ITEM_TO_MACHINE = {
     ItemType.SPLITTER: MachineType.SPLITTER,
     ItemType.CROSSING: MachineType.CROSSING,
 }
+
+# Items that place a machine when used -- exactly the keys of the mapping
+# above, so the two cannot drift. Membership only: the PLACE_* action and
+# UI palette order are interface concerns owned by their dispatchers, not
+# this definition. The jnp membership array is built in factoriax.placement,
+# its sole engine consumer.
+PLACEABLE_ITEM_LIST: tuple[int, ...] = tuple(int(it) for it in ITEM_TO_MACHINE)
+
+RESOURCE_ITEM_LIST: tuple[int, ...] = tuple(
+    i for i in range(1, NUM_ITEM_TYPES) if i not in PLACEABLE_ITEM_LIST
+)
 
 # ---------------------------------------------------------------------------
 # Direction and movement
