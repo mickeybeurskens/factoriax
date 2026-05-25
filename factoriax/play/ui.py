@@ -1570,7 +1570,6 @@ def render_hotbar(
 _BLOCK_NAMES: dict[int, str] = {
     int(BlockType.DIRT): "Dirt",
     int(BlockType.WATER): "Water",
-    int(BlockType.NEST): "Biter Nest",
     int(BlockType.OUT_OF_BOUNDS): "Out of Bounds",
     **{
         int(bt): f"{_ITEM_NAMES.get(int(it), '?')} Deposit"

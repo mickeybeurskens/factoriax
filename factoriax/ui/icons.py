@@ -110,7 +110,6 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
     solid_colors: dict[int, tuple[int, int, int]] = {
         int(BlockType.DIRT): (139, 90, 43),
         int(BlockType.WATER): (50, 120, 190),
-        int(BlockType.NEST): (130, 40, 55),
     }
     ore_colors: dict[int, tuple[tuple[int, int, int], bool]] = {
         int(BlockType.IRON): ((180, 185, 200), False),

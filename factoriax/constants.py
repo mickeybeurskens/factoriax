@@ -18,8 +18,7 @@ class BlockType(IntEnum):
     COAL = 6
     TIN = 7
     SILICON = 8
-    NEST = 9  # Temporary backward-compat (Stage 1)
-    LIMESTONE = 10  # Refractory feedstock; pairs with COAL in furnace
+    LIMESTONE = 9  # Refractory feedstock; pairs with COAL in furnace
 
 
 class ItemType(IntEnum):
