@@ -263,4 +263,129 @@ environment constants). Guarded by the alternate-book dispatch tests in
 and assert every `CRAFT_*` action resolves to a recipe whose output is the
 action's item (absent items resolve to `-1`).
 
+## 7. Miner/belt push duplicates items into inactive entity slots, which then leak into freshly-placed machines
+
+**Symptom**: On most easy_rocket seeds the scripted agent stalls in the
+first automated section (HULL or ENGINE): the section never crafts its
+assembler/belts/miners and NOOP-spins to the phase deadline. Inspecting
+the state at the stall shows every manual-miner pallet holding **COAL**,
+regardless of which ore its miner actually mines:
+
+```
+pallet (0,0)  source=COAL       buf=COAL x256   <- the real COAL pallet
+pallet (7,13) source=IRON_ORE   buf=COAL x57
+pallet (11,8) source=COPPER_ORE buf=COAL x84
+pallet (13,10)source=TIN_ORE    buf=COAL x99
+pallet (6,0)  source=SILICON    buf=COAL x150
+pallet (1,0)  source=LIMESTONE  buf=COAL x174
+```
+
+Each miner sits on the correct ore tile and holds the correct ore in its
+own buffer, but can't push into its pallet because the pallet is already
+full of COAL, and a pallet only accepts a push when it is empty or
+already holds the same item. So the whole factory starves. The COAL
+counts in the wrong pallets are not random — they track the real COAL
+pallet's running total at the moment each pallet was placed, so a pallet
+placed later is born holding more COAL.
+
+**Root cause**: Two compounding engine issues. Either one alone hides the
+visible symptom, but the gather gate is the real fix.
+
+(1) The push step in `run_miners` (and identically in
+`run_conveyor_belts`) is a scatter from each pusher plus a *gather* on
+the receiving side. Entity grid positions are clipped for safe indexing
+(`ey = clip(ent_y, 0, h - 1)`), so every inactive slot
+(`ent_y == ent_x == -1`) maps onto tile (0,0). The gather's `incoming`
+mask checked only that a pushing neighbour existed
+(`can_push[up_safe] & (up_eidx >= 0) & up_diff`), never that the
+*receiving* slot was active. So every inactive slot virtually sitting at
+(0,0) pulled in any push aimed at one of (0,0)'s neighbours. In
+easy_rocket the COAL manual miner frequently lands adjacent to a COAL
+pallet at (0,0), so every inactive slot accumulated COAL at the miner's
+rate. This is simultaneously an item-duplication / conservation bug: the
+push is subtracted from the source once but credited to *every* receiver
+the gather matches — the real pallet plus all inactive slots — creating
+items from nothing. The same pattern existed on the belt/splitter buffer
+track in `run_conveyor_belts`; its crossing-axis track was already gated
+on the active `is_crossing` mask, so only belts, splitters, and pallets
+leaked.
+
+(2) `place_machine` allocates the first inactive slot and wrote
+position/type/direction/health but never cleared
+`ent_buf_type`/`ent_buf_count`, so a machine placed into a polluted slot
+inherited that COAL.
+
+**Minimal reproduction** (clean repo, no scripted agent):
+
+```python
+import jax, jax.numpy as jnp
+import factoriax
+from factoriax.constants import BlockType, Direction, ItemType, MachineType
+from factoriax.levels import build_state
+from factoriax.machines import run_miners
+from factoriax.scenarios.easy_rocket import (
+    EASY_ROCKET_RECIPE_TABLE, build_easy_rocket_level, easy_rocket_conditions,
+)
+
+level = build_easy_rocket_level(jax.random.PRNGKey(0))
+env, params = factoriax.make(level, obs="global", achievement_fn=easy_rocket_conditions)
+params = params.replace(num_players=1, max_timesteps=2000,
+                        recipe_table=EASY_ROCKET_RECIPE_TABLE)
+state = build_state(level, params)
+
+# COAL ore at (1,0); MINER on it facing LEFT into (0,0); PALLET at (0,0);
+# entity slot 2 left INACTIVE (ent_y = -1).
+m   = state.map.at[0, 1].set(jnp.int8(int(BlockType.COAL)))
+res = state.block_resources.at[0, 1].set(jnp.asarray(9999, state.block_resources.dtype))
+n = state.ent_y.shape[0]
+ent_y = jnp.full(n, -1, state.ent_y.dtype).at[0].set(0).at[1].set(0)
+ent_x = jnp.full(n, -1, state.ent_x.dtype).at[0].set(1).at[1].set(0)
+ent_type = jnp.zeros(n, state.ent_type.dtype) \
+    .at[0].set(int(MachineType.MINER)).at[1].set(int(MachineType.PALLET))
+ent_dir = jnp.zeros(n, state.ent_direction.dtype).at[0].set(int(Direction.LEFT))
+tile_ent = jnp.full_like(state.tile_entity, -1).at[0, 1].set(0).at[0, 0].set(1)
+state = state.replace(map=m, block_resources=res, ent_y=ent_y, ent_x=ent_x,
+    ent_type=ent_type, ent_direction=ent_dir,
+    ent_buf_type=jnp.zeros(n, state.ent_buf_type.dtype),
+    ent_buf_count=jnp.zeros(n, state.ent_buf_count.dtype), tile_entity=tile_ent)
+
+run = jax.jit(run_miners)
+for t in range(6):
+    state = run(state, params)
+    print(f"t={t} pallet(0,0)=COAL x{int(state.ent_buf_count[1])}  "
+          f"INACTIVE slot 2 = {ItemType(int(state.ent_buf_type[2])).name} "
+          f"x{int(state.ent_buf_count[2])} (ent_y={int(state.ent_y[2])})")
+```
+
+Confirmed output: the never-placed slot 2 accumulates COAL in lockstep
+with the real pallet. The miner extracted 18 COAL over six ticks; the two
+receivers held 36 between them — proof of duplication.
+
+**Impact**: 84/100 easy_rocket seeds failed for the scripted agent —
+whenever a manual miner landed adjacent to (0,0) and faced it, every
+subsequently-placed pallet was born holding that miner's ore instead of
+its own, so the automated sections could never be fed. More broadly, any
+agent or scenario suffered silent item duplication whenever a miner,
+belt, or splitter pushed toward a tile neighbouring (0,0) while inactive
+slots existed (the common case — entity arrays are sized well above the
+placed-machine count). The duplicated items were invisible until an
+inactive slot was later allocated by `place_machine`, at which point the
+phantom buffer materialised on the new machine. Broke the "items never
+silently appear or disappear" invariant.
+
+**Fix landed**: gate the gather on the receiving entity being active in
+both `run_miners` and `run_conveyor_belts` —
+`incoming = active & can_push[up_safe] & (up_eidx >= 0) & up_diff`
+(`active = state.ent_y >= 0`, already computed). This stops both the
+buffer leak and the duplication at the source and restores conservation
+(`878bc8b`). Defense-in-depth: `place_machine` now zeros the allocated
+slot's `ent_buf_type`/`ent_buf_count` so a freshly-placed machine always
+starts empty regardless of stale slot state (`e1bf614`). Regression
+tests in `tests/test_machines.py` assert inactive slots stay empty and
+items are conserved under both a neighbouring miner push and a belt push;
+`tests/test_placement.py` asserts a machine placed into a polluted slot
+starts empty. A throughput A/B (`scripts/post_commit_perf.py`, before vs
+after) showed no measurable change — the gate adds two elementwise `&`
+terms to gathers that are already memory-bandwidth bound.
+
 ## (reserved for further bugs as they surface)
