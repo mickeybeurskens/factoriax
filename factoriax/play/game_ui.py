@@ -33,7 +33,6 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
     ROTATE_BASE,
-    TURN_RIGHT_MAP,
     Action,
     Direction,
     ItemType,
@@ -74,6 +73,11 @@ def _renderer_for(tile_px: int) -> JaxRenderer:
 
 
 _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
+
+# Direction -> next direction one step clockwise, indexed by Direction
+# value (1-indexed: LEFT=1..DOWN=4; index 0 is unused). Drives the
+# rotate-machine play action; lives here as it is play-UI-only wiring.
+TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.MINER): int(Action.PLACE_MINER),

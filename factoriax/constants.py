@@ -401,17 +401,19 @@ MAX_ACHIEVEMENTS = 64
 
 
 # ---------------------------------------------------------------------------
-# Temporary backward-compat constants (will be removed in Stage 2+)
+# Machine defaults
 # ---------------------------------------------------------------------------
 
 #: Default maximum health for every placeable machine. Wrappers can
 #: tune per-type values via :class:`~factoriax.machine_config.MachineConfig`.
 MAX_HEALTH: int = 256
 
-NUM_INVENTORY_SLOTS: int = 10
+# Machine inventory shape (DEF1 cluster). Both are hand-maintained and
+# over-allocated -- the real maximum slot count is 3, but the editor's
+# flattened slot view and MACHINE_SLOT_ROLES are width-8 in lockstep.
+# DEF1's MachineSpec will make these derive from one per-machine slot
+# definition; until then, the values stay as-is and move together.
 MAX_MACHINE_INVENTORY_SLOTS: int = 8
-
-TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
 # Per-MachineType slot counts (indexed by MachineType value).
 # SCIENCE_LAB: 2 input slots (one per pack type), no output.

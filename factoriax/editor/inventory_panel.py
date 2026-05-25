@@ -13,11 +13,11 @@ import pygame
 from factoriax.constants import (
     MACHINE_SLOT_ROLES,
     MAX_MACHINE_INVENTORY_SLOTS,
-    NUM_INVENTORY_SLOTS,
     ItemType,
 )
 from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.editor.state import (
+    NUM_INVENTORY_SLOTS,
     EditorState,
     InvTarget,
     get_inventory_slots,

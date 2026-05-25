@@ -14,12 +14,16 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MAX_MACHINE_INVENTORY_SLOTS,
-    NUM_INVENTORY_SLOTS,
     BlockType,
     ItemType,
     MachineType,
 )
 from factoriax.levels import Level, default_resources
+
+#: Number of inventory slots shown per player in the editor. The engine
+#: player inventory is item-indexed (it has no slot concept); this is
+#: purely the editor's display capacity.
+NUM_INVENTORY_SLOTS: int = 10
 
 #: Target type for inventory operations.
 #: ``("player", player_idx, 0)`` or ``("machine", tile_x, tile_y)``.
