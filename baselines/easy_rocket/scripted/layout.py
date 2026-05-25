@@ -794,6 +794,17 @@ def _try_layout(
                 )
                 reserved.discard(cand)
                 continue
+            if not result[0]:
+                # Empty path: the miner would abut the assembler. A miner
+                # can't push into a combiner, and the assembler pulls only
+                # from a belt neighbour — so a directly-adjacent miner can
+                # never feed it. Require at least one belt tile between.
+                last_failure = (
+                    f"{ItemType(ore).name} miner at {cand} abuts the "
+                    f"{ItemType(consumer).name} assembler with no belt gap"
+                )
+                reserved.discard(cand)
+                continue
             # Commit.
             chosen_pos = cand
             chosen_path, chosen_crossings = result
