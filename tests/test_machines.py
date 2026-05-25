@@ -6,10 +6,11 @@ from jax import random
 from factoriax import BlockType, EnvParams, EnvState, ItemType
 from factoriax.constants import (
     MAX_MACHINE_STACK_SIZE,
+    Direction,
     MachineType,
 )
 from factoriax.levels import generate_state
-from factoriax.machines import run_miners, update_all_machines
+from factoriax.machines import run_conveyor_belts, run_miners, update_all_machines
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -236,6 +237,132 @@ class TestMultipleMiners:
         assert new_state.ent_buf_type[eid_iron] == ItemType.IRON_ORE
         assert new_state.ent_buf_count[eid_copper] == 3
         assert new_state.ent_buf_type[eid_copper] == ItemType.COPPER_ORE
+
+
+class TestMinerPushDoesNotLeakIntoInactiveSlots:
+    """Regression: a miner push must reach only the placed receiver.
+
+    Inactive entity slots carry ``ent_y == ent_x == -1`` and the safety
+    clip in :func:`run_miners` maps every one of them onto tile (0, 0).
+    A miner standing next to (0, 0) and facing into it must not have its
+    ore credited to those phantom slots, both because the slots later
+    feed freshly-placed machines and because crediting more than one
+    receiver per push mints items from nothing.
+    """
+
+    def _push_into_corner_state(self, state_factory) -> EnvState:
+        """Build a miner at (0, 1) pushing COAL left into a pallet at (0, 0).
+
+        The pallet occupies the corner tile that every inactive slot
+        clips onto, so any ungated gather leaks the miner's ore into the
+        inactive slots in lockstep with the real pallet.
+
+        Args:
+            state_factory: The shared ``state_factory`` fixture.
+
+        Returns:
+            A state with two active entities (pallet, miner) and the
+            remaining slots inactive at (0, 0).
+        """
+        return state_factory(
+            world_map=jnp.array([[BlockType.DIRT, BlockType.COAL]], dtype=jnp.int32),
+            block_resources=jnp.array([[0, 50]], dtype=jnp.int16),
+            machine_types=jnp.array(
+                [[MachineType.PALLET, MachineType.MINER]], dtype=jnp.int32
+            ),
+            machine_direction=jnp.array(
+                [[Direction.DOWN, Direction.LEFT]], dtype=jnp.int8
+            ),
+        )
+
+    def test_inactive_slots_stay_empty_under_neighbour_push(
+        self, state_factory
+    ) -> None:
+        """Inactive slots keep an empty buffer while the pallet fills."""
+        state = self._push_into_corner_state(state_factory)
+        params = EnvParams(map_width=2, map_height=1)
+
+        for _ in range(5):
+            state = run_miners(state, params)
+
+        pallet_eid = _eid(state, 0, 0)
+        assert state.ent_buf_count[pallet_eid] > 0
+        assert state.ent_buf_type[pallet_eid] == ItemType.COAL
+
+        inactive = state.ent_y < 0
+        assert bool(jnp.all(state.ent_buf_count[inactive] == 0))
+        assert bool(jnp.all(state.ent_buf_type[inactive] == 0))
+
+    def test_push_conserves_items(self, state_factory) -> None:
+        """Total buffered ore equals total mined ore (no duplication)."""
+        state = self._push_into_corner_state(state_factory)
+        params = EnvParams(map_width=2, map_height=1)
+
+        for _ in range(5):
+            state = run_miners(state, params)
+
+        total_buffered = int(jnp.sum(state.ent_buf_count.astype(jnp.int32)))
+        total_mined = int(jnp.sum(state.items_mined))
+        assert total_buffered == total_mined
+
+
+class TestBeltPushDoesNotLeakIntoInactiveSlots:
+    """Regression: a belt push must reach only the placed receiver.
+
+    ``run_conveyor_belts`` shares the gather pattern of
+    :func:`run_miners`: every inactive slot clips onto tile (0, 0), so a
+    belt next to (0, 0) and facing into it must not have its item
+    credited to those phantom slots. The crossing-axis receiver track is
+    already gated on ``is_crossing`` (active), but the buffer track is
+    not, so belts and splitters leak without an explicit active gate.
+    """
+
+    def _belt_into_corner_state(self, state_factory) -> EnvState:
+        """Build a belt at (0, 1) pushing COAL left into a pallet at (0, 0).
+
+        Args:
+            state_factory: The shared ``state_factory`` fixture.
+
+        Returns:
+            A state with two active entities (pallet, belt) and the
+            remaining slots inactive at (0, 0). The belt holds one COAL.
+        """
+        return state_factory(
+            world_map=jnp.array([[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32),
+            machine_types=jnp.array(
+                [[MachineType.PALLET, MachineType.CONVEYOR_BELT]], dtype=jnp.int32
+            ),
+            machine_direction=jnp.array(
+                [[Direction.DOWN, Direction.LEFT]], dtype=jnp.int8
+            ),
+            buffer_type=jnp.array([[0, int(ItemType.COAL)]], dtype=jnp.int8),
+            buffer_count=jnp.array([[0, 1]], dtype=jnp.int16),
+        )
+
+    def test_inactive_slots_stay_empty_under_belt_push(self, state_factory) -> None:
+        """Inactive slots keep an empty buffer while the pallet fills."""
+        state = self._belt_into_corner_state(state_factory)
+        params = EnvParams(map_width=2, map_height=1)
+
+        state = run_conveyor_belts(state, params)
+
+        pallet_eid = _eid(state, 0, 0)
+        assert state.ent_buf_count[pallet_eid] == 1
+        assert state.ent_buf_type[pallet_eid] == ItemType.COAL
+
+        inactive = state.ent_y < 0
+        assert bool(jnp.all(state.ent_buf_count[inactive] == 0))
+        assert bool(jnp.all(state.ent_buf_type[inactive] == 0))
+
+    def test_belt_push_conserves_items(self, state_factory) -> None:
+        """The single COAL on the belt is moved, never duplicated."""
+        state = self._belt_into_corner_state(state_factory)
+        params = EnvParams(map_width=2, map_height=1)
+
+        before = int(jnp.sum(state.ent_buf_count.astype(jnp.int32)))
+        state = run_conveyor_belts(state, params)
+        after = int(jnp.sum(state.ent_buf_count.astype(jnp.int32)))
+        assert after == before
 
 
 class TestUpdateAllMachines:

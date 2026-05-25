@@ -198,7 +198,11 @@ def run_miners(
         up_diff = (up_y != ey) | (up_x != ex)
         up_eidx = state.tile_entity[up_y, up_x]
         up_safe = jnp.clip(up_eidx, 0, new_buf_type.shape[0] - 1)
-        incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
+        # Gate on the receiver being active: inactive slots all clip to
+        # tile (0, 0), so without this they would each pull in a push
+        # aimed at the real entity on (0, 0)'s neighbour -- duplicating
+        # the item and leaking it into slots later reused by placement.
+        incoming = active & can_push[up_safe] & (up_eidx >= 0) & up_diff
         in_type = new_buf_type[up_safe]
         in_xfer = xfer[up_safe]
 
@@ -792,7 +796,11 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         up_diff = (up_y != ey) | (up_x != ex)
         up_eidx = state.tile_entity[up_y, up_x]
         up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
-        incoming = can_push[up_safe] & (up_eidx >= 0) & up_diff
+        # Gate on the receiver being active: inactive slots all clip to
+        # tile (0, 0), so without this a belt or splitter pushing toward
+        # (0, 0)'s neighbour would duplicate its item into every inactive
+        # slot via the buffer track below (~is_crossing is true for them).
+        incoming = active & can_push[up_safe] & (up_eidx >= 0) & up_diff
         in_type = src_type[up_safe]
         in_xfer = xfer[up_safe]
 
