@@ -120,41 +120,34 @@ MACHINE_MAX_STACK = jnp.array(
 )
 
 # Max stack count per item type for the player inventory.
+# Per-item player inventory stack cap, indexed by ItemType. Most items
+# stack to a common default; machines and large rocket components are
+# bulky, so the player carries fewer per stack. Built by name-keyed
+# overrides over the default so a row can never drift out of alignment
+# with ItemType the way a positional literal can.
+_DEFAULT_PLAYER_STACK = 1024
+_BULKY_PLAYER_STACK = 128
+_PLAYER_STACK_OVERRIDES: dict[int, int] = {
+    int(ItemType.EMPTY): 0,
+    int(ItemType.CONVEYOR_BELT): _BULKY_PLAYER_STACK,
+    int(ItemType.MINER): _BULKY_PLAYER_STACK,
+    int(ItemType.ASSEMBLER): _BULKY_PLAYER_STACK,
+    int(ItemType.PALLET): _BULKY_PLAYER_STACK,
+    int(ItemType.ARM): _BULKY_PLAYER_STACK,
+    int(ItemType.ROCKET): _BULKY_PLAYER_STACK,
+    int(ItemType.FURNACE): _BULKY_PLAYER_STACK,
+    int(ItemType.HULL): _BULKY_PLAYER_STACK,
+    int(ItemType.ENGINE_UNIT): _BULKY_PLAYER_STACK,
+    int(ItemType.AVIONICS): _BULKY_PLAYER_STACK,
+    int(ItemType.ROCKET_CORE): _BULKY_PLAYER_STACK,
+    int(ItemType.SCIENCE_LAB): _BULKY_PLAYER_STACK,
+    int(ItemType.SPLITTER): _BULKY_PLAYER_STACK,
+    int(ItemType.CROSSING): _BULKY_PLAYER_STACK,
+}
 PLAYER_MAX_STACK = jnp.array(
     [
-        0,  # EMPTY
-        1024,  # COAL
-        1024,  # IRON_ORE
-        1024,  # COPPER_ORE
-        1024,  # TIN_ORE
-        1024,  # SILICON
-        1024,  # IRON_PLATE
-        1024,  # COPPER_PLATE
-        1024,  # TIN_PLATE
-        1024,  # WAFER
-        1024,  # FRAME
-        1024,  # CIRCUIT
-        1024,  # WIRE
-        1024,  # MOTOR
-        1024,  # SENSOR
-        128,  # CONVEYOR_BELT
-        128,  # MINER
-        128,  # ASSEMBLER
-        128,  # PALLET
-        128,  # ARM
-        1024,  # BASIC_SCIENCE_PACK
-        1024,  # ADVANCED_SCIENCE_PACK
-        128,  # ROCKET
-        128,  # FURNACE
-        1024,  # REFRACTORY
-        128,  # HULL
-        128,  # ENGINE_UNIT
-        128,  # AVIONICS
-        128,  # ROCKET_CORE
-        128,  # SCIENCE_LAB
-        1024,  # LIMESTONE
-        128,  # SPLITTER
-        128,  # CROSSING
+        _PLAYER_STACK_OVERRIDES.get(i, _DEFAULT_PLAYER_STACK)
+        for i in range(NUM_ITEM_TYPES)
     ],
     dtype=jnp.int32,
 )
