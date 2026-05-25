@@ -16,14 +16,13 @@ import numpy as np
 import pygame
 
 from factoriax.constants import (
-    MACHINE_NUM_SLOTS,
-    MACHINE_SLOT_ROLES,
     MAX_MACHINE_STACK_SIZE,
     ItemType,
     MachineType,
     SlotRole,
 )
 from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
+from factoriax.machine_spec import MACHINE_NUM_SLOTS, MACHINE_SLOT_ROLES
 from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.icons import render_item_icon

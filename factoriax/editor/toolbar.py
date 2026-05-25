@@ -12,12 +12,12 @@ import numpy as np
 import pygame
 
 from factoriax.constants import (
-    MACHINE_SLOT_ROLES,
     BlockType,
     ItemType,
     MachineType,
     SlotRole,
 )
+from factoriax.machine_spec import MACHINE_SLOT_ROLES
 from factoriax.placement import MACHINE_TO_ITEM_ARRAY
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.icons import (

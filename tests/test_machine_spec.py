@@ -1,22 +1,17 @@
 """Tests for the machine specification (DEF1).
 
-S0 (characterization lock): snapshot the exact current contents of the
-``MachineType``-indexed config arrays and the machine-config scalars
-*before* the DEF1 ``MachineSpec`` refactor derives them from per-machine
-records. Any unintended change to these values fails here.
+``machine_spec`` is the single source of truth for per-machine config:
+each machine is one ``MachineSpec`` record, and the ``MachineType``-indexed
+arrays the engine and editor index are derived from those records. These
+tests lock the derived arrays against the values they replaced — a golden
+snapshot taken before the refactor — so the derivation can never silently
+drift from the shipped config.
 
-The refactor will make exactly two intentional changes to these golden
-values, both confined to slots beyond a machine's ``num_slots`` (which
-nothing reads):
-
-1. the editor slot-view width shrinks ``8 -> 3`` (``max`` real slot count),
-   so ``MACHINE_SLOT_ROLES`` becomes shape ``(11, 3)`` and
-   ``MAX_MACHINE_INVENTORY_SLOTS`` becomes ``3``;
-2. ``PALLET``'s spurious slots 1-7 (currently ``STORAGE``) become ``NONE``
-   once roles are derived from its single-slot spec — the present
-   ``[STORAGE] * 8`` row disagrees with ``MACHINE_NUM_SLOTS[PALLET] == 1``.
-
-Until then this file asserts the current, pre-refactor truth.
+Two values intentionally differ from the pre-refactor arrays, both confined
+to slots beyond a machine's ``num_slots`` (which nothing reads): the
+slot-view width shrank ``8 -> 3`` (the real max), and ``PALLET``'s spurious
+slots 1-7 (formerly ``STORAGE``) are ``NONE`` now that roles derive from its
+single-slot spec.
 """
 
 from __future__ import annotations
@@ -24,14 +19,9 @@ from __future__ import annotations
 import numpy as np
 
 from factoriax import machine_spec
-from factoriax.constants import (
-    MACHINE_NUM_SLOTS,
-    MACHINE_SLOT_ROLES,
-    MAX_MACHINE_INVENTORY_SLOTS,
-    MachineType,
-)
+from factoriax.constants import MachineType
 
-# --- Golden snapshot of the current per-MachineType config -----------------
+# --- Golden values: the per-machine config as it shipped pre-refactor ------
 # Indexed by MachineType value: NONE, MINER, PALLET, ASSEMBLER, CONVEYOR_BELT,
 # ARM, ROCKET, FURNACE, SCIENCE_LAB, SPLITTER, CROSSING.
 
@@ -39,10 +29,10 @@ _GOLDEN_NUM_SLOTS: tuple[int, ...] = (0, 1, 1, 3, 1, 0, 0, 3, 2, 1, 2)
 _GOLDEN_MAX_STACK: tuple[int, ...] = (0, 64, 256, 1000, 3, 1, 0, 1000, 1000, 2, 2)
 _GOLDEN_MAX_TYPES: tuple[int, ...] = (0, 2, 1, 4, 1, 1, 0, 2, 2, 1, 2)
 _GOLDEN_MAX_HEALTH: int = 256
-_GOLDEN_MAX_INVENTORY_SLOTS: int = 8
 
-# Per-machine slot roles, width 8 (SlotRole values: NONE=0, INPUT=1, OUTPUT=2,
-# STORAGE=3, FUEL=4). PALLET's [3]*8 is the documented drift vs num_slots=1.
+# Pre-refactor slot roles, width 8 (SlotRole: NONE=0, INPUT=1, OUTPUT=2,
+# STORAGE=3, FUEL=4). PALLET's [3]*8 was the drift vs num_slots=1; kept here
+# so the agreement test can prove the within-num_slots roles are unchanged.
 _GOLDEN_SLOT_ROLES: tuple[tuple[int, ...], ...] = (
     (0, 0, 0, 0, 0, 0, 0, 0),  # NONE
     (2, 0, 0, 0, 0, 0, 0, 0),  # MINER       — 1 OUTPUT
@@ -57,41 +47,7 @@ _GOLDEN_SLOT_ROLES: tuple[tuple[int, ...], ...] = (
     (3, 3, 0, 0, 0, 0, 0, 0),  # CROSSING    — 2 STORAGE
 )
 
-
-def test_num_slots_snapshot() -> None:
-    """``MACHINE_NUM_SLOTS`` matches the locked golden values."""
-    assert tuple(np.asarray(MACHINE_NUM_SLOTS).tolist()) == _GOLDEN_NUM_SLOTS
-
-
-def test_slot_roles_snapshot() -> None:
-    """``MACHINE_SLOT_ROLES`` matches the locked golden rows (width 8)."""
-    rows = tuple(tuple(row) for row in np.asarray(MACHINE_SLOT_ROLES).tolist())
-    assert rows == _GOLDEN_SLOT_ROLES
-
-
-def test_scalars_snapshot() -> None:
-    """The machine-config scalars match the locked golden values.
-
-    ``MAX_HEALTH`` now lives in ``machine_spec``; the editor slot-view
-    width still reads 8 in constants until S4 moves it.
-    """
-    assert int(machine_spec.MAX_HEALTH) == _GOLDEN_MAX_HEALTH
-    assert int(MAX_MACHINE_INVENTORY_SLOTS) == _GOLDEN_MAX_INVENTORY_SLOTS
-
-
-def test_arrays_are_machinetype_length() -> None:
-    """Every per-machine array has one row per ``MachineType`` member."""
-    n = len(MachineType)
-    assert len(_GOLDEN_NUM_SLOTS) == n
-    assert np.asarray(MACHINE_NUM_SLOTS).shape == (n,)
-    assert np.asarray(MACHINE_SLOT_ROLES).shape[0] == n
-
-
-# --- S1: arrays derived from machine_spec.MACHINE_SPECS --------------------
-# The derived roles are width 3 (real max slot count) with PALLET corrected
-# to its single STORAGE slot — the two intentional changes from the golden
-# snapshot, both beyond any machine's num_slots.
-
+# Derived roles after the refactor: width 3 (real max), PALLET corrected.
 _DERIVED_SLOT_ROLES: tuple[tuple[int, ...], ...] = (
     (0, 0, 0),  # NONE
     (2, 0, 0),  # MINER
@@ -157,6 +113,14 @@ def test_derived_roles_agree_within_num_slots() -> None:
         assert tuple(derived[i, :n].tolist()) == _GOLDEN_SLOT_ROLES[i][:n], (
             f"machine {MachineType(i).name} role within num_slots changed"
         )
+
+
+def test_arrays_are_machinetype_length() -> None:
+    """Golden data and derived arrays have one row per ``MachineType``."""
+    n = len(MachineType)
+    assert len(_GOLDEN_NUM_SLOTS) == n
+    assert np.asarray(machine_spec.MACHINE_NUM_SLOTS).shape == (n,)
+    assert np.asarray(machine_spec.MACHINE_SLOT_ROLES).shape[0] == n
 
 
 def test_specs_cover_machinetypes_in_order() -> None:

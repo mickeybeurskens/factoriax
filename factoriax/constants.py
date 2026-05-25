@@ -3,7 +3,6 @@
 from enum import IntEnum
 
 import jax.numpy as jnp
-import numpy as np
 
 
 class BlockType(IntEnum):
@@ -363,21 +362,8 @@ MAX_ACHIEVEMENTS = 64
 
 
 # ---------------------------------------------------------------------------
-# Machine defaults
+# Machine slot roles
 # ---------------------------------------------------------------------------
-
-# Machine inventory shape (DEF1 cluster). Both are hand-maintained and
-# over-allocated -- the real maximum slot count is 3, but the editor's
-# flattened slot view and MACHINE_SLOT_ROLES are width-8 in lockstep.
-# DEF1's MachineSpec will make these derive from one per-machine slot
-# definition; until then, the values stay as-is and move together.
-MAX_MACHINE_INVENTORY_SLOTS: int = 8
-
-# Per-MachineType slot counts (indexed by MachineType value).
-# SCIENCE_LAB: 2 input slots (one per pack type), no output.
-# SPLITTER: 1 buffer slot (the stack-of-2 ent_buf).
-# CROSSING: 2 axis slots (vertical = ent_asm_in[0], horizontal = ent_asm_in[1]).
-MACHINE_NUM_SLOTS = np.array([0, 1, 1, 3, 1, 0, 0, 3, 2, 1, 2], dtype=np.int32)
 
 
 class SlotRole(IntEnum):
@@ -388,21 +374,3 @@ class SlotRole(IntEnum):
     OUTPUT = 2
     STORAGE = 3
     FUEL = 4
-
-
-MACHINE_SLOT_ROLES = np.array(
-    [
-        [SlotRole.NONE] * 8,  # NONE
-        [SlotRole.OUTPUT] + [SlotRole.NONE] * 7,  # MINER
-        [SlotRole.STORAGE] * 8,  # PALLET
-        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,  # CONVEYOR_BELT
-        [SlotRole.NONE] * 8,  # ARM (instant, no buffer)
-        [SlotRole.NONE] * 8,  # ROCKET
-        [SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT] + [SlotRole.NONE] * 5,
-        [SlotRole.INPUT, SlotRole.INPUT] + [SlotRole.NONE] * 6,  # SCIENCE_LAB
-        [SlotRole.STORAGE] + [SlotRole.NONE] * 7,  # SPLITTER (stack-of-2 buf)
-        [SlotRole.STORAGE, SlotRole.STORAGE] + [SlotRole.NONE] * 6,  # CROSSING
-    ],
-    dtype=np.int32,
-)

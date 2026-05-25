@@ -13,12 +13,12 @@ import numpy as np
 
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
-    MAX_MACHINE_INVENTORY_SLOTS,
     BlockType,
     ItemType,
     MachineType,
 )
 from factoriax.levels import Level, default_resources
+from factoriax.machine_spec import MAX_MACHINE_INVENTORY_SLOTS
 
 #: Number of inventory slots shown per player in the editor. The engine
 #: player inventory is item-indexed (it has no slot concept); this is
@@ -717,7 +717,7 @@ def get_num_slots(state: EditorState, target: InvTarget) -> int:
     Returns:
         Slot count (10 for players, machine-type-dependent for machines).
     """
-    from factoriax.constants import MACHINE_NUM_SLOTS
+    from factoriax.machine_spec import MACHINE_NUM_SLOTS
 
     if target[0] == "player":
         return NUM_INVENTORY_SLOTS

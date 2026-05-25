@@ -230,11 +230,12 @@ class TestScienceConstants:
 
     def test_lab_slot_roles(self) -> None:
         """The lab has two INPUT slots in MACHINE_SLOT_ROLES."""
-        from factoriax.constants import MACHINE_SLOT_ROLES, SlotRole
+        from factoriax.constants import SlotRole
+        from factoriax.machine_spec import MACHINE_SLOT_ROLES
 
         roles = MACHINE_SLOT_ROLES[int(MachineType.SCIENCE_LAB)]
         assert roles[0] == int(SlotRole.INPUT)
         assert roles[1] == int(SlotRole.INPUT)
-        # Slots 2+ are NONE.
-        for i in range(2, 8):
+        # Padding slots beyond the lab's two are NONE.
+        for i in range(2, len(roles)):
             assert roles[i] == int(SlotRole.NONE)
