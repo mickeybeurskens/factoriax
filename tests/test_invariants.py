@@ -12,7 +12,6 @@ import pytest
 from jax import lax, random
 
 from factoriax.constants import (
-    MACHINE_MAX_STACK,
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
@@ -22,6 +21,7 @@ from factoriax.constants import (
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step, mine_block
+from factoriax.machine_spec import MACHINE_MAX_STACK
 from factoriax.state import EnvParams, EnvState
 
 # Every test in this file runs a 100-step random rollout through

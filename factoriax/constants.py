@@ -96,29 +96,6 @@ INVENTORY_COUNT_DTYPE = jnp.int32
 MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
 BLOCK_RESOURCE_DTYPE = jnp.int16
 
-# Max distinct item types a machine can hold simultaneously.
-# SPLITTER holds one type (its stack-of-2 buffer); CROSSING holds two
-# (one per axis slot in ent_asm_in[0..1]).
-MACHINE_MAX_TYPES = jnp.array(
-    [0, 2, 1, 4, 1, 1, 0, 2, 2, 1, 2],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB,
-    # SPLITTER, CROSSING
-    dtype=jnp.int32,
-)
-
-# Max stack count per item type per machine type.
-# SPLITTER buffer caps at 2 (the user-specified stack-of-2 splitter).
-# CROSSING per-axis stack caps at 2: one cell of slack lets a fed
-# crossing both drain to its output and accept from its input on the
-# same tick, giving full one-tile-per-tick throughput in saturated
-# chains without a separate look-ahead pass.
-MACHINE_MAX_STACK = jnp.array(
-    [0, MAX_MACHINE_STACK_SIZE, 256, 1000, 3, 1, 0, 1000, 1000, 2, 2],
-    # NONE, MINER, PALLET, ASM, BELT, ARM, ROCKET, FURNACE, SCIENCE_LAB,
-    # SPLITTER, CROSSING
-    dtype=jnp.int16,
-)
-
 # Max stack count per item type for the player inventory.
 # Per-item player inventory stack cap, indexed by ItemType. Most items
 # stack to a common default; machines and large rocket components are

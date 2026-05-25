@@ -25,8 +25,6 @@ import numpy as np
 
 from factoriax import machine_spec
 from factoriax.constants import (
-    MACHINE_MAX_STACK,
-    MACHINE_MAX_TYPES,
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
     MAX_HEALTH,
@@ -66,16 +64,6 @@ def test_num_slots_snapshot() -> None:
     assert tuple(np.asarray(MACHINE_NUM_SLOTS).tolist()) == _GOLDEN_NUM_SLOTS
 
 
-def test_max_stack_snapshot() -> None:
-    """``MACHINE_MAX_STACK`` matches the locked golden values."""
-    assert tuple(np.asarray(MACHINE_MAX_STACK).tolist()) == _GOLDEN_MAX_STACK
-
-
-def test_max_types_snapshot() -> None:
-    """``MACHINE_MAX_TYPES`` matches the locked golden values."""
-    assert tuple(np.asarray(MACHINE_MAX_TYPES).tolist()) == _GOLDEN_MAX_TYPES
-
-
 def test_slot_roles_snapshot() -> None:
     """``MACHINE_SLOT_ROLES`` matches the locked golden rows (width 8)."""
     rows = tuple(tuple(row) for row in np.asarray(MACHINE_SLOT_ROLES).tolist())
@@ -93,8 +81,6 @@ def test_arrays_are_machinetype_length() -> None:
     n = len(MachineType)
     assert len(_GOLDEN_NUM_SLOTS) == n
     assert np.asarray(MACHINE_NUM_SLOTS).shape == (n,)
-    assert np.asarray(MACHINE_MAX_STACK).shape == (n,)
-    assert np.asarray(MACHINE_MAX_TYPES).shape == (n,)
     assert np.asarray(MACHINE_SLOT_ROLES).shape[0] == n
 
 

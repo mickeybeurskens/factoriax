@@ -11,11 +11,11 @@ import jax.numpy as jnp
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
 from factoriax.constants import (
-    MACHINE_MAX_TYPES,
     MAX_MACHINE_STACK_SIZE,
     MachineType,
 )
 from factoriax.levels import generate_state
+from factoriax.machine_spec import MACHINE_MAX_TYPES
 from factoriax.machines import run_miners, update_all_machines
 
 

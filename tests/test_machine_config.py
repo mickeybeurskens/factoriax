@@ -6,7 +6,6 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax.constants import (
-    MACHINE_MAX_STACK,
     MAX_HEALTH,
     BlockType,
     Direction,
@@ -18,6 +17,7 @@ from factoriax.machine_config import (
     MachineConfig,
     MachineConfigOverride,
 )
+from factoriax.machine_spec import MACHINE_MAX_STACK
 from factoriax.machines import run_conveyor_belts
 from factoriax.state import EnvParams, EnvState
 

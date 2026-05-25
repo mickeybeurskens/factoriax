@@ -17,7 +17,7 @@ Two layers:
   type (length = ``len(MachineType)``), so the JIT cache survives
   any override (the shape is fixed; only the values change).
 
-Default values come from :data:`~factoriax.constants.MACHINE_MAX_STACK`
+Default values come from :data:`~factoriax.machine_spec.MACHINE_MAX_STACK`
 so the constant remains the single source of truth for the engine's
 shipped stack caps. Override-aware overlays use
 :meth:`MachineConfig.with_overrides` which mirrors
@@ -31,7 +31,8 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import MACHINE_MAX_STACK, MAX_HEALTH, MachineType
+from factoriax.constants import MAX_HEALTH, MachineType
+from factoriax.machine_spec import MACHINE_MAX_STACK
 
 
 @dataclass(frozen=True)
@@ -83,7 +84,7 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
         Returns:
             :class:`MachineConfig` whose ``max_stack`` mirrors
-            :data:`~factoriax.constants.MACHINE_MAX_STACK` and whose
+            :data:`~factoriax.machine_spec.MACHINE_MAX_STACK` and whose
             ``max_health`` is :data:`~factoriax.constants.MAX_HEALTH`
             for every machine type.
         """
@@ -146,6 +147,6 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 
 #: Default :class:`MachineConfig` derived from
-#: :data:`~factoriax.constants.MACHINE_MAX_STACK`. Used as the default
+#: :data:`~factoriax.machine_spec.MACHINE_MAX_STACK`. Used as the default
 #: ``machine_config`` value on :class:`~factoriax.state.EnvParams`.
 DEFAULT_MACHINE_CONFIG: MachineConfig = MachineConfig.default()
