@@ -6,8 +6,6 @@ import pytest
 
 from factoriax import BlockType, Direction, ItemType
 from factoriax.constants import (
-    ITEM_TO_MACHINE_ARRAY,
-    MACHINE_TO_ITEM_ARRAY,
     MAX_HEALTH,
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
@@ -19,6 +17,8 @@ from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step
 from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfigOverride
 from factoriax.placement import (
+    ITEM_TO_MACHINE_ARRAY,
+    MACHINE_TO_ITEM_ARRAY,
     apply_repair,
     get_tile_in_front,
     is_placeable_item,

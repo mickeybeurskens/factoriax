@@ -255,62 +255,6 @@ ITEM_TO_MACHINE = {
     ItemType.CROSSING: MachineType.CROSSING,
 }
 
-ITEM_TO_MACHINE_ARRAY = jnp.array(
-    [
-        MachineType.NONE,  # EMPTY
-        MachineType.NONE,  # COAL
-        MachineType.NONE,  # IRON_ORE
-        MachineType.NONE,  # COPPER_ORE
-        MachineType.NONE,  # TIN_ORE
-        MachineType.NONE,  # SILICON
-        MachineType.NONE,  # IRON_PLATE
-        MachineType.NONE,  # COPPER_PLATE
-        MachineType.NONE,  # TIN_PLATE
-        MachineType.NONE,  # WAFER
-        MachineType.NONE,  # FRAME
-        MachineType.NONE,  # CIRCUIT
-        MachineType.NONE,  # WIRE
-        MachineType.NONE,  # MOTOR
-        MachineType.NONE,  # SENSOR
-        MachineType.CONVEYOR_BELT,  # CONVEYOR_BELT
-        MachineType.MINER,  # MINER
-        MachineType.ASSEMBLER,  # ASSEMBLER
-        MachineType.PALLET,  # PALLET
-        MachineType.ARM,  # ARM
-        MachineType.NONE,  # BASIC_SCIENCE_PACK
-        MachineType.NONE,  # ADVANCED_SCIENCE_PACK
-        MachineType.ROCKET,  # ROCKET
-        MachineType.FURNACE,  # FURNACE
-        MachineType.NONE,  # REFRACTORY
-        MachineType.NONE,  # HULL
-        MachineType.NONE,  # ENGINE_UNIT
-        MachineType.NONE,  # AVIONICS
-        MachineType.NONE,  # ROCKET_CORE
-        MachineType.SCIENCE_LAB,  # SCIENCE_LAB
-        MachineType.NONE,  # LIMESTONE
-        MachineType.SPLITTER,  # SPLITTER
-        MachineType.CROSSING,  # CROSSING
-    ],
-    dtype=jnp.int32,
-)
-
-MACHINE_TO_ITEM_ARRAY = jnp.array(
-    [
-        ItemType.EMPTY,  # NONE
-        ItemType.MINER,  # MINER
-        ItemType.PALLET,  # PALLET
-        ItemType.ASSEMBLER,  # ASSEMBLER
-        ItemType.CONVEYOR_BELT,  # CONVEYOR_BELT
-        ItemType.ARM,  # ARM
-        ItemType.ROCKET,  # ROCKET
-        ItemType.FURNACE,  # FURNACE
-        ItemType.SCIENCE_LAB,  # SCIENCE_LAB
-        ItemType.SPLITTER,  # SPLITTER
-        ItemType.CROSSING,  # CROSSING
-    ],
-    dtype=jnp.int32,
-)
-
 # ---------------------------------------------------------------------------
 # Direction and movement
 # ---------------------------------------------------------------------------
