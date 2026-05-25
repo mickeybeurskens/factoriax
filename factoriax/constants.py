@@ -66,6 +66,63 @@ class ItemType(IntEnum):
     CROSSING = 32
 
 
+# ---------------------------------------------------------------------------
+# Item categories (DEF2)
+# ---------------------------------------------------------------------------
+# Every non-EMPTY item belongs to exactly one category. These three enums are
+# the definitions; DEF2 composes ItemType from them (EMPTY + Resource +
+# HalfFabricate + Machine). Their own integer values are inert -- the real
+# item id lives on ItemType -- so only the member names and the grouping
+# matter. A test (test_item_categories) guards that they partition ItemType.
+
+
+class Resource(IntEnum):
+    """Mineable raw materials. Values inert (the item id is on ItemType)."""
+
+    COAL = 0
+    IRON_ORE = 1
+    COPPER_ORE = 2
+    TIN_ORE = 3
+    SILICON = 4
+    LIMESTONE = 5
+
+
+class HalfFabricate(IntEnum):
+    """Crafted, non-placeable intermediates. Values inert (see Resource)."""
+
+    IRON_PLATE = 0
+    COPPER_PLATE = 1
+    TIN_PLATE = 2
+    WAFER = 3
+    FRAME = 4
+    CIRCUIT = 5
+    WIRE = 6
+    MOTOR = 7
+    SENSOR = 8
+    BASIC_SCIENCE_PACK = 9
+    ADVANCED_SCIENCE_PACK = 10
+    REFRACTORY = 11
+    HULL = 12
+    ENGINE_UNIT = 13
+    AVIONICS = 14
+    ROCKET_CORE = 15
+
+
+class Machine(IntEnum):
+    """Placeable items that become a machine when used. Values inert."""
+
+    MINER = 0
+    PALLET = 1
+    CONVEYOR_BELT = 2
+    ASSEMBLER = 3
+    ARM = 4
+    ROCKET = 5
+    FURNACE = 6
+    SCIENCE_LAB = 7
+    SPLITTER = 8
+    CROSSING = 9
+
+
 class MachineType(IntEnum):
     """Machine types that can be placed on tiles."""
 
