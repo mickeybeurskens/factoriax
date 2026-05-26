@@ -24,9 +24,11 @@ from collections import deque
 
 import numpy as np
 
+from factoriax import actions
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
+    ITEM_TO_MACHINE,
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
     Action,
@@ -53,58 +55,17 @@ _SLOT_COUNT_NORM: float = 1024.0
 # once to a plain numpy array.
 _PLAYER_MAX_STACK_NP: np.ndarray = np.asarray(PLAYER_MAX_STACK, dtype=np.float32)
 
-# Action enum offsets for compound actions. Keep as bare ints so tests
-# don't need to re-import the enum.
-_ITEM_TO_DEPOSIT: dict[int, int] = {
-    int(ItemType.COAL): int(Action.DEPOSIT_COAL),
-    int(ItemType.IRON_ORE): int(Action.DEPOSIT_IRON_ORE),
-    int(ItemType.COPPER_ORE): int(Action.DEPOSIT_COPPER_ORE),
-    int(ItemType.TIN_ORE): int(Action.DEPOSIT_TIN_ORE),
-    int(ItemType.SILICON): int(Action.DEPOSIT_SILICON),
-    int(ItemType.IRON_PLATE): int(Action.DEPOSIT_IRON_PLATE),
-    int(ItemType.COPPER_PLATE): int(Action.DEPOSIT_COPPER_PLATE),
-    int(ItemType.TIN_PLATE): int(Action.DEPOSIT_TIN_PLATE),
-    int(ItemType.WAFER): int(Action.DEPOSIT_WAFER),
-    int(ItemType.FRAME): int(Action.DEPOSIT_FRAME),
-    int(ItemType.CIRCUIT): int(Action.DEPOSIT_CIRCUIT),
-    int(ItemType.WIRE): int(Action.DEPOSIT_WIRE),
-    int(ItemType.MOTOR): int(Action.DEPOSIT_MOTOR),
-    int(ItemType.SENSOR): int(Action.DEPOSIT_SENSOR),
-    int(ItemType.CONVEYOR_BELT): int(Action.DEPOSIT_CONVEYOR_BELT),
-    int(ItemType.MINER): int(Action.DEPOSIT_MINER),
-    int(ItemType.ASSEMBLER): int(Action.DEPOSIT_ASSEMBLER),
-    int(ItemType.PALLET): int(Action.DEPOSIT_PALLET),
-    int(ItemType.ARM): int(Action.DEPOSIT_ARM),
-    int(ItemType.BASIC_SCIENCE_PACK): int(Action.DEPOSIT_BASIC_SCIENCE_PACK),
-    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.DEPOSIT_ADVANCED_SCIENCE_PACK),
-    int(ItemType.ROCKET): int(Action.DEPOSIT_ROCKET),
-    int(ItemType.FURNACE): int(Action.DEPOSIT_FURNACE),
-    int(ItemType.REFRACTORY): int(Action.DEPOSIT_REFRACTORY),
-    int(ItemType.HULL): int(Action.DEPOSIT_HULL),
-    int(ItemType.ENGINE_UNIT): int(Action.DEPOSIT_ENGINE_UNIT),
-    int(ItemType.AVIONICS): int(Action.DEPOSIT_AVIONICS),
-    int(ItemType.ROCKET_CORE): int(Action.DEPOSIT_ROCKET_CORE),
-    # ItemType.LIMESTONE = 30 was inserted between SCIENCE_LAB (29)
-    # and SPLITTER (31). The Action enum's DEPOSIT_* slots weren't
-    # renumbered, so the dispatch math
-    # ``action - DEPOSIT_BASE + ItemType.COAL`` for action 71
-    # (named DEPOSIT_SPLITTER) actually deposits ItemType 30 =
-    # LIMESTONE. The agent only ever *places* SPLITTERs (never
-    # deposits them), so the SPLITTER deposit slot is otherwise
-    # unused — we redirect ItemType.LIMESTONE through it so
-    # ProduceInFurnace(REFRACTORY) (LIMESTONE + COAL recipe) works.
-    int(ItemType.LIMESTONE): int(Action.DEPOSIT_SPLITTER),
-}
+# Machine type -> its PLACE action, derived from the item<->machine bijection
+# and the inverse place table in factoriax.actions. Every item action mapping
+# is sourced from factoriax.actions; the deposit direction uses
+# ``actions.ITEM_TO_DEPOSIT_ACTION`` directly (see ``deposit_action``), so no
+# per-item deposit dict is maintained here. This also retires the old
+# LIMESTONE -> DEPOSIT_SPLITTER workaround: that hack compensated for a deposit
+# dispatch shear bug (DEPOSIT_SPLITTER actually deposited LIMESTONE); with the
+# bug fixed, LIMESTONE deposits through its own DEPOSIT_LIMESTONE action.
 _MACHINE_TO_PLACE: dict[int, int] = {
-    int(MachineType.MINER): int(Action.PLACE_MINER),
-    int(MachineType.PALLET): int(Action.PLACE_PALLET),
-    int(MachineType.CONVEYOR_BELT): int(Action.PLACE_CONVEYOR_BELT),
-    int(MachineType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
-    int(MachineType.ARM): int(Action.PLACE_ARM),
-    int(MachineType.ROCKET): int(Action.PLACE_ROCKET),
-    int(MachineType.SPLITTER): int(Action.PLACE_SPLITTER),
-    int(MachineType.CROSSING): int(Action.PLACE_CROSSING),
-    int(MachineType.FURNACE): int(Action.PLACE_FURNACE),
+    int(machine): int(actions.ITEM_TO_PLACE_ACTION[item])
+    for item, machine in ITEM_TO_MACHINE.items()
 }
 # Reverse mapping for ore-block → item type (e.g. BlockType.IRON → ItemType.IRON_ORE).
 _BLOCK_ITEM: dict[int, int] = {int(k): int(v) for k, v in BLOCK_TO_ITEM.items()}
@@ -597,7 +558,7 @@ def withdraw_action() -> int:
 
 def deposit_action(item: int | ItemType) -> int:
     """``DEPOSIT_<item>`` action for the given item type."""
-    return _ITEM_TO_DEPOSIT[int(item)]
+    return int(actions.ITEM_TO_DEPOSIT_ACTION[int(item)])
 
 
 def place_action(machine: int | MachineType) -> int:

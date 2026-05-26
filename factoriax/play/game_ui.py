@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pygame
 
+from factoriax import actions
 from factoriax.achievements import NUM_ACHIEVEMENTS
 from factoriax.config import (
     ControllerLookup,
@@ -79,15 +80,21 @@ _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
 # rotate-machine play action; lives here as it is play-UI-only wiring.
 TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
+# Machines the play hotbar offers, in palette order (SPLITTER / CROSSING are
+# intentionally not hand-placeable from the UI). The palette is the policy;
+# the PLACE action ids come from factoriax.actions so they track the enum.
+_PLACE_PALETTE: tuple[ItemType, ...] = (
+    ItemType.MINER,
+    ItemType.PALLET,
+    ItemType.CONVEYOR_BELT,
+    ItemType.ASSEMBLER,
+    ItemType.ARM,
+    ItemType.ROCKET,
+    ItemType.FURNACE,
+    ItemType.SCIENCE_LAB,
+)
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
-    int(ItemType.MINER): int(Action.PLACE_MINER),
-    int(ItemType.PALLET): int(Action.PLACE_PALLET),
-    int(ItemType.CONVEYOR_BELT): int(Action.PLACE_CONVEYOR_BELT),
-    int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
-    int(ItemType.ARM): int(Action.PLACE_ARM),
-    int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
-    int(ItemType.FURNACE): int(Action.PLACE_FURNACE),
-    int(ItemType.SCIENCE_LAB): int(Action.PLACE_SCIENCE_LAB),
+    int(it): int(actions.ITEM_TO_PLACE_ACTION[it]) for it in _PLACE_PALETTE
 }
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).

@@ -22,7 +22,14 @@ from baselines.easy_rocket.scripted.state_reader import (
     player_pos,
     tile_walkable_for_player,
 )
-from factoriax.constants import Action, Direction, ItemType, MachineType
+from factoriax import actions
+from factoriax.constants import (
+    NUM_ITEM_TYPES,
+    Action,
+    Direction,
+    ItemType,
+    MachineType,
+)
 from factoriax.state import EnvState
 
 # Per-direction unit vector in (dx, dy). Direction is 1..4; index 0
@@ -59,45 +66,33 @@ DIR_TO_ROTATE_ACTION: dict[int, int] = {
     int(Direction.DOWN): int(Action.ROTATE_DOWN),
 }
 
-# Hand-craftable items and their CRAFT actions. Items that can only
-# be produced by an assembler or furnace (HULL, ENGINE_UNIT, AVIONICS,
-# ROCKET_CORE, REFRACTORY) deliberately have no entry here.
+# Items the easy_rocket agent hand-crafts: everything craftable except the
+# machine-only outputs (REFRACTORY, HULL, ENGINE_UNIT, AVIONICS, ROCKET_CORE),
+# which it must produce through the furnace / assembler. That exclusion is the
+# agent's policy; the action ids come from factoriax.actions, so this map can't
+# drift from the Action enum or silently gain a newly-craftable item.
+_HAND_CRAFT_EXCLUDED: frozenset[int] = frozenset(
+    int(it)
+    for it in (
+        ItemType.REFRACTORY,
+        ItemType.HULL,
+        ItemType.ENGINE_UNIT,
+        ItemType.AVIONICS,
+        ItemType.ROCKET_CORE,
+    )
+)
 ITEM_TO_CRAFT_ACTION: dict[int, int] = {
-    int(ItemType.IRON_PLATE): int(Action.CRAFT_IRON_PLATE),
-    int(ItemType.COPPER_PLATE): int(Action.CRAFT_COPPER_PLATE),
-    int(ItemType.TIN_PLATE): int(Action.CRAFT_TIN_PLATE),
-    int(ItemType.WAFER): int(Action.CRAFT_WAFER),
-    int(ItemType.FRAME): int(Action.CRAFT_FRAME),
-    int(ItemType.CIRCUIT): int(Action.CRAFT_CIRCUIT),
-    int(ItemType.WIRE): int(Action.CRAFT_WIRE),
-    int(ItemType.MOTOR): int(Action.CRAFT_MOTOR),
-    int(ItemType.SENSOR): int(Action.CRAFT_SENSOR),
-    int(ItemType.CONVEYOR_BELT): int(Action.CRAFT_CONVEYOR_BELT),
-    int(ItemType.MINER): int(Action.CRAFT_MINER),
-    int(ItemType.ASSEMBLER): int(Action.CRAFT_ASSEMBLER),
-    int(ItemType.PALLET): int(Action.CRAFT_PALLET),
-    int(ItemType.ARM): int(Action.CRAFT_ARM),
-    int(ItemType.FURNACE): int(Action.CRAFT_FURNACE),
-    int(ItemType.BASIC_SCIENCE_PACK): int(Action.CRAFT_BASIC_SCIENCE_PACK),
-    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.CRAFT_ADVANCED_SCIENCE_PACK),
-    int(ItemType.ROCKET): int(Action.CRAFT_ROCKET),
-    int(ItemType.SCIENCE_LAB): int(Action.CRAFT_SCIENCE_LAB),
-    int(ItemType.SPLITTER): int(Action.CRAFT_SPLITTER),
-    int(ItemType.CROSSING): int(Action.CRAFT_CROSSING),
+    item: craft
+    for item in range(NUM_ITEM_TYPES)
+    if (craft := int(actions.ITEM_TO_CRAFT_ACTION[item])) != actions.NO_ACTION
+    and item not in _HAND_CRAFT_EXCLUDED
 }
 
-# Placeable items (machines) and their PLACE actions.
+# Placeable items (machines) and their PLACE actions -- the full placeable set.
 ITEM_TO_PLACE_ACTION: dict[int, int] = {
-    int(ItemType.MINER): int(Action.PLACE_MINER),
-    int(ItemType.PALLET): int(Action.PLACE_PALLET),
-    int(ItemType.CONVEYOR_BELT): int(Action.PLACE_CONVEYOR_BELT),
-    int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
-    int(ItemType.ARM): int(Action.PLACE_ARM),
-    int(ItemType.ROCKET): int(Action.PLACE_ROCKET),
-    int(ItemType.FURNACE): int(Action.PLACE_FURNACE),
-    int(ItemType.SCIENCE_LAB): int(Action.PLACE_SCIENCE_LAB),
-    int(ItemType.SPLITTER): int(Action.PLACE_SPLITTER),
-    int(ItemType.CROSSING): int(Action.PLACE_CROSSING),
+    item: place
+    for item in range(NUM_ITEM_TYPES)
+    if (place := int(actions.ITEM_TO_PLACE_ACTION[item])) != actions.NO_ACTION
 }
 
 # Each machine type's item form, for "pick the right CRAFT/PLACE

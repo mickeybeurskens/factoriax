@@ -24,6 +24,7 @@ from typing import ClassVar, Literal
 
 import numpy as np
 
+from factoriax import actions
 from factoriax.constants import Action, Direction, ItemType, MachineType
 from factoriax.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
 
@@ -193,25 +194,33 @@ class MineOre(Goal):
 # ---------------------------------------------------------------------------
 
 
+# Items the rocket goal-planner will hand-craft. Everything else -- the
+# machine-only outputs and the late-game machines it builds via placement --
+# is excluded, so CraftItem(...) raises ValueError for them. This tuple is the
+# planner's policy; the action ids are read from factoriax.actions so the map
+# stays in sync with the Action enum.
+_HAND_CRAFTABLE: tuple[ItemType, ...] = (
+    ItemType.IRON_PLATE,
+    ItemType.COPPER_PLATE,
+    ItemType.TIN_PLATE,
+    ItemType.WAFER,
+    ItemType.FRAME,
+    ItemType.CIRCUIT,
+    ItemType.WIRE,
+    ItemType.MOTOR,
+    ItemType.SENSOR,
+    ItemType.CONVEYOR_BELT,
+    ItemType.MINER,
+    ItemType.ASSEMBLER,
+    ItemType.PALLET,
+    ItemType.ARM,
+    ItemType.FURNACE,
+    ItemType.BASIC_SCIENCE_PACK,
+    ItemType.ADVANCED_SCIENCE_PACK,
+    ItemType.ROCKET,
+)
 _ITEM_TO_CRAFT_ACTION: dict[int, int] = {
-    int(ItemType.IRON_PLATE): int(Action.CRAFT_IRON_PLATE),
-    int(ItemType.COPPER_PLATE): int(Action.CRAFT_COPPER_PLATE),
-    int(ItemType.TIN_PLATE): int(Action.CRAFT_TIN_PLATE),
-    int(ItemType.WAFER): int(Action.CRAFT_WAFER),
-    int(ItemType.FRAME): int(Action.CRAFT_FRAME),
-    int(ItemType.CIRCUIT): int(Action.CRAFT_CIRCUIT),
-    int(ItemType.WIRE): int(Action.CRAFT_WIRE),
-    int(ItemType.MOTOR): int(Action.CRAFT_MOTOR),
-    int(ItemType.SENSOR): int(Action.CRAFT_SENSOR),
-    int(ItemType.CONVEYOR_BELT): int(Action.CRAFT_CONVEYOR_BELT),
-    int(ItemType.MINER): int(Action.CRAFT_MINER),
-    int(ItemType.ASSEMBLER): int(Action.CRAFT_ASSEMBLER),
-    int(ItemType.PALLET): int(Action.CRAFT_PALLET),
-    int(ItemType.ARM): int(Action.CRAFT_ARM),
-    int(ItemType.FURNACE): int(Action.CRAFT_FURNACE),
-    int(ItemType.BASIC_SCIENCE_PACK): int(Action.CRAFT_BASIC_SCIENCE_PACK),
-    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.CRAFT_ADVANCED_SCIENCE_PACK),
-    int(ItemType.ROCKET): int(Action.CRAFT_ROCKET),
+    int(it): int(actions.ITEM_TO_CRAFT_ACTION[it]) for it in _HAND_CRAFTABLE
 }
 
 
