@@ -21,12 +21,12 @@ import jax.numpy as jnp
 from factoriax.achievements import AchievementInfo
 from factoriax.constants import (
     MAX_ACHIEVEMENTS,
-    MINEABLE_BLOCKS,
     Action,
     ItemType,
     Machine,
 )
 from factoriax.state import EnvState
+from factoriax.tables import MINEABLE_BLOCKS
 
 #: Per-skill achievement metadata, in curriculum order. Grows by one
 #: entry per Phase L slice.

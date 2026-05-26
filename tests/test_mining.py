@@ -12,9 +12,10 @@ import pytest
 from jax import random
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
-from factoriax.constants import BLOCK_MAX_RESOURCES, MINEABLE_BLOCKS, Direction
+from factoriax.constants import BLOCK_MAX_RESOURCES, Direction
 from factoriax.game_logic import mine_block
 from factoriax.levels import generate_state
+from factoriax.tables import MINEABLE_BLOCKS
 
 _PARAMS = EnvParams()
 

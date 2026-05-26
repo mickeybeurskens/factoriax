@@ -19,8 +19,6 @@ from factoriax.game_logic import factoriax_step
 from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfigOverride
 from factoriax.machine_spec import MAX_HEALTH
 from factoriax.placement import (
-    ITEM_TO_MACHINE_ARRAY,
-    MACHINE_TO_ITEM_ARRAY,
     apply_repair,
     get_tile_in_front,
     is_placeable_item,
@@ -29,6 +27,7 @@ from factoriax.placement import (
     place_machine,
 )
 from factoriax.state import EnvParams
+from factoriax.tables import ITEM_TO_MACHINE_ARRAY, MACHINE_TO_ITEM_ARRAY
 
 
 def test_placeable_items_are_exactly_the_non_none_machines() -> None:

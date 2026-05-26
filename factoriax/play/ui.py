@@ -23,7 +23,6 @@ from factoriax.constants import (
     BLOCK_TO_ITEM,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
-    PLAYER_MAX_STACK,
     RESOURCE_ITEM_LIST,
     BlockType,
     Direction,
@@ -38,6 +37,7 @@ from factoriax.recipes import (
     RECIPE_NAMES,
 )
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import PLAYER_MAX_STACK
 
 # Re-export shared primitives so existing ``from factoriax.play.ui import``
 # statements keep working.

@@ -498,7 +498,7 @@ class TestGenerateState:
         """All ore tiles should have exactly base_resources resources."""
         import numpy as np
 
-        from factoriax.constants import MINEABLE_BLOCKS
+        from factoriax.tables import MINEABLE_BLOCKS
 
         params = EnvParams(map_width=32, map_height=32, num_players=1, base_resources=3)
         state = generate_state(jax.random.PRNGKey(5), params)
@@ -512,7 +512,7 @@ class TestGenerateState:
         """base_resources param controls starting resources on ore tiles."""
         import numpy as np
 
-        from factoriax.constants import MINEABLE_BLOCKS
+        from factoriax.tables import MINEABLE_BLOCKS
 
         for count in (1, 5, 10):
             params = EnvParams(

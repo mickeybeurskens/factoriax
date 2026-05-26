@@ -12,11 +12,11 @@ import jax.numpy as jnp
 
 from factoriax.achievements import CORE_ACHIEVEMENT_WEIGHTS
 from factoriax.constants import (
-    MINEABLE_BLOCKS,
     ItemType,
     Machine,
 )
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import MINEABLE_BLOCKS
 
 # ---------------------------------------------------------------------------
 # Proximity helper

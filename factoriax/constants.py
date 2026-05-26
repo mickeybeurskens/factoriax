@@ -1,8 +1,10 @@
-"""Constants and enumerations for the FactoriaX environment."""
+"""Constants and enumerations for the FactoriaX environment.
+
+Pure-Python definitions only. Their derived JAX arrays (gather tables, the
+state-array dtypes) live in :mod:`factoriax.tables`.
+"""
 
 from enum import IntEnum
-
-import jax.numpy as jnp
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -197,15 +199,6 @@ ROTATE_BASE: int = len(MoveAction) + int(InteractAction.ROTATE_LEFT)
 
 
 # ---------------------------------------------------------------------------
-# State-array dtypes
-# ---------------------------------------------------------------------------
-
-INVENTORY_COUNT_DTYPE = jnp.int32
-MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
-BLOCK_RESOURCE_DTYPE = jnp.int16
-
-
-# ---------------------------------------------------------------------------
 # Item / machine / block mappings
 # ---------------------------------------------------------------------------
 
@@ -250,70 +243,3 @@ SCIENCE_PACK_TYPES: tuple[int, ...] = (
     int(ItemType.ADVANCED_SCIENCE_PACK),
 )
 NUM_SCIENCE_PACK_TYPES: int = len(SCIENCE_PACK_TYPES)
-
-
-# ---------------------------------------------------------------------------
-# Player inventory stack caps
-# ---------------------------------------------------------------------------
-
-# Per-item cap; machines and large rocket components are bulky. Built name-keyed
-# over a default so rows can't drift out of alignment with ItemType.
-_DEFAULT_PLAYER_STACK = 1024
-_BULKY_PLAYER_STACK = 128
-_PLAYER_STACK_OVERRIDES: dict[int, int] = {
-    int(ItemType.EMPTY): 0,
-    int(ItemType.CONVEYOR_BELT): _BULKY_PLAYER_STACK,
-    int(ItemType.MINER): _BULKY_PLAYER_STACK,
-    int(ItemType.ASSEMBLER): _BULKY_PLAYER_STACK,
-    int(ItemType.PALLET): _BULKY_PLAYER_STACK,
-    int(ItemType.ARM): _BULKY_PLAYER_STACK,
-    int(ItemType.ROCKET): _BULKY_PLAYER_STACK,
-    int(ItemType.FURNACE): _BULKY_PLAYER_STACK,
-    int(ItemType.HULL): _BULKY_PLAYER_STACK,
-    int(ItemType.ENGINE_UNIT): _BULKY_PLAYER_STACK,
-    int(ItemType.AVIONICS): _BULKY_PLAYER_STACK,
-    int(ItemType.ROCKET_CORE): _BULKY_PLAYER_STACK,
-    int(ItemType.SCIENCE_LAB): _BULKY_PLAYER_STACK,
-    int(ItemType.SPLITTER): _BULKY_PLAYER_STACK,
-    int(ItemType.CROSSING): _BULKY_PLAYER_STACK,
-}
-PLAYER_MAX_STACK = jnp.array(
-    [
-        _PLAYER_STACK_OVERRIDES.get(i, _DEFAULT_PLAYER_STACK)
-        for i in range(NUM_ITEM_TYPES)
-    ],
-    dtype=jnp.int32,
-)
-
-
-# ---------------------------------------------------------------------------
-# Terrain and movement arrays
-# ---------------------------------------------------------------------------
-
-# (dx, dy) offset per Direction value; index 0 is the unused NONE slot.
-DIRECTIONS = jnp.array(
-    [
-        [0, 0],
-        [-1, 0],
-        [1, 0],
-        [0, -1],
-        [0, 1],
-    ],
-    dtype=jnp.int32,
-)
-
-MINEABLE_BLOCKS = jnp.array(
-    [
-        BlockType.COAL,
-        BlockType.IRON,
-        BlockType.COPPER,
-        BlockType.TIN,
-        BlockType.SILICON,
-        BlockType.LIMESTONE,
-    ],
-)
-
-SOLID_BLOCKS = jnp.array(
-    [BlockType.WATER, BlockType.OUT_OF_BOUNDS],
-    dtype=jnp.int32,
-)

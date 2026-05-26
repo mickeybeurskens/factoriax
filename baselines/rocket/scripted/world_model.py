@@ -30,7 +30,6 @@ from factoriax.constants import (
     BLOCK_TO_ITEM,
     ITEM_TO_MACHINE,
     NUM_ITEM_TYPES,
-    PLAYER_MAX_STACK,
     Action,
     BlockType,
     Direction,
@@ -39,6 +38,7 @@ from factoriax.constants import (
 )
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.recipes import NUM_RECIPES
+from factoriax.tables import PLAYER_MAX_STACK
 
 # Normalization constants used by ``factoriax.observations.global_array``.
 # Duplicated here so the decoder is self-contained and doesn't reach into

@@ -44,7 +44,6 @@ from jax import random
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     MAX_ACHIEVEMENTS,
-    MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     BlockType,
@@ -52,6 +51,7 @@ from factoriax.constants import (
     Machine,
 )
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import MINEABLE_BLOCKS
 
 # ---------------------------------------------------------------------------
 # Level dataclass

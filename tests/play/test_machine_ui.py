@@ -12,12 +12,12 @@ import numpy as np
 import pytest
 
 from factoriax.constants import (
-    MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_ITEM_TYPES,
     ItemType,
     Machine,
 )
 from factoriax.play.ui import ClickRegion, render_machine_menu
+from factoriax.tables import MACHINE_INVENTORY_COUNT_DTYPE
 
 _SW = 320
 _SH = 320

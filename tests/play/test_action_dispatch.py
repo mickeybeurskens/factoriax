@@ -14,7 +14,6 @@ import pytest
 
 from factoriax.config import build_key_lookup, default_keyboard
 from factoriax.constants import (
-    MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_ITEM_TYPES,
     Action,
     ItemType,
@@ -22,6 +21,7 @@ from factoriax.constants import (
 )
 from factoriax.play.game_ui import GameUI
 from factoriax.state import EnvParams
+from factoriax.tables import MACHINE_INVENTORY_COUNT_DTYPE
 
 
 @pytest.fixture

@@ -16,7 +16,6 @@ from factoriax import (
 )
 from factoriax.constants import (
     NUM_ACTIONS,
-    SOLID_BLOCKS,
     Machine,
 )
 from factoriax.game_logic import (
@@ -28,6 +27,7 @@ from factoriax.game_logic import (
 )
 from factoriax.levels import generate_state
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.tables import SOLID_BLOCKS
 from factoriax.ui.icons import create_default_textures
 
 

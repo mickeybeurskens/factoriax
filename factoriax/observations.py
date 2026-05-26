@@ -29,7 +29,6 @@ import numpy as np
 from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     NUM_ITEM_TYPES,
-    PLAYER_MAX_STACK,
     BlockType,
     Machine,
 )
@@ -38,6 +37,7 @@ from factoriax.jax_renderer import JaxRenderer
 from factoriax.placement import get_tile_in_front
 from factoriax.recipes import NUM_RECIPES
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import PLAYER_MAX_STACK
 
 # JaxRenderer caches device-resident texture atlases per tile size; keep
 # one renderer per requested ``block_pixel_size`` so the JIT compile and

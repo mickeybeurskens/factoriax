@@ -11,9 +11,10 @@ rebaking the XLA graph.
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import PLAYER_MAX_STACK, ItemType
+from factoriax.constants import ItemType
 from factoriax.recipes import MAX_RECIPE_INPUTS
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import PLAYER_MAX_STACK
 
 
 def count_item_in_inventory(

@@ -15,21 +15,16 @@ from factoriax.actions import (
 from factoriax.constants import (
     CRAFT_BASE,
     DEPOSIT_BASE,
-    DIRECTIONS,
-    MINEABLE_BLOCKS,
-    NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     PLACE_BASE,
-    PLAYER_MAX_STACK,
     ROTATE_BASE,
-    SCIENCE_PACK_TYPES,
     Action,
     BlockType,
     Direction,
     Machine,
 )
 from factoriax.crafting import craft_recipe
-from factoriax.machines import BLOCK_TO_ITEM_ARRAY, update_all_machines
+from factoriax.machines import update_all_machines
 from factoriax.placement import (
     apply_repair,
     get_tile_in_front,
@@ -38,6 +33,13 @@ from factoriax.placement import (
     set_machine_direction,
 )
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import (
+    BLOCK_TO_ITEM_ARRAY,
+    DIRECTIONS,
+    MINEABLE_BLOCKS,
+    PLAYER_MAX_STACK,
+    SCIENCE_PACK_INDEX,
+)
 
 # ROTATE_* offset (0..3) -> Direction value. (The PLACE/CRAFT/DEPOSIT
 # offset->item tables are imported from factoriax.actions, above.)
@@ -45,15 +47,6 @@ ROTATE_ACTION_TO_DIR = jnp.array(
     [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
     dtype=jnp.int32,
 )
-
-# Inverse lookup: ItemType -> index in SCIENCE_PACK_TYPES (0-based), or -1
-# for non-pack items. run_labs uses it to bucket arbitrary lab-slot
-# contents into the science_consumed_step delta vector. Derived from the
-# canonical SCIENCE_PACK_TYPES so the two cannot drift.
-_science_pack_index = [-1] * NUM_ITEM_TYPES
-for _pack_pos, _pack_item in enumerate(SCIENCE_PACK_TYPES):
-    _science_pack_index[_pack_item] = _pack_pos
-SCIENCE_PACK_INDEX = jnp.array(_science_pack_index, dtype=jnp.int8)
 
 
 def is_position_in_bounds(

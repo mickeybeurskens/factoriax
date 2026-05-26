@@ -8,34 +8,16 @@ machine item plus any buffer contents to the player.
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.constants import Machine
+from factoriax.state import EnvParams, EnvState
+from factoriax.tables import (
     DIRECTIONS,
-    ITEM_TO_MACHINE,
-    NUM_ITEM_TYPES,
-    PLACEABLE_ITEM_LIST,
+    ITEM_TO_MACHINE_ARRAY,
+    MACHINE_TO_ITEM_ARRAY,
+    PLACEABLE_ITEMS,
     PLAYER_MAX_STACK,
     SOLID_BLOCKS,
-    ItemType,
-    Machine,
 )
-from factoriax.state import EnvParams, EnvState
-
-# Dense membership array for the placeability check below, projected from
-# the canonical PLACEABLE_ITEM_LIST.
-PLACEABLE_ITEMS = jnp.array(PLACEABLE_ITEM_LIST, dtype=jnp.int32)
-
-# Item<->machine gathers for placement (item->machine) and pickup
-# (machine->item), both projected from the single ITEM_TO_MACHINE
-# definition in one pass so the forward and inverse maps cannot disagree.
-# Each is indexed by a raw id over its full enum range; non-machine slots
-# stay at the NONE/EMPTY sentinel.
-_item_to_machine = [int(Machine.NONE)] * NUM_ITEM_TYPES
-_machine_to_item = [int(ItemType.EMPTY)] * len(Machine)
-for _item, _machine in ITEM_TO_MACHINE.items():
-    _item_to_machine[int(_item)] = int(_machine)
-    _machine_to_item[int(_machine)] = int(_item)
-ITEM_TO_MACHINE_ARRAY = jnp.array(_item_to_machine, dtype=jnp.int32)
-MACHINE_TO_ITEM_ARRAY = jnp.array(_machine_to_item, dtype=jnp.int32)
 
 
 def get_tile_in_front(

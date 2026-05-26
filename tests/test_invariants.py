@@ -14,7 +14,6 @@ from jax import lax, random
 from factoriax.constants import (
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
-    PLAYER_MAX_STACK,
     BlockType,
     ItemType,
     Machine,
@@ -23,6 +22,7 @@ from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step, mine_block
 from factoriax.machine_spec import MACHINE_MAX_STACK
 from factoriax.state import EnvParams, EnvState
+from factoriax.tables import PLAYER_MAX_STACK
 
 # Every test in this file runs a 100-step random rollout through
 # ``factoriax_step``, which triggers the full env JIT compile. They
