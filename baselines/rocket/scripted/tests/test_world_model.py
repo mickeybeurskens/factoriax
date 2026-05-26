@@ -19,10 +19,10 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.levels import build_state
 from factoriax.engine.observations import global_array
 from factoriax.engine.state import EnvParams
-from factoriax.envs import FactoriaXEnv
 from factoriax.scenarios.rocket import build_rocket_level, rocket_conditions
 
 # ---------------------------------------------------------------------------

@@ -18,9 +18,9 @@ from jax import random
 
 from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
 from factoriax.engine.constants import Action, Direction
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.levels import Level
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.playground.config import (
     ControllerLookup,
     KeyLookup,

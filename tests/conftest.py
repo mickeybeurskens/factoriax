@@ -80,9 +80,9 @@ from factoriax.engine.constants import (  # noqa: E402
     Direction,
     Machine,
 )
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv  # noqa: E402
 from factoriax.engine.state import EnvParams  # noqa: E402
 from factoriax.engine.tables import BLOCK_RESOURCE_DTYPE
-from factoriax.envs.factoriax_env import FactoriaXEnv  # noqa: E402
 
 # Default entity capacity used by the test factory.
 _TEST_MAX_MACHINES: int = 64

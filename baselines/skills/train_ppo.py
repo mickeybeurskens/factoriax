@@ -43,10 +43,10 @@ from baselines.ppo.normalization import (
     update_running_stats,
 )
 from factoriax.engine.constants import NUM_ACTIONS, Action
+from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.scenarios.core import ScenarioLevel
 from factoriax.scenarios.skills import (
     SkillsBenchmark,

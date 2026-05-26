@@ -348,7 +348,7 @@ class TestBuildEnv:
     """
 
     def test_no_mask_returns_bare_env(self, runner: ScenarioRunner) -> None:
-        from factoriax.envs.factoriax_env import FactoriaXEnv
+        from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 
         env, _ = runner._build_env(None, frozenset())
         assert isinstance(env, FactoriaXEnv)
@@ -356,7 +356,7 @@ class TestBuildEnv:
     def test_non_empty_mask_wraps_in_action_mask_wrapper(
         self, runner: ScenarioRunner
     ) -> None:
-        from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+        from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 
         env, _ = runner._build_env(None, frozenset({int(Action.RIGHT)}))
         assert isinstance(env, ActionMaskWrapper)

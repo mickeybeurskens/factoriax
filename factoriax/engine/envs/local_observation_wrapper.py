@@ -13,13 +13,13 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
     local_array,
 )
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 class LocalObservationWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]

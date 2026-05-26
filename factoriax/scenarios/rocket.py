@@ -18,7 +18,7 @@ Setup:
 - ``RocketScenario`` exposes ``achievement_fn`` and ``blocked_actions``
   attributes the :class:`~factoriax.scenarios.runner.ScenarioRunner`
   picks up automatically; callers stepping the env directly should wrap
-  with :class:`~factoriax.envs.action_mask_wrapper.ActionMaskWrapper`
+  with :class:`~factoriax.engine.envs.action_mask_wrapper.ActionMaskWrapper`
   themselves (see :data:`ROCKET_BLOCKED_ACTIONS`).
 """
 
@@ -265,7 +265,7 @@ def rocket_conditions(state: EnvState) -> jax.Array:
 
     Every condition is a pure function of ``state``. The returned array
     is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
-    :class:`~factoriax.envs.factoriax_env.FactoriaXEnv`'s
+    :class:`~factoriax.engine.envs.factoriax_env.FactoriaXEnv`'s
     ``achievement_fn`` constructor argument directly.
 
     Args:
@@ -521,7 +521,7 @@ class RocketScenario:
     # Hand-craft actions are blocked for this scenario; production
     # must flow through the pre-placed furnace + assembler. Callers
     # (e.g. :class:`ScenarioRunner`) are expected to wrap the env with
-    # :class:`~factoriax.envs.action_mask_wrapper.ActionMaskWrapper`
+    # :class:`~factoriax.engine.envs.action_mask_wrapper.ActionMaskWrapper`
     # using this set.
     blocked_actions: frozenset[int] = ROCKET_BLOCKED_ACTIONS
 

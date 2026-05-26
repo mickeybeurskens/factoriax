@@ -16,8 +16,8 @@ import jax
 from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]

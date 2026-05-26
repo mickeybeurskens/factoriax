@@ -86,7 +86,7 @@ class TestEnvConstructorLevel:
 
     def test_default_level_none_resets_procedurally(self) -> None:
         """FactoriaXEnv(level=None).reset_env produces a procedural state."""
-        from factoriax.envs.factoriax_env import FactoriaXEnv
+        from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 
         env = FactoriaXEnv()  # level=None default
         params = EnvParams(map_width=8, map_height=8, num_players=1)
@@ -101,8 +101,8 @@ class TestEnvConstructorLevel:
 
     def test_level_constructor_arg_resets_to_level(self) -> None:
         """FactoriaXEnv(level=L).reset_env produces a state matching L's geometry."""
+        from factoriax.engine.envs.factoriax_env import FactoriaXEnv
         from factoriax.engine.levels import get_level
-        from factoriax.envs.factoriax_env import FactoriaXEnv
 
         level = get_level("15x15_resources")
         env = FactoriaXEnv(level=level)

@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 
 from factoriax.engine.constants import Action
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.state import EnvParams
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.playground.config import build_key_lookup, default_keyboard
 
 

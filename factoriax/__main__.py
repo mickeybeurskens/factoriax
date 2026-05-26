@@ -111,7 +111,7 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     from jax import random
 
     from factoriax.engine.achievements import core_game_conditions
-    from factoriax.envs.factoriax_env import FactoriaXEnv
+    from factoriax.engine.envs.factoriax_env import FactoriaXEnv
     from factoriax.playground.play.main import _play_loop, _run_with_loading_screen
 
     env = FactoriaXEnv(achievement_fn=core_game_conditions)
@@ -154,8 +154,8 @@ def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
     from jax import random
 
     from factoriax import scenarios as scenarios_pkg
-    from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-    from factoriax.envs.factoriax_env import FactoriaXEnv
+    from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
+    from factoriax.engine.envs.factoriax_env import FactoriaXEnv
     from factoriax.playground.menu.scenarios_menu import run_scenarios_menu
     from factoriax.playground.play.main import _play_loop, _run_with_loading_screen
 

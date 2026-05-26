@@ -30,8 +30,8 @@ import jax
 from jax import lax, random
 
 from factoriax.engine.constants import NUM_ACTIONS
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.state import EnvParams
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 logger = logging.getLogger(__name__)
 

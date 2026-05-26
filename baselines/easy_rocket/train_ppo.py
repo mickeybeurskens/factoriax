@@ -1,6 +1,6 @@
 """Train PPO on the easy rocket achievement scenario.
 
-Builds :class:`~factoriax.envs.FactoriaXEnv` with the easy_rocket
+Builds :class:`~factoriax.engine.envs.FactoriaXEnv` with the easy_rocket
 scenario's :func:`easy_rocket_conditions` bound as
 ``achievement_fn`` and :func:`easy_rocket_reward` as the training
 signal — Craftax-style sparse +weight on each newly-unlocked

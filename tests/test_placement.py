@@ -14,6 +14,7 @@ from factoriax.engine.constants import (
     Machine,
     MoveAction,
 )
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.game_logic import factoriax_step
 from factoriax.engine.machine_config import (
     DEFAULT_MACHINE_CONFIG,
@@ -30,7 +31,6 @@ from factoriax.engine.placement import (
 )
 from factoriax.engine.state import EnvParams
 from factoriax.engine.tables import ITEM_TO_MACHINE_ARRAY, MACHINE_TO_ITEM_ARRAY
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 def test_placeable_items_are_exactly_the_non_none_machines() -> None:

@@ -39,10 +39,10 @@ import numpy as np
 
 from baselines.skills.scripted import SCRIPTED_POLICIES, ScriptedPolicy
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
+from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.levels import build_state
 from factoriax.engine.state import EnvState
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.scenarios.skills import SkillsBenchmark, skills_conditions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")

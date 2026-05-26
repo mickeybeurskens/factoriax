@@ -81,11 +81,11 @@ from baselines.rocket.scripted.goals import (
     WaitUntil,
 )
 from factoriax.engine.constants import Direction, ItemType, Machine
+from factoriax.engine.envs import FactoriaXEnv
+from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.engine.levels import build_state
 from factoriax.engine.observations import global_array
 from factoriax.engine.state import EnvParams
-from factoriax.envs import FactoriaXEnv
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,

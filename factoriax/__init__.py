@@ -18,6 +18,11 @@ from factoriax.engine.constants import (
     Direction,
     ItemType,
 )
+from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.engine.envs.auto_reset_wrapper import AutoResetWrapper
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+from factoriax.engine.envs.local_observation_wrapper import LocalObservationWrapper
+from factoriax.engine.envs.science_tally_wrapper import ScienceTallyWrapper
 from factoriax.engine.levels import (
     LEVELS,
     Level,
@@ -31,11 +36,6 @@ from factoriax.engine.levels import (
 from factoriax.engine.observations import global_array, local_array, rgb
 from factoriax.engine.rewards import mining_reward
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.envs.auto_reset_wrapper import AutoResetWrapper
-from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
-from factoriax.envs.science_tally_wrapper import ScienceTallyWrapper
 
 AchievementFn = Callable[[EnvState], jax.Array]
 

@@ -21,8 +21,8 @@ from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
 from factoriax.engine.constants import NUM_SCIENCE_PACK_TYPES
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 class ScienceTallyState(struct.PyTreeNode):  # type: ignore[no-untyped-call]

@@ -20,10 +20,10 @@ from factoriax.engine.constants import (
     BlockType,
     ItemType,
 )
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.levels import Level, LevelBuilder
 from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.scenarios.skills import count_miners_on_ore
 
 _ORE_TYPES = [BlockType.IRON, BlockType.COPPER, BlockType.COAL]
@@ -32,7 +32,7 @@ _ORE_TYPES = [BlockType.IRON, BlockType.COPPER, BlockType.COAL]
 class PlaceMinerSkill(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """Gymnax environment rewarding miner placement on ore.
 
-    Wraps :class:`~factoriax.envs.factoriax_env.FactoriaXEnv` and
+    Wraps :class:`~factoriax.engine.envs.factoriax_env.FactoriaXEnv` and
     returns the current count of miners on ore tiles as the reward
     each step.
 

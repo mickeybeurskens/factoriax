@@ -18,11 +18,11 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.game_logic import factoriax_step, mine_block
 from factoriax.engine.machine_spec import MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 # Every test in this file runs a 100-step random rollout through
 # ``factoriax_step``, which triggers the full env JIT compile. They

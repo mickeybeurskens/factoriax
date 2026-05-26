@@ -15,11 +15,11 @@ import pytest
 from baselines.rocket.scripted import goals, skills
 from baselines.rocket.scripted.world_model import decode_observation
 from factoriax.engine.constants import ItemType
+from factoriax.engine.envs import FactoriaXEnv
+from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.engine.levels import build_state
 from factoriax.engine.observations import global_array
 from factoriax.engine.state import EnvParams
-from factoriax.envs import FactoriaXEnv
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.scenarios.rocket import (
     ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,

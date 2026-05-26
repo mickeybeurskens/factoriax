@@ -26,8 +26,8 @@ from factoriax.engine.constants import (
     BlockType,
     ItemType,
 )
+from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 def _achievement_index(achievement_id: str) -> int:

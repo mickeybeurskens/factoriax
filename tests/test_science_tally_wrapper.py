@@ -1,4 +1,4 @@
-"""Tests for ``factoriax.envs.science_tally_wrapper.ScienceTallyWrapper``.
+"""Tests for ``factoriax.engine.envs.science_tally_wrapper.ScienceTallyWrapper``.
 
 The wrapper's contract is narrow: forward to the inner env's step, then
 fold ``new_env_state.science_consumed_step`` into ``total_science_consumed``.
@@ -18,11 +18,11 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax.engine.constants import NUM_SCIENCE_PACK_TYPES
-from factoriax.engine.state import EnvParams
-from factoriax.envs.science_tally_wrapper import (
+from factoriax.engine.envs.science_tally_wrapper import (
     ScienceTallyState,
     ScienceTallyWrapper,
 )
+from factoriax.engine.state import EnvParams
 
 
 def _base_params() -> EnvParams:
