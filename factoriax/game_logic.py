@@ -7,24 +7,25 @@ name the specific item type. No slot cursors or recipe selection needed.
 import jax
 import jax.numpy as jnp
 
+from factoriax.actions import (
+    CRAFT_ACTION_TO_ITEM,
+    DEPOSIT_ACTION_TO_ITEM,
+    PLACE_ACTION_TO_ITEM,
+)
 from factoriax.constants import (
     CRAFT_BASE,
-    CRAFT_ITEMS,
     DEPOSIT_BASE,
-    DEPOSIT_ITEMS,
     DIRECTIONS,
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     PLACE_BASE,
-    PLACEMENT_ITEMS,
     PLAYER_MAX_STACK,
     ROTATE_BASE,
     SCIENCE_PACK_TYPES,
     Action,
     BlockType,
     Direction,
-    ItemType,
     MachineType,
 )
 from factoriax.crafting import craft_recipe
@@ -41,42 +42,15 @@ from factoriax.state import EnvParams, EnvState
 # ---------------------------------------------------------------------------
 # Action-dispatch resolution tables
 #
-# Each maps a compound action's offset (``action - <X>_BASE``) to the thing
-# the action refers to. They are private wiring for the step dispatcher in
-# this module, not environment constants, so they live next to the dispatch.
+# The PLACE_/CRAFT_/DEPOSIT_ offset -> item tables are derived in
+# factoriax.actions (alongside their inverses) and imported above. The rotate
+# table is direction wiring, not an item mapping, so it stays here next to the
+# dispatch that consumes it.
 # ---------------------------------------------------------------------------
-
-# PLACE_* offset -> ItemType of the machine placed (one per Machine).
-PLACE_ACTION_TO_ITEM = jnp.array(
-    [int(ItemType[m.name]) for m in PLACEMENT_ITEMS],
-    dtype=jnp.int32,
-)
 
 # ROTATE_* offset (0..3) -> Direction value.
 ROTATE_ACTION_TO_DIR = jnp.array(
     [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
-    dtype=jnp.int32,
-)
-
-# CRAFT_* offset -> ItemType the action crafts (one per non-resource item).
-# Crafting resolves action -> item here, then item -> recipe row via the active
-# recipe table's ``output_to_recipe`` (-1 when the table has no such recipe).
-# Routing through the output item keeps recipe-list order out of the dispatch
-# entirely, so a scenario with a reordered or subset recipe table
-# craft-dispatches correctly.
-CRAFT_ACTION_TO_ITEM = jnp.array(
-    [int(ItemType[m.name]) for m in CRAFT_ITEMS],
-    dtype=jnp.int32,
-)
-
-# DEPOSIT_* offset -> ItemType deposited (one per non-EMPTY item). An explicit
-# table, not arithmetic: the former ``action - DEPOSIT_BASE + COAL`` assumed
-# the deposit family and ItemType shared one contiguous order and sheared on
-# the items where they diverge (LIMESTONE stranded at the end, so SPLITTER /
-# CROSSING resolved one slot low). Built from the same family list as the
-# DEPOSIT_* Action members, so it cannot drift from them.
-DEPOSIT_ACTION_TO_ITEM = jnp.array(
-    [int(ItemType[m.name]) for m in DEPOSIT_ITEMS],
     dtype=jnp.int32,
 )
 
