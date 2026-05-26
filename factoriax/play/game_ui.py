@@ -716,9 +716,7 @@ class GameUI:
                 # output slot — item focus is purely a UI affordance.
                 action = int(Action.WITHDRAW)
             else:
-                # Deposit the selected item; the inverse table gives its
-                # DEPOSIT_* action (every non-EMPTY item is depositable, so the
-                # NO_ACTION guard only skips an EMPTY selection).
+                # Deposit the selected item (the guard only skips EMPTY).
                 deposit = int(ITEM_TO_DEPOSIT_ACTION[ps.selected_item])
                 if deposit != NO_ACTION:
                     action = deposit
@@ -773,10 +771,7 @@ class GameUI:
         elif PlayerAction.NAV_DOWN in actions:
             ps.selected_recipe = (ps.selected_recipe + 1) % NUM_RECIPES
         elif PlayerAction.CONFIRM in actions:
-            # The panel lists BASE_RECIPES in order; map the selected recipe to
-            # its output item's CRAFT_* action. (Recipe-list order and craft
-            # family order differ, so a recipe-index + CRAFT_BASE offset would
-            # be wrong.)
+            # Craft the selected recipe's output (the panel lists BASE_RECIPES).
             output = BASE_RECIPES[ps.selected_recipe].output
             return int(ITEM_TO_CRAFT_ACTION[output])
         return None

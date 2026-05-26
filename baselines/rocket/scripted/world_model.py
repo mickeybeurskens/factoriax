@@ -55,14 +55,9 @@ _SLOT_COUNT_NORM: float = 1024.0
 # once to a plain numpy array.
 _PLAYER_MAX_STACK_NP: np.ndarray = np.asarray(PLAYER_MAX_STACK, dtype=np.float32)
 
-# Machine type -> its PLACE action, derived from the item<->machine bijection
-# and the inverse place table in factoriax.actions. Every item action mapping
-# is sourced from factoriax.actions; the deposit direction uses
-# ``actions.ITEM_TO_DEPOSIT_ACTION`` directly (see ``deposit_action``), so no
-# per-item deposit dict is maintained here. This also retires the old
-# LIMESTONE -> DEPOSIT_SPLITTER workaround: that hack compensated for a deposit
-# dispatch shear bug (DEPOSIT_SPLITTER actually deposited LIMESTONE); with the
-# bug fixed, LIMESTONE deposits through its own DEPOSIT_LIMESTONE action.
+# Machine type -> its PLACE action, via the item<->machine bijection and the
+# inverse place table. Deposit resolves through actions.ITEM_TO_DEPOSIT_ACTION
+# directly (see deposit_action), so no per-item deposit dict lives here.
 _MACHINE_TO_PLACE: dict[int, int] = {
     int(machine): int(actions.ITEM_TO_PLACE_ACTION[item])
     for item, machine in ITEM_TO_MACHINE.items()

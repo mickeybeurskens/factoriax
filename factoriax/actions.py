@@ -4,9 +4,7 @@ The engine resolves an *action* to the item it refers to inside the JIT step;
 host-side callers (scripted agents, the play UI) need the *inverse* -- given an
 item, which action crafts / places / deposits it. Both directions are jnp
 gather tables derived from the same category family lists in
-:mod:`factoriax.constants` (the codebase paradigm -- cf. ``SCIENCE_PACK_INDEX``,
-``output_to_recipe``, ``BLOCK_TO_ITEM_ARRAY``), so they are usable inside
-``jax.jit`` and cannot drift from the ``Action`` enum or from each other.
+:mod:`factoriax.constants`, usable inside ``jax.jit``.
 
 Layout
 ------

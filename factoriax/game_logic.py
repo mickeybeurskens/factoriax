@@ -39,16 +39,8 @@ from factoriax.placement import (
 )
 from factoriax.state import EnvParams, EnvState
 
-# ---------------------------------------------------------------------------
-# Action-dispatch resolution tables
-#
-# The PLACE_/CRAFT_/DEPOSIT_ offset -> item tables are derived in
-# factoriax.actions (alongside their inverses) and imported above. The rotate
-# table is direction wiring, not an item mapping, so it stays here next to the
-# dispatch that consumes it.
-# ---------------------------------------------------------------------------
-
-# ROTATE_* offset (0..3) -> Direction value.
+# ROTATE_* offset (0..3) -> Direction value. (The PLACE/CRAFT/DEPOSIT
+# offset->item tables are imported from factoriax.actions, above.)
 ROTATE_ACTION_TO_DIR = jnp.array(
     [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
     dtype=jnp.int32,
