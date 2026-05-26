@@ -14,8 +14,6 @@ import pytest
 
 from factoriax.config import build_key_lookup, default_keyboard
 from factoriax.constants import (
-    CRAFT_BASE,
-    DEPOSIT_BASE,
     MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_ITEM_TYPES,
     Action,
@@ -77,8 +75,6 @@ class TestDepositAction:
         ps.selected_item = int(ItemType.COAL)
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
-        expected = DEPOSIT_BASE + int(ItemType.COAL) - int(ItemType.COAL)
-        assert result.action == expected
         assert result.action == int(Action.DEPOSIT_COAL)
 
     def test_deposit_iron(
@@ -211,12 +207,22 @@ class TestCraftAction:
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
         assert result.action == int(Action.CRAFT_COPPER_PLATE)
 
-    def test_craft_action_uses_craft_base(
+    def test_craft_confirm_emits_recipe_output_craft_action(
         self,
         game_ui: GameUI,
         state_factory,
     ) -> None:
-        """All craft actions are CRAFT_BASE + recipe index."""
+        """CONFIRM crafts the selected recipe's output item.
+
+        The crafting panel lists ``BASE_RECIPES`` in order, but recipe-list
+        order and craft-family order differ, so the action must route through
+        the output item -- a ``CRAFT_BASE + index`` offset would be wrong for
+        recipes whose output is out of craft-family position (e.g. a machine
+        recipe interleaved among the half-fabricates).
+        """
+        from factoriax.actions import ITEM_TO_CRAFT_ACTION
+        from factoriax.recipes import BASE_RECIPES, NUM_RECIPES
+
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
         )
@@ -224,10 +230,11 @@ class TestCraftAction:
         ps.inventory_open = True
         ps.menu_focus = "crafting"
 
-        for recipe_idx in range(3):
+        for recipe_idx in (0, 1, 9, NUM_RECIPES - 1):
             ps.selected_recipe = recipe_idx
             result = game_ui.handle_event(
                 _make_keydown(_confirm_key()),
                 state,
             )
-            assert result.action == CRAFT_BASE + recipe_idx
+            output = BASE_RECIPES[recipe_idx].output
+            assert result.action == int(ITEM_TO_CRAFT_ACTION[output])

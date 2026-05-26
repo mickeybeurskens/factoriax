@@ -87,7 +87,7 @@ _ROTATE_ACTIONS: frozenset[int] = frozenset(
     }
 )
 _CRAFT_ACTIONS: frozenset[int] = frozenset(
-    range(int(Action.CRAFT_IRON_PLATE), int(Action.CRAFT_CROSSING) + 1)
+    int(a) for a in Action if a.name.startswith("CRAFT_")
 )
 
 

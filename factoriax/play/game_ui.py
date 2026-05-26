@@ -18,8 +18,13 @@ import jax.numpy as jnp
 import numpy as np
 import pygame
 
-from factoriax import actions
 from factoriax.achievements import NUM_ACHIEVEMENTS
+from factoriax.actions import (
+    ITEM_TO_CRAFT_ACTION,
+    ITEM_TO_DEPOSIT_ACTION,
+    ITEM_TO_PLACE_ACTION,
+    NO_ACTION,
+)
 from factoriax.config import (
     ControllerLookup,
     KeyLookup,
@@ -29,8 +34,6 @@ from factoriax.config import (
     resolve_key,
 )
 from factoriax.constants import (
-    CRAFT_BASE,
-    DEPOSIT_BASE,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
     ROTATE_BASE,
@@ -53,7 +56,7 @@ from factoriax.play.ui import (
     render_pause_menu,
     render_victory_screen,
 )
-from factoriax.recipes import NUM_RECIPES
+from factoriax.recipes import BASE_RECIPES, NUM_RECIPES
 from factoriax.state import EnvParams, EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import ClickRegion, hit_test_regions
@@ -94,7 +97,7 @@ _PLACE_PALETTE: tuple[ItemType, ...] = (
     ItemType.SCIENCE_LAB,
 )
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
-    int(it): int(actions.ITEM_TO_PLACE_ACTION[it]) for it in _PLACE_PALETTE
+    int(it): int(ITEM_TO_PLACE_ACTION[it]) for it in _PLACE_PALETTE
 }
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).
@@ -713,9 +716,12 @@ class GameUI:
                 # output slot — item focus is purely a UI affordance.
                 action = int(Action.WITHDRAW)
             else:
-                item = ps.selected_item
-                if int(ItemType.COAL) <= item <= int(ItemType.ADVANCED_SCIENCE_PACK):
-                    action = DEPOSIT_BASE + item - int(ItemType.COAL)
+                # Deposit the selected item; the inverse table gives its
+                # DEPOSIT_* action (every non-EMPTY item is depositable, so the
+                # NO_ACTION guard only skips an EMPTY selection).
+                deposit = int(ITEM_TO_DEPOSIT_ACTION[ps.selected_item])
+                if deposit != NO_ACTION:
+                    action = deposit
         elif PlayerAction.CYCLE_RECIPE in actions:
             state = self._handle_assembler_recipe_or_hotbar(state)
         return state, action
@@ -767,7 +773,12 @@ class GameUI:
         elif PlayerAction.NAV_DOWN in actions:
             ps.selected_recipe = (ps.selected_recipe + 1) % NUM_RECIPES
         elif PlayerAction.CONFIRM in actions:
-            return CRAFT_BASE + ps.selected_recipe
+            # The panel lists BASE_RECIPES in order; map the selected recipe to
+            # its output item's CRAFT_* action. (Recipe-list order and craft
+            # family order differ, so a recipe-index + CRAFT_BASE offset would
+            # be wrong.)
+            output = BASE_RECIPES[ps.selected_recipe].output
+            return int(ITEM_TO_CRAFT_ACTION[output])
         return None
 
     def _handle_world_keys(
