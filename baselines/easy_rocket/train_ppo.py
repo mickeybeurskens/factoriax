@@ -643,13 +643,30 @@ def train(config: Config) -> dict[str, float]:
     best_ach_count_ever = 0
     total_episodes = 0
     current_step = 0
-    t_start = time.time()
+    # Throughput is reported warmup-free. Iter 0 pays the one-time JIT
+    # compile, so its wall time is recorded separately as the compile cost
+    # and excluded from the steady-state steps/sec.
+    warmup_seconds = 0.0
+    steady_steps = 0
+    steady_start = 0.0
+    marginal_sps = 0.0
+    t_prev = time.time()
 
     for it in range(num_iters):
         (params, opt_state, obs_stats, env_states, obs, rng, traj, metrics) = (
             train_step(params, opt_state, obs_stats, env_states, obs, rng)
         )
+        jax.block_until_ready(metrics)
+        t_now = time.time()
+        iter_seconds = t_now - t_prev
+        t_prev = t_now
         current_step += steps_per_iter
+        if it == 0:
+            warmup_seconds = iter_seconds
+            steady_start = t_now
+        else:
+            steady_steps += steps_per_iter
+            marginal_sps = steps_per_iter / iter_seconds
 
         rewards_np = np.asarray(traj.reward)
         dones_np = np.asarray(traj.done)
@@ -673,8 +690,6 @@ def train(config: Config) -> dict[str, float]:
                 running_peak_mask[n] = False
 
         if (it + 1) % ppo.log_interval == 0 or it == num_iters - 1:
-            elapsed = time.time() - t_start
-            sps = current_step / elapsed
             mean_ret = float(np.mean(list(ep_returns))) if ep_returns else 0.0
             mean_ach = float(np.mean(list(ep_ach_counts))) if ep_ach_counts else 0.0
 
@@ -686,47 +701,62 @@ def train(config: Config) -> dict[str, float]:
                 for a in top3
             )
 
-            logger.info(
-                (
-                    "iter=%d/%d  step=%dk  sps=%.0f  ret=%.2f  "
-                    "ach=%.2f/%d (ceil=%d)  best=%d  ent=%.3f  | %s"
-                ),
-                it + 1,
-                num_iters,
-                current_step // 1000,
-                sps,
-                mean_ret,
-                mean_ach,
-                NUM_EASY_ROCKET_ACHIEVEMENTS,
-                REACHABLE_ACHIEVEMENTS,
-                best_ach_count_ever,
-                float(metrics["loss/entropy"]),
-                act_str,
-            )
+            if it == 0:
+                logger.info(
+                    "iter=1/%d  compile+warmup=%.1fs  step=%dk  | %s",
+                    num_iters,
+                    warmup_seconds,
+                    current_step // 1000,
+                    act_str,
+                )
+            else:
+                logger.info(
+                    (
+                        "iter=%d/%d  step=%dk  sps=%.0f  ret=%.2f  "
+                        "ach=%.2f/%d (ceil=%d)  best=%d  ent=%.3f  | %s"
+                    ),
+                    it + 1,
+                    num_iters,
+                    current_step // 1000,
+                    marginal_sps,
+                    mean_ret,
+                    mean_ach,
+                    NUM_EASY_ROCKET_ACHIEVEMENTS,
+                    REACHABLE_ACHIEVEMENTS,
+                    best_ach_count_ever,
+                    float(metrics["loss/entropy"]),
+                    act_str,
+                )
 
             if wandb_run is not None:
                 log_data: dict[str, float] = {
                     "train/step": float(current_step),
-                    "train/sps": sps,
                     "train/mean_ep_return": mean_ret,
                     "train/mean_ep_achievements": mean_ach,
                     "train/best_achievements_ever": float(best_ach_count_ever),
                 }
+                # Warmup-free throughput: per-iteration steps/sec, skipping
+                # iter 0 (which pays the one-time JIT compile).
+                if it > 0:
+                    log_data["perf/sps"] = marginal_sps
                 for k, v in metrics.items():
                     log_data[f"train/{k}"] = float(v)
                 wandb_run.log(log_data, step=current_step)
 
-    elapsed = time.time() - t_start
+    steady_elapsed = t_prev - steady_start
+    steady_sps = steady_steps / steady_elapsed if steady_elapsed > 0 else float("nan")
     mean_ret = float(np.mean(list(ep_returns))) if ep_returns else 0.0
     mean_ach = float(np.mean(list(ep_ach_counts))) if ep_ach_counts else 0.0
     logger.info(
         (
-            "Done. %dk steps in %.1fs (%.0f sps). Final ret=%.2f  "
+            "Done. %dk steps  compile=%.1fs  steady-state=%.0f sps "
+            "(%d iters, warmup-free).  Final ret=%.2f  "
             "ach=%.2f/%d (ceil=%d)  best=%d  episodes=%d"
         ),
         current_step // 1000,
-        elapsed,
-        current_step / elapsed,
+        warmup_seconds,
+        steady_sps,
+        max(num_iters - 1, 0),
         mean_ret,
         mean_ach,
         NUM_EASY_ROCKET_ACHIEVEMENTS,
@@ -734,6 +764,31 @@ def train(config: Config) -> dict[str, float]:
         best_ach_count_ever,
         total_episodes,
     )
+
+    if wandb_run is not None:
+        import wandb  # noqa: PLC0415
+
+        mean_steady_iter = steady_elapsed / max(num_iters - 1, 1)
+        iter_time_table = wandb.Table(
+            data=[
+                ["compile (iter 0)", warmup_seconds],
+                ["steady iter (mean)", mean_steady_iter],
+            ],
+            columns=["phase", "seconds"],
+        )
+        wandb_run.log(
+            {
+                "perf/iter_time": wandb.plot.bar(
+                    iter_time_table,
+                    "phase",
+                    "seconds",
+                    title="Compile (warmup) vs steady iteration time",
+                ),
+                "perf/compile_seconds": warmup_seconds,
+                "perf/steady_sps": steady_sps,
+            },
+            step=current_step,
+        )
 
     try:
         _finalize_artifacts(
@@ -759,7 +814,7 @@ def train(config: Config) -> dict[str, float]:
         "best_achievements_ever": float(best_ach_count_ever),
         "max_possible_score": float(MAX_EASY_ROCKET_SCORE),
         "reachable_achievements": float(REACHABLE_ACHIEVEMENTS),
-        "sps": current_step / elapsed,
+        "sps": steady_sps,
     }
 
 
