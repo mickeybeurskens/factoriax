@@ -154,7 +154,7 @@ FUEL_AND_COLLECT_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
 BELT_LINE_BLOCKED_ACTIONS: frozenset[int] = _block_complement(
     {
         int(Action.NOOP),
-        int(Action.PLACE_BELT),
+        int(Action.PLACE_CONVEYOR_BELT),
         int(Action.MINE),
     }
     | _MOVE_ACTIONS

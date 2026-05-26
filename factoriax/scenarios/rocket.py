@@ -491,10 +491,13 @@ def build_rocket_level() -> Level:
 
 # The rocket scenario forbids all direct player crafting; production
 # must flow through the pre-placed furnace / assembler. The mask covers
-# every CRAFT_* action from IRON_PLATE through ROCKET (recipe actions
-# 18–35).
+# the entire CRAFT family, derived from the enum so every craftable item
+# is blocked automatically. (The former hand-numbered range
+# CRAFT_IRON_PLATE..CRAFT_ROCKET silently leaked the machine crafts
+# appended after ROCKET -- SCIENCE_LAB / SPLITTER / CROSSING -- letting the
+# agent hand-craft them despite the "no direct crafting" intent.)
 ROCKET_BLOCKED_ACTIONS: frozenset[int] = frozenset(
-    range(int(Action.CRAFT_IRON_PLATE), int(Action.CRAFT_ROCKET) + 1)
+    int(a) for a in Action if a.name.startswith("CRAFT_")
 )
 
 

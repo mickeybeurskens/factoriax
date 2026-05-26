@@ -155,7 +155,7 @@ class TestFuelAndCollectMask:
 class TestBeltLineMask:
     def test_allows_place_belt_and_mine(self) -> None:
         allowed = _allowed(BELT_LINE_BLOCKED_ACTIONS)
-        assert int(Action.PLACE_BELT) in allowed
+        assert int(Action.PLACE_CONVEYOR_BELT) in allowed
         assert int(Action.MINE) in allowed
 
     def test_allows_rotation(self) -> None:
@@ -170,7 +170,7 @@ class TestBeltLineMask:
 
     def test_blocks_other_place_actions(self) -> None:
         for a in range(int(Action.PLACE_MINER), int(Action.PLACE_CROSSING) + 1):
-            if a == int(Action.PLACE_BELT):
+            if a == int(Action.PLACE_CONVEYOR_BELT):
                 continue
             assert a in BELT_LINE_BLOCKED_ACTIONS
 

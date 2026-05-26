@@ -203,14 +203,14 @@ _ITEM_TO_CRAFT_ACTION: dict[int, int] = {
     int(ItemType.WIRE): int(Action.CRAFT_WIRE),
     int(ItemType.MOTOR): int(Action.CRAFT_MOTOR),
     int(ItemType.SENSOR): int(Action.CRAFT_SENSOR),
-    int(ItemType.CONVEYOR_BELT): int(Action.CRAFT_BELT),
+    int(ItemType.CONVEYOR_BELT): int(Action.CRAFT_CONVEYOR_BELT),
     int(ItemType.MINER): int(Action.CRAFT_MINER),
     int(ItemType.ASSEMBLER): int(Action.CRAFT_ASSEMBLER),
     int(ItemType.PALLET): int(Action.CRAFT_PALLET),
     int(ItemType.ARM): int(Action.CRAFT_ARM),
     int(ItemType.FURNACE): int(Action.CRAFT_FURNACE),
-    int(ItemType.BASIC_SCIENCE_PACK): int(Action.CRAFT_BASIC_SCIENCE),
-    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.CRAFT_ADV_SCIENCE),
+    int(ItemType.BASIC_SCIENCE_PACK): int(Action.CRAFT_BASIC_SCIENCE_PACK),
+    int(ItemType.ADVANCED_SCIENCE_PACK): int(Action.CRAFT_ADVANCED_SCIENCE_PACK),
     int(ItemType.ROCKET): int(Action.CRAFT_ROCKET),
 }
 

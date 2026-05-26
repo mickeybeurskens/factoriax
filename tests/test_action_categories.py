@@ -10,7 +10,23 @@ non-parametric actions today, disjointly.
 
 from __future__ import annotations
 
-from factoriax.constants import Action, InteractAction, MoveAction
+from factoriax.constants import (
+    CRAFT_BASE,
+    CRAFT_ITEMS,
+    DEPOSIT_BASE,
+    DEPOSIT_ITEMS,
+    NUM_ACTIONS,
+    NUM_ITEM_TYPES,
+    PLACE_BASE,
+    PLACEMENT_ITEMS,
+    Action,
+    HalfFabricate,
+    InteractAction,
+    ItemType,
+    Machine,
+    MoveAction,
+    Resource,
+)
 
 # Prefixes of the parametric action families on the current Action enum.
 _PARAMETRIC_PREFIXES = ("PLACE_", "CRAFT_", "DEPOSIT_")
@@ -31,3 +47,54 @@ def test_every_category_name_is_a_real_action() -> None:
     for enum_cls in (MoveAction, InteractAction):
         for member in enum_cls:
             assert member.name in Action.__members__
+
+
+def test_action_space_shape() -> None:
+    """The composed action layout has the expected flat size.
+
+    DEF2 D1b completes the two families hand-numbering left short (deposit
+    gains LIMESTONE, craft gains the five rocket parts), so the action count
+    grows 79 -> 85. ItemType is untouched in D1b, so its shape is unchanged.
+    """
+    assert NUM_ACTIONS == 85
+    assert NUM_ITEM_TYPES == 33
+
+
+def test_parametric_family_sizes_match_item_categories() -> None:
+    """Each parametric family has exactly one action per item it addresses."""
+    place = [a for a in Action if a.name.startswith("PLACE_")]
+    craft = [a for a in Action if a.name.startswith("CRAFT_")]
+    deposit = [a for a in Action if a.name.startswith("DEPOSIT_")]
+
+    assert len(place) == len(PLACEMENT_ITEMS) == len(Machine)
+    assert len(craft) == len(CRAFT_ITEMS)
+    assert len(deposit) == len(DEPOSIT_ITEMS)
+    # Deposit is total over the non-EMPTY items.
+    assert len(deposit) == NUM_ITEM_TYPES - 1
+
+
+def test_family_bases_partition_the_parametric_range() -> None:
+    """The derived ``*_BASE`` offsets tile the action space contiguously."""
+    fixed = len(MoveAction) + len(InteractAction)
+    assert PLACE_BASE == fixed
+    assert CRAFT_BASE == PLACE_BASE + len(PLACEMENT_ITEMS)
+    assert DEPOSIT_BASE == CRAFT_BASE + len(CRAFT_ITEMS)
+    assert DEPOSIT_BASE + len(DEPOSIT_ITEMS) == NUM_ACTIONS
+
+
+def test_craftable_iff_non_resource_iff_recipe_outputs() -> None:
+    """The Craft family addresses exactly the non-resource items, which are
+    exactly the recipe outputs -- the DEF2 design invariant. A family can no
+    longer fall short of (or overshoot) the set of items that actually have a
+    recipe, the way hand-numbering left craft missing the rocket parts.
+    """
+    from factoriax.recipes import BASE_RECIPES
+
+    craft_items = {ItemType[m.name] for m in CRAFT_ITEMS}
+    non_resource = {ItemType[m.name] for m in (*HalfFabricate, *Machine)}
+    recipe_outputs = {ItemType(r.output) for r in BASE_RECIPES}
+    resources = {ItemType[m.name] for m in Resource}
+
+    assert craft_items == non_resource
+    assert craft_items == recipe_outputs
+    assert craft_items.isdisjoint(resources)

@@ -95,14 +95,20 @@ def test_build_rocket_level_preplaces_furnace_and_assembler() -> None:
 
 def test_rocket_benchmark_exposes_blocked_actions() -> None:
     """The scenario advertises every CRAFT_* action as blocked."""
+    from factoriax.constants import CRAFT_ITEMS
     from factoriax.scenarios.rocket import ROCKET_BLOCKED_ACTIONS
 
     scenario = RocketScenario()
-    # All 18 CRAFT_* actions (IRON_PLATE .. ROCKET) must be blocked.
-    assert len(scenario.blocked_actions) == 18
+    # The whole craft family is blocked (one action per non-resource item),
+    # including the machine crafts the old hand-numbered range leaked.
+    assert len(scenario.blocked_actions) == len(CRAFT_ITEMS)
+    assert {a for a in Action if a.name.startswith("CRAFT_")} == {
+        Action(v) for v in scenario.blocked_actions
+    }
     assert Action.CRAFT_IRON_PLATE in scenario.blocked_actions
     assert Action.CRAFT_ROCKET in scenario.blocked_actions
-    assert Action.CRAFT_BASIC_SCIENCE in scenario.blocked_actions
+    assert Action.CRAFT_SCIENCE_LAB in scenario.blocked_actions
+    assert Action.CRAFT_BASIC_SCIENCE_PACK in scenario.blocked_actions
     # Movement / mining / placement actions must NOT be blocked.
     for allowed in (
         Action.NOOP,

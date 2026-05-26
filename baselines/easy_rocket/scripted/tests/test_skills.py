@@ -44,7 +44,7 @@ def test_stand_tile_for() -> None:
 def test_action_maps() -> None:
     assert craft_action(int(ItemType.MINER)) == int(Action.CRAFT_MINER)
     assert craft_action(int(ItemType.PALLET)) == int(Action.CRAFT_PALLET)
-    assert place_action(int(ItemType.CONVEYOR_BELT)) == int(Action.PLACE_BELT)
+    assert place_action(int(ItemType.CONVEYOR_BELT)) == int(Action.PLACE_CONVEYOR_BELT)
     assert place_action(int(ItemType.ASSEMBLER)) == int(Action.PLACE_ASSEMBLER)
     assert rotate_action(int(Direction.UP)) == int(Action.ROTATE_UP)
     assert face_action(int(Direction.LEFT)) == int(Action.FACE_LEFT)

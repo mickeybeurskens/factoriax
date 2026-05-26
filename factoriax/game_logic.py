@@ -9,12 +9,15 @@ import jax.numpy as jnp
 
 from factoriax.constants import (
     CRAFT_BASE,
+    CRAFT_ITEMS,
     DEPOSIT_BASE,
+    DEPOSIT_ITEMS,
     DIRECTIONS,
     MINEABLE_BLOCKS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     PLACE_BASE,
+    PLACEMENT_ITEMS,
     PLAYER_MAX_STACK,
     ROTATE_BASE,
     SCIENCE_PACK_TYPES,
@@ -43,20 +46,9 @@ from factoriax.state import EnvParams, EnvState
 # this module, not environment constants, so they live next to the dispatch.
 # ---------------------------------------------------------------------------
 
-# PLACE_* offset (0..9) -> ItemType of the machine placed.
+# PLACE_* offset -> ItemType of the machine placed (one per Machine).
 PLACE_ACTION_TO_ITEM = jnp.array(
-    [
-        ItemType.MINER,
-        ItemType.PALLET,
-        ItemType.CONVEYOR_BELT,
-        ItemType.ASSEMBLER,
-        ItemType.ARM,
-        ItemType.ROCKET,
-        ItemType.FURNACE,
-        ItemType.SCIENCE_LAB,
-        ItemType.SPLITTER,
-        ItemType.CROSSING,
-    ],
+    [int(ItemType[m.name]) for m in PLACEMENT_ITEMS],
     dtype=jnp.int32,
 )
 
@@ -66,35 +58,25 @@ ROTATE_ACTION_TO_DIR = jnp.array(
     dtype=jnp.int32,
 )
 
-# CRAFT_* offset (0..20) -> ItemType the action crafts. Crafting resolves
-# action -> item here, then item -> recipe row via the active recipe table's
-# ``output_to_recipe`` (-1 when the table has no such recipe). Routing through
-# the output item keeps recipe-list order out of the dispatch entirely, so a
-# scenario with a reordered or subset recipe table craft-dispatches correctly.
+# CRAFT_* offset -> ItemType the action crafts (one per non-resource item).
+# Crafting resolves action -> item here, then item -> recipe row via the active
+# recipe table's ``output_to_recipe`` (-1 when the table has no such recipe).
+# Routing through the output item keeps recipe-list order out of the dispatch
+# entirely, so a scenario with a reordered or subset recipe table
+# craft-dispatches correctly.
 CRAFT_ACTION_TO_ITEM = jnp.array(
-    [
-        ItemType.IRON_PLATE,
-        ItemType.COPPER_PLATE,
-        ItemType.TIN_PLATE,
-        ItemType.WAFER,
-        ItemType.FRAME,
-        ItemType.CIRCUIT,
-        ItemType.WIRE,
-        ItemType.MOTOR,
-        ItemType.SENSOR,
-        ItemType.CONVEYOR_BELT,
-        ItemType.MINER,
-        ItemType.ASSEMBLER,
-        ItemType.PALLET,
-        ItemType.ARM,
-        ItemType.FURNACE,
-        ItemType.BASIC_SCIENCE_PACK,
-        ItemType.ADVANCED_SCIENCE_PACK,
-        ItemType.ROCKET,
-        ItemType.SCIENCE_LAB,
-        ItemType.SPLITTER,
-        ItemType.CROSSING,
-    ],
+    [int(ItemType[m.name]) for m in CRAFT_ITEMS],
+    dtype=jnp.int32,
+)
+
+# DEPOSIT_* offset -> ItemType deposited (one per non-EMPTY item). An explicit
+# table, not arithmetic: the former ``action - DEPOSIT_BASE + COAL`` assumed
+# the deposit family and ItemType shared one contiguous order and sheared on
+# the items where they diverge (LIMESTONE stranded at the end, so SPLITTER /
+# CROSSING resolved one slot low). Built from the same family list as the
+# DEPOSIT_* Action members, so it cannot drift from them.
+DEPOSIT_ACTION_TO_ITEM = jnp.array(
+    [int(ItemType[m.name]) for m in DEPOSIT_ITEMS],
     dtype=jnp.int32,
 )
 
@@ -607,33 +589,34 @@ def _handle_player_action(
         jnp.clip(action - PLACE_BASE, 0, len(PLACE_ACTION_TO_ITEM) - 1)
     ]
     rotate_dir = ROTATE_ACTION_TO_DIR[jnp.clip(action - ROTATE_BASE, 0, 3)]
-    deposit_item = jnp.clip(
-        action - DEPOSIT_BASE + int(ItemType.COAL),
-        0,
-        NUM_ITEM_TYPES - 1,
-    )
+    deposit_item = DEPOSIT_ACTION_TO_ITEM[
+        jnp.clip(action - DEPOSIT_BASE, 0, len(DEPOSIT_ACTION_TO_ITEM) - 1)
+    ]
 
-    # Map action to handler category (0-8).
+    # Map action to handler category (0-8). The three parametric families are
+    # half-open ranges anchored at their *_BASE offset and sized by the family
+    # table; the fixed interactions are matched by member identity.
     cat = jnp.int32(0)  # default: movement
     cat = jnp.where(action == Action.MINE, 1, cat)
     cat = jnp.where(
-        (action >= Action.CRAFT_IRON_PLATE) & (action <= Action.CRAFT_CROSSING),
+        (action >= CRAFT_BASE) & (action < CRAFT_BASE + len(CRAFT_ACTION_TO_ITEM)),
         2,
         cat,
     )
     cat = jnp.where(
-        (action >= Action.PLACE_MINER) & (action <= Action.PLACE_CROSSING),
+        (action >= PLACE_BASE) & (action < PLACE_BASE + len(PLACE_ACTION_TO_ITEM)),
         3,
         cat,
     )
     cat = jnp.where(action == Action.PICKUP, 4, cat)
     cat = jnp.where(
-        (action >= Action.ROTATE_LEFT) & (action <= Action.ROTATE_DOWN),
+        (action >= ROTATE_BASE) & (action < ROTATE_BASE + len(ROTATE_ACTION_TO_DIR)),
         5,
         cat,
     )
     cat = jnp.where(
-        (action >= Action.DEPOSIT_COAL) & (action <= Action.DEPOSIT_CROSSING),
+        (action >= DEPOSIT_BASE)
+        & (action < DEPOSIT_BASE + len(DEPOSIT_ACTION_TO_ITEM)),
         6,
         cat,
     )

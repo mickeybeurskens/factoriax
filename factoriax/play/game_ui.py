@@ -82,7 +82,7 @@ TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
     int(ItemType.MINER): int(Action.PLACE_MINER),
     int(ItemType.PALLET): int(Action.PLACE_PALLET),
-    int(ItemType.CONVEYOR_BELT): int(Action.PLACE_BELT),
+    int(ItemType.CONVEYOR_BELT): int(Action.PLACE_CONVEYOR_BELT),
     int(ItemType.ASSEMBLER): int(Action.PLACE_ASSEMBLER),
     int(ItemType.ARM): int(Action.PLACE_ARM),
     int(ItemType.ROCKET): int(Action.PLACE_ROCKET),

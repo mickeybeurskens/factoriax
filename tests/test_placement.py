@@ -10,7 +10,9 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
     Action,
+    InteractAction,
     MachineType,
+    MoveAction,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step
@@ -369,9 +371,12 @@ class TestActionRepair:
     """Tests for Action.REPAIR and apply_repair."""
 
     def test_action_repair_value(self) -> None:
-        """REPAIR is the last action; NUM_ACTIONS reflects it."""
-        assert int(Action.REPAIR) == 78
-        assert NUM_ACTIONS == 79
+        """REPAIR is a fixed interaction action, derived from its category."""
+        assert "REPAIR" in Action.__members__
+        assert 0 <= int(Action.REPAIR) < NUM_ACTIONS
+        # Its flat value falls out of the InteractAction offset within the
+        # composed layout (MoveAction block, then InteractAction block).
+        assert int(Action.REPAIR) == len(MoveAction) + int(InteractAction.REPAIR)
 
     def _placed_state(self, state_factory):
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)

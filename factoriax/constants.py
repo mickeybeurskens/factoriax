@@ -311,123 +311,54 @@ class InteractAction(IntEnum):
 # ---------------------------------------------------------------------------
 
 
-class Action(IntEnum):
-    """Player actions using compound action design.
+# The items each parametric action family addresses, in composition order.
+# Placement covers every Machine, Craft every non-resource item (the design
+# invariant: craftable <=> non-resource), Deposit every non-EMPTY item. The
+# Action members and the game_logic action->item resolution tables both derive
+# from these tuples, so the two cannot drift and no family can fall short of
+# its item category the way hand-numbering left deposit (no LIMESTONE) and
+# craft (no rocket parts) short.
+PLACEMENT_ITEMS: tuple[Machine, ...] = tuple(Machine)
+CRAFT_ITEMS: tuple[HalfFabricate | Machine, ...] = (*HalfFabricate, *Machine)
+DEPOSIT_ITEMS: tuple[Resource | HalfFabricate | Machine, ...] = (
+    *Resource,
+    *HalfFabricate,
+    *Machine,
+)
 
-    Every action is self-contained: placement, deposit, and withdraw
-    actions name the specific item type so no slot cursor is needed.
-    Movement actions move in absolute map directions. FACE_* snaps
-    facing without moving.
-    """
+# Flat member names of the composed Action enum, in family order: the two
+# fixed families (MoveAction, InteractAction) then the three parametric
+# families. Nothing hand-assigns a flat value; the categories are the source.
+_ACTION_NAMES: list[str] = [
+    *(a.name for a in MoveAction),
+    *(a.name for a in InteractAction),
+    *(f"PLACE_{m.name}" for m in PLACEMENT_ITEMS),
+    *(f"CRAFT_{m.name}" for m in CRAFT_ITEMS),
+    *(f"DEPOSIT_{m.name}" for m in DEPOSIT_ITEMS),
+]
 
-    # Movement (9)
-    NOOP = 0
-    UP = 1
-    DOWN = 2
-    LEFT = 3
-    RIGHT = 4
-    FACE_UP = 5
-    FACE_DOWN = 6
-    FACE_LEFT = 7
-    FACE_RIGHT = 8
+Action = IntEnum("Action", _ACTION_NAMES, start=0)
+Action.__doc__ = """Player actions using compound action design.
 
-    # World (2)
-    MINE = 9
-    PICKUP = 10
+Every action is self-contained: placement, deposit, and withdraw actions
+name the specific item type so no slot cursor is needed. Movement actions
+move in absolute map directions; FACE_* snaps facing without moving.
 
-    # Placement — one per placeable machine type (10)
-    PLACE_MINER = 11
-    PLACE_PALLET = 12
-    PLACE_BELT = 13
-    PLACE_ASSEMBLER = 14
-    PLACE_ARM = 15
-    PLACE_ROCKET = 16
-    PLACE_FURNACE = 17
-    PLACE_SCIENCE_LAB = 18
-    PLACE_SPLITTER = 19
-    PLACE_CROSSING = 20
+Composed from MoveAction + InteractAction (the fixed families) followed by
+the parametric Placement/Craft/Deposit families generated from the item
+categories, so the action layout tracks the item set automatically.
+"""
 
-    # Crafting — one per recipe output (21)
-    CRAFT_IRON_PLATE = 21
-    CRAFT_COPPER_PLATE = 22
-    CRAFT_TIN_PLATE = 23
-    CRAFT_WAFER = 24
-    CRAFT_FRAME = 25
-    CRAFT_CIRCUIT = 26
-    CRAFT_WIRE = 27
-    CRAFT_MOTOR = 28
-    CRAFT_SENSOR = 29
-    CRAFT_BELT = 30
-    CRAFT_MINER = 31
-    CRAFT_ASSEMBLER = 32
-    CRAFT_PALLET = 33
-    CRAFT_ARM = 34
-    CRAFT_FURNACE = 35
-    CRAFT_BASIC_SCIENCE = 36
-    CRAFT_ADV_SCIENCE = 37
-    CRAFT_ROCKET = 38
-    CRAFT_SCIENCE_LAB = 39
-    CRAFT_SPLITTER = 40
-    CRAFT_CROSSING = 41
+# Base offsets for arithmetic dispatch of compound actions, derived from the
+# fixed-family and parametric-family sizes -- no hand-tied member references.
+PLACE_BASE: int = len(MoveAction) + len(InteractAction)
+CRAFT_BASE: int = PLACE_BASE + len(PLACEMENT_ITEMS)
+DEPOSIT_BASE: int = CRAFT_BASE + len(CRAFT_ITEMS)
+ROTATE_BASE: int = len(MoveAction) + int(InteractAction.ROTATE_LEFT)
 
-    # Deposit — one per non-EMPTY item type (31)
-    DEPOSIT_COAL = 42
-    DEPOSIT_IRON_ORE = 43
-    DEPOSIT_COPPER_ORE = 44
-    DEPOSIT_TIN_ORE = 45
-    DEPOSIT_SILICON = 46
-    DEPOSIT_IRON_PLATE = 47
-    DEPOSIT_COPPER_PLATE = 48
-    DEPOSIT_TIN_PLATE = 49
-    DEPOSIT_WAFER = 50
-    DEPOSIT_FRAME = 51
-    DEPOSIT_CIRCUIT = 52
-    DEPOSIT_WIRE = 53
-    DEPOSIT_MOTOR = 54
-    DEPOSIT_SENSOR = 55
-    DEPOSIT_BELT = 56
-    DEPOSIT_MINER = 57
-    DEPOSIT_ASSEMBLER = 58
-    DEPOSIT_PALLET = 59
-    DEPOSIT_ARM = 60
-    DEPOSIT_BASIC_SCIENCE = 61
-    DEPOSIT_ADV_SCIENCE = 62
-    DEPOSIT_ROCKET = 63
-    DEPOSIT_FURNACE = 64
-    DEPOSIT_REFRACTORY = 65
-    DEPOSIT_HULL = 66
-    DEPOSIT_ENGINE_UNIT = 67
-    DEPOSIT_AVIONICS = 68
-    DEPOSIT_ROCKET_CORE = 69
-    DEPOSIT_SCIENCE_LAB = 70
-    DEPOSIT_SPLITTER = 71
-    DEPOSIT_CROSSING = 72
-
-    # Withdraw — single action; machines have one output slot so no
-    # per-item selection is needed (mirrors PICKUP / MINE).
-    WITHDRAW = 73
-
-    # Machine rotation — absolute direction set (4)
-    ROTATE_LEFT = 74
-    ROTATE_RIGHT = 75
-    ROTATE_UP = 76
-    ROTATE_DOWN = 77
-
-    # Repair the machine in front of the player. The base engine
-    # restores the target's health to its configured maximum;
-    # wrappers override repair semantics by pre-empting this action.
-    REPAIR = 78
-
-
-# Base offsets for arithmetic dispatch of compound actions.
-PLACE_BASE: int = Action.PLACE_MINER
-CRAFT_BASE: int = Action.CRAFT_IRON_PLATE
-DEPOSIT_BASE: int = Action.DEPOSIT_COAL
-ROTATE_BASE: int = Action.ROTATE_LEFT
-
-# The PLACE_* / ROTATE_* / CRAFT_* action-offset resolution tables live with
-# the step dispatcher in factoriax.game_logic — they are dispatch wiring, not
-# environment constants.
+# The PLACE_* / ROTATE_* / CRAFT_* / DEPOSIT_* action-offset resolution tables
+# live with the step dispatcher in factoriax.game_logic -- they are dispatch
+# wiring, not environment constants.
 
 # ---------------------------------------------------------------------------
 # Block/terrain constants
