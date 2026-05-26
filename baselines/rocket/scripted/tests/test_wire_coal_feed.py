@@ -9,7 +9,7 @@ from baselines.rocket.scripted.goals import (
     coal_feed_inventory,
     wire_coal_feed,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _types(goals: list) -> list[int]:
@@ -31,8 +31,8 @@ def test_iron_layout_emits_miner_first_then_belts() -> None:
     )
     types = _types(goals)
     # First placement is the miner; everything after is belts.
-    assert types[0] == int(MachineType.MINER)
-    assert all(t == int(MachineType.CONVEYOR_BELT) for t in types[1:])
+    assert types[0] == int(Machine.MINER)
+    assert all(t == int(Machine.CONVEYOR_BELT) for t in types[1:])
     # Total: 1 miner + 14 belts (matches iron's documented trunk length).
     assert len(types) == 15
 
@@ -48,8 +48,8 @@ def test_tin_layout_emits_trunk_first_then_miner() -> None:
     )
     types = _types(goals)
     # Last placement is the miner; everything before is belts.
-    assert types[-1] == int(MachineType.MINER)
-    assert all(t == int(MachineType.CONVEYOR_BELT) for t in types[:-1])
+    assert types[-1] == int(Machine.MINER)
+    assert all(t == int(Machine.CONVEYOR_BELT) for t in types[:-1])
     # Total: 18 belts + 1 miner.
     assert len(types) == 19
 
@@ -63,8 +63,8 @@ def test_silicon_layout_trunk_first() -> None:
         trunk_waypoints=[(7, 21), (7, 8), (14, 8), (15, 8)],
     )
     types = _types(goals)
-    assert types[-1] == int(MachineType.MINER)
-    assert sum(1 for t in types if t == int(MachineType.CONVEYOR_BELT)) == 21
+    assert types[-1] == int(Machine.MINER)
+    assert sum(1 for t in types if t == int(Machine.CONVEYOR_BELT)) == 21
 
 
 def test_trunk_start_must_match_miner_push_tile() -> None:

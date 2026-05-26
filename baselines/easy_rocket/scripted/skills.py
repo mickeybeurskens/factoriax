@@ -28,7 +28,7 @@ from factoriax.constants import (
     Action,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.state import EnvState
 
@@ -96,18 +96,18 @@ ITEM_TO_PLACE_ACTION: dict[int, int] = {
 }
 
 # Each machine type's item form, for "pick the right CRAFT/PLACE
-# action given a MachineType the planner specified".
+# action given a Machine the planner specified".
 MACHINE_TO_ITEM: dict[int, int] = {
-    int(MachineType.MINER): int(ItemType.MINER),
-    int(MachineType.PALLET): int(ItemType.PALLET),
-    int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
-    int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
-    int(MachineType.ARM): int(ItemType.ARM),
-    int(MachineType.ROCKET): int(ItemType.ROCKET),
-    int(MachineType.FURNACE): int(ItemType.FURNACE),
-    int(MachineType.SCIENCE_LAB): int(ItemType.SCIENCE_LAB),
-    int(MachineType.SPLITTER): int(ItemType.SPLITTER),
-    int(MachineType.CROSSING): int(ItemType.CROSSING),
+    int(Machine.MINER): int(ItemType.MINER),
+    int(Machine.PALLET): int(ItemType.PALLET),
+    int(Machine.ASSEMBLER): int(ItemType.ASSEMBLER),
+    int(Machine.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
+    int(Machine.ARM): int(ItemType.ARM),
+    int(Machine.ROCKET): int(ItemType.ROCKET),
+    int(Machine.FURNACE): int(ItemType.FURNACE),
+    int(Machine.SCIENCE_LAB): int(ItemType.SCIENCE_LAB),
+    int(Machine.SPLITTER): int(ItemType.SPLITTER),
+    int(Machine.CROSSING): int(ItemType.CROSSING),
 }
 
 

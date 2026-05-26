@@ -31,7 +31,7 @@ from baselines.rocket.scripted.layout import (
     verify_layout,
 )
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _make_view(
@@ -83,9 +83,9 @@ def two_pallets_view() -> WorldView:
     """3x3 grid with PALLETs at (0, 0) DOWN and (2, 2) UP."""
     machine_type = np.zeros((3, 3), dtype=np.int32)
     machine_direction = np.zeros((3, 3), dtype=np.int32)
-    machine_type[0, 0] = int(MachineType.PALLET)
+    machine_type[0, 0] = int(Machine.PALLET)
     machine_direction[0, 0] = int(Direction.DOWN)
-    machine_type[2, 2] = int(MachineType.PALLET)
+    machine_type[2, 2] = int(Machine.PALLET)
     machine_direction[2, 2] = int(Direction.UP)
     return _make_view(machine_type, machine_direction)
 
@@ -97,29 +97,29 @@ class TestExpectedLayoutFromGoals:
         assert expected_layout_from_goals([]) == {}
 
     def test_extracts_single_placement(self) -> None:
-        goals = [PlaceMachineAt(MachineType.PALLET, (1, 2), int(Direction.DOWN))]
+        goals = [PlaceMachineAt(Machine.PALLET, (1, 2), int(Direction.DOWN))]
         layout = expected_layout_from_goals(goals)
-        assert layout == {(1, 2): (int(MachineType.PALLET), int(Direction.DOWN))}
+        assert layout == {(1, 2): (int(Machine.PALLET), int(Direction.DOWN))}
 
     def test_ignores_non_placement_goals(self) -> None:
         """MineOre, Wait, etc. are passed through but contribute nothing."""
         goals = [
             MineOre(ItemType.IRON_ORE, 5),
             Wait(10),
-            PlaceMachineAt(MachineType.MINER, (3, 4), int(Direction.UP)),
+            PlaceMachineAt(Machine.MINER, (3, 4), int(Direction.UP)),
             Wait(20),
         ]
         layout = expected_layout_from_goals(goals)
-        assert layout == {(3, 4): (int(MachineType.MINER), int(Direction.UP))}
+        assert layout == {(3, 4): (int(Machine.MINER), int(Direction.UP))}
 
     def test_duplicate_targets_last_writer_wins(self) -> None:
         """Two placements at the same tile keep the second one."""
         goals = [
-            PlaceMachineAt(MachineType.PALLET, (1, 1), int(Direction.DOWN)),
-            PlaceMachineAt(MachineType.MINER, (1, 1), int(Direction.UP)),
+            PlaceMachineAt(Machine.PALLET, (1, 1), int(Direction.DOWN)),
+            PlaceMachineAt(Machine.MINER, (1, 1), int(Direction.UP)),
         ]
         layout = expected_layout_from_goals(goals)
-        assert layout == {(1, 1): (int(MachineType.MINER), int(Direction.UP))}
+        assert layout == {(1, 1): (int(Machine.MINER), int(Direction.UP))}
 
 
 class TestDiffLayout:
@@ -127,13 +127,13 @@ class TestDiffLayout:
 
     def test_clean_layout_no_mismatches(self, two_pallets_view: WorldView) -> None:
         expected = {
-            (0, 0): (int(MachineType.PALLET), int(Direction.DOWN)),
-            (2, 2): (int(MachineType.PALLET), int(Direction.UP)),
+            (0, 0): (int(Machine.PALLET), int(Direction.DOWN)),
+            (2, 2): (int(Machine.PALLET), int(Direction.UP)),
         }
         assert diff_layout(two_pallets_view, expected) == []
 
     def test_missing_tile(self, empty_view: WorldView) -> None:
-        expected = {(1, 1): (int(MachineType.PALLET), int(Direction.DOWN))}
+        expected = {(1, 1): (int(Machine.PALLET), int(Direction.DOWN))}
         diff = diff_layout(empty_view, expected)
         assert len(diff) == 1
         assert diff[0].kind == "MISSING"
@@ -142,26 +142,26 @@ class TestDiffLayout:
 
     def test_wrong_type(self, two_pallets_view: WorldView) -> None:
         expected = {
-            (0, 0): (int(MachineType.MINER), int(Direction.DOWN)),
-            (2, 2): (int(MachineType.PALLET), int(Direction.UP)),
+            (0, 0): (int(Machine.MINER), int(Direction.DOWN)),
+            (2, 2): (int(Machine.PALLET), int(Direction.UP)),
         }
         diff = diff_layout(two_pallets_view, expected)
         assert len(diff) == 1
         assert diff[0].kind == "WRONG_TYPE"
         assert diff[0].tile == (0, 0)
         assert diff[0].expected == (
-            int(MachineType.MINER),
+            int(Machine.MINER),
             int(Direction.DOWN),
         )
         assert diff[0].observed == (
-            int(MachineType.PALLET),
+            int(Machine.PALLET),
             int(Direction.DOWN),
         )
 
     def test_wrong_direction(self, two_pallets_view: WorldView) -> None:
         expected = {
-            (0, 0): (int(MachineType.PALLET), int(Direction.UP)),
-            (2, 2): (int(MachineType.PALLET), int(Direction.UP)),
+            (0, 0): (int(Machine.PALLET), int(Direction.UP)),
+            (2, 2): (int(Machine.PALLET), int(Direction.UP)),
         }
         diff = diff_layout(two_pallets_view, expected)
         assert len(diff) == 1
@@ -170,7 +170,7 @@ class TestDiffLayout:
 
     def test_stray(self, two_pallets_view: WorldView) -> None:
         """A pallet present at (2, 2) but not in expected is STRAY."""
-        expected = {(0, 0): (int(MachineType.PALLET), int(Direction.DOWN))}
+        expected = {(0, 0): (int(Machine.PALLET), int(Direction.DOWN))}
         diff = diff_layout(two_pallets_view, expected)
         assert len(diff) == 1
         assert diff[0].kind == "STRAY"
@@ -181,15 +181,15 @@ class TestDiffLayout:
         self, empty_view: WorldView
     ) -> None:
         expected = {
-            (2, 2): (int(MachineType.PALLET), int(Direction.UP)),
-            (0, 0): (int(MachineType.PALLET), int(Direction.DOWN)),
+            (2, 2): (int(Machine.PALLET), int(Direction.UP)),
+            (0, 0): (int(Machine.PALLET), int(Direction.DOWN)),
         }
         diff = diff_layout(empty_view, expected)
         # Both missing; sort returns (0, 0) before (2, 2).
         assert [m.tile for m in diff] == [(0, 0), (2, 2)]
 
     def test_mismatch_render_human_readable(self, empty_view: WorldView) -> None:
-        expected = {(1, 1): (int(MachineType.PALLET), int(Direction.DOWN))}
+        expected = {(1, 1): (int(Machine.PALLET), int(Direction.DOWN))}
         diff = diff_layout(empty_view, expected)
         line = diff[0].render()
         assert "PALLET" in line
@@ -202,16 +202,16 @@ class TestVerifyLayout:
 
     def test_clean_returns_true(self, two_pallets_view: WorldView) -> None:
         expected = {
-            (0, 0): (int(MachineType.PALLET), int(Direction.DOWN)),
-            (2, 2): (int(MachineType.PALLET), int(Direction.UP)),
+            (0, 0): (int(Machine.PALLET), int(Direction.DOWN)),
+            (2, 2): (int(Machine.PALLET), int(Direction.UP)),
         }
         assert verify_layout(two_pallets_view, expected) is True
 
     def test_any_mismatch_returns_false(self, two_pallets_view: WorldView) -> None:
         # Wrong direction at (0, 0) is enough to flip the result.
         expected = {
-            (0, 0): (int(MachineType.PALLET), int(Direction.UP)),
-            (2, 2): (int(MachineType.PALLET), int(Direction.UP)),
+            (0, 0): (int(Machine.PALLET), int(Direction.UP)),
+            (2, 2): (int(Machine.PALLET), int(Direction.UP)),
         }
         assert verify_layout(two_pallets_view, expected) is False
 
@@ -226,7 +226,7 @@ class TestStrayDetectionRespectsExpected:
 
     def test_expected_present_tile_not_stray(self, two_pallets_view: WorldView) -> None:
         # Plan only mentions (0, 0); (2, 2) is unmentioned and present.
-        expected = {(0, 0): (int(MachineType.PALLET), int(Direction.DOWN))}
+        expected = {(0, 0): (int(Machine.PALLET), int(Direction.DOWN))}
         diff = diff_layout(two_pallets_view, expected)
         assert len(diff) == 1
         assert diff[0].kind == "STRAY"
@@ -235,7 +235,7 @@ class TestStrayDetectionRespectsExpected:
     def test_partial_plan_missing_plus_stray(self, two_pallets_view: WorldView) -> None:
         """Plan asks for (1, 1) (missing), env has (0, 0) and (2, 2)
         (both stray)."""
-        expected = {(1, 1): (int(MachineType.PALLET), int(Direction.DOWN))}
+        expected = {(1, 1): (int(Machine.PALLET), int(Direction.DOWN))}
         diff = diff_layout(two_pallets_view, expected)
         kinds = [m.kind for m in diff]
         assert kinds.count("MISSING") == 1
@@ -255,10 +255,10 @@ class TestNumpyArrayCoordinateConvention:
         """
         machine_type = np.zeros((10, 10), dtype=np.int32)
         machine_direction = np.zeros((10, 10), dtype=np.int32)
-        machine_type[3, 5] = int(MachineType.PALLET)
+        machine_type[3, 5] = int(Machine.PALLET)
         machine_direction[3, 5] = int(Direction.DOWN)
         view = _make_view(machine_type, machine_direction)
-        expected = {(5, 3): (int(MachineType.PALLET), int(Direction.DOWN))}
+        expected = {(5, 3): (int(Machine.PALLET), int(Direction.DOWN))}
         diff = diff_layout(view, expected)
         assert diff == [], f"unexpected mismatches: {diff}"
 
@@ -271,13 +271,13 @@ class TestRenderInDifferentKinds:
         [
             (
                 "MISSING",
-                (int(MachineType.PALLET), int(Direction.DOWN)),
+                (int(Machine.PALLET), int(Direction.DOWN)),
                 None,
             ),
             (
                 "STRAY",
                 None,
-                (int(MachineType.MINER), int(Direction.UP)),
+                (int(Machine.MINER), int(Direction.UP)),
             ),
         ],
     )

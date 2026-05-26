@@ -60,7 +60,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.jax_renderer import build_digit_atlas
 from factoriax.ui.icons import (
@@ -120,13 +120,13 @@ MISSING_RGBA: tuple[int, int, int, int] = (255, 0, 255, 255)
 # Non-directional machines (PALLET, ASSEMBLER, FURNACE, SCIENCE_LAB,
 # ROCKET, NONE) are rendered once and duplicated across all four
 # direction rows.
-_DIRECTIONAL_MACHINES: frozenset[MachineType] = frozenset(
+_DIRECTIONAL_MACHINES: frozenset[Machine] = frozenset(
     {
-        MachineType.CONVEYOR_BELT,
-        MachineType.MINER,
-        MachineType.ARM,
-        MachineType.SPLITTER,
-        MachineType.CROSSING,
+        Machine.CONVEYOR_BELT,
+        Machine.MINER,
+        Machine.ARM,
+        Machine.SPLITTER,
+        Machine.CROSSING,
     }
 )
 
@@ -179,15 +179,15 @@ def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray
     return _to_rgba(tex)
 
 
-def _machine_cell(machine: MachineType, direction: Direction) -> np.ndarray | None:
+def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
     """Return the RGBA machine sprite for *machine* facing *direction*.
 
     Non-directional machines ignore *direction*. Returns ``None`` to
     leave the cell magenta when no item maps to this machine
-    (e.g. ``MachineType.NONE``); the renderer's NONE row is fully
+    (e.g. ``Machine.NONE``); the renderer's NONE row is fully
     transparent so the sentinel never paints in practice.
     """
-    if machine == MachineType.NONE:
+    if machine == Machine.NONE:
         # Fully transparent — alpha compositing turns this into a no-op.
         return np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
     item_id = MACHINE_TO_ITEM.get(int(machine))
@@ -266,7 +266,7 @@ def _build_atlas_array() -> np.ndarray:
     # Rows 1..4: machines, one row per direction.
     for d_idx, direction in enumerate(_DIRECTION_ORDER):
         row = ROW_MACHINES_BASE + d_idx
-        for machine in sorted(MachineType, key=int):
+        for machine in sorted(Machine, key=int):
             # Non-directional machines render with a fixed fallback so
             # all four rows show the same sprite — keeps the gather
             # uniform without forcing the editor to know the difference.
@@ -317,7 +317,7 @@ def _build_atlas_json() -> dict:
             "machines": {
                 "rows": [ROW_MACHINES_BASE + i for i in range(NUM_DIRECTIONS)],
                 "directions": direction_axis,
-                "names": _ordered_enum_names(MachineType),
+                "names": _ordered_enum_names(Machine),
                 "missing": "magenta",
                 "directional": sorted(m.name for m in _DIRECTIONAL_MACHINES),
             },

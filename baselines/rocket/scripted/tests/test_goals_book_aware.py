@@ -24,7 +24,7 @@ from baselines.rocket.scripted.goals import (
     ProduceInFurnace,
     ProduceInMachine,
 )
-from factoriax.constants import ItemType, MachineType
+from factoriax.constants import ItemType, Machine
 from factoriax.recipes import (
     BASE_RECIPE_BOOK,
     Recipe,
@@ -103,16 +103,16 @@ class TestProduceInMachineBookAware:
         machine_type as recorded in the book — IRON_PLATE → FURNACE.
         """
         goal = ProduceInMachine(ItemType.IRON_PLATE, 1)
-        assert goal.machine_type == int(MachineType.FURNACE)
+        assert goal.machine_type == int(Machine.FURNACE)
 
     def test_explicit_machine_type_wins(self) -> None:
         """Explicit ``machine_type`` overrides book's default."""
         goal = ProduceInMachine(
             ItemType.IRON_PLATE,
             1,
-            machine_type=int(MachineType.ASSEMBLER),
+            machine_type=int(Machine.ASSEMBLER),
         )
-        assert goal.machine_type == int(MachineType.ASSEMBLER)
+        assert goal.machine_type == int(Machine.ASSEMBLER)
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ class TestPipelinedProduceBookAware:
         goal = PipelinedProduce(
             ItemType.WIRE,
             1,
-            machine_type=int(MachineType.ASSEMBLER),
+            machine_type=int(Machine.ASSEMBLER),
         )
         counts = {item: qty for item, qty in goal._recipe_inputs}
         assert counts[int(ItemType.COPPER_PLATE)] == 1
@@ -154,7 +154,7 @@ class TestPipelinedProduceBookAware:
         goal = PipelinedProduce(
             ItemType.WIRE,
             1,
-            machine_type=int(MachineType.ASSEMBLER),
+            machine_type=int(Machine.ASSEMBLER),
             book=book,
         )
         counts = {item: qty for item, qty in goal._recipe_inputs}

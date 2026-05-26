@@ -15,7 +15,7 @@ from factoriax.constants import (
     MACHINE_INVENTORY_COUNT_DTYPE,
     NUM_ITEM_TYPES,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.play.ui import ClickRegion, render_machine_menu
 
@@ -33,9 +33,9 @@ class TestRenderMachineMenuShape:
 
     @pytest.mark.parametrize(
         "machine_type",
-        [MachineType.MINER, MachineType.PALLET, MachineType.ASSEMBLER],
+        [Machine.MINER, Machine.PALLET, Machine.ASSEMBLER],
     )
-    def test_returns_uint8_rgba(self, state_factory, machine_type: MachineType) -> None:
+    def test_returns_uint8_rgba(self, state_factory, machine_type: Machine) -> None:
         """Output must be uint8 RGBA matching the requested screen dimensions."""
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
@@ -65,7 +65,7 @@ class TestMachineMenuClickRegions:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
         )
@@ -93,7 +93,7 @@ class TestMachineMenuClickRegions:
             world_map=jnp.zeros(shape, dtype=jnp.int32),
             machine_types=jnp.full(
                 shape,
-                int(MachineType.ASSEMBLER),
+                int(Machine.ASSEMBLER),
                 dtype=jnp.int32,
             ),
             asm_in_type=asm_in_type,
@@ -118,7 +118,7 @@ class TestMachineMenuClickRegions:
             world_map=jnp.zeros(shape, dtype=jnp.int32),
             machine_types=jnp.full(
                 shape,
-                int(MachineType.ASSEMBLER),
+                int(Machine.ASSEMBLER),
                 dtype=jnp.int32,
             ),
             asm_in_type=asm_in_type,
@@ -137,7 +137,7 @@ class TestMachineMenuClickRegions:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
         )
@@ -151,7 +151,7 @@ class TestMachineMenuClickRegions:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
         )
@@ -175,7 +175,7 @@ class TestMachineMenuContents:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
         )
@@ -193,7 +193,7 @@ class TestMachineMenuContents:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
@@ -214,7 +214,7 @@ class TestMachineMenuContents:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.ASSEMBLER),
+                int(Machine.ASSEMBLER),
                 dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
@@ -236,7 +236,7 @@ class TestMachineMenuContents:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.PALLET),
+                int(Machine.PALLET),
                 dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
@@ -253,7 +253,7 @@ class TestMachineMenuContents:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
             player_inventory=inv,
@@ -290,7 +290,7 @@ class TestMachineMenuFocusedItem:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,
@@ -319,7 +319,7 @@ class TestMachineMenuFocusedItem:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.PALLET),
+                int(Machine.PALLET),
                 dtype=jnp.int32,
             ),
         )
@@ -346,7 +346,7 @@ class TestMachineMenuTileCoords:
     def test_non_origin_tile(self, state_factory) -> None:
         """Machine at (2, 3) is correctly inspected."""
         machine_types = jnp.zeros((4, 4), dtype=jnp.int32)
-        machine_types = machine_types.at[3, 2].set(int(MachineType.PALLET))
+        machine_types = machine_types.at[3, 2].set(int(Machine.PALLET))
         buf_type = jnp.zeros((4, 4), dtype=jnp.int8)
         buf_type = buf_type.at[3, 2].set(int(ItemType.COAL))
         buf_count = jnp.zeros((4, 4), dtype=jnp.int16)
@@ -372,7 +372,7 @@ class TestMachineMenuTileCoords:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
             buffer_type=buf_type,

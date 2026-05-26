@@ -1,7 +1,7 @@
 """Per-machine definitions — the single source of truth for machine config.
 
 Each machine type is defined once, completely, as a :class:`MachineSpec`
-record. The ``MachineType``-indexed arrays the engine and editor index
+record. The ``Machine``-indexed arrays the engine and editor index
 (``MACHINE_NUM_SLOTS``, ``MACHINE_SLOT_ROLES``, ``MACHINE_MAX_STACK``,
 ``MACHINE_MAX_TYPES``) are derived from those records and validated at
 construction, so a machine's slot count, slot roles, buffer cap, and type
@@ -9,7 +9,7 @@ cap can no longer drift apart the way separate hand-maintained arrays did.
 
 This mirrors the records-to-derived-arrays shape of
 :mod:`factoriax.recipes` — independently; the two share no data, only the
-pattern. It imports only the ``MachineType`` / ``SlotRole`` enums (and the
+pattern. It imports only the ``Machine`` / ``SlotRole`` enums (and the
 default-health scalar) from :mod:`factoriax.constants`; consumers import
 the derived arrays from here.
 """
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import MachineType, SlotRole
+from factoriax.constants import Machine, SlotRole
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class MachineSpec:
     """Complete definition of one machine type.
 
     Attributes:
-        machine_type: The ``MachineType`` this record defines.
+        machine_type: The ``Machine`` this record defines.
         slots: Role of each logical inventory slot, in order. The length
             is the machine's slot count and the editor displays exactly
             these slots.
@@ -40,7 +40,7 @@ class MachineSpec:
         max_health: Default maximum health; ``MachineConfig`` seeds from it.
     """
 
-    machine_type: MachineType
+    machine_type: Machine
     slots: tuple[SlotRole, ...]
     buffer_stack: int
     max_types: int
@@ -57,38 +57,38 @@ class MachineSpec:
 #: can override per machine type.
 MAX_HEALTH: int = 256
 
-# One record per MachineType, in value order; index == MachineType value.
+# One record per Machine, in value order; index == Machine value.
 MACHINE_SPECS: tuple[MachineSpec, ...] = (
-    MachineSpec(MachineType.NONE, (), 0, 0, MAX_HEALTH),
-    MachineSpec(MachineType.MINER, (SlotRole.OUTPUT,), 64, 2, MAX_HEALTH),
-    MachineSpec(MachineType.PALLET, (SlotRole.STORAGE,), 256, 1, MAX_HEALTH),
+    MachineSpec(Machine.NONE, (), 0, 0, MAX_HEALTH),
+    MachineSpec(Machine.MINER, (SlotRole.OUTPUT,), 64, 2, MAX_HEALTH),
+    MachineSpec(Machine.PALLET, (SlotRole.STORAGE,), 256, 1, MAX_HEALTH),
+    MachineSpec(Machine.CONVEYOR_BELT, (SlotRole.STORAGE,), 3, 1, MAX_HEALTH),
     MachineSpec(
-        MachineType.ASSEMBLER,
+        Machine.ASSEMBLER,
         (SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT),
         1000,
         4,
         MAX_HEALTH,
     ),
-    MachineSpec(MachineType.CONVEYOR_BELT, (SlotRole.STORAGE,), 3, 1, MAX_HEALTH),
-    MachineSpec(MachineType.ARM, (), 1, 1, MAX_HEALTH),
-    MachineSpec(MachineType.ROCKET, (), 0, 0, MAX_HEALTH),
+    MachineSpec(Machine.ARM, (), 1, 1, MAX_HEALTH),
+    MachineSpec(Machine.ROCKET, (), 0, 0, MAX_HEALTH),
     MachineSpec(
-        MachineType.FURNACE,
+        Machine.FURNACE,
         (SlotRole.INPUT, SlotRole.INPUT, SlotRole.OUTPUT),
         1000,
         2,
         MAX_HEALTH,
     ),
     MachineSpec(
-        MachineType.SCIENCE_LAB,
+        Machine.SCIENCE_LAB,
         (SlotRole.INPUT, SlotRole.INPUT),
         1000,
         2,
         MAX_HEALTH,
     ),
-    MachineSpec(MachineType.SPLITTER, (SlotRole.STORAGE,), 2, 1, MAX_HEALTH),
+    MachineSpec(Machine.SPLITTER, (SlotRole.STORAGE,), 2, 1, MAX_HEALTH),
     MachineSpec(
-        MachineType.CROSSING,
+        Machine.CROSSING,
         (SlotRole.STORAGE, SlotRole.STORAGE),
         2,
         2,
@@ -105,19 +105,19 @@ def _validate(specs: tuple[MachineSpec, ...]) -> None:
 
     Raises:
         ValueError: If the table does not hold exactly one record per
-            ``MachineType`` in value order, or a record has a negative
+            ``Machine`` in value order, or a record has a negative
             capacity.
     """
-    if len(specs) != len(MachineType):
+    if len(specs) != len(Machine):
         raise ValueError(
             f"MACHINE_SPECS has {len(specs)} records; expected one per "
-            f"MachineType ({len(MachineType)})."
+            f"Machine ({len(Machine)})."
         )
     for i, spec in enumerate(specs):
-        if spec.machine_type != MachineType(i):
+        if spec.machine_type != Machine(i):
             raise ValueError(
                 f"MACHINE_SPECS[{i}] defines {spec.machine_type!r}; expected "
-                f"{MachineType(i)!r} (records must be in MachineType order)."
+                f"{Machine(i)!r} (records must be in Machine order)."
             )
         if min(spec.buffer_stack, spec.max_types, spec.max_health) < 0:
             raise ValueError(f"{spec.machine_type!r} has a negative capacity.")

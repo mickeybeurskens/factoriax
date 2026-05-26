@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from factoriax.constants import Direction, MachineType
+from factoriax.constants import Direction, Machine
 
 from .goals import Goal, PlaceMachineAt, PlaceMachineFromBackAt
 from .world_model import WorldView
@@ -82,7 +82,7 @@ class LayoutMismatch:
             if pair is None:
                 return "NONE"
             mt, d = pair
-            return f"({MachineType(mt).name}, {_dir_name(d)})"
+            return f"({Machine(mt).name}, {_dir_name(d)})"
 
         return (
             f"  ({x:>2}, {y:>2}) {self.kind:<10}  "
@@ -152,7 +152,7 @@ def diff_layout(view: WorldView, expected: ExpectedLayout) -> list[LayoutMismatc
         order.
     """
     mismatches: list[LayoutMismatch] = []
-    none_mt = int(MachineType.NONE)
+    none_mt = int(Machine.NONE)
     seen_expected: set[tuple[int, int]] = set()
 
     for tile, expected_pair in sorted(expected.items()):

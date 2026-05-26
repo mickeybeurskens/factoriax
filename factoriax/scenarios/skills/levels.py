@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import BlockType, Direction, ItemType, MachineType
+from factoriax.constants import BlockType, Direction, ItemType, Machine
 from factoriax.levels import Level, LevelBuilder
 from factoriax.scenarios.skills.achievements import (
     CRAFT_MINER_BLOCKED_ACTIONS,
@@ -204,7 +204,7 @@ def build_craft_miner_level(
         py = int(rng.integers(0, map_size))
         if (px, py) != (centre, centre):
             break
-    builder.place_machine(px, py, int(MachineType.PALLET), int(Direction.UP))
+    builder.place_machine(px, py, int(Machine.PALLET), int(Direction.UP))
     builder.set_machine_inventory(px, py, _CRAFT_MINER_PALLET_ITEM, count=1)
 
     builder.set_player_position(centre, centre)

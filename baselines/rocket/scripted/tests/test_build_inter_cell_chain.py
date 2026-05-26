@@ -13,7 +13,7 @@ from baselines.rocket.scripted.goals import (
     build_inter_cell_chain,
     inter_cell_chain_inventory,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 # ---------------------------------------------------------------------------
 # Inventory helper
@@ -78,7 +78,7 @@ def test_build_offset_2_emits_one_arm_no_belts() -> None:
     goals = build_inter_cell_chain((10, 10), (12, 10))
     assert len(goals) == 1
     assert isinstance(goals[0], PlaceMachineAt)
-    assert goals[0].machine_type == int(MachineType.ARM)
+    assert goals[0].machine_type == int(Machine.ARM)
     assert goals[0].target == (11, 10)
     assert goals[0].facing == int(Direction.RIGHT)
 
@@ -88,10 +88,10 @@ def test_build_offset_5_emits_arm_and_three_belts_in_order() -> None:
     goals = build_inter_cell_chain((10, 10), (15, 10))
     assert len(goals) == 4
     arm, belt0, belt1, belt2 = goals
-    assert arm.machine_type == int(MachineType.ARM)
+    assert arm.machine_type == int(Machine.ARM)
     assert arm.target == (11, 10)
     belts = (belt0, belt1, belt2)
-    assert all(b.machine_type == int(MachineType.CONVEYOR_BELT) for b in belts)
+    assert all(b.machine_type == int(Machine.CONVEYOR_BELT) for b in belts)
     assert [b.target for b in belts] == [(12, 10), (13, 10), (14, 10)]
     assert all(b.facing == int(Direction.RIGHT) for b in belts)
 
@@ -111,9 +111,9 @@ def test_build_down_direction_for_tier_4_vertical_drop() -> None:
     goals = build_inter_cell_chain((10, 5), (10, 9), direction=int(Direction.DOWN))
     assert len(goals) == 3
     assert [(g.machine_type, g.target, g.facing) for g in goals] == [
-        (int(MachineType.ARM), (10, 6), int(Direction.DOWN)),
-        (int(MachineType.CONVEYOR_BELT), (10, 7), int(Direction.DOWN)),
-        (int(MachineType.CONVEYOR_BELT), (10, 8), int(Direction.DOWN)),
+        (int(Machine.ARM), (10, 6), int(Direction.DOWN)),
+        (int(Machine.CONVEYOR_BELT), (10, 7), int(Direction.DOWN)),
+        (int(Machine.CONVEYOR_BELT), (10, 8), int(Direction.DOWN)),
     ]
 
 
@@ -124,10 +124,10 @@ def test_build_inventory_matches_emitted_goals() -> None:
     cost = inter_cell_chain_inventory(crate, sink)
     counts: dict[int, int] = {}
     for g in goals:
-        # Map MachineType -> ItemType (1:1 for ARM, CONVEYOR_BELT).
-        if g.machine_type == int(MachineType.ARM):
+        # Map Machine -> ItemType (1:1 for ARM, CONVEYOR_BELT).
+        if g.machine_type == int(Machine.ARM):
             counts[int(ItemType.ARM)] = counts.get(int(ItemType.ARM), 0) + 1
-        elif g.machine_type == int(MachineType.CONVEYOR_BELT):
+        elif g.machine_type == int(Machine.CONVEYOR_BELT):
             counts[int(ItemType.CONVEYOR_BELT)] = (
                 counts.get(int(ItemType.CONVEYOR_BELT), 0) + 1
             )
@@ -191,4 +191,4 @@ def test_realistic_motor_to_engine_chain() -> None:
     assert len(goals) == 1
     assert goals[0].target == (21, 13)
     assert goals[0].facing == int(Direction.RIGHT)
-    assert goals[0].machine_type == int(MachineType.ARM)
+    assert goals[0].machine_type == int(Machine.ARM)

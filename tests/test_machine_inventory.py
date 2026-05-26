@@ -10,13 +10,13 @@ import jax
 import jax.numpy as jnp
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
-from factoriax.constants import MachineType
+from factoriax.constants import Machine
 from factoriax.levels import generate_state
 from factoriax.machine_spec import MACHINE_MAX_STACK, MACHINE_MAX_TYPES
 from factoriax.machines import run_miners, update_all_machines
 
 # The miner's buffer capacity — a "full" buffer value for the stop test.
-_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(MachineType.MINER)])
+_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -82,7 +82,7 @@ class TestMinerInventory:
             ),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array(
-                [[MachineType.MINER]],
+                [[Machine.MINER]],
                 dtype=jnp.int32,
             ),
         )
@@ -101,7 +101,7 @@ class TestMinerInventory:
             ),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array(
-                [[MachineType.MINER]],
+                [[Machine.MINER]],
                 dtype=jnp.int32,
             ),
             buffer_type=jnp.array(
@@ -131,7 +131,7 @@ class TestPalletInventory:
                 dtype=jnp.int32,
             ),
             machine_types=jnp.array(
-                [[MachineType.PALLET]],
+                [[Machine.PALLET]],
                 dtype=jnp.int32,
             ),
         )
@@ -146,7 +146,7 @@ class TestPalletInventory:
                 dtype=jnp.int32,
             ),
             machine_types=jnp.array(
-                [[MachineType.PALLET]],
+                [[Machine.PALLET]],
                 dtype=jnp.int32,
             ),
             buffer_type=jnp.array(
@@ -176,7 +176,7 @@ class TestAssemblerInventory:
                 dtype=jnp.int32,
             ),
             machine_types=jnp.array(
-                [[MachineType.ASSEMBLER]],
+                [[Machine.ASSEMBLER]],
                 dtype=jnp.int32,
             ),
         )
@@ -196,7 +196,7 @@ class TestAssemblerInventory:
                 dtype=jnp.int32,
             ),
             machine_types=jnp.array(
-                [[MachineType.ASSEMBLER]],
+                [[Machine.ASSEMBLER]],
                 dtype=jnp.int32,
             ),
         )
@@ -213,12 +213,12 @@ class TestMaxTypesConstraint:
 
     def test_belt_max_types_is_one(self) -> None:
         """Belt should hold at most 1 distinct item type."""
-        assert int(MACHINE_MAX_TYPES[MachineType.CONVEYOR_BELT]) == 1
+        assert int(MACHINE_MAX_TYPES[Machine.CONVEYOR_BELT]) == 1
 
     def test_pallet_max_types_is_one(self) -> None:
         """Pallet should hold at most 1 distinct item type."""
-        assert int(MACHINE_MAX_TYPES[MachineType.PALLET]) == 1
+        assert int(MACHINE_MAX_TYPES[Machine.PALLET]) == 1
 
     def test_assembler_max_types_is_four(self) -> None:
         """Assembler should hold at most 4 distinct item types."""
-        assert int(MACHINE_MAX_TYPES[MachineType.ASSEMBLER]) == 4
+        assert int(MACHINE_MAX_TYPES[Machine.ASSEMBLER]) == 4

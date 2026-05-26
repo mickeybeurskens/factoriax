@@ -16,7 +16,7 @@ import dataclasses
 
 import numpy as np
 
-from factoriax.constants import BlockType, MachineType
+from factoriax.constants import BlockType, Machine
 from factoriax.state import EnvState
 
 # Block types that hold mineable ore. Order matches the easy_rocket
@@ -111,7 +111,7 @@ def block_at(state: EnvState, x: int, y: int) -> int:
 
 
 def machine_at(state: EnvState, x: int, y: int) -> int:
-    """Return the ``MachineType`` integer at ``(x, y)``; 0 means none."""
+    """Return the ``Machine`` integer at ``(x, y)``; 0 means none."""
     return int(np.asarray(state.machine_types)[y, x])
 
 
@@ -156,7 +156,7 @@ def tile_free(state: EnvState, x: int, y: int) -> bool:
         return False
     if int(map_arr[y, x]) not in _WALKABLE_BLOCKS:
         return False
-    if int(np.asarray(state.machine_types)[y, x]) != int(MachineType.NONE):
+    if int(np.asarray(state.machine_types)[y, x]) != int(Machine.NONE):
         return False
     return True
 
@@ -172,9 +172,7 @@ def walkable_grid(state: EnvState) -> np.ndarray:
     """
     map_arr = np.asarray(state.map)
     machines = np.asarray(state.machine_types)
-    return np.isin(map_arr, list(_WALKABLE_BLOCKS)) & (
-        machines == int(MachineType.NONE)
-    )
+    return np.isin(map_arr, list(_WALKABLE_BLOCKS)) & (machines == int(Machine.NONE))
 
 
 def tile_walkable_for_player(state: EnvState, x: int, y: int) -> bool:
@@ -193,6 +191,6 @@ def tile_walkable_for_player(state: EnvState, x: int, y: int) -> bool:
     if block in (int(BlockType.WATER), int(BlockType.OUT_OF_BOUNDS)):
         return False
     mt = int(np.asarray(state.machine_types)[y, x])
-    if mt != int(MachineType.NONE) and mt != int(MachineType.CONVEYOR_BELT):
+    if mt != int(Machine.NONE) and mt != int(Machine.CONVEYOR_BELT):
         return False
     return True

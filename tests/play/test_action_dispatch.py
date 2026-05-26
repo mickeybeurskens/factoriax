@@ -18,7 +18,7 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     Action,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.play.game_ui import GameUI
 from factoriax.state import EnvParams
@@ -65,7 +65,7 @@ class TestDepositAction:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.PALLET),
+                int(Machine.PALLET),
                 dtype=jnp.int32,
             ),
         )
@@ -87,7 +87,7 @@ class TestDepositAction:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.PALLET),
+                int(Machine.PALLET),
                 dtype=jnp.int32,
             ),
         )
@@ -109,7 +109,7 @@ class TestDepositAction:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.PALLET),
+                int(Machine.PALLET),
                 dtype=jnp.int32,
             ),
         )
@@ -145,7 +145,7 @@ class TestWithdrawAction:
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
                 (4, 4),
-                int(MachineType.MINER),
+                int(Machine.MINER),
                 dtype=jnp.int32,
             ),
             machine_inventory=machine_inv,

@@ -17,7 +17,7 @@ from baselines.easy_rocket.scripted.state_reader import (
     tile_free,
     tile_walkable_for_player,
 )
-from factoriax.constants import BlockType, Direction, ItemType, MachineType
+from factoriax.constants import BlockType, Direction, ItemType, Machine
 
 
 def _dirt(h: int = 6, w: int = 6) -> jnp.ndarray:
@@ -79,12 +79,12 @@ def test_block_at(make_state) -> None:
 
 def test_machine_and_entity_readers(make_state) -> None:
     # A belt facing RIGHT with 5 buffered iron at (3, 2).
-    belt = int(MachineType.CONVEYOR_BELT)
+    belt = int(Machine.CONVEYOR_BELT)
     machines = [(3, 2, belt, int(Direction.RIGHT), int(ItemType.IRON_ORE), 5)]
     state = make_state(_dirt(), machines=machines)
 
-    assert machine_at(state, 3, 2) == int(MachineType.CONVEYOR_BELT)
-    assert machine_at(state, 0, 0) == int(MachineType.NONE)
+    assert machine_at(state, 3, 2) == int(Machine.CONVEYOR_BELT)
+    assert machine_at(state, 0, 0) == int(Machine.NONE)
     assert entity_at(state, 3, 2) >= 0
     assert entity_at(state, 0, 0) == -1
     assert ent_direction_at(state, 3, 2) == int(Direction.RIGHT)
@@ -93,7 +93,7 @@ def test_machine_and_entity_readers(make_state) -> None:
 
 def test_tile_free(make_state) -> None:
     m = _dirt().at[0, 1].set(int(BlockType.IRON))  # ore at (1, 0)
-    machines = [(2, 0, int(MachineType.ASSEMBLER), 0, 0, 0)]
+    machines = [(2, 0, int(Machine.ASSEMBLER), 0, 0, 0)]
     state = make_state(m, machines=machines)
 
     assert tile_free(state, 0, 0) is True  # dirt, empty
@@ -105,8 +105,8 @@ def test_tile_free(make_state) -> None:
 def test_tile_walkable_for_player(make_state) -> None:
     m = _dirt().at[0, 1].set(int(BlockType.IRON)).at[0, 2].set(int(BlockType.WATER))
     machines = [
-        (3, 0, int(MachineType.ASSEMBLER), 0, 0, 0),
-        (4, 0, int(MachineType.CONVEYOR_BELT), int(Direction.RIGHT), 0, 0),
+        (3, 0, int(Machine.ASSEMBLER), 0, 0, 0),
+        (4, 0, int(Machine.CONVEYOR_BELT), int(Direction.RIGHT), 0, 0),
     ]
     state = make_state(m, machines=machines)
 

@@ -17,7 +17,7 @@ from factoriax.constants import (
     PLAYER_MAX_STACK,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.game_logic import factoriax_step, mine_block
@@ -197,9 +197,7 @@ class TestItemConservation:
             player_position=(0, 0),
             player_direction=int(Direction.RIGHT),
             player_inventory=inv,
-            machine_types=jnp.array(
-                [[MachineType.NONE, MachineType.PALLET]], dtype=jnp.int32
-            ),
+            machine_types=jnp.array([[Machine.NONE, Machine.PALLET]], dtype=jnp.int32),
         )
 
         initial_total = int(state.player_inventory[0, ItemType.COAL])

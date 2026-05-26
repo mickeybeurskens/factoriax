@@ -22,7 +22,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
@@ -124,25 +124,23 @@ def _build_iron_level(
         # Coordinates must mirror BuildSmelterCell's layout exactly.
         mx = _PATCH_X + _PATCH_SIZE // 2
         my_se = _PATCH_Y + _PATCH_SIZE - 1
-        builder.place_machine(mx, my_se, int(MachineType.MINER), int(Direction.DOWN))
+        builder.place_machine(mx, my_se, int(Machine.MINER), int(Direction.DOWN))
         # Ore feeder is a belt facing DOWN — combiners pull only
         # from facing belts under the directional Phase 0.
         builder.place_machine(
-            mx, my_se + 1, int(MachineType.CONVEYOR_BELT), int(Direction.DOWN)
+            mx, my_se + 1, int(Machine.CONVEYOR_BELT), int(Direction.DOWN)
         )
-        builder.place_machine(
-            mx, my_se + 2, int(MachineType.FURNACE), int(Direction.DOWN)
-        )
+        builder.place_machine(mx, my_se + 2, int(Machine.FURNACE), int(Direction.DOWN))
         builder.place_machine(
             mx + 1,
             my_se + 2,
-            int(MachineType.ARM),
+            int(Machine.ARM),
             int(Direction.RIGHT),
         )
         builder.place_machine(
             mx + 2,
             my_se + 2,
-            int(MachineType.PALLET),
+            int(Machine.PALLET),
             int(Direction.DOWN),
         )
         if coal_feeder:
@@ -153,7 +151,7 @@ def _build_iron_level(
             builder.place_machine(
                 mx,
                 my_se + 3,
-                int(MachineType.CONVEYOR_BELT),
+                int(Machine.CONVEYOR_BELT),
                 int(Direction.UP),
             )
             builder.set_machine_inventory(
@@ -197,11 +195,11 @@ def test_build_smelter_cell_places_all_five_entities() -> None:
     my_se = _PATCH_Y + _PATCH_SIZE - 1
     mt = np.asarray(final_state.machine_types)
     # Note: machine_types is indexed [y, x].
-    assert mt[my_se, mx] == int(MachineType.MINER)
-    assert mt[my_se + 1, mx] == int(MachineType.CONVEYOR_BELT)
-    assert mt[my_se + 2, mx] == int(MachineType.FURNACE)
-    assert mt[my_se + 2, mx + 1] == int(MachineType.ARM)
-    assert mt[my_se + 2, mx + 2] == int(MachineType.PALLET)
+    assert mt[my_se, mx] == int(Machine.MINER)
+    assert mt[my_se + 1, mx] == int(Machine.CONVEYOR_BELT)
+    assert mt[my_se + 2, mx] == int(Machine.FURNACE)
+    assert mt[my_se + 2, mx + 1] == int(Machine.ARM)
+    assert mt[my_se + 2, mx + 2] == int(Machine.PALLET)
 
 
 def test_build_smelter_cell_consumes_bootstrap_inventory() -> None:

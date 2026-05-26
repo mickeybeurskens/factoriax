@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import Action, Direction, ItemType, MachineType
+from factoriax.constants import Action, Direction, ItemType, Machine
 from factoriax.state import EnvParams, EnvState
 
 
@@ -39,7 +39,7 @@ def _loaded_pallet_tiles(state: EnvState) -> list[tuple[int, int]]:
     machines = np.asarray(state.machine_types)
     tile_entity = np.asarray(state.tile_entity)
     buf_counts = np.asarray(state.ent_buf_count)
-    ys, xs = np.where(machines == int(MachineType.PALLET))
+    ys, xs = np.where(machines == int(Machine.PALLET))
     loaded: list[tuple[int, int]] = []
     for y, x in zip(ys.tolist(), xs.tolist(), strict=True):
         eidx = int(tile_entity[y, x])

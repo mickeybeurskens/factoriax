@@ -35,50 +35,69 @@ class BlockType(IntEnum):
 
 
 class Resource(IntEnum):
-    """Mineable raw materials. Values inert (the item id is on ItemType)."""
+    """Mineable raw materials. Values inert (the item id is on ItemType).
 
-    COAL = 0
-    IRON_ORE = 1
-    COPPER_ORE = 2
-    TIN_ORE = 3
-    SILICON = 4
-    LIMESTONE = 5
+    ``NONE = 0`` is a placeholder so every item category shares the
+    "NONE=0, real members from 1" shape; it is stripped from all derivatives.
+    """
+
+    NONE = 0
+    COAL = 1
+    IRON_ORE = 2
+    COPPER_ORE = 3
+    TIN_ORE = 4
+    SILICON = 5
+    LIMESTONE = 6
 
 
 class HalfFabricate(IntEnum):
     """Crafted, non-placeable intermediates. Values inert (see Resource)."""
 
-    IRON_PLATE = 0
-    COPPER_PLATE = 1
-    TIN_PLATE = 2
-    WAFER = 3
-    FRAME = 4
-    CIRCUIT = 5
-    WIRE = 6
-    MOTOR = 7
-    SENSOR = 8
-    BASIC_SCIENCE_PACK = 9
-    ADVANCED_SCIENCE_PACK = 10
-    REFRACTORY = 11
-    HULL = 12
-    ENGINE_UNIT = 13
-    AVIONICS = 14
-    ROCKET_CORE = 15
+    NONE = 0
+    IRON_PLATE = 1
+    COPPER_PLATE = 2
+    TIN_PLATE = 3
+    WAFER = 4
+    FRAME = 5
+    CIRCUIT = 6
+    WIRE = 7
+    MOTOR = 8
+    SENSOR = 9
+    BASIC_SCIENCE_PACK = 10
+    ADVANCED_SCIENCE_PACK = 11
+    REFRACTORY = 12
+    HULL = 13
+    ENGINE_UNIT = 14
+    AVIONICS = 15
+    ROCKET_CORE = 16
 
 
 class Machine(IntEnum):
-    """Placeable items that become a machine when used. Values inert."""
+    """Placeable machine kinds -- the single machine enum.
 
-    MINER = 0
-    PALLET = 1
-    CONVEYOR_BELT = 2
-    ASSEMBLER = 3
-    ARM = 4
-    ROCKET = 5
-    FURNACE = 6
-    SCIENCE_LAB = 7
-    SPLITTER = 8
-    CROSSING = 9
+    Two roles in one: its *names* compose ItemType and the PLACE/CRAFT/DEPOSIT
+    action families (NONE stripped, values never leak there), and its *values*
+    are the entity tag stored in ``ent_type`` / ``machine_types``. ``NONE = 0``
+    is the empty-cell tag -- the machine-space analog of ``ItemType.EMPTY = 0``
+    -- so zero-filled tag arrays read as empty and ``MACHINE_SPECS[0]`` is the
+    empty row.
+    """
+
+    NONE = 0
+    MINER = 1
+    PALLET = 2
+    CONVEYOR_BELT = 3
+    ASSEMBLER = 4
+    ARM = 5
+    ROCKET = 6
+    FURNACE = 7
+    SCIENCE_LAB = 8
+    # Belt-network pieces. SPLITTER reuses ent_buf (stack=2) and outputs to the
+    # two perpendicular sides of its facing direction. CROSSING reuses
+    # ent_asm_in[0..1] for two independent per-axis buffers so the vertical and
+    # horizontal streams co-exist on one tile without mixing.
+    SPLITTER = 9
+    CROSSING = 10
 
 
 # ---------------------------------------------------------------------------
@@ -94,31 +113,13 @@ class Machine(IntEnum):
 _ITEM_CATEGORIES: tuple[type[IntEnum], ...] = (Resource, HalfFabricate, Machine)
 ItemType = IntEnum(
     "ItemType",
-    ["EMPTY", *(m.name for cat in _ITEM_CATEGORIES for m in cat)],
+    [
+        "EMPTY",
+        *(m.name for cat in _ITEM_CATEGORIES for m in cat if m.name != "NONE"),
+    ],
     start=0,
 )
 ItemType.__doc__ = "Item types that can be stored in inventory."
-
-
-class MachineType(IntEnum):
-    """Machine types that can be placed on tiles."""
-
-    NONE = 0
-    MINER = 1
-    PALLET = 2
-    ASSEMBLER = 3
-    CONVEYOR_BELT = 4
-    ARM = 5
-    ROCKET = 6
-    FURNACE = 7
-    SCIENCE_LAB = 8
-    # Belt-network pieces. SPLITTER reuses ent_buf (stack=2) and outputs
-    # to the two perpendicular sides of its facing direction. CROSSING
-    # reuses ent_asm_in[0..1] for two independent per-axis buffers so
-    # the vertical and horizontal streams can co-exist on one tile
-    # without mixing.
-    SPLITTER = 9
-    CROSSING = 10
 
 
 NUM_ITEM_TYPES = len(ItemType)
@@ -193,16 +194,16 @@ NUM_SCIENCE_PACK_TYPES: int = len(SCIENCE_PACK_TYPES)
 # placeable set below and the jnp gather arrays in factoriax.placement are
 # all projections of it.
 ITEM_TO_MACHINE = {
-    ItemType.MINER: MachineType.MINER,
-    ItemType.PALLET: MachineType.PALLET,
-    ItemType.CONVEYOR_BELT: MachineType.CONVEYOR_BELT,
-    ItemType.ASSEMBLER: MachineType.ASSEMBLER,
-    ItemType.ARM: MachineType.ARM,
-    ItemType.ROCKET: MachineType.ROCKET,
-    ItemType.FURNACE: MachineType.FURNACE,
-    ItemType.SCIENCE_LAB: MachineType.SCIENCE_LAB,
-    ItemType.SPLITTER: MachineType.SPLITTER,
-    ItemType.CROSSING: MachineType.CROSSING,
+    ItemType.MINER: Machine.MINER,
+    ItemType.PALLET: Machine.PALLET,
+    ItemType.CONVEYOR_BELT: Machine.CONVEYOR_BELT,
+    ItemType.ASSEMBLER: Machine.ASSEMBLER,
+    ItemType.ARM: Machine.ARM,
+    ItemType.ROCKET: Machine.ROCKET,
+    ItemType.FURNACE: Machine.FURNACE,
+    ItemType.SCIENCE_LAB: Machine.SCIENCE_LAB,
+    ItemType.SPLITTER: Machine.SPLITTER,
+    ItemType.CROSSING: Machine.CROSSING,
 }
 
 # Items that place a machine when used -- exactly the keys of the mapping
@@ -295,12 +296,12 @@ class InteractAction(IntEnum):
 # from these tuples, so the two cannot drift and no family can fall short of
 # its item category the way hand-numbering left deposit (no LIMESTONE) and
 # craft (no rocket parts) short.
-PLACEMENT_ITEMS: tuple[Machine, ...] = tuple(Machine)
-CRAFT_ITEMS: tuple[HalfFabricate | Machine, ...] = (*HalfFabricate, *Machine)
-DEPOSIT_ITEMS: tuple[Resource | HalfFabricate | Machine, ...] = (
-    *Resource,
-    *HalfFabricate,
-    *Machine,
+PLACEMENT_ITEMS: tuple[Machine, ...] = tuple(m for m in Machine if m.name != "NONE")
+CRAFT_ITEMS: tuple[HalfFabricate | Machine, ...] = tuple(
+    m for cat in (HalfFabricate, Machine) for m in cat if m.name != "NONE"
+)
+DEPOSIT_ITEMS: tuple[Resource | HalfFabricate | Machine, ...] = tuple(
+    m for cat in (Resource, HalfFabricate, Machine) for m in cat if m.name != "NONE"
 )
 
 # Flat member names of the composed Action enum, in family order: the two

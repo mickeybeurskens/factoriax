@@ -27,7 +27,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.machines import run_conveyor_belts
 from factoriax.state import EnvParams, EnvState
@@ -69,12 +69,12 @@ def _make_crossing_world(
     """
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     md = jnp.zeros(shape, dtype=jnp.int8)
     ait = jnp.zeros((*shape, 2), dtype=jnp.int8)
     aic = jnp.zeros((*shape, 2), dtype=jnp.int16)
 
-    mt = mt.at[1, 1].set(int(MachineType.CROSSING))
+    mt = mt.at[1, 1].set(int(Machine.CROSSING))
     md = md.at[1, 1].set(encoding)
     ait = ait.at[1, 1, CROSSING_VERT_SLOT].set(vert_item)
     aic = aic.at[1, 1, CROSSING_VERT_SLOT].set(vert_count)
@@ -83,13 +83,13 @@ def _make_crossing_world(
 
     up_p, down_p, left_p, right_p = pallets
     if up_p:
-        mt = mt.at[0, 1].set(int(MachineType.PALLET))
+        mt = mt.at[0, 1].set(int(Machine.PALLET))
     if down_p:
-        mt = mt.at[2, 1].set(int(MachineType.PALLET))
+        mt = mt.at[2, 1].set(int(Machine.PALLET))
     if left_p:
-        mt = mt.at[1, 0].set(int(MachineType.PALLET))
+        mt = mt.at[1, 0].set(int(Machine.PALLET))
     if right_p:
-        mt = mt.at[1, 2].set(int(MachineType.PALLET))
+        mt = mt.at[1, 2].set(int(Machine.PALLET))
 
     return state_factory(
         world_map=world,
@@ -232,7 +232,7 @@ def test_belt_pushing_into_output_side_is_rejected(state_factory) -> None:
     empty."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     md = jnp.zeros(shape, dtype=jnp.int8)
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
@@ -240,11 +240,11 @@ def test_belt_pushing_into_output_side_is_rejected(state_factory) -> None:
     aic = jnp.zeros((*shape, 2), dtype=jnp.int16)
 
     # Crossing at (1, 1), encoding=1: vert_dir=DOWN (S is output side).
-    mt = mt.at[1, 1].set(int(MachineType.CROSSING))
+    mt = mt.at[1, 1].set(int(Machine.CROSSING))
     md = md.at[1, 1].set(1)
 
     # Belt at (2, 1) pushing UP (toward the crossing's S/output side).
-    mt = mt.at[2, 1].set(int(MachineType.CONVEYOR_BELT))
+    mt = mt.at[2, 1].set(int(Machine.CONVEYOR_BELT))
     md = md.at[2, 1].set(int(Direction.UP))
     bt = bt.at[2, 1].set(int(ItemType.IRON_PLATE))
     bc = bc.at[2, 1].set(1)
@@ -274,18 +274,18 @@ def test_belt_pushing_into_correct_input_side_lands_in_axis_slot(
     its item lands in the crossing's vertical slot."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     md = jnp.zeros(shape, dtype=jnp.int8)
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
     ait = jnp.zeros((*shape, 2), dtype=jnp.int8)
     aic = jnp.zeros((*shape, 2), dtype=jnp.int16)
 
-    mt = mt.at[1, 1].set(int(MachineType.CROSSING))
+    mt = mt.at[1, 1].set(int(Machine.CROSSING))
     md = md.at[1, 1].set(1)
 
     # Belt at (0, 1) pushing DOWN — input side N for vert_dir=DOWN.
-    mt = mt.at[0, 1].set(int(MachineType.CONVEYOR_BELT))
+    mt = mt.at[0, 1].set(int(Machine.CONVEYOR_BELT))
     md = md.at[0, 1].set(int(Direction.DOWN))
     bt = bt.at[0, 1].set(int(ItemType.IRON_PLATE))
     bc = bc.at[0, 1].set(1)
@@ -321,7 +321,7 @@ def test_belt_to_crossing_to_belt_chain_full_throughput(state_factory) -> None:
     seen as ``full`` mid-pass."""
     shape = (4, 1)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     md = jnp.zeros(shape, dtype=jnp.int8)
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
@@ -331,20 +331,20 @@ def test_belt_to_crossing_to_belt_chain_full_throughput(state_factory) -> None:
     # (0, 0) belt pushing DOWN with iron, (1, 0) crossing vert_dir=DOWN
     # with slot 0 pre-filled, (2, 0) belt pushing DOWN, (3, 0) pallet
     # as a sink so the output-side belt has somewhere to drain.
-    mt = mt.at[0, 0].set(int(MachineType.CONVEYOR_BELT))
+    mt = mt.at[0, 0].set(int(Machine.CONVEYOR_BELT))
     md = md.at[0, 0].set(int(Direction.DOWN))
     bt = bt.at[0, 0].set(int(ItemType.IRON_PLATE))
     bc = bc.at[0, 0].set(1)
 
-    mt = mt.at[1, 0].set(int(MachineType.CROSSING))
+    mt = mt.at[1, 0].set(int(Machine.CROSSING))
     md = md.at[1, 0].set(1)  # vert_dir=DOWN, horiz_dir=RIGHT
     ait = ait.at[1, 0, CROSSING_VERT_SLOT].set(int(ItemType.IRON_PLATE))
     aic = aic.at[1, 0, CROSSING_VERT_SLOT].set(1)
 
-    mt = mt.at[2, 0].set(int(MachineType.CONVEYOR_BELT))
+    mt = mt.at[2, 0].set(int(Machine.CONVEYOR_BELT))
     md = md.at[2, 0].set(int(Direction.DOWN))
 
-    mt = mt.at[3, 0].set(int(MachineType.PALLET))
+    mt = mt.at[3, 0].set(int(Machine.PALLET))
 
     state = state_factory(
         world_map=world,

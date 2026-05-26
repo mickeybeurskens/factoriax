@@ -66,7 +66,8 @@ def test_parametric_family_sizes_match_item_categories() -> None:
     craft = [a for a in Action if a.name.startswith("CRAFT_")]
     deposit = [a for a in Action if a.name.startswith("DEPOSIT_")]
 
-    assert len(place) == len(PLACEMENT_ITEMS) == len(Machine)
+    real_machines = [m for m in Machine if m.name != "NONE"]
+    assert len(place) == len(PLACEMENT_ITEMS) == len(real_machines)
     assert len(craft) == len(CRAFT_ITEMS)
     assert len(deposit) == len(DEPOSIT_ITEMS)
     # Deposit is total over the non-EMPTY items.
@@ -91,9 +92,11 @@ def test_craftable_iff_non_resource_iff_recipe_outputs() -> None:
     from factoriax.recipes import BASE_RECIPES
 
     craft_items = {ItemType[m.name] for m in CRAFT_ITEMS}
-    non_resource = {ItemType[m.name] for m in (*HalfFabricate, *Machine)}
+    non_resource = {
+        ItemType[m.name] for m in (*HalfFabricate, *Machine) if m.name != "NONE"
+    }
     recipe_outputs = {ItemType(r.output) for r in BASE_RECIPES}
-    resources = {ItemType[m.name] for m in Resource}
+    resources = {ItemType[m.name] for m in Resource if m.name != "NONE"}
 
     assert craft_items == non_resource
     assert craft_items == recipe_outputs

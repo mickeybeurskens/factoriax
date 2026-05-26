@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from factoriax import Action, BlockType, Direction, ItemType
-from factoriax.constants import MachineType
+from factoriax.constants import Machine
 from factoriax.game_logic import deposit_to_adjacent, withdraw_from_adjacent
 
 # ---------------------------------------------------------------------------
@@ -29,12 +29,12 @@ def _machine_types(
     Args:
         w: Grid width.
         h: Grid height.
-        placements: Map of (x, y) -> MachineType.
+        placements: Map of (x, y) -> Machine.
 
     Returns:
         Machine types grid of shape (h, w).
     """
-    arr = jnp.full((h, w), MachineType.NONE, dtype=jnp.int32)
+    arr = jnp.full((h, w), Machine.NONE, dtype=jnp.int32)
     for (x, y), mtype in placements.items():
         arr = arr.at[y, x].set(mtype)
     return arr
@@ -158,7 +158,7 @@ class TestDepositToPallet:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
@@ -177,7 +177,7 @@ class TestDepositToPallet:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
             buffer_type=bt,
             buffer_count=bc,
         )
@@ -197,7 +197,7 @@ class TestDepositToPallet:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
             buffer_type=bt,
             buffer_count=bc,
         )
@@ -228,7 +228,7 @@ class TestDepositToPallet:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
@@ -262,7 +262,7 @@ class TestDepositToMiner:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.MINER}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
@@ -277,7 +277,7 @@ class TestDepositToMiner:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.MINER}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
@@ -296,7 +296,7 @@ class TestDepositToAssembler:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.ASSEMBLER}),
         )
 
         state = deposit_to_adjacent(state, 0, ItemType.IRON_ORE)
@@ -315,7 +315,7 @@ class TestDepositToAssembler:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.ASSEMBLER}),
             asm_in_type=ait,
             asm_in_count=aic,
         )
@@ -350,7 +350,7 @@ class TestWithdrawFromPallet:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
             buffer_type=bt,
             buffer_count=bc,
         )
@@ -367,7 +367,7 @@ class TestWithdrawFromPallet:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
         )
 
         state = withdraw_from_adjacent(state, 0)
@@ -397,7 +397,7 @@ class TestWithdrawFromMiner:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.MINER}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.MINER}),
             buffer_type=bt,
             buffer_count=bc,
         )
@@ -419,7 +419,7 @@ class TestWithdrawFromAssembler:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.ASSEMBLER}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.ASSEMBLER}),
             asm_out_type=aot,
             asm_out_count=aoc,
         )
@@ -472,8 +472,8 @@ class TestWithdrawDoesNotClobberOtherEntities:
                 4,
                 4,
                 {
-                    (2, 1): MachineType.ASSEMBLER,
-                    (2, 2): MachineType.ASSEMBLER,
+                    (2, 1): Machine.ASSEMBLER,
+                    (2, 2): Machine.ASSEMBLER,
                 },
             ),
             asm_out_type=aot,
@@ -513,7 +513,7 @@ class TestWithdrawMergesIntoInventory:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
             buffer_type=bt,
             buffer_count=bc,
         )
@@ -541,7 +541,7 @@ class TestDepositWithdrawViaStep:
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
             player_inventory=p_inv,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
         )
         params = EnvParams(map_width=3, map_height=3, num_players=1)
         rng = jax.random.PRNGKey(0)
@@ -564,7 +564,7 @@ class TestDepositWithdrawViaStep:
             world_map=_DIRT_3X3,
             player_position=(1, 1),
             player_direction=Direction.RIGHT,
-            machine_types=_machine_types(3, 3, {(2, 1): MachineType.PALLET}),
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
             buffer_type=bt,
             buffer_count=bc,
         )

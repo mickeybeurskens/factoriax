@@ -32,7 +32,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.machines import run_conveyor_belts
 from factoriax.state import EnvParams, EnvState
@@ -73,24 +73,24 @@ def _make_splitter_world(
     """
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     md = jnp.zeros(shape, dtype=jnp.int8)
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
 
-    mt = mt.at[1, 1].set(int(MachineType.SPLITTER))
+    mt = mt.at[1, 1].set(int(Machine.SPLITTER))
     md = md.at[1, 1].set(facing)
     bt = bt.at[1, 1].set(item)
     bc = bc.at[1, 1].set(buf_count)
 
     if up_pallet:
-        mt = mt.at[0, 1].set(int(MachineType.PALLET))
+        mt = mt.at[0, 1].set(int(Machine.PALLET))
     if down_pallet:
-        mt = mt.at[2, 1].set(int(MachineType.PALLET))
+        mt = mt.at[2, 1].set(int(Machine.PALLET))
     if left_pallet:
-        mt = mt.at[1, 0].set(int(MachineType.PALLET))
+        mt = mt.at[1, 0].set(int(Machine.PALLET))
     if right_pallet:
-        mt = mt.at[1, 2].set(int(MachineType.PALLET))
+        mt = mt.at[1, 2].set(int(Machine.PALLET))
 
     return state_factory(
         world_map=world,
@@ -251,10 +251,10 @@ def test_non_splitter_entities_untouched(state_factory) -> None:
     in any way."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
-    mt = mt.at[0, 1].set(int(MachineType.PALLET))
+    mt = mt.at[0, 1].set(int(Machine.PALLET))
     bt = bt.at[0, 1].set(int(ItemType.IRON_PLATE))
     bc = bc.at[0, 1].set(5)
     state = state_factory(
@@ -289,22 +289,22 @@ def test_left_pallet_wrong_type_fires_right_only(state_factory) -> None:
     (receptive). The splitter fires RIGHT only and consumes 1."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     md = jnp.zeros(shape, dtype=jnp.int8)
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
 
-    mt = mt.at[1, 1].set(int(MachineType.SPLITTER))
+    mt = mt.at[1, 1].set(int(Machine.SPLITTER))
     md = md.at[1, 1].set(int(Direction.UP))
     bt = bt.at[1, 1].set(int(ItemType.IRON_PLATE))
     bc = bc.at[1, 1].set(2)
 
     # LEFT pallet holds COPPER_PLATE (different type, blocks merge).
-    mt = mt.at[1, 0].set(int(MachineType.PALLET))
+    mt = mt.at[1, 0].set(int(Machine.PALLET))
     bt = bt.at[1, 0].set(int(ItemType.COPPER_PLATE))
     bc = bc.at[1, 0].set(50)
     # RIGHT pallet receptive (empty).
-    mt = mt.at[1, 2].set(int(MachineType.PALLET))
+    mt = mt.at[1, 2].set(int(Machine.PALLET))
 
     state = state_factory(
         world_map=world,

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import BlockType, Direction, MachineType
+from factoriax.constants import BlockType, Direction, Machine
 from factoriax.scenarios import build_rocket_level
 
 _MAP_SIZE = 32
@@ -72,8 +72,8 @@ def test_pre_placed_furnace_and_assembler_unchanged() -> None:
     level = build_rocket_level()
     machine_types = np.asarray(level.machine_types)
     machine_directions = np.asarray(level.machine_directions)
-    assert int(machine_types[16, 15]) == int(MachineType.FURNACE)
-    assert int(machine_types[16, 17]) == int(MachineType.ASSEMBLER)
+    assert int(machine_types[16, 15]) == int(Machine.FURNACE)
+    assert int(machine_types[16, 17]) == int(Machine.ASSEMBLER)
     assert int(machine_directions[16, 15]) == int(Direction.DOWN)
     assert int(machine_directions[16, 17]) == int(Direction.DOWN)
 
@@ -101,7 +101,7 @@ def test_factory_zone_east_of_patches_is_dirt() -> None:
             mt = int(machine_types[y, x])
             assert block == int(BlockType.DIRT), (
                 f"({x}, {y}) factory zone should be DIRT, got "
-                f"{BlockType(block).name} (machine={MachineType(mt).name})"
+                f"{BlockType(block).name} (machine={Machine(mt).name})"
             )
 
 

@@ -17,7 +17,7 @@ import pygame
 
 from factoriax.constants import (
     ItemType,
-    MachineType,
+    Machine,
     SlotRole,
 )
 from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
@@ -539,7 +539,7 @@ class MachineInspectorDialog:
     Attributes:
         tile_x: X coordinate of the inspected machine tile.
         tile_y: Y coordinate of the inspected machine tile.
-        machine_type: ``MachineType`` integer value.
+        machine_type: ``Machine`` integer value.
         inv_items: Reference to editor state inventory items at this tile.
         inv_counts: Reference to editor state inventory counts at this tile.
         selected_recipe: Current assembler recipe index (mutable ref via
@@ -625,7 +625,7 @@ class MachineInspectorDialog:
                 current = int(self.inv_counts[self.focused_slot])
                 self.count_text = str(current) if current > 0 else ""
         elif key == pygame.K_q:
-            if self.machine_type == int(MachineType.ASSEMBLER):
+            if self.machine_type == int(Machine.ASSEMBLER):
                 cur = int(self.selected_recipe[self.recipe_row, self.recipe_col])
                 self.selected_recipe[self.recipe_row, self.recipe_col] = (
                     cur + 1
@@ -709,7 +709,7 @@ class MachineInspectorDialog:
         overlay[:, :] = (0, 0, 0, 140)
 
         ns = self.num_slots
-        is_assembler = self.machine_type == int(MachineType.ASSEMBLER)
+        is_assembler = self.machine_type == int(Machine.ASSEMBLER)
         recipe_h = 20 if is_assembler else 0
         dlg_h = 50 + ns * _INSP_SLOT_H + recipe_h + 24
         dlg_w = min(_INSP_W, base_w - 20)

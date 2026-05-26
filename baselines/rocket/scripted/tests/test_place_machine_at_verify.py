@@ -24,7 +24,7 @@ import pytest
 
 from baselines.rocket.scripted.goals import PlaceMachineAt
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, MachineType
+from factoriax.constants import Direction, Machine
 
 
 def _make_view(
@@ -74,7 +74,7 @@ def expected_pallet_view() -> WorldView:
     PlaceMachineAt(PALLET, (1, 2), DOWN) was supposed to produce."""
     machine_type = np.zeros((3, 3), dtype=np.int32)
     machine_direction = np.zeros((3, 3), dtype=np.int32)
-    machine_type[2, 1] = int(MachineType.PALLET)
+    machine_type[2, 1] = int(Machine.PALLET)
     machine_direction[2, 1] = int(Direction.DOWN)
     return _make_view(
         width=3,
@@ -88,7 +88,7 @@ class TestVerifyPasses:
     """When the tile matches the goal's expectation, verify returns True."""
 
     def test_correct_type_and_direction(self, expected_pallet_view: WorldView) -> None:
-        goal = PlaceMachineAt(MachineType.PALLET, (1, 2), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (1, 2), int(Direction.DOWN))
         assert goal.verify(expected_pallet_view) is True
 
 
@@ -104,15 +104,15 @@ class TestVerifyFails:
             machine_type=empty_machine_type,
             machine_direction=empty_direction,
         )
-        goal = PlaceMachineAt(MachineType.PALLET, (1, 2), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (1, 2), int(Direction.DOWN))
         assert goal.verify(view) is False
 
     def test_wrong_machine_type(self, expected_pallet_view: WorldView) -> None:
         """The tile holds a MINER, not the expected PALLET."""
         wrong_type = expected_pallet_view.machine_type.copy()
-        wrong_type[2, 1] = int(MachineType.MINER)
+        wrong_type[2, 1] = int(Machine.MINER)
         view = replace(expected_pallet_view, machine_type=wrong_type)
-        goal = PlaceMachineAt(MachineType.PALLET, (1, 2), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (1, 2), int(Direction.DOWN))
         assert goal.verify(view) is False
 
     def test_wrong_direction(self, expected_pallet_view: WorldView) -> None:
@@ -120,7 +120,7 @@ class TestVerifyFails:
         wrong_dir = expected_pallet_view.machine_direction.copy()
         wrong_dir[2, 1] = int(Direction.UP)
         view = replace(expected_pallet_view, machine_direction=wrong_dir)
-        goal = PlaceMachineAt(MachineType.PALLET, (1, 2), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (1, 2), int(Direction.DOWN))
         assert goal.verify(view) is False
 
 
@@ -129,7 +129,7 @@ class TestRepr:
     name the machine and direction in human-readable form."""
 
     def test_repr_includes_human_readable_names(self) -> None:
-        goal = PlaceMachineAt(MachineType.PALLET, (1, 2), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (1, 2), int(Direction.DOWN))
         text = repr(goal)
         assert "PALLET" in text
         assert "DOWN" in text

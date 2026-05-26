@@ -1,7 +1,7 @@
 """Tests for the machine specification (DEF1).
 
 ``machine_spec`` is the single source of truth for per-machine config:
-each machine is one ``MachineSpec`` record, and the ``MachineType``-indexed
+each machine is one ``MachineSpec`` record, and the ``Machine``-indexed
 arrays the engine and editor index are derived from those records. These
 tests lock the derived arrays against the values they replaced — a golden
 snapshot taken before the refactor — so the derivation can never silently
@@ -20,15 +20,16 @@ import jax.numpy as jnp
 import numpy as np
 
 from factoriax import machine_spec
-from factoriax.constants import BlockType, MachineType, SlotRole
+from factoriax.constants import BlockType, Machine, SlotRole
 
-# --- Golden values: the per-machine config as it shipped pre-refactor ------
-# Indexed by MachineType value: NONE, MINER, PALLET, ASSEMBLER, CONVEYOR_BELT,
-# ARM, ROCKET, FURNACE, SCIENCE_LAB, SPLITTER, CROSSING.
+# --- Golden values: the per-machine config, indexed by Machine value -------
+# NONE, MINER, PALLET, CONVEYOR_BELT, ASSEMBLER, ARM, ROCKET, FURNACE,
+# SCIENCE_LAB, SPLITTER, CROSSING. (DEF3 made Machine the single tag enum, so
+# CONVEYOR_BELT=3 and ASSEMBLER=4 -- they swap vs the old MachineType order.)
 
-_GOLDEN_NUM_SLOTS: tuple[int, ...] = (0, 1, 1, 3, 1, 0, 0, 3, 2, 1, 2)
-_GOLDEN_MAX_STACK: tuple[int, ...] = (0, 64, 256, 1000, 3, 1, 0, 1000, 1000, 2, 2)
-_GOLDEN_MAX_TYPES: tuple[int, ...] = (0, 2, 1, 4, 1, 1, 0, 2, 2, 1, 2)
+_GOLDEN_NUM_SLOTS: tuple[int, ...] = (0, 1, 1, 1, 3, 0, 0, 3, 2, 1, 2)
+_GOLDEN_MAX_STACK: tuple[int, ...] = (0, 64, 256, 3, 1000, 1, 0, 1000, 1000, 2, 2)
+_GOLDEN_MAX_TYPES: tuple[int, ...] = (0, 2, 1, 1, 4, 1, 0, 2, 2, 1, 2)
 _GOLDEN_MAX_HEALTH: int = 256
 
 # Pre-refactor slot roles, width 8 (SlotRole: NONE=0, INPUT=1, OUTPUT=2,
@@ -38,8 +39,8 @@ _GOLDEN_SLOT_ROLES: tuple[tuple[int, ...], ...] = (
     (0, 0, 0, 0, 0, 0, 0, 0),  # NONE
     (2, 0, 0, 0, 0, 0, 0, 0),  # MINER       — 1 OUTPUT
     (3, 3, 3, 3, 3, 3, 3, 3),  # PALLET      — drift: 8 STORAGE vs num_slots=1
-    (1, 1, 2, 0, 0, 0, 0, 0),  # ASSEMBLER   — 2 INPUT, 1 OUTPUT
     (3, 0, 0, 0, 0, 0, 0, 0),  # CONVEYOR_BELT — 1 STORAGE
+    (1, 1, 2, 0, 0, 0, 0, 0),  # ASSEMBLER   — 2 INPUT, 1 OUTPUT
     (0, 0, 0, 0, 0, 0, 0, 0),  # ARM         — 0 slots
     (0, 0, 0, 0, 0, 0, 0, 0),  # ROCKET      — 0 slots
     (1, 1, 2, 0, 0, 0, 0, 0),  # FURNACE     — 2 INPUT, 1 OUTPUT
@@ -53,8 +54,8 @@ _DERIVED_SLOT_ROLES: tuple[tuple[int, ...], ...] = (
     (0, 0, 0),  # NONE
     (2, 0, 0),  # MINER
     (3, 0, 0),  # PALLET       (fixed: one STORAGE slot)
-    (1, 1, 2),  # ASSEMBLER
     (3, 0, 0),  # CONVEYOR_BELT
+    (1, 1, 2),  # ASSEMBLER
     (0, 0, 0),  # ARM
     (0, 0, 0),  # ROCKET
     (1, 1, 2),  # FURNACE
@@ -84,14 +85,14 @@ def test_derived_max_types_match_golden() -> None:
 def test_derived_max_health_is_default_for_every_machine() -> None:
     """Derived ``MACHINE_MAX_HEALTH`` is the default health per machine."""
     arr = np.asarray(machine_spec.MACHINE_MAX_HEALTH)
-    assert arr.shape == (len(MachineType),)
+    assert arr.shape == (len(Machine),)
     assert bool((arr == _GOLDEN_MAX_HEALTH).all())
 
 
 def test_derived_width_shrinks_to_real_max() -> None:
     """The slot-view width derives to the real max (3), not the old 8."""
     assert machine_spec.MAX_MACHINE_INVENTORY_SLOTS == 3
-    assert np.asarray(machine_spec.MACHINE_SLOT_ROLES).shape == (len(MachineType), 3)
+    assert np.asarray(machine_spec.MACHINE_SLOT_ROLES).shape == (len(Machine), 3)
 
 
 def test_derived_slot_roles() -> None:
@@ -112,23 +113,23 @@ def test_derived_roles_agree_within_num_slots() -> None:
     derived = np.asarray(machine_spec.MACHINE_SLOT_ROLES)
     for i, n in enumerate(_GOLDEN_NUM_SLOTS):
         assert tuple(derived[i, :n].tolist()) == _GOLDEN_SLOT_ROLES[i][:n], (
-            f"machine {MachineType(i).name} role within num_slots changed"
+            f"machine {Machine(i).name} role within num_slots changed"
         )
 
 
 def test_arrays_are_machinetype_length() -> None:
-    """Golden data and derived arrays have one row per ``MachineType``."""
-    n = len(MachineType)
+    """Golden data and derived arrays have one row per ``Machine``."""
+    n = len(Machine)
     assert len(_GOLDEN_NUM_SLOTS) == n
     assert np.asarray(machine_spec.MACHINE_NUM_SLOTS).shape == (n,)
     assert np.asarray(machine_spec.MACHINE_SLOT_ROLES).shape[0] == n
 
 
 def test_specs_cover_machinetypes_in_order() -> None:
-    """One spec per MachineType, in value order (the validate invariant)."""
-    assert len(machine_spec.MACHINE_SPECS) == len(MachineType)
+    """One spec per Machine, in value order (the validate invariant)."""
+    assert len(machine_spec.MACHINE_SPECS) == len(Machine)
     for i, spec in enumerate(machine_spec.MACHINE_SPECS):
-        assert spec.machine_type == MachineType(i)
+        assert spec.machine_type == Machine(i)
 
 
 # --- S5: the spec agrees with the engine's real buffer structure -----------

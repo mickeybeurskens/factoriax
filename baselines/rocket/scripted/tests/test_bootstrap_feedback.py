@@ -24,7 +24,7 @@ from baselines.rocket.scripted.world_model import decode_observation
 from factoriax.constants import (
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
@@ -95,7 +95,7 @@ def _build_test_env(
     if place_assembler:
         builder.place_machine(
             *_ASSEMBLER_TILE,
-            int(MachineType.ASSEMBLER),
+            int(Machine.ASSEMBLER),
             direction=int(Direction.DOWN),
         )
     for (x, y), (item_id, count) in pallet_seeds.items():
@@ -108,7 +108,7 @@ def _build_test_env(
         builder.place_machine(
             x,
             y,
-            int(MachineType.PALLET),
+            int(Machine.PALLET),
             direction=int(Direction.DOWN),
         )
         builder.set_machine_inventory(x, y, int(item_id), int(count))

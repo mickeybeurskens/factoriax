@@ -15,7 +15,7 @@ from baselines.rocket.scripted.goals import (
     build_smelter_cell_at,
     smelter_cell_inventory,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:
@@ -45,14 +45,14 @@ def test_canonical_cell_emits_four_placements_in_order() -> None:
     assert placements == [
         # coal feeder south of furnace, BELT facing UP — pushes coal
         # north into the furnace via the directional Phase 0 pull
-        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
+        (int(Machine.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
         # plate-bus east of arm, faces DOWN so its stand tile is south
-        (int(MachineType.PALLET), (10, 11), int(Direction.DOWN)),
+        (int(Machine.PALLET), (10, 11), int(Direction.DOWN)),
         # arm east of furnace, faces RIGHT (pulls plate east)
-        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
+        (int(Machine.ARM), (9, 11), int(Direction.RIGHT)),
         # furnace last — its stand tile is one west, kept walkable
         # because the arm doesn't share that column
-        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+        (int(Machine.FURNACE), (8, 11), int(Direction.RIGHT)),
     ]
 
 
@@ -66,8 +66,8 @@ def test_arm_precedes_furnace_to_keep_arm_stand_tile_walkable() -> None:
     """
     goals = build_smelter_cell_at((8, 11))
     types = [g.machine_type for g in goals]
-    arm_idx = types.index(int(MachineType.ARM))
-    furnace_idx = types.index(int(MachineType.FURNACE))
+    arm_idx = types.index(int(Machine.ARM))
+    furnace_idx = types.index(int(Machine.FURNACE))
     assert arm_idx < furnace_idx
 
 
@@ -126,13 +126,13 @@ def test_facing_left_mirrors_arm_and_plate_bus_to_west() -> None:
     placements = _placements(goals)
     assert placements == [
         # coal feeder belt south, unchanged from RIGHT case
-        (int(MachineType.CONVEYOR_BELT), (23, 12), int(Direction.UP)),
+        (int(Machine.CONVEYOR_BELT), (23, 12), int(Direction.UP)),
         # plate_bus two tiles WEST of furnace, still facing DOWN
-        (int(MachineType.PALLET), (21, 11), int(Direction.DOWN)),
+        (int(Machine.PALLET), (21, 11), int(Direction.DOWN)),
         # arm one tile WEST of furnace, facing LEFT
-        (int(MachineType.ARM), (22, 11), int(Direction.LEFT)),
+        (int(Machine.ARM), (22, 11), int(Direction.LEFT)),
         # furnace facing LEFT
-        (int(MachineType.FURNACE), (23, 11), int(Direction.LEFT)),
+        (int(Machine.FURNACE), (23, 11), int(Direction.LEFT)),
     ]
 
 
@@ -152,13 +152,13 @@ def test_extract_facing_adds_extractor_arm_before_plate_bus() -> None:
     )
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),  # coal
+        (int(Machine.CONVEYOR_BELT), (8, 12), int(Direction.UP)),  # coal
         # Extractor at (11, 11) facing RIGHT — plate_bus is (10, 11),
         # extractor sits one step further east.
-        (int(MachineType.ARM), (11, 11), int(Direction.RIGHT)),
-        (int(MachineType.PALLET), (10, 11), int(Direction.DOWN)),
-        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
-        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+        (int(Machine.ARM), (11, 11), int(Direction.RIGHT)),
+        (int(Machine.PALLET), (10, 11), int(Direction.DOWN)),
+        (int(Machine.ARM), (9, 11), int(Direction.RIGHT)),
+        (int(Machine.FURNACE), (8, 11), int(Direction.RIGHT)),
     ]
 
 
@@ -174,7 +174,7 @@ def test_extract_facing_for_mirrored_copper_cell() -> None:
     # Order: coal -> extractor -> plate_bus -> arm -> furnace
     assert placements[0][1] == (23, 12)  # coal
     assert placements[1] == (
-        int(MachineType.ARM),
+        int(Machine.ARM),
         (20, 11),
         int(Direction.LEFT),
     )  # extractor
@@ -236,18 +236,18 @@ def test_output_split_emits_six_placements_in_order() -> None:
     placements = _placements(goals)
     assert placements == [
         # coal feeder belt south of furnace, faces UP toward the furnace
-        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
+        (int(Machine.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
         # manual_stash north of splitter (smaller y)
-        (int(MachineType.PALLET), (10, 10), int(Direction.DOWN)),
+        (int(Machine.PALLET), (10, 10), int(Direction.DOWN)),
         # automation_belt south of splitter (larger y), facing DOWN
-        (int(MachineType.CONVEYOR_BELT), (10, 12), int(Direction.DOWN)),
+        (int(Machine.CONVEYOR_BELT), (10, 12), int(Direction.DOWN)),
         # splitter at the plate_bus location, facing the cell's facing
         # so its W input is the arm tile
-        (int(MachineType.SPLITTER), (10, 11), int(Direction.RIGHT)),
+        (int(Machine.SPLITTER), (10, 11), int(Direction.RIGHT)),
         # arm east of furnace, facing RIGHT
-        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
+        (int(Machine.ARM), (9, 11), int(Direction.RIGHT)),
         # furnace last — its stand tile is one west, kept walkable
-        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+        (int(Machine.FURNACE), (8, 11), int(Direction.RIGHT)),
     ]
 
 
@@ -263,36 +263,36 @@ def test_output_split_facing_left_mirrors_horizontal_axis() -> None:
     placements = _placements(goals)
     # Coal feeder belt south of the furnace.
     assert placements[0] == (
-        int(MachineType.CONVEYOR_BELT),
+        int(Machine.CONVEYOR_BELT),
         (24, 12),
         int(Direction.UP),
     )
     # Manual stash N (above) and automation belt S (below) of the
     # splitter — same N/S regardless of facing.
     assert placements[1] == (
-        int(MachineType.PALLET),
+        int(Machine.PALLET),
         (22, 10),
         int(Direction.DOWN),
     )
     assert placements[2] == (
-        int(MachineType.CONVEYOR_BELT),
+        int(Machine.CONVEYOR_BELT),
         (22, 12),
         int(Direction.DOWN),
     )
     # Splitter faces LEFT so its E (input) face is the arm.
     assert placements[3] == (
-        int(MachineType.SPLITTER),
+        int(Machine.SPLITTER),
         (22, 11),
         int(Direction.LEFT),
     )
     # Arm and furnace mirrored to the west.
     assert placements[4] == (
-        int(MachineType.ARM),
+        int(Machine.ARM),
         (23, 11),
         int(Direction.LEFT),
     )
     assert placements[5] == (
-        int(MachineType.FURNACE),
+        int(Machine.FURNACE),
         (24, 11),
         int(Direction.LEFT),
     )
@@ -360,11 +360,11 @@ def test_output_split_no_automation_belt_emits_five_placements() -> None:
     )
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
-        (int(MachineType.PALLET), (10, 10), int(Direction.DOWN)),
-        (int(MachineType.SPLITTER), (10, 11), int(Direction.RIGHT)),
-        (int(MachineType.ARM), (9, 11), int(Direction.RIGHT)),
-        (int(MachineType.FURNACE), (8, 11), int(Direction.RIGHT)),
+        (int(Machine.CONVEYOR_BELT), (8, 12), int(Direction.UP)),
+        (int(Machine.PALLET), (10, 10), int(Direction.DOWN)),
+        (int(Machine.SPLITTER), (10, 11), int(Direction.RIGHT)),
+        (int(Machine.ARM), (9, 11), int(Direction.RIGHT)),
+        (int(Machine.FURNACE), (8, 11), int(Direction.RIGHT)),
     ]
 
 

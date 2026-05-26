@@ -24,7 +24,7 @@ from factoriax.constants import (
     MINEABLE_BLOCKS,
     Action,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.state import EnvState
 
@@ -201,7 +201,7 @@ def count_miners_on_ore(state: EnvState) -> jax.Array:
         Scalar int32 count of miners on mineable blocks.
     """
     active = state.ent_y >= 0
-    is_miner = state.ent_type == MachineType.MINER
+    is_miner = state.ent_type == Machine.MINER
     y = jnp.clip(state.ent_y, 0)
     x = jnp.clip(state.ent_x, 0)
     tile = state.map[y, x]

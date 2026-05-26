@@ -26,7 +26,7 @@ from factoriax.constants import (
     Action,
     BlockType,
     Direction,
-    MachineType,
+    Machine,
 )
 from factoriax.crafting import craft_recipe
 from factoriax.machines import BLOCK_TO_ITEM_ARRAY, update_all_machines
@@ -138,9 +138,7 @@ def is_position_walkable(
     clipped_x = jnp.clip(position[0], 0, map_width - 1)
     clipped_y = jnp.clip(position[1], 0, map_height - 1)
     mt = state.machine_types[clipped_y, clipped_x]
-    has_blocking = in_bounds & (
-        (mt != MachineType.NONE) & (mt != MachineType.CONVEYOR_BELT)
-    )
+    has_blocking = in_bounds & ((mt != Machine.NONE) & (mt != Machine.CONVEYOR_BELT))
     return ~is_solid & ~has_blocking
 
 
@@ -304,8 +302,8 @@ def deposit_to_adjacent(
     sx = jnp.clip(tx, 0, map_w - 1)
     sy = jnp.clip(ty, 0, map_h - 1)
 
-    mt = jnp.where(in_bounds, state.machine_types[sy, sx], MachineType.NONE)
-    has_machine = mt != MachineType.NONE
+    mt = jnp.where(in_bounds, state.machine_types[sy, sx], Machine.NONE)
+    has_machine = mt != Machine.NONE
     player_count = state.player_inventory[player_idx, item_type_arr]
     has_item = player_count > 0
 
@@ -315,7 +313,7 @@ def deposit_to_adjacent(
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
     # Assemblers and furnaces share the 2-input-slot shape.
-    is_combiner = (mt == MachineType.ASSEMBLER) | (mt == MachineType.FURNACE)
+    is_combiner = (mt == Machine.ASSEMBLER) | (mt == Machine.FURNACE)
 
     # Deposit to combiner input slot.
     in_t0 = state.ent_asm_in_type[eidx, 0]
@@ -331,7 +329,7 @@ def deposit_to_adjacent(
     can_deposit_asm = in_bounds & has_item & (use_s0 | use_s1)
 
     # Deposit to buffer machine (non-combiner, non-miner).
-    is_miner = mt == MachineType.MINER
+    is_miner = mt == Machine.MINER
     buf_empty = state.ent_buf_count[eidx] == 0
     buf_same = state.ent_buf_type[eidx] == item_type_arr
     buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
@@ -408,8 +406,8 @@ def withdraw_from_adjacent(
     sx = jnp.clip(tx, 0, map_w - 1)
     sy = jnp.clip(ty, 0, map_h - 1)
 
-    mt = jnp.where(in_bounds, state.machine_types[sy, sx], MachineType.NONE)
-    is_machine = in_bounds & (mt != MachineType.NONE)
+    mt = jnp.where(in_bounds, state.machine_types[sy, sx], Machine.NONE)
+    is_machine = in_bounds & (mt != Machine.NONE)
 
     max_e = state.ent_y.shape[0]
     eidx_raw = state.tile_entity[sy, sx]
@@ -515,7 +513,7 @@ def run_labs(state: EnvState) -> EnvState:
         State with lab input slots zeroed (where they held packs) and
         ``science_consumed_step`` populated with the summed counts.
     """
-    is_lab = (state.ent_type == MachineType.SCIENCE_LAB) & (state.ent_y >= 0)
+    is_lab = (state.ent_type == Machine.SCIENCE_LAB) & (state.ent_y >= 0)
     # Shape (E, 2) after broadcasting.
     lab_mask = is_lab[:, None]
     slot_types = state.ent_asm_in_type

@@ -36,7 +36,7 @@ from factoriax.constants import (
     Action,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
@@ -116,7 +116,7 @@ def _rollout(state, goal, jit_step, env_params, max_steps: int = 400):
 def _build_module_level(
     *,
     prebuild_module: bool = False,
-    prebuild_machine: int = int(MachineType.ASSEMBLER),
+    prebuild_machine: int = int(Machine.ASSEMBLER),
     prebuild_inputs: tuple[tuple[int, int], ...] = (),
     one_input: bool = False,
     max_timesteps: int = 400,
@@ -142,25 +142,25 @@ def _build_module_level(
     if prebuild_module:
         builder.place_machine(
             *_OUTPUT,
-            int(MachineType.PALLET),
+            int(Machine.PALLET),
             int(Direction.DOWN),
         )
         # Input feeders are belts (facing into the assembler) under
         # the directional Phase 0; pallets here would never feed.
         builder.place_machine(
             *_INPUT_A,
-            int(MachineType.CONVEYOR_BELT),
+            int(Machine.CONVEYOR_BELT),
             int(Direction.DOWN),
         )
         if not one_input:
             builder.place_machine(
                 *_INPUT_B,
-                int(MachineType.CONVEYOR_BELT),
+                int(Machine.CONVEYOR_BELT),
                 int(Direction.RIGHT),
             )
         builder.place_machine(
             *_ARM,
-            int(MachineType.ARM),
+            int(Machine.ARM),
             int(Direction.RIGHT),
         )
         builder.place_machine(
@@ -203,7 +203,7 @@ def test_build_assembler_module_places_all_entities() -> None:
     jit_step, state, env_params = _build_module_level()
     goal = goals.BuildAssemblerModule(
         center_tile=_CENTER,
-        center_machine=MachineType.ASSEMBLER,
+        center_machine=Machine.ASSEMBLER,
         input_a_tile=_INPUT_A,
         input_b_tile=_INPUT_B,
         output_pallet_tile=_OUTPUT,
@@ -217,20 +217,20 @@ def test_build_assembler_module_places_all_entities() -> None:
     ent_direction = np.asarray(final_state.ent_direction)
 
     # Output pallet east-of-arm; inputs are feeder belts.
-    assert mt[_OUTPUT[1], _OUTPUT[0]] == int(MachineType.PALLET), (
+    assert mt[_OUTPUT[1], _OUTPUT[0]] == int(Machine.PALLET), (
         f"expected pallet at {_OUTPUT}"
     )
     for tile in (_INPUT_A, _INPUT_B):
-        assert mt[tile[1], tile[0]] == int(MachineType.CONVEYOR_BELT), (
+        assert mt[tile[1], tile[0]] == int(Machine.CONVEYOR_BELT), (
             f"expected feeder belt at {tile}"
         )
     # Center machine = assembler facing DOWN.
-    assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.ASSEMBLER)
+    assert mt[_CENTER[1], _CENTER[0]] == int(Machine.ASSEMBLER)
     center_eid = int(tile_entity[_CENTER[1], _CENTER[0]])
     assert center_eid >= 0
     assert int(ent_direction[center_eid]) == int(Direction.DOWN)
     # Arm facing RIGHT.
-    assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
+    assert mt[_ARM[1], _ARM[0]] == int(Machine.ARM)
     arm_eid = int(tile_entity[_ARM[1], _ARM[0]])
     assert arm_eid >= 0
     assert int(ent_direction[arm_eid]) == int(Direction.RIGHT)
@@ -241,7 +241,7 @@ def test_build_assembler_module_consumes_bootstrap_inventory() -> None:
     jit_step, state, env_params = _build_module_level()
     goal = goals.BuildAssemblerModule(
         center_tile=_CENTER,
-        center_machine=MachineType.ASSEMBLER,
+        center_machine=Machine.ASSEMBLER,
         input_a_tile=_INPUT_A,
         input_b_tile=_INPUT_B,
         output_pallet_tile=_OUTPUT,
@@ -270,7 +270,7 @@ def test_assembler_module_produces_wire_when_fed_plates() -> None:
     """
     jit_step, state, env_params = _build_module_level(
         prebuild_module=True,
-        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_machine=int(Machine.ASSEMBLER),
         prebuild_inputs=(
             (int(ItemType.COPPER_PLATE), 1),
             (int(ItemType.TIN_PLATE), 1),
@@ -302,7 +302,7 @@ def test_build_assembler_module_one_input_variant() -> None:
     jit_step, state, env_params = _build_module_level()
     goal = goals.BuildAssemblerModule(
         center_tile=_CENTER,
-        center_machine=MachineType.FURNACE,
+        center_machine=Machine.FURNACE,
         input_a_tile=_INPUT_A,
         input_b_tile=None,
         output_pallet_tile=_OUTPUT,
@@ -313,14 +313,14 @@ def test_build_assembler_module_one_input_variant() -> None:
 
     mt = np.asarray(final_state.machine_types)
     # Output pallet + input_a feeder belt; west neighbour is dirt.
-    assert mt[_INPUT_A[1], _INPUT_A[0]] == int(MachineType.CONVEYOR_BELT)
-    assert mt[_OUTPUT[1], _OUTPUT[0]] == int(MachineType.PALLET)
-    assert mt[_INPUT_B[1], _INPUT_B[0]] == int(MachineType.NONE), (
+    assert mt[_INPUT_A[1], _INPUT_A[0]] == int(Machine.CONVEYOR_BELT)
+    assert mt[_OUTPUT[1], _OUTPUT[0]] == int(Machine.PALLET)
+    assert mt[_INPUT_B[1], _INPUT_B[0]] == int(Machine.NONE), (
         "1-input variant must not place a west feeder belt"
     )
     # Furnace + arm.
-    assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.FURNACE)
-    assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
+    assert mt[_CENTER[1], _CENTER[0]] == int(Machine.FURNACE)
+    assert mt[_ARM[1], _ARM[0]] == int(Machine.ARM)
     # One PALLET left in inventory (started with 1, used 1 for output);
     # one CONVEYOR_BELT used (started with 2, 1 left).
     inv = np.asarray(final_state.player_inventory[0])
@@ -376,7 +376,7 @@ def test_assembler_module_produces_tier3_recipes(
     """
     jit_step, state, env_params = _build_module_level(
         prebuild_module=True,
-        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_machine=int(Machine.ASSEMBLER),
         prebuild_inputs=recipe_inputs,
     )
 
@@ -438,7 +438,7 @@ def test_two_assembler_modules_compose_without_collision() -> None:
     # Module A — the canonical layout.
     goal_a = goals.BuildAssemblerModule(
         center_tile=_CENTER,
-        center_machine=MachineType.ASSEMBLER,
+        center_machine=Machine.ASSEMBLER,
         input_a_tile=_INPUT_A,
         input_b_tile=_INPUT_B,
         output_pallet_tile=_OUTPUT,
@@ -454,7 +454,7 @@ def test_two_assembler_modules_compose_without_collision() -> None:
     arm_b = (11, 5)
     goal_b = goals.BuildAssemblerModule(
         center_tile=center_b,
-        center_machine=MachineType.ASSEMBLER,
+        center_machine=Machine.ASSEMBLER,
         input_a_tile=input_a_b,
         input_b_tile=input_b_b,
         output_pallet_tile=output_b,
@@ -464,18 +464,16 @@ def test_two_assembler_modules_compose_without_collision() -> None:
 
     mt = np.asarray(state.machine_types)
     # Both modules' centers + arms exist.
-    assert mt[_CENTER[1], _CENTER[0]] == int(MachineType.ASSEMBLER)
-    assert mt[_ARM[1], _ARM[0]] == int(MachineType.ARM)
-    assert mt[center_b[1], center_b[0]] == int(MachineType.ASSEMBLER)
-    assert mt[arm_b[1], arm_b[0]] == int(MachineType.ARM)
+    assert mt[_CENTER[1], _CENTER[0]] == int(Machine.ASSEMBLER)
+    assert mt[_ARM[1], _ARM[0]] == int(Machine.ARM)
+    assert mt[center_b[1], center_b[0]] == int(Machine.ASSEMBLER)
+    assert mt[arm_b[1], arm_b[0]] == int(Machine.ARM)
     # Both modules' output pallets exist.
     for tile in (_OUTPUT, output_b):
-        assert mt[tile[1], tile[0]] == int(MachineType.PALLET), (
-            f"missing pallet at {tile}"
-        )
+        assert mt[tile[1], tile[0]] == int(Machine.PALLET), f"missing pallet at {tile}"
     # Both modules' input feeders are belts.
     for tile in (_INPUT_A, _INPUT_B, input_a_b, input_b_b):
-        assert mt[tile[1], tile[0]] == int(MachineType.CONVEYOR_BELT), (
+        assert mt[tile[1], tile[0]] == int(Machine.CONVEYOR_BELT), (
             f"missing feeder belt at {tile}"
         )
     # Bootstrap inventory fully consumed.
@@ -545,7 +543,7 @@ def test_assembler_module_produces_tier4_recipes(
     """
     jit_step, state, env_params = _build_module_level(
         prebuild_module=True,
-        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_machine=int(Machine.ASSEMBLER),
         prebuild_inputs=recipe_inputs,
     )
 
@@ -595,7 +593,7 @@ def test_assembler_module_produces_rocket_when_fed_subassemblies() -> None:
     """
     jit_step, state, env_params = _build_module_level(
         prebuild_module=True,
-        prebuild_machine=int(MachineType.ASSEMBLER),
+        prebuild_machine=int(Machine.ASSEMBLER),
         prebuild_inputs=(
             (int(ItemType.HULL), 8),
             (int(ItemType.ROCKET_CORE), 8),

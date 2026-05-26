@@ -11,7 +11,7 @@ from factoriax.constants import (
     PLACEABLE_ITEM_LIST,
     Action,
     InteractAction,
-    MachineType,
+    Machine,
     MoveAction,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv
@@ -36,15 +36,15 @@ def test_placeable_items_are_exactly_the_non_none_machines() -> None:
 
     Every placeable item maps to a real machine, and every real machine's
     item is placeable. This anchors the placeable definition on
-    ``MachineType`` so the two can't drift apart.
+    ``Machine`` so the two can't drift apart.
     """
     placeable = set(PLACEABLE_ITEM_LIST)
     for item in placeable:
-        assert int(ITEM_TO_MACHINE_ARRAY[item]) != int(MachineType.NONE), (
+        assert int(ITEM_TO_MACHINE_ARRAY[item]) != int(Machine.NONE), (
             f"placeable item {ItemType(item).name} maps to no machine"
         )
     machine_items = {
-        int(MACHINE_TO_ITEM_ARRAY[int(m)]) for m in MachineType if m != MachineType.NONE
+        int(MACHINE_TO_ITEM_ARRAY[int(m)]) for m in Machine if m != Machine.NONE
     }
     assert machine_items == placeable
 
@@ -146,7 +146,7 @@ class TestPlacementValidation:
 
     def test_invalid_placement_on_existing_machine(self, state_factory) -> None:
         """Should not allow placement where machine exists."""
-        machine_types = jnp.array([[MachineType.MINER]], dtype=jnp.int32)
+        machine_types = jnp.array([[Machine.MINER]], dtype=jnp.int32)
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=machine_types,
@@ -191,7 +191,7 @@ class TestMachinePlacement:
         )
         new_state = place_machine(state, EnvParams(), 0, int(ItemType.MINER))
 
-        assert new_state.machine_types[0, 1] == MachineType.MINER
+        assert new_state.machine_types[0, 1] == Machine.MINER
         assert new_state.player_inventory[0, ItemType.MINER] == 0
 
     def test_place_machine_decrements_stack(self, state_factory) -> None:
@@ -228,7 +228,7 @@ class TestMachinePlacement:
         )
         new_state = place_machine(state, EnvParams(), 0, int(ItemType.MINER))
 
-        assert new_state.machine_types[0, 1] == MachineType.NONE
+        assert new_state.machine_types[0, 1] == Machine.NONE
         assert new_state.player_inventory[0, ItemType.MINER] == 1
 
     def test_cannot_place_without_item(self, state_factory) -> None:
@@ -243,7 +243,7 @@ class TestMachinePlacement:
         )
         new_state = place_machine(state, EnvParams(), 0, int(ItemType.MINER))
 
-        assert new_state.machine_types[0, 1] == MachineType.NONE
+        assert new_state.machine_types[0, 1] == Machine.NONE
 
     def test_cannot_place_non_placeable_item(self, state_factory) -> None:
         """Should not place non-placeable items."""
@@ -261,7 +261,7 @@ class TestMachinePlacement:
         )
         new_state = place_machine(state, EnvParams(), 0, int(ItemType.COAL))
 
-        assert new_state.machine_types[0, 1] == MachineType.NONE
+        assert new_state.machine_types[0, 1] == Machine.NONE
         assert new_state.player_inventory[0, ItemType.COAL] == 5
 
 
@@ -294,7 +294,7 @@ class TestPlacementClearsInheritedBuffer:
         new_state = place_machine(state, EnvParams(), 0, int(ItemType.MINER))
 
         assert int(new_state.tile_entity[0, 1]) == 0
-        assert new_state.machine_types[0, 1] == MachineType.MINER
+        assert new_state.machine_types[0, 1] == Machine.MINER
         assert int(new_state.ent_buf_count[0]) == 0
         assert int(new_state.ent_buf_type[0]) == 0
 
@@ -329,7 +329,7 @@ class TestPlacementInitializesHealth:
         state = self._miner_state(state_factory)
         params = EnvParams(
             machine_config=DEFAULT_MACHINE_CONFIG.with_overrides(
-                {int(MachineType.MINER): MachineConfigOverride(max_health=42)}
+                {int(Machine.MINER): MachineConfigOverride(max_health=42)}
             )
         )
         new_state = place_machine(state, params, 0, int(ItemType.MINER))
@@ -357,7 +357,7 @@ class TestPlacementInitializesHealth:
 
         level = (
             LevelBuilder(4, 4)
-            .place_machine(2, 2, int(MachineType.FURNACE), int(Direction.UP))
+            .place_machine(2, 2, int(Machine.FURNACE), int(Direction.UP))
             .build("hp_init_test")
         )
         params = EnvParams(map_width=4, map_height=4, num_players=1)
@@ -452,7 +452,7 @@ class TestActionRepair:
         )
         params = EnvParams(
             machine_config=DEFAULT_MACHINE_CONFIG.with_overrides(
-                {int(MachineType.MINER): MachineConfigOverride(max_health=42)}
+                {int(Machine.MINER): MachineConfigOverride(max_health=42)}
             )
         )
         placed = place_machine(state, params, 0, int(ItemType.MINER))
@@ -500,7 +500,7 @@ class TestPickupHealthGate:
         damaged = state.replace(ent_health=state.ent_health.at[eidx].set(50))
         result = pickup_machine(damaged, EnvParams(), 0)
         # Machine still on grid.
-        assert int(result.machine_types[0, 1]) == int(MachineType.MINER)
+        assert int(result.machine_types[0, 1]) == int(Machine.MINER)
         # Entity slot still active.
         assert int(result.ent_y[eidx]) == 0
         # Inventory unchanged.
@@ -513,7 +513,7 @@ class TestPickupHealthGate:
         state, _, eidx = self._placed_state(state_factory)
         result = pickup_machine(state, EnvParams(), 0)
         # Tile cleared.
-        assert int(result.machine_types[0, 1]) == int(MachineType.NONE)
+        assert int(result.machine_types[0, 1]) == int(Machine.NONE)
         # Entity slot deactivated.
         assert int(result.ent_y[eidx]) == -1
         # Inventory got the item back.

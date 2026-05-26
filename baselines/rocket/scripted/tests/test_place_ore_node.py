@@ -9,7 +9,7 @@ from baselines.rocket.scripted.goals import (
     ore_node_inventory,
     place_ore_node,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:
@@ -37,8 +37,8 @@ def test_default_down_node_emits_pallet_then_miner() -> None:
     goals = place_ore_node((8, 9))  # iron south-edge centre
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.PALLET), (8, 10), int(Direction.DOWN)),
-        (int(MachineType.MINER), (8, 9), int(Direction.DOWN)),
+        (int(Machine.PALLET), (8, 10), int(Direction.DOWN)),
+        (int(Machine.MINER), (8, 9), int(Direction.DOWN)),
     ]
 
 
@@ -52,15 +52,15 @@ def test_pallet_precedes_miner() -> None:
     """
     goals = place_ore_node((8, 9))
     types = [g.machine_type for g in goals]
-    assert types.index(int(MachineType.PALLET)) < types.index(int(MachineType.MINER))
+    assert types.index(int(Machine.PALLET)) < types.index(int(Machine.MINER))
 
 
 def test_right_facing_node_puts_pallet_east() -> None:
     goals = place_ore_node((9, 24), direction=int(Direction.RIGHT))
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.PALLET), (10, 24), int(Direction.RIGHT)),
-        (int(MachineType.MINER), (9, 24), int(Direction.RIGHT)),
+        (int(Machine.PALLET), (10, 24), int(Direction.RIGHT)),
+        (int(Machine.MINER), (9, 24), int(Direction.RIGHT)),
     ]
 
 
@@ -68,8 +68,8 @@ def test_up_facing_node_puts_pallet_north() -> None:
     goals = place_ore_node((7, 22), direction=int(Direction.UP))
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.PALLET), (7, 21), int(Direction.UP)),
-        (int(MachineType.MINER), (7, 22), int(Direction.UP)),
+        (int(Machine.PALLET), (7, 21), int(Direction.UP)),
+        (int(Machine.MINER), (7, 22), int(Direction.UP)),
     ]
 
 
@@ -82,7 +82,7 @@ def test_with_pallet_false_emits_only_miner() -> None:
     )
     placements = _placements(goals)
     assert placements == [
-        (int(MachineType.MINER), (9, 24), int(Direction.RIGHT)),
+        (int(Machine.MINER), (9, 24), int(Direction.RIGHT)),
     ]
 
 

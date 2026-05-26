@@ -39,7 +39,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import ItemType, MachineType
+from factoriax.constants import ItemType, Machine
 
 # ---------------------------------------------------------------------------
 # Recipe dataclass — the canonical per-recipe record
@@ -95,9 +95,9 @@ class Recipe:
     def machine_type(self) -> int:
         """Combiner type that runs this recipe — derived from output."""
         return (
-            int(MachineType.FURNACE)
+            int(Machine.FURNACE)
             if self.output in _FURNACE_OUTPUTS
-            else int(MachineType.ASSEMBLER)
+            else int(Machine.ASSEMBLER)
         )
 
 
@@ -254,7 +254,7 @@ class RecipeBook:
                     f"({ItemType(other.output).name}, {other.name!r}) both "
                     f"consume the input set {{{input_names}}} as "
                     f"{key[1]}-input recipes on machine "
-                    f"{MachineType(key[0]).name}. The forward-match in "
+                    f"{Machine(key[0]).name}. The forward-match in "
                     f"run_combiners dispatches a machine's input buffers to a "
                     f"recipe by input item-types alone (counts are ignored), "
                     f"so it cannot tell these two apart. Give one recipe a "

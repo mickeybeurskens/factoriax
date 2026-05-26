@@ -15,7 +15,7 @@ from baselines.rocket.scripted.recipe_planning import (
     scale_inventory,
     sum_inventories,
 )
-from factoriax.constants import ItemType, MachineType
+from factoriax.constants import ItemType, Machine
 from factoriax.recipes import (
     BASE_RECIPE_BOOK,
     Recipe,
@@ -167,7 +167,7 @@ class TestProductionSchedule:
     def test_single_furnace_recipe(self) -> None:
         sched = production_schedule({int(ItemType.IRON_PLATE): 3})
         assert sched == [
-            (int(ItemType.IRON_PLATE), 3, int(MachineType.FURNACE)),
+            (int(ItemType.IRON_PLATE), 3, int(Machine.FURNACE)),
         ]
 
     def test_intermediate_emitted_before_consumer(self) -> None:
@@ -195,7 +195,7 @@ class TestProductionSchedule:
         assert len(wire_entries) == 1
         _, qty, machine = wire_entries[0]
         assert qty == 5  # 2 + 3
-        assert machine == int(MachineType.ASSEMBLER)
+        assert machine == int(Machine.ASSEMBLER)
 
     def test_machine_type_per_entry(self) -> None:
         """Each schedule entry carries the right machine_type from the
@@ -210,9 +210,9 @@ class TestProductionSchedule:
                 int(ItemType.WAFER),
                 int(ItemType.REFRACTORY),
             }:
-                assert machine == int(MachineType.FURNACE)
+                assert machine == int(Machine.FURNACE)
             else:
-                assert machine == int(MachineType.ASSEMBLER)
+                assert machine == int(Machine.ASSEMBLER)
 
     def test_output_count_rounds_up_qty(self) -> None:
         """If output_count=2 and target=3, schedule reports qty=4

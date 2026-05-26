@@ -79,7 +79,7 @@ from factoriax.constants import (  # noqa: E402
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     Direction,
-    MachineType,
+    Machine,
 )
 from factoriax.envs.factoriax_env import FactoriaXEnv  # noqa: E402
 from factoriax.state import EnvParams  # noqa: E402
@@ -261,7 +261,7 @@ def state_factory():
         mt_grid = (
             machine_types.astype(jnp.int8)
             if machine_types is not None
-            else jnp.full(shape, MachineType.NONE, dtype=jnp.int8)
+            else jnp.full(shape, Machine.NONE, dtype=jnp.int8)
         )
 
         # Build entity arrays from the grid-based arguments.
@@ -325,7 +325,7 @@ def state_factory():
         idx = 0
         for y in range(shape[0]):
             for x in range(shape[1]):
-                if int(mt_np[y, x]) != int(MachineType.NONE) and idx < mm:
+                if int(mt_np[y, x]) != int(Machine.NONE) and idx < mm:
                     ent_y[idx] = y
                     ent_x[idx] = x
                     ent_type[idx] = mt_np[y, x]

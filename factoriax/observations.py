@@ -6,7 +6,7 @@ NumPy RGB image via the pixel renderer and cannot be JIT'd.
 
 Spatial channels (10 total):
 - ``block_type`` — terrain.
-- ``machine_type`` — ``MachineType`` at each tile (or NONE).
+- ``machine_type`` — ``Machine`` at each tile (or NONE).
 - ``block_resources`` — ore count under the tile.
 - ``slot{0,1,2}_type`` / ``slot{0,1,2}_count`` — a uniform 3-slot
   projection of every machine's contents. Combiners map
@@ -31,7 +31,7 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     PLAYER_MAX_STACK,
     BlockType,
-    MachineType,
+    Machine,
 )
 from factoriax.crafting import can_afford_recipe
 from factoriax.jax_renderer import JaxRenderer
@@ -45,7 +45,7 @@ from factoriax.state import EnvParams, EnvState
 _RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 _MAP_NORM: float = float(max(BlockType))
-_MACHINE_NORM: float = float(max(MachineType))
+_MACHINE_NORM: float = float(max(Machine))
 _DIR_NORM: float = 4.0
 # Count normalisation for slot channels. Big enough to keep pallet
 # counts (up to 1000) finite, small enough that tiny buffers still
@@ -84,13 +84,13 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
 
-    is_combiner = (state.ent_type == MachineType.ASSEMBLER) | (
-        state.ent_type == MachineType.FURNACE
+    is_combiner = (state.ent_type == Machine.ASSEMBLER) | (
+        state.ent_type == Machine.FURNACE
     )
     is_buffer_machine = (
-        (state.ent_type == MachineType.MINER)
-        | (state.ent_type == MachineType.PALLET)
-        | (state.ent_type == MachineType.CONVEYOR_BELT)
+        (state.ent_type == Machine.MINER)
+        | (state.ent_type == Machine.PALLET)
+        | (state.ent_type == Machine.CONVEYOR_BELT)
     )
 
     # Slots 0 and 1: asm_in for combiners, else zero.
@@ -370,7 +370,7 @@ def local_array(
         / _MAP_NORM
     )
     padded_machines = (
-        jnp.pad(state.machine_types, pw, constant_values=MachineType.NONE).astype(
+        jnp.pad(state.machine_types, pw, constant_values=Machine.NONE).astype(
             jnp.float32
         )
         / _MACHINE_NORM

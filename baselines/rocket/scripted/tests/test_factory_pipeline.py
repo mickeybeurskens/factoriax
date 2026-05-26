@@ -31,7 +31,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
@@ -174,26 +174,20 @@ def test_smelter_cell_plus_coal_trunk_produces_iron_plate() -> None:
     builder.set_player_position(*_SPAWN)
 
     # Smelter cell.
-    builder.place_machine(*_PLATE_PALLET, int(MachineType.PALLET), int(Direction.DOWN))
-    builder.place_machine(*_FURNACE_ARM, int(MachineType.ARM), int(Direction.RIGHT))
-    builder.place_machine(*_FURNACE_TILE, int(MachineType.FURNACE), int(Direction.DOWN))
-    builder.place_machine(
-        *_ORE_PALLET, int(MachineType.CONVEYOR_BELT), int(Direction.DOWN)
-    )
-    builder.place_machine(*_MINER_TILE, int(MachineType.MINER), int(Direction.DOWN))
+    builder.place_machine(*_PLATE_PALLET, int(Machine.PALLET), int(Direction.DOWN))
+    builder.place_machine(*_FURNACE_ARM, int(Machine.ARM), int(Direction.RIGHT))
+    builder.place_machine(*_FURNACE_TILE, int(Machine.FURNACE), int(Direction.DOWN))
+    builder.place_machine(*_ORE_PALLET, int(Machine.CONVEYOR_BELT), int(Direction.DOWN))
+    builder.place_machine(*_MINER_TILE, int(Machine.MINER), int(Direction.DOWN))
 
     # Coal trunk.
-    builder.place_machine(*_COAL_SOURCE, int(MachineType.PALLET), int(Direction.DOWN))
+    builder.place_machine(*_COAL_SOURCE, int(Machine.PALLET), int(Direction.DOWN))
     builder.set_machine_inventory(
         _COAL_SOURCE[0], _COAL_SOURCE[1], int(ItemType.COAL), 50
     )
-    builder.place_machine(*_FEEDER_ARM, int(MachineType.ARM), _FEEDER_ARM_DIR)
-    builder.place_machine(
-        *_COAL_BELT, int(MachineType.CONVEYOR_BELT), int(Direction.UP)
-    )
-    builder.place_machine(
-        *_COAL_PALLET, int(MachineType.CONVEYOR_BELT), int(Direction.UP)
-    )
+    builder.place_machine(*_FEEDER_ARM, int(Machine.ARM), _FEEDER_ARM_DIR)
+    builder.place_machine(*_COAL_BELT, int(Machine.CONVEYOR_BELT), int(Direction.UP))
+    builder.place_machine(*_COAL_PALLET, int(Machine.CONVEYOR_BELT), int(Direction.UP))
 
     level = builder.build("factory_pipeline_test")
     env_params = EnvParams(
@@ -246,24 +240,18 @@ def test_smelter_output_feeds_craft_from_bus() -> None:
     builder.set_player_position(*_SPAWN)
 
     # Smelter cell + coal trunk (same as previous test).
-    builder.place_machine(*_PLATE_PALLET, int(MachineType.PALLET), int(Direction.DOWN))
-    builder.place_machine(*_FURNACE_ARM, int(MachineType.ARM), int(Direction.RIGHT))
-    builder.place_machine(*_FURNACE_TILE, int(MachineType.FURNACE), int(Direction.DOWN))
-    builder.place_machine(
-        *_ORE_PALLET, int(MachineType.CONVEYOR_BELT), int(Direction.DOWN)
-    )
-    builder.place_machine(*_MINER_TILE, int(MachineType.MINER), int(Direction.DOWN))
-    builder.place_machine(*_COAL_SOURCE, int(MachineType.PALLET), int(Direction.DOWN))
+    builder.place_machine(*_PLATE_PALLET, int(Machine.PALLET), int(Direction.DOWN))
+    builder.place_machine(*_FURNACE_ARM, int(Machine.ARM), int(Direction.RIGHT))
+    builder.place_machine(*_FURNACE_TILE, int(Machine.FURNACE), int(Direction.DOWN))
+    builder.place_machine(*_ORE_PALLET, int(Machine.CONVEYOR_BELT), int(Direction.DOWN))
+    builder.place_machine(*_MINER_TILE, int(Machine.MINER), int(Direction.DOWN))
+    builder.place_machine(*_COAL_SOURCE, int(Machine.PALLET), int(Direction.DOWN))
     builder.set_machine_inventory(
         _COAL_SOURCE[0], _COAL_SOURCE[1], int(ItemType.COAL), 50
     )
-    builder.place_machine(*_FEEDER_ARM, int(MachineType.ARM), _FEEDER_ARM_DIR)
-    builder.place_machine(
-        *_COAL_BELT, int(MachineType.CONVEYOR_BELT), int(Direction.UP)
-    )
-    builder.place_machine(
-        *_COAL_PALLET, int(MachineType.CONVEYOR_BELT), int(Direction.UP)
-    )
+    builder.place_machine(*_FEEDER_ARM, int(Machine.ARM), _FEEDER_ARM_DIR)
+    builder.place_machine(*_COAL_BELT, int(Machine.CONVEYOR_BELT), int(Direction.UP))
+    builder.place_machine(*_COAL_PALLET, int(Machine.CONVEYOR_BELT), int(Direction.UP))
 
     level = builder.build("factory_pipeline_bus_test")
     env_params = EnvParams(

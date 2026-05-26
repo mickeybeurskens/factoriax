@@ -10,7 +10,7 @@ import pytest
 from factoriax.constants import (
     NUM_ITEM_TYPES,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.rewards import (
     miner_output_reward,
@@ -124,7 +124,7 @@ class TestMinerOutputReward:
     ) -> None:
         """Ore increase in a miner's buffer produces reward."""
         mt = jnp.zeros((4, 4), dtype=jnp.int32)
-        mt = mt.at[0, 0].set(int(MachineType.MINER))
+        mt = mt.at[0, 0].set(int(Machine.MINER))
         prev = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=mt,
@@ -153,7 +153,7 @@ class TestPalletFillingReward:
     ) -> None:
         """Items deposited into a pallet produce positive reward."""
         mt = jnp.zeros((4, 4), dtype=jnp.int32)
-        mt = mt.at[1, 1].set(int(MachineType.PALLET))
+        mt = mt.at[1, 1].set(int(Machine.PALLET))
         prev = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=mt,

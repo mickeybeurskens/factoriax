@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, MachineType
+from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, Machine
 from factoriax.state import EnvState
 
 
@@ -178,7 +178,7 @@ def count_machines(state: EnvState, machine_type: int) -> jax.Array:
 
     Args:
         state: Current environment state
-        machine_type: MachineType to count
+        machine_type: Machine to count
 
     Returns:
         Count of machines of the specified type on the map
@@ -196,7 +196,7 @@ def _any_miner_has_output(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one miner output is non-empty.
     """
-    is_miner = state.ent_type == MachineType.MINER
+    is_miner = state.ent_type == Machine.MINER
     is_active = state.ent_y >= 0
     has_output = state.ent_buf_count > 0
     return jnp.any(is_miner & is_active & has_output)
@@ -211,7 +211,7 @@ def _any_pallet_has_items(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one pallet slot is non-empty.
     """
-    is_pallet = state.ent_type == MachineType.PALLET
+    is_pallet = state.ent_type == Machine.PALLET
     is_active = state.ent_y >= 0
     has_items = state.ent_buf_count > 0
     return jnp.any(is_pallet & is_active & has_items)
@@ -226,7 +226,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
     Returns:
         Scalar boolean — True if at least one assembler output is non-empty.
     """
-    is_asm = state.ent_type == MachineType.ASSEMBLER
+    is_asm = state.ent_type == Machine.ASSEMBLER
     is_active = state.ent_y >= 0
     has_output = state.ent_asm_out_count > 0
     return jnp.any(is_asm & is_active & has_output)
@@ -256,7 +256,7 @@ def core_game_conditions(state: EnvState) -> jax.Array:
         + state.items_mined[ItemType.COPPER_ORE]
     )
 
-    total_machines = jnp.sum(state.machine_types != MachineType.NONE)
+    total_machines = jnp.sum(state.machine_types != Machine.NONE)
 
     # Count machine items across all player inventories.
     machine_items_held = (
@@ -280,19 +280,19 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             # 5  Automated Mining — miner output slot non-empty
             _any_miner_has_output(state),
             # 6  Moving Parts — place a pallet
-            count_machines(state, MachineType.PALLET) >= 1,
+            count_machines(state, Machine.PALLET) >= 1,
             # 7  First Pipeline — any pallet holds items
             _any_pallet_has_items(state),
             # 8  Belt Network — place 5 belts
-            count_machines(state, MachineType.CONVEYOR_BELT) >= 5,
+            count_machines(state, Machine.CONVEYOR_BELT) >= 5,
             # 9  Scaling Up — 3 miners on the map
-            count_machines(state, MachineType.MINER) >= 3,
+            count_machines(state, Machine.MINER) >= 3,
             # 10 Industrialist — 10 machines total
             total_machines >= 10,
             # 11 Assembler Crafted — hold an assembler
             count_total_items(state, ItemType.ASSEMBLER) >= 1,
             # 12 Assembly Line — place an assembler
-            count_machines(state, MachineType.ASSEMBLER) >= 1,
+            count_machines(state, Machine.ASSEMBLER) >= 1,
             # 13 First Assembly — assembler output non-empty
             _any_assembler_has_output(state),
             # 14 Hull Production — placeholder (item removed, always False)
@@ -300,7 +300,7 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             # 15 Fuel Production — placeholder (item removed, always False)
             jnp.bool_(False),
             # 16 Rocket Complete — place a rocket on the map
-            count_machines(state, MachineType.ROCKET) >= 1,
+            count_machines(state, Machine.ROCKET) >= 1,
             # 17 First Science — hold any science pack
             (
                 count_total_items(state, ItemType.BASIC_SCIENCE_PACK)

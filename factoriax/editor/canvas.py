@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pygame
 
-from factoriax.constants import MachineType
+from factoriax.constants import Machine
 from factoriax.jax_renderer import (
     biter_icon_rgba,
     block_textures_rgba,
@@ -205,7 +205,7 @@ def render_canvas(
 
     machine_slice = es.machine_types[row0:row1, col0:col1]
     direction_slice = es.machine_directions[row0:row1, col0:col1]
-    mys, mxs = np.nonzero(machine_slice != int(MachineType.NONE))
+    mys, mxs = np.nonzero(machine_slice != int(Machine.NONE))
 
     machine_size = int(ts * 0.6)
     offset = (ts - machine_size) // 2

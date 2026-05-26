@@ -10,7 +10,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.game_logic import deposit_to_adjacent
 from factoriax.machines import run_assemblers
@@ -45,7 +45,7 @@ def _make_assembler_state(
     asm_out_count: int = 0,
     buf_type: int = 0,
     buf_count: int = 0,
-    machine_type: int = int(MachineType.ASSEMBLER),
+    machine_type: int = int(Machine.ASSEMBLER),
 ) -> EnvState:
     """Create a 3x3 world with a combiner (assembler or furnace) at (0, 0).
 
@@ -58,7 +58,7 @@ def _make_assembler_state(
         asm_out_count: Output item count.
         buf_type: Buffer item type.
         buf_count: Buffer item count.
-        machine_type: MachineType to place. Defaults to ASSEMBLER;
+        machine_type: Machine to place. Defaults to ASSEMBLER;
             use FURNACE for smelting-recipe tests.
 
     Returns:
@@ -66,7 +66,7 @@ def _make_assembler_state(
     """
     shape = (3, 3)
     world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-    mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
+    mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
     mt = mt.at[0, 0].set(machine_type)
 
     in_types = asm_in_type or [0, 0]
@@ -111,7 +111,7 @@ class TestAssemblerStartsCraft:
         """Iron plate recipe needs IRON_ORE + COAL; both consumed."""
         state = _make_assembler_state(
             state_factory,
-            machine_type=int(MachineType.FURNACE),
+            machine_type=int(Machine.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
             asm_in_count=[5, 3],
         )
@@ -142,7 +142,7 @@ class TestAssemblerStartsCraft:
         a single populated slot never fires."""
         state = _make_assembler_state(
             state_factory,
-            machine_type=int(MachineType.FURNACE),
+            machine_type=int(Machine.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), 0],
             asm_in_count=[5, 0],
         )
@@ -159,7 +159,7 @@ class TestAssemblerStartsCraft:
         recipe needs both slots populated."""
         state = _make_assembler_state(
             state_factory,
-            machine_type=int(MachineType.FURNACE),
+            machine_type=int(Machine.FURNACE),
             asm_in_type=[int(ItemType.LIMESTONE), int(ItemType.COAL)],
             asm_in_count=[1, 1],
         )
@@ -176,7 +176,7 @@ class TestAssemblerStartsCraft:
         coal-alone keeps the furnace idle."""
         state = _make_assembler_state(
             state_factory,
-            machine_type=int(MachineType.FURNACE),
+            machine_type=int(Machine.FURNACE),
             asm_in_type=[int(ItemType.COAL), 0],
             asm_in_count=[1, 0],
         )
@@ -190,7 +190,7 @@ class TestAssemblerStartsCraft:
         """Empty input slot means nothing to smelt."""
         state = _make_assembler_state(
             state_factory,
-            machine_type=int(MachineType.FURNACE),
+            machine_type=int(Machine.FURNACE),
             asm_in_type=[0, 0],
             asm_in_count=[0, 0],
         )
@@ -237,7 +237,7 @@ class TestAssemblerStallsOutputFull:
         withdraw builds naturally."""
         state = _make_assembler_state(
             state_factory,
-            machine_type=int(MachineType.FURNACE),
+            machine_type=int(Machine.FURNACE),
             asm_in_type=[int(ItemType.IRON_ORE), 0],
             asm_in_count=[5, 0],
             asm_out_type=int(ItemType.IRON_PLATE),
@@ -360,7 +360,7 @@ class TestAssemblerPlacementAndPickup:
     def test_assembler_exists_in_state(self, state_factory) -> None:
         """Placing an assembler sets the correct machine type."""
         state = _make_assembler_state(state_factory)
-        assert int(state.machine_types[0, 0]) == int(MachineType.ASSEMBLER)
+        assert int(state.machine_types[0, 0]) == int(Machine.ASSEMBLER)
 
     def test_progress_decrements(self, state_factory) -> None:
         """Power > 1 should decrement by 1 each tick."""

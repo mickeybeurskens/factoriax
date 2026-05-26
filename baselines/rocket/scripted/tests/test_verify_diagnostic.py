@@ -24,7 +24,7 @@ from baselines.rocket.scripted.goals import (
 from baselines.rocket.scripted.planner import Planner, VerifyDiagnostic
 from baselines.rocket.scripted.skills import Result
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, MachineType
+from factoriax.constants import Direction, Machine
 
 
 def _empty_view(size: int = 32) -> WorldView:
@@ -91,7 +91,7 @@ class TestPlaceMachineAtDetails:
 
     def test_details_reference_target_tile(self) -> None:
         view = _empty_view()
-        goal = PlaceMachineAt(MachineType.PALLET, (5, 6), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (5, 6), int(Direction.DOWN))
         text = goal.verify_failure_details(view)
         assert text is not None
         assert "(5, 6)" in text
@@ -105,7 +105,7 @@ class TestPlannerThreadsDetailsThrough:
     def test_planner_diagnostic_carries_details(self) -> None:
         view = _empty_view(size=8)
         # Plan asks for a pallet at (3, 3); empty world ensures verify fails.
-        goal = PlaceMachineAt(MachineType.PALLET, (3, 3), int(Direction.DOWN))
+        goal = PlaceMachineAt(Machine.PALLET, (3, 3), int(Direction.DOWN))
         # Force the goal to immediately report DONE so verify runs on the
         # first tick — bypass step's "machine count grew?" gate by
         # poking the start-count to 0.
@@ -129,7 +129,7 @@ class TestVerifyLayoutTruncation:
     def test_no_truncation_for_small_diff(self) -> None:
         view = _empty_view()
         expected = {
-            (i, 0): (int(MachineType.PALLET), int(Direction.DOWN)) for i in range(3)
+            (i, 0): (int(Machine.PALLET), int(Direction.DOWN)) for i in range(3)
         }
         goal = VerifyLayout(expected, label="small")
         text = goal.verify_failure_details(view)
@@ -141,7 +141,7 @@ class TestVerifyLayoutTruncation:
         view = _empty_view()
         n = _MAX_LAYOUT_MISMATCHES_RENDERED + 7
         expected = {
-            (i, 0): (int(MachineType.PALLET), int(Direction.DOWN)) for i in range(n)
+            (i, 0): (int(Machine.PALLET), int(Direction.DOWN)) for i in range(n)
         }
         goal = VerifyLayout(expected, label="big")
         text = goal.verify_failure_details(view)
@@ -169,7 +169,7 @@ def test_planner_format_round_trip(action: str) -> None:
     """``planner.verify_diagnostic.format()`` runs without error and
     produces a non-empty string for every action taken."""
     view = _empty_view()
-    expected = {(2, 2): (int(MachineType.PALLET), int(Direction.DOWN))}
+    expected = {(2, 2): (int(Machine.PALLET), int(Direction.DOWN))}
 
     # Subclass per-action so ``verify_failure_action`` is set as a
     # proper class variable rather than mutated on the instance.

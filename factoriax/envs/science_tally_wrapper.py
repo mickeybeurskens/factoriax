@@ -1,7 +1,7 @@
 """Gymnax wrapper that tallies science pack consumption across an episode.
 
 The engine's per-step ``EnvState.science_consumed_step`` is a transient
-delta — zero most steps, non-zero whenever a :class:`MachineType.SCIENCE_LAB`
+delta — zero most steps, non-zero whenever a :class:`Machine.SCIENCE_LAB`
 consumed packs this tick. This wrapper folds those deltas into a cumulative
 per-type total on a composite state so downstream reward functions,
 analyses, or achievements can ask "how much basic vs advanced science has

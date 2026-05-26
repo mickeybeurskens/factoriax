@@ -35,7 +35,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.recipes import NUM_RECIPES
@@ -44,7 +44,7 @@ from factoriax.recipes import NUM_RECIPES
 # Duplicated here so the decoder is self-contained and doesn't reach into
 # module-private names.
 _MAP_NORM: float = float(max(BlockType))
-_MACHINE_NORM: float = float(max(MachineType))
+_MACHINE_NORM: float = float(max(Machine))
 _DIR_NORM: float = 4.0
 _BUF_COUNT_NORM: float = 64.0
 # Slot counts on the 10-channel obs are normalized by a larger constant
@@ -146,7 +146,7 @@ class WorldView:
 
     Attributes:
         block_type: ``(H, W)`` int32, values from :class:`BlockType`.
-        machine_type: ``(H, W)`` int32, values from :class:`MachineType`.
+        machine_type: ``(H, W)`` int32, values from :class:`Machine`.
             ``NONE`` where no machine is placed.
         block_resources: ``(H, W)`` int32, ore remaining on each tile.
         slot0_type/slot0_count: ``(H, W)`` int32, input-A slot contents.
@@ -201,7 +201,7 @@ class WorldView:
 
     def tiles_with_machine(
         self,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
     ) -> list[tuple[int, int]]:
         """List of ``(x, y)`` tiles holding a machine of *machine_type*."""
         mask = self.machine_type == int(machine_type)
@@ -219,7 +219,7 @@ class WorldView:
 
     def total_machines(self) -> int:
         """Count placed machines of any type on the map."""
-        return int((self.machine_type != int(MachineType.NONE)).sum())
+        return int((self.machine_type != int(Machine.NONE)).sum())
 
     # ------------------------------------------------------------------
     # Graph queries
@@ -444,14 +444,14 @@ def _compute_walkable(block_type: np.ndarray, machine_type: np.ndarray) -> np.nd
     Water, out-of-bounds markers, and machine-occupied tiles are
     blocked. Belts are the one exception — the engine's
     :func:`factoriax.game_logic.is_position_walkable` treats
-    ``MachineType.CONVEYOR_BELT`` as walkable so items can flow
+    ``Machine.CONVEYOR_BELT`` as walkable so items can flow
     through tiles the agent later walks across, and the planner has
     to match that to plan paths through laid trunks. DIRT + ore tiles
     are walkable (the engine lets the player stand on ore; mining is
     the primary way it drops).
     """
-    blocked_machines = (machine_type != int(MachineType.NONE)) & (
-        machine_type != int(MachineType.CONVEYOR_BELT)
+    blocked_machines = (machine_type != int(Machine.NONE)) & (
+        machine_type != int(Machine.CONVEYOR_BELT)
     )
     blocked = (
         (block_type == int(BlockType.WATER))
@@ -561,6 +561,6 @@ def deposit_action(item: int | ItemType) -> int:
     return int(actions.ITEM_TO_DEPOSIT_ACTION[int(item)])
 
 
-def place_action(machine: int | MachineType) -> int:
+def place_action(machine: int | Machine) -> int:
     """``PLACE_<machine>`` action for the given placeable machine type."""
     return _MACHINE_TO_PLACE[int(machine)]

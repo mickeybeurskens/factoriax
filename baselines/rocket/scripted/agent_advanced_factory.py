@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBook
 from factoriax.state import EnvParams
 
@@ -84,8 +84,8 @@ _PRE_PLACED_FURNACE_TILE: tuple[int, int] = (15, 16)
 _PRE_PLACED_ASSEMBLER_TILE: tuple[int, int] = (17, 16)
 
 _PRE_PLACED_LAYOUT: dict[tuple[int, int], tuple[int, int]] = {
-    _PRE_PLACED_FURNACE_TILE: (int(MachineType.FURNACE), int(Direction.DOWN)),
-    _PRE_PLACED_ASSEMBLER_TILE: (int(MachineType.ASSEMBLER), int(Direction.DOWN)),
+    _PRE_PLACED_FURNACE_TILE: (int(Machine.FURNACE), int(Direction.DOWN)),
+    _PRE_PLACED_ASSEMBLER_TILE: (int(Machine.ASSEMBLER), int(Direction.DOWN)),
 }
 
 # ---------------------------------------------------------------------------
@@ -791,9 +791,9 @@ def _phase_0a(
     smelt_goals: list[Goal] = []
     craft_goals: list[Goal] = []
     for output_item, qty, machine_type in schedule:
-        if machine_type == int(MachineType.FURNACE):
+        if machine_type == int(Machine.FURNACE):
             smelt_goals.append(ProduceInFurnace(output_item, qty, book=book))
-        elif machine_type == int(MachineType.ASSEMBLER):
+        elif machine_type == int(Machine.ASSEMBLER):
             craft_goals.append(ProduceInAssembler(output_item, qty, book=book))
         # Other machine types are not produced via Phase 0a (e.g. recipes
         # gated to a specific cell). None of the rocket recipes use them
@@ -904,7 +904,7 @@ def _bus_pull_phase(
             # Plain ``ProduceInMachine`` picks the nearest machine,
             # which is brittle once the WIRE / FRAME / etc. cells
             # are on the map.
-            if int(machine_type) == int(MachineType.FURNACE):
+            if int(machine_type) == int(Machine.FURNACE):
                 goals.append(
                     ProduceInFurnaceAt(
                         _PRE_PLACED_FURNACE_TILE,
@@ -914,7 +914,7 @@ def _bus_pull_phase(
                         until_held=True,
                     )
                 )
-            elif int(machine_type) == int(MachineType.ASSEMBLER):
+            elif int(machine_type) == int(Machine.ASSEMBLER):
                 goals.append(
                     ProduceInAssemblerAt(
                         _PRE_PLACED_ASSEMBLER_TILE,
@@ -973,9 +973,7 @@ def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
     goals: list[Goal] = []
 
     for tile in spec.ore_belt_tiles:
-        goals.append(
-            PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, int(Direction.RIGHT))
-        )
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, int(Direction.RIGHT)))
     # Ore feeder is now a belt facing DOWN (south, into the furnace's
     # asm_in slot 0 via Phase 0's directional pull) instead of a
     # pallet — combiners no longer auto-pull from neighbouring
@@ -984,11 +982,11 @@ def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
     # pulls it south.
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.CONVEYOR_BELT, spec.ore_pallet_tile, int(Direction.DOWN)
+            Machine.CONVEYOR_BELT, spec.ore_pallet_tile, int(Direction.DOWN)
         )
     )
     goals.append(
-        PlaceMachineAt(MachineType.MINER, spec.ore_miner_tile, int(Direction.RIGHT))
+        PlaceMachineAt(Machine.MINER, spec.ore_miner_tile, int(Direction.RIGHT))
     )
     goals.extend(
         build_smelter_cell_at(
@@ -998,12 +996,10 @@ def _phase_1_cell_goals(spec: _SmelterCellSpec) -> list[Goal]:
         )
     )
     for tile in spec.coal_belt_tiles:
-        goals.append(
-            PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, int(Direction.RIGHT))
-        )
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, int(Direction.RIGHT)))
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.MINER, spec.coal_miner_tile, int(Direction.RIGHT)
+            Machine.MINER, spec.coal_miner_tile, int(Direction.RIGHT)
         )
     )
     return goals
@@ -1054,15 +1050,13 @@ def _phase_2_wire_goals() -> list[Goal]:
     )
 
     for tile, facing in _COPPER_PRE_SPLITTER_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
     goals.append(
-        PlaceMachineAt(
-            MachineType.SPLITTER, _COPPER_SPLITTER_TILE, int(Direction.RIGHT)
-        )
+        PlaceMachineAt(Machine.SPLITTER, _COPPER_SPLITTER_TILE, int(Direction.RIGHT))
     )
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.ARM, _COPPER_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+            Machine.ARM, _COPPER_EXTRACT_ARM_TILE, int(Direction.RIGHT)
         )
     )
 
@@ -1070,16 +1064,14 @@ def _phase_2_wire_goals() -> list[Goal]:
     # splitter (11, 15) RIGHT so each stand tile stays dirt or a
     # prior walkable belt.
     for tile, facing in reversed(_TIN_TO_WIRE_BELTS):
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # Tin extractor arm at (10, 16) RIGHT — placed *before* the
     # splitter so the from-back stand tile (11, 16) is still dirt.
     # If the splitter went first, both (10, 16) and (11, 16) would
     # be non-walkable for any subsequent placement here.
     goals.append(
-        PlaceMachineFromBackAt(
-            MachineType.ARM, _TIN_EXTRACT_ARM_TILE, int(Direction.RIGHT)
-        )
+        PlaceMachineFromBackAt(Machine.ARM, _TIN_EXTRACT_ARM_TILE, int(Direction.RIGHT))
     )
 
     # Tin splitter — both natural stand tiles ((10, 16) is the arm,
@@ -1088,7 +1080,7 @@ def _phase_2_wire_goals() -> list[Goal]:
     # facing, same I/O), then ROTATE_RIGHT to settle at facing=RIGHT.
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.SPLITTER, _TIN_SPLITTER_TILE, int(Direction.RIGHT)
+            Machine.SPLITTER, _TIN_SPLITTER_TILE, int(Direction.RIGHT)
         )
     )
     return goals
@@ -1135,15 +1127,15 @@ def _phase_3_frame_goals() -> list[Goal]:
     )
 
     for tile, facing in _IRON_TO_FRAME_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.ARM, _IRON_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+            Machine.ARM, _IRON_EXTRACT_ARM_TILE, int(Direction.RIGHT)
         )
     )
 
     for tile, facing in _TIN_TO_FRAME_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
     return goals
 
 
@@ -1191,24 +1183,22 @@ def _phase_3_circuit_goals() -> list[Goal]:
     )
 
     for tile, facing in _COPPER_TO_CIRCUIT_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     for tile, facing in _WAFER_POST_CROSSING_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # CROSSING dir=1: vertical N->S (tin) + horizontal W->E (wafer).
     # PlaceMachineAt navigates to target - unit(facing); facing=1
     # (LEFT) means stand = (12, 17), which is the wafer post-crossing
     # belt placed above.
-    goals.append(PlaceMachineAt(MachineType.CROSSING, _WAFER_CROSSING_TILE, 1))
+    goals.append(PlaceMachineAt(Machine.CROSSING, _WAFER_CROSSING_TILE, 1))
 
     for tile, facing in _WAFER_PRE_CROSSING_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     goals.append(
-        PlaceMachineFromBackAt(
-            MachineType.ARM, _WAFER_EXTRACT_ARM_TILE, int(Direction.UP)
-        )
+        PlaceMachineFromBackAt(Machine.ARM, _WAFER_EXTRACT_ARM_TILE, int(Direction.UP))
     )
     return goals
 
@@ -1257,21 +1247,21 @@ def _phase_3_motor_goals() -> list[Goal]:
     )
 
     for tile, facing in _WIRE_TO_MOTOR_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # CROSSING dir=1: vertical N->S (iron) + horizontal W->E (wire).
     # Stand = (20, 12) belt placed above.
-    goals.append(PlaceMachineAt(MachineType.CROSSING, _WIRE_IRON_CROSSING_TILE, 1))
+    goals.append(PlaceMachineAt(Machine.CROSSING, _WIRE_IRON_CROSSING_TILE, 1))
 
     for tile, facing in _WIRE_TO_MOTOR_MID_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # CROSSING dir=1: vertical N->S (CIRCUIT-bound copper) +
     # horizontal W->E (wire). Stand = (17, 12) belt placed above.
-    goals.append(PlaceMachineAt(MachineType.CROSSING, _WIRE_COPPER_CROSSING_TILE, 1))
+    goals.append(PlaceMachineAt(Machine.CROSSING, _WIRE_COPPER_CROSSING_TILE, 1))
 
     for tile, facing in _WIRE_TO_MOTOR_TAIL_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # WIRE extractor's natural stand tile (15, 14) is the WIRE output
     # PALLET (non-walkable), so it goes via from-back: stand on the
@@ -1280,13 +1270,11 @@ def _phase_3_motor_goals() -> list[Goal]:
     # (15, 14) PALLET (south, behind) and pushes onto (15, 12) belt
     # (north, front).
     goals.append(
-        PlaceMachineFromBackAt(
-            MachineType.ARM, _WIRE_EXTRACT_ARM_TILE, int(Direction.UP)
-        )
+        PlaceMachineFromBackAt(Machine.ARM, _WIRE_EXTRACT_ARM_TILE, int(Direction.UP))
     )
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.ARM, _FRAME_EXTRACT_ARM_TILE, int(Direction.RIGHT)
+            Machine.ARM, _FRAME_EXTRACT_ARM_TILE, int(Direction.RIGHT)
         )
     )
     return goals
@@ -1341,29 +1329,29 @@ def _phase_3_sensor_goals() -> list[Goal]:
     )
 
     for tile, facing in _WIRE_TO_SENSOR_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # WIRE SPLITTER — horizontal facing RIGHT outputs UP and DOWN.
     # DOWN feeds the existing MOTOR-bound col-24 trunk; UP feeds
     # the SENSOR-bound row-11 corridor placed above.
     goals.append(
-        PlaceMachineAt(MachineType.SPLITTER, _WIRE_SPLITTER_TILE, int(Direction.RIGHT))
+        PlaceMachineAt(Machine.SPLITTER, _WIRE_SPLITTER_TILE, int(Direction.RIGHT))
     )
 
     for tile, facing in _CIRCUIT_TO_SENSOR_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # CROSSING dir=1: vertical N->S (wire) + horizontal W->E (CIRCUIT).
-    goals.append(PlaceMachineAt(MachineType.CROSSING, _CIRCUIT_WIRE_CROSSING_TILE, 1))
+    goals.append(PlaceMachineAt(Machine.CROSSING, _CIRCUIT_WIRE_CROSSING_TILE, 1))
 
     for tile, facing in _CIRCUIT_TO_SENSOR_MID_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # CROSSING dir=1: vertical N->S (iron) + horizontal W->E (CIRCUIT).
-    goals.append(PlaceMachineAt(MachineType.CROSSING, _CIRCUIT_IRON_CROSSING_TILE, 1))
+    goals.append(PlaceMachineAt(Machine.CROSSING, _CIRCUIT_IRON_CROSSING_TILE, 1))
 
     for tile, facing in _CIRCUIT_TO_SENSOR_TAIL_BELTS:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, facing))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, facing))
 
     # CIRCUIT extractor arm at (18, 19) facing DOWN — natural stand
     # tile (18, 18) is the CIRCUIT output PALLET, so go from-back:
@@ -1371,7 +1359,7 @@ def _phase_3_sensor_goals() -> list[Goal]:
     # inheriting UP, then ROTATE to DOWN.
     goals.append(
         PlaceMachineFromBackAt(
-            MachineType.ARM, _CIRCUIT_EXTRACT_ARM_TILE, int(Direction.DOWN)
+            Machine.ARM, _CIRCUIT_EXTRACT_ARM_TILE, int(Direction.DOWN)
         )
     )
     return goals

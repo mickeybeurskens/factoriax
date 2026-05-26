@@ -17,7 +17,7 @@ from factoriax.constants import (
     Action,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs import FactoriaXEnv
 from factoriax.levels import build_state
@@ -119,8 +119,8 @@ def test_decode_machine_type_round_trip(
     expected = np.asarray(rocket_initial_state.machine_types)
     np.testing.assert_array_equal(view.machine_type, expected)
     # Rocket level pre-places exactly one furnace and one assembler.
-    assert int((view.machine_type == int(MachineType.FURNACE)).sum()) == 1
-    assert int((view.machine_type == int(MachineType.ASSEMBLER)).sum()) == 1
+    assert int((view.machine_type == int(Machine.FURNACE)).sum()) == 1
+    assert int((view.machine_type == int(Machine.ASSEMBLER)).sum()) == 1
 
 
 def test_decode_block_resources_round_trip(
@@ -349,8 +349,8 @@ def test_deposit_action_matches_enum() -> None:
 
 
 def test_place_action_matches_enum() -> None:
-    assert wm.place_action(MachineType.MINER) == int(Action.PLACE_MINER)
-    assert wm.place_action(MachineType.ROCKET) == int(Action.PLACE_ROCKET)
+    assert wm.place_action(Machine.MINER) == int(Action.PLACE_MINER)
+    assert wm.place_action(Machine.ROCKET) == int(Action.PLACE_ROCKET)
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ def test_fresh_state_has_zero_slots_and_direction(
         assert int(grid.sum()) == 0, f"{name} non-zero on fresh level"
     # Pre-placed furnace/assembler use direction UP by default (non-zero
     # allowed); but NONE tiles must stay at 0.
-    none_mask = view.machine_type == int(MachineType.NONE)
+    none_mask = view.machine_type == int(Machine.NONE)
     assert int(view.machine_direction[none_mask].sum()) == 0
 
 

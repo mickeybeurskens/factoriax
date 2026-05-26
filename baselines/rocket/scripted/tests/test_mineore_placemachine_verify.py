@@ -17,7 +17,7 @@ import pytest
 
 from baselines.rocket.scripted.goals import MineOre, PlaceMachine
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _view_with_inventory(item: int, count: int) -> WorldView:
@@ -100,31 +100,29 @@ class TestPlaceMachineVerify:
     def test_action_is_halt(self) -> None:
         # Use a dummy predicate; verify_failure_action is class-level.
         predicate = lambda _v: None  # noqa: E731
-        assert (
-            PlaceMachine(MachineType.MINER, predicate).verify_failure_action == "halt"
-        )
+        assert PlaceMachine(Machine.MINER, predicate).verify_failure_action == "halt"
 
     def test_returns_false_before_step_runs(self) -> None:
         """Without a baseline (step never ran), verify must return False."""
         predicate = lambda _v: None  # noqa: E731
-        goal = PlaceMachine(MachineType.MINER, predicate)
-        view = _view_with_machine(int(MachineType.MINER), 0, 0)
+        goal = PlaceMachine(Machine.MINER, predicate)
+        view = _view_with_machine(int(Machine.MINER), 0, 0)
         assert goal.verify(view) is False
 
     def test_passes_when_typed_count_grew(self) -> None:
         """Set baseline manually, then verify against a view with one more."""
         predicate = lambda _v: None  # noqa: E731
-        goal = PlaceMachine(MachineType.MINER, predicate)
+        goal = PlaceMachine(Machine.MINER, predicate)
         goal._start_typed_count = 0
-        view = _view_with_machine(int(MachineType.MINER), 1, 1)
+        view = _view_with_machine(int(Machine.MINER), 1, 1)
         assert goal.verify(view) is True
 
     def test_fails_when_typed_count_unchanged(self) -> None:
         predicate = lambda _v: None  # noqa: E731
-        goal = PlaceMachine(MachineType.MINER, predicate)
+        goal = PlaceMachine(Machine.MINER, predicate)
         goal._start_typed_count = 1
         # View has only one MINER; 1 > 1 is False.
-        view = _view_with_machine(int(MachineType.MINER), 1, 1)
+        view = _view_with_machine(int(Machine.MINER), 1, 1)
         assert goal.verify(view) is False
 
     def test_fails_when_other_type_grew(self) -> None:
@@ -132,19 +130,19 @@ class TestPlaceMachineVerify:
         machine, but verify is per-type, so a placement that landed
         as PALLET when MINER was requested still trips verify."""
         predicate = lambda _v: None  # noqa: E731
-        goal = PlaceMachine(MachineType.MINER, predicate)
+        goal = PlaceMachine(Machine.MINER, predicate)
         goal._start_typed_count = 0
         # Wrong type present.
-        view = _view_with_machine(int(MachineType.PALLET), 1, 1)
+        view = _view_with_machine(int(Machine.PALLET), 1, 1)
         assert goal.verify(view) is False
 
 
 @pytest.mark.parametrize(
     "machine_type",
-    [MachineType.MINER, MachineType.PALLET, MachineType.ARM, MachineType.FURNACE],
+    [Machine.MINER, Machine.PALLET, Machine.ARM, Machine.FURNACE],
 )
 def test_place_machine_verify_works_for_all_types(
-    machine_type: MachineType,
+    machine_type: Machine,
 ) -> None:
     """Smoke test: verify across machine types."""
     predicate = lambda _v: None  # noqa: E731

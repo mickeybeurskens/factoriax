@@ -16,7 +16,7 @@ from baselines.easy_rocket.scripted.skills import (
     step_toward_adjacent,
     step_toward_tile,
 )
-from factoriax.constants import Action, BlockType, Direction, ItemType, MachineType
+from factoriax.constants import Action, BlockType, Direction, ItemType, Machine
 
 
 def test_is_adjacent() -> None:
@@ -64,7 +64,7 @@ def test_step_toward_tile_straight_line(make_state) -> None:
 def test_step_toward_tile_routes_around_machine(make_state) -> None:
     # A non-belt machine at (1, 0) blocks the direct path east; the
     # BFS must detour (down or up) rather than walk into it.
-    machines = [(1, 0, int(MachineType.ASSEMBLER), 0, 0, 0)]
+    machines = [(1, 0, int(Machine.ASSEMBLER), 0, 0, 0)]
     state = make_state(_dirt(), machines=machines, player_position=(0, 0))
     action = step_toward_tile(state, 3, 0)
     assert action != int(Action.RIGHT)

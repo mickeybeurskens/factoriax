@@ -194,24 +194,24 @@ class TestCraftMinerLevel:
 
     def test_has_one_pallet(self) -> None:
         """Each level pre-places exactly one pallet."""
-        from factoriax.constants import MachineType
+        from factoriax.constants import Machine
 
         for seed in range(20):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.machine_types is not None
-            pallet_count = int((level.machine_types == int(MachineType.PALLET)).sum())
+            pallet_count = int((level.machine_types == int(Machine.PALLET)).sum())
             assert pallet_count == 1, f"seed={seed}: {pallet_count} pallets (want 1)"
 
     def test_pallet_holds_complementary_ingredient(self) -> None:
         """The pallet holds whichever of IRON_PLATE/WIRE the player doesn't have."""
-        from factoriax.constants import MachineType
+        from factoriax.constants import Machine
 
         for seed in range(10):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.machine_types is not None
             assert level.machine_inventory is not None
             assert level.player_inventory is not None
-            ys, xs = np.where(level.machine_types == int(MachineType.PALLET))
+            ys, xs = np.where(level.machine_types == int(Machine.PALLET))
             assert len(xs) == 1
             x, y = int(xs[0]), int(ys[0])
             pallet_items = {
@@ -247,13 +247,13 @@ class TestCraftMinerLevel:
 
     def test_pallet_position_varies_with_seed(self) -> None:
         """Different seeds produce distinct pallet positions."""
-        from factoriax.constants import MachineType
+        from factoriax.constants import Machine
 
         positions: set[tuple[int, int]] = set()
         for seed in range(20):
             level, _, _ = build_craft_miner_level(seed=seed)
             assert level.machine_types is not None
-            ys, xs = np.where(level.machine_types == int(MachineType.PALLET))
+            ys, xs = np.where(level.machine_types == int(Machine.PALLET))
             positions.add((int(xs[0]), int(ys[0])))
         assert len(positions) >= 4
 

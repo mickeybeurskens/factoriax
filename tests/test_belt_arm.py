@@ -13,7 +13,7 @@ import jax.numpy as jnp
 from factoriax.constants import (
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.machines import run_arms, run_conveyor_belts
 from factoriax.state import EnvParams
@@ -78,7 +78,7 @@ def _make_state(
         Configured EnvState.
     """
     shape = machine_types.shape
-    n_entities = int((machine_types != int(MachineType.NONE)).sum())
+    n_entities = int((machine_types != int(Machine.NONE)).sum())
     return state_factory(
         world_map=jnp.zeros(shape, dtype=jnp.int32),
         machine_types=machine_types,
@@ -110,7 +110,7 @@ def _get_buf(state, y: int, x: int) -> tuple[int, int]:
 # Conveyor belt tests
 # ---------------------------------------------------------------------------
 
-B = MachineType.CONVEYOR_BELT
+B = Machine.CONVEYOR_BELT
 R = int(Direction.RIGHT)
 D = int(Direction.DOWN)
 
@@ -167,7 +167,7 @@ class TestConveyorBelt:
 
     def test_does_not_push_to_empty_tile(self, state_factory) -> None:
         """Belt facing an empty tile does not transfer items."""
-        types = jnp.array([[B, MachineType.NONE]])
+        types = jnp.array([[B, Machine.NONE]])
         dirs = jnp.array([[R, _NOOP]])
         bt, bc = _buf_grids((1, 2), {(0, 0): (ItemType.COAL, 2)})
         state = _make_state(
@@ -262,7 +262,7 @@ class TestArm:
     def test_transfers_from_miner_to_belt(self, state_factory) -> None:
         """Arm transfers 1 item from miner behind to belt in front."""
         # [MINER, ARM(RIGHT), BELT]
-        types = jnp.array([[MachineType.MINER, MachineType.ARM, B]])
+        types = jnp.array([[Machine.MINER, Machine.ARM, B]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.COAL, 5)})
         state = _make_state(
@@ -282,7 +282,7 @@ class TestArm:
     def test_deposits_to_pallet(self, state_factory) -> None:
         """Arm transfers 1 item from belt behind to pallet in front."""
         # [BELT, ARM(RIGHT), PALLET]
-        types = jnp.array([[B, MachineType.ARM, MachineType.PALLET]])
+        types = jnp.array([[B, Machine.ARM, Machine.PALLET]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.IRON_ORE, 3)})
         state = _make_state(
@@ -302,7 +302,7 @@ class TestArm:
     def test_merges_same_item_into_destination(self, state_factory) -> None:
         """Arm merges item into destination holding the same type."""
         # [MINER, ARM(RIGHT), PALLET with existing COAL]
-        types = jnp.array([[MachineType.MINER, MachineType.ARM, MachineType.PALLET]])
+        types = jnp.array([[Machine.MINER, Machine.ARM, Machine.PALLET]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         bt, bc = _buf_grids(
             (1, 3),
@@ -328,7 +328,7 @@ class TestArm:
     def test_noop_when_dest_full(self, state_factory) -> None:
         """Arm does nothing when destination is at max stack."""
         # [MINER, ARM(RIGHT), BELT at max]
-        types = jnp.array([[MachineType.MINER, MachineType.ARM, B]])
+        types = jnp.array([[Machine.MINER, Machine.ARM, B]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         bt, bc = _buf_grids(
             (1, 3),
@@ -353,7 +353,7 @@ class TestArm:
     def test_noop_when_source_empty(self, state_factory) -> None:
         """Arm with empty source does nothing."""
         # [empty MINER, ARM(RIGHT), BELT]
-        types = jnp.array([[MachineType.MINER, MachineType.ARM, B]])
+        types = jnp.array([[Machine.MINER, Machine.ARM, B]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         state = _make_state(
             state_factory,
@@ -367,7 +367,7 @@ class TestArm:
     def test_noop_when_no_dest_entity(self, state_factory) -> None:
         """Arm facing into empty tile does nothing."""
         # [MINER, ARM(RIGHT), NONE]
-        types = jnp.array([[MachineType.MINER, MachineType.ARM, MachineType.NONE]])
+        types = jnp.array([[Machine.MINER, Machine.ARM, Machine.NONE]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.COAL, 3)})
         state = _make_state(
@@ -392,7 +392,7 @@ class TestArm:
         buffers to be zeroed in the same tick.
         """
         # [PALLET, ARM(RIGHT), BELT]
-        types = jnp.array([[MachineType.PALLET, MachineType.ARM, B]])
+        types = jnp.array([[Machine.PALLET, Machine.ARM, B]])
         dirs = jnp.array([[_NOOP, R, _NOOP]])
         bt, bc = _buf_grids(
             (1, 3),

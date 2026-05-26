@@ -15,7 +15,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.editor.state import editor_state_from_level, editor_state_to_level
 from factoriax.levels import Level
@@ -36,9 +36,9 @@ def _make_fully_populated_level() -> Level:
     block_resources[0, 0] = 100
     block_resources[1, 2] = 50
 
-    machine_types = np.full((h, w), int(MachineType.NONE), dtype=np.int32)
-    machine_types[2, 3] = int(MachineType.PALLET)
-    machine_types[3, 1] = int(MachineType.ASSEMBLER)
+    machine_types = np.full((h, w), int(Machine.NONE), dtype=np.int32)
+    machine_types[2, 3] = int(Machine.PALLET)
+    machine_types[3, 1] = int(Machine.ASSEMBLER)
 
     machine_directions = np.zeros((h, w), dtype=np.int32)
     machine_directions[2, 3] = int(Direction.RIGHT)

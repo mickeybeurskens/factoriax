@@ -14,7 +14,7 @@ import pygame
 from factoriax.constants import (
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
     SlotRole,
 )
 from factoriax.machine_spec import MACHINE_SLOT_ROLES
@@ -58,14 +58,12 @@ BLOCK_ITEMS: list[tuple[int, str]] = [
 
 MACHINE_ITEMS: list[tuple[int, str]] = [
     (int(m), MACHINE_TYPE_NAMES.get(int(m), m.name.capitalize()))
-    for m in MachineType
-    if m != MachineType.NONE
+    for m in Machine
+    if m != Machine.NONE
 ]
 
 MACHINE_TO_ITEM_MAP: dict[int, int] = {
-    int(mt): int(MACHINE_TO_ITEM_ARRAY[int(mt)])
-    for mt in MachineType
-    if mt != MachineType.NONE
+    int(mt): int(MACHINE_TO_ITEM_ARRAY[int(mt)]) for mt in Machine if mt != Machine.NONE
 }
 
 
@@ -147,7 +145,7 @@ def render_toolbar(
     Args:
         selected_tool: Active tool name (``"paint"``, ``"fill"``, ``"erase"``).
         selected_block: Active ``BlockType`` value.
-        selected_machine: Active ``MachineType`` value, or 0 for none.
+        selected_machine: Active ``Machine`` value, or 0 for none.
         direction: Current machine placement direction.
         resource_brush: :class:`~factoriax.editor.state.ResourceBrush`.
         height: Available height for the toolbar in pixels.
@@ -565,7 +563,7 @@ def get_palette_items_for_machine_slot(
     value.
 
     Args:
-        machine_type: ``MachineType`` integer value.
+        machine_type: ``Machine`` integer value.
         slot_idx: Zero-based slot index within the machine.
 
     Returns:

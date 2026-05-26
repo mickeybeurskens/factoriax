@@ -17,7 +17,7 @@ from factoriax import (
 from factoriax.constants import (
     NUM_ACTIONS,
     SOLID_BLOCKS,
-    MachineType,
+    Machine,
 )
 from factoriax.game_logic import (
     get_block_at,
@@ -192,7 +192,7 @@ class TestGameLogic:
             dtype=jnp.int32,
         )
         machine_types = jnp.array(
-            [[MachineType.NONE, MachineType.CONVEYOR_BELT, MachineType.MINER]],
+            [[Machine.NONE, Machine.CONVEYOR_BELT, Machine.MINER]],
             dtype=jnp.int32,
         )
         state = state_factory(

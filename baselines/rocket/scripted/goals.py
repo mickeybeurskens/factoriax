@@ -25,7 +25,7 @@ from typing import ClassVar, Literal
 import numpy as np
 
 from factoriax import actions
-from factoriax.constants import Action, Direction, ItemType, MachineType
+from factoriax.constants import Action, Direction, ItemType, Machine
 from factoriax.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
 
 from .skills import (
@@ -368,7 +368,7 @@ class PlaceMachine(Goal):
 
     def __init__(
         self,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
         predicate: LocationPredicate,
     ) -> None:
         self.machine_type = int(machine_type)
@@ -428,7 +428,7 @@ class PlaceMachineAt(Goal):
 
     def __init__(
         self,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
         target: tuple[int, int],
         facing: int,
     ) -> None:
@@ -485,13 +485,13 @@ class PlaceMachineAt(Goal):
         x, y = self.target
         observed_mt = int(view.machine_type[y, x])
         observed_dir = int(view.machine_direction[y, x])
-        observed_mt_name = MachineType(observed_mt).name
+        observed_mt_name = Machine(observed_mt).name
         # Direction starts at 1; treat 0 as "no direction" rather than
         # tripping a ValueError on the enum lookup.
         observed_dir_name = (
             Direction(observed_dir).name if observed_dir != 0 else "NONE"
         )
-        expected_mt_name = MachineType(self.machine_type).name
+        expected_mt_name = Machine(self.machine_type).name
         expected_dir_name = Direction(self.facing).name if self.facing != 0 else "NONE"
         return (
             f"  expected: tile {self.target} -> "
@@ -501,7 +501,7 @@ class PlaceMachineAt(Goal):
         )
 
     def __repr__(self) -> str:
-        mt_name = MachineType(self.machine_type).name
+        mt_name = Machine(self.machine_type).name
         dir_name = Direction(self.facing).name
         return f"PlaceMachineAt({mt_name}, {self.target}, {dir_name})"
 
@@ -541,7 +541,7 @@ class PlaceMachineFromBackAt(Goal):
 
     def __init__(
         self,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
         target: tuple[int, int],
         facing: int,
     ) -> None:
@@ -593,11 +593,11 @@ class PlaceMachineFromBackAt(Goal):
         x, y = self.target
         observed_mt = int(view.machine_type[y, x])
         observed_dir = int(view.machine_direction[y, x])
-        observed_mt_name = MachineType(observed_mt).name
+        observed_mt_name = Machine(observed_mt).name
         observed_dir_name = (
             Direction(observed_dir).name if observed_dir != 0 else "NONE"
         )
-        expected_mt_name = MachineType(self.machine_type).name
+        expected_mt_name = Machine(self.machine_type).name
         expected_dir_name = Direction(self.facing).name if self.facing != 0 else "NONE"
         return (
             f"  expected: tile {self.target} -> "
@@ -607,7 +607,7 @@ class PlaceMachineFromBackAt(Goal):
         )
 
     def __repr__(self) -> str:
-        mt_name = MachineType(self.machine_type).name
+        mt_name = Machine(self.machine_type).name
         dir_name = Direction(self.facing).name
         return f"PlaceMachineFromBackAt({mt_name}, {self.target}, {dir_name})"
 
@@ -938,11 +938,11 @@ def place_belt_network(
         kind, payload = tile_kind[tile]
         if kind == "BELT":
             goals.append(
-                PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, payload),
+                PlaceMachineAt(Machine.CONVEYOR_BELT, tile, payload),
             )
         else:
             goals.append(
-                PlaceMachineAt(MachineType.CROSSING, tile, payload),
+                PlaceMachineAt(Machine.CROSSING, tile, payload),
             )
     return goals
 
@@ -971,9 +971,9 @@ def belt_network_inventory(paths: list[BeltPath]) -> dict[int, int]:
     n_crossings = 0
     for goal in goals:
         assert isinstance(goal, PlaceMachineAt)
-        if goal.machine_type == int(MachineType.CONVEYOR_BELT):
+        if goal.machine_type == int(Machine.CONVEYOR_BELT):
             n_belts += 1
-        elif goal.machine_type == int(MachineType.CROSSING):
+        elif goal.machine_type == int(Machine.CROSSING):
             n_crossings += 1
     cost: dict[int, int] = {}
     if n_belts:
@@ -1074,7 +1074,7 @@ def place_belt_path(
             direction = Direction.UP
         goals.append(
             PlaceMachineAt(
-                MachineType.CONVEYOR_BELT,
+                Machine.CONVEYOR_BELT,
                 tile,
                 int(direction),
             ),
@@ -1399,7 +1399,7 @@ def build_smelter_cell_at(
     # pushes UP into the furnace.
     goals: list[Goal] = [
         PlaceMachineAt(
-            MachineType.CONVEYOR_BELT,
+            Machine.CONVEYOR_BELT,
             coal_buffer_tile,
             int(Direction.UP),
         ),
@@ -1415,7 +1415,7 @@ def build_smelter_cell_at(
         # which is dirt at place time.
         goals.append(
             PlaceMachineAt(
-                MachineType.PALLET,
+                Machine.PALLET,
                 manual_stash_tile,
                 int(Direction.DOWN),
             ),
@@ -1423,14 +1423,14 @@ def build_smelter_cell_at(
         if automation_belt:
             goals.append(
                 PlaceMachineAt(
-                    MachineType.CONVEYOR_BELT,
+                    Machine.CONVEYOR_BELT,
                     automation_belt_tile,
                     int(Direction.DOWN),
                 ),
             )
         goals.append(
             PlaceMachineAt(
-                MachineType.SPLITTER,
+                Machine.SPLITTER,
                 plate_bus_tile,
                 facing,
             ),
@@ -1441,22 +1441,22 @@ def build_smelter_cell_at(
             # the bus's eventual location, currently dirt.
             goals.append(
                 PlaceMachineAt(
-                    MachineType.ARM,
+                    Machine.ARM,
                     extractor_tile,
                     int(extract_facing),
                 ),
             )
         goals.append(
             PlaceMachineAt(
-                MachineType.PALLET,
+                Machine.PALLET,
                 plate_bus_tile,
                 int(Direction.DOWN),
             ),
         )
     goals.extend(
         [
-            PlaceMachineAt(MachineType.ARM, arm_tile, facing),
-            PlaceMachineAt(MachineType.FURNACE, furnace_tile, facing),
+            PlaceMachineAt(Machine.ARM, arm_tile, facing),
+            PlaceMachineAt(Machine.FURNACE, furnace_tile, facing),
         ]
     )
     return goals
@@ -1587,7 +1587,7 @@ def build_assembler_module_at(
 
     goals: list[Goal] = [
         PlaceMachineAt(
-            MachineType.PALLET,
+            Machine.PALLET,
             output_tile,
             int(Direction.DOWN),
         ),
@@ -1599,7 +1599,7 @@ def build_assembler_module_at(
         # in the assembler's iteration scanning west.
         goals.append(
             PlaceMachineAt(
-                MachineType.CONVEYOR_BELT,
+                Machine.CONVEYOR_BELT,
                 input_b_tile,
                 int(Direction.RIGHT),
             ),
@@ -1607,19 +1607,19 @@ def build_assembler_module_at(
     goals.extend(
         [
             PlaceMachineAt(
-                MachineType.ARM,
+                Machine.ARM,
                 arm_tile,
                 int(Direction.RIGHT),
             ),
             PlaceMachineAt(
-                MachineType.ASSEMBLER,
+                Machine.ASSEMBLER,
                 center_tile,
                 int(Direction.DOWN),
             ),
             # Feeder belt facing DOWN (south) — same Phase 0 pull
             # rationale as input_b above (just rotated).
             PlaceMachineAt(
-                MachineType.CONVEYOR_BELT,
+                Machine.CONVEYOR_BELT,
                 input_a_tile,
                 int(Direction.DOWN),
             ),
@@ -1804,9 +1804,9 @@ def build_inter_cell_chain(
                     f"with an occupied tile"
                 )
 
-    goals: list[Goal] = [PlaceMachineAt(MachineType.ARM, arm_tile, direction)]
+    goals: list[Goal] = [PlaceMachineAt(Machine.ARM, arm_tile, direction)]
     for tile in belt_tiles:
-        goals.append(PlaceMachineAt(MachineType.CONVEYOR_BELT, tile, direction))
+        goals.append(PlaceMachineAt(Machine.CONVEYOR_BELT, tile, direction))
     return goals
 
 
@@ -1935,9 +1935,9 @@ def place_ore_node(
     goals: list[Goal] = []
     if with_pallet:
         goals.append(
-            PlaceMachineAt(MachineType.PALLET, pallet_tile, direction),
+            PlaceMachineAt(Machine.PALLET, pallet_tile, direction),
         )
-    goals.append(PlaceMachineAt(MachineType.MINER, miner_tile, direction))
+    goals.append(PlaceMachineAt(Machine.MINER, miner_tile, direction))
     return goals
 
 
@@ -2106,15 +2106,15 @@ def coal_feed_inventory(
 def _machine_to_item(machine_type: int) -> int:
     """Item type corresponding to a placeable machine."""
     return {
-        int(MachineType.MINER): int(ItemType.MINER),
-        int(MachineType.PALLET): int(ItemType.PALLET),
-        int(MachineType.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
-        int(MachineType.ASSEMBLER): int(ItemType.ASSEMBLER),
-        int(MachineType.ARM): int(ItemType.ARM),
-        int(MachineType.ROCKET): int(ItemType.ROCKET),
-        int(MachineType.FURNACE): int(ItemType.FURNACE),
-        int(MachineType.SPLITTER): int(ItemType.SPLITTER),
-        int(MachineType.CROSSING): int(ItemType.CROSSING),
+        int(Machine.MINER): int(ItemType.MINER),
+        int(Machine.PALLET): int(ItemType.PALLET),
+        int(Machine.CONVEYOR_BELT): int(ItemType.CONVEYOR_BELT),
+        int(Machine.ASSEMBLER): int(ItemType.ASSEMBLER),
+        int(Machine.ARM): int(ItemType.ARM),
+        int(Machine.ROCKET): int(ItemType.ROCKET),
+        int(Machine.FURNACE): int(ItemType.FURNACE),
+        int(Machine.SPLITTER): int(ItemType.SPLITTER),
+        int(Machine.CROSSING): int(ItemType.CROSSING),
     }[machine_type]
 
 
@@ -2135,7 +2135,7 @@ class DepositInto(Goal):
 
     def __init__(
         self,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
         item_type: int | ItemType,
     ) -> None:
         self.machine_type = int(machine_type)
@@ -2220,7 +2220,7 @@ class DepositIntoAt(Goal):
 
     def step(self, view: WorldView) -> StepReturn:
         x, y = self.tile
-        if view.machine_type[y, x] != int(MachineType.PALLET):
+        if view.machine_type[y, x] != int(Machine.PALLET):
             return Result.FAIL, None
 
         current_inv = view.player.held(self.item_type)
@@ -2368,7 +2368,7 @@ class VerifyLayout(Goal):
 class WithdrawUntilHeld(Goal):
     """Withdraw from adjacent pallets until the player holds >= count.
 
-    Finds the nearest :class:`MachineType.PALLET` whose buffered item
+    Finds the nearest :class:`Machine.PALLET` whose buffered item
     matches ``item_type``, navigates adjacent, emits ``WITHDRAW``.
     With the engine's bulk-withdraw semantics (one action transfers
     the whole slot up to inventory capacity), this usually clears a
@@ -2406,7 +2406,7 @@ class WithdrawUntilHeld(Goal):
         pallet_tiles = [
             (x, y)
             for (x, y) in buffered
-            if view.machine_type[y, x] == int(MachineType.PALLET)
+            if view.machine_type[y, x] == int(Machine.PALLET)
         ]
         if not pallet_tiles:
             self._empty_attempts += 1
@@ -2435,7 +2435,7 @@ class WithdrawFrom(Goal):
 
     def __init__(
         self,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
         item_type: int | ItemType,
         max_attempts: int = 6,
     ) -> None:
@@ -2527,8 +2527,8 @@ def _default_machine_for(
     if recipe is not None:
         return int(recipe.machine_type)
     if int(output_item) in _FURNACE_OUTPUTS:
-        return int(MachineType.FURNACE)
-    return int(MachineType.ASSEMBLER)
+        return int(Machine.FURNACE)
+    return int(Machine.ASSEMBLER)
 
 
 class ProduceInMachine(Goal):
@@ -2551,7 +2551,7 @@ class ProduceInMachine(Goal):
         self,
         output_item: int | ItemType,
         count: int,
-        machine_type: int | MachineType | None = None,
+        machine_type: int | Machine | None = None,
         book: RecipeBook = BASE_RECIPE_BOOK,
     ) -> None:
         self.output_item = int(output_item)
@@ -2641,7 +2641,7 @@ def ProduceInFurnace(  # noqa: N802 - factory mirrors class-style instantiation
     book: RecipeBook = BASE_RECIPE_BOOK,
 ) -> ProduceInMachine:
     """Produce *count* of *output_item* via the nearest furnace."""
-    return ProduceInMachine(output_item, count, int(MachineType.FURNACE), book=book)
+    return ProduceInMachine(output_item, count, int(Machine.FURNACE), book=book)
 
 
 def ProduceInAssembler(  # noqa: N802 - factory mirrors class-style instantiation
@@ -2650,7 +2650,7 @@ def ProduceInAssembler(  # noqa: N802 - factory mirrors class-style instantiatio
     book: RecipeBook = BASE_RECIPE_BOOK,
 ) -> ProduceInMachine:
     """Produce *count* of *output_item* via the nearest assembler."""
-    return ProduceInMachine(output_item, count, int(MachineType.ASSEMBLER), book=book)
+    return ProduceInMachine(output_item, count, int(Machine.ASSEMBLER), book=book)
 
 
 # ---------------------------------------------------------------------------
@@ -2743,8 +2743,8 @@ class ProduceInMachineAt(Goal):
         x, y = self.tile
         machine = int(view.machine_type[y, x])
         if machine not in (
-            int(MachineType.FURNACE),
-            int(MachineType.ASSEMBLER),
+            int(Machine.FURNACE),
+            int(Machine.ASSEMBLER),
         ):
             return Result.FAIL, None
 
@@ -2876,7 +2876,7 @@ class PipelinedProduce(Goal):
         self,
         output_item: int | ItemType,
         count: int,
-        machine_type: int | MachineType,
+        machine_type: int | Machine,
         k: int = 3,
         book: RecipeBook = BASE_RECIPE_BOOK,
     ) -> None:
@@ -3055,7 +3055,7 @@ class WithdrawFromBusAt(Goal):
             return Result.RUNNING, int(Action.NOOP)
 
         x, y = self.tile
-        if view.machine_type[y, x] != int(MachineType.PALLET):
+        if view.machine_type[y, x] != int(Machine.PALLET):
             return Result.FAIL, None
 
         self._active = FaceAndInteract(self.tile, int(Action.WITHDRAW))
@@ -3109,7 +3109,7 @@ class CraftFromBus(Goal):
         output_item: int | ItemType,
         count: int,
         bus_tiles: dict[int | ItemType, tuple[int, int]],
-        machine_type: int | MachineType | None = None,
+        machine_type: int | Machine | None = None,
         book: RecipeBook = BASE_RECIPE_BOOK,
     ) -> None:
         self.output_item = int(output_item)
@@ -3254,17 +3254,17 @@ class BuildSmelterCell(Goal):
 
         self._steps: list[Goal] = [
             PlaceMachineAt(
-                MachineType.PALLET,
+                Machine.PALLET,
                 self.plate_pallet_tile,
                 int(Direction.DOWN),
             ),
             PlaceMachineAt(
-                MachineType.ARM,
+                Machine.ARM,
                 self.arm_tile,
                 int(Direction.RIGHT),
             ),
             PlaceMachineAt(
-                MachineType.FURNACE,
+                Machine.FURNACE,
                 self.furnace_tile,
                 int(Direction.DOWN),
             ),
@@ -3273,12 +3273,12 @@ class BuildSmelterCell(Goal):
             # neighbour belt whose direction points at it. A pallet
             # here would not auto-feed (only belts are eligible).
             PlaceMachineAt(
-                MachineType.CONVEYOR_BELT,
+                Machine.CONVEYOR_BELT,
                 self.ore_pallet_tile,
                 int(Direction.DOWN),
             ),
             PlaceMachineAt(
-                MachineType.MINER,
+                Machine.MINER,
                 self.miner_tile,
                 int(Direction.DOWN),
             ),
@@ -3360,13 +3360,13 @@ class BuildCoalTrunk(Goal):
         self.belt_specs = list(belt_specs)
         self._steps: list[Goal] = [
             PlaceMachineAt(
-                MachineType.ARM,
+                Machine.ARM,
                 feeder_arm_tile,
                 int(feeder_arm_dir),
             ),
         ] + [
             PlaceMachineAt(
-                MachineType.CONVEYOR_BELT,
+                Machine.CONVEYOR_BELT,
                 tile,
                 int(direction),
             )
@@ -3433,8 +3433,8 @@ class BuildAssemblerModule(Goal):
 
     Args:
         center_tile: ``(x, y)`` for the assembler or furnace.
-        center_machine: :class:`MachineType.ASSEMBLER` or
-            :class:`MachineType.FURNACE`.
+        center_machine: :class:`Machine.ASSEMBLER` or
+            :class:`Machine.FURNACE`.
         input_a_tile: ``(x, y)`` for the north input pallet
             (always required).
         input_b_tile: ``(x, y)`` for the west input pallet, or
@@ -3448,7 +3448,7 @@ class BuildAssemblerModule(Goal):
     def __init__(
         self,
         center_tile: tuple[int, int],
-        center_machine: int | MachineType,
+        center_machine: int | Machine,
         input_a_tile: tuple[int, int],
         input_b_tile: tuple[int, int] | None,
         output_pallet_tile: tuple[int, int],
@@ -3462,7 +3462,7 @@ class BuildAssemblerModule(Goal):
 
         steps: list[Goal] = [
             PlaceMachineAt(
-                MachineType.PALLET,
+                Machine.PALLET,
                 output_pallet_tile,
                 int(Direction.DOWN),
             ),
@@ -3474,7 +3474,7 @@ class BuildAssemblerModule(Goal):
             # west-scan iteration).
             steps.append(
                 PlaceMachineAt(
-                    MachineType.CONVEYOR_BELT,
+                    Machine.CONVEYOR_BELT,
                     input_b_tile,
                     int(Direction.RIGHT),
                 )
@@ -3482,7 +3482,7 @@ class BuildAssemblerModule(Goal):
         steps.extend(
             [
                 PlaceMachineAt(
-                    MachineType.ARM,
+                    Machine.ARM,
                     self.arm_tile,
                     int(Direction.RIGHT),
                 ),
@@ -3494,7 +3494,7 @@ class BuildAssemblerModule(Goal):
                 # Input_a feeder belt facing DOWN — same reasoning,
                 # rotated.
                 PlaceMachineAt(
-                    MachineType.CONVEYOR_BELT,
+                    Machine.CONVEYOR_BELT,
                     input_a_tile,
                     int(Direction.DOWN),
                 ),

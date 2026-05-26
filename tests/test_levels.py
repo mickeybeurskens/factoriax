@@ -15,7 +15,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BlockType,
     Direction,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import (
     LEVELS,
@@ -273,7 +273,7 @@ class TestBuildState:
 
     def test_machine_types_none_by_default(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)
-        assert jnp.all(state.machine_types == int(MachineType.NONE))
+        assert jnp.all(state.machine_types == int(Machine.NONE))
 
     def test_machine_directions_zero_by_default(self) -> None:
         """Without directions in the level, all entity directions default to zero."""
@@ -284,8 +284,8 @@ class TestBuildState:
         """Directions set in the Level must appear in the built state."""
         dirs = np.zeros((8, 8), dtype=np.int32)
         dirs[3, 3] = int(Direction.RIGHT)
-        machines = np.full((8, 8), int(MachineType.NONE), dtype=np.int32)
-        machines[3, 3] = int(MachineType.CONVEYOR_BELT)
+        machines = np.full((8, 8), int(Machine.NONE), dtype=np.int32)
+        machines[3, 3] = int(Machine.CONVEYOR_BELT)
         level = Level(
             name="dir_test",
             map_width=8,
@@ -356,8 +356,8 @@ class TestSerialization:
 
     def test_roundtrip_with_machine_directions(self) -> None:
         """Machine directions must survive save/load."""
-        machines = np.full((4, 4), int(MachineType.NONE), dtype=np.int32)
-        machines[1, 2] = int(MachineType.CONVEYOR_BELT)
+        machines = np.full((4, 4), int(Machine.NONE), dtype=np.int32)
+        machines[1, 2] = int(Machine.CONVEYOR_BELT)
         dirs = np.zeros((4, 4), dtype=np.int32)
         dirs[1, 2] = int(Direction.LEFT)
         level = Level(

@@ -7,7 +7,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.editor.state import (
     InvTarget,
@@ -56,7 +56,7 @@ class TestNewEditorState:
 
     def test_no_machines(self) -> None:
         state = new_editor_state(5, 5)
-        assert np.all(state.machine_types == int(MachineType.NONE))
+        assert np.all(state.machine_types == int(Machine.NONE))
 
     def test_not_dirty(self) -> None:
         state = new_editor_state(5, 5)
@@ -108,14 +108,14 @@ class TestSetMachine:
 
     def test_place_machine(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 2, 2, int(MachineType.MINER), int(Direction.DOWN))
-        assert state.machine_types[2, 2] == int(MachineType.MINER)
+        set_machine(state, 2, 2, int(Machine.MINER), int(Direction.DOWN))
+        assert state.machine_types[2, 2] == int(Machine.MINER)
         assert state.machine_directions[2, 2] == int(Direction.DOWN)
         assert state.dirty is True
 
     def test_out_of_bounds(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 10, 10, int(MachineType.MINER), int(Direction.DOWN))
+        set_machine(state, 10, 10, int(Machine.MINER), int(Direction.DOWN))
         assert state.dirty is False
 
 
@@ -156,22 +156,22 @@ class TestEraseTile:
         rng = np.random.default_rng(0)
         brush = ResourceBrush()
         set_tile(state, 1, 1, int(BlockType.COAL), brush, rng)
-        set_machine(state, 1, 1, int(MachineType.MINER), int(Direction.DOWN))
+        set_machine(state, 1, 1, int(Machine.MINER), int(Direction.DOWN))
         erase_tile(state, 1, 1)
         assert state.block_map[1, 1] == int(BlockType.DIRT)
         assert state.block_resources[1, 1] == 0
-        assert state.machine_types[1, 1] == int(MachineType.NONE)
+        assert state.machine_types[1, 1] == int(Machine.NONE)
 
     def test_erase_block_preserves_machine(self) -> None:
         state = new_editor_state(5, 5)
         rng = np.random.default_rng(0)
         brush = ResourceBrush(mode="exact", exact_value=50)
         set_tile(state, 2, 2, int(BlockType.COAL), brush, rng)
-        set_machine(state, 2, 2, int(MachineType.MINER), int(Direction.DOWN))
+        set_machine(state, 2, 2, int(Machine.MINER), int(Direction.DOWN))
         erase_block(state, 2, 2)
         assert state.block_map[2, 2] == int(BlockType.DIRT)
         assert state.block_resources[2, 2] == 0
-        assert state.machine_types[2, 2] == int(MachineType.MINER)
+        assert state.machine_types[2, 2] == int(Machine.MINER)
         assert state.machine_directions[2, 2] == int(Direction.DOWN)
 
     def test_erase_machine_preserves_terrain(self) -> None:
@@ -179,11 +179,11 @@ class TestEraseTile:
         rng = np.random.default_rng(0)
         brush = ResourceBrush(mode="exact", exact_value=50)
         set_tile(state, 2, 2, int(BlockType.COAL), brush, rng)
-        set_machine(state, 2, 2, int(MachineType.MINER), int(Direction.DOWN))
+        set_machine(state, 2, 2, int(Machine.MINER), int(Direction.DOWN))
         erase_machine(state, 2, 2)
         assert state.block_map[2, 2] == int(BlockType.COAL)
         assert state.block_resources[2, 2] == 50
-        assert state.machine_types[2, 2] == int(MachineType.NONE)
+        assert state.machine_types[2, 2] == int(Machine.NONE)
         assert state.machine_directions[2, 2] == 0
 
     def test_erase_block_out_of_bounds(self) -> None:
@@ -234,8 +234,8 @@ class TestLevelConversion:
 
     def test_machines_preserved(self) -> None:
         block_map = np.full((5, 5), int(BlockType.DIRT), dtype=np.int32)
-        machines = np.full((5, 5), int(MachineType.NONE), dtype=np.int32)
-        machines[2, 2] = int(MachineType.PALLET)
+        machines = np.full((5, 5), int(Machine.NONE), dtype=np.int32)
+        machines[2, 2] = int(Machine.PALLET)
         original = Level(
             name="mach_test",
             map_width=5,
@@ -244,10 +244,10 @@ class TestLevelConversion:
             machine_types=machines,
         )
         state = editor_state_from_level(original)
-        assert state.machine_types[2, 2] == int(MachineType.PALLET)
+        assert state.machine_types[2, 2] == int(Machine.PALLET)
         level = editor_state_to_level(state)
         assert level.machine_types is not None
-        assert level.machine_types[2, 2] == int(MachineType.PALLET)
+        assert level.machine_types[2, 2] == int(Machine.PALLET)
 
     def test_all_zero_resources_become_none(self) -> None:
         state = new_editor_state(5, 5)
@@ -275,8 +275,8 @@ class TestLevelConversion:
     def test_directions_preserved(self) -> None:
         """Machine directions must survive editor round-trip."""
         block_map = np.full((5, 5), int(BlockType.DIRT), dtype=np.int32)
-        machines = np.full((5, 5), int(MachineType.NONE), dtype=np.int32)
-        machines[1, 1] = int(MachineType.CONVEYOR_BELT)
+        machines = np.full((5, 5), int(Machine.NONE), dtype=np.int32)
+        machines[1, 1] = int(Machine.CONVEYOR_BELT)
         dirs = np.zeros((5, 5), dtype=np.int32)
         dirs[1, 1] = int(Direction.RIGHT)
         original = Level(
@@ -314,18 +314,18 @@ class TestAddColumn:
         add_column(state)
         assert np.all(state.block_map[:, 5] == int(BlockType.DIRT))
         assert np.all(state.block_resources[:, 5] == 0)
-        assert np.all(state.machine_types[:, 5] == int(MachineType.NONE))
+        assert np.all(state.machine_types[:, 5] == int(Machine.NONE))
 
     def test_preserves_existing_data(self) -> None:
         state = new_editor_state(3, 3)
         rng = np.random.default_rng(0)
         brush = ResourceBrush(mode="exact", exact_value=42)
         set_tile(state, 1, 1, int(BlockType.COAL), brush, rng)
-        set_machine(state, 0, 0, int(MachineType.MINER), int(Direction.DOWN))
+        set_machine(state, 0, 0, int(Machine.MINER), int(Direction.DOWN))
         add_column(state)
         assert state.block_map[1, 1] == int(BlockType.COAL)
         assert state.block_resources[1, 1] == 42
-        assert state.machine_types[0, 0] == int(MachineType.MINER)
+        assert state.machine_types[0, 0] == int(Machine.MINER)
 
     def test_marks_dirty(self) -> None:
         state = new_editor_state(5, 5)
@@ -396,13 +396,13 @@ class TestAddRow:
         add_row(state)
         assert np.all(state.block_map[5, :] == int(BlockType.DIRT))
         assert np.all(state.block_resources[5, :] == 0)
-        assert np.all(state.machine_types[5, :] == int(MachineType.NONE))
+        assert np.all(state.machine_types[5, :] == int(Machine.NONE))
 
     def test_preserves_existing_data(self) -> None:
         state = new_editor_state(3, 3)
-        set_machine(state, 1, 1, int(MachineType.PALLET), int(Direction.RIGHT))
+        set_machine(state, 1, 1, int(Machine.PALLET), int(Direction.RIGHT))
         add_row(state)
-        assert state.machine_types[1, 1] == int(MachineType.PALLET)
+        assert state.machine_types[1, 1] == int(Machine.PALLET)
         assert state.machine_directions[1, 1] == int(Direction.RIGHT)
 
     def test_all_arrays_consistent_shape(self) -> None:
@@ -493,15 +493,15 @@ class TestResizeRoundTrip:
         state = new_editor_state(3, 3)
         add_column(state)
         add_row(state)
-        set_machine(state, 3, 3, int(MachineType.PALLET), int(Direction.DOWN))
-        assert state.machine_types[3, 3] == int(MachineType.PALLET)
+        set_machine(state, 3, 3, int(Machine.PALLET), int(Direction.DOWN))
+        assert state.machine_types[3, 3] == int(Machine.PALLET)
 
     def test_shrink_discards_edge_data(self) -> None:
         state = new_editor_state(5, 5)
         rng = np.random.default_rng(0)
         brush = ResourceBrush(mode="exact", exact_value=10)
         set_tile(state, 4, 4, int(BlockType.IRON), brush, rng)
-        set_machine(state, 4, 4, int(MachineType.MINER), int(Direction.DOWN))
+        set_machine(state, 4, 4, int(Machine.MINER), int(Direction.DOWN))
         remove_column(state)
         remove_row(state)
         assert state.map_width == 4
@@ -521,7 +521,7 @@ class TestResizeRoundTrip:
         assert state.machine_types.shape == expected
         assert state.machine_directions.shape == expected
         assert np.all(state.block_map[:, 2:] == int(BlockType.DIRT))
-        assert np.all(state.machine_types[:, 2:] == int(MachineType.NONE))
+        assert np.all(state.machine_types[:, 2:] == int(Machine.NONE))
 
 
 class TestSampleResource:
@@ -729,7 +729,7 @@ class TestGetInventorySlots:
 
     def test_machine_inventory(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 2, 2, int(MachineType.PALLET), 0)
+        set_machine(state, 2, 2, int(Machine.PALLET), 0)
         state.machine_inventory_items[2, 2, 0] = int(ItemType.IRON_ORE)
         state.machine_inventory_counts[2, 2, 0] = 10
         slots = get_inventory_slots(state, ("machine", 2, 2))
@@ -749,7 +749,7 @@ class TestSetInventorySlot:
 
     def test_set_machine_slot(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 1, 1, int(MachineType.MINER), 0)
+        set_machine(state, 1, 1, int(Machine.MINER), 0)
         target: InvTarget = ("machine", 1, 1)
         set_inventory_slot(state, target, 0, int(ItemType.COAL), 5)
         assert state.machine_inventory_items[1, 1, 0] == int(ItemType.COAL)
@@ -791,12 +791,12 @@ class TestGetNumSlots:
 
     def test_miner_has_one(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 0, 0, int(MachineType.MINER), 0)
+        set_machine(state, 0, 0, int(Machine.MINER), 0)
         assert get_num_slots(state, ("machine", 0, 0)) == 1
 
     def test_pallet_has_one(self) -> None:
         state = new_editor_state(5, 5)
-        set_machine(state, 0, 0, int(MachineType.PALLET), 0)
+        set_machine(state, 0, 0, int(Machine.PALLET), 0)
         assert get_num_slots(state, ("machine", 0, 0)) == 1
 
 

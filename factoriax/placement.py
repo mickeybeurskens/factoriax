@@ -16,7 +16,7 @@ from factoriax.constants import (
     PLAYER_MAX_STACK,
     SOLID_BLOCKS,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.state import EnvParams, EnvState
 
@@ -29,8 +29,8 @@ PLACEABLE_ITEMS = jnp.array(PLACEABLE_ITEM_LIST, dtype=jnp.int32)
 # definition in one pass so the forward and inverse maps cannot disagree.
 # Each is indexed by a raw id over its full enum range; non-machine slots
 # stay at the NONE/EMPTY sentinel.
-_item_to_machine = [int(MachineType.NONE)] * NUM_ITEM_TYPES
-_machine_to_item = [int(ItemType.EMPTY)] * len(MachineType)
+_item_to_machine = [int(Machine.NONE)] * NUM_ITEM_TYPES
+_machine_to_item = [int(ItemType.EMPTY)] * len(Machine)
 for _item, _machine in ITEM_TO_MACHINE.items():
     _item_to_machine[int(_item)] = int(_machine)
     _machine_to_item[int(_machine)] = int(_item)
@@ -91,7 +91,7 @@ def is_valid_placement_tile(
     sy = jnp.clip(ty, 0, h - 1)
     block = state.map[sy, sx]
     is_solid = jnp.any(block == SOLID_BLOCKS)
-    has_machine = state.machine_types[sy, sx] != MachineType.NONE
+    has_machine = state.machine_types[sy, sx] != Machine.NONE
     return in_bounds & ~is_solid & ~has_machine
 
 
@@ -241,8 +241,8 @@ def pickup_machine(
     sx = jnp.clip(tx, 0, w - 1)
     sy = jnp.clip(ty, 0, h - 1)
 
-    mt = jnp.where(in_bounds, state.machine_types[sy, sx], MachineType.NONE)
-    has_machine = mt != MachineType.NONE
+    mt = jnp.where(in_bounds, state.machine_types[sy, sx], Machine.NONE)
+    has_machine = mt != Machine.NONE
     machine_item = MACHINE_TO_ITEM_ARRAY[mt.astype(jnp.int32)]
 
     # Check player has space for the machine item.
@@ -276,7 +276,7 @@ def pickup_machine(
     # Clear grid.
     cur_mt = state.machine_types[sy, sx]
     new_machine_types = state.machine_types.at[sy, sx].set(
-        jnp.where(should_pickup, jnp.int8(MachineType.NONE), cur_mt),
+        jnp.where(should_pickup, jnp.int8(Machine.NONE), cur_mt),
     )
     new_tile_entity = jnp.where(
         should_pickup,
@@ -448,9 +448,9 @@ def set_machine_direction(
     mt = jnp.where(
         in_bounds,
         state.machine_types[sy, sx],
-        MachineType.NONE,
+        Machine.NONE,
     )
-    has_machine = mt != MachineType.NONE
+    has_machine = mt != Machine.NONE
     should_set = in_bounds & has_machine
 
     max_e = state.ent_y.shape[0]

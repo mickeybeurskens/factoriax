@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from factoriax.constants import MachineType
+from factoriax.constants import Machine
 from factoriax.recipes import (
     BASE_RECIPES,
     NUM_RECIPES,
@@ -70,7 +70,7 @@ def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     """
     recipe = BASE_RECIPES[idx]
     machine = int(RECIPE_MACHINE_TYPE[idx])
-    if machine == int(MachineType.ASSEMBLER):
+    if machine == int(Machine.ASSEMBLER):
         assert len(recipe.inputs) == 2, (
             f"Assembler recipe {idx} ({recipe.output}) has "
             f"{len(recipe.inputs)} inputs; expected 2."
@@ -99,7 +99,7 @@ def test_every_furnace_recipe_is_two_input() -> None:
     outliers that would need a special-case feeder shape).
     """
     for idx, recipe in enumerate(BASE_RECIPES):
-        if int(RECIPE_MACHINE_TYPE[idx]) == int(MachineType.FURNACE):
+        if int(RECIPE_MACHINE_TYPE[idx]) == int(Machine.FURNACE):
             assert len(recipe.inputs) == 2, (
                 f"Furnace recipe {idx} ({recipe.output}) has "
                 f"{len(recipe.inputs)} inputs; expected 2."

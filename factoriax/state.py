@@ -161,7 +161,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             caps; constructing an :class:`EnvParams` with overrides via
             ``DEFAULT_MACHINE_CONFIG.with_overrides({...})`` retunes
             those caps without rebuilding the JIT cache (the array
-            shape is fixed by ``len(MachineType)``).
+            shape is fixed by ``len(Machine)``).
     """
 
     max_timesteps: int = 1000

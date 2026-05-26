@@ -14,7 +14,7 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import Level, build_state
 from factoriax.state import EnvParams
@@ -27,10 +27,10 @@ def _make_level_with_pallet_items() -> Level:
 
     machine_types = np.full(
         (h, w),
-        int(MachineType.NONE),
+        int(Machine.NONE),
         dtype=np.int32,
     )
-    machine_types[2, 2] = int(MachineType.PALLET)
+    machine_types[2, 2] = int(Machine.PALLET)
 
     machine_inv = np.zeros((h, w, NUM_ITEM_TYPES), dtype=np.int32)
     machine_inv[2, 2, int(ItemType.IRON_ORE)] = 10

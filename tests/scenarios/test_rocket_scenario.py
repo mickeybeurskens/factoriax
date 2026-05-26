@@ -16,7 +16,7 @@ from factoriax.constants import (
     Action,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.scenarios import (
     MAX_ROCKET_SCORE,
@@ -89,8 +89,8 @@ def test_build_rocket_level_preplaces_furnace_and_assembler() -> None:
     level = build_rocket_level()
     mt = np.asarray(level.machine_types)
     # Spawn at map center (16, 16). Furnace immediately west, assembler east.
-    assert int(mt[16, 15]) == int(MachineType.FURNACE)
-    assert int(mt[16, 17]) == int(MachineType.ASSEMBLER)
+    assert int(mt[16, 15]) == int(Machine.FURNACE)
+    assert int(mt[16, 17]) == int(Machine.ASSEMBLER)
 
 
 def test_rocket_benchmark_exposes_blocked_actions() -> None:
@@ -210,19 +210,19 @@ def test_item_holding_conditions(
 @pytest.mark.parametrize(
     "achievement_id,mt_grid",
     [
-        ("place_miner", jnp.array([[MachineType.MINER]], dtype=jnp.int32)),
-        ("place_furnace", jnp.array([[MachineType.FURNACE]], dtype=jnp.int32)),
+        ("place_miner", jnp.array([[Machine.MINER]], dtype=jnp.int32)),
+        ("place_furnace", jnp.array([[Machine.FURNACE]], dtype=jnp.int32)),
         (
             "place_belt",
-            jnp.array([[MachineType.CONVEYOR_BELT]], dtype=jnp.int32),
+            jnp.array([[Machine.CONVEYOR_BELT]], dtype=jnp.int32),
         ),
-        ("place_pallet", jnp.array([[MachineType.PALLET]], dtype=jnp.int32)),
-        ("place_arm", jnp.array([[MachineType.ARM]], dtype=jnp.int32)),
+        ("place_pallet", jnp.array([[Machine.PALLET]], dtype=jnp.int32)),
+        ("place_arm", jnp.array([[Machine.ARM]], dtype=jnp.int32)),
         (
             "place_assembler",
-            jnp.array([[MachineType.ASSEMBLER]], dtype=jnp.int32),
+            jnp.array([[Machine.ASSEMBLER]], dtype=jnp.int32),
         ),
-        ("place_rocket", jnp.array([[MachineType.ROCKET]], dtype=jnp.int32)),
+        ("place_rocket", jnp.array([[Machine.ROCKET]], dtype=jnp.int32)),
     ],
 )
 def test_single_placement_conditions(
@@ -240,12 +240,12 @@ def test_single_placement_conditions(
 def test_belt_network_requires_five(state_factory) -> None:
     """belt_network fires at 5 belts, not at 4."""
     # 1x4 strip of belts — below threshold.
-    belts_4 = jnp.full((1, 4), MachineType.CONVEYOR_BELT, dtype=jnp.int32)
+    belts_4 = jnp.full((1, 4), Machine.CONVEYOR_BELT, dtype=jnp.int32)
     world_4 = jnp.full((1, 4), BlockType.DIRT, dtype=jnp.int32)
     state_4 = state_factory(world_map=world_4, machine_types=belts_4)
     assert not bool(rocket_conditions(state_4)[_index_of("belt_network")])
     # 1x5 strip — at threshold.
-    belts_5 = jnp.full((1, 5), MachineType.CONVEYOR_BELT, dtype=jnp.int32)
+    belts_5 = jnp.full((1, 5), Machine.CONVEYOR_BELT, dtype=jnp.int32)
     world_5 = jnp.full((1, 5), BlockType.DIRT, dtype=jnp.int32)
     state_5 = state_factory(world_map=world_5, machine_types=belts_5)
     assert bool(rocket_conditions(state_5)[_index_of("belt_network")])
@@ -253,11 +253,11 @@ def test_belt_network_requires_five(state_factory) -> None:
 
 def test_scaling_up_requires_three_miners(state_factory) -> None:
     """scaling_up fires at 3 miners, not at 2."""
-    miners_2 = jnp.full((1, 2), MachineType.MINER, dtype=jnp.int32)
+    miners_2 = jnp.full((1, 2), Machine.MINER, dtype=jnp.int32)
     world_2 = jnp.full((1, 2), BlockType.DIRT, dtype=jnp.int32)
     state_2 = state_factory(world_map=world_2, machine_types=miners_2)
     assert not bool(rocket_conditions(state_2)[_index_of("scaling_up")])
-    miners_3 = jnp.full((1, 3), MachineType.MINER, dtype=jnp.int32)
+    miners_3 = jnp.full((1, 3), Machine.MINER, dtype=jnp.int32)
     world_3 = jnp.full((1, 3), BlockType.DIRT, dtype=jnp.int32)
     state_3 = state_factory(world_map=world_3, machine_types=miners_3)
     assert bool(rocket_conditions(state_3)[_index_of("scaling_up")])
@@ -268,8 +268,8 @@ def test_industrialist_requires_ten_machines(state_factory) -> None:
     # 2x5 mixed grid: 10 machines.
     grid = jnp.array(
         [
-            [MachineType.MINER] * 5,
-            [MachineType.PALLET] * 5,
+            [Machine.MINER] * 5,
+            [Machine.PALLET] * 5,
         ],
         dtype=jnp.int32,
     )
@@ -281,7 +281,7 @@ def test_industrialist_requires_ten_machines(state_factory) -> None:
 def test_automated_mining_requires_buffered_ore(state_factory) -> None:
     """automated_mining fires when a placed miner has buffer items."""
     world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[MachineType.MINER]], dtype=jnp.int32)
+    mt = jnp.array([[Machine.MINER]], dtype=jnp.int32)
     # Empty buffer — should NOT fire.
     state_empty = state_factory(world_map=world, machine_types=mt)
     assert not bool(rocket_conditions(state_empty)[_index_of("automated_mining")])
@@ -298,7 +298,7 @@ def test_automated_mining_requires_buffered_ore(state_factory) -> None:
 def test_pallet_filled_requires_buffered_item(state_factory) -> None:
     """pallet_filled fires when a placed pallet has items."""
     world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[MachineType.PALLET]], dtype=jnp.int32)
+    mt = jnp.array([[Machine.PALLET]], dtype=jnp.int32)
     state = state_factory(
         world_map=world,
         machine_types=mt,
@@ -311,7 +311,7 @@ def test_pallet_filled_requires_buffered_item(state_factory) -> None:
 def test_first_assembly_requires_assembler_output(state_factory) -> None:
     """first_assembly fires when a placed assembler has output items."""
     world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[MachineType.ASSEMBLER]], dtype=jnp.int32)
+    mt = jnp.array([[Machine.ASSEMBLER]], dtype=jnp.int32)
     state = state_factory(
         world_map=world,
         machine_types=mt,

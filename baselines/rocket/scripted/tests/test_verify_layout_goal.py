@@ -18,7 +18,7 @@ from baselines.rocket.scripted.goals import VerifyLayout
 from baselines.rocket.scripted.planner import Planner
 from baselines.rocket.scripted.skills import Result
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, MachineType
+from factoriax.constants import Direction, Machine
 
 
 def _make_view(machine_type_arr: np.ndarray) -> WorldView:
@@ -56,7 +56,7 @@ def _make_view(machine_type_arr: np.ndarray) -> WorldView:
 def matching_view() -> WorldView:
     """Pallet at (0, 0) facing direction 0 (the zero-init for direction)."""
     machine_type = np.zeros((3, 3), dtype=np.int32)
-    machine_type[0, 0] = int(MachineType.PALLET)
+    machine_type[0, 0] = int(Machine.PALLET)
     return _make_view(machine_type)
 
 
@@ -68,20 +68,20 @@ def test_step_returns_done_immediately(matching_view: WorldView) -> None:
 
 
 def test_verify_passes_for_matching_layout(matching_view: WorldView) -> None:
-    expected = {(0, 0): (int(MachineType.PALLET), 0)}
+    expected = {(0, 0): (int(Machine.PALLET), 0)}
     goal = VerifyLayout(expected, label="match")
     assert goal.verify(matching_view) is True
 
 
 def test_verify_fails_for_missing_tile(matching_view: WorldView) -> None:
-    expected = {(2, 2): (int(MachineType.PALLET), 0)}
+    expected = {(2, 2): (int(Machine.PALLET), 0)}
     goal = VerifyLayout(expected, label="missing")
     assert goal.verify(matching_view) is False
 
 
 def test_planner_halts_on_verify_failure(matching_view: WorldView) -> None:
     """Drop a VerifyLayout into a Planner; it halts the run on miss."""
-    expected_miss = {(2, 2): (int(MachineType.PALLET), 0)}
+    expected_miss = {(2, 2): (int(Machine.PALLET), 0)}
     goal = VerifyLayout(expected_miss, label="halt-test")
     planner = Planner([goal], debug_log=True)
 
@@ -94,7 +94,7 @@ def test_planner_halts_on_verify_failure(matching_view: WorldView) -> None:
 
 
 def test_planner_passes_on_clean_layout(matching_view: WorldView) -> None:
-    expected = {(0, 0): (int(MachineType.PALLET), 0)}
+    expected = {(0, 0): (int(Machine.PALLET), 0)}
     planner = Planner(
         [VerifyLayout(expected, label="ok")],
         debug_log=True,

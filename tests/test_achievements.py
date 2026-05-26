@@ -12,7 +12,7 @@ from factoriax.achievements import (
 from factoriax.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
-    MachineType,
+    Machine,
 )
 
 
@@ -82,18 +82,18 @@ class TestMachineCounting:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
-        assert count_machines(state, MachineType.MINER) == 0
+        assert count_machines(state, Machine.MINER) == 0
 
     def test_count_machines_single(self, state_factory) -> None:
         """Should count single placed miner."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.MINER]],
+                [[Machine.MINER]],
                 dtype=jnp.int32,
             ),
         )
-        assert count_machines(state, MachineType.MINER) == 1
+        assert count_machines(state, Machine.MINER) == 1
 
 
 class TestConditionComputation:
@@ -135,7 +135,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.MINER]],
+                [[Machine.MINER]],
                 dtype=jnp.int32,
             ),
             buffer_type=jnp.array(
@@ -152,7 +152,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.PALLET]],
+                [[Machine.PALLET]],
                 dtype=jnp.int32,
             ),
             buffer_type=jnp.array(
@@ -178,7 +178,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.ASSEMBLER]],
+                [[Machine.ASSEMBLER]],
                 dtype=jnp.int32,
             ),
             asm_out_type=jnp.array(
@@ -211,7 +211,7 @@ class TestConditionComputation:
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.ROCKET]],
+                [[Machine.ROCKET]],
                 dtype=jnp.int32,
             ),
         )

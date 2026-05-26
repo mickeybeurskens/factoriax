@@ -49,7 +49,7 @@ from factoriax.constants import (
     NUM_SCIENCE_PACK_TYPES,
     BlockType,
     Direction,
-    MachineType,
+    Machine,
 )
 from factoriax.state import EnvParams, EnvState
 
@@ -313,7 +313,7 @@ class LevelBuilder:
         Args:
             x: Column (0-indexed).
             y: Row (0-indexed).
-            machine_type: ``MachineType`` integer value.
+            machine_type: ``Machine`` integer value.
             direction: Facing direction as an ``Action`` integer value
                 (e.g. ``Direction.RIGHT``).  Defaults to 0 (no direction).
 
@@ -330,7 +330,7 @@ class LevelBuilder:
         if self._machine_types is None:
             self._machine_types = np.full(
                 (self._height, self._width),
-                int(MachineType.NONE),
+                int(Machine.NONE),
                 dtype=np.int32,
             )
         if self._machine_directions is None:
@@ -563,7 +563,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         level.machine_types
         if level.machine_types is not None
         else np.full(
-            (level.map_height, level.map_width), int(MachineType.NONE), dtype=np.int32
+            (level.map_height, level.map_width), int(Machine.NONE), dtype=np.int32
         )
     )
     machine_dirs_np = (
@@ -614,7 +614,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     for y in range(map_shape[0]):
         for x in range(map_shape[1]):
             mt = int(machine_types_np[y, x])
-            if mt == int(MachineType.NONE):
+            if mt == int(Machine.NONE):
                 continue
             if idx >= mm:
                 break
@@ -630,7 +630,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             # Populate inventory from level data.
             if machine_inv is not None:
                 inv_row = machine_inv[y, x]
-                if mt == int(MachineType.MINER):
+                if mt == int(Machine.MINER):
                     # Miners have one output buffer for mined ore.
                     for it in range(1, NUM_ITEM_TYPES):
                         if int(inv_row[it]) > 0:
@@ -638,8 +638,8 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
                             ent_buf_count_np[idx] = int(inv_row[it])
                             break
                 elif mt in (
-                    int(MachineType.ASSEMBLER),
-                    int(MachineType.FURNACE),
+                    int(Machine.ASSEMBLER),
+                    int(Machine.FURNACE),
                 ):
                     slot = 0
                     for it in range(1, NUM_ITEM_TYPES):
@@ -751,7 +751,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     return EnvState(
         map=world_map.astype(jnp.int8),
         block_resources=block_resources,
-        machine_types=jnp.full(map_shape, int(MachineType.NONE), dtype=jnp.int8),
+        machine_types=jnp.full(map_shape, int(Machine.NONE), dtype=jnp.int8),
         tile_entity=jnp.full(map_shape, -1, dtype=jnp.int16),
         ent_y=jnp.full(mm, -1, dtype=jnp.int16),
         ent_x=jnp.full(mm, -1, dtype=jnp.int16),

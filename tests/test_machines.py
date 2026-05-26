@@ -6,14 +6,14 @@ from jax import random
 from factoriax import BlockType, EnvParams, EnvState, ItemType
 from factoriax.constants import (
     Direction,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import generate_state
 from factoriax.machine_spec import MACHINE_MAX_STACK
 from factoriax.machines import run_conveyor_belts, run_miners, update_all_machines
 
 # The miner's buffer capacity — a "full" buffer value for the stop tests.
-_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(MachineType.MINER)])
+_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
@@ -39,7 +39,7 @@ class TestMachineInitialization:
         params = EnvParams()
         state = generate_state(rng, params)
 
-        assert jnp.all(state.machine_types == MachineType.NONE)
+        assert jnp.all(state.machine_types == Machine.NONE)
         assert jnp.all(state.ent_power == 0)
         assert jnp.all(state.ent_buf_count == 0)
 
@@ -64,7 +64,7 @@ class TestMinerOperation:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -80,7 +80,7 @@ class TestMinerOperation:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array(
                 [[_MINER_BUF_CAP]],
@@ -100,7 +100,7 @@ class TestMinerOperation:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[0]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -114,7 +114,7 @@ class TestMinerOperation:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[2]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
             max_machines=1,
         )
         params = EnvParams(map_width=1, map_height=1)
@@ -134,7 +134,7 @@ class TestMinerOperation:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[1]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -158,7 +158,7 @@ class TestMinerOperation:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array([[MINER_OUTPUT_CAP - 1]], dtype=jnp.int16),
         )
@@ -189,7 +189,7 @@ class TestMinerDifferentOres:
         state = state_factory(
             world_map=jnp.array([[block_type]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 
@@ -216,8 +216,8 @@ class TestMultipleMiners:
             block_resources=jnp.array([[50, 50], [50, 0]], dtype=jnp.int16),
             machine_types=jnp.array(
                 [
-                    [MachineType.MINER, MachineType.MINER],
-                    [MachineType.MINER, MachineType.NONE],
+                    [Machine.MINER, Machine.MINER],
+                    [Machine.MINER, Machine.NONE],
                 ],
                 dtype=jnp.int32,
             ),
@@ -270,9 +270,7 @@ class TestMinerPushDoesNotLeakIntoInactiveSlots:
         return state_factory(
             world_map=jnp.array([[BlockType.DIRT, BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[0, 50]], dtype=jnp.int16),
-            machine_types=jnp.array(
-                [[MachineType.PALLET, MachineType.MINER]], dtype=jnp.int32
-            ),
+            machine_types=jnp.array([[Machine.PALLET, Machine.MINER]], dtype=jnp.int32),
             machine_direction=jnp.array(
                 [[Direction.DOWN, Direction.LEFT]], dtype=jnp.int8
             ),
@@ -333,7 +331,7 @@ class TestBeltPushDoesNotLeakIntoInactiveSlots:
         return state_factory(
             world_map=jnp.array([[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32),
             machine_types=jnp.array(
-                [[MachineType.PALLET, MachineType.CONVEYOR_BELT]], dtype=jnp.int32
+                [[Machine.PALLET, Machine.CONVEYOR_BELT]], dtype=jnp.int32
             ),
             machine_direction=jnp.array(
                 [[Direction.DOWN, Direction.LEFT]], dtype=jnp.int8
@@ -376,7 +374,7 @@ class TestUpdateAllMachines:
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
-            machine_types=jnp.array([[MachineType.MINER]], dtype=jnp.int32),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
         params = EnvParams(map_width=1, map_height=1)
 

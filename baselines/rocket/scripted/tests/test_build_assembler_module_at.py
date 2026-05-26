@@ -10,7 +10,7 @@ from baselines.rocket.scripted.goals import (
     assembler_module_inventory,
     build_assembler_module_at,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:
@@ -43,18 +43,18 @@ def test_2_input_layout_around_center() -> None:
     placements = _placements(goals)
     assert placements == [
         # output east-east, facing DOWN
-        (int(MachineType.PALLET), (18, 9), int(Direction.DOWN)),
+        (int(Machine.PALLET), (18, 9), int(Direction.DOWN)),
         # input_b west feeder belt, facing RIGHT (pushes east into
         # the assembler; Phase 0 directional pull picks it up).
-        (int(MachineType.CONVEYOR_BELT), (15, 9), int(Direction.RIGHT)),
+        (int(Machine.CONVEYOR_BELT), (15, 9), int(Direction.RIGHT)),
         # arm east, facing RIGHT
-        (int(MachineType.ARM), (17, 9), int(Direction.RIGHT)),
+        (int(Machine.ARM), (17, 9), int(Direction.RIGHT)),
         # center assembler, facing DOWN
-        (int(MachineType.ASSEMBLER), (16, 9), int(Direction.DOWN)),
+        (int(Machine.ASSEMBLER), (16, 9), int(Direction.DOWN)),
         # input_a north feeder belt, facing DOWN — last because its
         # stand tile (one further north) is unaffected by anything
         # else.
-        (int(MachineType.CONVEYOR_BELT), (16, 8), int(Direction.DOWN)),
+        (int(Machine.CONVEYOR_BELT), (16, 8), int(Direction.DOWN)),
     ]
 
 
@@ -72,8 +72,8 @@ def test_arm_precedes_center() -> None:
     (one west of arm = center) needs to be walkable dirt."""
     goals = build_assembler_module_at((16, 9))
     types = [g.machine_type for g in goals]
-    arm_idx = types.index(int(MachineType.ARM))
-    center_idx = types.index(int(MachineType.ASSEMBLER))
+    arm_idx = types.index(int(Machine.ARM))
+    center_idx = types.index(int(Machine.ASSEMBLER))
     assert arm_idx < center_idx
 
 

@@ -13,7 +13,7 @@ from baselines.rocket.scripted.goals import (
     PlaceMachineAt,
     place_belt_path,
 )
-from factoriax.constants import Direction, MachineType
+from factoriax.constants import Direction, Machine
 
 
 def _belt_specs(goals: list) -> list[tuple[tuple[int, int], int]]:
@@ -21,7 +21,7 @@ def _belt_specs(goals: list) -> list[tuple[tuple[int, int], int]]:
     out = []
     for g in goals:
         assert isinstance(g, PlaceMachineAt)
-        assert g.machine_type == int(MachineType.CONVEYOR_BELT)
+        assert g.machine_type == int(Machine.CONVEYOR_BELT)
         out.append((g.target, g.facing))
     return out
 

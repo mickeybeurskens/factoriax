@@ -19,7 +19,7 @@ from factoriax.constants import (
     BLOCK_TO_ITEM,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.recipes import NUM_RECIPES
 from factoriax.state import EnvParams, EnvState
@@ -92,7 +92,7 @@ def run_miners(
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
-    is_miner = (state.ent_type == MachineType.MINER) & active
+    is_miner = (state.ent_type == Machine.MINER) & active
 
     # Gather grid data at miner positions (clipped for safety).
     ey = jnp.clip(state.ent_y, 0, h - 1)
@@ -260,9 +260,9 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
-    is_arm = (state.ent_type == MachineType.ARM) & active
-    self_is_combiner = (state.ent_type == MachineType.ASSEMBLER) | (
-        state.ent_type == MachineType.FURNACE
+    is_arm = (state.ent_type == Machine.ARM) & active
+    self_is_combiner = (state.ent_type == Machine.ASSEMBLER) | (
+        state.ent_type == Machine.FURNACE
     )
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
@@ -315,8 +315,8 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         dst_safe = jnp.clip(dst_eidx, 0, buf_type.shape[0] - 1)
 
         dst_type = state.ent_type[dst_safe]
-        dst_is_combiner = (dst_type == MachineType.ASSEMBLER) | (
-            dst_type == MachineType.FURNACE
+        dst_is_combiner = (dst_type == Machine.ASSEMBLER) | (
+            dst_type == Machine.FURNACE
         )
 
         dst_bc = buf_count[dst_safe]
@@ -439,8 +439,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     # they only differ in which recipes they're allowed to match in
     # Phase 3 (via params.recipe_table.machine_type).
     is_combiner = (
-        (state.ent_type == MachineType.ASSEMBLER)
-        | (state.ent_type == MachineType.FURNACE)
+        (state.ent_type == Machine.ASSEMBLER) | (state.ent_type == Machine.FURNACE)
     ) & active
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
@@ -478,7 +477,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
         nb_bc = buf_count[nb_safe]
         nb_type = state.ent_type[nb_safe]
         nb_dir = state.ent_direction[nb_safe]
-        nb_is_belt = nb_type == MachineType.CONVEYOR_BELT
+        nb_is_belt = nb_type == Machine.CONVEYOR_BELT
         nb_facing_self = nb_dir == jnp.int8(opposite_dir[d])
         nb_eligible = nb_valid & nb_diff & (nb_bc > 0) & nb_is_belt & nb_facing_self
 
@@ -630,9 +629,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
-    is_belt = (state.ent_type == MachineType.CONVEYOR_BELT) & active
-    is_splitter = (state.ent_type == MachineType.SPLITTER) & active
-    is_crossing = (state.ent_type == MachineType.CROSSING) & active
+    is_belt = (state.ent_type == Machine.CONVEYOR_BELT) & active
+    is_splitter = (state.ent_type == Machine.SPLITTER) & active
+    is_crossing = (state.ent_type == Machine.CROSSING) & active
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
@@ -729,7 +728,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
 
         dn_type = state.ent_type[dn_safe]
-        dn_is_crossing = dn_type == MachineType.CROSSING
+        dn_is_crossing = dn_type == Machine.CROSSING
         # Reject pushes into combiner destinations. Combiners receive
         # inputs only via Phase 0's directional pull (from facing
         # belts) or via an arm pushing into ``ent_asm_in`` — never via
@@ -737,9 +736,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         # accumulate uncontrolled). Belts whose terminus faces a
         # combiner back-pressure: items hold on the belt and Phase 0
         # picks them up next tick.
-        dn_is_combiner = (dn_type == MachineType.ASSEMBLER) | (
-            dn_type == MachineType.FURNACE
-        )
+        dn_is_combiner = (dn_type == Machine.ASSEMBLER) | (dn_type == Machine.FURNACE)
         # Crossing destination only accepts pushes that align with the
         # *input direction* for the relevant axis. The input direction is
         # the same as the axis output direction (a flow N→S takes inputs

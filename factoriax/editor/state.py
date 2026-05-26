@@ -15,7 +15,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import Level, default_resources
 from factoriax.machine_spec import MAX_MACHINE_INVENTORY_SLOTS
@@ -134,7 +134,7 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
         map_height=height,
         block_map=block_map,
         block_resources=np.zeros((height, width), dtype=np.int32),
-        machine_types=np.full((height, width), int(MachineType.NONE), dtype=np.int32),
+        machine_types=np.full((height, width), int(Machine.NONE), dtype=np.int32),
         machine_directions=np.zeros((height, width), dtype=np.int32),
         machine_inventory_items=np.zeros(inv_shape, dtype=np.int32),
         machine_inventory_counts=np.zeros(inv_shape, dtype=np.int32),
@@ -163,7 +163,7 @@ def editor_state_from_level(level: Level) -> EditorState:
         if level.machine_types is not None
         else np.full(
             (level.map_height, level.map_width),
-            int(MachineType.NONE),
+            int(Machine.NONE),
             dtype=np.int32,
         )
     )
@@ -243,7 +243,7 @@ def editor_state_to_level(state: EditorState) -> Level:
         resources = None
 
     machines: np.ndarray | None = state.machine_types.copy()
-    if np.all(machines == int(MachineType.NONE)):
+    if np.all(machines == int(Machine.NONE)):
         machines = None
 
     directions: np.ndarray | None = state.machine_directions.copy()
@@ -339,7 +339,7 @@ def set_machine(
         state: Editor state (mutated in place).
         x: Tile column.
         y: Tile row.
-        machine: ``MachineType`` integer value.
+        machine: ``Machine`` integer value.
         direction: ``Action`` direction value for the machine facing.
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
@@ -425,7 +425,7 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
-    state.machine_types[y, x] = int(MachineType.NONE)
+    state.machine_types[y, x] = int(Machine.NONE)
     state.machine_directions[y, x] = 0
     state.machine_inventory_items[y, x] = 0
     state.machine_inventory_counts[y, x] = 0
@@ -469,7 +469,7 @@ def add_column(state: EditorState) -> None:
     state.machine_types = np.concatenate(
         [
             state.machine_types,
-            np.full((h, 1), int(MachineType.NONE), dtype=np.int32),
+            np.full((h, 1), int(Machine.NONE), dtype=np.int32),
         ],
         axis=1,
     )
@@ -537,7 +537,7 @@ def add_row(state: EditorState) -> None:
     state.machine_types = np.concatenate(
         [
             state.machine_types,
-            np.full((1, w), int(MachineType.NONE), dtype=np.int32),
+            np.full((1, w), int(Machine.NONE), dtype=np.int32),
         ],
         axis=0,
     )

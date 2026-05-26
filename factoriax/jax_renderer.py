@@ -53,7 +53,7 @@ import numpy as np
 
 from factoriax.constants import (
     BlockType,
-    MachineType,
+    Machine,
 )
 from factoriax.state import EnvState
 
@@ -203,7 +203,7 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
         JAX array of shape ``(4, num_machine_types, tile_px, tile_px, 4)``.
         Index 0 is direction LEFT, 3 is direction DOWN.
     """
-    n_machines = max(int(m) for m in MachineType) + 1
+    n_machines = max(int(m) for m in Machine) + 1
     rows = []
     for d in range(_ATLAS_NUM_DIRECTIONS):
         cells = _atlas_row_cells(_ATLAS_ROW_MACHINES_BASE + d, n_machines)
@@ -284,7 +284,7 @@ def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarra
     LEFT row to keep the gather well-defined.
 
     Args:
-        machine_type: ``MachineType`` integer.
+        machine_type: ``Machine`` integer.
         size: Side length in pixels for the returned sprite.
         direction: ``Direction`` integer (1=LEFT, 2=RIGHT, 3=UP, 4=DOWN).
 

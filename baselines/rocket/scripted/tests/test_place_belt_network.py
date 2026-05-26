@@ -18,7 +18,7 @@ from baselines.rocket.scripted.goals import (
     belt_network_inventory,
     place_belt_network,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:
@@ -40,9 +40,9 @@ def _belts_and_crossings(
     crossings: list[tuple[tuple[int, int], int]] = []
     for goal in goals:
         assert isinstance(goal, PlaceMachineAt)
-        if goal.machine_type == int(MachineType.CONVEYOR_BELT):
+        if goal.machine_type == int(Machine.CONVEYOR_BELT):
             belts.append((goal.target, goal.facing))
-        elif goal.machine_type == int(MachineType.CROSSING):
+        elif goal.machine_type == int(Machine.CROSSING):
             crossings.append((goal.target, goal.facing))
         else:
             raise AssertionError(f"unexpected goal type: {goal.machine_type}")
@@ -270,7 +270,7 @@ def test_two_paths_with_crossing_topological_order_is_valid() -> None:
     for goal in goals:
         assert isinstance(goal, PlaceMachineAt)
         tile = goal.target
-        if goal.machine_type == int(MachineType.CONVEYOR_BELT):
+        if goal.machine_type == int(Machine.CONVEYOR_BELT):
             dx, dy = direction_offset[goal.facing]
             stand = (tile[0] - dx, tile[1] - dy)
             assert stand in placed or stand not in {

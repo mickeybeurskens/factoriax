@@ -16,7 +16,7 @@ import numpy as np
 
 from baselines.rocket.scripted.agent import _pallet_has_output_predicate
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 
 
 def _make_view_with_pallet(
@@ -39,7 +39,7 @@ def _make_view_with_pallet(
     buffer_type = np.zeros((map_size, map_size), dtype=np.int32)
 
     x, y = tile
-    machine_type[y, x] = int(MachineType.PALLET)
+    machine_type[y, x] = int(Machine.PALLET)
     slot2_type[y, x] = buf_type
     slot2_count[y, x] = buf_count
     buffer_type[y, x] = buf_type

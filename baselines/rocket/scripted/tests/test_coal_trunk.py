@@ -27,7 +27,7 @@ from factoriax.constants import (
     Action,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
@@ -136,7 +136,7 @@ def _build_trunk_level(*, prebuild_trunk: bool = False, coal_count: int = 100):
     # Destination pallet (empty) is always present.
     builder.place_machine(
         *_DEST_PALLET,
-        int(MachineType.PALLET),
+        int(Machine.PALLET),
         int(Direction.DOWN),
     )
 
@@ -146,7 +146,7 @@ def _build_trunk_level(*, prebuild_trunk: bool = False, coal_count: int = 100):
         # so this dodges the placement geometry conflict entirely.
         builder.place_machine(
             *_SOURCE_PALLET,
-            int(MachineType.PALLET),
+            int(Machine.PALLET),
             int(Direction.DOWN),
         )
         builder.set_machine_inventory(
@@ -157,13 +157,13 @@ def _build_trunk_level(*, prebuild_trunk: bool = False, coal_count: int = 100):
         )
         builder.place_machine(
             *_FEEDER_ARM,
-            int(MachineType.ARM),
+            int(Machine.ARM),
             _FEEDER_ARM_DIR,
         )
         for tile, direction in _BELT_SPECS:
             builder.place_machine(
                 *tile,
-                int(MachineType.CONVEYOR_BELT),
+                int(Machine.CONVEYOR_BELT),
                 int(direction),
             )
 
@@ -197,15 +197,13 @@ def test_build_coal_trunk_places_arm_and_belts() -> None:
     ent_direction = np.asarray(final_state.ent_direction)
 
     arm_eid = int(tile_entity[_FEEDER_ARM[1], _FEEDER_ARM[0]])
-    assert mt[_FEEDER_ARM[1], _FEEDER_ARM[0]] == int(MachineType.ARM)
+    assert mt[_FEEDER_ARM[1], _FEEDER_ARM[0]] == int(Machine.ARM)
     assert arm_eid >= 0
     assert int(ent_direction[arm_eid]) == _FEEDER_ARM_DIR
 
     for (x, y), direction in _BELT_SPECS:
         belt_eid = int(tile_entity[y, x])
-        assert mt[y, x] == int(MachineType.CONVEYOR_BELT), (
-            f"expected belt at ({x}, {y})"
-        )
+        assert mt[y, x] == int(Machine.CONVEYOR_BELT), f"expected belt at ({x}, {y})"
         assert belt_eid >= 0
         assert int(ent_direction[belt_eid]) == int(direction), (
             f"belt at ({x}, {y}) facing {int(ent_direction[belt_eid])}, "

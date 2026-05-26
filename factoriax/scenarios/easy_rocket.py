@@ -9,7 +9,7 @@ from factoriax.constants import (
     MAX_ACHIEVEMENTS,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import Level, LevelBuilder
 from factoriax.recipes import Recipe, RecipeBook, RecipeTable
@@ -209,7 +209,7 @@ def _blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
     is the block under the entity's ``(ent_y, ent_x)`` tile, computed with
     clamped indices so inactive slots stay JIT-safe.
     """
-    active = (state.ent_type == int(MachineType.MINER)) & (state.ent_y >= 0)
+    active = (state.ent_type == int(Machine.MINER)) & (state.ent_y >= 0)
     safe_y = jnp.maximum(state.ent_y, 0)
     safe_x = jnp.maximum(state.ent_x, 0)
     blocks = state.map[safe_y, safe_x]
@@ -255,7 +255,7 @@ def easy_rocket_conditions(state: EnvState) -> jax.Array:
 
     miner_on_ore = _any_miner_on_ore(state)
     three_ore_types = _distinct_ore_types_under_miners(state)
-    rocket_placed = _count_machines(state, int(MachineType.ROCKET)) >= 1
+    rocket_placed = _count_machines(state, int(Machine.ROCKET)) >= 1
 
     stub = jnp.bool_(False)
     conditions = jnp.stack(

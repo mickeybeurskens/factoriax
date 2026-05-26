@@ -13,7 +13,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from factoriax.constants import ItemType, MachineType
+from factoriax.constants import ItemType, Machine
 from factoriax.game_logic import CRAFT_ACTION_TO_ITEM
 from factoriax.recipes import (
     BASE_RECIPE_BOOK,
@@ -181,9 +181,9 @@ def test_furnace_recipes_assigned_furnace_machine_type() -> None:
     }
     for idx, recipe in enumerate(BASE_RECIPES):
         expected = (
-            int(MachineType.FURNACE)
+            int(Machine.FURNACE)
             if recipe.output in furnace_outputs
-            else int(MachineType.ASSEMBLER)
+            else int(Machine.ASSEMBLER)
         )
         assert int(table.machine_type[idx]) == expected, (
             f"Recipe {idx} ({ItemType(recipe.output).name}) machine_type "

@@ -54,7 +54,7 @@ from baselines.easy_rocket.scripted.state_reader import (
     player_direction,
     player_pos,
 )
-from factoriax.constants import Action, BlockType, ItemType, MachineType
+from factoriax.constants import Action, BlockType, ItemType, Machine
 from factoriax.state import EnvParams, EnvState
 
 # Recipe inputs map: crafted ItemType -> list of (input ItemType, count).
@@ -385,14 +385,14 @@ class PhasePlaceManualMiners(Phase):
         # Pallets first (no facing).
         for pal in layout.pallets:
             targets.append(
-                _Target(pal.pos, int(ItemType.PALLET), int(MachineType.PALLET), None)
+                _Target(pal.pos, int(ItemType.PALLET), int(Machine.PALLET), None)
             )
         # Then manual miners, each facing its pallet.
         for m in layout.miners:
             if m.role != "manual":
                 continue
             targets.append(
-                _Target(m.pos, int(ItemType.MINER), int(MachineType.MINER), m.facing)
+                _Target(m.pos, int(ItemType.MINER), int(Machine.MINER), m.facing)
             )
         self._placer = _Placer(targets, label="phase3/manual-miners+pallets")
 
@@ -486,16 +486,14 @@ class PhaseSection(Phase):
         targets: list[_Target] = []
         for a in self._assemblers:
             targets.append(
-                _Target(
-                    a.pos, int(ItemType.ASSEMBLER), int(MachineType.ASSEMBLER), None
-                )
+                _Target(a.pos, int(ItemType.ASSEMBLER), int(Machine.ASSEMBLER), None)
             )
         for b in reversed(self._belts):
             targets.append(
                 _Target(
                     b.pos,
                     int(ItemType.CONVEYOR_BELT),
-                    int(MachineType.CONVEYOR_BELT),
+                    int(Machine.CONVEYOR_BELT),
                     b.facing,
                 )
             )
@@ -504,13 +502,13 @@ class PhaseSection(Phase):
                 _Target(
                     c.pos,
                     int(ItemType.CROSSING),
-                    int(MachineType.CROSSING),
+                    int(Machine.CROSSING),
                     c.ent_direction,
                 )
             )
         for m in self._miners:
             targets.append(
-                _Target(m.pos, int(ItemType.MINER), int(MachineType.MINER), m.facing)
+                _Target(m.pos, int(ItemType.MINER), int(Machine.MINER), m.facing)
             )
         self._targets = targets
         self._placer = _Placer(
@@ -624,16 +622,14 @@ class PhaseRocketSection(Phase):
         targets: list[_Target] = []
         for a in self._assemblers:
             targets.append(
-                _Target(
-                    a.pos, int(ItemType.ASSEMBLER), int(MachineType.ASSEMBLER), None
-                )
+                _Target(a.pos, int(ItemType.ASSEMBLER), int(Machine.ASSEMBLER), None)
             )
         for b in reversed(self._belts):
             targets.append(
                 _Target(
                     b.pos,
                     int(ItemType.CONVEYOR_BELT),
-                    int(MachineType.CONVEYOR_BELT),
+                    int(Machine.CONVEYOR_BELT),
                     b.facing,
                 )
             )
@@ -642,13 +638,13 @@ class PhaseRocketSection(Phase):
                 _Target(
                     c.pos,
                     int(ItemType.CROSSING),
-                    int(MachineType.CROSSING),
+                    int(Machine.CROSSING),
                     c.ent_direction,
                 )
             )
         for arm in self._arms:
             targets.append(
-                _Target(arm.pos, int(ItemType.ARM), int(MachineType.ARM), arm.facing)
+                _Target(arm.pos, int(ItemType.ARM), int(Machine.ARM), arm.facing)
             )
         self._targets = targets
         self._placer = _Placer(targets, label="section/ROCKET")
@@ -748,7 +744,7 @@ class PhaseWaitAndPlaceRocket(Phase):
 
     def success(self, state: EnvState) -> bool:
         # Mirror easy_rocket's rocket_placed condition.
-        return bool((np.asarray(state.machine_types) == int(MachineType.ROCKET)).any())
+        return bool((np.asarray(state.machine_types) == int(Machine.ROCKET)).any())
 
 
 def _recipe_inputs_from_table(recipe_table: object) -> RecipeInputs:

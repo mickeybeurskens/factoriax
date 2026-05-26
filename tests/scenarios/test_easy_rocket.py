@@ -12,7 +12,7 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import Level
 from factoriax.recipes import RecipeBook, RecipeTable
@@ -265,14 +265,14 @@ def test_conditions_inventory_machine_unlock(
 
 def test_conditions_miner_on_ore_unlocks(state_factory) -> None:
     world = jnp.array([[BlockType.IRON]], dtype=jnp.int32)
-    mt = jnp.array([[MachineType.MINER]], dtype=jnp.int32)
+    mt = jnp.array([[Machine.MINER]], dtype=jnp.int32)
     state = state_factory(world_map=world, machine_types=mt)
     assert bool(easy_rocket_conditions(state)[_A_MINER_ON_ORE])
 
 
 def test_conditions_miner_on_dirt_does_not_unlock(state_factory) -> None:
     world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[MachineType.MINER]], dtype=jnp.int32)
+    mt = jnp.array([[Machine.MINER]], dtype=jnp.int32)
     state = state_factory(world_map=world, machine_types=mt)
     assert not bool(easy_rocket_conditions(state)[_A_MINER_ON_ORE])
 
@@ -283,7 +283,7 @@ def test_conditions_three_ore_types_under_miners(state_factory) -> None:
         dtype=jnp.int32,
     )
     mt_three = jnp.array(
-        [[MachineType.MINER, MachineType.MINER, MachineType.MINER]],
+        [[Machine.MINER, Machine.MINER, Machine.MINER]],
         dtype=jnp.int32,
     )
     state_three = state_factory(world_map=world_three, machine_types=mt_three)
@@ -294,7 +294,7 @@ def test_conditions_three_ore_types_under_miners(state_factory) -> None:
         dtype=jnp.int32,
     )
     mt_two = jnp.array(
-        [[MachineType.MINER, MachineType.MINER]],
+        [[Machine.MINER, Machine.MINER]],
         dtype=jnp.int32,
     )
     state_two = state_factory(world_map=world_two, machine_types=mt_two)
@@ -310,7 +310,7 @@ def test_conditions_three_ore_types_under_miners(state_factory) -> None:
 
 def test_conditions_rocket_placed(state_factory) -> None:
     world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[MachineType.ROCKET]], dtype=jnp.int32)
+    mt = jnp.array([[Machine.ROCKET]], dtype=jnp.int32)
     state = state_factory(world_map=world, machine_types=mt)
     assert bool(easy_rocket_conditions(state)[_A_PLACE_ROCKET])
 
@@ -324,9 +324,9 @@ def test_conditions_graph_stubs_always_false(state_factory) -> None:
     mt = jnp.array(
         [
             [
-                MachineType.MINER,
-                MachineType.CONVEYOR_BELT,
-                MachineType.ASSEMBLER,
+                Machine.MINER,
+                Machine.CONVEYOR_BELT,
+                Machine.ASSEMBLER,
             ]
         ],
         dtype=jnp.int32,

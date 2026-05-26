@@ -14,7 +14,7 @@ Two layers:
   effect.
 - :class:`MachineConfig` is the JAX-friendly :class:`PyTreeNode`
   that the engine reads from. Its arrays are indexed by machine
-  type (length = ``len(MachineType)``), so the JIT cache survives
+  type (length = ``len(Machine)``), so the JIT cache survives
   any override (the shape is fixed; only the values change).
 
 Default values come from :data:`~factoriax.machine_spec.MACHINE_MAX_STACK`
@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import MachineType
+from factoriax.constants import Machine
 from factoriax.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 
 
@@ -63,14 +63,14 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     Stored as a PyTree leaf on :class:`~factoriax.state.EnvParams` so
     JIT'd kernels in :mod:`factoriax.machines` can read
     ``params.machine_config.max_stack`` without re-baking the XLA
-    graph when overrides change. Shape is fixed by ``len(MachineType)``
+    graph when overrides change. Shape is fixed by ``len(Machine)``
     so the JIT cache survives across different override sets.
 
     Attributes:
         max_stack: Per-machine buffer cap, shape
-            ``(len(MachineType),)``, int16.
+            ``(len(Machine),)``, int16.
         max_health: Per-machine maximum health, shape
-            ``(len(MachineType),)``, int16. Default mirrors
+            ``(len(Machine),)``, int16. Default mirrors
             :data:`~factoriax.machine_spec.MACHINE_MAX_HEALTH`;
             wrappers tune via :meth:`with_overrides`.
     """
@@ -106,7 +106,7 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
         Args:
             overrides: Mapping from machine type integer (e.g.
-                ``int(MachineType.PALLET)``) to a
+                ``int(Machine.PALLET)``) to a
                 :class:`MachineConfigOverride`. Empty or all-None
                 overrides return an array equal to ``self``.
 
@@ -127,20 +127,20 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             if mt_int < 0 or mt_int >= n:
                 raise ValueError(
                     f"machine type {mt_int} out of range [0, {n}); valid "
-                    f"types: {[m.name for m in MachineType]}"
+                    f"types: {[m.name for m in Machine]}"
                 )
             if ov.max_stack is not None:
                 if ov.max_stack < 0:
                     raise ValueError(
                         f"max_stack must be non-negative; got {ov.max_stack} "
-                        f"for {MachineType(mt_int).name}"
+                        f"for {Machine(mt_int).name}"
                     )
                 max_stack = max_stack.at[mt_int].set(jnp.int16(ov.max_stack))
             if ov.max_health is not None:
                 if ov.max_health < 0:
                     raise ValueError(
                         f"max_health must be non-negative; got {ov.max_health} "
-                        f"for {MachineType(mt_int).name}"
+                        f"for {Machine(mt_int).name}"
                     )
                 max_health = max_health.at[mt_int].set(jnp.int16(ov.max_health))
         return MachineConfig(max_stack=max_stack, max_health=max_health)

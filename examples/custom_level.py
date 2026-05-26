@@ -25,7 +25,7 @@ from factoriax import (
     load_level,
     save_level,
 )
-from factoriax.constants import MachineType
+from factoriax.constants import Machine
 
 
 def build_demo_level() -> Level:
@@ -34,7 +34,7 @@ def build_demo_level() -> Level:
         LevelBuilder(12, 12)
         .fill_rect(1, 1, 3, 3, BlockType.IRON, resources=200)
         .fill_rect(8, 1, 3, 3, BlockType.COPPER, resources=200)
-        .place_machine(2, 4, int(MachineType.MINER), direction=int(Direction.UP))
+        .place_machine(2, 4, int(Machine.MINER), direction=int(Direction.UP))
         .build("demo_two_patches")
     )
 

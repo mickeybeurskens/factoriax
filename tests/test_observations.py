@@ -18,7 +18,7 @@ from factoriax.constants import (
     BLOCK_MAX_RESOURCES,
     NUM_ITEM_TYPES,
     BlockType,
-    MachineType,
+    Machine,
 )
 from factoriax.observations import (
     _SPATIAL_CHANNEL_NAMES,
@@ -288,7 +288,7 @@ class TestLocalArray:
         """A MINER at the player's position appears in the machine channel."""
         world_map = jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT)
         machine_types = jnp.zeros((8, 8), dtype=jnp.int32)
-        machine_types = machine_types.at[3, 3].set(int(MachineType.MINER))
+        machine_types = machine_types.at[3, 3].set(int(Machine.MINER))
 
         state = state_factory(
             world_map=world_map,
@@ -299,7 +299,7 @@ class TestLocalArray:
 
         window_size = _WINDOW**2
         machine_flat = out[window_size : 2 * window_size]
-        miner_val = float(MachineType.MINER) / float(max(MachineType))
+        miner_val = float(Machine.MINER) / float(max(Machine))
         centre = _RADIUS * _WINDOW + _RADIUS
         assert machine_flat[centre] == pytest.approx(miner_val)
 
@@ -453,8 +453,8 @@ class TestSlotProjection:
 
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-        mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
-        mt = mt.at[3, 2].set(int(MachineType.ASSEMBLER))
+        mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
+        mt = mt.at[3, 2].set(int(Machine.ASSEMBLER))
         ait = jnp.zeros((*shape, 2), dtype=jnp.int32)
         ait = ait.at[3, 2, 0].set(int(ItemType.IRON_PLATE))
         ait = ait.at[3, 2, 1].set(int(ItemType.TIN_PLATE))
@@ -502,8 +502,8 @@ class TestSlotProjection:
 
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-        mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
-        mt = mt.at[1, 1].set(int(MachineType.PALLET))
+        mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
+        mt = mt.at[1, 1].set(int(Machine.PALLET))
         bt = jnp.zeros(shape, dtype=jnp.int32).at[1, 1].set(int(ItemType.COAL))
         bc = jnp.zeros(shape, dtype=jnp.int32).at[1, 1].set(50)
 
@@ -530,8 +530,8 @@ class TestSlotProjection:
         every slot channel."""
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
-        mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
-        mt = mt.at[2, 2].set(int(MachineType.ASSEMBLER))
+        mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
+        mt = mt.at[2, 2].set(int(Machine.ASSEMBLER))
 
         state = state_factory(world_map=world_map, machine_types=mt)
         obs = global_array(state, _DEFAULT_PARAMS, 0)
@@ -575,10 +575,10 @@ class TestLocalGlobalEquivalence:
         world_map = world_map.at[9, 2].set(int(BlockType.WATER))
         world_map = world_map.at[11, 12].set(int(BlockType.IRON))
 
-        mt = jnp.full((h, w), int(MachineType.NONE), dtype=jnp.int32)
-        mt = mt.at[7, 7].set(int(MachineType.ASSEMBLER))
-        mt = mt.at[8, 9].set(int(MachineType.MINER))
-        mt = mt.at[5, 10].set(int(MachineType.PALLET))
+        mt = jnp.full((h, w), int(Machine.NONE), dtype=jnp.int32)
+        mt = mt.at[7, 7].set(int(Machine.ASSEMBLER))
+        mt = mt.at[8, 9].set(int(Machine.MINER))
+        mt = mt.at[5, 10].set(int(Machine.PALLET))
 
         md = jnp.zeros((h, w), dtype=jnp.int8)
         md = md.at[7, 7].set(int(Direction.RIGHT))
@@ -696,8 +696,8 @@ class TestMachineDirectionChannel:
 
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.IRON), dtype=jnp.int32)
-        mt = jnp.full(shape, int(MachineType.NONE), dtype=jnp.int32)
-        mt = mt.at[4, 4].set(int(MachineType.MINER))
+        mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
+        mt = mt.at[4, 4].set(int(Machine.MINER))
         md = jnp.zeros(shape, dtype=jnp.int8).at[4, 4].set(int(Direction.RIGHT))
 
         state = state_factory(

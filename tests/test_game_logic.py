@@ -11,7 +11,7 @@ import pytest
 from factoriax import Action, BlockType, Direction, EnvParams, ItemType
 from factoriax.constants import (
     NUM_ITEM_TYPES,
-    MachineType,
+    Machine,
 )
 from factoriax.game_logic import (
     _handle_player_action,
@@ -163,11 +163,11 @@ class TestCompoundDeposit:
             player_inventory=inv,
             machine_types=jnp.full(
                 (3, 3),
-                MachineType.NONE,
+                Machine.NONE,
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(MachineType.MINER),
+            .set(Machine.MINER),
         )
         new = deposit_to_adjacent(state, 0, int(ItemType.COAL))
         assert int(new.player_inventory[0, ItemType.COAL]) == 10
@@ -188,11 +188,11 @@ class TestCompoundWithdraw:
             player_direction=int(Direction.DOWN),
             machine_types=jnp.full(
                 (3, 3),
-                MachineType.NONE,
+                Machine.NONE,
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(MachineType.MINER),
+            .set(Machine.MINER),
             buffer_type=jnp.zeros((3, 3), dtype=jnp.int8)
             .at[1, 1]
             .set(int(ItemType.IRON_ORE)),
@@ -215,11 +215,11 @@ class TestCompoundWithdraw:
             player_direction=int(Direction.DOWN),
             machine_types=jnp.full(
                 (3, 3),
-                MachineType.NONE,
+                Machine.NONE,
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(MachineType.MINER),
+            .set(Machine.MINER),
         )
         new = withdraw_from_adjacent(state, 0)
         assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 0
@@ -255,7 +255,7 @@ class TestFactoriaxStep:
             player_direction=int(Direction.LEFT),
             block_resources=jnp.array([[10, 0, 50]], dtype=jnp.int16),
             machine_types=jnp.array(
-                [[MachineType.NONE, MachineType.NONE, MachineType.MINER]],
+                [[Machine.NONE, Machine.NONE, Machine.MINER]],
                 dtype=jnp.int32,
             ),
             machine_power=jnp.array([[0, 0, 10]], dtype=jnp.int32),

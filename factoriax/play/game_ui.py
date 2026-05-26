@@ -40,7 +40,7 @@ from factoriax.constants import (
     Action,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.jax_renderer import JaxRenderer
 from factoriax.play.play_state import PlayState
@@ -662,7 +662,7 @@ class GameUI:
             if (
                 0 <= tx < map_w
                 and 0 <= ty < map_h
-                and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
+                and int(state.machine_types[ty, tx]) != int(Machine.NONE)
             ):
                 ps.machine_tx, ps.machine_ty = tx, ty
                 ps.machine_open = True
@@ -852,7 +852,7 @@ def _rotate_action_for_tile(state: EnvState) -> int:
     map_h, map_w = state.map.shape
     if not (0 <= tx < map_w and 0 <= ty < map_h):
         return int(Action.NOOP)
-    if int(state.machine_types[ty, tx]) == int(MachineType.NONE):
+    if int(state.machine_types[ty, tx]) == int(Machine.NONE):
         return int(Action.NOOP)
     eidx = int(state.tile_entity[ty, tx])
     if eidx < 0:
@@ -887,7 +887,7 @@ def _handle_world_interact(
     has_machine = (
         0 <= tx < map_w
         and 0 <= ty < map_h
-        and int(state.machine_types[ty, tx]) != int(MachineType.NONE)
+        and int(state.machine_types[ty, tx]) != int(Machine.NONE)
     )
     if has_machine:
         return int(Action.PICKUP)

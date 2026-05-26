@@ -18,7 +18,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.editor.canvas import (
     Viewport,
@@ -99,7 +99,7 @@ _DIR_CYCLE = [
     int(Direction.LEFT),
 ]
 
-_CONVEYOR = int(MachineType.CONVEYOR_BELT)
+_CONVEYOR = int(Machine.CONVEYOR_BELT)
 
 _TOOL_LIST = [TOOL_PAINT, TOOL_FILL, TOOL_ERASE]
 
@@ -135,7 +135,7 @@ class ToolState:
     Attributes:
         tool: Active tool name.
         block: Active ``BlockType`` value.
-        machine: Active ``MachineType`` value, or 0 for block mode.
+        machine: Active ``Machine`` value, or 0 for block mode.
         direction: Global machine placement direction.
         entity: Active entity selection as ``(kind, index)`` or ``None``.
         brush: Resource brush settings.
@@ -546,7 +546,7 @@ def _handle_inv_canvas_click(
             ts.inv_focused_slot = 0
             return
     mt = int(editor.machine_types[ty, tx])
-    if mt != int(MachineType.NONE):
+    if mt != int(Machine.NONE):
         ts.inv_target = ("machine", tx, ty)
         ts.inv_focused_slot = 0
         return
@@ -910,7 +910,7 @@ def _handle_rotate(ts: ToolState, editor: EditorState) -> None:
         ct is not None
         and 0 <= ct[0] < editor.map_width
         and 0 <= ct[1] < editor.map_height
-        and editor.machine_types[ct[1], ct[0]] != int(MachineType.NONE)
+        and editor.machine_types[ct[1], ct[0]] != int(Machine.NONE)
     ):
         r, c = ct[1], ct[0]
         editor.machine_directions[r, c] = _next_direction(
@@ -940,7 +940,7 @@ def _open_inspector(
     x, y = ct
     if not (0 <= x < editor.map_width and 0 <= y < editor.map_height):
         return None
-    if editor.machine_types[y, x] == int(MachineType.NONE):
+    if editor.machine_types[y, x] == int(Machine.NONE):
         return None
     return MachineInspectorDialog(
         tile_x=x,
@@ -1028,7 +1028,7 @@ def _validate_inv_target(ts: ToolState, editor: EditorState) -> None:
             or ty < 0
             or tx >= editor.map_width
             or ty >= editor.map_height
-            or int(editor.machine_types[ty, tx]) == int(MachineType.NONE)
+            or int(editor.machine_types[ty, tx]) == int(Machine.NONE)
         ):
             ts.inv_target = None
             ts.inv_focused_slot = 0

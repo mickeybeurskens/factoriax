@@ -22,7 +22,7 @@ import jax.numpy as jnp
 from factoriax.constants import (
     BlockType,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.game_logic import run_labs
 
@@ -50,13 +50,13 @@ def _lab_state(
     """
     h = w = 8
     world_map = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)
-    mt_grid = jnp.full((h, w), int(MachineType.NONE), dtype=jnp.int32)
+    mt_grid = jnp.full((h, w), int(Machine.NONE), dtype=jnp.int32)
     ait = jnp.zeros((h, w, 2), dtype=jnp.int32)
     aic = jnp.zeros((h, w, 2), dtype=jnp.int32)
     for (x, y), types, counts in zip(
         lab_positions, lab_slot_types, lab_slot_counts, strict=True
     ):
-        mt_grid = mt_grid.at[y, x].set(int(MachineType.SCIENCE_LAB))
+        mt_grid = mt_grid.at[y, x].set(int(Machine.SCIENCE_LAB))
         ait = ait.at[y, x, 0].set(types[0])
         ait = ait.at[y, x, 1].set(types[1])
         aic = aic.at[y, x, 0].set(counts[0])
@@ -123,7 +123,7 @@ class TestRunLabsDelta:
         )
         new_state = run_labs(state)
         # Find the active lab entity.
-        idx = int(jnp.argmax(new_state.ent_type == int(MachineType.SCIENCE_LAB)))
+        idx = int(jnp.argmax(new_state.ent_type == int(Machine.SCIENCE_LAB)))
         assert int(new_state.ent_asm_in_type[idx, 0]) == 0
         assert int(new_state.ent_asm_in_count[idx, 0]) == 0
 
@@ -155,7 +155,7 @@ class TestRunLabsDelta:
         )
         new_state = run_labs(state)
         assert tuple(new_state.science_consumed_step.tolist()) == (0, 0)
-        idx = int(jnp.argmax(new_state.ent_type == int(MachineType.SCIENCE_LAB)))
+        idx = int(jnp.argmax(new_state.ent_type == int(Machine.SCIENCE_LAB)))
         # Non-pack item stays put.
         assert int(new_state.ent_asm_in_type[idx, 0]) == int(ItemType.IRON_PLATE)
         assert int(new_state.ent_asm_in_count[idx, 0]) == 10
@@ -233,7 +233,7 @@ class TestScienceConstants:
         from factoriax.constants import SlotRole
         from factoriax.machine_spec import MACHINE_SLOT_ROLES
 
-        roles = MACHINE_SLOT_ROLES[int(MachineType.SCIENCE_LAB)]
+        roles = MACHINE_SLOT_ROLES[int(Machine.SCIENCE_LAB)]
         assert roles[0] == int(SlotRole.INPUT)
         assert roles[1] == int(SlotRole.INPUT)
         # Padding slots beyond the lab's two are NONE.

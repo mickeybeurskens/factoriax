@@ -83,8 +83,10 @@ def test_inverse_domains() -> None:
     inv_craft = np.asarray(actions.ITEM_TO_CRAFT_ACTION)
     inv_deposit = np.asarray(actions.ITEM_TO_DEPOSIT_ACTION)
 
-    placeable = {int(ItemType[m.name]) for m in Machine}
-    craftable = {int(ItemType[m.name]) for m in (*HalfFabricate, *Machine)}
+    placeable = {int(ItemType[m.name]) for m in Machine if m.name != "NONE"}
+    craftable = {
+        int(ItemType[m.name]) for m in (*HalfFabricate, *Machine) if m.name != "NONE"
+    }
     depositable = set(range(1, NUM_ITEM_TYPES))  # every non-EMPTY item
 
     def domain(inv: np.ndarray) -> set[int]:
@@ -104,6 +106,8 @@ def test_resources_are_not_craftable_or_placeable() -> None:
     inv_craft = np.asarray(actions.ITEM_TO_CRAFT_ACTION)
     inv_deposit = np.asarray(actions.ITEM_TO_DEPOSIT_ACTION)
     for resource in Resource:
+        if resource.name == "NONE":
+            continue
         item = int(ItemType[resource.name])
         assert inv_craft[item] == actions.NO_ACTION
         assert inv_place[item] == actions.NO_ACTION

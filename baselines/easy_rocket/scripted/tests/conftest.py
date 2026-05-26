@@ -21,20 +21,20 @@ from factoriax.constants import (
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     Direction,
-    MachineType,
+    Machine,
 )
 from factoriax.state import EnvState
 
 # One machine to place in a synthetic state: (x, y, machine_type,
 # direction, buf_type, buf_count).
-Machine = tuple[int, int, int, int, int, int]
+PlacedMachine = tuple[int, int, int, int, int, int]
 
 
 def _make_state(
     world_map: jnp.ndarray,
     *,
     block_resources: jnp.ndarray | None = None,
-    machines: list[Machine] | None = None,
+    machines: list[PlacedMachine] | None = None,
     player_position: tuple[int, int] = (0, 0),
     player_direction: int = int(Direction.DOWN),
     player_inventory: jnp.ndarray | None = None,
@@ -48,7 +48,7 @@ def _make_state(
     """
     h, w = world_map.shape
     mm = max_machines
-    mt_grid = np.full((h, w), int(MachineType.NONE), dtype=np.int8)
+    mt_grid = np.full((h, w), int(Machine.NONE), dtype=np.int8)
     tile_ent = np.full((h, w), -1, dtype=np.int16)
     ent_y = np.full(mm, -1, dtype=np.int16)
     ent_x = np.full(mm, -1, dtype=np.int16)

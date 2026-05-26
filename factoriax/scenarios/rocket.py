@@ -34,7 +34,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.levels import Level, LevelBuilder
 from factoriax.recipes import (
@@ -248,7 +248,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
     withdraw pulls it out (no buffer drain), so that's where we check.
     """
     matches = (
-        (state.ent_type == MachineType.ASSEMBLER)
+        (state.ent_type == Machine.ASSEMBLER)
         & (state.ent_y >= 0)
         & (state.ent_asm_out_count > 0)
     )
@@ -274,7 +274,7 @@ def rocket_conditions(state: EnvState) -> jax.Array:
     Returns:
         Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
-    total_machines = jnp.sum(state.machine_types != MachineType.NONE)
+    total_machines = jnp.sum(state.machine_types != Machine.NONE)
 
     conditions = jnp.array(
         [
@@ -295,31 +295,31 @@ def rocket_conditions(state: EnvState) -> jax.Array:
             _holds_item(state, ItemType.MOTOR),
             _holds_item(state, ItemType.SENSOR),
             _holds_item(state, ItemType.MINER),
-            _count_machines(state, MachineType.MINER) >= 1,
+            _count_machines(state, Machine.MINER) >= 1,
             _holds_item(state, ItemType.FURNACE),
-            _count_machines(state, MachineType.FURNACE) >= 1,
-            _any_entity_buf_nonempty(state, MachineType.MINER),
+            _count_machines(state, Machine.FURNACE) >= 1,
+            _any_entity_buf_nonempty(state, Machine.MINER),
             _holds_item(state, ItemType.CONVEYOR_BELT),
-            _count_machines(state, MachineType.CONVEYOR_BELT) >= 1,
+            _count_machines(state, Machine.CONVEYOR_BELT) >= 1,
             # Advanced (5 pt).
             _holds_item(state, ItemType.PALLET),
-            _count_machines(state, MachineType.PALLET) >= 1,
-            _any_entity_buf_nonempty(state, MachineType.PALLET),
+            _count_machines(state, Machine.PALLET) >= 1,
+            _any_entity_buf_nonempty(state, Machine.PALLET),
             _holds_item(state, ItemType.ARM),
-            _count_machines(state, MachineType.ARM) >= 1,
+            _count_machines(state, Machine.ARM) >= 1,
             _holds_item(state, ItemType.ASSEMBLER),
-            _count_machines(state, MachineType.ASSEMBLER) >= 1,
+            _count_machines(state, Machine.ASSEMBLER) >= 1,
             _any_assembler_has_output(state),
-            _count_machines(state, MachineType.CONVEYOR_BELT) >= 5,
+            _count_machines(state, Machine.CONVEYOR_BELT) >= 5,
             _holds_item(state, ItemType.HULL),
             _holds_item(state, ItemType.ENGINE_UNIT),
             _holds_item(state, ItemType.AVIONICS),
             _holds_item(state, ItemType.ROCKET_CORE),
             # Very Advanced (8 pt).
-            _count_machines(state, MachineType.MINER) >= 3,
+            _count_machines(state, Machine.MINER) >= 3,
             total_machines >= 10,
             _holds_item(state, ItemType.ROCKET),
-            _count_machines(state, MachineType.ROCKET) >= 1,
+            _count_machines(state, Machine.ROCKET) >= 1,
         ],
         dtype=jnp.bool_,
     )
@@ -473,13 +473,13 @@ def build_rocket_level() -> Level:
     builder.place_machine(
         _FURNACE_TILE[0],
         _FURNACE_TILE[1],
-        int(MachineType.FURNACE),
+        int(Machine.FURNACE),
         direction=int(Direction.DOWN),
     )
     builder.place_machine(
         _ASSEMBLER_TILE[0],
         _ASSEMBLER_TILE[1],
-        int(MachineType.ASSEMBLER),
+        int(Machine.ASSEMBLER),
         direction=int(Direction.DOWN),
     )
     return builder.build("rocket_v1")

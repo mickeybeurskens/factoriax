@@ -28,7 +28,7 @@ from factoriax.constants import (
     BlockType,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.crafting import can_afford_recipe, count_item_in_inventory
 from factoriax.recipes import (
@@ -770,7 +770,7 @@ def render_machine_menu(
     )
 
     # --- Assembler recipe subtitle ---
-    if machine_type == int(MachineType.ASSEMBLER):
+    if machine_type == int(Machine.ASSEMBLER):
         eidx = int(state.tile_entity[ty, tx])
         if eidx >= 0:
             out_type = int(state.ent_asm_out_type[eidx])
@@ -963,7 +963,7 @@ def render_machine_menu(
     # --- Hint bar ---
     hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
     hints = "[E] Transfer  [W/S] Switch panel  [A/D] Select  [ESC] Close"
-    if machine_type == int(MachineType.ASSEMBLER):
+    if machine_type == int(Machine.ASSEMBLER):
         hints = "[Q] Recipe  " + hints
     _render_control_hints(
         overlay,
@@ -1641,7 +1641,7 @@ def render_info_panel(
     else:
         block_type = int(state.map[hover_ty, hover_tx])
         machine_type = int(state.machine_types[hover_ty, hover_tx])
-        has_machine = machine_type != int(MachineType.NONE)
+        has_machine = machine_type != int(Machine.NONE)
 
         if has_machine:
             cy = _render_info_machine(
@@ -1698,7 +1698,7 @@ def _render_info_machine(
         max_x: Content right edge X.
         tx: Machine tile X.
         ty: Machine tile Y.
-        machine_type: MachineType int value.
+        machine_type: Machine int value.
         header_font: Font for the machine name header.
         body_font: Font for body text.
         hint_font: Font for small labels.

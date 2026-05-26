@@ -80,7 +80,7 @@ from baselines.rocket.scripted.goals import (
     Wait,
     WaitUntil,
 )
-from factoriax.constants import Direction, ItemType, MachineType
+from factoriax.constants import Direction, ItemType, Machine
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.levels import build_state
@@ -184,20 +184,20 @@ def test_emits_each_cell_placements() -> None:
     by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
 
     for label, (mx, my), (fx, fy), (cx, cy) in _CELL_GEOMETRY:
-        assert by_tile[(mx, my)][0] == int(MachineType.MINER), label
-        assert by_tile[(mx + 1, my)][0] == int(MachineType.CONVEYOR_BELT), label
-        assert by_tile[(mx + 2, my)][0] == int(MachineType.CONVEYOR_BELT), label
+        assert by_tile[(mx, my)][0] == int(Machine.MINER), label
+        assert by_tile[(mx + 1, my)][0] == int(Machine.CONVEYOR_BELT), label
+        assert by_tile[(mx + 2, my)][0] == int(Machine.CONVEYOR_BELT), label
         # Ore feeder is now a belt facing DOWN (combiners pull only
         # from facing belts under the directional Phase 0).
-        assert by_tile[(fx, my)][0] == int(MachineType.CONVEYOR_BELT), label
-        assert by_tile[(fx, fy)][0] == int(MachineType.FURNACE), label
-        assert by_tile[(fx + 1, fy)][0] == int(MachineType.ARM), label
-        assert by_tile[(fx + 2, fy)][0] == int(MachineType.PALLET), label
+        assert by_tile[(fx, my)][0] == int(Machine.CONVEYOR_BELT), label
+        assert by_tile[(fx, fy)][0] == int(Machine.FURNACE), label
+        assert by_tile[(fx + 1, fy)][0] == int(Machine.ARM), label
+        assert by_tile[(fx + 2, fy)][0] == int(Machine.PALLET), label
         # Coal feeder south of the furnace is also a belt (UP-facing).
-        assert by_tile[(fx, fy + 1)][0] == int(MachineType.CONVEYOR_BELT), label
-        assert by_tile[(cx, cy)][0] == int(MachineType.MINER), label
+        assert by_tile[(fx, fy + 1)][0] == int(Machine.CONVEYOR_BELT), label
+        assert by_tile[(cx, cy)][0] == int(Machine.MINER), label
         for x in range(1, 7):
-            assert by_tile[(x, cy)][0] == int(MachineType.CONVEYOR_BELT), label
+            assert by_tile[(x, cy)][0] == int(Machine.CONVEYOR_BELT), label
 
 
 def test_emits_wire_cell_placements() -> None:
@@ -210,22 +210,22 @@ def test_emits_wire_cell_placements() -> None:
     by_tile = {g.target: (g.machine_type, g.facing) for g in placements}
 
     # WIRE assembler module: inputs are feeder belts; output is a pallet.
-    assert by_tile[_WIRE_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
-    assert by_tile[_WIRE_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_WIRE_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_WIRE_OUTPUT_TILE][0] == int(MachineType.PALLET)
-    assert by_tile[(14, 14)][0] == int(MachineType.ARM)  # output arm
+    assert by_tile[_WIRE_ASSEMBLER_TILE][0] == int(Machine.ASSEMBLER)
+    assert by_tile[_WIRE_INPUT_A_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_WIRE_INPUT_B_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_WIRE_OUTPUT_TILE][0] == int(Machine.PALLET)
+    assert by_tile[(14, 14)][0] == int(Machine.ARM)  # output arm
 
     # Copper extractor arm + pre-splitter L-route + horizontal SPLITTER
     # at (13, 12). The splitter's DOWN output lands on the WIRE
     # input_a feeder at (13, 13); its UP output is consumed by Phase
     # 3.CIRCUIT off (13, 11).
-    assert by_tile[_COPPER_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
-    assert by_tile[(11, 13)] == (int(MachineType.CONVEYOR_BELT), int(Direction.UP))
-    assert by_tile[(11, 12)] == (int(MachineType.CONVEYOR_BELT), int(Direction.RIGHT))
-    assert by_tile[(12, 12)] == (int(MachineType.CONVEYOR_BELT), int(Direction.RIGHT))
+    assert by_tile[_COPPER_EXTRACT_ARM_TILE][0] == int(Machine.ARM)
+    assert by_tile[(11, 13)] == (int(Machine.CONVEYOR_BELT), int(Direction.UP))
+    assert by_tile[(11, 12)] == (int(Machine.CONVEYOR_BELT), int(Direction.RIGHT))
+    assert by_tile[(12, 12)] == (int(Machine.CONVEYOR_BELT), int(Direction.RIGHT))
     assert by_tile[_COPPER_SPLITTER_TILE] == (
-        int(MachineType.SPLITTER),
+        int(Machine.SPLITTER),
         int(Direction.RIGHT),
     )
 
@@ -234,10 +234,10 @@ def test_emits_wire_cell_placements() -> None:
     # the WIRE route (via its UP output) and the FRAME route (via
     # its DOWN output). The UP output drops onto (11, 15) RIGHT
     # then bends to (12, 15) UP into the WIRE input_b.
-    assert by_tile[_TIN_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
-    assert by_tile[(11, 16)][0] == int(MachineType.SPLITTER)
-    assert by_tile[(11, 15)][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[(12, 15)][0] == int(MachineType.CONVEYOR_BELT)
+    assert by_tile[_TIN_EXTRACT_ARM_TILE][0] == int(Machine.ARM)
+    assert by_tile[(11, 16)][0] == int(Machine.SPLITTER)
+    assert by_tile[(11, 15)][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[(12, 15)][0] == int(Machine.CONVEYOR_BELT)
 
 
 def test_uses_place_from_back_for_coal_miners() -> None:
@@ -247,7 +247,7 @@ def test_uses_place_from_back_for_coal_miners() -> None:
         g
         for g in goals
         if isinstance(g, PlaceMachineFromBackAt)
-        and g.machine_type == int(MachineType.MINER)
+        and g.machine_type == int(Machine.MINER)
     ]
     expected_targets = {(0, 11), (0, 14), (0, 17), (0, 20)}
     assert {g.target for g in miners_from_back} == expected_targets
@@ -263,8 +263,7 @@ def test_uses_place_from_back_for_extractor_arms() -> None:
     arms_from_back = [
         g
         for g in goals
-        if isinstance(g, PlaceMachineFromBackAt)
-        and g.machine_type == int(MachineType.ARM)
+        if isinstance(g, PlaceMachineFromBackAt) and g.machine_type == int(Machine.ARM)
     ]
     by_target = {g.target: g.facing for g in arms_from_back}
     assert by_target == {
@@ -289,29 +288,29 @@ def test_emits_circuit_cell_placements() -> None:
 
     # CIRCUIT module: inputs are feeder belts; output is a pallet.
     cx, cy = _CIRCUIT_ASSEMBLER_TILE
-    assert by_tile[_CIRCUIT_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
-    assert by_tile[_CIRCUIT_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_CIRCUIT_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_CIRCUIT_OUTPUT_TILE][0] == int(MachineType.PALLET)
-    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+    assert by_tile[_CIRCUIT_ASSEMBLER_TILE][0] == int(Machine.ASSEMBLER)
+    assert by_tile[_CIRCUIT_INPUT_A_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_CIRCUIT_INPUT_B_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_CIRCUIT_OUTPUT_TILE][0] == int(Machine.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(Machine.ARM)  # output arm
 
     # Wafer extractor (from-back, facing UP from (9, 18)).
     assert by_tile[_WAFER_EXTRACT_ARM_TILE] == (
-        int(MachineType.ARM),
+        int(Machine.ARM),
         int(Direction.UP),
     )
 
     # CROSSING shares (11, 17) with the tin -> FRAME trunk; dir=1
     # is N->S vertical + W->E horizontal.
-    assert by_tile[_WAFER_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+    assert by_tile[_WAFER_CROSSING_TILE] == (int(Machine.CROSSING), 1)
 
     # Every copper-to-CIRCUIT and wafer-route belt landed.
     for tile, _facing in _COPPER_TO_CIRCUIT_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _WAFER_PRE_CROSSING_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _WAFER_POST_CROSSING_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
 
 
 def test_emits_motor_cell_placements() -> None:
@@ -325,34 +324,34 @@ def test_emits_motor_cell_placements() -> None:
 
     # MOTOR module: inputs are feeder belts; output is a pallet.
     cx, cy = _MOTOR_ASSEMBLER_TILE
-    assert by_tile[_MOTOR_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
-    assert by_tile[_MOTOR_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_MOTOR_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_MOTOR_OUTPUT_TILE][0] == int(MachineType.PALLET)
-    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+    assert by_tile[_MOTOR_ASSEMBLER_TILE][0] == int(Machine.ASSEMBLER)
+    assert by_tile[_MOTOR_INPUT_A_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_MOTOR_INPUT_B_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_MOTOR_OUTPUT_TILE][0] == int(Machine.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(Machine.ARM)  # output arm
 
     # Extractor arms.
     assert by_tile[_WIRE_EXTRACT_ARM_TILE] == (
-        int(MachineType.ARM),
+        int(Machine.ARM),
         int(Direction.UP),
     )
     assert by_tile[_FRAME_EXTRACT_ARM_TILE] == (
-        int(MachineType.ARM),
+        int(Machine.ARM),
         int(Direction.RIGHT),
     )
 
     # Both CROSSINGs share their tile with an upstream cell's trunk;
     # dir=1 = N->S vertical (copper or iron) + W->E horizontal (wire).
-    assert by_tile[_WIRE_COPPER_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
-    assert by_tile[_WIRE_IRON_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+    assert by_tile[_WIRE_COPPER_CROSSING_TILE] == (int(Machine.CROSSING), 1)
+    assert by_tile[_WIRE_IRON_CROSSING_TILE] == (int(Machine.CROSSING), 1)
 
     # Every wire-route belt landed.
     for tile, _facing in _WIRE_TO_MOTOR_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _WIRE_TO_MOTOR_MID_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _WIRE_TO_MOTOR_TAIL_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
 
 
 def test_circuit_and_iron_belts_skip_motor_crossing_tiles() -> None:
@@ -389,36 +388,36 @@ def test_emits_sensor_cell_placements() -> None:
 
     # SENSOR module: inputs are feeder belts; output is a pallet.
     cx, cy = _SENSOR_ASSEMBLER_TILE
-    assert by_tile[_SENSOR_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
-    assert by_tile[_SENSOR_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_SENSOR_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_SENSOR_OUTPUT_TILE][0] == int(MachineType.PALLET)
-    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+    assert by_tile[_SENSOR_ASSEMBLER_TILE][0] == int(Machine.ASSEMBLER)
+    assert by_tile[_SENSOR_INPUT_A_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_SENSOR_INPUT_B_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_SENSOR_OUTPUT_TILE][0] == int(Machine.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(Machine.ARM)  # output arm
 
     # CIRCUIT extractor (from-back, facing DOWN).
     assert by_tile[_CIRCUIT_EXTRACT_ARM_TILE] == (
-        int(MachineType.ARM),
+        int(Machine.ARM),
         int(Direction.DOWN),
     )
 
     # WIRE splitter inline on the WIRE -> MOTOR trunk.
     assert by_tile[_WIRE_SPLITTER_TILE] == (
-        int(MachineType.SPLITTER),
+        int(Machine.SPLITTER),
         int(Direction.RIGHT),
     )
 
     # Two CROSSINGs on the CIRCUIT route across iron and wire trunks.
-    assert by_tile[_CIRCUIT_IRON_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
-    assert by_tile[_CIRCUIT_WIRE_CROSSING_TILE] == (int(MachineType.CROSSING), 1)
+    assert by_tile[_CIRCUIT_IRON_CROSSING_TILE] == (int(Machine.CROSSING), 1)
+    assert by_tile[_CIRCUIT_WIRE_CROSSING_TILE] == (int(Machine.CROSSING), 1)
 
     for tile, _facing in _WIRE_TO_SENSOR_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _CIRCUIT_TO_SENSOR_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _CIRCUIT_TO_SENSOR_MID_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
     for tile, _facing in _CIRCUIT_TO_SENSOR_TAIL_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
 
 
 def test_emits_frame_cell_placements() -> None:
@@ -434,22 +433,22 @@ def test_emits_frame_cell_placements() -> None:
 
     # FRAME assembler module: inputs are feeder belts; output is a pallet.
     cx, cy = _FRAME_ASSEMBLER_TILE
-    assert by_tile[_FRAME_ASSEMBLER_TILE][0] == int(MachineType.ASSEMBLER)
-    assert by_tile[_FRAME_INPUT_A_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_FRAME_INPUT_B_TILE][0] == int(MachineType.CONVEYOR_BELT)
-    assert by_tile[_FRAME_OUTPUT_TILE][0] == int(MachineType.PALLET)
-    assert by_tile[(cx + 1, cy)][0] == int(MachineType.ARM)  # output arm
+    assert by_tile[_FRAME_ASSEMBLER_TILE][0] == int(Machine.ASSEMBLER)
+    assert by_tile[_FRAME_INPUT_A_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_FRAME_INPUT_B_TILE][0] == int(Machine.CONVEYOR_BELT)
+    assert by_tile[_FRAME_OUTPUT_TILE][0] == int(Machine.PALLET)
+    assert by_tile[(cx + 1, cy)][0] == int(Machine.ARM)  # output arm
 
     # Iron extractor + every iron route belt.
-    assert by_tile[_IRON_EXTRACT_ARM_TILE][0] == int(MachineType.ARM)
+    assert by_tile[_IRON_EXTRACT_ARM_TILE][0] == int(Machine.ARM)
     for tile, _facing in _IRON_TO_FRAME_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
 
     # Tin route belts (the trunk head at (11, 17) is a CROSSING,
     # placed by Phase 3.CIRCUIT, not a BELT).
     for tile, _facing in _TIN_TO_FRAME_BELTS:
-        assert by_tile[tile][0] == int(MachineType.CONVEYOR_BELT), tile
-    assert by_tile[_WAFER_CROSSING_TILE][0] == int(MachineType.CROSSING)
+        assert by_tile[tile][0] == int(Machine.CONVEYOR_BELT), tile
+    assert by_tile[_WAFER_CROSSING_TILE][0] == int(Machine.CROSSING)
 
 
 def test_frame_routes_avoid_pre_placed_drain_zone() -> None:
@@ -529,7 +528,7 @@ def test_uses_place_from_back_for_ore_feeder_belts() -> None:
         g
         for g in goals
         if isinstance(g, PlaceMachineFromBackAt)
-        and g.machine_type == int(MachineType.CONVEYOR_BELT)
+        and g.machine_type == int(Machine.CONVEYOR_BELT)
         and g.target in expected_targets
     ]
     assert {g.target for g in feeders_from_back} == expected_targets
@@ -926,9 +925,8 @@ def _assert_pallet_holds(state, tile: tuple[int, int], item: ItemType) -> None:
     ent_buf_count = np.asarray(state.ent_buf_count)
 
     bx, by = tile
-    assert int(machine_types[by, bx]) == int(MachineType.PALLET), (
-        f"tile {tile} should be PALLET; got "
-        f"{MachineType(int(machine_types[by, bx])).name}"
+    assert int(machine_types[by, bx]) == int(Machine.PALLET), (
+        f"tile {tile} should be PALLET; got {Machine(int(machine_types[by, bx])).name}"
     )
     ent_id = int(tile_entity[by, bx])
     assert ent_id >= 0, f"entity not registered at {tile}"

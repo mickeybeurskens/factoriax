@@ -18,7 +18,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from factoriax.constants import Action, ItemType, MachineType
+from factoriax.constants import Action, ItemType, Machine
 from factoriax.state import EnvParams
 
 from .goals import (
@@ -75,7 +75,7 @@ def _miner_has_output_predicate() -> Callable[[WorldView], bool]:
         # buffer_type > 0 on any MINER tile — rocket conditions match
         # the miner's ent_buf_count, which the obs surfaces as the
         # buffer_type channel via the tile→entity scatter.
-        miner_tiles = view.tiles_with_machine(MachineType.MINER)
+        miner_tiles = view.tiles_with_machine(Machine.MINER)
         for x, y in miner_tiles:
             if view.buffer_type[y, x] != 0:
                 return True
@@ -125,7 +125,7 @@ def _any_assembler_has_output_predicate() -> Callable[[WorldView], bool]:
     """
 
     def pred(view: WorldView) -> bool:
-        asm_tiles = view.tiles_with_machine(MachineType.ASSEMBLER)
+        asm_tiles = view.tiles_with_machine(Machine.ASSEMBLER)
         for x, y in asm_tiles:
             if view.buffer_type[y, x] != 0:
                 return True
@@ -193,24 +193,24 @@ def build_rocket_goals() -> list[Goal]:
         ProduceInAssembler(ItemType.ASSEMBLER, 1),
         ProduceInAssembler(ItemType.ROCKET, 1),
         # ---- Phase G — placements ----
-        PlaceMachine(MachineType.MINER, on_ore(ItemType.IRON_ORE)),
-        PlaceMachine(MachineType.MINER, on_ore(ItemType.COPPER_ORE)),
-        PlaceMachine(MachineType.MINER, on_ore(ItemType.TIN_ORE)),
+        PlaceMachine(Machine.MINER, on_ore(ItemType.IRON_ORE)),
+        PlaceMachine(Machine.MINER, on_ore(ItemType.COPPER_ORE)),
+        PlaceMachine(Machine.MINER, on_ore(ItemType.TIN_ORE)),
         WaitUntil(_miner_has_output_predicate(), max_ticks=30),
-        PlaceMachine(MachineType.FURNACE, free_tile_near_player()),
-        PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
-        PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
-        PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
-        PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
-        PlaceMachine(MachineType.CONVEYOR_BELT, free_tile_near_player()),
-        PlaceMachine(MachineType.PALLET, free_tile_near_player()),
-        PlaceMachine(MachineType.ARM, free_tile_near_player()),
-        PlaceMachine(MachineType.ASSEMBLER, free_tile_near_player()),
+        PlaceMachine(Machine.FURNACE, free_tile_near_player()),
+        PlaceMachine(Machine.CONVEYOR_BELT, free_tile_near_player()),
+        PlaceMachine(Machine.CONVEYOR_BELT, free_tile_near_player()),
+        PlaceMachine(Machine.CONVEYOR_BELT, free_tile_near_player()),
+        PlaceMachine(Machine.CONVEYOR_BELT, free_tile_near_player()),
+        PlaceMachine(Machine.CONVEYOR_BELT, free_tile_near_player()),
+        PlaceMachine(Machine.PALLET, free_tile_near_player()),
+        PlaceMachine(Machine.ARM, free_tile_near_player()),
+        PlaceMachine(Machine.ASSEMBLER, free_tile_near_player()),
         # ---- Phase H — unlock pallet_filled ----
         # Deposit a leftover plate (raw ore is all smelted by now).
-        DepositInto(MachineType.PALLET, ItemType.IRON_PLATE),
+        DepositInto(Machine.PALLET, ItemType.IRON_PLATE),
         # ---- Phase I — capstone: place the rocket ----
-        PlaceMachine(MachineType.ROCKET, free_tile_near_player()),
+        PlaceMachine(Machine.ROCKET, free_tile_near_player()),
     ]
 
 

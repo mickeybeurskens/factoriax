@@ -20,7 +20,7 @@ from factoriax.constants import (
     Action,
     Direction,
     ItemType,
-    MachineType,
+    Machine,
 )
 from factoriax.play.game_ui import GameUI, GameUIResult
 from factoriax.state import EnvParams
@@ -117,7 +117,7 @@ class TestWorldKeys:
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(int(MachineType.MINER)),
+            .set(int(Machine.MINER)),
         )
         result = ui.handle_event(_key(pygame.K_e), state)
         assert result.action == int(Action.PICKUP)
@@ -133,7 +133,7 @@ class TestWorldKeys:
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(int(MachineType.MINER)),
+            .set(int(Machine.MINER)),
             machine_direction=jnp.zeros(
                 (8, 8),
                 dtype=jnp.int32,
@@ -306,7 +306,7 @@ class TestMachineContext:
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(int(MachineType.MINER)),
+            .set(int(Machine.MINER)),
         )
 
     def test_open_machine(self, ui, machine_state) -> None:
@@ -496,7 +496,7 @@ class TestRenderFrame:
                 dtype=jnp.int32,
             )
             .at[1, 1]
-            .set(int(MachineType.MINER)),
+            .set(int(Machine.MINER)),
         )
         ps = ui.play_state
         ps.machine_open = True
