@@ -20,50 +20,8 @@ class BlockType(IntEnum):
     LIMESTONE = 9  # Refractory feedstock; pairs with COAL in furnace
 
 
-class ItemType(IntEnum):
-    """Item types that can be stored in inventory."""
-
-    EMPTY = 0
-    COAL = 1
-    IRON_ORE = 2
-    COPPER_ORE = 3
-    TIN_ORE = 4
-    SILICON = 5
-    IRON_PLATE = 6
-    COPPER_PLATE = 7
-    TIN_PLATE = 8
-    WAFER = 9
-    FRAME = 10
-    CIRCUIT = 11
-    WIRE = 12
-    MOTOR = 13
-    SENSOR = 14
-    CONVEYOR_BELT = 15
-    MINER = 16
-    ASSEMBLER = 17
-    PALLET = 18
-    ARM = 19
-    BASIC_SCIENCE_PACK = 20
-    ADVANCED_SCIENCE_PACK = 21
-    ROCKET = 22
-    FURNACE = 23
-    REFRACTORY = 24
-    HULL = 25
-    ENGINE_UNIT = 26
-    AVIONICS = 27
-    ROCKET_CORE = 28
-    SCIENCE_LAB = 29
-    # LIMESTONE is appended at the end so existing ItemType ids and the
-    # CRAFT_ACTION_TO_RECIPE slot ordering stay stable. Pairs with COAL
-    # in the REFRACTORY recipe so every furnace recipe takes two inputs.
-    LIMESTONE = 30
-    # Belt-network pieces — the same logistical tier as CONVEYOR_BELT.
-    # Appended at the end of ItemType so existing ids stay stable; the
-    # corresponding CRAFT_SPLITTER / CRAFT_CROSSING actions extend the
-    # CRAFT-addressable range (recipe indices 19, 20 — between
-    # SCIENCE_LAB at 18 and the legacy machine-only REFRACTORY at 21).
-    SPLITTER = 31
-    CROSSING = 32
+# ItemType is composed from the item categories below (EMPTY + Resource +
+# HalfFabricate + Machine); see its definition just after the Machine class.
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +79,25 @@ class Machine(IntEnum):
     SCIENCE_LAB = 7
     SPLITTER = 8
     CROSSING = 9
+
+
+# ---------------------------------------------------------------------------
+# ItemType -- composed from the item categories (DEF2)
+# ---------------------------------------------------------------------------
+# EMPTY, then the three categories in order: contiguous and renumbered. The
+# category enums are the single source -- nothing here hand-assigns a flat item
+# id. Existing ``ItemType.X`` references, ``int(ItemType.X)``, ``ItemType(i)``,
+# ``.name`` and iteration all resolve at runtime; only the integer *values*
+# move. That is a deliberate break: the observation encodes item ids as
+# normalized scalars, so renumbering changes what a trained agent perceives and
+# invalidates saved trajectories.
+_ITEM_CATEGORIES: tuple[type[IntEnum], ...] = (Resource, HalfFabricate, Machine)
+ItemType = IntEnum(
+    "ItemType",
+    ["EMPTY", *(m.name for cat in _ITEM_CATEGORIES for m in cat)],
+    start=0,
+)
+ItemType.__doc__ = "Item types that can be stored in inventory."
 
 
 class MachineType(IntEnum):
