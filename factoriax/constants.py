@@ -269,6 +269,44 @@ DIRECTIONS = jnp.array(
 )
 
 # ---------------------------------------------------------------------------
+# Action categories (DEF2)
+# ---------------------------------------------------------------------------
+# The fixed (non-parametric) action categories. DEF2 composes the flat
+# Action enum from these plus the parametric families generated from the
+# item categories (Placement per Machine, Craft per non-resource item,
+# Deposit per item). Like the item categories, their own integer values are
+# inert -- the real action id lives on Action. A test
+# (test_action_categories) guards that these cover today's fixed actions.
+
+
+class MoveAction(IntEnum):
+    """Movement and facing. Values inert (the action id is on Action)."""
+
+    NOOP = 0
+    UP = 1
+    DOWN = 2
+    LEFT = 3
+    RIGHT = 4
+    FACE_UP = 5
+    FACE_DOWN = 6
+    FACE_LEFT = 7
+    FACE_RIGHT = 8
+
+
+class InteractAction(IntEnum):
+    """Non-parametric world interactions. Values inert (see MoveAction)."""
+
+    MINE = 0
+    PICKUP = 1
+    WITHDRAW = 2
+    REPAIR = 3
+    ROTATE_LEFT = 4
+    ROTATE_RIGHT = 5
+    ROTATE_UP = 6
+    ROTATE_DOWN = 7
+
+
+# ---------------------------------------------------------------------------
 # Action enum
 # ---------------------------------------------------------------------------
 
