@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pygame
 import pytest
 
-from factoriax.config import (
+from factoriax.playground.config import (
     _AXIS_DEADZONE,
     build_controller_lookup,
     controller_event_to_name,

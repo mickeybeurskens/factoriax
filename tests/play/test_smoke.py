@@ -16,10 +16,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.config import build_key_lookup, default_keyboard
 from factoriax.engine.constants import Action
 from factoriax.engine.state import EnvParams
 from factoriax.envs.factoriax_env import FactoriaXEnv
+from factoriax.playground.config import build_key_lookup, default_keyboard
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +64,7 @@ class TestPlayUISmoke:
 
     def test_inventory_menu(self, env_and_state) -> None:
         """render_inventory_menu returns an RGBA overlay."""
-        from factoriax.play.ui import render_inventory_menu
+        from factoriax.playground.play.ui import render_inventory_menu
 
         _, params, state = env_and_state
         overlay, regions = render_inventory_menu(state, params, 480, 480)
@@ -74,7 +74,7 @@ class TestPlayUISmoke:
     def test_achievement_menu(self) -> None:
         """render_achievement_menu returns an RGBA overlay."""
         from factoriax.engine.constants import MAX_ACHIEVEMENTS
-        from factoriax.play.ui import render_achievement_menu
+        from factoriax.playground.play.ui import render_achievement_menu
 
         achievements = np.zeros(MAX_ACHIEVEMENTS, dtype=np.bool_)
         overlay = render_achievement_menu(achievements, 480, 480)
@@ -82,14 +82,14 @@ class TestPlayUISmoke:
 
     def test_welcome_screen(self) -> None:
         """render_welcome_screen returns an overlay and regions."""
-        from factoriax.play.ui import render_welcome_screen
+        from factoriax.playground.play.ui import render_welcome_screen
 
         overlay, regions = render_welcome_screen(480, 480, False)
         assert overlay.shape == (480, 480, 4)
 
     def test_game_ui_render_frame(self, env_and_state) -> None:
         """GameUI.render_frame produces an RGB frame."""
-        from factoriax.play.game_ui import GameUI
+        from factoriax.playground.play.game_ui import GameUI
 
         _, params, state = env_and_state
         kb = build_key_lookup(default_keyboard())
@@ -104,7 +104,7 @@ class TestConfigSmoke:
 
     def test_env_params_to_dict(self) -> None:
         """env_params_to_dict covers all current EnvParams fields."""
-        from factoriax.config import env_params_to_dict
+        from factoriax.playground.config import env_params_to_dict
 
         d = env_params_to_dict(EnvParams())
         assert isinstance(d, dict)
@@ -113,7 +113,7 @@ class TestConfigSmoke:
 
     def test_env_params_round_trip(self) -> None:
         """env_params_to_dict values match EnvParams fields."""
-        from factoriax.config import env_params_to_dict
+        from factoriax.playground.config import env_params_to_dict
 
         params = EnvParams(map_width=64, map_height=64)
         d = env_params_to_dict(params)
@@ -122,7 +122,7 @@ class TestConfigSmoke:
 
     def test_load_config(self) -> None:
         """load_config returns a PlayerConfig without crashing."""
-        from factoriax.config import load_config
+        from factoriax.playground.config import load_config
 
         config = load_config()
         assert config is not None

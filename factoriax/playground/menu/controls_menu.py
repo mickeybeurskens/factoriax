@@ -1,6 +1,6 @@
 """Settings menu — keyboard, controller, display, and reset bindings.
 
-Tv-style two-panel layout mirroring :mod:`factoriax.menu.scenarios_menu`:
+Tv-style two-panel layout mirroring :mod:`factoriax.playground.menu.scenarios_menu`:
 left panel lists the page (Keyboard, Controller, Display, Reset Bindings);
 right panel shows the content of the selected page. Bindings are
 group-headed (Movement / Actions / Menus); Display has fullscreen and UI
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import pygame
 
-from factoriax.config import (
+from factoriax.playground.config import (
     PlayerAction,
     PlayerConfig,
     build_controller_lookup,
@@ -22,12 +22,12 @@ from factoriax.config import (
     default_keyboard,
     resolve_event,
 )
-from factoriax.play.launch_screen import _confirm_display_change
-from factoriax.ui import panels
-from factoriax.ui import theme as _theme
-from factoriax.ui.fonts import get_pixel_font
-from factoriax.ui.panels import LabelValueSection
-from factoriax.ui.scaling import ScaledCanvas
+from factoriax.playground.play.launch_screen import _confirm_display_change
+from factoriax.playground.ui import panels
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.fonts import get_pixel_font
+from factoriax.playground.ui.panels import LabelValueSection
+from factoriax.playground.ui.scaling import ScaledCanvas
 
 _BASE_TITLE_FONT: int = 48
 _FPS: int = 30
@@ -237,7 +237,7 @@ def run_controls_menu(
     Binding edits are written into ``config.keyboard`` / ``config.controller``
     in place; the caller is responsible for persistence.
     """
-    from factoriax.config import controller_event_to_name, event_to_key_name
+    from factoriax.playground.config import controller_event_to_name, event_to_key_name
 
     kb_lookup = build_key_lookup(config.keyboard or default_keyboard())
     ctrl_lookup = build_controller_lookup(config.controller or default_controller())

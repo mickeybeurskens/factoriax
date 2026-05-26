@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from factoriax.ui import theme as _theme
+from factoriax.playground.ui import theme as _theme
 
 
 @dataclass(frozen=True, slots=True)

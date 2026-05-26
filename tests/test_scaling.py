@@ -9,8 +9,8 @@ from __future__ import annotations
 import pygame
 import pytest
 
-from factoriax.ui import theme
-from factoriax.ui.scaling import ScaledCanvas
+from factoriax.playground.ui import theme
+from factoriax.playground.ui.scaling import ScaledCanvas
 
 
 @pytest.fixture(autouse=True)

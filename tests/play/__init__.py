@@ -1,1 +1,1 @@
-"""Tests for factoriax.play subpackage."""
+"""Tests for factoriax.playground.play subpackage."""

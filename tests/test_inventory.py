@@ -12,7 +12,7 @@ from factoriax.engine.levels import generate_state
 from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.state import EnvParams
 from factoriax.engine.tables import PLAYER_MAX_STACK
-from factoriax.ui.theme import BLOCK_PIXEL_SIZE
+from factoriax.playground.ui.theme import BLOCK_PIXEL_SIZE
 
 
 class TestInventoryState:

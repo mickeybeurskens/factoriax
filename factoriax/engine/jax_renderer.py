@@ -278,7 +278,7 @@ def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarra
 
     Sliced from the atlas's directional machine rows; the editor
     canvas uses this in place of
-    :func:`factoriax.ui.icons.render_item_icon` so both surfaces
+    :func:`factoriax.playground.ui.icons.render_item_icon` so both surfaces
     pull from the same source of truth. Direction values outside
     ``[1, 4]`` (e.g. an unset machine direction) are clipped to the
     LEFT row to keep the gather well-defined.

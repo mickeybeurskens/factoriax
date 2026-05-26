@@ -7,7 +7,7 @@ import numpy as np
 
 from factoriax.engine.achievements import NUM_ACHIEVEMENTS
 from factoriax.engine.state import EnvParams
-from factoriax.play.ui import (
+from factoriax.playground.play.ui import (
     SCROLL_STEP,
     ClickRegion,
     blit_scroll_view,
@@ -84,7 +84,7 @@ class TestBlitScrollView:
 
     def test_scrollbar_appears_when_content_overflows(self) -> None:
         """A scrollbar column is drawn on the right when content exceeds viewport."""
-        from factoriax.ui.theme import SCROLLBAR_W as _SCROLLBAR_W
+        from factoriax.playground.ui.theme import SCROLLBAR_W as _SCROLLBAR_W
 
         overlay = self._make_overlay(100, 60)
         content = self._make_content(300, 60, fill=10)
@@ -123,7 +123,7 @@ class TestBlitScrollView:
 
     def test_scrollbar_thumb_at_top_when_offset_zero(self) -> None:
         """Scrollbar thumb starts at the top when scroll_offset is 0."""
-        from factoriax.ui.theme import (
+        from factoriax.playground.ui.theme import (
             SCROLLBAR_THUMB,
             SCROLLBAR_W,
         )
@@ -138,7 +138,7 @@ class TestBlitScrollView:
 
     def test_scrollbar_thumb_at_bottom_when_fully_scrolled(self) -> None:
         """Scrollbar thumb sits at the bottom when fully scrolled."""
-        from factoriax.ui.theme import (
+        from factoriax.playground.ui.theme import (
             SCROLLBAR_THUMB,
             SCROLLBAR_W,
         )

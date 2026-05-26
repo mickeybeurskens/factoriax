@@ -142,7 +142,7 @@ class Trajectory:
         Describes any cost or penalty function applied during training
         (e.g. action penalty scale, entropy bonus coefficient).
     env_params_scheme : dict, optional
-        Snapshot of :func:`factoriax.config.env_params_to_dict` taken
+        Snapshot of :func:`factoriax.playground.config.env_params_to_dict` taken
         at recording time. Replay tooling rebuilds
         :class:`~factoriax.engine.state.EnvParams` from this dict so engine
         knobs like ``player_mining_yield`` and ``miner_mining_rate``
@@ -470,7 +470,7 @@ def states_to_trajectory(
     kwargs["timesteps"] = np.arange(T, dtype=np.int32)[np.newaxis, :]
 
     if params is not None:
-        from factoriax.config import env_params_to_dict
+        from factoriax.playground.config import env_params_to_dict
 
         kwargs["env_params_scheme"] = env_params_to_dict(params)
 

@@ -2,7 +2,15 @@
 
 import numpy as np
 
-from factoriax.editor.state import (
+from factoriax.engine.constants import (
+    BLOCK_MAX_RESOURCES,
+    BlockType,
+    Direction,
+    ItemType,
+    Machine,
+)
+from factoriax.engine.levels import Level
+from factoriax.playground.editor.state import (
     InvTarget,
     ResourceBrush,
     add_biter,
@@ -30,14 +38,6 @@ from factoriax.editor.state import (
     set_tile,
     swap_inventory_slots,
 )
-from factoriax.engine.constants import (
-    BLOCK_MAX_RESOURCES,
-    BlockType,
-    Direction,
-    ItemType,
-    Machine,
-)
-from factoriax.engine.levels import Level
 
 
 class TestNewEditorState:

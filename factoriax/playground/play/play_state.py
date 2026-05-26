@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from factoriax.engine.state import EnvState
-    from factoriax.ui.primitives import ClickRegion
+    from factoriax.playground.ui.primitives import ClickRegion
 
 
 @dataclass

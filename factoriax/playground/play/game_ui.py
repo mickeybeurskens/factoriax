@@ -1,6 +1,6 @@
 """Reusable game UI: menus, hotbar, click regions, and event dispatch.
 
-Extracted from :mod:`factoriax.play.main` so that both the play loop
+Extracted from :mod:`factoriax.playground.play.main` so that both the play loop
 and the debugger can share the same input handling and menu rendering
 without duplicating code. GameUI owns a :class:`PlayState` internally
 and translates pygame events into :class:`GameUIResult` values that
@@ -18,14 +18,6 @@ import jax.numpy as jnp
 import numpy as np
 import pygame
 
-from factoriax.config import (
-    ControllerLookup,
-    KeyLookup,
-    PlayerAction,
-    resolve_controller_button,
-    resolve_controller_hat,
-    resolve_key,
-)
 from factoriax.engine.achievements import NUM_ACHIEVEMENTS
 from factoriax.engine.actions import (
     ITEM_TO_CRAFT_ACTION,
@@ -45,8 +37,16 @@ from factoriax.engine.constants import (
 from factoriax.engine.jax_renderer import JaxRenderer
 from factoriax.engine.recipes import BASE_RECIPES, NUM_RECIPES
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.play.play_state import PlayState
-from factoriax.play.ui import (
+from factoriax.playground.config import (
+    ControllerLookup,
+    KeyLookup,
+    PlayerAction,
+    resolve_controller_button,
+    resolve_controller_hat,
+    resolve_key,
+)
+from factoriax.playground.play.play_state import PlayState
+from factoriax.playground.play.ui import (
     _entity_inventory,
     _hotbar_h,  # noqa: F401 — re-export
     render_achievement_menu,
@@ -58,8 +58,8 @@ from factoriax.play.ui import (
     render_pause_menu,
     render_victory_screen,
 )
-from factoriax.ui.compositing import composite_rgba_over_rgb
-from factoriax.ui.primitives import ClickRegion, hit_test_regions
+from factoriax.playground.ui.compositing import composite_rgba_over_rgb
+from factoriax.playground.ui.primitives import ClickRegion, hit_test_regions
 
 # Module-level renderer cache keyed by tile size. Play windows resize
 # the render at runtime; cache instances so each tile size pays the

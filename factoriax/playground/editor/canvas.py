@@ -26,7 +26,7 @@ from factoriax.engine.jax_renderer import (
 )
 
 if TYPE_CHECKING:
-    from factoriax.editor.state import EditorState
+    from factoriax.playground.editor.state import EditorState
 
 TILE_SIZES = (16, 24, 32, 48)
 _GRID_COLOR = (80, 80, 80, 100)
@@ -164,7 +164,7 @@ def render_canvas(
     tile that has resources.
 
     Args:
-        state: :class:`~factoriax.editor.state.EditorState` instance.
+        state: :class:`~factoriax.playground.editor.state.EditorState` instance.
         vp: Current viewport.
         cursor_tile: ``(tx, ty)`` of the tile under the mouse, or ``None``.
         selection_rect: ``(x0, y0, x1, y1)`` tile coordinates of the
@@ -285,7 +285,7 @@ def render_canvas(
 @functools.lru_cache(maxsize=72)
 def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
     """Cached player start icon for the editor canvas."""
-    from factoriax.ui.icons import create_player_start_icon
+    from factoriax.playground.ui.icons import create_player_start_icon
 
     return create_player_start_icon(player_idx, size)
 
@@ -384,7 +384,7 @@ def _get_resource_font(tile_size: int) -> pygame.font.Font:
     Returns:
         A pygame font instance.
     """
-    from factoriax.ui.fonts import get_pixel_font
+    from factoriax.playground.ui.fonts import get_pixel_font
 
     font_size = max(8, tile_size * 2 // 5)
     return get_pixel_font(font_size)

@@ -6,7 +6,7 @@ Generates ``factoriax/assets/atlas.png`` and the sidecar
 from this atlas — every visual the play view shows for terrain,
 machines, and the player flows through it.
 
-The atlas is sourced from :mod:`factoriax.ui.icons`, which is the
+The atlas is sourced from :mod:`factoriax.playground.ui.icons`, which is the
 procedural-art module that the editor and play HUD already use. By
 funneling both renderers' sprites through the same code we avoid the
 play-vs-editor visual divergence the prior flat-color atlas caused.
@@ -34,7 +34,7 @@ Directional categories carry one cell per
   players × four directions packed as ``(player_idx, direction)``,
   so player ``p`` direction ``d_idx`` lives at
   ``1 + p * 4 + d_idx``. Players beyond eight wrap modulo eight to
-  match :data:`factoriax.ui.icons.PLAYER_COLORS`.
+  match :data:`factoriax.playground.ui.icons.PLAYER_COLORS`.
 
 Usage::
 
@@ -63,7 +63,7 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.jax_renderer import build_digit_atlas
-from factoriax.ui.icons import (
+from factoriax.playground.ui.icons import (
     MACHINE_TO_ITEM,
     create_biter_texture,
     create_player_texture,
@@ -216,7 +216,7 @@ def _item_cell(item: ItemType) -> np.ndarray | None:
 def _player_cell(player_idx: int, direction: Direction) -> np.ndarray:
     """Return the RGBA sprite for *player_idx* facing *direction*.
 
-    Player colors come from :data:`factoriax.ui.icons.PLAYER_COLORS`,
+    Player colors come from :data:`factoriax.playground.ui.icons.PLAYER_COLORS`,
     which provides a distinct palette per slot.
     """
     sprite = create_player_texture(

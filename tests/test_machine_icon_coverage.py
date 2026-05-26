@@ -1,7 +1,7 @@
 """Every placeable machine must have a renderable icon.
 
 Catches the case where a new Machine is added to ITEM_TO_MACHINE
-in constants.py but ``factoriax.ui.icons.MACHINE_TO_ITEM`` or
+in constants.py but ``factoriax.playground.ui.icons.MACHINE_TO_ITEM`` or
 ``render_item_icon`` doesn't know about it. The arm was invisible on
 the map because of exactly this kind of disconnect.
 """
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from factoriax.engine.constants import ITEM_TO_MACHINE, Direction, ItemType, Machine
-from factoriax.ui.icons import MACHINE_TO_ITEM, render_item_icon
+from factoriax.playground.ui.icons import MACHINE_TO_ITEM, render_item_icon
 
 
 class TestMachineIconCoverage:

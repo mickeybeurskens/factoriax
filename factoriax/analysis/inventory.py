@@ -4,10 +4,10 @@ Renders a player's inventory as a standalone RGB panel: one row per
 non-EMPTY :class:`ItemType`, each with a sprite icon, label, and count.
 Rows are dimmed when the count is zero so the eye can sweep to what
 the agent is actually holding. Item sprites are pulled from
-:func:`factoriax.ui.icons.render_item_icon` so the panel, GPU map
+:func:`factoriax.playground.ui.icons.render_item_icon` so the panel, GPU map
 renderer, hotbar, and editor all show identical art per item.
 
-Pure NumPy + :mod:`factoriax.ui` primitives. No debugger dependency.
+Pure NumPy + :mod:`factoriax.playground.ui` primitives. No debugger dependency.
 Used by the agent debugger (live HUD + replay) and the PPO eval video.
 """
 
@@ -16,9 +16,9 @@ from __future__ import annotations
 import numpy as np
 
 from factoriax.engine.constants import ItemType
-from factoriax.ui.compositing import composite_rgba_over_rgb
-from factoriax.ui.fonts import get_pixel_font, render_text_rgba
-from factoriax.ui.icons import render_item_icon
+from factoriax.playground.ui.compositing import composite_rgba_over_rgb
+from factoriax.playground.ui.fonts import get_pixel_font, render_text_rgba
+from factoriax.playground.ui.icons import render_item_icon
 
 __all__ = ["INVENTORY_ITEMS", "render_inventory_panel"]
 

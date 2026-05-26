@@ -1,4 +1,4 @@
-"""Entry point for ``python -m factoriax.play``.
+"""Entry point for ``python -m factoriax.playground.play``.
 
 Delegates to the main menu entry point so all human-facing launches
 go through the same title screen.

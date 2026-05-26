@@ -4,8 +4,9 @@ import numpy as np
 import pygame
 import pytest
 
-from factoriax.editor.canvas import Viewport, clamp_camera, render_canvas
-from factoriax.editor.state import (
+from factoriax.engine.constants import BlockType, Direction, Machine
+from factoriax.playground.editor.canvas import Viewport, clamp_camera, render_canvas
+from factoriax.playground.editor.state import (
     ResourceBrush,
     add_column,
     add_row,
@@ -15,7 +16,6 @@ from factoriax.editor.state import (
     set_machine,
     set_tile,
 )
-from factoriax.engine.constants import BlockType, Direction, Machine
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -26,7 +26,7 @@ def _init_pygame() -> None:
 
 def _make_vp(state: object) -> Viewport:
     """Build a viewport matching the editor state dimensions."""
-    from factoriax.editor.state import EditorState
+    from factoriax.playground.editor.state import EditorState
 
     es: EditorState = state  # type: ignore[assignment]
     vp = Viewport(

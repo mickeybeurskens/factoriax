@@ -12,10 +12,6 @@ import jax.numpy as jnp
 import pygame
 import pytest
 
-from factoriax.config import (
-    build_key_lookup,
-    default_keyboard,
-)
 from factoriax.engine.constants import (
     Action,
     Direction,
@@ -23,7 +19,11 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.play.game_ui import GameUI, GameUIResult
+from factoriax.playground.config import (
+    build_key_lookup,
+    default_keyboard,
+)
+from factoriax.playground.play.game_ui import GameUI, GameUIResult
 
 
 @pytest.fixture

@@ -6,16 +6,16 @@ play mode, and inspector. Importing from here (rather than from
 ensures consistent styling across all interactive tools.
 """
 
-from factoriax.ui.compositing import (
+from factoriax.playground.ui.compositing import (
     blit_rgba,
     blit_scroll_view,
     clip_scroll_offset,
     composite_rgba_over_rgb,
 )
-from factoriax.ui.fonts import get_pixel_font, render_text_rgba
-from factoriax.ui.primitives import ClickRegion, draw_panel, hit_test_regions
-from factoriax.ui.scaling import ScaledCanvas
-from factoriax.ui.theme import (
+from factoriax.playground.ui.fonts import get_pixel_font, render_text_rgba
+from factoriax.playground.ui.primitives import ClickRegion, draw_panel, hit_test_regions
+from factoriax.playground.ui.scaling import ScaledCanvas
+from factoriax.playground.ui.theme import (
     BORDER,
     BORDER_PX,
     FONT_BODY,
@@ -33,7 +33,7 @@ from factoriax.ui.theme import (
     SLOT_COUNT_COLOR,
     TEXT_COLOR,
 )
-from factoriax.ui.window import auto_ui_scale, calculate_window_size
+from factoriax.playground.ui.window import auto_ui_scale, calculate_window_size
 
 __all__ = [
     "ScaledCanvas",

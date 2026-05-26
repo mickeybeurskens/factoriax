@@ -11,7 +11,7 @@ import numpy as np
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType
 from factoriax.engine.state import EnvParams
-from factoriax.play.ui import (
+from factoriax.playground.play.ui import (
     ClickRegion,
     render_achievement_menu,
     render_inventory_menu,
@@ -141,12 +141,12 @@ class TestRenderWelcomeScreen:
         """The SPACE/mine row should describe the look-at semantic.
 
         Source-level check: the welcome screen rasterizes text, so we
-        verify the controls list in factoriax.play.ui matches the new
+        verify the controls list in factoriax.playground.play.ui matches the new
         phrasing by reading the source.
         """
         import inspect
 
-        from factoriax.play import ui
+        from factoriax.playground.play import ui
 
         src = inspect.getsource(ui.render_welcome_screen)
         # Old bare label is gone; new look-at phrasing is present.

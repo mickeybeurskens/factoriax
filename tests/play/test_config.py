@@ -9,7 +9,8 @@ import orjson
 import pygame
 import pytest
 
-from factoriax.config import (
+from factoriax.engine.state import EnvParams
+from factoriax.playground.config import (
     KeyLookup,
     PlayerAction,
     PlayerConfig,
@@ -22,7 +23,6 @@ from factoriax.config import (
     resolve_key,
     save_config,
 )
-from factoriax.engine.state import EnvParams
 
 # Ensure pygame constants are available for key lookups.
 pygame.init()

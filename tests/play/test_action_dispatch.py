@@ -12,7 +12,6 @@ import jax.numpy as jnp
 import pygame
 import pytest
 
-from factoriax.config import build_key_lookup, default_keyboard
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     Action,
@@ -21,7 +20,8 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.state import EnvParams
 from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
-from factoriax.play.game_ui import GameUI
+from factoriax.playground.config import build_key_lookup, default_keyboard
+from factoriax.playground.play.game_ui import GameUI
 
 
 @pytest.fixture

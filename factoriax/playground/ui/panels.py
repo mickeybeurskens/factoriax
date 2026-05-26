@@ -1,6 +1,6 @@
 """Reusable drawing primitives for FactoriaX menus.
 
-All components read sizes and colors from :mod:`factoriax.ui.theme` so the
+All components read sizes and colors from :mod:`factoriax.playground.ui.theme` so the
 look stays consistent across menus. Each function is a stateless drawing
 operation; menus own the layout and event loop.
 """
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 import pygame
 
-from factoriax.ui import theme as _theme
+from factoriax.playground.ui import theme as _theme
 
 
 class InputSourceTracker:
@@ -593,7 +593,10 @@ class DecorationStrip:
         (index 6); the player and miner slots stay clear.
         """
         from factoriax.engine.constants import Direction, ItemType
-        from factoriax.ui.icons import create_player_texture, render_item_icon
+        from factoriax.playground.ui.icons import (
+            create_player_texture,
+            render_item_icon,
+        )
 
         surfaces: list[pygame.Surface] = [
             rgba_to_surface(

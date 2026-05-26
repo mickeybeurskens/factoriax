@@ -15,7 +15,6 @@ from pathlib import Path
 import numpy as np
 import pygame
 
-from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.engine.constants import (
     ItemType,
     Machine,
@@ -27,9 +26,10 @@ from factoriax.engine.machine_spec import (
     MACHINE_SPECS,
 )
 from factoriax.engine.recipes import NUM_RECIPES, RECIPE_NAMES
-from factoriax.ui.fonts import get_pixel_font
-from factoriax.ui.icons import render_item_icon
-from factoriax.ui.labels import MACHINE_TYPE_NAMES
+from factoriax.playground.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
+from factoriax.playground.ui.fonts import get_pixel_font
+from factoriax.playground.ui.icons import render_item_icon
+from factoriax.playground.ui.labels import MACHINE_TYPE_NAMES
 
 _BG = (22, 22, 22, 228)
 _BORDER = (190, 165, 55, 255)

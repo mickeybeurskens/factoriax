@@ -11,7 +11,8 @@ import jax.numpy as jnp
 import pygame
 import pytest
 
-from factoriax.config import (
+from factoriax.engine.state import EnvParams
+from factoriax.playground.config import (
     PlayerAction,
     PlayerConfig,
     build_controller_lookup,
@@ -22,14 +23,13 @@ from factoriax.config import (
     resolve_controller_hat,
     resolve_key,
 )
-from factoriax.engine.state import EnvParams
-from factoriax.menu.controls_menu import (
+from factoriax.playground.menu.controls_menu import (
     _format_binding,
     _format_controller_display,
     _format_key_display,
     _init_rebind_actions,
 )
-from factoriax.play.game_ui import GameUI
+from factoriax.playground.play.game_ui import GameUI
 
 # ---------------------------------------------------------------------------
 # Binding mutation round-trip

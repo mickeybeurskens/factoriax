@@ -3,15 +3,15 @@
 Holds the colour palette, base layout sizes, and small drawing helpers
 used by multiple menu screens (the play launch screen and the controls
 screen). Sizes are expressed in *base* pixels and multiplied by
-``factoriax.ui.theme.UI_SCALE`` at runtime by each caller.
+``factoriax.playground.ui.theme.UI_SCALE`` at runtime by each caller.
 """
 
 from __future__ import annotations
 
 import pygame
 
-from factoriax.ui import theme as _theme
-from factoriax.ui.fonts import get_pixel_font
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.fonts import get_pixel_font
 
 # -- Colors ---------------------------------------------------------------
 BG: tuple[int, int, int] = (20, 20, 25)

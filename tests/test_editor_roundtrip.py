@@ -10,7 +10,6 @@ from __future__ import annotations
 import numpy as np
 import numpy.testing as npt
 
-from factoriax.editor.state import editor_state_from_level, editor_state_to_level
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     BlockType,
@@ -19,6 +18,10 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.levels import Level
+from factoriax.playground.editor.state import (
+    editor_state_from_level,
+    editor_state_to_level,
+)
 
 
 def _make_fully_populated_level() -> Level:
@@ -162,7 +165,7 @@ class TestFieldCoverage:
         """
         import dataclasses
 
-        from factoriax.editor.state import EditorState
+        from factoriax.playground.editor.state import EditorState
 
         level_fields = {
             f.name for f in dataclasses.fields(Level) if f.name not in self._EXCLUDED

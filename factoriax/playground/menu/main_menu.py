@@ -1,6 +1,6 @@
 """Title screen for FactoriaX.
 
-Two-panel layout mirroring :mod:`factoriax.menu.scenarios_menu`: a list of
+Two-panel layout mirroring :mod:`factoriax.playground.menu.scenarios_menu`: a list of
 menu options on the left, an explanation panel on the right.
 """
 
@@ -10,16 +10,16 @@ from dataclasses import dataclass
 
 import pygame
 
-from factoriax.config import (
+from factoriax.playground.config import (
     ControllerLookup,
     KeyLookup,
     PlayerAction,
     resolve_event,
 )
-from factoriax.ui import panels
-from factoriax.ui import theme as _theme
-from factoriax.ui.fonts import get_pixel_font
-from factoriax.ui.scaling import ScaledCanvas
+from factoriax.playground.ui import panels
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.fonts import get_pixel_font
+from factoriax.playground.ui.scaling import ScaledCanvas
 
 _BASE_TITLE_FONT: int = 48
 _BASE_ICON_SIZE: int = 32
@@ -94,7 +94,7 @@ def run_main_menu(
         ``"play"``, ``"scenarios"``, ``"editor"``, ``"settings"``, or
         ``None`` (quit / window closed).
     """
-    from factoriax.config import (
+    from factoriax.playground.config import (
         build_controller_lookup,
         build_key_lookup,
         default_controller,

@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import pygame
 
-from factoriax.config import (
+from factoriax.playground.config import (
     PlayerConfig,
     build_controller_lookup,
     build_key_lookup,
@@ -19,8 +19,8 @@ from factoriax.config import (
     load_config,
     save_config,
 )
-from factoriax.ui import theme as _theme
-from factoriax.ui.window import auto_ui_scale, calculate_window_size
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.window import auto_ui_scale, calculate_window_size
 
 _BASE_SIZE = 1024
 
@@ -41,7 +41,7 @@ def _run() -> None:
         screen = pygame.display.set_mode((w, h))
     pygame.display.set_caption("FactoriaX")
 
-    from factoriax.menu.main_menu import run_main_menu
+    from factoriax.playground.menu.main_menu import run_main_menu
 
     kb_lookup = build_key_lookup(config.keyboard)
     ctrl_lookup = build_controller_lookup(config.controller)
@@ -96,7 +96,7 @@ def _apply_display_config(config: PlayerConfig) -> pygame.Surface:
 
 def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
     """Show play settings, then launch the game with chosen parameters."""
-    from factoriax.play.launch_screen import run_settings_menu
+    from factoriax.playground.play.launch_screen import run_settings_menu
 
     new_config = run_settings_menu(screen, initial_config=config)
     if new_config is None:
@@ -112,7 +112,7 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
 
     from factoriax.engine.achievements import core_game_conditions
     from factoriax.envs.factoriax_env import FactoriaXEnv
-    from factoriax.play.main import _play_loop, _run_with_loading_screen
+    from factoriax.playground.play.main import _play_loop, _run_with_loading_screen
 
     env = FactoriaXEnv(achievement_fn=core_game_conditions)
 
@@ -156,8 +156,8 @@ def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
     from factoriax import scenarios as scenarios_pkg
     from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
     from factoriax.envs.factoriax_env import FactoriaXEnv
-    from factoriax.menu.scenarios_menu import run_scenarios_menu
-    from factoriax.play.main import _play_loop, _run_with_loading_screen
+    from factoriax.playground.menu.scenarios_menu import run_scenarios_menu
+    from factoriax.playground.play.main import _play_loop, _run_with_loading_screen
 
     kb_lookup = build_key_lookup(config.keyboard)
     ctrl_lookup = build_controller_lookup(config.controller)
@@ -209,7 +209,7 @@ def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
 
 def _handle_editor(screen: pygame.Surface) -> None:
     """Launch the level editor."""
-    from factoriax.editor.main import main as editor_main
+    from factoriax.playground.editor.main import main as editor_main
 
     editor_main(screen=screen)
     pygame.display.set_caption("FactoriaX")
@@ -217,7 +217,7 @@ def _handle_editor(screen: pygame.Surface) -> None:
 
 def _handle_settings(screen: pygame.Surface, config: PlayerConfig) -> None:
     """Open the controls/rebinding screen and persist changes."""
-    from factoriax.menu.controls_menu import run_controls_menu
+    from factoriax.playground.menu.controls_menu import run_controls_menu
 
     new_fullscreen, new_scale = run_controls_menu(screen, config)
     config.fullscreen = new_fullscreen

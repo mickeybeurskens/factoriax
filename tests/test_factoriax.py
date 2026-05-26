@@ -28,7 +28,7 @@ from factoriax.engine.game_logic import (
 from factoriax.engine.levels import generate_state
 from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.tables import SOLID_BLOCKS
-from factoriax.ui.icons import create_default_textures
+from factoriax.playground.ui.icons import create_default_textures
 
 
 class TestConstants:

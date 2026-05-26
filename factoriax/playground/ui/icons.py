@@ -13,7 +13,7 @@ from factoriax.engine.constants import (
     Direction,
     ItemType,
 )
-from factoriax.ui.theme import BLOCK_PIXEL_SIZE
+from factoriax.playground.ui.theme import BLOCK_PIXEL_SIZE
 
 ASSETS_PATH = Path(__file__).parent.parent / "assets"
 

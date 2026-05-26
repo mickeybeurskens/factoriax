@@ -6,7 +6,7 @@ subpackage (and any other human-facing entry points) should import from
 here.
 
 Generic UI primitives (ClickRegion, draw_panel, fonts, compositing) now
-live in :mod:`factoriax.ui` and are re-exported here for backward
+live in :mod:`factoriax.playground.ui` and are re-exported here for backward
 compatibility.
 """
 
@@ -39,19 +39,21 @@ from factoriax.engine.recipes import (
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
-# Re-export shared primitives so existing ``from factoriax.play.ui import``
+# Re-export shared primitives so existing ``from factoriax.playground.play.ui import``
 # statements keep working.
-from factoriax.ui import theme as _theme
-from factoriax.ui.compositing import blit_rgba as _blit_rgba  # noqa: F401
-from factoriax.ui.compositing import (
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.compositing import blit_rgba as _blit_rgba  # noqa: F401
+from factoriax.playground.ui.compositing import (
     blit_scroll_view,  # noqa: F401
     clip_scroll_offset,  # noqa: F401
 )
-from factoriax.ui.fonts import get_pixel_font  # noqa: F401
-from factoriax.ui.fonts import render_text_rgba as _render_text_rgba  # noqa: F401
-from factoriax.ui.icons import ITEM_COLORS, PLAYER_COLORS, render_item_icon
-from factoriax.ui.labels import MACHINE_TYPE_NAMES
-from factoriax.ui.primitives import (
+from factoriax.playground.ui.fonts import get_pixel_font  # noqa: F401
+from factoriax.playground.ui.fonts import (
+    render_text_rgba as _render_text_rgba,  # noqa: F401
+)
+from factoriax.playground.ui.icons import ITEM_COLORS, PLAYER_COLORS, render_item_icon
+from factoriax.playground.ui.labels import MACHINE_TYPE_NAMES
+from factoriax.playground.ui.primitives import (
     ClickRegion,  # noqa: F401
     draw_panel,  # noqa: F401
 )
@@ -132,7 +134,7 @@ def _entity_inventory(state: EnvState, ty: int, tx: int) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Core drawing primitives (re-exported from factoriax.ui)
+# Core drawing primitives (re-exported from factoriax.playground.ui)
 # ---------------------------------------------------------------------------
 
 
@@ -213,7 +215,7 @@ def _render_control_hints(
 # ---------------------------------------------------------------------------
 
 
-# clip_scroll_offset and blit_scroll_view are re-exported from factoriax.ui
+# clip_scroll_offset and blit_scroll_view are re-exported from factoriax.playground.ui
 # at the top of this file.
 
 

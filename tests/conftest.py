@@ -94,7 +94,7 @@ def pygame_session() -> None:
 
     SDL drivers are pinned to ``dummy`` above so this is side-effect
     free. The display surface ``set_mode((800, 600))`` is what
-    :class:`factoriax.ui.scaling.ScaledCanvas` reads via
+    :class:`factoriax.playground.ui.scaling.ScaledCanvas` reads via
     ``pygame.display.get_surface()``; tests in ``tests/test_scaling.py``
     used to do this in their own session fixture, which is now
     redundant.

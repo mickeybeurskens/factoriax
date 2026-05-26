@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.ui import theme as _theme
+from factoriax.playground.ui import theme as _theme
 
 
 def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> None:

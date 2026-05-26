@@ -1,8 +1,8 @@
 """Main event loop for the FactoriaX level editor.
 
 Handles window creation, event dispatch, tool state, and rendering
-composition.  Mirrors the structure of ``factoriax.play.main`` but
-operates on mutable :class:`~factoriax.editor.state.EditorState`
+composition.  Mirrors the structure of ``factoriax.playground.play.main`` but
+operates on mutable :class:`~factoriax.playground.editor.state.EditorState`
 arrays instead of JAX state.
 """
 
@@ -13,7 +13,15 @@ import dataclasses
 import numpy as np
 import pygame
 
-from factoriax.editor.canvas import (
+from factoriax.engine.constants import (
+    BLOCK_MAX_RESOURCES,
+    BlockType,
+    Direction,
+    ItemType,
+    Machine,
+)
+from factoriax.engine.levels import load_level, save_level
+from factoriax.playground.editor.canvas import (
     Viewport,
     clamp_camera,
     pan,
@@ -21,15 +29,15 @@ from factoriax.editor.canvas import (
     screen_to_tile,
     zoom,
 )
-from factoriax.editor.dialogs import (
+from factoriax.playground.editor.dialogs import (
     FileDialog,
     MachineInspectorDialog,
     NewLevelDialog,
     NumberInputDialog,
     render_help_overlay,
 )
-from factoriax.editor.inventory_panel import render_inventory_panel
-from factoriax.editor.state import (
+from factoriax.playground.editor.inventory_panel import render_inventory_panel
+from factoriax.playground.editor.state import (
     EditorState,
     InvTarget,
     ResourceBrush,
@@ -54,7 +62,7 @@ from factoriax.editor.state import (
     set_player_position,
     set_tile,
 )
-from factoriax.editor.toolbar import (
+from factoriax.playground.editor.toolbar import (
     BLOCK_ITEMS,
     MACHINE_ITEMS,
     MAX_EDITOR_PLAYERS,
@@ -71,18 +79,10 @@ from factoriax.editor.toolbar import (
     render_status_bar,
     render_toolbar,
 )
-from factoriax.engine.constants import (
-    BLOCK_MAX_RESOURCES,
-    BlockType,
-    Direction,
-    ItemType,
-    Machine,
-)
-from factoriax.engine.levels import load_level, save_level
-from factoriax.play.main import play_level
-from factoriax.ui.compositing import composite_rgba_over_rgb
-from factoriax.ui.primitives import ClickRegion, hit_test_regions
-from factoriax.ui.window import calculate_window_size
+from factoriax.playground.play.main import play_level
+from factoriax.playground.ui.compositing import composite_rgba_over_rgb
+from factoriax.playground.ui.primitives import ClickRegion, hit_test_regions
+from factoriax.playground.ui.window import calculate_window_size
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -361,7 +361,7 @@ def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
     """Launch a full play-test session from the editor.
 
     Converts the editor state to a Level and delegates to
-    :func:`~factoriax.play.main.play_level`, which provides the
+    :func:`~factoriax.playground.play.main.play_level`, which provides the
     complete game UI.  Returns to the editor when the user quits.
 
     Args:

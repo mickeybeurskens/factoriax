@@ -6,15 +6,15 @@ from unittest.mock import patch
 
 import numpy as np
 
-from factoriax.editor.dialogs import FileDialog, _list_level_files
-from factoriax.editor.state import (
+from factoriax.engine.constants import Direction, Machine
+from factoriax.engine.levels import load_level, save_level
+from factoriax.playground.editor.dialogs import FileDialog, _list_level_files
+from factoriax.playground.editor.state import (
     editor_state_from_level,
     editor_state_to_level,
     new_editor_state,
     set_machine,
 )
-from factoriax.engine.constants import Direction, Machine
-from factoriax.engine.levels import load_level, save_level
 
 
 class TestFileDialogSave:
@@ -26,7 +26,7 @@ class TestFileDialogSave:
             levels_dir = Path(d) / "levels"
             with patch.object(FileDialog, "__post_init__", lambda self: None):
                 dlg = FileDialog(mode="save", filename_text="my_level")
-            with patch("factoriax.editor.dialogs.LEVELS_DIR", levels_dir):
+            with patch("factoriax.playground.editor.dialogs.LEVELS_DIR", levels_dir):
                 result = dlg.get_path()
         assert result is not None
         assert result.name == "my_level.json"
@@ -38,7 +38,7 @@ class TestFileDialogSave:
             assert not levels_dir.exists()
             with patch.object(FileDialog, "__post_init__", lambda self: None):
                 dlg = FileDialog(mode="save", filename_text="test")
-            with patch("factoriax.editor.dialogs.LEVELS_DIR", levels_dir):
+            with patch("factoriax.playground.editor.dialogs.LEVELS_DIR", levels_dir):
                 dlg.get_path()
             assert levels_dir.is_dir()
 
@@ -59,7 +59,7 @@ class TestFileDialogLoad:
             levels_dir.mkdir()
             (levels_dir / "alpha.json").write_text("{}")
             (levels_dir / "beta.json").write_text("{}")
-            with patch("factoriax.editor.dialogs.LEVELS_DIR", levels_dir):
+            with patch("factoriax.playground.editor.dialogs.LEVELS_DIR", levels_dir):
                 files = _list_level_files()
         assert files == ["alpha", "beta"]
 
@@ -69,7 +69,7 @@ class TestFileDialogLoad:
             levels_dir = Path(d) / "levels"
             levels_dir.mkdir()
             (levels_dir / "alpha.json").write_text("{}")
-            with patch("factoriax.editor.dialogs.LEVELS_DIR", levels_dir):
+            with patch("factoriax.playground.editor.dialogs.LEVELS_DIR", levels_dir):
                 dlg = FileDialog(mode="load")
             assert dlg.selected_index == 0
             assert dlg.filename_text == "alpha"
@@ -79,7 +79,7 @@ class TestFileDialogLoad:
         with tempfile.TemporaryDirectory() as d:
             levels_dir = Path(d) / "levels"
             levels_dir.mkdir()
-            with patch("factoriax.editor.dialogs.LEVELS_DIR", levels_dir):
+            with patch("factoriax.playground.editor.dialogs.LEVELS_DIR", levels_dir):
                 dlg = FileDialog(mode="load")
         assert dlg.get_path() is None
 
@@ -137,7 +137,7 @@ class TestEditorSaveLoadRoundTrip:
             levels_dir = Path(d) / "levels"
             levels_dir.mkdir()
             (levels_dir / "test.json").write_text("{}")
-            with patch("factoriax.editor.dialogs.LEVELS_DIR", levels_dir):
+            with patch("factoriax.playground.editor.dialogs.LEVELS_DIR", levels_dir):
                 FileDialog(mode="save", filename_text="test")
                 FileDialog(mode="load")
         if not had_tkinter:

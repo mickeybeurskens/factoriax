@@ -1,6 +1,6 @@
 """Interactive play script for FactoriaX using pygame.
 
-Uses :class:`~factoriax.play.game_ui.GameUI` for all menu rendering
+Uses :class:`~factoriax.playground.play.game_ui.GameUI` for all menu rendering
 and input dispatch. This module handles the pygame window, environment
 stepping, trajectory recording, and play-specific screens (welcome,
 victory).
@@ -16,7 +16,12 @@ import numpy as np
 import pygame
 from jax import random
 
-from factoriax.config import (
+from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
+from factoriax.engine.constants import Action, Direction
+from factoriax.engine.levels import Level
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.envs.factoriax_env import FactoriaXEnv
+from factoriax.playground.config import (
     ControllerLookup,
     KeyLookup,
     build_controller_lookup,
@@ -25,17 +30,12 @@ from factoriax.config import (
     default_keyboard,
     resolve_controller_axis,
 )
-from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
-from factoriax.engine.constants import Action, Direction
-from factoriax.engine.levels import Level
-from factoriax.engine.state import EnvParams, EnvState
-from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.play.game_ui import GameUI
-from factoriax.play.play_state import PlayState
-from factoriax.play.ui import _hotbar_h, render_welcome_screen
-from factoriax.ui import theme as _play_theme
-from factoriax.ui.compositing import composite_rgba_over_rgb
-from factoriax.ui.window import calculate_window_size
+from factoriax.playground.play.game_ui import GameUI
+from factoriax.playground.play.play_state import PlayState
+from factoriax.playground.play.ui import _hotbar_h, render_welcome_screen
+from factoriax.playground.ui import theme as _play_theme
+from factoriax.playground.ui.compositing import composite_rgba_over_rgb
+from factoriax.playground.ui.window import calculate_window_size
 
 _ROCKET_ACHIEVEMENT_IDX: int = next(
     i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
@@ -119,7 +119,7 @@ def play_level(
         pygame.init()
 
     if seed is None:
-        from factoriax.config import load_config
+        from factoriax.playground.config import load_config
 
         seed = int(load_config().seed)
 
@@ -571,7 +571,7 @@ def main() -> None:
     env: FactoriaXEnv = env_result[0]  # type: ignore[index]
     params: EnvParams = env_result[1]  # type: ignore[index]
 
-    from factoriax.config import load_config
+    from factoriax.playground.config import load_config
 
     config = load_config()
     rng = random.PRNGKey(int(config.seed))

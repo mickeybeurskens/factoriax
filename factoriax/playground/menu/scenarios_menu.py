@@ -10,17 +10,17 @@ from dataclasses import dataclass
 import pygame
 
 from factoriax import scenarios as scenarios_pkg
-from factoriax.config import (
+from factoriax.playground.config import (
     ControllerLookup,
     KeyLookup,
     PlayerAction,
     resolve_event,
 )
+from factoriax.playground.ui import panels
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.fonts import get_pixel_font
+from factoriax.playground.ui.scaling import ScaledCanvas
 from factoriax.scenarios import Scenario
-from factoriax.ui import panels
-from factoriax.ui import theme as _theme
-from factoriax.ui.fonts import get_pixel_font
-from factoriax.ui.scaling import ScaledCanvas
 
 _BASE_TITLE_FONT: int = 48
 _FPS: int = 30
@@ -74,7 +74,7 @@ def run_scenarios_menu(
     ctrl_lookup: ControllerLookup | None = None,
 ) -> str | None:
     """Show the scenario picker. Returns the chosen scenario's class name, or None."""
-    from factoriax.config import (
+    from factoriax.playground.config import (
         build_controller_lookup,
         build_key_lookup,
         default_controller,

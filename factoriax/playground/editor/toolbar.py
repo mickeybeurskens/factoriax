@@ -3,7 +3,7 @@
 Renders all chrome around the canvas: tool palette, block selector,
 resource brush panel, machine palette, entity palette, top menu bar,
 and bottom status bar.  Each render function returns an RGB or RGBA image and a list of
-:class:`~factoriax.play.ui.ClickRegion` objects for hit-testing.
+:class:`~factoriax.playground.play.ui.ClickRegion` objects for hit-testing.
 """
 
 from __future__ import annotations
@@ -19,15 +19,15 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.machine_spec import MACHINE_SLOT_ROLES
 from factoriax.engine.tables import MACHINE_TO_ITEM_ARRAY
-from factoriax.ui.fonts import get_pixel_font
-from factoriax.ui.icons import (
+from factoriax.playground.ui.fonts import get_pixel_font
+from factoriax.playground.ui.icons import (
     create_biter_texture,
     create_player_start_icon,
     get_textures,
     render_item_icon,
 )
-from factoriax.ui.labels import MACHINE_TYPE_NAMES
-from factoriax.ui.primitives import ClickRegion
+from factoriax.playground.ui.labels import MACHINE_TYPE_NAMES
+from factoriax.playground.ui.primitives import ClickRegion
 
 TOOLBAR_WIDTH = 120
 MENU_BAR_HEIGHT = 32
@@ -147,7 +147,7 @@ def render_toolbar(
         selected_block: Active ``BlockType`` value.
         selected_machine: Active ``Machine`` value, or 0 for none.
         direction: Current machine placement direction.
-        resource_brush: :class:`~factoriax.editor.state.ResourceBrush`.
+        resource_brush: :class:`~factoriax.playground.editor.state.ResourceBrush`.
         height: Available height for the toolbar in pixels.
         show_resources: Whether the resource overlay is active.
         selected_entity: Active entity selection as ``(kind, index)``
@@ -157,7 +157,7 @@ def render_toolbar(
         ``(image, regions)`` where *image* is RGB shape
         ``(height, TOOLBAR_WIDTH, 3)``.
     """
-    from factoriax.editor.state import ResourceBrush
+    from factoriax.playground.editor.state import ResourceBrush
 
     brush: ResourceBrush = resource_brush  # type: ignore[assignment]
     # Render at full content height so small maps don't clip icons.

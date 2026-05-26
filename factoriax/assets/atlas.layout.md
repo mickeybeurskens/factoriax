@@ -34,12 +34,12 @@ artifact rather than silent zeros.
 
 | Row | Category               | Source enum                      | Cells | Notes |
 | --: | ---------------------- | -------------------------------- | ----: | ----- |
-|   0 | blocks                 | `factoriax.constants.BlockType`  | 11    | Sourced from `factoriax.ui.icons.get_textures`. Alpha forced to 255 — terrain is opaque. |
-|   1 | machines, dir LEFT     | `factoriax.constants.MachineType`| 11    | Directional machines render with `direction=LEFT`; non-directional machines duplicate the DOWN sprite. |
-|   2 | machines, dir RIGHT    | `factoriax.constants.MachineType`| 11    | Same, with `direction=RIGHT`. |
-|   3 | machines, dir UP       | `factoriax.constants.MachineType`| 11    | Same, with `direction=UP`. |
-|   4 | machines, dir DOWN     | `factoriax.constants.MachineType`| 11    | Same, with `direction=DOWN`. |
-|   5 | items                  | `factoriax.constants.ItemType`   | 33    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
+|   0 | blocks                 | `factoriax.engine.constants.BlockType`  | 11    | Sourced from `factoriax.playground.ui.icons.get_textures`. Alpha forced to 255 — terrain is opaque. |
+|   1 | machines, dir LEFT     | `factoriax.engine.constants.MachineType`| 11    | Directional machines render with `direction=LEFT`; non-directional machines duplicate the DOWN sprite. |
+|   2 | machines, dir RIGHT    | `factoriax.engine.constants.MachineType`| 11    | Same, with `direction=RIGHT`. |
+|   3 | machines, dir UP       | `factoriax.engine.constants.MachineType`| 11    | Same, with `direction=UP`. |
+|   4 | machines, dir DOWN     | `factoriax.engine.constants.MachineType`| 11    | Same, with `direction=DOWN`. |
+|   5 | items                  | `factoriax.engine.constants.ItemType`   | 33    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
 |   6 | misc                   | (manually enumerated)            | 33    | col 0 = biter; cols 1..32 hold 8 players × 4 directions packed as `(player_idx, direction)` starting at col 1, with `col = 1 + player_idx * 4 + direction_idx`. Player slots beyond 8 wrap modulo 8. |
 |   7 | digits                 | digits 0-9                       | 10    | Each cell is 32×32; the 3×5 glyph is rendered at the cell's top-left, padded with zeros. Alpha=255. |
 

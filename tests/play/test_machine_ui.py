@@ -17,7 +17,7 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
-from factoriax.play.ui import ClickRegion, render_machine_menu
+from factoriax.playground.play.ui import ClickRegion, render_machine_menu
 
 _SW = 320
 _SH = 320

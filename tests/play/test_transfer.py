@@ -1,11 +1,11 @@
-"""Tests for factoriax.play.transfer -- inventory type swap."""
+"""Tests for factoriax.playground.play.transfer -- inventory type swap."""
 
 from __future__ import annotations
 
 import jax.numpy as jnp
 
 from factoriax.engine.constants import NUM_ITEM_TYPES, ItemType
-from factoriax.play.transfer import swap_inventory_slots
+from factoriax.playground.play.transfer import swap_inventory_slots
 
 # ---------------------------------------------------------------------------
 # swap_inventory_slots

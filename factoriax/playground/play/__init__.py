@@ -6,11 +6,11 @@ training pipeline never pulls in pygame as a dependency.
 
 Quick start
 -----------
->>> python -m factoriax.play
+>>> python -m factoriax.playground.play
 
 Or import directly:
 
->>> from factoriax.play import main
+>>> from factoriax.playground.play import main
 >>> main()
 
 Submodules
@@ -20,14 +20,14 @@ Submodules
 - ``ui`` — Menu rendering (inventory, achievements, pause)
 """
 
-from factoriax.play.game_ui import GameUI, GameUIResult
-from factoriax.play.main import main
-from factoriax.play.ui import (
+from factoriax.playground.play.game_ui import GameUI, GameUIResult
+from factoriax.playground.play.main import main
+from factoriax.playground.play.ui import (
     render_achievement_menu,
     render_inventory_menu,
     render_pause_menu,
 )
-from factoriax.ui.primitives import ClickRegion
+from factoriax.playground.ui.primitives import ClickRegion
 
 __all__ = [
     "GameUI",

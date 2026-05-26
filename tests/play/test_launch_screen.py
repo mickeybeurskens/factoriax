@@ -9,14 +9,14 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame  # noqa: E402
 
-from factoriax.config import (  # noqa: E402
+from factoriax.engine.state import EnvParams  # noqa: E402
+from factoriax.playground.config import (  # noqa: E402
     PlayerConfig,
     default_controller,
     default_keyboard,
     env_params_to_dict,
 )
-from factoriax.engine.state import EnvParams  # noqa: E402
-from factoriax.play.launch_screen import (  # noqa: E402
+from factoriax.playground.play.launch_screen import (  # noqa: E402
     _PAGE_OPTIONS,
     _SETTING_FIELDS,
     _get_value,
@@ -126,7 +126,9 @@ class TestRunSettingsMenu:
         def fake_save(cfg: PlayerConfig, path=None) -> None:
             calls.append(cfg)
 
-        monkeypatch.setattr("factoriax.play.launch_screen.save_config", fake_save)
+        monkeypatch.setattr(
+            "factoriax.playground.play.launch_screen.save_config", fake_save
+        )
 
         pygame.event.clear()
         pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE))

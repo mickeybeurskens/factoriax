@@ -1,6 +1,6 @@
 """Pre-game launch screen — Play / Settings / Reset to defaults.
 
-The screen mirrors :mod:`factoriax.menu.scenarios_menu`: a list of options on
+The screen mirrors :mod:`factoriax.playground.menu.scenarios_menu`: a list of options on
 the left, content on the right. Selecting *Settings* on the left turns the
 right panel into an editable list of :class:`~factoriax.engine.state.EnvParams`
 fields; selecting *Play* commits the current values and returns control to
@@ -8,7 +8,7 @@ the play loop; selecting *Reset to defaults* replaces every field with
 :meth:`EnvParams()` defaults and a fresh seed.
 
 :func:`_confirm_scale_change` is unrelated to the launch flow; it lives here
-because :mod:`factoriax.menu.controls_menu` imports it.
+because :mod:`factoriax.playground.menu.controls_menu` imports it.
 """
 
 from __future__ import annotations
@@ -18,7 +18,8 @@ from dataclasses import dataclass
 
 import pygame
 
-from factoriax.config import (
+from factoriax.engine.state import EnvParams
+from factoriax.playground.config import (
     PlayerAction,
     PlayerConfig,
     build_controller_lookup,
@@ -30,14 +31,13 @@ from factoriax.config import (
     resolve_event,
     save_config,
 )
-from factoriax.engine.state import EnvParams
-from factoriax.ui import panels
-from factoriax.ui import theme as _theme
-from factoriax.ui.fonts import get_pixel_font
-from factoriax.ui.forms import GOLD, LABEL_COLOR
-from factoriax.ui.panels import SettingField, SettingSection
-from factoriax.ui.scaling import ScaledCanvas
-from factoriax.ui.window import auto_ui_scale, calculate_window_size
+from factoriax.playground.ui import panels
+from factoriax.playground.ui import theme as _theme
+from factoriax.playground.ui.fonts import get_pixel_font
+from factoriax.playground.ui.forms import GOLD, LABEL_COLOR
+from factoriax.playground.ui.panels import SettingField, SettingSection
+from factoriax.playground.ui.scaling import ScaledCanvas
+from factoriax.playground.ui.window import auto_ui_scale, calculate_window_size
 
 _BASE_TITLE_FONT: int = 48
 _BASE_BUTTON_W: int = 110
@@ -177,10 +177,10 @@ def run_settings_menu(
         The :class:`PlayerConfig` if the user pressed Enter on *Play* (the
         caller should hand it to the play loop), or ``None`` if the user
         backed out via Backspace (return to main menu). Edits are persisted
-        via :func:`factoriax.config.save_config` before the function returns
+        via :func:`factoriax.playground.config.save_config` before the function returns
         in either case.
     """
-    from factoriax.config import load_config
+    from factoriax.playground.config import load_config
 
     config = initial_config if initial_config is not None else load_config()
     # Ensure env_params has every key the editor displays.
