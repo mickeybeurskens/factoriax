@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 
-from factoriax.constants import NUM_ACTIONS, NUM_ITEM_TYPES, Action, ItemType
+from factoriax.engine.constants import NUM_ACTIONS, NUM_ITEM_TYPES, Action, ItemType
 
 logger = logging.getLogger(__name__)
 

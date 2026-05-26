@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import Direction
+from factoriax.engine.constants import Direction
 
 # ---------------------------------------------------------------------------
 # Splitter — perpendicular output directions per facing

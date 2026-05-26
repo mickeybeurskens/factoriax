@@ -175,7 +175,7 @@ class PlaceAt(Skill):
 
     The machine's ``ent_direction`` is set to the player's direction
     at the moment of placement (see
-    :func:`factoriax.placement.place_machine`). So to land a machine
+    :func:`factoriax.engine.placement.place_machine`). So to land a machine
     at ``target`` facing direction ``D``, the player must stand at
     ``target - unit_vec(D)`` and emit ``PLACE_*`` while facing ``D``.
 

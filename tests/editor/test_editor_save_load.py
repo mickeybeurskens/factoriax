@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import numpy as np
 
-from factoriax.constants import Direction, Machine
 from factoriax.editor.dialogs import FileDialog, _list_level_files
 from factoriax.editor.state import (
     editor_state_from_level,
@@ -14,7 +13,8 @@ from factoriax.editor.state import (
     new_editor_state,
     set_machine,
 )
-from factoriax.levels import load_level, save_level
+from factoriax.engine.constants import Direction, Machine
+from factoriax.engine.levels import load_level, save_level
 
 
 class TestFileDialogSave:

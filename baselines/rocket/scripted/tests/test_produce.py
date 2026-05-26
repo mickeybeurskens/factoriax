@@ -14,17 +14,17 @@ import pytest
 
 from baselines.rocket.scripted import goals, skills
 from baselines.rocket.scripted.world_model import decode_observation
-from factoriax.constants import ItemType
+from factoriax.engine.constants import ItemType
+from factoriax.engine.levels import build_state
+from factoriax.engine.observations import global_array
+from factoriax.engine.state import EnvParams
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.levels import build_state
-from factoriax.observations import global_array
 from factoriax.scenarios.rocket import (
     ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.state import EnvParams
 
 pytestmark = pytest.mark.slow
 

@@ -9,7 +9,7 @@ from baselines.rocket.scripted.goals import (
     coal_feed_inventory,
     wire_coal_feed,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _types(goals: list) -> list[int]:

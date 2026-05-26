@@ -25,7 +25,7 @@ from factoriax import (
     load_level,
     save_level,
 )
-from factoriax.constants import Machine
+from factoriax.engine.constants import Machine
 
 
 def build_demo_level() -> Level:

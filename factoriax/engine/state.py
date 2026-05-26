@@ -5,9 +5,9 @@ from typing import ClassVar
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import Action
-from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfig
-from factoriax.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
+from factoriax.engine.constants import Action
+from factoriax.engine.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfig
+from factoriax.engine.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
 
 
 class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
@@ -49,8 +49,8 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         ent_health: Per-entity machine health, shape ``(MAX_M,)``, int16.
             Initialized to ``params.machine_config.max_health[ent_type]``
             on placement. Inactive slots hold ``0``. Read by
-            :func:`~factoriax.placement.apply_repair` and
-            :func:`~factoriax.placement.pickup_machine`; no other engine
+            :func:`~factoriax.engine.placement.apply_repair` and
+            :func:`~factoriax.engine.placement.pickup_machine`; no other engine
             kernel reads or writes this field, so wrappers can layer
             arbitrary degradation/repair models on top without engine
             changes.
@@ -69,7 +69,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             ``(MAX_ACHIEVEMENTS,)``, bool. Once a bit flips on it stays
             on for the rest of the episode. The engine evaluates the
             condition function bound at env-construction time inside
-            :func:`~factoriax.game_logic.factoriax_step` and folds the
+            :func:`~factoriax.engine.game_logic.factoriax_step` and folds the
             result in with ``|``. Wrappers, observations, rewards, and
             scenarios read this field directly — no wrapper needed.
     """
@@ -142,21 +142,21 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             the player. Defaults to 1.
         recipe_table: Per-recipe balance numbers (input/output counts,
             ticks) and identity arrays (machine type, output items)
-            packed as a :class:`~factoriax.recipes.RecipeTable`. Defaults
-            to :data:`~factoriax.recipes.DEFAULT_RECIPE_TABLE`. Stored as
-            a PyTree leaf so JIT'd kernels in :mod:`factoriax.machines`
-            and :mod:`factoriax.crafting` can read recipe values from
+            packed as a :class:`~factoriax.engine.recipes.RecipeTable`. Defaults
+            to :data:`~factoriax.engine.recipes.DEFAULT_RECIPE_TABLE`. Stored as
+            a PyTree leaf so JIT'd kernels in :mod:`factoriax.engine.machines`
+            and :mod:`factoriax.engine.crafting` can read recipe values from
             ``params.recipe_table.*`` without re-baking the XLA graph
             when the user constructs an :class:`EnvParams` with a tuned
             balance overlay (added in Step 5+). Shape is fixed by
-            :data:`~factoriax.recipes.NUM_RECIPES` and
-            :data:`~factoriax.recipes.MAX_RECIPE_INPUTS` so JIT cache
+            :data:`~factoriax.engine.recipes.NUM_RECIPES` and
+            :data:`~factoriax.engine.recipes.MAX_RECIPE_INPUTS` so JIT cache
             reuse is preserved across overlays.
         machine_config: Per-machine-type tunable knobs (currently just
             ``max_stack``) packed as a
-            :class:`~factoriax.machine_config.MachineConfig`. Defaults
-            to :data:`~factoriax.machine_config.DEFAULT_MACHINE_CONFIG`.
-            Engine kernels in :mod:`factoriax.machines` read from
+            :class:`~factoriax.engine.machine_config.MachineConfig`. Defaults
+            to :data:`~factoriax.engine.machine_config.DEFAULT_MACHINE_CONFIG`.
+            Engine kernels in :mod:`factoriax.engine.machines` read from
             ``params.machine_config.max_stack`` when computing buffer
             caps; constructing an :class:`EnvParams` with overrides via
             ``DEFAULT_MACHINE_CONFIG.with_overrides({...})`` retunes

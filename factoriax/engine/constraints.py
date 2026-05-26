@@ -27,8 +27,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import ItemType
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.constants import ItemType
+from factoriax.engine.state import EnvParams, EnvState
 
 _ORE_ITEMS = jnp.array(
     [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE],

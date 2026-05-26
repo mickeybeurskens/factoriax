@@ -24,9 +24,9 @@ from typing import ClassVar, Literal
 
 import numpy as np
 
-from factoriax import actions
-from factoriax.constants import Action, Direction, ItemType, Machine
-from factoriax.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
+from factoriax.engine import actions
+from factoriax.engine.constants import Action, Direction, ItemType, Machine
+from factoriax.engine.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
 
 from .skills import (
     FaceAndInteract,
@@ -197,7 +197,7 @@ class MineOre(Goal):
 # Items the rocket goal-planner will hand-craft. Everything else -- the
 # machine-only outputs and the late-game machines it builds via placement --
 # is excluded, so CraftItem(...) raises ValueError for them. This tuple is the
-# planner's policy; the action ids are read from factoriax.actions so the map
+# planner's policy; the action ids are read from factoriax.engine.actions so the map
 # stays in sync with the Action enum.
 _HAND_CRAFTABLE: tuple[ItemType, ...] = (
     ItemType.IRON_PLATE,
@@ -644,7 +644,7 @@ def _belt_path_label(paths: list[BeltPath], idx: int) -> str:
 
 
 # (vert_out_dir, horiz_out_dir) -> packed crossing encoding (1..4).
-# Mirrors :data:`factoriax.belts.CROSSING_AXIS_DIRS`. The vertical
+# Mirrors :data:`factoriax.engine.belts.CROSSING_AXIS_DIRS`. The vertical
 # axis maps UP/DOWN flow; horizontal maps LEFT/RIGHT flow.
 _CROSSING_ENCODINGS: dict[tuple[int, int], int] = {
     (int(Direction.DOWN), int(Direction.RIGHT)): 1,
@@ -2498,7 +2498,7 @@ def _find_recipe(
     Args:
         output_item: ``ItemType`` integer to look up.
         book: :class:`RecipeBook` to search. Defaults to
-            :data:`~factoriax.recipes.BASE_RECIPE_BOOK` so existing
+            :data:`~factoriax.engine.recipes.BASE_RECIPE_BOOK` so existing
             call sites that don't thread an env-specific book
             keep working unchanged.
     """
@@ -2684,9 +2684,9 @@ class ProduceInMachineAt(Goal):
             completed cycles to run; with ``until_held=True`` it is
             the held-output threshold (matching
             :class:`ProduceInMachine`'s semantics).
-        book: :class:`~factoriax.recipes.RecipeBook` for recipe
+        book: :class:`~factoriax.engine.recipes.RecipeBook` for recipe
             lookup. Defaults to
-            :data:`~factoriax.recipes.BASE_RECIPE_BOOK`; pass a
+            :data:`~factoriax.engine.recipes.BASE_RECIPE_BOOK`; pass a
             tuned book to track a balance overlay.
         until_held: When True, the goal exits as soon as the
             player's held output is at least ``count``. This matches

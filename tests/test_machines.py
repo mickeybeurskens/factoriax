@@ -4,13 +4,17 @@ import jax.numpy as jnp
 from jax import random
 
 from factoriax import BlockType, EnvParams, EnvState, ItemType
-from factoriax.constants import (
+from factoriax.engine.constants import (
     Direction,
     Machine,
 )
-from factoriax.levels import generate_state
-from factoriax.machine_spec import MACHINE_MAX_STACK
-from factoriax.machines import run_conveyor_belts, run_miners, update_all_machines
+from factoriax.engine.levels import generate_state
+from factoriax.engine.machine_spec import MACHINE_MAX_STACK
+from factoriax.engine.machines import (
+    run_conveyor_belts,
+    run_miners,
+    update_all_machines,
+)
 
 # The miner's buffer capacity — a "full" buffer value for the stop tests.
 _MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])
@@ -153,7 +157,7 @@ class TestMinerOperation:
         Full output slot: next tick mines 0 until a withdraw/arm/belt
         drains it.
         """
-        from factoriax.machines import MINER_OUTPUT_CAP
+        from factoriax.engine.machines import MINER_OUTPUT_CAP
 
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),

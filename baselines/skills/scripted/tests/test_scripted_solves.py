@@ -18,11 +18,11 @@ import jax.numpy as jnp
 import pytest
 
 from baselines.skills.scripted import SCRIPTED_POLICIES, ScriptedPolicy
+from factoriax.engine.levels import build_state
+from factoriax.engine.state import EnvState
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import build_state
 from factoriax.scenarios.skills import SkillsBenchmark, skills_conditions
-from factoriax.state import EnvState
 
 pytestmark = pytest.mark.slow
 

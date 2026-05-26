@@ -10,7 +10,7 @@ from baselines.rocket.scripted.goals import (
     assembler_module_inventory,
     build_assembler_module_at,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:

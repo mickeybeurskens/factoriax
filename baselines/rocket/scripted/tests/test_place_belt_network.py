@@ -18,7 +18,7 @@ from baselines.rocket.scripted.goals import (
     belt_network_inventory,
     place_belt_network,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:

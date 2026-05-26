@@ -2,12 +2,12 @@
 
 Maps engine enum values to the label strings the editor and play UI
 render in panel headers, tooltips, and toolbars. Presentation only —
-kept out of the core :mod:`factoriax.constants` module.
+kept out of the core :mod:`factoriax.engine.constants` module.
 """
 
 from __future__ import annotations
 
-from factoriax.constants import Machine
+from factoriax.engine.constants import Machine
 
 # Human-readable display names for each Machine, derived from the
 # enum: underscores become spaces and each word is title-cased, giving

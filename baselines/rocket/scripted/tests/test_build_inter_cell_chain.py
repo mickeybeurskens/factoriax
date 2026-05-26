@@ -13,7 +13,7 @@ from baselines.rocket.scripted.goals import (
     build_inter_cell_chain,
     inter_cell_chain_inventory,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 # ---------------------------------------------------------------------------
 # Inventory helper

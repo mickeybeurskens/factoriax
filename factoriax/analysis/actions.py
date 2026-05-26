@@ -28,7 +28,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
-from factoriax.constants import NUM_ACTIONS, Action
+from factoriax.engine.constants import NUM_ACTIONS, Action
 
 from .trajectory import Trajectory
 

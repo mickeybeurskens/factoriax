@@ -13,7 +13,7 @@ from baselines.rocket.scripted.goals import (
     PlaceMachineAt,
     place_belt_path,
 )
-from factoriax.constants import Direction, Machine
+from factoriax.engine.constants import Direction, Machine
 
 
 def _belt_specs(goals: list) -> list[tuple[tuple[int, int], int]]:

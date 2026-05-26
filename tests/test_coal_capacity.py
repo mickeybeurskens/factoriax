@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import BLOCK_MAX_RESOURCES, BlockType
-from factoriax.levels import build_state
+from factoriax.engine.constants import BLOCK_MAX_RESOURCES, BlockType
+from factoriax.engine.levels import build_state
+from factoriax.engine.state import EnvParams
 from factoriax.scenarios.rocket import build_rocket_level
-from factoriax.state import EnvParams
 
 
 def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:

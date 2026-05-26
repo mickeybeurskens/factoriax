@@ -1,10 +1,10 @@
 """Display data for machine-inventory slot-role badges in the editor.
 
-Maps :class:`~factoriax.constants.SlotRole` integer values to the badge
+Maps :class:`~factoriax.engine.constants.SlotRole` integer values to the badge
 label text and color the editor draws for each machine inventory slot.
 This is presentation only — the role *semantics* live with the
 ``SlotRole`` enum and ``MACHINE_SLOT_ROLES`` in
-:mod:`factoriax.constants`.
+:mod:`factoriax.engine.constants`.
 """
 
 from __future__ import annotations

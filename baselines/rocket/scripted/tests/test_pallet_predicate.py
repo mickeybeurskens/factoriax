@@ -16,7 +16,7 @@ import numpy as np
 
 from baselines.rocket.scripted.agent import _pallet_has_output_predicate
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _make_view_with_pallet(

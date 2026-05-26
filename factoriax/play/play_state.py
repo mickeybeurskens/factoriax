@@ -1,7 +1,7 @@
 """Mutable UI state for the interactive play loop.
 
 This dataclass holds all menu visibility, navigation, and recording
-state. It is entirely separate from :class:`~factoriax.state.EnvState`
+state. It is entirely separate from :class:`~factoriax.engine.state.EnvState`
 and is never passed to JAX functions.
 """
 
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from factoriax.state import EnvState
+    from factoriax.engine.state import EnvState
     from factoriax.ui.primitives import ClickRegion
 
 

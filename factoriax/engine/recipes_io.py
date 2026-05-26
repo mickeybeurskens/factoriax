@@ -1,16 +1,16 @@
-"""TOML loader for :class:`~factoriax.recipes.RecipeBalance`.
+"""TOML loader for :class:`~factoriax.engine.recipes.RecipeBalance`.
 
 Reads a balance overlay from a TOML file so users can tune game
 balance without editing Python source. The loader:
 
 1. Maps each TOML table key to an ``ItemType`` (case-insensitive
    match against the enum's member names).
-2. Maps each table's keys to :class:`~factoriax.recipes.RecipeOverride`
+2. Maps each table's keys to :class:`~factoriax.engine.recipes.RecipeOverride`
    fields (``input_counts``, ``output_count``, ``ticks``).
-3. Builds a :class:`~factoriax.recipes.RecipeBalance` with the parsed
+3. Builds a :class:`~factoriax.engine.recipes.RecipeBalance` with the parsed
    overrides; ``RecipeBalance``'s own ``__post_init__`` validates
    uniqueness of overridden outputs, and
-   :meth:`~factoriax.recipes.RecipeBook.with_balance` validates the
+   :meth:`~factoriax.engine.recipes.RecipeBook.with_balance` validates the
    per-recipe values when the overlay is applied.
 
 Example TOML:
@@ -35,8 +35,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from factoriax.constants import ItemType
-from factoriax.recipes import RecipeBalance, RecipeOverride
+from factoriax.engine.constants import ItemType
+from factoriax.engine.recipes import RecipeBalance, RecipeOverride
 
 # Allowed override fields, mapped to their expected Python types
 # in the parsed TOML.

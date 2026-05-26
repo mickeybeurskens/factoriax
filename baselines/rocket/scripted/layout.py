@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from factoriax.constants import Direction, Machine
+from factoriax.engine.constants import Direction, Machine
 
 from .goals import Goal, PlaceMachineAt, PlaceMachineFromBackAt
 from .world_model import WorldView

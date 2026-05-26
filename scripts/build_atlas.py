@@ -23,7 +23,7 @@ and player layers onto the terrain using the alpha channel, so:
   walking onto a belt no longer hides the belt.
 
 Directional categories carry one cell per
-:class:`~factoriax.constants.Direction`:
+:class:`~factoriax.engine.constants.Direction`:
 
 - Machines: rows 1-4 hold variants for direction LEFT, RIGHT, UP,
   DOWN respectively. Non-directional machines (``PALLET``,
@@ -55,14 +55,14 @@ import imageio.v3 as iio
 import numpy as np
 import orjson
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     BlockType,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.jax_renderer import build_digit_atlas
+from factoriax.engine.jax_renderer import build_digit_atlas
 from factoriax.ui.icons import (
     MACHINE_TO_ITEM,
     create_biter_texture,

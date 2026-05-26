@@ -5,7 +5,7 @@ Two network architectures are provided:
 - :class:`ActorCritic` — MLP trunk for flat vector observations
   (``local_array`` or ``global_array``).
 - :class:`VisionActorCritic` — CNN encoder for pixel observations
-  produced by :class:`~factoriax.jax_renderer.JaxRenderer`.
+  produced by :class:`~factoriax.engine.jax_renderer.JaxRenderer`.
 
 Both produce ``(logits, value)`` and can be used interchangeably
 by the training script.

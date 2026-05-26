@@ -3,7 +3,7 @@
 A :class:`Level` is a compact, JSON-serializable description of a world:
 block layout, optional initial resource amounts, and optional initial
 machines.  It is purely a world description — player count and placement
-are runtime concerns supplied via :class:`~factoriax.state.EnvParams`
+are runtime concerns supplied via :class:`~factoriax.engine.state.EnvParams`
 when calling :func:`build_state`.  This separation means the same level
 works unchanged for 1, 2, or N agents.
 
@@ -26,7 +26,7 @@ Typical usage::
     level = load_level(Path("my_level.json"))
 
 Procedural generation lives here as :func:`generate_state`, which
-produces an :class:`~factoriax.state.EnvState` directly from a JAX
+produces an :class:`~factoriax.engine.state.EnvState` directly from a JAX
 key — fully JAX-native and JIT-compatible.
 """
 
@@ -41,7 +41,7 @@ import numpy as np
 import orjson
 from jax import random
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
@@ -50,8 +50,8 @@ from factoriax.constants import (
     Direction,
     Machine,
 )
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import MINEABLE_BLOCKS
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import MINEABLE_BLOCKS
 
 # ---------------------------------------------------------------------------
 # Level dataclass
@@ -65,8 +65,8 @@ class Level:
     A Level captures only the static world geometry — block layout and
     optional pre-set resource amounts or machines.  Player placement is
     not part of the level; use :func:`build_state` with an
-    :class:`~factoriax.state.EnvParams` to materialise the full
-    :class:`~factoriax.state.EnvState`.
+    :class:`~factoriax.engine.state.EnvParams` to materialise the full
+    :class:`~factoriax.engine.state.EnvState`.
 
     Attributes:
         name: Human-readable identifier used in the level registry.
@@ -511,7 +511,7 @@ def _place_players(
 
 
 def build_state(level: Level, params: EnvParams) -> EnvState:
-    """Construct a JAX :class:`~factoriax.state.EnvState` from a :class:`Level`.
+    """Construct a JAX :class:`~factoriax.engine.state.EnvState` from a :class:`Level`.
 
     Players are placed at the centre of the map, spread horizontally,
     each guaranteed to land on a DIRT tile.  All dynamic fields
@@ -523,7 +523,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
         params: Environment parameters, including ``num_players``.
 
     Returns:
-        A fully initialised :class:`~factoriax.state.EnvState`.
+        A fully initialised :class:`~factoriax.engine.state.EnvState`.
 
     Raises:
         ValueError: If the level dimensions do not match ``params``.
@@ -708,7 +708,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
             terrain probabilities.
 
     Returns:
-        Initial :class:`~factoriax.state.EnvState` with a randomly
+        Initial :class:`~factoriax.engine.state.EnvState` with a randomly
         generated map and players near the centre.
 
     Example:

@@ -20,9 +20,9 @@ import jax.numpy as jnp
 from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import NUM_SCIENCE_PACK_TYPES
+from factoriax.engine.constants import NUM_SCIENCE_PACK_TYPES
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.state import EnvParams, EnvState
 
 
 class ScienceTallyState(struct.PyTreeNode):  # type: ignore[no-untyped-call]

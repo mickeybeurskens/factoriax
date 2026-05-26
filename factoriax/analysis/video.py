@@ -17,8 +17,8 @@ from typing import Any
 import numpy as np
 
 from factoriax.analysis.inventory import render_inventory_panel
-from factoriax.jax_renderer import JaxRenderer
-from factoriax.state import EnvState
+from factoriax.engine.jax_renderer import JaxRenderer
+from factoriax.engine.state import EnvState
 
 # JaxRenderer holds device-resident atlases for one tile size. Cache
 # instances per ``block_pixel_size`` so the per-call cost is just a

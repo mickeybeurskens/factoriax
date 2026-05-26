@@ -28,8 +28,8 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import MAX_ACHIEVEMENTS, ItemType, Machine
-from factoriax.state import EnvState
+from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType, Machine
+from factoriax.engine.state import EnvState
 
 
 @dataclass(frozen=True)
@@ -148,7 +148,7 @@ ACHIEVEMENT_INFO = [
 NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 
 #: Per-achievement reward magnitudes for the core game, used by
-#: :func:`factoriax.rewards.achievement_reward` as the default weights.
+#: :func:`factoriax.engine.rewards.achievement_reward` as the default weights.
 #: Shape ``(MAX_ACHIEVEMENTS,)`` — slots beyond the 17 core achievements
 #: are zero so they contribute no reward.
 CORE_ACHIEVEMENT_WEIGHTS = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)

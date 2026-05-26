@@ -30,7 +30,7 @@ With scheme descriptors that capture how the trajectory was produced:
 ...     cost_scheme={"type": "action_penalty", "scale": 0.01},
 ... )
 
-State round-trip (requires factoriax.state):
+State round-trip (requires factoriax.engine.state):
 >>> from factoriax.analysis.trajectory import states_to_trajectory, trajectory_to_states
 >>> traj = states_to_trajectory(states, actions)
 >>> reconstructed = trajectory_to_states(traj, episode=0)
@@ -45,7 +45,7 @@ import numpy as np
 import orjson
 
 if TYPE_CHECKING:
-    from factoriax.state import EnvParams, EnvState
+    from factoriax.engine.state import EnvParams, EnvState
 
 # All optional array fields in the order they are declared.
 # Used by save/load/slice/repr to avoid hardcoding the list in 6 places.
@@ -144,7 +144,7 @@ class Trajectory:
     env_params_scheme : dict, optional
         Snapshot of :func:`factoriax.config.env_params_to_dict` taken
         at recording time. Replay tooling rebuilds
-        :class:`~factoriax.state.EnvParams` from this dict so engine
+        :class:`~factoriax.engine.state.EnvParams` from this dict so engine
         knobs like ``player_mining_yield`` and ``miner_mining_rate``
         reproduce the captured ``items_mined``.
     """
@@ -495,10 +495,10 @@ def trajectory_to_states(
         List of ``EnvState`` objects, one per timestep.
 
     Raises:
-        ImportError: If ``factoriax.state`` is not available.
+        ImportError: If ``factoriax.engine.state`` is not available.
         ValueError: If required fields are missing from the trajectory.
     """
-    from factoriax.state import EnvState
+    from factoriax.engine.state import EnvState
 
     T = traj.episode_length
     states = []
@@ -543,7 +543,7 @@ def trajectory_to_states(
         if "achievements_unlocked" not in state_kwargs:
             import jax.numpy as jnp
 
-            from factoriax.constants import MAX_ACHIEVEMENTS
+            from factoriax.engine.constants import MAX_ACHIEVEMENTS
 
             state_kwargs["achievements_unlocked"] = jnp.zeros(
                 MAX_ACHIEVEMENTS, dtype=jnp.bool_

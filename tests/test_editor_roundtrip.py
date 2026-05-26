@@ -10,15 +10,15 @@ from __future__ import annotations
 import numpy as np
 import numpy.testing as npt
 
-from factoriax.constants import (
+from factoriax.editor.state import editor_state_from_level, editor_state_to_level
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     BlockType,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.editor.state import editor_state_from_level, editor_state_to_level
-from factoriax.levels import Level
+from factoriax.engine.levels import Level
 
 
 def _make_fully_populated_level() -> Level:

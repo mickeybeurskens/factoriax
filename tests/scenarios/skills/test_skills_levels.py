@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import BlockType, ItemType
+from factoriax.engine.constants import BlockType, ItemType
 from factoriax.scenarios.skills import (
     build_craft_miner_level,
     build_mine_level,
@@ -194,7 +194,7 @@ class TestCraftMinerLevel:
 
     def test_has_one_pallet(self) -> None:
         """Each level pre-places exactly one pallet."""
-        from factoriax.constants import Machine
+        from factoriax.engine.constants import Machine
 
         for seed in range(20):
             level, _, _ = build_craft_miner_level(seed=seed)
@@ -204,7 +204,7 @@ class TestCraftMinerLevel:
 
     def test_pallet_holds_complementary_ingredient(self) -> None:
         """The pallet holds whichever of IRON_PLATE/WIRE the player doesn't have."""
-        from factoriax.constants import Machine
+        from factoriax.engine.constants import Machine
 
         for seed in range(10):
             level, _, _ = build_craft_miner_level(seed=seed)
@@ -247,7 +247,7 @@ class TestCraftMinerLevel:
 
     def test_pallet_position_varies_with_seed(self) -> None:
         """Different seeds produce distinct pallet positions."""
-        from factoriax.constants import Machine
+        from factoriax.engine.constants import Machine
 
         positions: set[tuple[int, int]] = set()
         for seed in range(20):

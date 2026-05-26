@@ -5,7 +5,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.achievements import NUM_ACHIEVEMENTS
+from factoriax.engine.achievements import NUM_ACHIEVEMENTS
+from factoriax.engine.state import EnvParams
 from factoriax.play.ui import (
     SCROLL_STEP,
     ClickRegion,
@@ -15,7 +16,6 @@ from factoriax.play.ui import (
     render_inventory_menu,
     scroll_adjust_regions,
 )
-from factoriax.state import EnvParams
 
 _MAP = jnp.zeros((4, 4), dtype=jnp.int32)
 _PARAMS = EnvParams()

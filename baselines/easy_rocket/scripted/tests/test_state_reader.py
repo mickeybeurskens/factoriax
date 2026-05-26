@@ -17,7 +17,7 @@ from baselines.easy_rocket.scripted.state_reader import (
     tile_free,
     tile_walkable_for_player,
 )
-from factoriax.constants import BlockType, Direction, ItemType, Machine
+from factoriax.engine.constants import BlockType, Direction, ItemType, Machine
 
 
 def _dirt(h: int = 6, w: int = 6) -> jnp.ndarray:

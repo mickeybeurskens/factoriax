@@ -14,11 +14,11 @@ import jax.numpy as jnp
 import numpy as np
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import NUM_ACTIONS, BlockType
+from factoriax.engine.constants import NUM_ACTIONS, BlockType
+from factoriax.engine.levels import Level, LevelBuilder
+from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import Level, LevelBuilder
-from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
-from factoriax.state import EnvParams, EnvState
 
 _ORE_TYPES = [BlockType.IRON, BlockType.COPPER, BlockType.COAL]
 

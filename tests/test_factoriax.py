@@ -14,20 +14,20 @@ from factoriax import (
     EnvParams,
     EnvState,
 )
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ACTIONS,
     Machine,
 )
-from factoriax.game_logic import (
+from factoriax.engine.game_logic import (
     get_block_at,
     is_game_over,
     is_position_in_bounds,
     is_position_walkable,
     move_player,
 )
-from factoriax.levels import generate_state
-from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
-from factoriax.tables import SOLID_BLOCKS
+from factoriax.engine.levels import generate_state
+from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.engine.tables import SOLID_BLOCKS
 from factoriax.ui.icons import create_default_textures
 
 
@@ -71,8 +71,8 @@ class TestEnvStateSchema:
 
     def test_generate_state_initializes_achievements_unlocked(self) -> None:
         """Procedural state has all-False achievements_unlocked of correct shape."""
-        from factoriax.constants import MAX_ACHIEVEMENTS
-        from factoriax.levels import generate_state
+        from factoriax.engine.constants import MAX_ACHIEVEMENTS
+        from factoriax.engine.levels import generate_state
 
         state = generate_state(random.PRNGKey(0), EnvParams())
 
@@ -101,8 +101,8 @@ class TestEnvConstructorLevel:
 
     def test_level_constructor_arg_resets_to_level(self) -> None:
         """FactoriaXEnv(level=L).reset_env produces a state matching L's geometry."""
+        from factoriax.engine.levels import get_level
         from factoriax.envs.factoriax_env import FactoriaXEnv
-        from factoriax.levels import get_level
 
         level = get_level("15x15_resources")
         env = FactoriaXEnv(level=level)

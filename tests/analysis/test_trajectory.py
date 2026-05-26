@@ -15,8 +15,8 @@ import numpy as np
 
 from factoriax.analysis.trajectory import Trajectory, states_to_trajectory
 from factoriax.config import env_params_to_dict
-from factoriax.constants import BlockType
-from factoriax.state import EnvParams
+from factoriax.engine.constants import BlockType
+from factoriax.engine.state import EnvParams
 
 
 class TestEnvParamsSchemeField:

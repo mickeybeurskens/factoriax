@@ -1,7 +1,7 @@
 """Editor state: mutable numpy arrays for the level editor.
 
 The editor works on plain numpy arrays so there is no JAX dependency
-during editing.  Conversion to/from :class:`~factoriax.levels.Level`
+during editing.  Conversion to/from :class:`~factoriax.engine.levels.Level`
 happens only at save/load/play boundaries.
 """
 
@@ -11,14 +11,14 @@ import dataclasses
 
 import numpy as np
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     BlockType,
     ItemType,
     Machine,
 )
-from factoriax.levels import Level, default_resources
-from factoriax.machine_spec import MAX_MACHINE_INVENTORY_SLOTS
+from factoriax.engine.levels import Level, default_resources
+from factoriax.engine.machine_spec import MAX_MACHINE_INVENTORY_SLOTS
 
 #: Number of inventory slots shown per player in the editor. The engine
 #: player inventory is item-indexed (it has no slot concept); this is
@@ -175,7 +175,7 @@ def editor_state_from_level(level: Level) -> EditorState:
     inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
     if level.machine_inventory is not None:
         # Convert pouch (H, W, NUM_ITEM_TYPES) to slot-based for editor.
-        from factoriax.constants import NUM_ITEM_TYPES as _NIT
+        from factoriax.engine.constants import NUM_ITEM_TYPES as _NIT
 
         pouch = level.machine_inventory
         inv_items = np.zeros(inv_shape, dtype=np.int32)
@@ -251,7 +251,7 @@ def editor_state_to_level(state: EditorState) -> Level:
         directions = None
 
     # Convert slot-based editor inventory back to pouch for Level.
-    from factoriax.constants import NUM_ITEM_TYPES as _NIT
+    from factoriax.engine.constants import NUM_ITEM_TYPES as _NIT
 
     machine_inv: np.ndarray | None = None
     if not (
@@ -717,7 +717,7 @@ def get_num_slots(state: EditorState, target: InvTarget) -> int:
     Returns:
         Slot count (10 for players, machine-type-dependent for machines).
     """
-    from factoriax.machine_spec import MACHINE_NUM_SLOTS
+    from factoriax.engine.machine_spec import MACHINE_NUM_SLOTS
 
     if target[0] == "player":
         return NUM_INVENTORY_SLOTS

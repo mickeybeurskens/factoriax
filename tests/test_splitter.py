@@ -28,14 +28,14 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BlockType,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.machines import run_conveyor_belts
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.machines import run_conveyor_belts
+from factoriax.engine.state import EnvParams, EnvState
 
 # Splitter behaviour is exercised through the merged belt-network pass.
 run_splitters = run_conveyor_belts

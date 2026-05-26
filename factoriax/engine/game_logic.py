@@ -7,12 +7,12 @@ name the specific item type. No slot cursors or recipe selection needed.
 import jax
 import jax.numpy as jnp
 
-from factoriax.actions import (
+from factoriax.engine.actions import (
     CRAFT_ACTION_TO_ITEM,
     DEPOSIT_ACTION_TO_ITEM,
     PLACE_ACTION_TO_ITEM,
 )
-from factoriax.constants import (
+from factoriax.engine.constants import (
     CRAFT_BASE,
     DEPOSIT_BASE,
     NUM_SCIENCE_PACK_TYPES,
@@ -23,17 +23,17 @@ from factoriax.constants import (
     Direction,
     Machine,
 )
-from factoriax.crafting import craft_recipe
-from factoriax.machines import update_all_machines
-from factoriax.placement import (
+from factoriax.engine.crafting import craft_recipe
+from factoriax.engine.machines import update_all_machines
+from factoriax.engine.placement import (
     apply_repair,
     get_tile_in_front,
     pickup_machine,
     place_machine,
     set_machine_direction,
 )
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import (
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import (
     BLOCK_TO_ITEM_ARRAY,
     DIRECTIONS,
     MINEABLE_BLOCKS,
@@ -42,7 +42,7 @@ from factoriax.tables import (
 )
 
 # ROTATE_* offset (0..3) -> Direction value. (The PLACE/CRAFT/DEPOSIT
-# offset->item tables are imported from factoriax.actions, above.)
+# offset->item tables are imported from factoriax.engine.actions, above.)
 ROTATE_ACTION_TO_DIR = jnp.array(
     [Direction.LEFT, Direction.RIGHT, Direction.UP, Direction.DOWN],
     dtype=jnp.int32,

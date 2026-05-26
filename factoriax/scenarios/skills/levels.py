@@ -15,15 +15,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import BlockType, Direction, ItemType, Machine
-from factoriax.levels import Level, LevelBuilder
+from factoriax.engine.constants import BlockType, Direction, ItemType, Machine
+from factoriax.engine.levels import Level, LevelBuilder
+from factoriax.engine.state import EnvParams
 from factoriax.scenarios.skills.achievements import (
     CRAFT_MINER_BLOCKED_ACTIONS,
     MINE_BLOCKED_ACTIONS,
     NAVIGATE_BLOCKED_ACTIONS,
     PLACE_MINER_BLOCKED_ACTIONS,
 )
-from factoriax.state import EnvParams
 
 _NAVIGATE_MAP_SIZE: int = 5
 _NAVIGATE_MAX_TIMESTEPS: int = 200

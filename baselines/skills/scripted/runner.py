@@ -2,7 +2,7 @@
 
 Drives each scripted policy through its corresponding
 :class:`SkillsBenchmark` level, renders an mp4 of the rollout via
-:class:`~factoriax.jax_renderer.JaxRenderer`, generates action +
+:class:`~factoriax.engine.jax_renderer.JaxRenderer`, generates action +
 inventory analysis plots, and uploads everything to a single wandb
 run per level. Mirrors the eval-pass pattern in
 ``baselines/skills/train_ppo.py``.
@@ -39,11 +39,11 @@ import numpy as np
 
 from baselines.skills.scripted import SCRIPTED_POLICIES, ScriptedPolicy
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
+from factoriax.engine.levels import build_state
+from factoriax.engine.state import EnvState
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import build_state
 from factoriax.scenarios.skills import SkillsBenchmark, skills_conditions
-from factoriax.state import EnvState
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 logger = logging.getLogger("scripted_runner")

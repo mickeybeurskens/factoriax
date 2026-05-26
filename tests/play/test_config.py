@@ -22,7 +22,7 @@ from factoriax.config import (
     resolve_key,
     save_config,
 )
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 
 # Ensure pygame constants are available for key lookups.
 pygame.init()

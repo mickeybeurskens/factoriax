@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from factoriax.constants import Action
+from factoriax.engine.constants import Action
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 
 

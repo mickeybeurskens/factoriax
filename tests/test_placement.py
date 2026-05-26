@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax import BlockType, Direction, ItemType
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
@@ -14,11 +14,13 @@ from factoriax.constants import (
     Machine,
     MoveAction,
 )
-from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.game_logic import factoriax_step
-from factoriax.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfigOverride
-from factoriax.machine_spec import MAX_HEALTH
-from factoriax.placement import (
+from factoriax.engine.game_logic import factoriax_step
+from factoriax.engine.machine_config import (
+    DEFAULT_MACHINE_CONFIG,
+    MachineConfigOverride,
+)
+from factoriax.engine.machine_spec import MAX_HEALTH
+from factoriax.engine.placement import (
     apply_repair,
     get_tile_in_front,
     is_placeable_item,
@@ -26,8 +28,9 @@ from factoriax.placement import (
     pickup_machine,
     place_machine,
 )
-from factoriax.state import EnvParams
-from factoriax.tables import ITEM_TO_MACHINE_ARRAY, MACHINE_TO_ITEM_ARRAY
+from factoriax.engine.state import EnvParams
+from factoriax.engine.tables import ITEM_TO_MACHINE_ARRAY, MACHINE_TO_ITEM_ARRAY
+from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 def test_placeable_items_are_exactly_the_non_none_machines() -> None:
@@ -59,7 +62,7 @@ def test_place_dispatch_covers_exactly_the_placeable_items() -> None:
     interface concern free to differ, but neither side may gain or drop a
     placeable item without the other.
     """
-    from factoriax.game_logic import PLACE_ACTION_TO_ITEM
+    from factoriax.engine.game_logic import PLACE_ACTION_TO_ITEM
 
     dispatch_items = {int(i) for i in PLACE_ACTION_TO_ITEM.tolist()}
     assert dispatch_items == set(PLACEABLE_ITEM_LIST)
@@ -352,7 +355,7 @@ class TestPlacementInitializesHealth:
 
     def test_build_state_initializes_pre_placed_to_full_health(self) -> None:
         """Levels with pre-placed machines start them at full HP."""
-        from factoriax.levels import LevelBuilder, build_state
+        from factoriax.engine.levels import LevelBuilder, build_state
 
         level = (
             LevelBuilder(4, 4)
@@ -605,8 +608,8 @@ class TestWrapperContract:
         stays focused on the wrapper-only logic without paying the
         2x2 ``factoriax_step`` XLA compile.
         """
-        from factoriax.constants import Action
-        from factoriax.placement import get_tile_in_front
+        from factoriax.engine.constants import Action
+        from factoriax.engine.placement import get_tile_in_front
 
         is_repair = action == int(Action.REPAIR)
         # Inner step is a no-op on NOOP, so identity passthrough matches
@@ -647,7 +650,7 @@ class TestWrapperContract:
 
     def test_degradation_decrements_health_each_step(self, state_factory) -> None:
         """The wrapper's per-step decay reduces HP without engine changes."""
-        from factoriax.constants import Action
+        from factoriax.engine.constants import Action
 
         state, params = self._placed_state(state_factory)
         eidx = int(state.tile_entity[0, 1])
@@ -663,7 +666,7 @@ class TestWrapperContract:
         (5 + 10 from override - 1 degradation), NOT MAX_HEALTH. This
         proves the wrapper pre-empted the base full-restore.
         """
-        from factoriax.constants import Action
+        from factoriax.engine.constants import Action
 
         state, params = self._placed_state(state_factory)
         eidx = int(state.tile_entity[0, 1])
@@ -678,7 +681,7 @@ class TestWrapperContract:
         """The wrapper only ever reads/writes state.ent_health on top of
         what the base engine does — proving the engine surface needed
         for degradation/repair is exactly that one field."""
-        from factoriax.constants import Action
+        from factoriax.engine.constants import Action
 
         state, params = self._placed_state(state_factory)
         before = state

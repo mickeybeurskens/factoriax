@@ -24,7 +24,7 @@ from baselines.rocket.scripted.goals import (
 from baselines.rocket.scripted.planner import Planner, VerifyDiagnostic
 from baselines.rocket.scripted.skills import Result
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, Machine
+from factoriax.engine.constants import Direction, Machine
 
 
 def _empty_view(size: int = 32) -> WorldView:

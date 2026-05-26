@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import ItemType
+from factoriax.engine.constants import ItemType
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
 from factoriax.ui.icons import render_item_icon

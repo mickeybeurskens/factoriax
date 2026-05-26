@@ -3,7 +3,7 @@
 Player crafting is instant: check if the player has the required inputs,
 consume them, produce the output. Uses the same recipe table as assemblers.
 
-Recipe arrays flow in via :class:`~factoriax.state.EnvParams.recipe_table`
+Recipe arrays flow in via :class:`~factoriax.engine.state.EnvParams.recipe_table`
 so balance overlays (Step 5+) can tune input/output counts without
 rebaking the XLA graph.
 """
@@ -11,10 +11,10 @@ rebaking the XLA graph.
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import ItemType
-from factoriax.recipes import MAX_RECIPE_INPUTS
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import PLAYER_MAX_STACK
+from factoriax.engine.constants import ItemType
+from factoriax.engine.recipes import MAX_RECIPE_INPUTS
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import PLAYER_MAX_STACK
 
 
 def count_item_in_inventory(

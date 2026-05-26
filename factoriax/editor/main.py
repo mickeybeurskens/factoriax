@@ -13,13 +13,6 @@ import dataclasses
 import numpy as np
 import pygame
 
-from factoriax.constants import (
-    BLOCK_MAX_RESOURCES,
-    BlockType,
-    Direction,
-    ItemType,
-    Machine,
-)
 from factoriax.editor.canvas import (
     Viewport,
     clamp_camera,
@@ -78,7 +71,14 @@ from factoriax.editor.toolbar import (
     render_status_bar,
     render_toolbar,
 )
-from factoriax.levels import load_level, save_level
+from factoriax.engine.constants import (
+    BLOCK_MAX_RESOURCES,
+    BlockType,
+    Direction,
+    ItemType,
+    Machine,
+)
+from factoriax.engine.levels import load_level, save_level
 from factoriax.play.main import play_level
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import ClickRegion, hit_test_regions

@@ -15,10 +15,11 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted.agent import make_scripted_rocket_agent
+from factoriax.engine.levels import build_state
+from factoriax.engine.observations import global_array
+from factoriax.engine.state import EnvParams
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.levels import build_state
-from factoriax.observations import global_array
 from factoriax.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -26,7 +27,6 @@ from factoriax.scenarios.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.state import EnvParams
 
 pytestmark = pytest.mark.slow
 

@@ -10,13 +10,13 @@ to :func:`jax.jit`.
 import jax
 import jax.numpy as jnp
 
-from factoriax.achievements import CORE_ACHIEVEMENT_WEIGHTS
-from factoriax.constants import (
+from factoriax.engine.achievements import CORE_ACHIEVEMENT_WEIGHTS
+from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import MINEABLE_BLOCKS
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import MINEABLE_BLOCKS
 
 # ---------------------------------------------------------------------------
 # Proximity helper
@@ -60,7 +60,7 @@ def achievement_reward(
     instances and returns the weighted sum of newly satisfied slots.
     The ``weights`` vector controls the magnitude per slot — slots with
     zero weight contribute nothing. Achievements live on
-    :class:`~factoriax.state.EnvState` directly; the env's
+    :class:`~factoriax.engine.state.EnvState` directly; the env's
     ``achievement_fn`` constructor argument latches them each step.
 
     Args:

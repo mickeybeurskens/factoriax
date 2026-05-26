@@ -20,11 +20,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import Action, BlockType
-from factoriax.levels import LevelBuilder
+from factoriax.engine.constants import Action, BlockType
+from factoriax.engine.levels import LevelBuilder
+from factoriax.engine.state import EnvParams
 from factoriax.scenarios.core import LevelResult, ScenarioLevel
 from factoriax.scenarios.runner import ScenarioRunner
-from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Shared stub infrastructure

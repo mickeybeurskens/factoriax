@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import pytest
 
-from factoriax.constants import Machine
-from factoriax.recipes import (
+from factoriax.engine.constants import Machine
+from factoriax.engine.recipes import (
     BASE_RECIPES,
     NUM_RECIPES,
     RECIPE_MACHINE_TYPE,

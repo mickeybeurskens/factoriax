@@ -18,13 +18,6 @@ import jax.numpy as jnp
 import numpy as np
 import pygame
 
-from factoriax.achievements import NUM_ACHIEVEMENTS
-from factoriax.actions import (
-    ITEM_TO_CRAFT_ACTION,
-    ITEM_TO_DEPOSIT_ACTION,
-    ITEM_TO_PLACE_ACTION,
-    NO_ACTION,
-)
 from factoriax.config import (
     ControllerLookup,
     KeyLookup,
@@ -33,7 +26,14 @@ from factoriax.config import (
     resolve_controller_hat,
     resolve_key,
 )
-from factoriax.constants import (
+from factoriax.engine.achievements import NUM_ACHIEVEMENTS
+from factoriax.engine.actions import (
+    ITEM_TO_CRAFT_ACTION,
+    ITEM_TO_DEPOSIT_ACTION,
+    ITEM_TO_PLACE_ACTION,
+    NO_ACTION,
+)
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
     ROTATE_BASE,
@@ -42,7 +42,9 @@ from factoriax.constants import (
     ItemType,
     Machine,
 )
-from factoriax.jax_renderer import JaxRenderer
+from factoriax.engine.jax_renderer import JaxRenderer
+from factoriax.engine.recipes import BASE_RECIPES, NUM_RECIPES
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.play.play_state import PlayState
 from factoriax.play.ui import (
     _entity_inventory,
@@ -56,8 +58,6 @@ from factoriax.play.ui import (
     render_pause_menu,
     render_victory_screen,
 )
-from factoriax.recipes import BASE_RECIPES, NUM_RECIPES
-from factoriax.state import EnvParams, EnvState
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.primitives import ClickRegion, hit_test_regions
 
@@ -85,7 +85,7 @@ TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
 # Machines the play hotbar offers, in palette order (SPLITTER / CROSSING are
 # intentionally not hand-placeable from the UI). The palette is the policy;
-# the PLACE action ids come from factoriax.actions so they track the enum.
+# the PLACE action ids come from factoriax.engine.actions so they track the enum.
 _PLACE_PALETTE: tuple[ItemType, ...] = (
     ItemType.MINER,
     ItemType.PALLET,

@@ -20,9 +20,9 @@ import jax.numpy as jnp
 from baselines.easy_rocket.scripted.layout import FactoryLayout, plan_factory
 from baselines.easy_rocket.scripted.phases import Phase, build_phases
 from baselines.easy_rocket.scripted.state_reader import find_patches
-from factoriax.constants import Action, ItemType
-from factoriax.recipes import RecipeTable
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.constants import Action, ItemType
+from factoriax.engine.recipes import RecipeTable
+from factoriax.engine.state import EnvParams, EnvState
 
 
 @dataclasses.dataclass

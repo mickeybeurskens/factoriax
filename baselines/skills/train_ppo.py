@@ -42,17 +42,17 @@ from baselines.ppo.normalization import (
     normalize_obs,
     update_running_stats,
 )
-from factoriax.constants import NUM_ACTIONS, Action
+from factoriax.engine.constants import NUM_ACTIONS, Action
+from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.scenarios.core import ScenarioLevel
 from factoriax.scenarios.skills import (
     SkillsBenchmark,
     skills_conditions,
     skills_reward,
 )
-from factoriax.state import EnvParams, EnvState
 
 logging.basicConfig(
     level=logging.INFO,
@@ -311,7 +311,7 @@ def train(config: Config) -> dict[str, float]:
 
     # Build initial state from the level (build_state pulls in
     # pre-placed pallets/miners/etc. that ``reset_env`` would skip).
-    from factoriax.levels import build_state
+    from factoriax.engine.levels import build_state
 
     initial_state = build_state(level, env_params)
     initial_obs = env.get_obs(initial_state, env_params)
@@ -689,7 +689,7 @@ def _evaluate(
     from pathlib import Path
 
     from factoriax.analysis.video import compose_frame_with_inventory, write_video
-    from factoriax.levels import build_state
+    from factoriax.engine.levels import build_state
 
     logger.info("Running evaluation rollout...")
     state = build_state(level, env_params)

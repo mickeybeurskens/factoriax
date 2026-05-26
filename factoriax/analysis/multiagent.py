@@ -21,7 +21,7 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from factoriax.constants import NUM_ACTIONS
+from factoriax.engine.constants import NUM_ACTIONS
 
 from .actions import (
     DEFAULT_ACTION_LABELS,

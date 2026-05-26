@@ -11,19 +11,14 @@ from typing import Any, Literal
 
 import jax
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     Action,
     BlockType,
     Direction,
     ItemType,
 )
-from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.envs.auto_reset_wrapper import AutoResetWrapper
-from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
-from factoriax.envs.science_tally_wrapper import ScienceTallyWrapper
-from factoriax.levels import (
+from factoriax.engine.levels import (
     LEVELS,
     Level,
     LevelBuilder,
@@ -33,9 +28,14 @@ from factoriax.levels import (
     load_level,
     save_level,
 )
-from factoriax.observations import global_array, local_array, rgb
-from factoriax.rewards import mining_reward
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.observations import global_array, local_array, rgb
+from factoriax.engine.rewards import mining_reward
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.envs.auto_reset_wrapper import AutoResetWrapper
+from factoriax.envs.factoriax_env import FactoriaXEnv
+from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
+from factoriax.envs.science_tally_wrapper import ScienceTallyWrapper
 
 AchievementFn = Callable[[EnvState], jax.Array]
 

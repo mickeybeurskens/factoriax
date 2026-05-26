@@ -14,8 +14,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import Action, BlockType
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.constants import Action, BlockType
+from factoriax.engine.state import EnvParams, EnvState
 
 _ORE_BLOCK_VALUES: tuple[int, ...] = (
     int(BlockType.COAL),

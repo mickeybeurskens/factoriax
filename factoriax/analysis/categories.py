@@ -13,7 +13,7 @@ from collections import OrderedDict
 import matplotlib.colors as mcolors
 import numpy as np
 
-from factoriax.constants import Action, ItemType
+from factoriax.engine.constants import Action, ItemType
 
 # ---------------------------------------------------------------
 # Action groups: (base_hex, [Action members])

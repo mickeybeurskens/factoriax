@@ -18,8 +18,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import Action, Direction, ItemType, Machine
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.constants import Action, Direction, ItemType, Machine
+from factoriax.engine.state import EnvParams, EnvState
 
 
 def _action(a: int) -> jax.Array:

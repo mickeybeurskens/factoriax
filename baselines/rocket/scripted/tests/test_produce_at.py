@@ -17,8 +17,8 @@ from baselines.rocket.scripted.goals import (
     ProduceInFurnaceAt,
     ProduceInMachineAt,
 )
-from factoriax.constants import ItemType
-from factoriax.recipes import (
+from factoriax.engine.constants import ItemType
+from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
     RecipeBalance,
     RecipeBook,

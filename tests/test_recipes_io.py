@@ -1,4 +1,4 @@
-"""Tests for the TOML balance loader in :mod:`factoriax.recipes_io`."""
+"""Tests for the TOML balance loader in :mod:`factoriax.engine.recipes_io`."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from factoriax.constants import ItemType
-from factoriax.recipes import RecipeBalance, RecipeOverride
-from factoriax.recipes_io import load_balance_from_toml
+from factoriax.engine.constants import ItemType
+from factoriax.engine.recipes import RecipeBalance, RecipeOverride
+from factoriax.engine.recipes_io import load_balance_from_toml
 
 
 def _write(tmp_path: Path, body: str) -> Path:
@@ -172,7 +172,7 @@ class TestLoadBalanceFromToml:
         """End-to-end: load a TOML, apply via with_balance, see the
         change in the projected RecipeTable.
         """
-        from factoriax.recipes import BASE_RECIPE_BOOK, RecipeTable
+        from factoriax.engine.recipes import BASE_RECIPE_BOOK, RecipeTable
 
         path = _write(
             tmp_path,

@@ -30,7 +30,7 @@ import dataclasses
 import os
 from dataclasses import dataclass
 
-from factoriax.constants import Action
+from factoriax.engine.constants import Action
 
 from .goals import Goal
 from .skills import Result, StepReturn

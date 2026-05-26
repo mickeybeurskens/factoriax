@@ -11,8 +11,8 @@ import jax.numpy as jnp
 from jax import random
 
 import factoriax
-from factoriax.constants import NUM_ACTIONS
-from factoriax.state import EnvParams
+from factoriax.engine.constants import NUM_ACTIONS
+from factoriax.engine.state import EnvParams
 
 
 def bench_single_env(num_steps: int = 2000) -> float:

@@ -15,8 +15,8 @@ from baselines.rocket.scripted.recipe_planning import (
     scale_inventory,
     sum_inventories,
 )
-from factoriax.constants import ItemType, Machine
-from factoriax.recipes import (
+from factoriax.engine.constants import ItemType, Machine
+from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
     Recipe,
     RecipeBalance,
@@ -238,7 +238,7 @@ class TestProductionSchedule:
             }
         )
         positions = {item: idx for idx, (item, _, _) in enumerate(sched)}
-        from factoriax.recipes import BASE_RECIPES
+        from factoriax.engine.recipes import BASE_RECIPES
 
         recipe_by_output = {r.output: r for r in BASE_RECIPES}
         for item, _, _ in sched:

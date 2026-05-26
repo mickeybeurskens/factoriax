@@ -11,18 +11,18 @@ import jax.numpy as jnp
 import pytest
 from jax import lax, random
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
     BlockType,
     ItemType,
     Machine,
 )
+from factoriax.engine.game_logic import factoriax_step, mine_block
+from factoriax.engine.machine_spec import MACHINE_MAX_STACK
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import PLAYER_MAX_STACK
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.game_logic import factoriax_step, mine_block
-from factoriax.machine_spec import MACHINE_MAX_STACK
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import PLAYER_MAX_STACK
 
 # Every test in this file runs a 100-step random rollout through
 # ``factoriax_step``, which triggers the full env JIT compile. They
@@ -158,7 +158,7 @@ class TestItemConservation:
         Total ore in inventory + remaining block resources must equal
         the initial block resources when only mining (no machines).
         """
-        from factoriax.constants import Direction
+        from factoriax.engine.constants import Direction
 
         world_map = jnp.array(
             [[BlockType.COAL, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
@@ -186,8 +186,11 @@ class TestItemConservation:
 
     def test_deposit_withdraw_round_trip(self, state_factory) -> None:
         """Depositing then withdrawing preserves total item count."""
-        from factoriax.constants import Direction
-        from factoriax.game_logic import deposit_to_adjacent, withdraw_from_adjacent
+        from factoriax.engine.constants import Direction
+        from factoriax.engine.game_logic import (
+            deposit_to_adjacent,
+            withdraw_from_adjacent,
+        )
 
         world_map = jnp.array([[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32)
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)

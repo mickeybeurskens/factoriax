@@ -6,8 +6,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import Action, BlockType, ItemType
-from factoriax.levels import build_state
+from factoriax.engine.constants import Action, BlockType, ItemType
+from factoriax.engine.levels import build_state
 from factoriax.scenarios.skills.mining import MiningSkill, mining_level
 from factoriax.scenarios.skills.place_miner import (
     PlaceMinerSkill,

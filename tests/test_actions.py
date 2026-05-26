@@ -1,7 +1,7 @@
 """Tests for the item<->action mappings (DEF2 D1c).
 
 The forward (action offset -> item) and inverse (item -> absolute action)
-tables in :mod:`factoriax.actions` are both derived from the category family
+tables in :mod:`factoriax.engine.actions` are both derived from the category family
 lists, and must be mutual inverses on each family's domain. These are
 JIT-free: the jnp tables are converted to numpy and inspected directly.
 """
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax import actions
-from factoriax.constants import (
+from factoriax.engine import actions
+from factoriax.engine.constants import (
     CRAFT_BASE,
     CRAFT_ITEMS,
     DEPOSIT_BASE,

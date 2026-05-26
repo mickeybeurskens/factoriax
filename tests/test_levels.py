@@ -1,4 +1,4 @@
-"""Tests for factoriax.levels: Level, LevelBuilder, build_state, serialization,
+"""Tests for factoriax.engine.levels: Level, LevelBuilder, build_state, serialization,
 procedural generation, and the built-in level registry."""
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     BlockType,
     Direction,
     Machine,
 )
-from factoriax.levels import (
+from factoriax.engine.levels import (
     LEVELS,
     Level,
     LevelBuilder,
@@ -29,7 +29,7 @@ from factoriax.levels import (
     load_level,
     save_level,
 )
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -498,7 +498,7 @@ class TestGenerateState:
         """All ore tiles should have exactly base_resources resources."""
         import numpy as np
 
-        from factoriax.tables import MINEABLE_BLOCKS
+        from factoriax.engine.tables import MINEABLE_BLOCKS
 
         params = EnvParams(map_width=32, map_height=32, num_players=1, base_resources=3)
         state = generate_state(jax.random.PRNGKey(5), params)
@@ -512,7 +512,7 @@ class TestGenerateState:
         """base_resources param controls starting resources on ore tiles."""
         import numpy as np
 
-        from factoriax.tables import MINEABLE_BLOCKS
+        from factoriax.engine.tables import MINEABLE_BLOCKS
 
         for count in (1, 5, 10):
             params = EnvParams(

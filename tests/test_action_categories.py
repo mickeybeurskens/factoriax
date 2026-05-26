@@ -10,7 +10,7 @@ non-parametric actions today, disjointly.
 
 from __future__ import annotations
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     CRAFT_BASE,
     CRAFT_ITEMS,
     DEPOSIT_BASE,
@@ -89,7 +89,7 @@ def test_craftable_iff_non_resource_iff_recipe_outputs() -> None:
     longer fall short of (or overshoot) the set of items that actually have a
     recipe, the way hand-numbering left craft missing the rocket parts.
     """
-    from factoriax.recipes import BASE_RECIPES
+    from factoriax.engine.recipes import BASE_RECIPES
 
     craft_items = {ItemType[m.name] for m in CRAFT_ITEMS}
     non_resource = {

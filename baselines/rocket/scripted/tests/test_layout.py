@@ -31,7 +31,7 @@ from baselines.rocket.scripted.layout import (
     verify_layout,
 )
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _make_view(

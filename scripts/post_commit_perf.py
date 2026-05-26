@@ -29,9 +29,9 @@ import time
 import jax
 from jax import lax, random
 
-from factoriax.constants import NUM_ACTIONS
+from factoriax.engine.constants import NUM_ACTIONS
+from factoriax.engine.state import EnvParams
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.state import EnvParams
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from baselines.rocket.scripted.goals import Goal, VerifyFailureAction
 from baselines.rocket.scripted.planner import Planner
 from baselines.rocket.scripted.skills import Result, StepReturn
 from baselines.rocket.scripted.world_model import WorldView
-from factoriax.constants import Action
+from factoriax.engine.constants import Action
 
 
 class _StubGoal(Goal):

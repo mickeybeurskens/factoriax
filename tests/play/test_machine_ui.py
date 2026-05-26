@@ -11,13 +11,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     ItemType,
     Machine,
 )
+from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
 from factoriax.play.ui import ClickRegion, render_machine_menu
-from factoriax.tables import MACHINE_INVENTORY_COUNT_DTYPE
 
 _SW = 320
 _SH = 320

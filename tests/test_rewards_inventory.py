@@ -7,19 +7,19 @@ player_inventory and entity buffer arrays after the entity migration.
 import jax.numpy as jnp
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     ItemType,
     Machine,
 )
-from factoriax.rewards import (
+from factoriax.engine.rewards import (
     miner_output_reward,
     pallet_filling_reward,
     player_inventory_reward,
     sparse_miner_crafting_reward,
     sparse_pallet_crafting_reward,
 )
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 
 
 @pytest.fixture

@@ -18,7 +18,7 @@ from baselines.rocket.scripted.goals import VerifyLayout
 from baselines.rocket.scripted.planner import Planner
 from baselines.rocket.scripted.skills import Result
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, Machine
+from factoriax.engine.constants import Direction, Machine
 
 
 def _make_view(machine_type_arr: np.ndarray) -> WorldView:

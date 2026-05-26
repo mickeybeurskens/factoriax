@@ -15,6 +15,7 @@ from factoriax.config import (  # noqa: E402
     default_keyboard,
     env_params_to_dict,
 )
+from factoriax.engine.state import EnvParams  # noqa: E402
 from factoriax.play.launch_screen import (  # noqa: E402
     _PAGE_OPTIONS,
     _SETTING_FIELDS,
@@ -23,7 +24,6 @@ from factoriax.play.launch_screen import (  # noqa: E402
     _set_value,
     run_settings_menu,
 )
-from factoriax.state import EnvParams  # noqa: E402
 
 
 def _make_config(seed: int = 42, player_mining_yield: int = 1) -> PlayerConfig:

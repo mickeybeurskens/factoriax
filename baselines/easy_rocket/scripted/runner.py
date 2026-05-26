@@ -27,14 +27,14 @@ import numpy as np
 
 import factoriax
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
-from factoriax.constants import NUM_ACTIONS, Action
-from factoriax.levels import build_state
+from factoriax.engine.constants import NUM_ACTIONS, Action
+from factoriax.engine.levels import build_state
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.easy_rocket import (
     NUM_EASY_ROCKET_ACHIEVEMENTS,
     EasyRocketScenario,
     easy_rocket_conditions,
 )
-from factoriax.state import EnvParams, EnvState
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 logger = logging.getLogger("easy_rocket_scripted")

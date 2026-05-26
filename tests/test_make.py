@@ -12,12 +12,12 @@ import jax.numpy as jnp
 from jax import random
 
 import factoriax
-from factoriax.constants import MAX_ACHIEVEMENTS, Action
+from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
+from factoriax.engine.levels import LevelBuilder
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.envs.auto_reset_wrapper import AutoResetWrapper
 from factoriax.envs.factoriax_env import FactoriaXEnv
 from factoriax.envs.local_observation_wrapper import LocalObservationWrapper
-from factoriax.levels import LevelBuilder
 
 
 def test_make_level_by_registry_name() -> None:

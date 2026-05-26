@@ -80,11 +80,12 @@ from baselines.rocket.scripted.goals import (
     Wait,
     WaitUntil,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
+from factoriax.engine.levels import build_state
+from factoriax.engine.observations import global_array
+from factoriax.engine.state import EnvParams
 from factoriax.envs import FactoriaXEnv
 from factoriax.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.levels import build_state
-from factoriax.observations import global_array
 from factoriax.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -94,7 +95,6 @@ from factoriax.scenarios.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
-from factoriax.state import EnvParams
 
 _EXPECTED_UNLOCKS: tuple[str, ...] = (
     # Bootstrap + ore collection.
@@ -843,7 +843,7 @@ def test_bus_pull_pins_production_to_pre_placed_machines() -> None:
 
 def test_recipe_overlay_changes_bom_quantities() -> None:
     """Doubling WIRE's COPPER_PLATE input scales COPPER_ORE mining up."""
-    from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBalance, RecipeOverride
+    from factoriax.engine.recipes import BASE_RECIPE_BOOK, RecipeBalance, RecipeOverride
 
     base_goals = build_advanced_factory_goals(book=BASE_RECIPE_BOOK, slack={})
     base_copper = next(

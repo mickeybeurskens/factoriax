@@ -15,14 +15,18 @@ from pathlib import Path
 import numpy as np
 import pygame
 
-from factoriax.constants import (
+from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
+from factoriax.engine.constants import (
     ItemType,
     Machine,
     SlotRole,
 )
-from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
-from factoriax.machine_spec import MACHINE_NUM_SLOTS, MACHINE_SLOT_ROLES, MACHINE_SPECS
-from factoriax.recipes import NUM_RECIPES, RECIPE_NAMES
+from factoriax.engine.machine_spec import (
+    MACHINE_NUM_SLOTS,
+    MACHINE_SLOT_ROLES,
+    MACHINE_SPECS,
+)
+from factoriax.engine.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.ui.fonts import get_pixel_font
 from factoriax.ui.icons import render_item_icon
 from factoriax.ui.labels import MACHINE_TYPE_NAMES

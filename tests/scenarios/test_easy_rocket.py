@@ -7,15 +7,16 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     BlockType,
     ItemType,
     Machine,
 )
-from factoriax.levels import Level
-from factoriax.recipes import RecipeBook, RecipeTable
+from factoriax.engine.levels import Level
+from factoriax.engine.recipes import RecipeBook, RecipeTable
+from factoriax.engine.state import EnvParams
 from factoriax.scenarios.core import LevelResult, Scenario
 from factoriax.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
@@ -28,7 +29,6 @@ from factoriax.scenarios.easy_rocket import (
     easy_rocket_conditions,
     easy_rocket_reward,
 )
-from factoriax.state import EnvParams
 
 _SPAWN: tuple[int, int] = (8, 8)
 _FORBID_RADIUS: int = 1

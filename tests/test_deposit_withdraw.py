@@ -11,8 +11,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from factoriax import Action, BlockType, Direction, ItemType
-from factoriax.constants import Machine
-from factoriax.game_logic import deposit_to_adjacent, withdraw_from_adjacent
+from factoriax.engine.constants import Machine
+from factoriax.engine.game_logic import deposit_to_adjacent, withdraw_from_adjacent
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +50,7 @@ def _player_inv(num_players: int, entries: dict[int, int]) -> jnp.ndarray:
     Returns:
         Player inventory of shape (num_players, NUM_ITEM_TYPES).
     """
-    from factoriax.constants import NUM_ITEM_TYPES
+    from factoriax.engine.constants import NUM_ITEM_TYPES
 
     inv = jnp.zeros((num_players, NUM_ITEM_TYPES), dtype=jnp.int32)
     for item_type, count in entries.items():
@@ -532,8 +532,8 @@ class TestDepositWithdrawViaStep:
         """DEPOSIT_COAL action through the full step pipeline."""
         import jax
 
-        from factoriax.game_logic import factoriax_step
-        from factoriax.state import EnvParams
+        from factoriax.engine.game_logic import factoriax_step
+        from factoriax.engine.state import EnvParams
 
         p_inv = _player_inv(1, {ItemType.COAL: 5})
         state = state_factory(
@@ -556,8 +556,8 @@ class TestDepositWithdrawViaStep:
         """WITHDRAW action pulls from the buffer slot regardless of item."""
         import jax
 
-        from factoriax.game_logic import factoriax_step
-        from factoriax.state import EnvParams
+        from factoriax.engine.game_logic import factoriax_step
+        from factoriax.engine.state import EnvParams
 
         bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.IRON_ORE, 10)})
         state = state_factory(

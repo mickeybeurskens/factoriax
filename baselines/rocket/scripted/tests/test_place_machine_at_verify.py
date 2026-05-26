@@ -24,7 +24,7 @@ import pytest
 
 from baselines.rocket.scripted.goals import PlaceMachineAt
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, Machine
+from factoriax.engine.constants import Direction, Machine
 
 
 def _make_view(

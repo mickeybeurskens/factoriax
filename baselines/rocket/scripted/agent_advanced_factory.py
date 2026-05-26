@@ -45,9 +45,9 @@ from __future__ import annotations
 
 import dataclasses
 
-from factoriax.constants import Direction, ItemType, Machine
-from factoriax.recipes import BASE_RECIPE_BOOK, RecipeBook
-from factoriax.state import EnvParams
+from factoriax.engine.constants import Direction, ItemType, Machine
+from factoriax.engine.recipes import BASE_RECIPE_BOOK, RecipeBook
+from factoriax.engine.state import EnvParams
 
 from .agent import ScriptedAgent, _miner_has_output_predicate
 from .goals import (
@@ -1389,9 +1389,9 @@ def build_advanced_factory_goals(
     flows through automatically.
 
     Args:
-        book: :class:`~factoriax.recipes.RecipeBook` whose recipes
+        book: :class:`~factoriax.engine.recipes.RecipeBook` whose recipes
             drive the BOM and production schedule. Defaults to the
-            shipped :data:`~factoriax.recipes.BASE_RECIPE_BOOK`;
+            shipped :data:`~factoriax.engine.recipes.BASE_RECIPE_BOOK`;
             pass a tuned book (e.g.
             ``BASE_RECIPE_BOOK.with_balance(...)``) to make the
             agent's mine / smelt / craft quantities track the
@@ -1504,7 +1504,7 @@ def make_advanced_factory_rocket_agent(
 
     Args:
         env_params: Environment parameters (passed to the planner).
-        book: :class:`~factoriax.recipes.RecipeBook` driving the
+        book: :class:`~factoriax.engine.recipes.RecipeBook` driving the
             bootstrap quantities. Pass a tuned book to explore
             balance changes.
         slack: Per-leaf-resource slack on top of the BOM. See

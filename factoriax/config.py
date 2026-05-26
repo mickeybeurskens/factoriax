@@ -26,7 +26,7 @@ from pathlib import Path
 import orjson
 import pygame
 
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 
 logger = logging.getLogger(__name__)
 

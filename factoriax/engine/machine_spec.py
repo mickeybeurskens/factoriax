@@ -8,9 +8,9 @@ construction, so a machine's slot count, slot roles, buffer cap, and type
 cap can no longer drift apart the way separate hand-maintained arrays did.
 
 This mirrors the records-to-derived-arrays shape of
-:mod:`factoriax.recipes` — independently; the two share no data, only the
+:mod:`factoriax.engine.recipes` — independently; the two share no data, only the
 pattern. It imports only the ``Machine`` / ``SlotRole`` enums (and the
-default-health scalar) from :mod:`factoriax.constants`; consumers import
+default-health scalar) from :mod:`factoriax.engine.constants`; consumers import
 the derived arrays from here.
 """
 
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import Machine, SlotRole
+from factoriax.engine.constants import Machine, SlotRole
 
 
 @dataclass(frozen=True)

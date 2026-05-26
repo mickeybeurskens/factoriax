@@ -4,13 +4,13 @@ The engine resolves an *action* to the item it refers to inside the JIT step;
 host-side callers (scripted agents, the play UI) need the *inverse* -- given an
 item, which action crafts / places / deposits it. Both directions are jnp
 gather tables derived from the same category family lists in
-:mod:`factoriax.constants`, usable inside ``jax.jit``.
+:mod:`factoriax.engine.constants`, usable inside ``jax.jit``.
 
 Layout
 ------
 * **Forward** (``action offset -> item``): indexed by ``action - <FAMILY>_BASE``;
   one entry per action in the family, in family order. Consumed by the step
-  dispatcher in :mod:`factoriax.game_logic`.
+  dispatcher in :mod:`factoriax.engine.game_logic`.
 * **Inverse** (``item -> absolute action``): indexed by ``ItemType``; holds the
   flat ``Action`` id, or :data:`NO_ACTION` (``-1``) where the item has no
   action in that family. Resources are non-craftable and non-machines are
@@ -28,7 +28,7 @@ from enum import IntEnum
 
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     CRAFT_BASE,
     CRAFT_ITEMS,
     DEPOSIT_BASE,

@@ -17,12 +17,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from factoriax.constants import NUM_SCIENCE_PACK_TYPES
+from factoriax.engine.constants import NUM_SCIENCE_PACK_TYPES
+from factoriax.engine.state import EnvParams
 from factoriax.envs.science_tally_wrapper import (
     ScienceTallyState,
     ScienceTallyWrapper,
 )
-from factoriax.state import EnvParams
 
 
 def _base_params() -> EnvParams:

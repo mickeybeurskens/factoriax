@@ -4,15 +4,15 @@ These tests cover the construction-time overlay machinery — the
 sparse override container, the per-recipe override application via
 :meth:`RecipeBook.with_balance`, and the end-to-end projection
 through :meth:`RecipeTable.from_book` so a tuned overlay reaches
-:class:`~factoriax.state.EnvParams.recipe_table` cleanly.
+:class:`~factoriax.engine.state.EnvParams.recipe_table` cleanly.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from factoriax.constants import ItemType
-from factoriax.recipes import (
+from factoriax.engine.constants import ItemType
+from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
     BASE_RECIPES,
     RecipeBalance,

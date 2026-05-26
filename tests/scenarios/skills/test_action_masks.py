@@ -9,7 +9,7 @@ exact-set comparison rather than spot checks.
 
 from __future__ import annotations
 
-from factoriax.constants import Action
+from factoriax.engine.constants import Action
 from factoriax.scenarios.skills.achievements import (
     ARM_TRANSFER_BLOCKED_ACTIONS,
     BELT_LINE_BLOCKED_ACTIONS,

@@ -5,15 +5,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from factoriax.constants import BlockType
-from factoriax.levels import LevelBuilder
+from factoriax.engine.constants import BlockType
+from factoriax.engine.levels import LevelBuilder
+from factoriax.engine.state import EnvParams
 from factoriax.scenarios.core import (
     LevelResult,
     Scenario,
     ScenarioLevel,
     ScenarioResult,
 )
-from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Fixtures

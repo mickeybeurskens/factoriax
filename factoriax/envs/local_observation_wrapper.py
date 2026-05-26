@@ -13,20 +13,20 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.observations import (
+from factoriax.engine.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
     local_array,
 )
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.envs.factoriax_env import FactoriaXEnv
 
 
 class LocalObservationWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """Replace the inner env's full-map obs with a local radius-R window.
 
     Wraps :class:`FactoriaXEnv` directly and substitutes
-    :func:`factoriax.observations.local_array` for ``get_obs``. The
+    :func:`factoriax.engine.observations.local_array` for ``get_obs``. The
     window side length is ``2 * radius + 1``; at ``radius=3`` each obs
     is a 7x7 window centered on the selected player.
 

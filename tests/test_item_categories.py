@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     ITEM_TO_MACHINE,
     HalfFabricate,
     ItemType,

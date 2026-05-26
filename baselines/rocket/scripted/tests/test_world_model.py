@@ -13,17 +13,17 @@ import numpy as np
 import pytest
 
 from baselines.rocket.scripted import world_model as wm
-from factoriax.constants import (
+from factoriax.engine.constants import (
     Action,
     Direction,
     ItemType,
     Machine,
 )
+from factoriax.engine.levels import build_state
+from factoriax.engine.observations import global_array
+from factoriax.engine.state import EnvParams
 from factoriax.envs import FactoriaXEnv
-from factoriax.levels import build_state
-from factoriax.observations import global_array
 from factoriax.scenarios.rocket import build_rocket_level, rocket_conditions
-from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Helpers for synthesising states without stepping the env.

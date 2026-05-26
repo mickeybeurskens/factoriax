@@ -19,8 +19,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax import machine_spec
-from factoriax.constants import BlockType, Machine, SlotRole
+from factoriax.engine import machine_spec
+from factoriax.engine.constants import BlockType, Machine, SlotRole
 
 # --- Golden values: the per-machine config, indexed by Machine value -------
 # NONE, MINER, PALLET, CONVEYOR_BELT, ASSEMBLER, ARM, ROCKET, FURNACE,

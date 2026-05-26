@@ -54,8 +54,8 @@ from baselines.easy_rocket.scripted.state_reader import (
     player_direction,
     player_pos,
 )
-from factoriax.constants import Action, BlockType, ItemType, Machine
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.constants import Action, BlockType, ItemType, Machine
+from factoriax.engine.state import EnvParams, EnvState
 
 # Recipe inputs map: crafted ItemType -> list of (input ItemType, count).
 # Populated by :func:`build_phases` from the runtime recipe table.

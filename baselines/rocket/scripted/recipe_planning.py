@@ -11,7 +11,7 @@ These helpers walk the recipe graph to convert a *target inventory*
   every consumer.
 
 These functions are agent-strategy concerns and do not appear inside
-the JIT'd engine. They consume :class:`~factoriax.recipes.RecipeBook`
+the JIT'd engine. They consume :class:`~factoriax.engine.recipes.RecipeBook`
 because that is the engine's source of truth for recipe identity and
 balance, but produce only Python data — no JAX arrays.
 
@@ -25,8 +25,8 @@ ore + coal that extra cycle consumes.
 
 from __future__ import annotations
 
-from factoriax.constants import ItemType
-from factoriax.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
+from factoriax.engine.constants import ItemType
+from factoriax.engine.recipes import BASE_RECIPE_BOOK, Recipe, RecipeBook
 
 
 def bill_of_materials(
@@ -57,7 +57,7 @@ def bill_of_materials(
             inventory at end of bootstrap*, not the raw shopping
             list).
         book: :class:`RecipeBook` to walk. Defaults to
-            :data:`~factoriax.recipes.BASE_RECIPE_BOOK`; pass a
+            :data:`~factoriax.engine.recipes.BASE_RECIPE_BOOK`; pass a
             tuned book obtained via
             ``BASE_RECIPE_BOOK.with_balance(...)`` to make the BOM
             track a balance overlay.
@@ -121,7 +121,7 @@ def production_schedule(
         targets: Required item counts, ``{ItemType: qty}``. Same
             semantics as :func:`bill_of_materials`.
         book: :class:`RecipeBook` to walk. Defaults to
-            :data:`~factoriax.recipes.BASE_RECIPE_BOOK`.
+            :data:`~factoriax.engine.recipes.BASE_RECIPE_BOOK`.
 
     Returns:
         Ordered ``[(item, qty, machine_type), ...]``. Items not

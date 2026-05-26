@@ -16,7 +16,6 @@ import numpy as np
 import pygame
 from jax import random
 
-from factoriax.achievements import ACHIEVEMENT_INFO, core_game_conditions
 from factoriax.config import (
     ControllerLookup,
     KeyLookup,
@@ -26,13 +25,14 @@ from factoriax.config import (
     default_keyboard,
     resolve_controller_axis,
 )
-from factoriax.constants import Action, Direction
+from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
+from factoriax.engine.constants import Action, Direction
+from factoriax.engine.levels import Level
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.levels import Level
 from factoriax.play.game_ui import GameUI
 from factoriax.play.play_state import PlayState
 from factoriax.play.ui import _hotbar_h, render_welcome_screen
-from factoriax.state import EnvParams, EnvState
 from factoriax.ui import theme as _play_theme
 from factoriax.ui.compositing import composite_rgba_over_rgb
 from factoriax.ui.window import calculate_window_size

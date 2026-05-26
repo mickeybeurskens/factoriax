@@ -6,15 +6,15 @@ ent_asm_in_type/count and outputs in ent_asm_out_type/count.
 
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BlockType,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.game_logic import deposit_to_adjacent
-from factoriax.machines import run_assemblers
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.game_logic import deposit_to_adjacent
+from factoriax.engine.machines import run_assemblers
+from factoriax.engine.state import EnvParams, EnvState
 
 _PARAMS = EnvParams()
 

@@ -5,20 +5,20 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BlockType,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.machine_config import (
+from factoriax.engine.machine_config import (
     DEFAULT_MACHINE_CONFIG,
     MachineConfig,
     MachineConfigOverride,
 )
-from factoriax.machine_spec import MACHINE_MAX_STACK, MAX_HEALTH
-from factoriax.machines import run_conveyor_belts
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.machine_spec import MACHINE_MAX_STACK, MAX_HEALTH
+from factoriax.engine.machines import run_conveyor_belts
+from factoriax.engine.state import EnvParams, EnvState
 
 
 class TestMachineConfigDefault:

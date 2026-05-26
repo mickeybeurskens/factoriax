@@ -1,14 +1,18 @@
-"""Tests for the reward functions in factoriax.rewards."""
+"""Tests for the reward functions in factoriax.engine.rewards."""
 
 import jax
 import jax.numpy as jnp
 import pytest
 
 from factoriax import BlockType, ItemType
-from factoriax.achievements import core_game_conditions
-from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
-from factoriax.rewards import achievement_reward, mining_reward, sparse_mining_reward
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.achievements import core_game_conditions
+from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
+from factoriax.engine.rewards import (
+    achievement_reward,
+    mining_reward,
+    sparse_mining_reward,
+)
+from factoriax.engine.state import EnvParams, EnvState
 
 
 def _wrap(state: EnvState) -> EnvState:

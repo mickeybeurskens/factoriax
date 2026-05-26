@@ -15,7 +15,7 @@ from baselines.rocket.scripted.goals import (
     build_smelter_cell_at,
     smelter_cell_inventory,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:

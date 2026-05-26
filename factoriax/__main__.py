@@ -110,7 +110,7 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
 
     from jax import random
 
-    from factoriax.achievements import core_game_conditions
+    from factoriax.engine.achievements import core_game_conditions
     from factoriax.envs.factoriax_env import FactoriaXEnv
     from factoriax.play.main import _play_loop, _run_with_loading_screen
 

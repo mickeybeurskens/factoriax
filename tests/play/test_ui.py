@@ -9,7 +9,8 @@ intentionally absent.
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import MAX_ACHIEVEMENTS, ItemType
+from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType
+from factoriax.engine.state import EnvParams
 from factoriax.play.ui import (
     ClickRegion,
     render_achievement_menu,
@@ -17,7 +18,6 @@ from factoriax.play.ui import (
     render_pause_menu,
     render_welcome_screen,
 )
-from factoriax.state import EnvParams
 
 _SW = 128
 _SH = 128
@@ -77,7 +77,7 @@ class TestRenderInventoryMenu:
 
     def test_populated_inventory(self, state_factory) -> None:
         """Should not crash when inventory contains items."""
-        from factoriax.constants import NUM_ITEM_TYPES
+        from factoriax.engine.constants import NUM_ITEM_TYPES
 
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, int(ItemType.COAL)].set(5)

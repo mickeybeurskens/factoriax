@@ -18,8 +18,8 @@ from baselines.easy_rocket.scripted.layout import (
     _walk_dag,
     plan_factory,
 )
-from factoriax.constants import Direction, ItemType
-from factoriax.levels import build_state
+from factoriax.engine.constants import Direction, ItemType
+from factoriax.engine.levels import build_state
 from factoriax.scenarios.easy_rocket import (
     EASY_ROCKET_RECIPE_TABLE,
     build_easy_rocket_level,

@@ -21,8 +21,8 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import Action
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.constants import Action
+from factoriax.engine.state import EnvParams, EnvState
 
 
 class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]

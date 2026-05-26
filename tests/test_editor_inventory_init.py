@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     BlockType,
     ItemType,
     Machine,
 )
-from factoriax.levels import Level, build_state
-from factoriax.state import EnvParams
+from factoriax.engine.levels import Level, build_state
+from factoriax.engine.state import EnvParams
 
 
 def _make_level_with_pallet_items() -> Level:

@@ -16,14 +16,14 @@ from factoriax.config import (
     build_key_lookup,
     default_keyboard,
 )
-from factoriax.constants import (
+from factoriax.engine.constants import (
     Action,
     Direction,
     ItemType,
     Machine,
 )
+from factoriax.engine.state import EnvParams
 from factoriax.play.game_ui import GameUI, GameUIResult
-from factoriax.state import EnvParams
 
 
 @pytest.fixture

@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from factoriax.constants import ITEM_TO_MACHINE, Direction, ItemType, Machine
+from factoriax.engine.constants import ITEM_TO_MACHINE, Direction, ItemType, Machine
 from factoriax.ui.icons import MACHINE_TO_ITEM, render_item_icon
 
 

@@ -8,9 +8,9 @@ machine item plus any buffer contents to the player.
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import Machine
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import (
+from factoriax.engine.constants import Machine
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import (
     DIRECTIONS,
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_TO_ITEM_ARRAY,
@@ -361,8 +361,8 @@ def apply_repair(
     The base engine implements REPAIR as a full restore with no item
     cost. Wrappers that want a different policy (per-tick repair,
     inventory consumption, partial restore) pre-empt
-    :data:`~factoriax.constants.Action.REPAIR` by rewriting it to
-    :data:`~factoriax.constants.Action.NOOP` before calling
+    :data:`~factoriax.engine.constants.Action.REPAIR` by rewriting it to
+    :data:`~factoriax.engine.constants.Action.NOOP` before calling
     ``step_env`` and then applying their own update to
     ``state.ent_health``.
 

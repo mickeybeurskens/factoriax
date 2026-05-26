@@ -2,7 +2,7 @@
 
 The screen mirrors :mod:`factoriax.menu.scenarios_menu`: a list of options on
 the left, content on the right. Selecting *Settings* on the left turns the
-right panel into an editable list of :class:`~factoriax.state.EnvParams`
+right panel into an editable list of :class:`~factoriax.engine.state.EnvParams`
 fields; selecting *Play* commits the current values and returns control to
 the play loop; selecting *Reset to defaults* replaces every field with
 :meth:`EnvParams()` defaults and a fresh seed.
@@ -30,7 +30,7 @@ from factoriax.config import (
     resolve_event,
     save_config,
 )
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 from factoriax.ui import panels
 from factoriax.ui import theme as _theme
 from factoriax.ui.fonts import get_pixel_font

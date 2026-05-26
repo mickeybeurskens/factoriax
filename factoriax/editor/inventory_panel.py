@@ -10,9 +10,6 @@ from __future__ import annotations
 import numpy as np
 import pygame
 
-from factoriax.constants import (
-    ItemType,
-)
 from factoriax.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.editor.state import (
     NUM_INVENTORY_SLOTS,
@@ -21,7 +18,13 @@ from factoriax.editor.state import (
     get_inventory_slots,
     get_num_slots,
 )
-from factoriax.machine_spec import MACHINE_SLOT_ROLES, MAX_MACHINE_INVENTORY_SLOTS
+from factoriax.engine.constants import (
+    ItemType,
+)
+from factoriax.engine.machine_spec import (
+    MACHINE_SLOT_ROLES,
+    MAX_MACHINE_INVENTORY_SLOTS,
+)
 from factoriax.ui.fonts import get_pixel_font, render_text_rgba
 from factoriax.ui.icons import PLAYER_COLORS, render_item_icon
 from factoriax.ui.labels import MACHINE_TYPE_NAMES

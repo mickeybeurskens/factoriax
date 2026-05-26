@@ -1,18 +1,18 @@
-"""Tests for factoriax.constraints — constraint cost functions."""
+"""Tests for factoriax.engine.constraints — constraint cost functions."""
 
 from __future__ import annotations
 
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import NUM_ITEM_TYPES, ItemType
-from factoriax.constraints import (
+from factoriax.engine.constants import NUM_ITEM_TYPES, ItemType
+from factoriax.engine.constraints import (
     balance_cost,
     balance_cost_names,
     diversity_cost,
     diversity_cost_names,
 )
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -9,7 +9,7 @@ from baselines.rocket.scripted.goals import (
     ore_node_inventory,
     place_ore_node,
 )
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _placements(goals: list) -> list[tuple[int, tuple[int, int], int]]:

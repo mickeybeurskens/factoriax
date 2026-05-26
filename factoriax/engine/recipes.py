@@ -7,7 +7,7 @@ Single source of truth for recipe data. Two layers:
   (input counts via the ``inputs`` tuple, ``output_count``, ``ticks``).
 - :data:`BASE_RECIPES` is the canonical tuple of :class:`Recipe`
   instances shipped with the engine. The five JAX arrays consumed by
-  :mod:`factoriax.crafting` and :mod:`factoriax.machines` (outputs,
+  :mod:`factoriax.engine.crafting` and :mod:`factoriax.engine.machines` (outputs,
   input items, input counts, output counts, ticks, machine type) are
   derived projections of this tuple.
 
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from flax import struct
 
-from factoriax.constants import ItemType, Machine
+from factoriax.engine.constants import ItemType, Machine
 
 # ---------------------------------------------------------------------------
 # Recipe dataclass — the canonical per-recipe record
@@ -73,7 +73,7 @@ class Recipe:
     Attributes:
         output: ``ItemType`` integer this recipe produces.
         inputs: One or two ``(ItemType, count)`` pairs. The matcher
-            in :func:`factoriax.machines.run_assemblers` requires
+            in :func:`factoriax.engine.machines.run_assemblers` requires
             unordered uniqueness of the input *type-set* per machine
             type — two recipes with the same input items on the same
             machine would race the deterministic forward-match.
@@ -198,8 +198,8 @@ class RecipeBook:
        at most one recipe. The reverse-lookup ``OUTPUT_TO_RECIPE`` is a
        single-valued mapping; two recipes producing the same item would
        race the deterministic forward-match in
-       :func:`factoriax.machines.run_assemblers` and would also break
-       :func:`factoriax.crafting.craft_recipe`'s yield calculation.
+       :func:`factoriax.engine.machines.run_assemblers` and would also break
+       :func:`factoriax.engine.crafting.craft_recipe`'s yield calculation.
     2. **Unique input pair per (machine_type, arity)** — no two recipes
        on the same combiner type at the same arity share an unordered
        input type-set. This is the gate the Phase 3 forward-match in

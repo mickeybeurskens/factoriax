@@ -12,7 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import MAX_ACHIEVEMENTS
+from factoriax.engine.constants import MAX_ACHIEVEMENTS
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios import (
     LevelResult,
     Scenario,
@@ -21,7 +22,6 @@ from factoriax.scenarios import (
     skills_reward,
 )
 from factoriax.scenarios.skills import NUM_SKILLS, SKILLS_ACHIEVEMENT_INFO
-from factoriax.state import EnvParams, EnvState
 
 
 class TestSkillsBenchmarkProtocol:
@@ -93,7 +93,7 @@ class TestSkillsConditions:
 
     def _navigate_state(self) -> EnvState:
         """Build a real state from the canonical navigate level."""
-        from factoriax.levels import build_state
+        from factoriax.engine.levels import build_state
         from factoriax.scenarios.skills import build_navigate_level
 
         level, params, _ = build_navigate_level(seed=0)

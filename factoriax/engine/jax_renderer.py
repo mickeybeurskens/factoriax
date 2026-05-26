@@ -24,7 +24,7 @@ new art without touching this code.
 
 Directional machines (conveyor belts, miners, arms, splitters,
 crossings) and the player sprite each carry four cells in the atlas,
-one per :class:`~factoriax.constants.Direction`. ``render_map``
+one per :class:`~factoriax.engine.constants.Direction`. ``render_map``
 gathers by ``(direction, machine_type)`` for the machine layer and
 by ``player_directions[i]`` for each player so placed objects show
 their orientation.
@@ -51,11 +51,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BlockType,
     Machine,
 )
-from factoriax.state import EnvState
+from factoriax.engine.state import EnvState
 
 # ---------------------------------------------------------------------------
 # Visual constants
@@ -84,7 +84,7 @@ DIGIT_W: int = 3
 # docstring for why. The atlas's items/digits rows are unused here.
 # ---------------------------------------------------------------------------
 
-_ATLAS_PATH: Path = Path(__file__).resolve().parent / "assets" / "atlas.png"
+_ATLAS_PATH: Path = Path(__file__).resolve().parent.parent / "assets" / "atlas.png"
 _ATLAS_CELL_PX: int = 32
 
 # Row indices in the sprite atlas (must match factoriax/assets/atlas.layout.md).
@@ -191,7 +191,7 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
     """Build a direction-indexed machine atlas from the sprite atlas.
 
     The four rows starting at :data:`_ATLAS_ROW_MACHINES_BASE` hold one
-    machine variant per :class:`~factoriax.constants.Direction`, in the
+    machine variant per :class:`~factoriax.engine.constants.Direction`, in the
     order LEFT, RIGHT, UP, DOWN. Non-directional machines are simply
     duplicated across all four rows so a uniform gather works at render
     time.

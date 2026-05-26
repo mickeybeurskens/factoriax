@@ -19,12 +19,12 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BlockType,
     ItemType,
     Machine,
 )
-from factoriax.game_logic import run_labs
+from factoriax.engine.game_logic import run_labs
 
 # ---------------------------------------------------------------------------
 # Low-level run_labs tests — exercise the reduction directly without an env.
@@ -212,10 +212,10 @@ class TestLabInEnvStep:
 
 
 class TestScienceConstants:
-    """New constants declared in factoriax.constants cohere."""
+    """New constants declared in factoriax.engine.constants cohere."""
 
     def test_science_pack_index_maps_both_packs(self) -> None:
-        from factoriax.tables import SCIENCE_PACK_INDEX
+        from factoriax.engine.tables import SCIENCE_PACK_INDEX
 
         assert int(SCIENCE_PACK_INDEX[int(ItemType.BASIC_SCIENCE_PACK)]) == 0
         assert int(SCIENCE_PACK_INDEX[int(ItemType.ADVANCED_SCIENCE_PACK)]) == 1
@@ -224,14 +224,14 @@ class TestScienceConstants:
         assert int(SCIENCE_PACK_INDEX[int(ItemType.EMPTY)]) == -1
 
     def test_science_lab_is_placeable(self) -> None:
-        from factoriax.constants import PLACEABLE_ITEM_LIST
+        from factoriax.engine.constants import PLACEABLE_ITEM_LIST
 
         assert int(ItemType.SCIENCE_LAB) in PLACEABLE_ITEM_LIST
 
     def test_lab_slot_roles(self) -> None:
         """The lab has two INPUT slots in MACHINE_SLOT_ROLES."""
-        from factoriax.constants import SlotRole
-        from factoriax.machine_spec import MACHINE_SLOT_ROLES
+        from factoriax.engine.constants import SlotRole
+        from factoriax.engine.machine_spec import MACHINE_SLOT_ROLES
 
         roles = MACHINE_SLOT_ROLES[int(Machine.SCIENCE_LAB)]
         assert roles[0] == int(SlotRole.INPUT)

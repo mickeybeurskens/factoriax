@@ -1,4 +1,4 @@
-"""Tests for factoriax.observations: global_array, local_array, and rgb.
+"""Tests for factoriax.engine.observations: global_array, local_array, and rgb.
 
 Each function is tested for correct output shape, value range, JAX
 compatibility, and behavioural correctness (e.g. the local window actually
@@ -14,13 +14,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     NUM_ITEM_TYPES,
     BlockType,
     Machine,
 )
-from factoriax.observations import (
+from factoriax.engine.observations import (
     _SPATIAL_CHANNEL_NAMES,
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
@@ -29,7 +29,7 @@ from factoriax.observations import (
     local_array,
     rgb,
 )
-from factoriax.state import EnvParams
+from factoriax.engine.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -97,7 +97,7 @@ class TestPlayerScalars:
 
     def test_player_idx_selects_correct_inventory(self, state_factory) -> None:
         """Different player_idx reads from the correct inventory row."""
-        from factoriax.constants import ItemType
+        from factoriax.engine.constants import ItemType
 
         inv = jnp.zeros((2, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[1, ItemType.IRON_ORE].set(5)
@@ -449,7 +449,7 @@ class TestSlotProjection:
     ) -> None:
         """Assembler at (2, 3) with iron+tin inputs and a frame output
         must surface those on slot 0, slot 1, slot 2 channels."""
-        from factoriax.constants import ItemType
+        from factoriax.engine.constants import ItemType
 
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
@@ -498,7 +498,7 @@ class TestSlotProjection:
     def test_pallet_puts_buffer_on_slot2(self, state_factory) -> None:
         """A pallet stores items in ``ent_buf``. That must land on
         slot 2 and leave slots 0 and 1 at zero."""
-        from factoriax.constants import ItemType
+        from factoriax.engine.constants import ItemType
 
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
@@ -565,7 +565,7 @@ class TestLocalGlobalEquivalence:
         radius: int,
     ) -> None:
         """Every local-window tile equals the global tile at (py±r, px±r)."""
-        from factoriax.constants import Direction, ItemType
+        from factoriax.engine.constants import Direction, ItemType
 
         h = w = 16
         # Sprinkle content that exercises every spatial channel:
@@ -660,7 +660,7 @@ class TestLocalGlobalEquivalence:
 
     def test_scalar_tail_matches_global(self, state_factory) -> None:
         """Player scalars + research tail is byte-for-byte identical."""
-        from factoriax.constants import ItemType
+        from factoriax.engine.constants import ItemType
 
         radius = _RADIUS
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
@@ -692,7 +692,7 @@ class TestMachineDirectionChannel:
 
     def test_placed_miner_direction_visible(self, state_factory) -> None:
         """A miner facing RIGHT shows the RIGHT enum value at its tile."""
-        from factoriax.constants import Direction
+        from factoriax.engine.constants import Direction
 
         shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
         world_map = jnp.full(shape, int(BlockType.IRON), dtype=jnp.int32)

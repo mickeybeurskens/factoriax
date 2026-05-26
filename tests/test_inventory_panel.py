@@ -18,7 +18,7 @@ from factoriax.analysis.inventory import (
     _inventory_slot_positions,
     render_inventory_panel,
 )
-from factoriax.constants import NUM_ITEM_TYPES, ItemType
+from factoriax.engine.constants import NUM_ITEM_TYPES, ItemType
 
 
 class TestInventoryItemsConstant:

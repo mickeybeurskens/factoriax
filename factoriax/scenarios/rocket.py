@@ -27,8 +27,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax.achievements import AchievementInfo
-from factoriax.constants import (
+from factoriax.engine.achievements import AchievementInfo
+from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     Action,
     BlockType,
@@ -36,17 +36,17 @@ from factoriax.constants import (
     ItemType,
     Machine,
 )
-from factoriax.levels import Level, LevelBuilder
-from factoriax.recipes import (
+from factoriax.engine.levels import Level, LevelBuilder
+from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
     RecipeBalance,
     RecipeBook,
     RecipeOverride,
     RecipeTable,
 )
-from factoriax.rewards import achievement_reward
+from factoriax.engine.rewards import achievement_reward
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.core import LevelResult, ScenarioLevel
-from factoriax.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
 # Achievement catalogue
@@ -341,9 +341,9 @@ def rocket_reward(
 ) -> jax.Array:
     """Sparse reward for newly-unlocked rocket-scenario achievements.
 
-    Thin wrapper around :func:`factoriax.rewards.achievement_reward`
+    Thin wrapper around :func:`factoriax.engine.rewards.achievement_reward`
     bound to :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. Assumes *prev_state*
-    and *new_state* are :class:`~factoriax.state.EnvState` instances
+    and *new_state* are :class:`~factoriax.engine.state.EnvState` instances
     whose ``achievements_unlocked`` field has been latched by the env's
     ``achievement_fn`` (typically :func:`rocket_conditions`).
 
@@ -386,7 +386,7 @@ ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
 ROCKET_RECIPE_BOOK: RecipeBook = BASE_RECIPE_BOOK.with_balance(ROCKET_RECIPE_BALANCE)
 
 #: :class:`RecipeTable` projection of :data:`ROCKET_RECIPE_BOOK`.
-#: Pass into :class:`~factoriax.state.EnvParams` ``recipe_table`` so
+#: Pass into :class:`~factoriax.engine.state.EnvParams` ``recipe_table`` so
 #: the JIT'd engine produces the rebalanced output counts.
 ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(ROCKET_RECIPE_BOOK)
 

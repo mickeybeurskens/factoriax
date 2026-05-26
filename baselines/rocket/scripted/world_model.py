@@ -24,8 +24,8 @@ from collections import deque
 
 import numpy as np
 
-from factoriax import actions
-from factoriax.constants import (
+from factoriax.engine import actions
+from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
     ITEM_TO_MACHINE,
@@ -36,11 +36,11 @@ from factoriax.constants import (
     ItemType,
     Machine,
 )
-from factoriax.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
-from factoriax.recipes import NUM_RECIPES
-from factoriax.tables import PLAYER_MAX_STACK
+from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.engine.recipes import NUM_RECIPES
+from factoriax.engine.tables import PLAYER_MAX_STACK
 
-# Normalization constants used by ``factoriax.observations.global_array``.
+# Normalization constants used by ``factoriax.engine.observations.global_array``.
 # Duplicated here so the decoder is self-contained and doesn't reach into
 # module-private names.
 _MAP_NORM: float = float(max(BlockType))
@@ -64,7 +64,7 @@ _MACHINE_TO_PLACE: dict[int, int] = {
 }
 # Reverse mapping for ore-block → item type (e.g. BlockType.IRON → ItemType.IRON_ORE).
 _BLOCK_ITEM: dict[int, int] = {int(k): int(v) for k, v in BLOCK_TO_ITEM.items()}
-# Compass direction → (dx, dy) offset matching factoriax.constants.DIRECTIONS.
+# Compass direction → (dx, dy) offset matching factoriax.engine.constants.DIRECTIONS.
 _DIR_OFFSETS: dict[int, tuple[int, int]] = {
     int(Direction.LEFT): (-1, 0),
     int(Direction.RIGHT): (1, 0),
@@ -340,7 +340,7 @@ def decode_observation(
 
     Args:
         obs: 1-D float32 array as produced by
-            :func:`factoriax.observations.global_array` for a single
+            :func:`factoriax.engine.observations.global_array` for a single
             player.
         map_height: Number of tile rows.
         map_width: Number of tile columns.
@@ -438,7 +438,7 @@ def _compute_walkable(block_type: np.ndarray, machine_type: np.ndarray) -> np.nd
 
     Water, out-of-bounds markers, and machine-occupied tiles are
     blocked. Belts are the one exception — the engine's
-    :func:`factoriax.game_logic.is_position_walkable` treats
+    :func:`factoriax.engine.game_logic.is_position_walkable` treats
     ``Machine.CONVEYOR_BELT`` as walkable so items can flow
     through tiles the agent later walks across, and the planner has
     to match that to plan paths through laid trunks. DIRT + ore tiles

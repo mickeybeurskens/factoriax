@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import NUM_ITEM_TYPES, ItemType
+from factoriax.engine.constants import NUM_ITEM_TYPES, ItemType
 from factoriax.play.transfer import swap_inventory_slots
 
 # ---------------------------------------------------------------------------

@@ -17,8 +17,8 @@ import functools
 import numpy as np
 import pygame
 
-from factoriax.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
-from factoriax.constants import (
+from factoriax.engine.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
+from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
     NUM_ITEM_TYPES,
@@ -29,15 +29,15 @@ from factoriax.constants import (
     ItemType,
     Machine,
 )
-from factoriax.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.recipes import (
+from factoriax.engine.crafting import can_afford_recipe, count_item_in_inventory
+from factoriax.engine.recipes import (
     BASE_RECIPES,
     NUM_RECIPES,
     OUTPUT_TO_RECIPE,
     RECIPE_NAMES,
 )
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import PLAYER_MAX_STACK
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import PLAYER_MAX_STACK
 
 # Re-export shared primitives so existing ``from factoriax.play.ui import``
 # statements keep working.

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from factoriax.constants import BlockType, Direction, Machine
+from factoriax.engine.constants import BlockType, Direction, Machine
 from factoriax.scenarios import build_rocket_level
 
 _MAP_SIZE = 32

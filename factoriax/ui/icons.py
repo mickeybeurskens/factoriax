@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     ITEM_TO_MACHINE,
     BlockType,
     Direction,

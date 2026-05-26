@@ -1,7 +1,7 @@
 """Constants and enumerations for the FactoriaX environment.
 
 Pure-Python definitions only. Their derived JAX arrays (gather tables, the
-state-array dtypes) live in :mod:`factoriax.tables`.
+state-array dtypes) live in :mod:`factoriax.engine.tables`.
 """
 
 from enum import IntEnum
@@ -191,7 +191,7 @@ MAX_ACHIEVEMENTS = 64
 BLOCK_MAX_RESOURCES = 30000
 
 # Base offsets for the parametric action families. The PLACE_/CRAFT_/DEPOSIT_
-# offset->item tables live with the dispatcher in factoriax.actions.
+# offset->item tables live with the dispatcher in factoriax.engine.actions.
 PLACE_BASE: int = len(MoveAction) + len(InteractAction)
 CRAFT_BASE: int = PLACE_BASE + len(PLACEMENT_ITEMS)
 DEPOSIT_BASE: int = CRAFT_BASE + len(CRAFT_ITEMS)
@@ -204,7 +204,7 @@ ROTATE_BASE: int = len(MoveAction) + int(InteractAction.ROTATE_LEFT)
 
 # The item<->machine bijection and anchor for the machine cluster: every
 # placeable item and the machine it becomes. The placeable list and the
-# factoriax.placement gather arrays are projections of it.
+# factoriax.engine.placement gather arrays are projections of it.
 ITEM_TO_MACHINE = {
     ItemType.MINER: Machine.MINER,
     ItemType.PALLET: Machine.PALLET,

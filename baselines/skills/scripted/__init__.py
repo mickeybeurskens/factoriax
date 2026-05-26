@@ -29,7 +29,7 @@ from baselines.skills.scripted.craft_miner import craft_miner_policy
 from baselines.skills.scripted.mine import mine_policy
 from baselines.skills.scripted.navigate import navigate_policy
 from baselines.skills.scripted.place_miner import place_miner_policy
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.state import EnvParams, EnvState
 
 #: Function signature every scripted policy implements.
 ScriptedPolicy = Callable[[EnvState, EnvParams], jax.Array]

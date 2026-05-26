@@ -3,13 +3,13 @@
 import jax.numpy as jnp
 
 from factoriax import BlockType, ItemType
-from factoriax.achievements import (
+from factoriax.engine.achievements import (
     ACHIEVEMENT_INFO,
     core_game_conditions,
     count_machines,
     count_total_items,
 )
-from factoriax.constants import (
+from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     Machine,

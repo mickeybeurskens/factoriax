@@ -19,8 +19,8 @@ from typing import Protocol, runtime_checkable
 import jax
 import numpy as np
 
-from factoriax.levels import Level
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.levels import Level
+from factoriax.engine.state import EnvParams, EnvState
 
 # A policy maps a JAX float32 observation array to a JAX integer action scalar.
 # This is intentionally minimal: any callable with this signature works,

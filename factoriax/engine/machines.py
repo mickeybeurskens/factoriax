@@ -10,19 +10,19 @@ a grid position, then gather that entity's state.
 
 import jax.numpy as jnp
 
-from factoriax.belts import (
+from factoriax.engine.belts import (
     CROSSING_AXIS_DIRS,
     CROSSING_HORIZ_SLOT,
     CROSSING_VERT_SLOT,
 )
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BlockType,
     ItemType,
     Machine,
 )
-from factoriax.recipes import NUM_RECIPES
-from factoriax.state import EnvParams, EnvState
-from factoriax.tables import BLOCK_TO_ITEM_ARRAY
+from factoriax.engine.recipes import NUM_RECIPES
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY
 
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
 _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
@@ -413,7 +413,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     Entity-based: iterates over entity slots. Neighbor lookups use
     ``tile_entity`` grid to find adjacent entities. Recipe identity
     and balance numbers are read via ``params.recipe_table`` so a
-    tuned :class:`~factoriax.state.EnvParams` re-uses the cached XLA
+    tuned :class:`~factoriax.engine.state.EnvParams` re-uses the cached XLA
     trace (shape stable) but applies the user's balance overlay.
 
     Args:

@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     Action,
@@ -18,6 +18,7 @@ from factoriax.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios import (
     MAX_ROCKET_SCORE,
     ROCKET_ACHIEVEMENT_INFO,
@@ -28,7 +29,6 @@ from factoriax.scenarios import (
     rocket_conditions,
     rocket_reward,
 )
-from factoriax.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
 # Catalogue + construction
@@ -95,7 +95,7 @@ def test_build_rocket_level_preplaces_furnace_and_assembler() -> None:
 
 def test_rocket_benchmark_exposes_blocked_actions() -> None:
     """The scenario advertises every CRAFT_* action as blocked."""
-    from factoriax.constants import CRAFT_ITEMS
+    from factoriax.engine.constants import CRAFT_ITEMS
     from factoriax.scenarios.rocket import ROCKET_BLOCKED_ACTIONS
 
     scenario = RocketScenario()

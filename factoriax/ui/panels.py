@@ -592,7 +592,7 @@ class DecorationStrip:
         Ore travels across the four belt slots (indices 2-5) and onto the arm
         (index 6); the player and miner slots stay clear.
         """
-        from factoriax.constants import Direction, ItemType
+        from factoriax.engine.constants import Direction, ItemType
         from factoriax.ui.icons import create_player_texture, render_item_icon
 
         surfaces: list[pygame.Surface] = [

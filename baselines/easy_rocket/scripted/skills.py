@@ -22,15 +22,15 @@ from baselines.easy_rocket.scripted.state_reader import (
     player_pos,
     tile_walkable_for_player,
 )
-from factoriax import actions
-from factoriax.constants import (
+from factoriax.engine import actions
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     Action,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.state import EnvState
+from factoriax.engine.state import EnvState
 
 # Per-direction unit vector in (dx, dy). Direction is 1..4; index 0
 # is reserved for "no direction".
@@ -69,7 +69,7 @@ DIR_TO_ROTATE_ACTION: dict[int, int] = {
 # Items the easy_rocket agent hand-crafts: everything craftable except the
 # machine-only outputs (REFRACTORY, HULL, ENGINE_UNIT, AVIONICS, ROCKET_CORE),
 # which it must produce through the furnace / assembler. That exclusion is the
-# agent's policy; the action ids come from factoriax.actions, so this map can't
+# agent's policy; the action ids come from factoriax.engine.actions, so this map can't
 # drift from the Action enum or silently gain a newly-craftable item.
 _HAND_CRAFT_EXCLUDED: frozenset[int] = frozenset(
     int(it)

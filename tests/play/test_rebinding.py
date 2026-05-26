@@ -22,6 +22,7 @@ from factoriax.config import (
     resolve_controller_hat,
     resolve_key,
 )
+from factoriax.engine.state import EnvParams
 from factoriax.menu.controls_menu import (
     _format_binding,
     _format_controller_display,
@@ -29,7 +30,6 @@ from factoriax.menu.controls_menu import (
     _init_rebind_actions,
 )
 from factoriax.play.game_ui import GameUI
-from factoriax.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Binding mutation round-trip
@@ -175,7 +175,7 @@ class TestGameUIWithReboundKey:
         state_factory,
     ) -> None:
         """Rebinding mine to K_j makes J produce MINE action."""
-        from factoriax.constants import Action
+        from factoriax.engine.constants import Action
 
         bindings = default_keyboard()
         bindings[PlayerAction.MINE] = ["K_j"]

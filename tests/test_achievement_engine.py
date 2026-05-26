@@ -19,10 +19,15 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax.achievements import ACHIEVEMENT_INFO, core_game_conditions
-from factoriax.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES, BlockType, ItemType
+from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
+from factoriax.engine.constants import (
+    MAX_ACHIEVEMENTS,
+    NUM_ITEM_TYPES,
+    BlockType,
+    ItemType,
+)
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.state import EnvParams, EnvState
 
 
 def _achievement_index(achievement_id: str) -> int:

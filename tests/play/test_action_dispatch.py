@@ -13,15 +13,15 @@ import pygame
 import pytest
 
 from factoriax.config import build_key_lookup, default_keyboard
-from factoriax.constants import (
+from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     Action,
     ItemType,
     Machine,
 )
+from factoriax.engine.state import EnvParams
+from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
 from factoriax.play.game_ui import GameUI
-from factoriax.state import EnvParams
-from factoriax.tables import MACHINE_INVENTORY_COUNT_DTYPE
 
 
 @pytest.fixture
@@ -220,8 +220,8 @@ class TestCraftAction:
         recipes whose output is out of craft-family position (e.g. a machine
         recipe interleaved among the half-fabricates).
         """
-        from factoriax.actions import ITEM_TO_CRAFT_ACTION
-        from factoriax.recipes import BASE_RECIPES, NUM_RECIPES
+        from factoriax.engine.actions import ITEM_TO_CRAFT_ACTION
+        from factoriax.engine.recipes import BASE_RECIPES, NUM_RECIPES
 
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),

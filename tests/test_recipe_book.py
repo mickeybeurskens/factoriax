@@ -13,9 +13,9 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from factoriax.constants import ItemType, Machine
-from factoriax.game_logic import CRAFT_ACTION_TO_ITEM
-from factoriax.recipes import (
+from factoriax.engine.constants import ItemType, Machine
+from factoriax.engine.game_logic import CRAFT_ACTION_TO_ITEM
+from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
     BASE_RECIPES,
     DEFAULT_RECIPE_TABLE,

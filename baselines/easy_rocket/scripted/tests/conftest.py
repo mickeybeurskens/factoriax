@@ -15,15 +15,15 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
     NUM_SCIENCE_PACK_TYPES,
     Direction,
     Machine,
 )
-from factoriax.state import EnvState
-from factoriax.tables import BLOCK_RESOURCE_DTYPE
+from factoriax.engine.state import EnvState
+from factoriax.engine.tables import BLOCK_RESOURCE_DTYPE
 
 # One machine to place in a synthetic state: (x, y, machine_type,
 # direction, buf_type, buf_count).

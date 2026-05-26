@@ -33,9 +33,9 @@ from baselines.easy_rocket.scripted.state_reader import (
     tile_free,
     walkable_grid,
 )
-from factoriax.constants import BlockType, Direction, ItemType
-from factoriax.recipes import RecipeTable
-from factoriax.state import EnvState
+from factoriax.engine.constants import BlockType, Direction, ItemType
+from factoriax.engine.recipes import RecipeTable
+from factoriax.engine.state import EnvState
 
 # Map ore ItemType -> ore BlockType so we can find the corresponding
 # patch on the map.

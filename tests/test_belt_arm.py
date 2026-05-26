@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.machines import run_arms, run_conveyor_belts
-from factoriax.state import EnvParams
+from factoriax.engine.machines import run_arms, run_conveyor_belts
+from factoriax.engine.state import EnvParams
 
 # ---------------------------------------------------------------------------
 # Helpers

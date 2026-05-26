@@ -16,7 +16,7 @@ from baselines.easy_rocket.scripted.skills import (
     step_toward_adjacent,
     step_toward_tile,
 )
-from factoriax.constants import Action, BlockType, Direction, ItemType, Machine
+from factoriax.engine.constants import Action, BlockType, Direction, ItemType, Machine
 
 
 def test_is_adjacent() -> None:

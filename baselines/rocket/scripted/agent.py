@@ -18,8 +18,8 @@ from collections.abc import Callable
 
 import numpy as np
 
-from factoriax.constants import Action, ItemType, Machine
-from factoriax.state import EnvParams
+from factoriax.engine.constants import Action, ItemType, Machine
+from factoriax.engine.state import EnvParams
 
 from .goals import (
     DepositInto,

@@ -12,7 +12,6 @@ from PIL import Image
 
 pygame.init()
 
-from factoriax.constants import Action, BlockType  # noqa: E402
 from factoriax.editor.canvas import Viewport  # noqa: E402
 from factoriax.editor.main import (  # noqa: E402
     MENU_BAR_HEIGHT,
@@ -22,9 +21,10 @@ from factoriax.editor.main import (  # noqa: E402
 )
 from factoriax.editor.state import ResourceBrush, editor_state_from_level  # noqa: E402
 from factoriax.editor.toolbar import STATUS_BAR_HEIGHT, TOOL_PAINT  # noqa: E402
-from factoriax.jax_renderer import JaxRenderer  # noqa: E402
-from factoriax.levels import build_state, load_level  # noqa: E402
-from factoriax.state import EnvParams  # noqa: E402
+from factoriax.engine.constants import Action, BlockType  # noqa: E402
+from factoriax.engine.jax_renderer import JaxRenderer  # noqa: E402
+from factoriax.engine.levels import build_state, load_level  # noqa: E402
+from factoriax.engine.state import EnvParams  # noqa: E402
 
 MEDIA_DIR = Path("docs/media")
 ROCKET_LEVEL = Path("levels/rocket.lvl.json")

@@ -1,6 +1,6 @@
 """Derived JAX arrays for the FactoriaX engine.
 
-:mod:`factoriax.constants` holds pure-Python definitions; this is the JAX layer
+:mod:`factoriax.engine.constants` holds pure-Python definitions; this is the JAX layer
 that projects them into the jnp gather tables and state-array dtypes the engine
 uses. It imports only ``constants`` and is imported by the engine modules, so
 it sits one layer above ``constants`` and below everything else.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     BLOCK_TO_ITEM,
     ITEM_TO_MACHINE,
     NUM_ITEM_TYPES,

@@ -7,10 +7,10 @@ fraction for unlocking on the final tick. This trains policies that
 solve quickly rather than ones that stall and then trigger the
 condition right before the budget runs out.
 
-Why this lives next to the scenario, not in :mod:`factoriax.rewards`:
+Why this lives next to the scenario, not in :mod:`factoriax.engine.rewards`:
 the reward is *specific* to the skills curriculum's scoring shape.
 Rocket and any future scenario with different scoring should not
-share this function. ``factoriax.rewards.achievement_reward`` remains
+share this function. ``factoriax.engine.rewards.achievement_reward`` remains
 the generic per-bit-weighted shim for scenarios that don't care about
 solve speed.
 """
@@ -20,7 +20,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.state import EnvParams, EnvState
 
 
 def skills_reward(

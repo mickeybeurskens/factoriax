@@ -17,9 +17,9 @@ import numpy as np
 import pytest
 
 from factoriax.config import build_key_lookup, default_keyboard
-from factoriax.constants import Action
+from factoriax.engine.constants import Action
+from factoriax.engine.state import EnvParams
 from factoriax.envs.factoriax_env import FactoriaXEnv
-from factoriax.state import EnvParams
 
 
 @pytest.fixture(scope="module")
@@ -36,7 +36,7 @@ class TestRendererSmoke:
 
     def test_render_pixels(self, env_and_state) -> None:
         """The renderer returns an RGB array."""
-        from factoriax.jax_renderer import JaxRenderer
+        from factoriax.engine.jax_renderer import JaxRenderer
 
         _, _, state = env_and_state
         img = np.asarray(JaxRenderer(tile_px=8).jit_render_map(state))
@@ -46,7 +46,7 @@ class TestRendererSmoke:
 
     def test_render_after_step(self, env_and_state) -> None:
         """Rendering works after stepping the environment."""
-        from factoriax.jax_renderer import JaxRenderer
+        from factoriax.engine.jax_renderer import JaxRenderer
 
         env, params, state = env_and_state
         _, state2, _, _, _ = env.step_env(
@@ -73,7 +73,7 @@ class TestPlayUISmoke:
 
     def test_achievement_menu(self) -> None:
         """render_achievement_menu returns an RGBA overlay."""
-        from factoriax.constants import MAX_ACHIEVEMENTS
+        from factoriax.engine.constants import MAX_ACHIEVEMENTS
         from factoriax.play.ui import render_achievement_menu
 
         achievements = np.zeros(MAX_ACHIEVEMENTS, dtype=np.bool_)

@@ -10,15 +10,15 @@ import jax
 import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.constants import NUM_ACTIONS
-from factoriax.game_logic import factoriax_step, is_game_over
-from factoriax.levels import Level, build_state, generate_state
-from factoriax.observations import (
+from factoriax.engine.constants import NUM_ACTIONS
+from factoriax.engine.game_logic import factoriax_step, is_game_over
+from factoriax.engine.levels import Level, build_state, generate_state
+from factoriax.engine.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
     global_array,
 )
-from factoriax.state import EnvParams, EnvState
+from factoriax.engine.state import EnvParams, EnvState
 
 AchievementFn = Callable[[EnvState], jax.Array]
 
@@ -30,7 +30,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     evaluates an optional achievement-condition function each step.
     Reward computation and other policy-shaping concerns still belong
     in gymnax wrappers that compose over this environment. Pixel
-    rendering is provided by :class:`factoriax.jax_renderer.JaxRenderer`;
+    rendering is provided by :class:`factoriax.engine.jax_renderer.JaxRenderer`;
     the env itself does not expose a render method.
 
     The ``achievement_fn`` parameter is captured at construction time
@@ -41,9 +41,9 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     The ``level`` parameter selects the reset behavior. When ``None``
     (default), :meth:`reset_env` generates a procedural world from the
-    PRNG key. When a :class:`~factoriax.levels.Level` is supplied,
+    PRNG key. When a :class:`~factoriax.engine.levels.Level` is supplied,
     :meth:`reset_env` materializes that fixed level via
-    :func:`~factoriax.levels.build_state` and the PRNG key is unused
+    :func:`~factoriax.engine.levels.build_state` and the PRNG key is unused
     for layout. gymnax conformance — ``reset_env(key, params)`` is
     the only reset surface.
 
@@ -166,7 +166,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Dispatches on the env's bound ``level``: when ``None``,
         procedurally generates a world from the PRNG key; when a
         :class:`Level` is bound, materializes that level via
-        :func:`~factoriax.levels.build_state` (the key is unused for
+        :func:`~factoriax.engine.levels.build_state` (the key is unused for
         layout).
 
         Args:

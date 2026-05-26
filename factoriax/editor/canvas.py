@@ -4,7 +4,7 @@ Renders only the visible slice of the map. Block and machine sprites
 come from the same sprite atlas the JAX renderer reads, so the editor
 canvas is pixel-identical to the play view down to the swapped art on
 ``factoriax/assets/atlas.png``. Per-cell helpers in
-:mod:`factoriax.jax_renderer` (``block_textures_rgba``,
+:mod:`factoriax.engine.jax_renderer` (``block_textures_rgba``,
 ``machine_icon_rgba``) provide RGBA numpy arrays at the requested
 tile size.
 """
@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pygame
 
-from factoriax.constants import Machine
-from factoriax.jax_renderer import (
+from factoriax.engine.constants import Machine
+from factoriax.engine.jax_renderer import (
     biter_icon_rgba,
     block_textures_rgba,
     machine_icon_rgba,

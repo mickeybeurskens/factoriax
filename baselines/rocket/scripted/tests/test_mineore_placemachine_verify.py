@@ -17,7 +17,7 @@ import pytest
 
 from baselines.rocket.scripted.goals import MineOre, PlaceMachine
 from baselines.rocket.scripted.world_model import PlayerScalars, WorldView
-from factoriax.constants import Direction, ItemType, Machine
+from factoriax.engine.constants import Direction, ItemType, Machine
 
 
 def _view_with_inventory(item: int, count: int) -> WorldView:

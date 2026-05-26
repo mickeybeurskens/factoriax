@@ -4,7 +4,6 @@ import numpy as np
 import pygame
 import pytest
 
-from factoriax.constants import BlockType, Direction, Machine
 from factoriax.editor.canvas import Viewport, clamp_camera, render_canvas
 from factoriax.editor.state import (
     ResourceBrush,
@@ -16,6 +15,7 @@ from factoriax.editor.state import (
     set_machine,
     set_tile,
 )
+from factoriax.engine.constants import BlockType, Direction, Machine
 
 
 @pytest.fixture(scope="session", autouse=True)

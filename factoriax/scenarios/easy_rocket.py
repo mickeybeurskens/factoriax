@@ -5,17 +5,17 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax.constants import (
+from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     BlockType,
     ItemType,
     Machine,
 )
-from factoriax.levels import Level, LevelBuilder
-from factoriax.recipes import Recipe, RecipeBook, RecipeTable
-from factoriax.rewards import achievement_reward
+from factoriax.engine.levels import Level, LevelBuilder
+from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
+from factoriax.engine.rewards import achievement_reward
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.core import LevelResult, ScenarioLevel
-from factoriax.state import EnvParams, EnvState
 
 _MAP_SIZE: int = 16
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
