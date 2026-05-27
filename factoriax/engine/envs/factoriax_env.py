@@ -11,6 +11,7 @@ import jax.numpy as jnp
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
 from factoriax.engine.constants import NUM_ACTIONS
+from factoriax.engine.envs.hooks import StepHook, achievement_hook
 from factoriax.engine.game_logic import factoriax_step, is_game_over
 from factoriax.engine.levels import Level, build_state, generate_state
 from factoriax.engine.observations import (
@@ -21,6 +22,11 @@ from factoriax.engine.observations import (
 from factoriax.engine.state import EnvParams, EnvState
 
 AchievementFn = Callable[[EnvState], jax.Array]
+#: World generator: ``(key, params) -> EnvState``. Overrides the level/procgen
+#: branch in :meth:`FactoriaXEnv.reset_env` when supplied.
+ResetFn = Callable[[jax.Array, EnvParams], EnvState]
+#: Per-step reward: ``(prev_state, new_state, params) -> float``.
+RewardFn = Callable[[EnvState, EnvState, EnvParams], jax.Array]
 
 
 class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
@@ -39,13 +45,14 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     cache entries via ``static_argnames=("self",)`` on :meth:`step`.
     Pass ``None`` to skip the eval pass entirely (zero added cost).
 
-    The ``level`` parameter selects the reset behavior. When ``None``
-    (default), :meth:`reset_env` generates a procedural world from the
-    PRNG key. When a :class:`~factoriax.engine.levels.Level` is supplied,
-    :meth:`reset_env` materializes that fixed level via
-    :func:`~factoriax.engine.levels.build_state` and the PRNG key is unused
-    for layout. gymnax conformance — ``reset_env(key, params)`` is
-    the only reset surface.
+    Reset behavior is selected by ``reset_fn`` then ``level``: when
+    ``reset_fn`` is supplied, :meth:`reset_env` calls it with the PRNG key
+    (the scenario owns world generation); otherwise a ``None`` ``level``
+    means procedural generation from the key, and a supplied
+    :class:`~factoriax.engine.levels.Level` is materialized via
+    :func:`~factoriax.engine.levels.build_state` (key unused for layout).
+    gymnax conformance — ``reset_env(key, params)`` is the only reset
+    surface.
 
     Args:
         achievement_fn: Pure function ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``
@@ -68,17 +75,35 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         self,
         achievement_fn: AchievementFn | None = None,
         level: Level | None = None,
+        reset_fn: ResetFn | None = None,
+        step_hooks: tuple[StepHook, ...] = (),
+        reward_fn: RewardFn | None = None,
     ) -> None:
         """Initialize the environment.
 
         Args:
-            achievement_fn: Optional achievement condition function.
-            level: Fixed level for :meth:`reset_env`, or ``None`` for
-                procedural generation.
+            achievement_fn: Optional achievement condition function. Convenience
+                for ``step_hooks=(achievement_hook(achievement_fn),)``; when both
+                are given the achievement fold runs after the explicit hooks.
+            level: Fixed level for :meth:`reset_env`, or ``None`` for procedural
+                generation. Ignored when ``reset_fn`` is supplied.
+            reset_fn: World generator ``(key, params) -> EnvState``. When set,
+                :meth:`reset_env` calls it instead of the level/procgen branch.
+            step_hooks: Post-step transforms applied in order after
+                :func:`factoriax_step`, each ``(key, state, params) -> state``.
+            reward_fn: Per-step reward ``(prev, new, params) -> float``. When
+                ``None``, :meth:`step_env` returns ``0.0`` (rewards then belong to
+                a wrapper or the training loop).
         """
         super().__init__()
         self._achievement_fn = achievement_fn
         self._level = level
+        self._reset_fn = reset_fn
+        self._reward_fn = reward_fn
+        hooks = tuple(step_hooks)
+        if achievement_fn is not None:
+            hooks = hooks + (achievement_hook(achievement_fn),)
+        self._step_hooks = hooks
 
     @property
     def default_params(self) -> EnvParams:
@@ -148,15 +173,17 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """
         action_arr = jnp.int32(action)
         new_state = factoriax_step(key, state, action_arr, params)
-        if self._achievement_fn is not None:
-            conditions = self._achievement_fn(new_state)
-            new_state = new_state.replace(
-                achievements_unlocked=new_state.achievements_unlocked | conditions,
-            )
+        for hook in self._step_hooks:
+            new_state = hook(key, new_state, params)
+        reward = (
+            self._reward_fn(state, new_state, params)
+            if self._reward_fn is not None
+            else jnp.float32(0.0)
+        )
         done = is_game_over(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}
-        return obs, new_state, jnp.float32(0.0), done, info
+        return obs, new_state, reward, done, info
 
     def reset_env(
         self, key: jax.Array, params: EnvParams
@@ -176,7 +203,9 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Tuple of (initial_observation, initial_state).
         """
-        if self._level is None:
+        if self._reset_fn is not None:
+            state = self._reset_fn(key, params)
+        elif self._level is None:
             state = generate_state(key, params)
         else:
             state = build_state(self._level, params)

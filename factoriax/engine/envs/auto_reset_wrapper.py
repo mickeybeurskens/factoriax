@@ -61,14 +61,21 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         >>> # whenever ``done`` flips True, with no Python-side branch.
     """
 
-    def __init__(self, inner: FactoriaXEnv) -> None:
+    def __init__(self, inner: FactoriaXEnv, resample: bool = False) -> None:
         """Initialize the auto-reset wrapper.
 
         Args:
             inner: Core environment instance.
+            resample: When ``False`` (default), termination restores the cached
+                initial state (cheap, same layout every episode). When ``True``,
+                termination calls ``inner.reset_env`` with a fresh key, so each
+                episode regenerates from the scenario's ``reset_fn`` — at the cost
+                of running generation every step (under ``vmap``/``select`` both
+                branches execute), so reserve it for cheap generators.
         """
         super().__init__()
         self._inner = inner
+        self._resample = resample
 
     @property
     def default_params(self) -> EnvParams:
@@ -101,19 +108,23 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Returns:
             Tuple of (observation, new_state, reward, done, info).
         """
+        step_key, reset_key = jax.random.split(key)
         obs_step, new_env, reward, done, info = self._inner.step_env(
-            key,
+            step_key,
             state.env_state,
             action,
             params,
         )
-        reset_env = state.reset_state
+        if self._resample:
+            obs_reset, reset_env = self._inner.reset_env(reset_key, params)
+        else:
+            reset_env = state.reset_state
+            obs_reset = self._inner.get_obs(reset_env, params)
         final_env = jax.tree.map(
             lambda r, s: jax.lax.select(done, r, s),
             reset_env,
             new_env,
         )
-        obs_reset = self._inner.get_obs(reset_env, params)
         final_obs = jax.lax.select(done, obs_reset, obs_step)
         new_state = state.replace(env_state=final_env)
         return final_obs, new_state, reward, done, info
