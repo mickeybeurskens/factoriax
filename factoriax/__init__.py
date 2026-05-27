@@ -89,6 +89,18 @@ def make(
         >>> obs, state = env.reset_env(jax.random.PRNGKey(0), params)
     """
     if isinstance(level, str):
+        # TODO(scenario-refactor Phase 5): move this import to module top.
+        # It is lazy only because the new engine.scenarios factories still
+        # import the old factoriax.scenarios package transitionally; importing
+        # that chain at module load would risk an import cycle. Once the old
+        # package is deleted (see tasks/scenario_refactor_plan.md), engine.scenarios
+        # becomes a clean leaf and this can be a normal top-level import.
+        from factoriax.engine.scenarios import registry as _scenarios  # noqa: PLC0415
+
+        if level in _scenarios.SCENARIOS:
+            return _scenarios.make(
+                level, obs=obs, obs_radius=obs_radius, auto_reset=auto_reset
+            )
         level = get_level(level)
 
     env: Any = FactoriaXEnv(achievement_fn=achievement_fn, level=level)
