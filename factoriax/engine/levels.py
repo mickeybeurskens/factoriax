@@ -696,32 +696,22 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
 # ---------------------------------------------------------------------------
 
 
-def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
-    """Generate a procedural world state from a random key.
+def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
+    """Assemble an initial :class:`EnvState` from a generated block map.
 
-    JAX-native and JIT-compatible.  Players spawn near the centre of the
-    map; spawn tiles are forced to DIRT after random terrain generation.
+    Places players near the centre (forcing their spawn tiles to DIRT),
+    derives ore resources from the mineable mask, and zeroes machines,
+    inventory, and progress. Shared by :func:`generate_state` and the
+    per-scenario world generators so they agree on state assembly.
 
     Args:
-        rng: JAX random key for reproducible generation.
-        params: Environment parameters including map dimensions and
-            terrain probabilities.
+        world_map: Block-type grid of shape ``(map_height, map_width)``.
+        params: Environment parameters (map dimensions, player count,
+            ``base_resources``).
 
     Returns:
-        Initial :class:`~factoriax.engine.state.EnvState` with a randomly
-        generated map and players near the centre.
-
-    Example:
-        >>> import jax
-        >>> import factoriax
-        >>> _, params = factoriax.make()
-        >>> state = factoriax.generate_state(jax.random.PRNGKey(0), params)
-        >>> state.map.shape == (params.map_height, params.map_width)
-        True
+        Initial :class:`~factoriax.engine.state.EnvState`.
     """
-    rng_map, _ = random.split(rng)
-    world_map = _generate_terrain(rng_map, params)
-
     center_x = params.map_width // 2
     center_y = params.map_height // 2
     player_positions = []
@@ -774,6 +764,34 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
         science_consumed_step=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
+
+
+def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
+    """Generate a procedural world state from a random key.
+
+    JAX-native and JIT-compatible.  Players spawn near the centre of the
+    map; spawn tiles are forced to DIRT after random terrain generation.
+
+    Args:
+        rng: JAX random key for reproducible generation.
+        params: Environment parameters including map dimensions and
+            terrain probabilities.
+
+    Returns:
+        Initial :class:`~factoriax.engine.state.EnvState` with a randomly
+        generated map and players near the centre.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> _, params = factoriax.make()
+        >>> state = factoriax.generate_state(jax.random.PRNGKey(0), params)
+        >>> state.map.shape == (params.map_height, params.map_width)
+        True
+    """
+    rng_map, _ = random.split(rng)
+    world_map = _generate_terrain(rng_map, params)
+    return initial_state(world_map, params)
 
 
 def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:

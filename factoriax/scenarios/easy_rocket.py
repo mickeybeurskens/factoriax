@@ -7,6 +7,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
@@ -14,7 +15,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.levels import Level, LevelBuilder
+from factoriax.engine.levels import Level, LevelBuilder, initial_state
 from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.engine.rewards import achievement_reward
 from factoriax.engine.state import EnvParams, EnvState
@@ -93,6 +94,69 @@ def build_easy_rocket_level(key: jax.Array) -> Level:
         )
     builder.set_player_position(*_SPAWN)
     return builder.build("easy_rocket_v1")
+
+
+_MAX_CORNER: int = _MAP_SIZE - _PATCH_SIZE
+#: Every 2x2 patch corner that does not touch the spawn zone, computed once.
+#: The JAX generator draws non-overlapping patches from this fixed set, so the
+#: spawn-avoidance rule matches the host builder exactly.
+_VALID_PATCH_CORNERS: np.ndarray = np.array(
+    [
+        (cx, cy)
+        for cx in range(_MAX_CORNER + 1)
+        for cy in range(_MAX_CORNER + 1)
+        if not _patch_touches_spawn_zone(cx, cy)
+    ],
+    dtype=np.int32,
+)
+
+
+def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
+    """Build a dirt map with one non-overlapping 2x2 patch per ore block.
+
+    Jittable, vmappable port of :func:`build_easy_rocket_level`'s placement:
+    shuffle the valid (spawn-avoiding) corners with ``key`` and greedily take
+    the first ``len(_PATCH_BLOCKS)`` that do not overlap an already-placed
+    patch. With ~200 candidates and six patches this always succeeds, so no
+    rejection-failure branch is needed.
+    """
+    corners = jnp.asarray(_VALID_PATCH_CORNERS)
+    shuffled = corners[jax.random.permutation(key, corners.shape[0])]
+    n_patches = len(_PATCH_BLOCKS)
+    placed0 = jnp.full((n_patches, 2), -_PATCH_SIZE, dtype=jnp.int32)
+
+    def place(
+        carry: tuple[jax.Array, jax.Array], cand: jax.Array
+    ) -> tuple[tuple[jax.Array, jax.Array], None]:
+        placed, count = carry
+        dx = jnp.abs(placed[:, 0] - cand[0])
+        dy = jnp.abs(placed[:, 1] - cand[1])
+        filled = jnp.arange(n_patches) < count
+        overlaps = jnp.any(filled & (dx < _PATCH_SIZE) & (dy < _PATCH_SIZE))
+        do_place = (count < n_patches) & ~overlaps
+        slot = jnp.minimum(count, n_patches - 1)
+        placed = placed.at[slot].set(jnp.where(do_place, cand, placed[slot]))
+        return (placed, count + do_place.astype(jnp.int32)), None
+
+    (placed, _count), _ = jax.lax.scan(place, (placed0, jnp.int32(0)), shuffled)
+
+    world = jnp.full((params.map_height, params.map_width), jnp.int8(BlockType.DIRT))
+    for i, block in enumerate(_PATCH_BLOCKS):
+        patch = jnp.full((_PATCH_SIZE, _PATCH_SIZE), jnp.int8(int(block)))
+        world = jax.lax.dynamic_update_slice(world, patch, (placed[i, 1], placed[i, 0]))
+    return world
+
+
+def generate_easy_rocket_state(key: jax.Array, params: EnvParams) -> EnvState:
+    """Generate an easy-rocket initial state from a PRNG key.
+
+    JAX-native and JIT/vmap-compatible: the six ore patches are placed from
+    ``key`` (see :func:`_easy_rocket_terrain`), then :func:`initial_state`
+    assembles the full :class:`EnvState` (player at centre, ore resources from
+    ``params.base_resources``, empty machines/inventory). Suitable as a
+    scenario ``reset_fn`` so every reset/episode draws a fresh layout.
+    """
+    return initial_state(_easy_rocket_terrain(key, params), params)
 
 
 EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
