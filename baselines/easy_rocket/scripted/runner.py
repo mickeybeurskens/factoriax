@@ -28,14 +28,13 @@ import numpy as np
 import factoriax
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import NUM_ACTIONS, Action
-from factoriax.engine.levels import build_state
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
-    EasyRocketScenario,
-    easy_rocket_conditions,
 )
+
+_SCENARIO_ID = "EasyRocket-v1"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 logger = logging.getLogger("easy_rocket_scripted")
@@ -46,23 +45,16 @@ ScriptedPolicy = Callable[[EnvState, EnvParams], jax.Array]
 
 
 def _make_env_and_state(seed: int) -> tuple[object, EnvState, EnvParams]:
-    """Build the easy_rocket env, initial state, and params.
+    """Build the easy_rocket env, an initial state, and params.
 
-    Level and params both come from :class:`EasyRocketScenario` — the
-    single source of truth for the scenario's runtime config (recipe
-    table, episode budget, entity budget). The runner applies no
-    overrides; to change a setting, change the scenario. ``make`` builds
-    only the env/wrapper stack; its generic default params are discarded
-    in favour of the scenario's.
+    Loads the scenario via ``factoriax.make("EasyRocket-v1")`` — the registry is
+    the single source of truth for the env (keyed procgen reset, achievement
+    hook, reward) and its params. The initial state is drawn from the scenario's
+    keyed generator with ``PRNGKey(seed)``, so each seed gives a distinct (but
+    reproducible) layout the scripted agent plans around.
     """
-    scenario_level = EasyRocketScenario(seed=seed).levels()[0]
-    level, env_params = scenario_level.level, scenario_level.env_params
-    env, _ = factoriax.make(
-        level,
-        obs="global",
-        achievement_fn=easy_rocket_conditions,
-    )
-    state0 = build_state(level, env_params)
+    env, env_params = factoriax.make(_SCENARIO_ID)
+    _, state0 = env.reset_env(jax.random.PRNGKey(seed), env_params)
     return env, state0, env_params
 
 

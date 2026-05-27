@@ -66,6 +66,7 @@ def make(
     obs: str = "global",
     obs_radius: int = 7,
     auto_reset: bool = False,
+    resample: bool | None = None,
 ) -> tuple[Any, EnvParams]:
     """Resolve a scenario id to ``(env, params)``, applying optional wrappers.
 
@@ -73,8 +74,10 @@ def make(
         env_id: Registered scenario id (e.g. ``"EasyRocket-v1"``).
         obs: ``"global"`` (default) or ``"local"`` for a windowed observation.
         obs_radius: Local-observation half-width (ignored for global obs).
-        auto_reset: Wrap in :class:`AutoResetWrapper`; uses the scenario's
-            ``resample`` setting for keyed per-episode regeneration.
+        auto_reset: Wrap in :class:`AutoResetWrapper`.
+        resample: Auto-reset mode. ``None`` (default) uses the scenario's
+            ``resample`` setting; pass ``True``/``False`` to override — e.g.
+            ``False`` for the cheap cached restore even on a keyed scenario.
 
     Returns:
         ``(env, params)``.
@@ -87,7 +90,8 @@ def make(
     if obs == "local":
         env = LocalObservationWrapper(env, radius=obs_radius)
     if auto_reset:
-        env = AutoResetWrapper(env, resample=spec.resample)
+        use_resample = spec.resample if resample is None else resample
+        env = AutoResetWrapper(env, resample=use_resample)
     return env, params
 
 

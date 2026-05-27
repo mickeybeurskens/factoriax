@@ -1,15 +1,12 @@
 """Train PPO on the easy rocket achievement scenario.
 
-Builds :class:`~factoriax.engine.envs.FactoriaXEnv` with the easy_rocket
-scenario's :func:`easy_rocket_conditions` bound as
-``achievement_fn`` and :func:`easy_rocket_reward` as the training
-signal — Craftax-style sparse +weight on each newly-unlocked
-achievement.
+Loads the scenario via ``factoriax.make("EasyRocket-v1")`` — the env carries
+the achievement conditions (a step hook) and the achievement reward (returned by
+``step_env``), Craftax-style sparse +weight on each newly-unlocked achievement.
 
-V1 trains on a single fixed layout sampled from
-:func:`build_easy_rocket_level` with ``PRNGKey(seed)``, broadcast
-across all parallel envs. Procgen-per-reset is a parked follow-up;
-see ``docs/specs/2026_easy_rocket_ppo.md``.
+Each parallel env draws its own keyed layout from the scenario's reset_fn and
+restores it on episode end (cheap cached reset). Per-episode regeneration is
+available via the scenario's keyed ``AutoResetWrapper`` if wanted later.
 
 Reuses the shared PPO infrastructure from ``baselines.ppo``. The
 collect/GAE/update pipeline is fused into one JIT-compiled step to
@@ -50,18 +47,15 @@ from baselines.ppo.normalization import (
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
-from factoriax.engine.levels import build_state
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
-    EASY_ROCKET_RECIPE_TABLE,
     MAX_EASY_ROCKET_SCORE,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
-    build_easy_rocket_level,
-    easy_rocket_conditions,
-    easy_rocket_reward,
 )
+
+_SCENARIO_ID = "EasyRocket-v1"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -141,36 +135,6 @@ def _ppo_loss(
         "misc/approx_kl": ((ratio - 1.0) - jnp.log(ratio)).mean(),
         "misc/clip_frac": (jnp.abs(ratio - 1.0) > clip_eps).astype(jnp.float32).mean(),
     }
-
-
-def _make_env_and_state(config: Config) -> tuple[Any, EnvState, EnvParams]:
-    """Build the wrapped env, initial EnvState, and EnvParams.
-
-    The scenario sets ``blocked_actions = frozenset()`` — no action
-    mask is applied. Observations are global (the 16x16 map flattens
-    to a small enough vector that the local-window wrapper is not
-    worth the extra indirection).
-
-    ``EASY_ROCKET_RECIPE_TABLE`` must be wired into ``EnvParams``
-    explicitly: the scenario uses an 8-recipe book, while
-    ``factoriax.make`` returns ``EnvParams`` with the full
-    ``DEFAULT_RECIPE_TABLE`` (~60 recipes). Without this override
-    the env would offer a different (and substantially harder)
-    recipe surface than the bench defines.
-    """
-    level = build_easy_rocket_level(jax.random.PRNGKey(config.ppo.seed))
-    env, env_params = factoriax.make(
-        level,
-        obs="global",
-        achievement_fn=easy_rocket_conditions,
-    )
-    env_params = env_params.replace(
-        num_players=1,
-        max_timesteps=config.max_timesteps,
-        recipe_table=EASY_ROCKET_RECIPE_TABLE,
-    )
-    state0 = build_state(level, env_params)
-    return env, state0, env_params
 
 
 def _resolve_out_dir(config: Config) -> Any:
@@ -405,11 +369,10 @@ def _finalize_artifacts(
 
 def train(config: Config) -> dict[str, float]:
     """Train PPO against the easy_rocket scenario and return final metrics."""
-    env, initial_state, env_params = _make_env_and_state(config)
-    initial_obs = env.get_obs(initial_state, env_params)
-    obs_dim = int(initial_obs.shape[0])
-
     ppo = config.ppo
+    env, env_params = factoriax.make(_SCENARIO_ID)
+    env_params = env_params.replace(max_timesteps=config.max_timesteps)
+    obs_dim = int(env.observation_space(env_params).shape[0])
     logger.info(
         "Easy rocket PPO  obs_dim=%d  actions=%d  envs=%d  rollout=%d  total=%dk",
         obs_dim,
@@ -462,15 +425,17 @@ def train(config: Config) -> dict[str, float]:
 
     obs_stats = init_running_stats(obs_dim)
 
-    def _broadcast(x: jax.Array) -> jax.Array:
-        a = jnp.asarray(x)
-        return jnp.broadcast_to(a[None], (ppo.num_envs,) + a.shape)
-
-    fixed_states: EnvState = jax.tree_util.tree_map(_broadcast, initial_state)
-
     vmap_step = jax.vmap(env.step_env, in_axes=(0, 0, 0, None))
     vmap_obs = jax.vmap(env.get_obs, in_axes=(0, None))
-    vmap_reward = jax.vmap(easy_rocket_reward, in_axes=(0, 0, None))
+    vmap_reset = jax.vmap(env.reset_env, in_axes=(0, None))
+
+    # Each parallel env draws its own keyed layout from the scenario's reset_fn
+    # and restores it on episode end (cheap cached reset). Reward comes from the
+    # env's bound reward_fn via step_env.
+    rng, reset_rng = jax.random.split(rng)
+    _reset_obs, reset_states = vmap_reset(
+        jax.random.split(reset_rng, ppo.num_envs), env_params
+    )
 
     mb_size = steps_per_iter // ppo.num_minibatches
 
@@ -508,17 +473,15 @@ def train(config: Config) -> dict[str, float]:
             log_probs = jax.nn.log_softmax(logits)[jnp.arange(ppo.num_envs), actions]
 
             keys = jax.random.split(key_step, ppo.num_envs)
-            _, next_states, _env_rewards, dones, _ = vmap_step(
+            _, next_states, rewards, dones, _ = vmap_step(
                 keys, states, actions, env_params
             )
-
-            rewards = vmap_reward(states, next_states, env_params)
 
             def _where(r: jax.Array, s: jax.Array) -> jax.Array:
                 mask = dones.reshape((-1,) + (1,) * (s.ndim - 1))
                 return jnp.where(mask, r, s)
 
-            next_states = jax.tree_util.tree_map(_where, fixed_states, next_states)
+            next_states = jax.tree_util.tree_map(_where, reset_states, next_states)
             next_obs = vmap_obs(next_states, env_params)
 
             return (next_states, next_obs, key), Transition(
@@ -618,8 +581,8 @@ def train(config: Config) -> dict[str, float]:
         num_iters * steps_per_iter // 1000,
     )
 
-    env_states = fixed_states
-    obs = vmap_obs(fixed_states, env_params)
+    env_states = reset_states
+    obs = vmap_obs(reset_states, env_params)
     ep_returns: deque[float] = deque(maxlen=500)
     ep_ach_counts: deque[int] = deque(maxlen=500)
     running_return = np.zeros(ppo.num_envs, dtype=np.float32)
@@ -774,12 +737,13 @@ def train(config: Config) -> dict[str, float]:
             step=current_step,
         )
 
+    _, eval_initial_state = env.reset_env(jax.random.PRNGKey(ppo.seed), env_params)
     try:
         _finalize_artifacts(
             config=config,
             env=env,
             env_params=env_params,
-            initial_state=initial_state,
+            initial_state=eval_initial_state,
             network=network,
             params=params,
             obs_stats=obs_stats,
