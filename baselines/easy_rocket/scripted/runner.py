@@ -31,6 +31,7 @@ from factoriax.engine.constants import NUM_ACTIONS, Action
 from factoriax.engine.levels import build_state
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.easy_rocket import (
+    EASY_ROCKET_ACHIEVEMENT_NAMES,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
     EasyRocketScenario,
     easy_rocket_conditions,
@@ -126,6 +127,61 @@ def _save_video(states: list[EnvState], out_path: Path, fps: int) -> None:
     logger.info("Saved video: %s (%d frames)", out_path, len(frames))
 
 
+def _log_wandb(
+    *,
+    project: str,
+    run_name: str | None,
+    seed: int,
+    max_timesteps: int,
+    ach_mask: np.ndarray,
+    ticks: int,
+    elapsed: float,
+    phase_outcomes: list[tuple[str, bool, int]],
+    video_path: Path,
+    video_fps: int,
+) -> None:
+    """Log the scripted rollout to wandb: per-achievement results + video.
+
+    Each achievement bit is logged as a 0/1 scalar under ``achievements/``
+    and collected into a table for a readable per-bit view. The mp4 rollout
+    is logged inline. Raises ``ImportError`` (caught by the caller) if wandb
+    is not installed.
+    """
+    import wandb  # noqa: PLC0415  # type: ignore[import-untyped]
+
+    run = wandb.init(
+        project=project,
+        name=run_name or f"scripted_easy_rocket_seed{seed}",
+        config={"seed": seed, "max_timesteps": max_timesteps, "policy": "scripted"},
+        tags=["easy_rocket", "scripted", "achievement", "validation"],
+    )
+    unlocked = ach_mask.astype(bool)
+    table = wandb.Table(columns=["index", "name", "unlocked"])
+    log: dict[str, object] = {}
+    for idx, name in enumerate(EASY_ROCKET_ACHIEVEMENT_NAMES):
+        hit = bool(unlocked[idx])
+        log[f"achievements/{name}"] = int(hit)
+        table.add_data(idx, name, hit)
+    phase_table = wandb.Table(columns=["phase", "ok", "ticks"])
+    for name, ok, pticks in phase_outcomes:
+        phase_table.add_data(name, bool(ok), pticks)
+    log.update(
+        {
+            "achievements/unlocked_count": int(unlocked.sum()),
+            "achievements/total": len(EASY_ROCKET_ACHIEVEMENT_NAMES),
+            "achievements/fraction": float(unlocked.mean()),
+            "achievements/table": table,
+            "rollout/ticks": ticks,
+            "rollout/seconds": elapsed,
+            "phases/outcomes": phase_table,
+            "final/rollout": wandb.Video(str(video_path), fps=video_fps, format="mp4"),
+        }
+    )
+    run.log(log)
+    run.finish()
+    logger.info("Logged scripted rollout to wandb project %r.", project)
+
+
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -144,6 +200,13 @@ def main() -> None:
         default=0,
         help="Log agent status every N ticks (0 = off). Also logs on phase change.",
     )
+    parser.add_argument(
+        "--wandb",
+        action="store_true",
+        help="Log per-achievement results and the rollout video to wandb.",
+    )
+    parser.add_argument("--wandb-project", type=str, default="factoriax_easy_rocket")
+    parser.add_argument("--wandb-run-name", type=str, default=None)
     args = parser.parse_args()
 
     from baselines.easy_rocket.scripted.agent import (  # noqa: PLC0415
@@ -178,6 +241,9 @@ def main() -> None:
         100.0 * action_counts[top1] / max(1, len(actions)),
         elapsed,
     )
+    logger.info("Achievements:")
+    for idx, name in enumerate(EASY_ROCKET_ACHIEVEMENT_NAMES):
+        logger.info("  %-20s %s", name, "OK" if bool(ach_mask[idx]) else "--")
     logger.info("Phase report:")
     for name, ok, ticks in agent.report.phase_outcomes:
         logger.info(
@@ -189,8 +255,27 @@ def main() -> None:
     if agent.report.halted:
         logger.info("HALTED: %s", agent.report.halt_reason)
 
-    if not args.no_save_video:
-        _save_video(states, Path(args.out_dir) / "rollout.mp4", args.video_fps)
+    video_path = Path(args.out_dir) / "rollout.mp4"
+    need_video = not args.no_save_video or args.wandb
+    if need_video:
+        _save_video(states, video_path, args.video_fps)
+
+    if args.wandb:
+        try:
+            _log_wandb(
+                project=args.wandb_project,
+                run_name=args.wandb_run_name,
+                seed=args.seed,
+                max_timesteps=env_params.max_timesteps,
+                ach_mask=ach_mask,
+                ticks=len(actions),
+                elapsed=elapsed,
+                phase_outcomes=agent.report.phase_outcomes,
+                video_path=video_path,
+                video_fps=args.video_fps,
+            )
+        except ImportError:
+            logger.error("wandb not installed. Run: uv add wandb")
 
 
 if __name__ == "__main__":

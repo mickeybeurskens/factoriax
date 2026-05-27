@@ -157,27 +157,21 @@ def test_build_level_patches_avoid_spawn() -> None:
                 )
 
 
-# Achievement indices in the condition mask, mirroring the spec order.
+# Achievement indices in the condition mask, in curriculum order.
 _A_MINE_1_ORE = 0
-_A_MINE_1_OF_EACH = 1
-_A_MINE_10_OF_EACH = 2
-_A_CRAFT_MINER = 3
-_A_CRAFT_ASSEMBLER = 4
-_A_CRAFT_BELT = 5
-_A_MINER_ON_ORE = 6
-_A_FEED_BELT_WITH_MINER = 7
-_A_THREE_ORE_TYPES = 8
-_A_FEED_ASSEMBLER_BELT = 9
-_A_FEED_ASSEMBLER_TWO_BELTS = 10
-_A_CONNECT_TWO_ASSEMBLERS = 11
-_A_PLACE_ROCKET = 12
-
-_GRAPH_GATED_INDICES = (
-    _A_FEED_BELT_WITH_MINER,
-    _A_FEED_ASSEMBLER_BELT,
-    _A_FEED_ASSEMBLER_TWO_BELTS,
-    _A_CONNECT_TWO_ASSEMBLERS,
-)
+_A_PROSPECTOR = 1
+_A_CRAFT_MINER = 2
+_A_AUTOMATED_MINING = 3
+_A_ORE_FIELDS = 4
+_A_FULL_SUPPLY = 5
+_A_ASSEMBLER_ONLINE = 6
+_A_HULL_FED = 7
+_A_HULL_PRODUCED = 8
+_A_ENGINE_FED = 9
+_A_ENGINE_PRODUCED = 10
+_A_ROCKET_FED = 11
+_A_ROCKET_PRODUCED = 12
+_A_LIFTOFF = 13
 
 
 def _inv(**items: int) -> jnp.ndarray:
@@ -207,7 +201,7 @@ def test_conditions_mine_1_ore_any_ore_unlocks(state_factory) -> None:
     state = state_factory(world_map=_dirt_map(), player_inventory=_inv(IRON_ORE=1))
     mask = easy_rocket_conditions(state)
     assert bool(mask[_A_MINE_1_ORE])
-    assert not bool(mask[_A_MINE_1_OF_EACH])
+    assert not bool(mask[_A_PROSPECTOR])
 
 
 def test_conditions_mine_1_of_each_needs_all_six(state_factory) -> None:
@@ -215,7 +209,7 @@ def test_conditions_mine_1_of_each_needs_all_six(state_factory) -> None:
         world_map=_dirt_map(),
         player_inventory=_inv(IRON_ORE=1, COPPER_ORE=1, TIN_ORE=1, SILICON=1, COAL=1),
     )
-    assert not bool(easy_rocket_conditions(five)[_A_MINE_1_OF_EACH])
+    assert not bool(easy_rocket_conditions(five)[_A_PROSPECTOR])
 
     six = state_factory(
         world_map=_dirt_map(),
@@ -223,123 +217,217 @@ def test_conditions_mine_1_of_each_needs_all_six(state_factory) -> None:
             IRON_ORE=1, COPPER_ORE=1, TIN_ORE=1, SILICON=1, COAL=1, LIMESTONE=1
         ),
     )
-    assert bool(easy_rocket_conditions(six)[_A_MINE_1_OF_EACH])
+    assert bool(easy_rocket_conditions(six)[_A_PROSPECTOR])
 
 
-def test_conditions_mine_10_of_each_uses_miner_craft_ores(state_factory) -> None:
-    nine = state_factory(
+_ALL_ORE_BLOCKS: tuple[int, ...] = (
+    int(BlockType.IRON),
+    int(BlockType.COPPER),
+    int(BlockType.TIN),
+    int(BlockType.SILICON),
+    int(BlockType.COAL),
+    int(BlockType.LIMESTONE),
+)
+
+
+def _miner_row(state_factory, ore_blocks, buffer_counts):
+    """A one-row map of miners over ``ore_blocks`` with given output buffers."""
+    world = jnp.array([list(ore_blocks)], dtype=jnp.int32)
+    mt = jnp.array([[Machine.MINER] * len(ore_blocks)], dtype=jnp.int32)
+    bc = jnp.array([list(buffer_counts)], dtype=jnp.int16)
+    return state_factory(world_map=world, machine_types=mt, buffer_count=bc)
+
+
+def _assembler(
+    state_factory,
+    *,
+    in_types: tuple[int, int] = (0, 0),
+    in_counts: tuple[int, int] = (0, 0),
+    out_type: int = 0,
+    out_count: int = 0,
+    buf_type: int = 0,
+    buf_count: int = 0,
+):
+    """A single placed assembler with the given input / output / buffer slots."""
+    return state_factory(
         world_map=_dirt_map(),
-        player_inventory=_inv(IRON_ORE=10, COPPER_ORE=10, TIN_ORE=10, COAL=9),
+        machine_types=jnp.array([[Machine.ASSEMBLER]], dtype=jnp.int32),
+        asm_in_type=jnp.array([[list(in_types)]], dtype=jnp.int8),
+        asm_in_count=jnp.array([[list(in_counts)]], dtype=jnp.int16),
+        asm_out_type=jnp.array([[out_type]], dtype=jnp.int8),
+        asm_out_count=jnp.array([[out_count]], dtype=jnp.int16),
+        buffer_type=jnp.array([[buf_type]], dtype=jnp.int8),
+        buffer_count=jnp.array([[buf_count]], dtype=jnp.int16),
     )
-    assert not bool(easy_rocket_conditions(nine)[_A_MINE_10_OF_EACH])
 
-    ten = state_factory(
-        world_map=_dirt_map(),
-        player_inventory=_inv(IRON_ORE=10, COPPER_ORE=10, TIN_ORE=10, COAL=10),
-    )
-    assert bool(easy_rocket_conditions(ten)[_A_MINE_10_OF_EACH])
 
-    # Silicon is not on the miner-craft path; absence does not block #3.
-    no_silicon_but_others_ok = state_factory(
-        world_map=_dirt_map(),
-        player_inventory=_inv(IRON_ORE=10, COPPER_ORE=10, TIN_ORE=10, COAL=10),
+def test_craft_miner_unlocks_on_inventory(state_factory) -> None:
+    state = state_factory(world_map=_dirt_map(), player_inventory=_inv(MINER=1))
+    assert bool(easy_rocket_conditions(state)[_A_CRAFT_MINER])
+
+
+def test_automated_mining_needs_producing_miner(state_factory) -> None:
+    blocks = (int(BlockType.IRON),)
+    # Placed on ore but empty buffer -> not yet producing.
+    idle = _miner_row(state_factory, blocks, (0,))
+    assert not bool(easy_rocket_conditions(idle)[_A_AUTOMATED_MINING])
+    # Output buffer non-empty -> producing.
+    producing = _miner_row(state_factory, blocks, (3,))
+    assert bool(easy_rocket_conditions(producing)[_A_AUTOMATED_MINING])
+
+
+def test_ore_fields_needs_three_distinct_producing(state_factory) -> None:
+    blocks = (int(BlockType.IRON), int(BlockType.COPPER), int(BlockType.TIN))
+    assert bool(
+        easy_rocket_conditions(_miner_row(state_factory, blocks, (1, 1, 1)))[
+            _A_ORE_FIELDS
+        ]
     )
-    assert bool(easy_rocket_conditions(no_silicon_but_others_ok)[_A_MINE_10_OF_EACH])
+    # Three distinct blocks but none producing.
+    assert not bool(
+        easy_rocket_conditions(_miner_row(state_factory, blocks, (0, 0, 0)))[
+            _A_ORE_FIELDS
+        ]
+    )
+    # Only two producing.
+    assert not bool(
+        easy_rocket_conditions(_miner_row(state_factory, blocks, (1, 1, 0)))[
+            _A_ORE_FIELDS
+        ]
+    )
+    # Three producing miners but all on the same ore block.
+    same = (int(BlockType.IRON),) * 3
+    assert not bool(
+        easy_rocket_conditions(_miner_row(state_factory, same, (1, 1, 1)))[
+            _A_ORE_FIELDS
+        ]
+    )
+
+
+def test_full_supply_needs_all_six_producing(state_factory) -> None:
+    all_producing = _miner_row(state_factory, _ALL_ORE_BLOCKS, (1,) * 6)
+    assert bool(easy_rocket_conditions(all_producing)[_A_FULL_SUPPLY])
+    # Five producing, the sixth idle -> not complete.
+    five = _miner_row(state_factory, _ALL_ORE_BLOCKS, (1, 1, 1, 1, 1, 0))
+    assert not bool(easy_rocket_conditions(five)[_A_FULL_SUPPLY])
+
+
+def test_assembler_online_counts_placed_assembler(state_factory) -> None:
+    placed = state_factory(
+        world_map=_dirt_map(),
+        machine_types=jnp.array([[Machine.ASSEMBLER]], dtype=jnp.int32),
+    )
+    assert bool(easy_rocket_conditions(placed)[_A_ASSEMBLER_ONLINE])
+    empty = state_factory(world_map=_dirt_map())
+    assert not bool(easy_rocket_conditions(empty)[_A_ASSEMBLER_ONLINE])
 
 
 @pytest.mark.parametrize(
-    "item_name,achievement_idx",
+    "in_a,in_b,fed_idx,other_idx",
     [
-        ("MINER", _A_CRAFT_MINER),
-        ("ASSEMBLER", _A_CRAFT_ASSEMBLER),
-        ("CONVEYOR_BELT", _A_CRAFT_BELT),
+        (ItemType.IRON_ORE, ItemType.LIMESTONE, _A_HULL_FED, _A_ENGINE_FED),
+        (ItemType.COPPER_ORE, ItemType.LIMESTONE, _A_ENGINE_FED, _A_HULL_FED),
+        (ItemType.HULL, ItemType.ENGINE_UNIT, _A_ROCKET_FED, _A_HULL_FED),
     ],
 )
-def test_conditions_inventory_machine_unlock(
-    state_factory, item_name: str, achievement_idx: int
+def test_assembler_fed_disambiguates_sections(
+    state_factory, in_a, in_b, fed_idx: int, other_idx: int
 ) -> None:
-    inv = _inv(**{item_name: 1})
-    state = state_factory(world_map=_dirt_map(), player_inventory=inv)
-    assert bool(easy_rocket_conditions(state)[achievement_idx])
-
-
-def test_conditions_miner_on_ore_unlocks(state_factory) -> None:
-    world = jnp.array([[BlockType.IRON]], dtype=jnp.int32)
-    mt = jnp.array([[Machine.MINER]], dtype=jnp.int32)
-    state = state_factory(world_map=world, machine_types=mt)
-    assert bool(easy_rocket_conditions(state)[_A_MINER_ON_ORE])
-
-
-def test_conditions_miner_on_dirt_does_not_unlock(state_factory) -> None:
-    world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[Machine.MINER]], dtype=jnp.int32)
-    state = state_factory(world_map=world, machine_types=mt)
-    assert not bool(easy_rocket_conditions(state)[_A_MINER_ON_ORE])
-
-
-def test_conditions_three_ore_types_under_miners(state_factory) -> None:
-    world_three = jnp.array(
-        [[BlockType.IRON, BlockType.COPPER, BlockType.TIN]],
-        dtype=jnp.int32,
-    )
-    mt_three = jnp.array(
-        [[Machine.MINER, Machine.MINER, Machine.MINER]],
-        dtype=jnp.int32,
-    )
-    state_three = state_factory(world_map=world_three, machine_types=mt_three)
-    assert bool(easy_rocket_conditions(state_three)[_A_THREE_ORE_TYPES])
-
-    world_two = jnp.array(
-        [[BlockType.IRON, BlockType.COPPER]],
-        dtype=jnp.int32,
-    )
-    mt_two = jnp.array(
-        [[Machine.MINER, Machine.MINER]],
-        dtype=jnp.int32,
-    )
-    state_two = state_factory(world_map=world_two, machine_types=mt_two)
-    assert not bool(easy_rocket_conditions(state_two)[_A_THREE_ORE_TYPES])
-
-    # Three miners on the same ore type still does not unlock.
-    world_same = jnp.array(
-        [[BlockType.IRON, BlockType.IRON, BlockType.IRON]], dtype=jnp.int32
-    )
-    state_same = state_factory(world_map=world_same, machine_types=mt_three)
-    assert not bool(easy_rocket_conditions(state_same)[_A_THREE_ORE_TYPES])
-
-
-def test_conditions_rocket_placed(state_factory) -> None:
-    world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    mt = jnp.array([[Machine.ROCKET]], dtype=jnp.int32)
-    state = state_factory(world_map=world, machine_types=mt)
-    assert bool(easy_rocket_conditions(state)[_A_PLACE_ROCKET])
-
-
-def test_conditions_graph_stubs_always_false(state_factory) -> None:
-    # A setup that "looks like" several graph-gated achievements could unlock:
-    # a miner adjacent to a belt carrying ore, plus a placed assembler.
-    world = jnp.array(
-        [[BlockType.IRON, BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32
-    )
-    mt = jnp.array(
-        [
-            [
-                Machine.MINER,
-                Machine.CONVEYOR_BELT,
-                Machine.ASSEMBLER,
-            ]
-        ],
-        dtype=jnp.int32,
-    )
-    state = state_factory(
-        world_map=world,
-        machine_types=mt,
-        buffer_type=jnp.array([[0, int(ItemType.IRON_ORE), 0]], dtype=jnp.int8),
-        buffer_count=jnp.array([[0, 5, 0]], dtype=jnp.int16),
-    )
+    state = _assembler(state_factory, in_types=(int(in_a), int(in_b)), in_counts=(1, 1))
     mask = easy_rocket_conditions(state)
-    for idx in _GRAPH_GATED_INDICES:
-        assert not bool(mask[idx]), f"graph-gated achievement #{idx} should stay False"
+    assert bool(mask[fed_idx])
+    assert not bool(mask[other_idx])
+
+
+def test_assembler_fed_needs_both_inputs(state_factory) -> None:
+    # The shared limestone input alone must not satisfy any 'fed' bit.
+    only_lime = _assembler(
+        state_factory, in_types=(int(ItemType.LIMESTONE), 0), in_counts=(1, 0)
+    )
+    mask = easy_rocket_conditions(only_lime)
+    assert not bool(mask[_A_HULL_FED])
+    assert not bool(mask[_A_ENGINE_FED])
+    assert not bool(mask[_A_ROCKET_FED])
+
+
+@pytest.mark.parametrize(
+    "item,produced_idx",
+    [
+        (ItemType.HULL, _A_HULL_PRODUCED),
+        (ItemType.ENGINE_UNIT, _A_ENGINE_PRODUCED),
+        (ItemType.ROCKET, _A_ROCKET_PRODUCED),
+    ],
+)
+def test_assembler_produced_via_output_slot(
+    state_factory, item, produced_idx: int
+) -> None:
+    state = _assembler(state_factory, out_type=int(item), out_count=1)
+    assert bool(easy_rocket_conditions(state)[produced_idx])
+
+
+@pytest.mark.parametrize(
+    "item,produced_idx",
+    [
+        (ItemType.HULL, _A_HULL_PRODUCED),
+        (ItemType.ENGINE_UNIT, _A_ENGINE_PRODUCED),
+        (ItemType.ROCKET, _A_ROCKET_PRODUCED),
+    ],
+)
+def test_assembler_produced_via_buffer_drain(
+    state_factory, item, produced_idx: int
+) -> None:
+    # The engine drains a finished output into the buffer on the next tick.
+    state = _assembler(state_factory, buf_type=int(item), buf_count=1)
+    assert bool(easy_rocket_conditions(state)[produced_idx])
+
+
+def test_liftoff_needs_placed_rocket(state_factory) -> None:
+    placed = state_factory(
+        world_map=_dirt_map(),
+        machine_types=jnp.array([[Machine.ROCKET]], dtype=jnp.int32),
+    )
+    assert bool(easy_rocket_conditions(placed)[_A_LIFTOFF])
+
+
+def test_inventory_does_not_unlock_machine_bits(state_factory) -> None:
+    # Hand-held section items must not flip any machine-sourced bit; only
+    # populated machine buffers (or placed machines) do. This pins the
+    # hand-vs-machine invariant the production curriculum relies on.
+    inv = _inv(
+        MINER=1,
+        ASSEMBLER=1,
+        ROCKET=1,
+        HULL=200,
+        ENGINE_UNIT=200,
+        IRON_ORE=50,
+        COPPER_ORE=50,
+        TIN_ORE=50,
+        SILICON=50,
+        COAL=50,
+        LIMESTONE=50,
+    )
+    mask = easy_rocket_conditions(
+        state_factory(world_map=_dirt_map(), player_inventory=inv)
+    )
+    machine_sourced = (
+        _A_AUTOMATED_MINING,
+        _A_ORE_FIELDS,
+        _A_FULL_SUPPLY,
+        _A_ASSEMBLER_ONLINE,
+        _A_HULL_FED,
+        _A_HULL_PRODUCED,
+        _A_ENGINE_FED,
+        _A_ENGINE_PRODUCED,
+        _A_ROCKET_FED,
+        _A_ROCKET_PRODUCED,
+        _A_LIFTOFF,
+    )
+    for idx in machine_sourced:
+        assert not bool(mask[idx]), f"bit {idx} wrongly flipped from player inventory"
+    # The hand-skill bits, by contrast, do fire from inventory alone.
+    assert bool(mask[_A_MINE_1_ORE])
+    assert bool(mask[_A_PROSPECTOR])
+    assert bool(mask[_A_CRAFT_MINER])
 
 
 def test_weights_and_max_score() -> None:
@@ -377,7 +465,7 @@ def test_reward_no_unlock_is_zero(state_factory) -> None:
 def test_reward_only_counts_newly_unlocked(state_factory) -> None:
     # Already-unlocked bits do not re-fire reward.
     prev = _ach_state(state_factory, [_A_CRAFT_MINER])
-    new = _ach_state(state_factory, [_A_CRAFT_MINER, _A_CRAFT_ASSEMBLER])
+    new = _ach_state(state_factory, [_A_CRAFT_MINER, _A_ASSEMBLER_ONLINE])
     reward = easy_rocket_reward(prev, new, EnvParams())
     assert float(reward) == 1.0
 

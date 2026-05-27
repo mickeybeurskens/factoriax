@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 
@@ -160,8 +163,6 @@ EASY_ROCKET_RECIPE_BOOK: RecipeBook = RecipeBook(recipes=EASY_ROCKET_RECIPES)
 EASY_ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(EASY_ROCKET_RECIPE_BOOK)
 
 
-NUM_EASY_ROCKET_ACHIEVEMENTS: int = 13
-
 _RAW_ORE_ITEMS: tuple[int, ...] = (
     int(ItemType.IRON_ORE),
     int(ItemType.COPPER_ORE),
@@ -169,15 +170,6 @@ _RAW_ORE_ITEMS: tuple[int, ...] = (
     int(ItemType.SILICON),
     int(ItemType.COAL),
     int(ItemType.LIMESTONE),
-)
-
-# Ores needed to craft a miner: trace MINER <- IRON_PLATE + WIRE, where
-# IRON_PLATE <- IRON_ORE + COAL and WIRE <- COPPER_PLATE + TIN_PLATE.
-_MINER_CRAFT_ORES: tuple[int, ...] = (
-    int(ItemType.IRON_ORE),
-    int(ItemType.COPPER_ORE),
-    int(ItemType.TIN_ORE),
-    int(ItemType.COAL),
 )
 
 _ORE_BLOCKS: tuple[int, ...] = (
@@ -192,10 +184,6 @@ _ORE_BLOCKS: tuple[int, ...] = (
 
 def _holds_item(state: EnvState, item: int) -> jax.Array:
     return jnp.sum(state.player_inventory[:, item]) >= 1
-
-
-def _holds_at_least(state: EnvState, item: int, threshold: int) -> jax.Array:
-    return jnp.sum(state.player_inventory[:, item]) >= threshold
 
 
 def _count_machines(state: EnvState, machine_type: int) -> jax.Array:
@@ -216,71 +204,158 @@ def _blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
     return active, blocks
 
 
-def _any_miner_on_ore(state: EnvState) -> jax.Array:
+def _producing_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
+    """Return (producing_mask, block_at_pos) over all entity slots.
+
+    Like :func:`_blocks_under_active_miners` but the mask also requires a
+    non-empty output buffer, so a slot counts only once its miner has
+    actually mined ore rather than merely being placed on an ore tile.
+    """
     active, blocks = _blocks_under_active_miners(state)
-    is_ore = jnp.zeros_like(blocks, dtype=jnp.bool_)
-    for ore_block in _ORE_BLOCKS:
-        is_ore = is_ore | (blocks == ore_block)
-    return jnp.any(active & is_ore)
+    producing = active & (state.ent_buf_count > 0)
+    return producing, blocks
 
 
-def _distinct_ore_types_under_miners(state: EnvState) -> jax.Array:
-    active, blocks = _blocks_under_active_miners(state)
-    presence = jnp.stack(
-        [jnp.any(active & (blocks == ore_block)) for ore_block in _ORE_BLOCKS]
+def _producing_ore_presence(state: EnvState) -> jax.Array:
+    """Per-ore-block presence: True where a producing miner sits on it."""
+    producing, blocks = _producing_miners(state)
+    return jnp.stack(
+        [jnp.any(producing & (blocks == ore_block)) for ore_block in _ORE_BLOCKS]
     )
-    result: jax.Array = jnp.sum(presence.astype(jnp.int32)) >= 3
+
+
+def _distinct_producing_ore_types(state: EnvState) -> jax.Array:
+    """At least three distinct ore blocks sit under producing miners."""
+    result: jax.Array = jnp.sum(_producing_ore_presence(state).astype(jnp.int32)) >= 3
     return result
 
 
-def easy_rocket_conditions(state: EnvState) -> jax.Array:
-    """Compute the 13 easy-rocket achievement bits, zero-padded to MAX_ACHIEVEMENTS.
+def _all_ore_types_covered(state: EnvState) -> jax.Array:
+    """Every one of the six raw ores sits under a producing miner."""
+    result: jax.Array = jnp.all(_producing_ore_presence(state))
+    return result
 
-    The four belt-network achievements (indices 7, 9, 10, 11) are stubs that
-    always read False; they unlock once the entity connection graph lands.
+
+def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Array:
+    """An active assembler holds both ``item_a`` and ``item_b`` in its inputs.
+
+    Each input item must occupy one of the two input slots with a
+    non-empty count. Requiring both inputs in the same assembler keeps
+    the hull, engine, and rocket feeds distinct despite their shared
+    limestone input.
     """
-    has_any_raw_ore = jnp.any(
-        jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
-    )
-    has_each_raw_ore = jnp.all(
-        jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
-    )
-    has_ten_of_each_miner_craft_ore = jnp.all(
-        jnp.stack([_holds_at_least(state, item, 10) for item in _MINER_CRAFT_ORES])
-    )
+    is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
+    in_type = state.ent_asm_in_type
+    in_count = state.ent_asm_in_count
+    has_a = jnp.any((in_type == item_a) & (in_count > 0), axis=-1)
+    has_b = jnp.any((in_type == item_b) & (in_count > 0), axis=-1)
+    return jnp.any(is_asm & has_a & has_b)
 
-    has_miner_in_inventory = _holds_item(state, int(ItemType.MINER))
-    has_assembler_in_inventory = _holds_item(state, int(ItemType.ASSEMBLER))
-    has_belt_in_inventory = _holds_item(state, int(ItemType.CONVEYOR_BELT))
 
-    miner_on_ore = _any_miner_on_ore(state)
-    three_ore_types = _distinct_ore_types_under_miners(state)
-    rocket_placed = _count_machines(state, int(Machine.ROCKET)) >= 1
+def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
+    """An active assembler carries ``item`` in its output or buffer slot.
 
-    stub = jnp.bool_(False)
-    conditions = jnp.stack(
-        [
-            has_any_raw_ore,
-            has_each_raw_ore,
-            has_ten_of_each_miner_craft_ore,
-            has_miner_in_inventory,
-            has_assembler_in_inventory,
-            has_belt_in_inventory,
-            miner_on_ore,
-            stub,
-            three_ore_types,
-            stub,
-            stub,
-            stub,
-            rocket_placed,
-        ]
-    )
-    return jnp.concatenate(
-        [
-            conditions,
-            jnp.zeros(MAX_ACHIEVEMENTS - NUM_EASY_ROCKET_ACHIEVEMENTS, dtype=jnp.bool_),
-        ]
-    )
+    Reads both ``ent_asm_out`` and ``ent_buf`` because the engine drains
+    a finished output into the buffer on the next tick; checking only the
+    output slot would blink off for that tick.
+    """
+    is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
+    out_has = (state.ent_asm_out_type == item) & (state.ent_asm_out_count > 0)
+    buf_has = (state.ent_buf_type == item) & (state.ent_buf_count > 0)
+    return jnp.any(is_asm & (out_has | buf_has))
+
+
+def _has_any_raw_ore(state: EnvState) -> jax.Array:
+    """Player holds at least one of any raw ore type."""
+    return jnp.any(jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS]))
+
+
+def _has_each_raw_ore(state: EnvState) -> jax.Array:
+    """Player holds at least one of every raw ore type."""
+    return jnp.all(jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS]))
+
+
+def _any_producing_miner(state: EnvState) -> jax.Array:
+    """At least one placed miner has ore in its output buffer."""
+    return jnp.any(_producing_miners(state)[0])
+
+
+def _has_machine(state: EnvState, machine: int) -> jax.Array:
+    """At least one machine of ``machine`` type is placed on the map."""
+    return _count_machines(state, machine) >= 1
+
+
+#: Achievement bits in curriculum order, each paired with a stable name. This
+#: is the single source of truth for the bit set: the condition tuple, the
+#: public name list, and :data:`NUM_EASY_ROCKET_ACHIEVEMENTS` all derive from
+#: it. Hand-skill bits read the player inventory; production bits read machine
+#: buffers, so hand crafting cannot unlock them. The four sections are raw ore,
+#: hulls, engines, and final assembly.
+_EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
+    ("mine_1_ore", _has_any_raw_ore),
+    ("prospector", _has_each_raw_ore),
+    ("craft_miner", partial(_holds_item, item=int(ItemType.MINER))),
+    ("automated_mining", _any_producing_miner),
+    ("ore_fields", _distinct_producing_ore_types),
+    ("full_supply", _all_ore_types_covered),
+    ("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
+    (
+        "hull_line_fed",
+        partial(
+            _assembler_holds_inputs,
+            item_a=int(ItemType.IRON_ORE),
+            item_b=int(ItemType.LIMESTONE),
+        ),
+    ),
+    ("hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))),
+    (
+        "engine_line_fed",
+        partial(
+            _assembler_holds_inputs,
+            item_a=int(ItemType.COPPER_ORE),
+            item_b=int(ItemType.LIMESTONE),
+        ),
+    ),
+    (
+        "engine_production",
+        partial(_assembler_outputs_item, item=int(ItemType.ENGINE_UNIT)),
+    ),
+    (
+        "rocket_line_fed",
+        partial(
+            _assembler_holds_inputs,
+            item_a=int(ItemType.HULL),
+            item_b=int(ItemType.ENGINE_UNIT),
+        ),
+    ),
+    ("rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))),
+    ("liftoff", partial(_has_machine, machine=int(Machine.ROCKET))),
+)
+
+#: Stable per-bit names in curriculum order, for display and logging.
+EASY_ROCKET_ACHIEVEMENT_NAMES: tuple[str, ...] = tuple(
+    name for name, _ in _EASY_ROCKET_ACHIEVEMENTS
+)
+
+_EASY_ROCKET_CONDITIONS: tuple[Callable[..., jax.Array], ...] = tuple(
+    condition for _, condition in _EASY_ROCKET_ACHIEVEMENTS
+)
+
+NUM_EASY_ROCKET_ACHIEVEMENTS: int = len(_EASY_ROCKET_ACHIEVEMENTS)
+
+
+def easy_rocket_conditions(state: EnvState) -> jax.Array:
+    """Compute the easy-rocket achievement bits, zero-padded to MAX_ACHIEVEMENTS.
+
+    The bits walk a four-section production curriculum: raw ore, hulls,
+    engines, and final assembly. Automated-production bits read
+    machine-internal buffers, which only the simulation fills; hand actions
+    deposit into the player inventory, so those bits cannot be unlocked by
+    hand crafting.
+    """
+    conditions = jnp.stack([condition(state) for condition in _EASY_ROCKET_CONDITIONS])
+    padding = jnp.zeros(MAX_ACHIEVEMENTS - conditions.shape[0], dtype=jnp.bool_)
+    return jnp.concatenate([conditions, padding])
 
 
 EASY_ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = (

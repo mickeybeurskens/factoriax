@@ -53,6 +53,7 @@ from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
 from factoriax.engine.levels import build_state
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.scenarios.easy_rocket import (
+    EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     EASY_ROCKET_RECIPE_TABLE,
     MAX_EASY_ROCKET_SCORE,
@@ -69,31 +70,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Reachable per-episode achievement count. Four of the 13 easy_rocket
-# achievements are belt-network stubs that always read False today, so
-# the soft ceiling the policy can hit is 9. Surface both numbers in
-# logs so a plateau at 9 reads as expected, not a bug.
-REACHABLE_ACHIEVEMENTS: int = 9
+# Every easy_rocket achievement is reachable through automated production —
+# the bits read machine buffers, no belt-network stubs remain — so the soft
+# ceiling equals the full count. Surfaced in logs alongside the live count.
+REACHABLE_ACHIEVEMENTS: int = NUM_EASY_ROCKET_ACHIEVEMENTS
 
-# Display labels for the 13 easy_rocket achievements, in the order the
-# scenario's ``easy_rocket_conditions`` stacks them. The four belt-
-# network stubs are labelled explicitly so the unreachable-by-design
-# bits are easy to spot in the achievement-timing plot.
-EASY_ROCKET_ACHIEVEMENT_LABELS: tuple[str, ...] = (
-    "has_any_raw_ore",
-    "has_each_raw_ore",
-    "ten_of_each_miner_craft_ore",
-    "has_miner_in_inventory",
-    "has_assembler_in_inventory",
-    "has_belt_in_inventory",
-    "miner_on_ore",
-    "stub_belt_0",
-    "three_ore_types_under_miners",
-    "stub_belt_1",
-    "stub_belt_2",
-    "stub_belt_3",
-    "rocket_placed",
-)
+# Display labels come from the scenario, the single source of truth for the
+# bit set and its order.
+EASY_ROCKET_ACHIEVEMENT_LABELS: tuple[str, ...] = EASY_ROCKET_ACHIEVEMENT_NAMES
 
 
 @dataclasses.dataclass

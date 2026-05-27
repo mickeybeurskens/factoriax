@@ -61,9 +61,11 @@ toward the full rocket.
   `factoriax.observations`.
 
 The achievement list is locked in this spec (see "Achievement contract"
-below). It is 13 items, equally weighted, covering raw mining,
-crafting, machine placement, and the first non-trivial belt-network
-compositions.
+below). It is 14 items, equally weighted, structured as a curriculum
+through four production sections: raw ore, hulls, engines, and final
+assembly. Every automated-production milestone is detected by reading
+machine-internal buffers, so no belt-network topology tracing is
+required.
 
 ## Tech Stack
 
@@ -91,8 +93,8 @@ New file:
 ```
 factoriax/scenarios/easy_rocket.py    # Scenario class, level builder,
                                        # recipe book template,
-                                       # 13-achievement contract
-                                       # (with 4 graph-gated stubs),
+                                       # 14-achievement production
+                                       # curriculum,
                                        # reward + scoring.
 ```
 
@@ -319,93 +321,108 @@ pre-placed machines.
 
 ### Achievement contract
 
-Thirteen achievements, all weight 1.0, scored as the unweighted sum
+Fourteen achievements, all weight 1.0, scored as the unweighted sum
 of unlocked bits. The list is **locked** by this spec — do not add,
 remove, rename, or reweight without an explicit human decision.
 
 ```
-weights              = jnp.ones(13, dtype=jnp.float32)
-MAX_EASY_ROCKET_SCORE = 13.0
+weights              = jnp.ones(14, dtype=jnp.float32)
+MAX_EASY_ROCKET_SCORE = 14.0
 ```
 
 The scenario implements the standard
 `Scenario.achievement_fn` / `Scenario.score` interface. The
 `achievement_fn` returns a `bool` array zero-padded to
 `MAX_ACHIEVEMENTS`, matching the rocket scenario's shape contract.
-Achievements that depend on belt-network topology are gated on
-`docs/specs/2026_entity_connection_graph.md` landing; until then
-their condition function returns `False` unconditionally and the
-bit cannot unlock. The list and the weighting do not change — a v1
-agent simply tops out at 9.0 / 13.0, and the remaining four bits
-become reachable once the graph module ships.
 
-The full list, with the condition each achievement checks and a
-status flag (**v1** = wired in the first easy-rocket release;
-**graph** = wired once the connection-graph spec lands):
+**Production, not topology.** Earlier drafts of this contract gated
+four achievements on belt-network connectivity, tracked by
+`docs/specs/2026_entity_connection_graph.md`. That dependency is
+removed. The list is reformulated around *production state*, which
+the engine already exposes and which is impossible to spoof by hand.
+The reformulation rests on one structural invariant:
 
-1. **Mine 1 Ore** — agent holds ≥1 of any raw ore (iron, copper,
-   tin, silicon, or coal). Status: **v1**. Trivial inventory sum.
-2. **Mine 1 Ore of each** — agent holds ≥1 of every raw ore type
-   present on the map (iron, copper, tin, silicon, coal, limestone).
-   Status:
-   **v1**. Per-type inventory check.
-3. **Mine 10 Ore of each** — agent holds ≥10 of each ore needed to
-   craft a miner. Tracing the base recipes, the miner needs
-   `IRON_PLATE + WIRE`, which reduces to raw inputs
-   `IRON_ORE + COAL + COPPER_ORE + TIN_ORE`, so this checks ≥10 of
-   each of those four types. Silicon is excluded because it is not
-   on the miner-craft path. Status: **v1**. Per-type inventory
-   check.
-4. **Craft a miner** — agent holds ≥1 `MINER`. Status: **v1**.
-5. **Craft an assembler** — agent holds ≥1 `ASSEMBLER`. Status:
-   **v1**.
-6. **Craft at least one belt** — agent holds ≥1 `CONVEYOR_BELT`.
-   Status: **v1**.
-7. **Place miner on ore** — at least one placed `MINER` entity sits
-   on a tile whose underlying block is an ore block. Status: **v1**.
-   Needs a per-entity world-block lookup
-   (`state.world_blocks[ent_x, ent_y]` over active miners). Helper
-   required; no graph dependency.
-8. **Feed a belt with a miner** — at least one belt entity in the
-   miner's output direction whose `buf_count > 0`. Status:
-   **graph**. Requires belt-chain identification that the
-   connection-graph spec provides.
-9. **Have miners on three ore types** — count the distinct ore-block
-   types beneath placed `MINER` entities; at least three distinct
-   types. Status: **v1**. Per-entity world-block lookup plus a
-   distinct-count reduction. Shares the helper from #7.
-10. **Feed an assembler with a belt** — at least one `ASSEMBLER`
-    entity with a non-empty input slot whose feeding belt chain has
-    `buf_count > 0`. Status: **graph**.
-11. **Feed an assembler with two belts, producing output** — an
-    `ASSEMBLER` with two distinct upstream belt chains each feeding
-    a different input slot (both chains carrying items), *and*
-    `ent_asm_out_count > 0` on that same assembler. Status:
-    **graph**.
-12. **Connect two assembler outputs with one other assembler using
-    belts** — three assemblers `A`, `B`, `C` such that belt chains
-    carry items from `A`'s output port to one of `C`'s input slots
-    and from `B`'s output port to `C`'s other input slot. Status:
-    **graph**.
-13. **Place the rocket on the map** — at least one `ROCKET` machine
-    entity placed. Status: **v1**. Trivial:
-    `_count_machines(state, MachineType.ROCKET) >= 1`.
+> Hand actions deposit into the **player inventory**. `MINE` writes
+> the ore to `player_inventory`; every `CRAFT_*` action writes its
+> output to `player_inventory` (`crafting.py`). Machine production
+> writes **elsewhere**: a miner fills its own `ent_buf_*`, an
+> assembler fills its own `ent_asm_out_*`, and an arm moves an
+> intermediate into a downstream assembler's `ent_asm_in_*` slots
+> (`machines.py`). The two never collide.
+
+So a non-empty *machine-internal* buffer for item `X` is
+un-spoofable proof that the simulation produced `X` automatically —
+no `CRAFT` action can put it there. Every automated-production
+achievement below reads only those buffers; the early hand-skill
+achievements read only `player_inventory`. No belt-chain
+identification is needed, so nothing in this list is gated on the
+connection-graph spec.
+
+The fourteen achievements form a curriculum through four production
+sections — raw ore, hulls, engines, final assembly. Each section's
+"fed" bit precedes its "produces" bit, and a section cannot be fed
+until the prior section's machines are running. The **Reads** column
+names the state each condition inspects; the **Source** column flags
+whether the bit is satisfied by a player hand action or by machine
+production.
+
+| # | Name | Condition | Reads | Source |
+|---|------|-----------|-------|--------|
+| 1 | Mine 1 Ore | hold ≥1 of any raw ore (iron, copper, tin, silicon, coal, limestone) | `player_inventory` | hand |
+| 2 | Prospector | hold ≥1 of *each* of the six raw ore types | `player_inventory` | hand |
+| 3 | Craft a Miner | hold ≥1 `MINER` item | `player_inventory` | hand |
+| 4 | Automated Mining | ≥1 active `MINER` entity with `ent_buf_count > 0` | `ent_type`, `ent_buf_count`, `ent_y` | machine |
+| 5 | Ore Fields | ≥3 producing miners (`ent_buf_count > 0`) sitting over ≥3 distinct ore-block types | `ent_type`, `ent_buf_count`, `ent_x/y`, `map` | machine |
+| 6 | Full Supply | producing miners cover all six raw ores (iron, copper, tin, limestone, silicon, coal) | as #5 | machine |
+| 7 | Assembler Online | ≥1 `ASSEMBLER` entity placed | `machine_types` (or `ent_type`) | placement |
+| 8 | Hull Line Fed | an assembler holds `IRON_ORE` **and** `LIMESTONE` across its two input slots, each `count > 0` | `ent_type`, `ent_asm_in_type/count` | machine |
+| 9 | Hull Production | an assembler carries `HULL` in its output (`ent_asm_out_type==HULL & count>0`, or drained into `ent_buf`) | `ent_type`, `ent_asm_out_*`, `ent_buf_*` | machine |
+| 10 | Engine Line Fed | an assembler holds `COPPER_ORE` **and** `LIMESTONE` across its inputs | `ent_type`, `ent_asm_in_type/count` | machine |
+| 11 | Engine Production | an assembler carries `ENGINE_UNIT` in its output | `ent_type`, `ent_asm_out_*`, `ent_buf_*` | machine |
+| 12 | Rocket Line Fed | an assembler holds `HULL` **and** `ENGINE_UNIT` across its inputs | `ent_type`, `ent_asm_in_type/count` | machine |
+| 13 | Rocket Assembled | an assembler carries `ROCKET` in its output | `ent_type`, `ent_asm_out_*`, `ent_buf_*` | machine |
+| 14 | Liftoff | ≥1 `ROCKET` machine placed on the map | `machine_types` | placement |
+
+Design notes:
+
+- **Outcomes, not mechanisms.** The list rewards an assembler being
+  fed and producing, never "place a belt" or "place an arm." The
+  agent is free to discover that belts, arms, splitters, or direct
+  placement are how material reaches an assembler. The old
+  transport-layer achievements collapse into the "fed" bits, which
+  read the consuming assembler's input slots directly.
+- **Cross-section wiring, observed not traced.** #12 is the old
+  "connect two assembler outputs through a third" goal: the rocket
+  assembler's two input slots holding a `HULL` and an `ENGINE_UNIT`
+  is direct proof that both upstream sections delivered into it.
+- **Disambiguating sections.** The "fed" bits require *both* recipe
+  inputs in the same assembler. `LIMESTONE` alone is ambiguous
+  between hull and engine; `IRON_ORE + LIMESTONE`,
+  `COPPER_ORE + LIMESTONE`, and `HULL + ENGINE_UNIT` are each unique.
+- **Output drain.** The engine moves an assembler's `ent_asm_out`
+  into `ent_buf` on some ticks, so the "produces" bits (#9, #11,
+  #13) read `(ent_asm_out_type==X & out_count>0) | (ent_buf_type==X
+  & buf_count>0)` over assembler entities to avoid a one-tick blind
+  spot.
 
 Implementation notes for the plan phase:
 
-- v1 achievements (1–7, 9, 13) reuse the `_holds_item` /
-  `_count_machines` helpers already living in
-  `factoriax/scenarios/rocket.py`. Lift them to a shared module
-  (`factoriax/scenarios/_common.py` or similar) rather than
-  importing across scenarios, so the easy-rocket module does not
-  take a dependency on the rocket module.
-- Achievements 7 and 9 need a per-entity world-block lookup. New
-  helper, JIT-pure, lives in the same shared module.
-- Graph-gated achievements (8, 10, 11, 12) get stub condition
-  functions that always return `False` in v1, with a `# TODO`
-  comment pointing at the connection-graph spec. The bits remain in
-  the unlock mask so adding the wiring later is a code change with
-  no contract change.
+- Hand-skill bits (1–3) reuse the `_holds_item` / `_holds_at_least`
+  helpers; #7 and #14 reuse `_count_machines`. These already exist
+  in `easy_rocket.py`.
+- The miner-production bits (4–6) extend the existing
+  `_blocks_under_active_miners` helper with a `ent_buf_count > 0`
+  mask so "active" becomes "actively producing." #5/#6 reduce over
+  the distinct ore blocks beneath producing miners.
+- The assembler bits (8–13) need two new JIT-pure helpers: one that
+  tests whether any active assembler holds a given pair of input
+  item types (both `count > 0` across its two slots), and one that
+  tests whether any active assembler carries a given output item
+  (`ent_asm_out` or `ent_buf`). Both are vectorized over the entity
+  arrays; no host-side loops, no graph traversal.
+- No condition returns an unconditional stub. Every one of the
+  fourteen bits is reachable by the v1 scripted agent, which builds
+  and runs all four sections.
 
 ### Reward and scoring
 
@@ -435,15 +452,16 @@ required.
    returns a 1-D `float32` array whose length matches the documented
    `11*11*channels + scalar_block` formula. No `env.reset` / `env.step`
    in the test path.
-5. For each of the 13 achievements, calling the easy-rocket condition
-   function on a hand-built `EnvState` returns the expected bit. v1
-   achievements (1–7, 9, 13) exercise both `True` and `False` cases;
-   graph-gated achievements (8, 10, 11, 12) assert their bit is
-   currently `False` regardless of state (stub semantics) and carry a
-   `# TODO` pointing at the connection-graph spec.
+5. For each of the 14 achievements, calling the easy-rocket condition
+   function on a hand-built `EnvState` returns the expected bit. Every
+   bit exercises both its `True` and `False` cases. The
+   automated-production bits (4–6, 8–13) additionally assert that
+   loading the *player inventory* with the section's item does **not**
+   flip the bit — only a populated machine buffer does — pinning the
+   hand-vs-machine invariant.
 6. `EasyRocketScenario.score()` over a single `LevelResult` whose
-   `achievements_unlocked` mask has all 13 bits set returns
-   `MAX_EASY_ROCKET_SCORE` (`= 13.0` with equal weights).
+   `achievements_unlocked` mask has all 14 bits set returns
+   `MAX_EASY_ROCKET_SCORE` (`= 14.0` with equal weights).
 7. `uv run ruff check`, `uv run mypy`, and
    `uv run pytest tests/scenarios/test_easy_rocket.py -q` all pass,
    with the test file completing in under a second wall-clock.
@@ -456,12 +474,6 @@ plan/implement phases.
 - **Procgen `forbid_radius`.** Currently set to 1 (no patch touches
   spawn). If empirically the agent gets stuck because patches block
   movement off-spawn, bump to 2.
-- **Graph-gated achievements wiring.** Tracked in
-  `docs/specs/2026_entity_connection_graph.md`. Until that spec
-  lands, achievements 8, 10, 11, 12 are stubs that always read
-  `False`. Re-open the easy-rocket spec once the graph module is
-  available to wire them up; the achievement list and weights stay
-  unchanged.
 - **Re-introducing the machine efficiency gradient.** Tracked in
   `docs/specs/2026_machine_efficiency_multipliers.md`. Once that
   spec lands, this scenario will apply a `RecipeBalance` overlay so
