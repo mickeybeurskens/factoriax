@@ -28,11 +28,11 @@ from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.engine.levels import LevelBuilder, build_state
 from factoriax.engine.observations import global_array
-from factoriax.engine.state import EnvParams
-from factoriax.scenarios.rocket import (
+from factoriax.engine.scenarios.rocket import (
     ROCKET_BLOCKED_ACTIONS,
     rocket_conditions,
 )
+from factoriax.engine.state import EnvParams
 
 pytestmark = pytest.mark.slow
 

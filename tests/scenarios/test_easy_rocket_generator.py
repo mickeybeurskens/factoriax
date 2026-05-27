@@ -13,14 +13,14 @@ import numpy as np
 from jax import random
 
 from factoriax.engine.constants import BlockType
-from factoriax.engine.state import EnvParams
-from factoriax.scenarios.easy_rocket import (
+from factoriax.engine.scenarios.easy_rocket import (
     _MAP_SIZE,
     _PATCH_BLOCKS,
     _SPAWN,
     _easy_rocket_terrain,
     generate_easy_rocket_state,
 )
+from factoriax.engine.state import EnvParams
 
 _PARAMS = EnvParams(
     map_width=_MAP_SIZE, map_height=_MAP_SIZE, num_players=1, base_resources=3000

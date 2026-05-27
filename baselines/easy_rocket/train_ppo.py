@@ -47,13 +47,13 @@ from baselines.ppo.normalization import (
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
-from factoriax.engine.state import EnvParams, EnvState
-from factoriax.scenarios.easy_rocket import (
+from factoriax.engine.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     MAX_EASY_ROCKET_SCORE,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
 )
+from factoriax.engine.state import EnvParams, EnvState
 
 _SCENARIO_ID = "EasyRocket-v1"
 

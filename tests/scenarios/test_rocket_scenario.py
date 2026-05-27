@@ -18,17 +18,16 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.state import EnvParams, EnvState
-from factoriax.scenarios import (
+from factoriax.engine.scenarios.rocket import (
     MAX_ROCKET_SCORE,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_ACHIEVEMENT_WEIGHTS,
-    LevelResult,
-    RocketScenario,
+    ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,
     rocket_conditions,
     rocket_reward,
 )
+from factoriax.engine.state import EnvParams, EnvState
 
 # ---------------------------------------------------------------------------
 # Catalogue + construction
@@ -56,14 +55,11 @@ def test_all_ids_unique() -> None:
     assert len(set(ids)) == len(ids)
 
 
-def test_scenario_construction() -> None:
-    """RocketScenario has one level at the advertised dimensions."""
-    scenario = RocketScenario()
-    assert scenario.name == "rocket"
-    assert scenario.num_players == 1
-    levels = scenario.levels()
-    assert len(levels) == 1
-    params = levels[0].env_params
+def test_rocket_factory_builds_env() -> None:
+    """The registry factory yields the rocket env at the advertised params."""
+    import factoriax
+
+    _env, params = factoriax.make("Rocket-v1")
     assert params.max_timesteps == 8000
     assert params.map_width == 32
     assert params.map_height == 32
@@ -93,22 +89,18 @@ def test_build_rocket_level_preplaces_furnace_and_assembler() -> None:
     assert int(mt[16, 17]) == int(Machine.ASSEMBLER)
 
 
-def test_rocket_benchmark_exposes_blocked_actions() -> None:
-    """The scenario advertises every CRAFT_* action as blocked."""
+def test_rocket_blocks_all_craft_actions() -> None:
+    """The rocket hand-craft mask is exactly the CRAFT_* family."""
     from factoriax.engine.constants import CRAFT_ITEMS
-    from factoriax.scenarios.rocket import ROCKET_BLOCKED_ACTIONS
 
-    scenario = RocketScenario()
     # The whole craft family is blocked (one action per non-resource item),
     # including the machine crafts the old hand-numbered range leaked.
-    assert len(scenario.blocked_actions) == len(CRAFT_ITEMS)
+    assert len(ROCKET_BLOCKED_ACTIONS) == len(CRAFT_ITEMS)
     assert {a for a in Action if a.name.startswith("CRAFT_")} == {
-        Action(v) for v in scenario.blocked_actions
+        Action(v) for v in ROCKET_BLOCKED_ACTIONS
     }
-    assert Action.CRAFT_IRON_PLATE in scenario.blocked_actions
-    assert Action.CRAFT_ROCKET in scenario.blocked_actions
-    assert Action.CRAFT_SCIENCE_LAB in scenario.blocked_actions
-    assert Action.CRAFT_BASIC_SCIENCE_PACK in scenario.blocked_actions
+    assert int(Action.CRAFT_IRON_PLATE) in ROCKET_BLOCKED_ACTIONS
+    assert int(Action.CRAFT_ROCKET) in ROCKET_BLOCKED_ACTIONS
     # Movement / mining / placement actions must NOT be blocked.
     for allowed in (
         Action.NOOP,
@@ -118,8 +110,7 @@ def test_rocket_benchmark_exposes_blocked_actions() -> None:
         Action.WITHDRAW,
         Action.DEPOSIT_COAL,
     ):
-        assert int(allowed) not in scenario.blocked_actions
-    assert scenario.blocked_actions == ROCKET_BLOCKED_ACTIONS
+        assert int(allowed) not in ROCKET_BLOCKED_ACTIONS
 
 
 # ``test_action_mask_wrapper_noops_blocked_actions`` (~4.1s, unique
@@ -395,37 +386,6 @@ def test_rocket_reward_no_unlock_is_zero() -> None:
 # ---------------------------------------------------------------------------
 # Score aggregation
 # ---------------------------------------------------------------------------
-
-
-def test_score_reads_achievement_mask() -> None:
-    """score() weights each slot in the result mask correctly."""
-    scenario = RocketScenario()
-    mask = np.zeros(MAX_ACHIEVEMENTS, dtype=bool)
-    mask[_index_of("collect_iron")] = True  # +1
-    mask[_index_of("place_rocket")] = True  # +8
-    result = LevelResult(
-        level_name="rocket_v1",
-        items_mined={"coal": 0, "iron": 0, "copper": 0},
-        weighted_score=0.0,
-        timesteps_used=0,
-        actions=np.zeros((0,), dtype=np.int32),
-        achievements_unlocked=mask,
-    )
-    assert scenario.score([result]) == pytest.approx(9.0)
-
-
-def test_score_without_mask_returns_zero() -> None:
-    """Defensive: missing achievements mask scores as zero."""
-    scenario = RocketScenario()
-    result = LevelResult(
-        level_name="rocket_v1",
-        items_mined={"coal": 0, "iron": 0, "copper": 0},
-        weighted_score=0.0,
-        timesteps_used=0,
-        actions=np.zeros((0,), dtype=np.int32),
-        achievements_unlocked=None,
-    )
-    assert scenario.score([result]) == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------

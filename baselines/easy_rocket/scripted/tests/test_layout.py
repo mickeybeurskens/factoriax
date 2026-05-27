@@ -20,7 +20,7 @@ from baselines.easy_rocket.scripted.layout import (
 )
 from factoriax.engine.constants import Direction, ItemType
 from factoriax.engine.levels import build_state
-from factoriax.scenarios.easy_rocket import (
+from factoriax.engine.scenarios.easy_rocket import (
     EASY_ROCKET_RECIPE_TABLE,
     build_easy_rocket_level,
     easy_rocket_conditions,

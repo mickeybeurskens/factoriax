@@ -22,8 +22,8 @@ from factoriax.engine.constants import (
 from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.levels import build_state
 from factoriax.engine.observations import global_array
+from factoriax.engine.scenarios.rocket import build_rocket_level, rocket_conditions
 from factoriax.engine.state import EnvParams
-from factoriax.scenarios.rocket import build_rocket_level, rocket_conditions
 
 # ---------------------------------------------------------------------------
 # Helpers for synthesising states without stepping the env.

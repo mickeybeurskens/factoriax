@@ -25,7 +25,7 @@ recipe rebalance auto-resizes mining / smelting / crafting without
 hand edits.
 
 Map layout the agent assumes (v2; see
-:func:`factoriax.scenarios.rocket.build_rocket_level`)::
+:func:`factoriax.engine.scenarios.rocket.build_rocket_level`)::
 
       0 1 2 3 4 5 6 7 8 9 ...
     9 # · · I I · · . O . . .       (M=miner, .=belt, F=furnace,

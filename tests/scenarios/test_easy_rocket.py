@@ -16,19 +16,17 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.levels import Level
 from factoriax.engine.recipes import RecipeBook, RecipeTable
-from factoriax.engine.state import EnvParams
-from factoriax.scenarios.core import LevelResult, Scenario
-from factoriax.scenarios.easy_rocket import (
+from factoriax.engine.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     EASY_ROCKET_RECIPE_BOOK,
     EASY_ROCKET_RECIPE_TABLE,
     MAX_EASY_ROCKET_SCORE,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
-    EasyRocketScenario,
     build_easy_rocket_level,
     easy_rocket_conditions,
     easy_rocket_reward,
 )
+from factoriax.engine.state import EnvParams
 
 _SPAWN: tuple[int, int] = (8, 8)
 _FORBID_RADIUS: int = 1
@@ -470,74 +468,12 @@ def test_reward_only_counts_newly_unlocked(state_factory) -> None:
     assert float(reward) == 1.0
 
 
-def test_scenario_implements_protocol() -> None:
-    scenario = EasyRocketScenario()
-    assert isinstance(scenario, Scenario)
-    assert scenario.name == "easy_rocket"
-    assert scenario.num_players == 1
-    assert EasyRocketScenario.blocked_actions == frozenset()
+def test_easy_rocket_factory_builds_env() -> None:
+    """The registry factory yields a steppable env at the scenario's params."""
+    import factoriax
 
-
-def test_scenario_levels_shape() -> None:
-    [scenario_level] = EasyRocketScenario().levels()
-    params = scenario_level.env_params
+    env, params = factoriax.make("EasyRocket-v1")
+    assert params.map_width == _MAP_SIZE and params.map_height == _MAP_SIZE
     assert params.max_timesteps == 2000
-    assert params.map_width == _MAP_SIZE
-    assert params.map_height == _MAP_SIZE
-    assert params.num_players == 1
     assert params.recipe_table is EASY_ROCKET_RECIPE_TABLE
-    assert scenario_level.level.player_positions == [_SPAWN]
-
-
-def test_scenario_seed_changes_layout() -> None:
-    a = EasyRocketScenario(seed=0).levels()[0].level
-    b = EasyRocketScenario(seed=1).levels()[0].level
-    assert not np.array_equal(a.block_map, b.block_map)
-
-
-def _level_result_with_mask(mask_indices: list[int]) -> LevelResult:
-    mask = np.zeros(MAX_ACHIEVEMENTS, dtype=bool)
-    for i in mask_indices:
-        mask[i] = True
-    return LevelResult(
-        level_name="easy_rocket_v1",
-        items_mined={},
-        weighted_score=0.0,
-        timesteps_used=0,
-        actions=np.zeros((0,), dtype=np.int32),
-        achievements_unlocked=mask,
-    )
-
-
-def test_score_returns_max_with_full_mask() -> None:
-    result = _level_result_with_mask(list(range(NUM_EASY_ROCKET_ACHIEVEMENTS)))
-    assert EasyRocketScenario().score([result]) == MAX_EASY_ROCKET_SCORE
-
-
-def test_score_returns_zero_with_no_results() -> None:
-    assert EasyRocketScenario().score([]) == 0.0
-
-
-def test_score_returns_zero_when_mask_missing() -> None:
-    result = LevelResult(
-        level_name="easy_rocket_v1",
-        items_mined={},
-        weighted_score=0.0,
-        timesteps_used=0,
-        actions=np.zeros((0,), dtype=np.int32),
-        achievements_unlocked=None,
-    )
-    assert EasyRocketScenario().score([result]) == 0.0
-
-
-def test_easy_rocket_public_exports() -> None:
-    import factoriax.scenarios as scenarios
-
-    assert scenarios.EasyRocketScenario is EasyRocketScenario
-    assert scenarios.EASY_ROCKET_RECIPE_BOOK is EASY_ROCKET_RECIPE_BOOK
-    assert scenarios.EASY_ROCKET_RECIPE_TABLE is EASY_ROCKET_RECIPE_TABLE
-    assert scenarios.EASY_ROCKET_ACHIEVEMENT_WEIGHTS is EASY_ROCKET_ACHIEVEMENT_WEIGHTS
-    assert scenarios.MAX_EASY_ROCKET_SCORE == MAX_EASY_ROCKET_SCORE
-    assert scenarios.build_easy_rocket_level is build_easy_rocket_level
-    assert scenarios.easy_rocket_conditions is easy_rocket_conditions
-    assert scenarios.easy_rocket_reward is easy_rocket_reward
+    assert MAX_EASY_ROCKET_SCORE == float(NUM_EASY_ROCKET_ACHIEVEMENTS)

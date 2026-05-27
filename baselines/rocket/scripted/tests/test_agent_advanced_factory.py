@@ -85,8 +85,7 @@ from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.engine.levels import build_state
 from factoriax.engine.observations import global_array
-from factoriax.engine.state import EnvParams
-from factoriax.scenarios.rocket import (
+from factoriax.engine.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_BLOCKED_ACTIONS,
@@ -95,6 +94,7 @@ from factoriax.scenarios.rocket import (
     build_rocket_level,
     rocket_conditions,
 )
+from factoriax.engine.state import EnvParams
 
 _EXPECTED_UNLOCKS: tuple[str, ...] = (
     # Bootstrap + ore collection.

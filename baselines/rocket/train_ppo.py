@@ -44,8 +44,7 @@ from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
 from factoriax.engine.levels import build_state
-from factoriax.engine.state import EnvParams, EnvState
-from factoriax.scenarios.rocket import (
+from factoriax.engine.scenarios.rocket import (
     MAX_ROCKET_SCORE,
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -55,6 +54,7 @@ from factoriax.scenarios.rocket import (
     rocket_conditions,
     rocket_reward,
 )
+from factoriax.engine.state import EnvParams, EnvState
 
 logging.basicConfig(
     level=logging.INFO,
