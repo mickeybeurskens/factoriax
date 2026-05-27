@@ -153,9 +153,8 @@ def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
 
     from jax import random
 
-    from factoriax import scenarios as scenarios_pkg
-    from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
-    from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+    import factoriax
+    from factoriax.engine.scenarios import SCENARIOS
     from factoriax.playground.menu.scenarios_menu import run_scenarios_menu
     from factoriax.playground.play.main import _play_loop, _run_with_loading_screen
 
@@ -167,29 +166,15 @@ def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
     if chosen is None:
         return
 
-    cls = getattr(scenarios_pkg, chosen)
+    play_env, params = factoriax.make(chosen)
     scenario_seed = int.from_bytes(os.urandom(4), "little")
-    try:
-        scenario = cls(seed=scenario_seed)
-    except TypeError:
-        scenario = cls()
-    [scenario_level] = scenario.levels()
-
-    env: FactoriaXEnv = FactoriaXEnv(
-        achievement_fn=scenario.achievement_fn,
-        level=scenario_level.level,
-    )
-    params = scenario_level.env_params
-    blocked: frozenset[int] = getattr(scenario, "blocked_actions", frozenset())
-    play_env: Any = ActionMaskWrapper(env, tuple(blocked)) if blocked else env
-
     rng = random.PRNGKey(scenario_seed)
     rng, reset_key = random.split(rng)
     reset_result = cast(
         "tuple[Any, Any]",
         _run_with_loading_screen(
             screen,
-            f"Loading {scenario.name}",
+            f"Loading {SCENARIOS[chosen].name}",
             lambda: play_env.reset_env(reset_key, params),
         ),
     )

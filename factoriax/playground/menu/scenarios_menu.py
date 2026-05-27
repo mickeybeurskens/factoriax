@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import inspect
-import sys
-import textwrap
 from dataclasses import dataclass
 
 import pygame
 
-from factoriax import scenarios as scenarios_pkg
+from factoriax.engine.scenarios import list_scenarios
 from factoriax.playground.config import (
     ControllerLookup,
     KeyLookup,
@@ -20,7 +17,6 @@ from factoriax.playground.ui import panels
 from factoriax.playground.ui import theme as _theme
 from factoriax.playground.ui.fonts import get_pixel_font
 from factoriax.playground.ui.scaling import ScaledCanvas
-from factoriax.scenarios import Scenario
 
 _BASE_TITLE_FONT: int = 48
 _FPS: int = 30
@@ -28,42 +24,26 @@ _FPS: int = 30
 
 @dataclass(frozen=True)
 class _ScenarioEntry:
-    class_name: str
+    scenario_id: str
     display_name: str
-    instance: Scenario
     docstring: str
 
 
 def discover_scenarios() -> list[_ScenarioEntry]:
-    """Walk :mod:`factoriax.scenarios` for classes implementing ``Scenario``.
+    """List registered scenarios for the picker, sorted by display name.
 
-    Returns one entry per discovered scenario, sorted by display name.
-    Classes that fail to instantiate with no arguments are skipped.
+    Reads the scenario registry
+    (:func:`factoriax.engine.scenarios.list_scenarios`); each entry's
+    ``scenario_id`` is the id passed to :func:`factoriax.make`.
     """
-    out: list[_ScenarioEntry] = []
-    seen_classes: set[type] = set()
-    for name in scenarios_pkg.__all__:
-        obj = getattr(scenarios_pkg, name, None)
-        if not inspect.isclass(obj) or obj in seen_classes:
-            continue
-        seen_classes.add(obj)
-        try:
-            instance = obj()
-        except Exception:
-            continue
-        if not isinstance(instance, Scenario):
-            continue
-        module = sys.modules.get(obj.__module__)
-        doc = textwrap.dedent((module.__doc__ if module else None) or "").strip()
-        display = " ".join(word.capitalize() for word in str(instance.name).split("_"))
-        out.append(
-            _ScenarioEntry(
-                class_name=name,
-                display_name=display,
-                instance=instance,
-                docstring=doc,
-            )
+    out = [
+        _ScenarioEntry(
+            scenario_id=env_id,
+            display_name=spec.name,
+            docstring=spec.description,
         )
+        for env_id, spec in list_scenarios()
+    ]
     out.sort(key=lambda e: e.display_name)
     return out
 
@@ -73,7 +53,7 @@ def run_scenarios_menu(
     kb_lookup: KeyLookup | None = None,
     ctrl_lookup: ControllerLookup | None = None,
 ) -> str | None:
-    """Show the scenario picker. Returns the chosen scenario's class name, or None."""
+    """Show the scenario picker. Returns the chosen scenario's id, or None."""
     from factoriax.playground.config import (
         build_controller_lookup,
         build_key_lookup,
@@ -144,7 +124,7 @@ def run_scenarios_menu(
             if PlayerAction.BACK in actions:
                 return None
             if PlayerAction.CONFIRM in actions and entries:
-                return entries[selected_idx].class_name
+                return entries[selected_idx].scenario_id
             if entries:
                 if focus_list:
                     if PlayerAction.NAV_DOWN in actions:
