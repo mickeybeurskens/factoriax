@@ -55,10 +55,12 @@ num_envs_list=("${NUM_ENVS:-2048}")                  # 16x16 env is tiny; A100 f
 rollout_steps_list=("${ROLLOUT_STEPS:-128}")
 run_names=("${RUN_NAME:-ppo_easy_rocket_procgen}")
 
-# Set to "--fixed-env-seed" to broadcast a single reset key to all parallel
-# envs (every worker draws the same procgen layout — layout-invariance
-# ablation). Leave empty for the default per-env keyed reset.
+# Set to "true" to broadcast a single reset key to all parallel envs (every
+# worker draws the same procgen layout — layout-invariance ablation).
+# "false" keeps the default per-env keyed reset.
+fixed_env_seed=false
 fixed_env_flag=""
+[[ "${fixed_env_seed}" == "true" ]] && fixed_env_flag="--fixed-env-seed"
 
 # ---- SLURM / environment (override via env vars, defaults below) -------------
 
