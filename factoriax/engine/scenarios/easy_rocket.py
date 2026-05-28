@@ -440,7 +440,11 @@ def easy_rocket_reward(
     )
 
 
-def easy_rocket() -> tuple[FactoriaXEnv, EnvParams]:
+def easy_rocket(
+    *,
+    obs: str = "x_ray_global",
+    obs_radius: int = 7,
+) -> tuple[FactoriaXEnv, EnvParams]:
     """Return the easy-rocket env (keyed procgen reset) and its params.
 
     Binds the keyed generator as ``reset_fn`` (a fresh layout per reset), the
@@ -448,11 +452,17 @@ def easy_rocket() -> tuple[FactoriaXEnv, EnvParams]:
     reward. Loaded via ``factoriax.make("EasyRocket-v1")``. The 16x16 factory
     runs to ~80 entities, so ``max_machines`` is budgeted to 100 (above the
     auto default of 64) to avoid overflowing the entity arrays mid-build.
+
+    Args:
+        obs: Observation variant; defaults to the full-map x_ray view.
+        obs_radius: Local-window half-width; ignored for ``_global`` obs.
     """
     env = FactoriaXEnv(
         reset_fn=generate_easy_rocket_state,
         step_hooks=(achievement_hook(easy_rocket_conditions),),
         reward_fn=easy_rocket_reward,
+        obs=obs,
+        obs_radius=obs_radius,
     )
     params = EnvParams(
         map_width=_MAP_SIZE,

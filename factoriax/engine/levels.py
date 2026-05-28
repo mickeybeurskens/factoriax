@@ -90,8 +90,8 @@ class Level:
             uses the automatic centre-of-map placement.
 
     Example:
-        >>> import factoriax
-        >>> env, params = factoriax.make("15x15_resources")
+        >>> from factoriax import FactoriaXEnv, get_level
+        >>> env = FactoriaXEnv(level=get_level("15x15_resources"))
         >>> # ``env`` is bound to the registered Level for the lifetime
         >>> # of the env; ``factoriax.LEVELS`` lists every built-in.
     """
@@ -531,7 +531,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     Example:
         >>> import factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
-        >>> _, params = factoriax.make()
+        >>> _, params = factoriax.make("EasyRocket-v1")
         >>> params = params.replace(map_width=8, map_height=8, num_players=1)
         >>> state = factoriax.build_state(level, params)
         >>> state.map.shape
@@ -784,7 +784,7 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     Example:
         >>> import jax
         >>> import factoriax
-        >>> _, params = factoriax.make()
+        >>> _, params = factoriax.make("EasyRocket-v1")
         >>> state = factoriax.generate_state(jax.random.PRNGKey(0), params)
         >>> state.map.shape == (params.map_height, params.map_width)
         True

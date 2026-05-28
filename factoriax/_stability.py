@@ -43,7 +43,6 @@ STABILITY: dict[str, StabilityTier] = {
     # composition order is documented on factoriax.make).
     "ActionMaskWrapper": "Stable",
     "AutoResetWrapper": "Stable",
-    "LocalObservationWrapper": "Stable",
     "ScienceTallyWrapper": "Experimental",
     # --- levels: builder + registry surface (Stable).
     "LEVELS": "Stable",
@@ -56,8 +55,11 @@ STABILITY: dict[str, StabilityTier] = {
     "save_level": "Stable",
     # --- observations (Experimental; the schema is still settling
     # as new spatial channels land).
-    "global_array": "Experimental",
-    "local_array": "Experimental",
+    "OBSERVATIONS": "Experimental",
+    "global_superficial": "Experimental",
+    "global_x_ray": "Experimental",
+    "local_superficial": "Experimental",
+    "local_x_ray": "Experimental",
     "rgb": "Experimental",
     # --- rewards (Experimental; new reward functions land regularly
     # and the signature may grow extra args).

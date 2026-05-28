@@ -18,7 +18,7 @@ from baselines.rocket.scripted.world_model import decode_observation
 from factoriax.engine.constants import Action, ItemType
 from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.levels import build_state
-from factoriax.engine.observations import global_array
+from factoriax.engine.observations import global_x_ray
 from factoriax.engine.scenarios.rocket import build_rocket_level, rocket_conditions
 from factoriax.engine.state import EnvParams
 
@@ -60,7 +60,7 @@ def _jit_obs(env_params: EnvParams):
     key = (env_params.map_width, env_params.map_height, env_params.max_timesteps)
     fn = _JIT_OBS_CACHE.get(key)
     if fn is None:
-        fn = jax.jit(lambda s: global_array(s, env_params, 0))
+        fn = jax.jit(lambda s: global_x_ray(s, env_params, 0))
         _JIT_OBS_CACHE[key] = fn
     return fn
 

@@ -21,7 +21,7 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.levels import build_state
-from factoriax.engine.observations import global_array
+from factoriax.engine.observations import global_x_ray
 from factoriax.engine.scenarios.rocket import build_rocket_level, rocket_conditions
 from factoriax.engine.state import EnvParams
 
@@ -44,8 +44,8 @@ def rocket_initial_state(rocket_env_params: EnvParams):
 
 
 def _obs_from_state(state, params: EnvParams) -> np.ndarray:
-    """Compute global_array for player 0 and copy to a numpy array."""
-    return np.asarray(global_array(state, params, 0))
+    """Compute global_x_ray for player 0 and copy to a numpy array."""
+    return np.asarray(global_x_ray(state, params, 0))
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ def test_decode_tracks_player_movement(
         rocket_env_params,
     )
     obs_new = np.asarray(
-        global_array(new_state, rocket_env_params, 0),
+        global_x_ray(new_state, rocket_env_params, 0),
     )
     view_new = wm.decode_observation(
         obs_new,

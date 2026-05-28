@@ -84,7 +84,7 @@ from factoriax.engine.constants import Direction, ItemType, Machine
 from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.engine.levels import build_state
-from factoriax.engine.observations import global_array
+from factoriax.engine.observations import global_x_ray
 from factoriax.engine.scenarios.rocket import (
     NUM_ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_INFO,
@@ -890,7 +890,7 @@ def _run_agent(max_steps: int, seed: int = 0):
         ROCKET_BLOCKED_ACTIONS,
     )
     jit_step = jax.jit(env.step_env)
-    jit_obs = jax.jit(lambda s: global_array(s, env_params, 0))
+    jit_obs = jax.jit(lambda s: global_x_ray(s, env_params, 0))
     agent = make_advanced_factory_rocket_agent(env_params, book=ROCKET_RECIPE_BOOK)
 
     unlock_timestep = np.full((NUM_ROCKET_ACHIEVEMENTS,), -1, dtype=np.int32)

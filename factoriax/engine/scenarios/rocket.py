@@ -504,7 +504,11 @@ ROCKET_BLOCKED_ACTIONS: frozenset[int] = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def rocket() -> tuple[Any, EnvParams]:
+def rocket(
+    *,
+    obs: str = "x_ray_local",
+    obs_radius: int = 5,
+) -> tuple[Any, EnvParams]:
     """Return the rocket env (fixed level, hand-craft masked) and its params.
 
     Loaded via ``factoriax.make("Rocket-v1")``. A fixed pre-placed 32x32 level
@@ -512,11 +516,17 @@ def rocket() -> tuple[Any, EnvParams]:
     run as a step hook; hand-craft actions are masked so production flows
     through the pre-placed furnace + assembler. The 8000-step budget gives a
     factory-scale plan room to parallelise smelts and assemblies.
+
+    Args:
+        obs: Observation variant; defaults to an 11x11 local x_ray window.
+        obs_radius: Local-window half-width; ignored for ``_global`` obs.
     """
     env: Any = FactoriaXEnv(
         level=build_rocket_level(),
         step_hooks=(achievement_hook(rocket_conditions),),
         reward_fn=rocket_reward,
+        obs=obs,
+        obs_radius=obs_radius,
     )
     env = ActionMaskWrapper(env, tuple(ROCKET_BLOCKED_ACTIONS))
     params = EnvParams(

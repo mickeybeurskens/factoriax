@@ -36,13 +36,9 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
             JIT graph of :meth:`step_env`.
 
     Example:
-        >>> import factoriax
-        >>> from factoriax import Action
-        >>> env, params = factoriax.make(
-        ...     blocked_actions=(int(Action.MINE),),
-        ... )
-        >>> # ``factoriax.make`` returns ``env`` already wrapped in
-        >>> # :class:`ActionMaskWrapper`; MINE actions become NOOPs.
+        >>> from factoriax import ActionMaskWrapper, FactoriaXEnv, Action
+        >>> env = ActionMaskWrapper(FactoriaXEnv(), blocked_actions=(int(Action.MINE),))
+        >>> # MINE actions become NOOPs inside ``env.step_env``.
     """
 
     def __init__(

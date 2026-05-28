@@ -1,4 +1,4 @@
-"""Tests for factoriax.engine.observations: global_array, local_array, and rgb.
+"""Tests for factoriax.engine.observations: global_x_ray, local_x_ray, and rgb.
 
 Each function is tested for correct output shape, value range, JAX
 compatibility, and behavioural correctness (e.g. the local window actually
@@ -21,12 +21,12 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.observations import (
-    _SPATIAL_CHANNEL_NAMES,
+    _X_RAY_SPATIAL_CHANNEL_NAMES,
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
-    _player_scalars,
-    global_array,
-    local_array,
+    _x_ray_scalars,
+    global_x_ray,
+    local_x_ray,
     rgb,
 )
 from factoriax.engine.state import EnvParams
@@ -43,26 +43,28 @@ _DEFAULT_PARAMS = EnvParams(
 )
 
 _GLOBAL_OBS_SIZE = (
-    NUM_SPATIAL_CHANNELS * _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
-    + NUM_PLAYER_SCALARS
+    NUM_SPATIAL_CHANNELS["x_ray"]
+    * _DEFAULT_PARAMS.map_width
+    * _DEFAULT_PARAMS.map_height
+    + NUM_PLAYER_SCALARS["x_ray"]
 )
 
 
 # ---------------------------------------------------------------------------
-# _player_scalars
+# _x_ray_scalars
 # ---------------------------------------------------------------------------
 
 
 class TestPlayerScalars:
-    """Tests for the internal _player_scalars helper."""
+    """Tests for the internal _x_ray_scalars helper."""
 
     def test_shape(self, state_factory) -> None:
         """Scalar vector has the expected length."""
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
-        out = _player_scalars(state, _DEFAULT_PARAMS, 0)
-        expected = NUM_PLAYER_SCALARS
+        out = _x_ray_scalars(state, _DEFAULT_PARAMS, 0)
+        expected = NUM_PLAYER_SCALARS["x_ray"]
         assert out.shape == (expected,)
 
     def test_values_in_range(self, state_factory) -> None:
@@ -72,7 +74,7 @@ class TestPlayerScalars:
             player_position=(3, 5),
             timestep=50,
         )
-        out = np.array(_player_scalars(state, _DEFAULT_PARAMS, 0))
+        out = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
         assert out.min() >= 0.0
         assert out.max() <= 1.0
 
@@ -82,7 +84,7 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(4, 6),
         )
-        out = np.array(_player_scalars(state, _DEFAULT_PARAMS, 0))
+        out = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
         assert out[0] == pytest.approx(4 / _DEFAULT_PARAMS.map_width)
         assert out[1] == pytest.approx(6 / _DEFAULT_PARAMS.map_height)
 
@@ -92,7 +94,7 @@ class TestPlayerScalars:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             timestep=40,
         )
-        out = np.array(_player_scalars(state, _DEFAULT_PARAMS, 0))
+        out = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
         assert out[3] == pytest.approx(40 / _DEFAULT_PARAMS.max_timesteps)
 
     def test_player_idx_selects_correct_inventory(self, state_factory) -> None:
@@ -107,26 +109,26 @@ class TestPlayerScalars:
             num_players=2,
             player_inventory=inv,
         )
-        scalars_p0 = np.array(_player_scalars(state, _DEFAULT_PARAMS, 0))
-        scalars_p1 = np.array(_player_scalars(state, _DEFAULT_PARAMS, 1))
+        scalars_p0 = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
+        scalars_p1 = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 1))
         # Player inventories differ, so the scalar vectors should differ.
         assert not np.allclose(scalars_p0, scalars_p1)
 
 
 # ---------------------------------------------------------------------------
-# global_array
+# global_x_ray
 # ---------------------------------------------------------------------------
 
 
 class TestGlobalArray:
-    """Tests for global_array."""
+    """Tests for global_x_ray."""
 
     def test_shape(self, state_factory) -> None:
         """Output shape includes map, player scalars, and inventory."""
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
-        out = global_array(state, _DEFAULT_PARAMS, 0)
+        out = global_x_ray(state, _DEFAULT_PARAMS, 0)
         assert out.shape == (_GLOBAL_OBS_SIZE,)
 
     def test_values_in_range(self, state_factory) -> None:
@@ -135,7 +137,7 @@ class TestGlobalArray:
             world_map=jnp.array([[int(BlockType.DIRT)] * 8] * 8, dtype=jnp.int32),
             player_position=(2, 2),
         )
-        out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
+        out = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         assert out.min() >= 0.0, f"min={out.min()}"
         assert out.max() <= 1.0, f"max={out.max()}"
 
@@ -143,7 +145,7 @@ class TestGlobalArray:
         """The first H*W elements (block channel) match the normalized map."""
         world_map = jnp.array([[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32)
         state = state_factory(world_map=world_map)
-        out = np.array(global_array(state, _DEFAULT_PARAMS, 0))
+        out = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         tiles = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
         expected_val = float(BlockType.COAL) / float(max(BlockType))
         np.testing.assert_allclose(out[:tiles], expected_val)
@@ -155,11 +157,11 @@ class TestGlobalArray:
             player_positions=jnp.array([[0, 0], [7, 7]], dtype=jnp.int32),
             num_players=2,
         )
-        obs0 = np.array(global_array(state, _DEFAULT_PARAMS, 0))
-        obs1 = np.array(global_array(state, _DEFAULT_PARAMS, 1))
+        obs0 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
+        obs1 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 1))
         # Spatial channels are identical; player scalars differ.
         spatial_size = (
-            NUM_SPATIAL_CHANNELS
+            NUM_SPATIAL_CHANNELS["x_ray"]
             * _DEFAULT_PARAMS.map_width
             * _DEFAULT_PARAMS.map_height
         )
@@ -167,11 +169,11 @@ class TestGlobalArray:
         assert not np.allclose(obs0[spatial_size:], obs1[spatial_size:])
 
     def test_jit_compatible(self, state_factory) -> None:
-        """global_array survives jax.jit without error."""
+        """global_x_ray survives jax.jit without error."""
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
         )
-        jit_fn = jax.jit(global_array)
+        jit_fn = jax.jit(global_x_ray)
         out = jit_fn(state, _DEFAULT_PARAMS, 0)
         assert out.shape == (_GLOBAL_OBS_SIZE,)
 
@@ -182,12 +184,12 @@ class TestGlobalArray:
             player_positions=jnp.array([[0, 0], [4, 4]], dtype=jnp.int32),
             num_players=2,
         )
-        vmap_fn = jax.vmap(global_array, in_axes=(None, None, 0))
+        vmap_fn = jax.vmap(global_x_ray, in_axes=(None, None, 0))
         all_obs = vmap_fn(state, _DEFAULT_PARAMS, jnp.arange(2))
         assert all_obs.shape == (2, _GLOBAL_OBS_SIZE)
 
     def test_matches_env_get_obs(self, state_factory) -> None:
-        """global_array for selected_player matches FactoriaXEnv.get_obs."""
+        """global_x_ray for selected_player matches FactoriaXEnv.get_obs."""
         from factoriax import FactoriaXEnv
 
         state = state_factory(
@@ -197,33 +199,37 @@ class TestGlobalArray:
         )
         env = FactoriaXEnv()
         env_obs = np.array(env.get_obs(state, _DEFAULT_PARAMS))
-        obs_fn = np.array(global_array(state, _DEFAULT_PARAMS, state.selected_player))
+        obs_fn = np.array(global_x_ray(state, _DEFAULT_PARAMS, state.selected_player))
         np.testing.assert_allclose(env_obs, obs_fn)
 
 
 # ---------------------------------------------------------------------------
-# local_array
+# local_x_ray
 # ---------------------------------------------------------------------------
 
 _RADIUS = 3
 _WINDOW = 2 * _RADIUS + 1
-_LOCAL_OBS_SIZE = NUM_SPATIAL_CHANNELS * _WINDOW**2 + NUM_PLAYER_SCALARS
+_LOCAL_OBS_SIZE = (
+    NUM_SPATIAL_CHANNELS["x_ray"] * _WINDOW**2 + NUM_PLAYER_SCALARS["x_ray"]
+)
 
 
 class TestLocalArray:
-    """Tests for local_array."""
+    """Tests for local_x_ray."""
 
     def test_shape_default_radius(self, state_factory) -> None:
         """Output shape is correct for radius=10 (default)."""
         radius = 10
         window = 2 * radius + 1
-        expected = NUM_SPATIAL_CHANNELS * window**2 + NUM_PLAYER_SCALARS
+        expected = (
+            NUM_SPATIAL_CHANNELS["x_ray"] * window**2 + NUM_PLAYER_SCALARS["x_ray"]
+        )
         state = state_factory(
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),
         )
         params = EnvParams(map_width=32, map_height=32, num_players=1)
-        out = local_array(state, params, 0)
+        out = local_x_ray(state, params, 0)
         assert out.shape == (expected,)
 
     def test_shape_custom_radius(self, state_factory) -> None:
@@ -232,7 +238,7 @@ class TestLocalArray:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(3, 3),
         )
-        out = local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS)
+        out = local_x_ray(state, _DEFAULT_PARAMS, 0, radius=_RADIUS)
         assert out.shape == (_LOCAL_OBS_SIZE,)
 
     def test_values_in_range(self, state_factory) -> None:
@@ -242,7 +248,7 @@ class TestLocalArray:
             player_position=(3, 3),
             block_resources=jnp.full((8, 8), BLOCK_MAX_RESOURCES, dtype=jnp.int16),
         )
-        out = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
+        out = np.array(local_x_ray(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
         assert out.min() >= 0.0, f"min={out.min()}"
         assert out.max() <= 1.0, f"max={out.max()}"
 
@@ -253,7 +259,7 @@ class TestLocalArray:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(0, 0),
         )
-        out = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
+        out = np.array(local_x_ray(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
         map_flat = out[: _WINDOW**2]
         oob_val = float(BlockType.OUT_OF_BOUNDS) / float(max(BlockType))
         dirt_val = float(BlockType.DIRT) / float(max(BlockType))
@@ -275,8 +281,8 @@ class TestLocalArray:
         state_far = state_factory(world_map=world_map, player_position=(0, 0))
 
         window_size = _WINDOW**2
-        obs_near = np.array(local_array(state_near, _DEFAULT_PARAMS, 0, radius=_RADIUS))
-        obs_far = np.array(local_array(state_far, _DEFAULT_PARAMS, 0, radius=_RADIUS))
+        obs_near = np.array(local_x_ray(state_near, _DEFAULT_PARAMS, 0, radius=_RADIUS))
+        obs_far = np.array(local_x_ray(state_far, _DEFAULT_PARAMS, 0, radius=_RADIUS))
 
         # The map segment of the near observation should contain a COAL value.
         coal_val = float(BlockType.COAL) / float(max(BlockType))
@@ -295,7 +301,7 @@ class TestLocalArray:
             player_position=(3, 3),
             machine_types=machine_types,
         )
-        out = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
+        out = np.array(local_x_ray(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
 
         window_size = _WINDOW**2
         machine_flat = out[window_size : 2 * window_size]
@@ -314,7 +320,7 @@ class TestLocalArray:
             player_position=(3, 3),
             block_resources=resources,
         )
-        out = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
+        out = np.array(local_x_ray(state, _DEFAULT_PARAMS, 0, radius=_RADIUS))
 
         window_size = _WINDOW**2
         resource_flat = out[2 * window_size : 3 * window_size]
@@ -322,12 +328,12 @@ class TestLocalArray:
         assert resource_flat[centre] == pytest.approx(1.0)  # fully normalized
 
     def test_jit_compatible(self, state_factory) -> None:
-        """local_array survives jax.jit when radius is bound via partial."""
+        """local_x_ray survives jax.jit when radius is bound via partial."""
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(3, 3),
         )
-        jit_fn = jax.jit(functools.partial(local_array, radius=_RADIUS))
+        jit_fn = jax.jit(functools.partial(local_x_ray, radius=_RADIUS))
         out = jit_fn(state, _DEFAULT_PARAMS, 0)
         assert out.shape == (_LOCAL_OBS_SIZE,)
 
@@ -339,7 +345,7 @@ class TestLocalArray:
             num_players=2,
         )
         vmap_fn = jax.vmap(
-            functools.partial(local_array, radius=_RADIUS),
+            functools.partial(local_x_ray, radius=_RADIUS),
             in_axes=(None, None, 0),
         )
         all_obs = vmap_fn(state, _DEFAULT_PARAMS, jnp.arange(2))
@@ -353,7 +359,7 @@ class TestLocalArray:
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(7, 7),
         )
-        out = local_array(state, _DEFAULT_PARAMS, 0, radius=_RADIUS)
+        out = local_x_ray(state, _DEFAULT_PARAMS, 0, radius=_RADIUS)
         assert out.shape == (_LOCAL_OBS_SIZE,)
 
 
@@ -419,7 +425,7 @@ class TestRgb:
 
 def _slice_channel(obs: jax.Array, params: EnvParams, name: str) -> np.ndarray:
     """Return the ``(H, W)`` float view of a named spatial channel."""
-    idx = _SPATIAL_CHANNEL_NAMES.index(name)
+    idx = _X_RAY_SPATIAL_CHANNEL_NAMES.index(name)
     tile_count = params.map_width * params.map_height
     start = idx * tile_count
     end = start + tile_count
@@ -431,7 +437,7 @@ class TestSlotProjection:
 
     def test_num_spatial_channels(self) -> None:
         """Grew from 4 to 10: base 3 + 6 slot + direction."""
-        assert NUM_SPATIAL_CHANNELS == 10
+        assert NUM_SPATIAL_CHANNELS["x_ray"] == 10
         for name in (
             "slot0_type",
             "slot0_count",
@@ -441,7 +447,7 @@ class TestSlotProjection:
             "slot2_count",
             "machine_direction",
         ):
-            assert name in _SPATIAL_CHANNEL_NAMES
+            assert name in _X_RAY_SPATIAL_CHANNEL_NAMES
 
     def test_assembler_slots_show_asm_in_and_asm_out(
         self,
@@ -472,7 +478,7 @@ class TestSlotProjection:
             asm_out_type=aot,
             asm_out_count=aoc,
         )
-        obs = global_array(state, _DEFAULT_PARAMS, 0)
+        obs = global_x_ray(state, _DEFAULT_PARAMS, 0)
 
         s0t = _slice_channel(obs, _DEFAULT_PARAMS, "slot0_type")
         s1t = _slice_channel(obs, _DEFAULT_PARAMS, "slot1_type")
@@ -513,7 +519,7 @@ class TestSlotProjection:
             buffer_type=bt,
             buffer_count=bc,
         )
-        obs = global_array(state, _DEFAULT_PARAMS, 0)
+        obs = global_x_ray(state, _DEFAULT_PARAMS, 0)
 
         s0t = _slice_channel(obs, _DEFAULT_PARAMS, "slot0_type")
         s1t = _slice_channel(obs, _DEFAULT_PARAMS, "slot1_type")
@@ -534,7 +540,7 @@ class TestSlotProjection:
         mt = mt.at[2, 2].set(int(Machine.ASSEMBLER))
 
         state = state_factory(world_map=world_map, machine_types=mt)
-        obs = global_array(state, _DEFAULT_PARAMS, 0)
+        obs = global_x_ray(state, _DEFAULT_PARAMS, 0)
 
         for ch in ("slot0_type", "slot1_type", "slot2_type"):
             g = _slice_channel(obs, _DEFAULT_PARAMS, ch)
@@ -547,13 +553,13 @@ class TestSlotProjection:
 class TestLocalGlobalEquivalence:
     """Local window must match global obs tile-for-tile at the player.
 
-    Invariant: ``local_array(state, params, p, radius=R)`` is a pure
-    spatial crop of ``global_array(state, params, p)``. For every
+    Invariant: ``local_x_ray(state, params, p, radius=R)`` is a pure
+    spatial crop of ``global_x_ray(state, params, p)``. For every
     (y, x) inside the window, the per-channel value in the local obs
     must equal the corresponding tile in the global obs. The player
     scalars + research tail appended after the spatial block must be
-    identical between the two. If this test fails, either ``local_array``
-    and ``global_array`` have drifted in channel ordering / normalisation,
+    identical between the two. If this test fails, either ``local_x_ray``
+    and ``global_x_ray`` have drifted in channel ordering / normalisation,
     or the window indexing is off — both of which silently corrupt
     training without obvious symptoms.
     """
@@ -632,12 +638,12 @@ class TestLocalGlobalEquivalence:
             num_players=1,
             max_timesteps=100,
         )
-        global_obs = np.array(global_array(state, params, 0))
-        local_obs = np.array(local_array(state, params, 0, radius=radius))
+        global_obs = np.array(global_x_ray(state, params, 0))
+        local_obs = np.array(local_x_ray(state, params, 0, radius=radius))
 
         window = 2 * radius + 1
         tile_count = h * w
-        for ch_idx, ch_name in enumerate(_SPATIAL_CHANNEL_NAMES):
+        for ch_idx, ch_name in enumerate(_X_RAY_SPATIAL_CHANNEL_NAMES):
             global_channel = global_obs[
                 ch_idx * tile_count : (ch_idx + 1) * tile_count
             ].reshape(h, w)
@@ -671,16 +677,16 @@ class TestLocalGlobalEquivalence:
             timestep=37,
             player_inventory=inv,
         )
-        global_obs = np.array(global_array(state, _DEFAULT_PARAMS, 0))
-        local_obs = np.array(local_array(state, _DEFAULT_PARAMS, 0, radius=radius))
+        global_obs = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
+        local_obs = np.array(local_x_ray(state, _DEFAULT_PARAMS, 0, radius=radius))
 
         global_spatial = (
-            NUM_SPATIAL_CHANNELS
+            NUM_SPATIAL_CHANNELS["x_ray"]
             * _DEFAULT_PARAMS.map_width
             * _DEFAULT_PARAMS.map_height
         )
         window = 2 * radius + 1
-        local_spatial = NUM_SPATIAL_CHANNELS * window * window
+        local_spatial = NUM_SPATIAL_CHANNELS["x_ray"] * window * window
         np.testing.assert_array_equal(
             global_obs[global_spatial:],
             local_obs[local_spatial:],
@@ -705,7 +711,7 @@ class TestMachineDirectionChannel:
             machine_types=mt,
             machine_direction=md,
         )
-        obs = global_array(state, _DEFAULT_PARAMS, 0)
+        obs = global_x_ray(state, _DEFAULT_PARAMS, 0)
         d = _slice_channel(obs, _DEFAULT_PARAMS, "machine_direction")
 
         # Normalised by 4 (max direction value). RIGHT = 2.

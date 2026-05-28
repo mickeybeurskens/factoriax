@@ -84,8 +84,8 @@ class TestInventoryObservation:
         obs = env.get_obs(state, params)
 
         expected_size = (
-            NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
-            + NUM_PLAYER_SCALARS
+            NUM_SPATIAL_CHANNELS["x_ray"] * params.map_width * params.map_height
+            + NUM_PLAYER_SCALARS["x_ray"]
         )
         assert obs.shape == (expected_size,)
 
@@ -102,7 +102,9 @@ class TestInventoryObservation:
         env, params, _, state = canonical_env_8x8_1p
         obs = env.get_obs(state, params)
 
-        spatial_size = NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
+        spatial_size = (
+            NUM_SPATIAL_CHANNELS["x_ray"] * params.map_width * params.map_height
+        )
         inv_start = spatial_size
         inv_data = obs[inv_start:]
 

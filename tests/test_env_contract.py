@@ -1,4 +1,4 @@
-"""Lightweight gymnax-contract tests for the public env (``factoriax.make``).
+"""Lightweight gymnax-contract tests for :class:`FactoriaXEnv`.
 
 Pins the RL interface that consumers bind to: the declared spaces match the
 real observation/action, ``step_env`` returns the gymnax 5-tuple with the right
@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-import factoriax
+from factoriax import AutoResetWrapper, FactoriaXEnv
 from factoriax.engine.constants import NUM_ACTIONS, Action
 from factoriax.engine.levels import LevelBuilder
 
@@ -29,8 +29,9 @@ def level8():
 
 @pytest.fixture(scope="module")
 def default_env(level8):
-    """The default (global-obs, unwrapped) env from ``factoriax.make``."""
-    return factoriax.make(level8)
+    """The default (global-obs, unwrapped) env."""
+    env = FactoriaXEnv(level=level8)
+    return env, env.default_params
 
 
 def test_action_space_is_discrete_num_actions(default_env) -> None:
@@ -49,8 +50,9 @@ def test_observation_space_matches_obs(default_env) -> None:
 
 
 def test_local_observation_space_matches_obs(level8) -> None:
-    """LocalObservationWrapper's declared space matches its real obs."""
-    env, params = factoriax.make(level8, obs="local", obs_radius=3)
+    """``observation_space`` matches ``get_obs`` for a local x_ray env."""
+    env = FactoriaXEnv(level=level8, obs="x_ray_local", obs_radius=3)
+    params = env.default_params
     obs, _ = env.reset_env(random.PRNGKey(0), params)
     space = env.observation_space(params)
     assert obs.shape == space.shape
@@ -88,8 +90,8 @@ def test_step_is_vmappable(default_env) -> None:
 
 def test_auto_reset_restores_episode_on_done(level8) -> None:
     """AutoResetWrapper restores the cached reset state when ``done`` fires."""
-    env, params = factoriax.make(level8, auto_reset=True)
-    params = dataclasses.replace(params, max_timesteps=1)
+    env = AutoResetWrapper(FactoriaXEnv(level=level8))
+    params = dataclasses.replace(env.default_params, max_timesteps=1)
     _, state = env.reset_env(random.PRNGKey(0), params)
     _, state1, _, done, _ = env.step_env(
         random.PRNGKey(1), state, int(Action.NOOP), params

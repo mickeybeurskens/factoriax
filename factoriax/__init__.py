@@ -1,15 +1,14 @@
 """FactoriaX: A JAX-based grid environment.
 
-Top-level public API. The recommended entry point for researchers is
-:func:`make`, which mirrors ``gymnax.make()`` and assembles the
-canonical wrapper stack around :class:`FactoriaXEnv`. Power users can
-construct :class:`FactoriaXEnv` directly and compose wrappers by hand.
+Top-level public API. :func:`make` mirrors ``gymnax.make()``: pass a
+registered scenario id and get back a fully-configured ``(env, params)``
+pair. Direct construction of :class:`FactoriaXEnv` (with its own ``obs``
+and ``obs_radius`` args, plus optional ``level=`` / ``achievement_fn=``
+/ ``reset_fn=`` / ``step_hooks=`` / ``reward_fn=``) remains available
+for callers that need a non-scenario env.
 """
 
-from collections.abc import Callable, Iterable
-from typing import Any, Literal
-
-import jax
+from typing import Any
 
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
@@ -21,7 +20,6 @@ from factoriax.engine.constants import (
 from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
 from factoriax.engine.envs.auto_reset_wrapper import AutoResetWrapper
 from factoriax.engine.envs.factoriax_env import FactoriaXEnv
-from factoriax.engine.envs.local_observation_wrapper import LocalObservationWrapper
 from factoriax.engine.envs.science_tally_wrapper import ScienceTallyWrapper
 from factoriax.engine.levels import (
     LEVELS,
@@ -33,88 +31,62 @@ from factoriax.engine.levels import (
     load_level,
     save_level,
 )
-from factoriax.engine.observations import global_array, local_array, rgb
+from factoriax.engine.observations import (
+    OBSERVATIONS,
+    global_superficial,
+    global_x_ray,
+    local_superficial,
+    local_x_ray,
+    rgb,
+)
 from factoriax.engine.rewards import mining_reward
 from factoriax.engine.scenarios import registry as _scenario_registry
 from factoriax.engine.state import EnvParams, EnvState
 
-AchievementFn = Callable[[EnvState], jax.Array]
-
 
 def make(
-    level: Level | str | None = None,
+    env_id: str,
     *,
-    obs: Literal["global", "local"] = "global",
-    obs_radius: int = 7,
-    achievement_fn: AchievementFn | None = None,
+    obs: str | None = None,
+    obs_radius: int | None = None,
     auto_reset: bool = False,
-    blocked_actions: Iterable[int] = (),
+    resample: bool | None = None,
 ) -> tuple[Any, EnvParams]:
-    """Build a FactoriaX environment with the canonical wrapper stack.
+    """Build a registered scenario env.
 
-    Mirrors ``gymnax.make()``. Composition order, outermost to
-    innermost::
-
-        AutoReset -> ActionMask -> LocalObservation -> FactoriaXEnv
-
-    A given wrapper is only included when its corresponding option is
-    set (``obs='local'`` adds the local-observation wrapper,
-    ``blocked_actions`` non-empty adds the action mask, ``auto_reset``
-    adds auto-reset). The bare :class:`FactoriaXEnv` is returned when
-    no wrappers are requested.
+    Mirrors :func:`gymnax.make`. The returned env carries its own
+    observation function and observation space; the wrappers stack
+    only when auto-reset is requested.
 
     Args:
-        level: Level instance, registry name, or ``None`` for
-            procedural generation.
-        obs: ``'global'`` (default) for full-map observations; ``'local'``
-            for a windowed view centered on the selected player.
-        obs_radius: Half-width of the local observation window. Ignored
-            when ``obs='global'``.
-        achievement_fn: Optional condition function bound to the inner
-            env's constructor. See :class:`FactoriaXEnv`.
-        auto_reset: Wrap the outermost env in
-            :class:`AutoResetWrapper` for ``lax.scan`` training loops.
-        blocked_actions: Iterable of integer action ids to mask to
-            ``NOOP`` via :class:`ActionMaskWrapper`.
+        env_id: Registered scenario id (e.g. ``"EasyRocket-v1"``).
+        obs: Observation variant name. ``None`` uses the scenario's
+            opinionated default. Valid keys live in
+            :data:`~factoriax.engine.observations.OBSERVATIONS`.
+        obs_radius: Local-window half-width. ``None`` uses the scenario
+            default; ignored for ``_global`` obs variants.
+        auto_reset: Wrap in :class:`AutoResetWrapper` for ``lax.scan``
+            training loops.
+        resample: Auto-reset mode. ``None`` uses the scenario's
+            ``resample`` setting.
 
     Returns:
-        Tuple of ``(env, params)``. ``params`` is the inner env's
-        :attr:`default_params`; callers can mutate freely.
+        Tuple of ``(env, params)``.
 
     Raises:
-        KeyError: When ``level`` is a string and the registry has no
-            such entry.
+        KeyError: When ``env_id`` is not registered.
 
     Example:
-        >>> env, params = factoriax.make("15x15_resources", obs="local")
-        >>> obs, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> env, params = make("EasyRocket-v1")
+        >>> env, params = make("Rocket-v1", obs="superficial_local", obs_radius=5)
     """
-    if isinstance(level, str):
-        if level in _scenario_registry.SCENARIOS:
-            return _scenario_registry.make(
-                level, obs=obs, obs_radius=obs_radius, auto_reset=auto_reset
-            )
-        level = get_level(level)
-
-    env: Any = FactoriaXEnv(achievement_fn=achievement_fn, level=level)
-    params: EnvParams = env.default_params
-    if level is not None:
-        params = params.replace(
-            map_width=level.map_width,
-            map_height=level.map_height,
-        )
-
-    if obs == "local":
-        env = LocalObservationWrapper(env, radius=obs_radius)
-
-    blocked_tuple = tuple(int(a) for a in blocked_actions)
-    if blocked_tuple:
-        env = ActionMaskWrapper(env, blocked_tuple)
-
-    if auto_reset:
-        env = AutoResetWrapper(env)
-
-    return env, params
+    return _scenario_registry.make(
+        env_id,
+        obs=obs,
+        obs_radius=obs_radius,
+        auto_reset=auto_reset,
+        resample=resample,
+    )
 
 
 __all__ = [
@@ -130,15 +102,17 @@ __all__ = [
     "LEVELS",
     "Level",
     "LevelBuilder",
-    "LocalObservationWrapper",
     "NUM_ITEM_TYPES",
+    "OBSERVATIONS",
     "ScienceTallyWrapper",
     "build_state",
     "generate_state",
     "get_level",
-    "global_array",
+    "global_superficial",
+    "global_x_ray",
     "load_level",
-    "local_array",
+    "local_superficial",
+    "local_x_ray",
     "make",
     "mining_reward",
     "rgb",

@@ -56,7 +56,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
     Example:
         >>> import factoriax
-        >>> env, params = factoriax.make(auto_reset=True)
+        >>> env, params = factoriax.make("EasyRocket-v1", auto_reset=True)
         >>> # ``env.step_env`` now returns the next-episode reset state
         >>> # whenever ``done`` flips True, with no Python-side branch.
     """

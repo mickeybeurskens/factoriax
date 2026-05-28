@@ -2,7 +2,7 @@
 
 The scripted agent is map-agnostic: nothing it does is allowed to
 reference the initial level layout directly. Instead it consumes the
-``global_array`` observation each tick, reconstructs per-tile grids,
+``global_x_ray`` observation each tick, reconstructs per-tile grids,
 and runs simple graph searches on the walkable mask.
 
 The data model is a :class:`WorldView` — an immutable snapshot of the
@@ -40,7 +40,7 @@ from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNE
 from factoriax.engine.recipes import NUM_RECIPES
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
-# Normalization constants used by ``factoriax.engine.observations.global_array``.
+# Normalization constants used by ``factoriax.engine.observations.global_x_ray``.
 # Duplicated here so the decoder is self-contained and doesn't reach into
 # module-private names.
 _MAP_NORM: float = float(max(BlockType))
@@ -304,10 +304,10 @@ class WorldView:
 
 
 def _scalar_sections() -> dict[str, slice]:
-    """Return the scalar-field layout used by ``_player_scalars``.
+    """Return the scalar-field layout used by ``_x_ray_scalars``.
 
     Sections in order: fixed (pos_x, pos_y, dir, timestep, affords),
-    facing (9), player inventory (NUM_ITEM_TYPES).
+    player inventory (NUM_ITEM_TYPES), facing (9).
     """
     i = 0
     sections: dict[str, slice] = {}
@@ -321,9 +321,9 @@ def _scalar_sections() -> dict[str, slice]:
     i += 1
     sections["afford"] = slice(i, i + NUM_RECIPES)
     i += NUM_RECIPES
-    sections["facing"] = slice(i, i + 9)
-    i += 9  # 9 facing fields
     sections["inventory"] = slice(i, i + NUM_ITEM_TYPES)
+    i += NUM_ITEM_TYPES
+    sections["facing"] = slice(i, i + 9)
     return sections
 
 
@@ -336,11 +336,11 @@ def decode_observation(
     map_width: int,
     max_timesteps: int,
 ) -> WorldView:
-    """Parse a ``global_array`` observation into a :class:`WorldView`.
+    """Parse a ``global_x_ray`` observation into a :class:`WorldView`.
 
     Args:
         obs: 1-D float32 array as produced by
-            :func:`factoriax.engine.observations.global_array` for a single
+            :func:`factoriax.engine.observations.global_x_ray` for a single
             player.
         map_height: Number of tile rows.
         map_width: Number of tile columns.
@@ -352,8 +352,9 @@ def decode_observation(
         player scalars needed for planning.
     """
     obs = np.asarray(obs, dtype=np.float32)
-    expected_spatial = NUM_SPATIAL_CHANNELS * map_height * map_width
-    expected_total = expected_spatial + NUM_PLAYER_SCALARS
+    n_channels = NUM_SPATIAL_CHANNELS["x_ray"]
+    expected_spatial = n_channels * map_height * map_width
+    expected_total = expected_spatial + NUM_PLAYER_SCALARS["x_ray"]
     if obs.shape != (expected_total,):
         raise ValueError(
             f"Expected obs shape ({expected_total},) for map "
@@ -361,11 +362,11 @@ def decode_observation(
         )
 
     spatial = obs[:expected_spatial].reshape(
-        NUM_SPATIAL_CHANNELS,
+        n_channels,
         map_height,
         map_width,
     )
-    # Re-scale with np.round to undo the float division in global_array.
+    # Re-scale with np.round to undo the float division in global_x_ray.
     block_type = np.round(spatial[0] * _MAP_NORM).astype(np.int32)
     machine_type = np.round(spatial[1] * _MACHINE_NORM).astype(np.int32)
     block_resources = np.round(spatial[2] * float(BLOCK_MAX_RESOURCES)).astype(

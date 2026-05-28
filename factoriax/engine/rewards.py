@@ -106,7 +106,7 @@ def mining_reward(
     Example:
         >>> import jax
         >>> import factoriax
-        >>> env, params = factoriax.make()
+        >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
         >>> _, next_state, _, _, _ = env.step_env(
         ...     jax.random.PRNGKey(1), state, 0, params

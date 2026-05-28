@@ -29,7 +29,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-import factoriax
 from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
 from baselines.ppo.config import PPOConfig
 from baselines.ppo.gae import Transition, compute_gae
@@ -40,6 +39,7 @@ from baselines.ppo.normalization import (
     normalize_obs,
     update_running_stats,
 )
+from factoriax import ActionMaskWrapper, FactoriaXEnv
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
@@ -148,14 +148,14 @@ def _make_env_and_state(
     map grows.
     """
     level = build_rocket_level()
-    env, env_params = factoriax.make(
-        level,
-        obs="local",
-        obs_radius=config.ppo.obs_radius,
+    env: Any = FactoriaXEnv(
+        level=level,
         achievement_fn=rocket_conditions,
-        blocked_actions=ROCKET_BLOCKED_ACTIONS,
+        obs="x_ray_local",
+        obs_radius=config.ppo.obs_radius,
     )
-    env_params = env_params.replace(
+    env = ActionMaskWrapper(env, tuple(ROCKET_BLOCKED_ACTIONS))
+    env_params = env.default_params.replace(
         num_players=1,
         max_timesteps=config.max_timesteps,
     )

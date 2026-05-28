@@ -4,7 +4,19 @@ Each function maps ``(state, params, player_idx) -> jax.Array`` and is
 JAX-native and JIT-compatible. ``rgb`` is the exception: it returns a
 NumPy RGB image via the pixel renderer and cannot be JIT'd.
 
-Spatial channels (10 total):
+Two profiles compose four top-level builders:
+
+- **x_ray** sees through every machine to its slot contents and the ore
+  remaining under each terrain tile (10 spatial channels + 72 player
+  scalars).
+- **superficial** sees only what's outwardly visible (3 spatial channels
+  + 63 player scalars; no slot peek, no facing-tile peek).
+
+Each profile pairs with a view extent: ``global_*`` flattens the whole
+map; ``local_*`` extracts a ``(2r+1) x (2r+1)`` window centred on the
+selected player.
+
+x_ray spatial channels (10):
 - ``block_type`` — terrain.
 - ``machine_type`` — ``Machine`` at each tile (or NONE).
 - ``block_resources`` — ore count under the tile.
@@ -12,12 +24,16 @@ Spatial channels (10 total):
   projection of every machine's contents. Combiners map
   ``ent_asm_in[0] → slot 0``, ``ent_asm_in[1] → slot 1``,
   ``ent_asm_out → slot 2``. Buffer machines (miner, pallet, belt)
-  leave slots 0/1 at zero and write ``ent_buf`` into slot 2. Lets
-  agents read machine state at any tile without navigating there.
+  leave slots 0/1 at zero and write ``ent_buf`` into slot 2.
 - ``machine_direction`` — ``ent_direction`` per tile (1..4 or 0).
 
-Player scalars: position, direction, timestep, recipe affordability,
-facing-machine state, player inventory, research state.
+superficial spatial channels (3): ``block_type``, ``machine_type``,
+``machine_direction``.
+
+x_ray scalars: pose + recipe affordability + player inventory +
+facing-machine readouts (72 floats).
+superficial scalars: pose + recipe affordability + player inventory
+(63 floats; the 9 facing readouts are dropped).
 """
 
 from __future__ import annotations
@@ -155,8 +171,8 @@ def _reconstruct_machine_direction_grid(state: EnvState) -> jnp.ndarray:
     return grid.at[ey, ex].set(vals)
 
 
-# Spatial channels shared by global_array and local_array.
-_SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
+# Channel and scalar manifests, per profile.
+_X_RAY_SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
     "block_type",
     "machine_type",
     "block_resources",
@@ -168,15 +184,26 @@ _SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
     "slot2_count",
     "machine_direction",
 )
-NUM_SPATIAL_CHANNELS: int = len(_SPATIAL_CHANNEL_NAMES)
+_SUPERFICIAL_SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
+    "block_type",
+    "machine_type",
+    "machine_direction",
+)
+NUM_SPATIAL_CHANNELS: dict[str, int] = {
+    "x_ray": len(_X_RAY_SPATIAL_CHANNEL_NAMES),
+    "superficial": len(_SUPERFICIAL_SPATIAL_CHANNEL_NAMES),
+}
 
-# Scalar fields in every observation vector.
-_PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
+# Scalar fields, in vector order, per helper.
+_COMMON_SCALAR_FIELDS: tuple[str, ...] = (
     "pos_x",
     "pos_y",
     "direction",
     "timestep",
     *(f"afford_{i}" for i in range(NUM_RECIPES)),
+    *(f"player_inv_{i}" for i in range(NUM_ITEM_TYPES)),
+)
+_FACING_SCALAR_FIELDS: tuple[str, ...] = (
     "facing_machine_type",
     "facing_buffer_type",
     "facing_buffer_count",
@@ -186,17 +213,22 @@ _PLAYER_SCALAR_FIELDS: tuple[str, ...] = (
     "facing_asm_in1_count",
     "facing_asm_out_type",
     "facing_asm_out_count",
-    *(f"player_inv_{i}" for i in range(NUM_ITEM_TYPES)),
 )
-NUM_PLAYER_SCALARS: int = len(_PLAYER_SCALAR_FIELDS)
+# x_ray = common ++ facing (72); superficial = common (63).
+NUM_PLAYER_SCALARS: dict[str, int] = {
+    "x_ray": len(_COMMON_SCALAR_FIELDS) + len(_FACING_SCALAR_FIELDS),
+    "superficial": len(_COMMON_SCALAR_FIELDS),
+}
 
 
-def _player_scalars(
+def _common_scalars(
     state: EnvState,
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """Build the per-player scalar vector.
+    """Pose, recipe affordability, and player inventory. 63 floats.
+
+    Shared by x_ray and superficial profiles.
 
     Args:
         state: Current environment state.
@@ -204,16 +236,10 @@ def _player_scalars(
         player_idx: Index of the player.
 
     Returns:
-        Float32 array of shape ``(NUM_PLAYER_SCALARS,)``.
+        Float32 array of shape ``(63,)``.
     """
     pos = state.player_positions[player_idx]
-    afford = jax.vmap(
-        lambda r: can_afford_recipe(state, params, player_idx, r).astype(
-            jnp.float32,
-        ),
-    )(jnp.arange(NUM_RECIPES))
-
-    scalars = jnp.array(
+    pose_time = jnp.array(
         [
             pos[0] / params.map_width,
             pos[1] / params.map_height,
@@ -222,9 +248,32 @@ def _player_scalars(
         ],
         dtype=jnp.float32,
     )
-    scalars = jnp.concatenate([scalars, afford])
+    afford = jax.vmap(
+        lambda r: can_afford_recipe(state, params, player_idx, r).astype(
+            jnp.float32,
+        ),
+    )(jnp.arange(NUM_RECIPES))
+    inv = state.player_inventory[player_idx].astype(jnp.float32) / _PLAYER_MAX_STACK_F
+    return jnp.concatenate([pose_time, afford, inv])
 
-    # Facing-machine state via entity lookup.
+
+def _facing_scalars(
+    state: EnvState,
+    player_idx: int | jax.Array,
+) -> jax.Array:
+    """Facing-machine readouts. 9 floats. x_ray only.
+
+    Reads the entity in front of the player and returns its machine
+    type plus buffer/assembler-slot contents. Out-of-bounds tiles
+    return zeros via a mask.
+
+    Args:
+        state: Current environment state.
+        player_idx: Index of the player.
+
+    Returns:
+        Float32 array of shape ``(9,)``.
+    """
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
     in_bounds = (tx >= 0) & (tx < map_w) & (ty >= 0) & (ty < map_h)
@@ -234,49 +283,84 @@ def _player_scalars(
 
     max_e = state.ent_y.shape[0]
     eidx = jnp.clip(state.tile_entity[sy, sx], 0, max_e - 1)
+    item_norm = float(NUM_ITEM_TYPES)
 
-    facing_mt = state.machine_types[sy, sx].astype(jnp.float32) * mask
-    facing_bt = state.ent_buf_type[eidx].astype(jnp.float32) * mask
-    facing_bc = state.ent_buf_count[eidx].astype(jnp.float32) * mask
-    facing_asm_in0t = state.ent_asm_in_type[eidx, 0].astype(jnp.float32) * mask
-    facing_asm_in0c = state.ent_asm_in_count[eidx, 0].astype(jnp.float32) * mask
-    facing_asm_in1t = state.ent_asm_in_type[eidx, 1].astype(jnp.float32) * mask
-    facing_asm_in1c = state.ent_asm_in_count[eidx, 1].astype(jnp.float32) * mask
-    facing_asm_ot = state.ent_asm_out_type[eidx].astype(jnp.float32) * mask
-    facing_asm_oc = state.ent_asm_out_count[eidx].astype(jnp.float32) * mask
-
-    facing = jnp.array(
+    return jnp.array(
         [
-            facing_mt / _MACHINE_NORM,
-            facing_bt / float(NUM_ITEM_TYPES),
-            facing_bc / 64.0,
-            facing_asm_in0t / float(NUM_ITEM_TYPES),
-            facing_asm_in0c / 64.0,
-            facing_asm_in1t / float(NUM_ITEM_TYPES),
-            facing_asm_in1c / 64.0,
-            facing_asm_ot / float(NUM_ITEM_TYPES),
-            facing_asm_oc / 64.0,
+            state.machine_types[sy, sx].astype(jnp.float32) * mask / _MACHINE_NORM,
+            state.ent_buf_type[eidx].astype(jnp.float32) * mask / item_norm,
+            state.ent_buf_count[eidx].astype(jnp.float32) * mask / 64.0,
+            state.ent_asm_in_type[eidx, 0].astype(jnp.float32) * mask / item_norm,
+            state.ent_asm_in_count[eidx, 0].astype(jnp.float32) * mask / 64.0,
+            state.ent_asm_in_type[eidx, 1].astype(jnp.float32) * mask / item_norm,
+            state.ent_asm_in_count[eidx, 1].astype(jnp.float32) * mask / 64.0,
+            state.ent_asm_out_type[eidx].astype(jnp.float32) * mask / item_norm,
+            state.ent_asm_out_count[eidx].astype(jnp.float32) * mask / 64.0,
         ]
     )
-    scalars = jnp.concatenate([scalars, facing])
-
-    # Player inventory.
-    player_inv = (
-        state.player_inventory[player_idx].astype(jnp.float32) / _PLAYER_MAX_STACK_F
-    )
-
-    return jnp.concatenate([scalars, player_inv])
 
 
-def global_array(
+def _x_ray_scalars(
     state: EnvState,
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """Full-map flat observation for one player.
+    """The 72-float x_ray scalar block: common (63) + facing (9)."""
+    return jnp.concatenate(
+        [
+            _common_scalars(state, params, player_idx),
+            _facing_scalars(state, player_idx),
+        ]
+    )
 
-    Four spatial channels (block type, machine type, resources, buffer type)
-    followed by the player scalar vector.
+
+def _superficial_scalars(
+    state: EnvState,
+    params: EnvParams,
+    player_idx: int | jax.Array,
+) -> jax.Array:
+    """The 63-float superficial scalar block: common only."""
+    return _common_scalars(state, params, player_idx)
+
+
+def observation_size(
+    params: EnvParams,
+    *,
+    profile: str,
+    view: str,
+    radius: int = 7,
+) -> int:
+    """Flat observation size for ``(profile, view)`` on ``params``.
+
+    Args:
+        params: Environment parameters (for ``map_width``/``map_height``).
+        profile: ``"x_ray"`` or ``"superficial"``.
+        view: ``"global"`` or ``"local"``.
+        radius: Half-width of the local window when ``view="local"``.
+
+    Returns:
+        Total flat observation length (spatial + scalar).
+    """
+    if view == "global":
+        spatial_tiles = params.map_width * params.map_height
+    elif view == "local":
+        side = 2 * radius + 1
+        spatial_tiles = side * side
+    else:
+        raise ValueError(f"view must be 'global' or 'local'; got {view!r}")
+    return NUM_SPATIAL_CHANNELS[profile] * spatial_tiles + NUM_PLAYER_SCALARS[profile]
+
+
+def global_x_ray(
+    state: EnvState,
+    params: EnvParams,
+    player_idx: int | jax.Array,
+) -> jax.Array:
+    """Full-map x_ray observation for one player.
+
+    Ten spatial channels (block type, machine type, ore resources, six
+    slot channels, machine direction) flattened, followed by the 72-float
+    x_ray scalar vector.
 
     Args:
         state: Current environment state.
@@ -284,15 +368,15 @@ def global_array(
         player_idx: Index of the observing player.
 
     Returns:
-        Float32 array of shape ``(NUM_SPATIAL_CHANNELS * H * W
-        + NUM_PLAYER_SCALARS,)``.
+        Float32 array of shape
+        ``(NUM_SPATIAL_CHANNELS["x_ray"] * H * W + NUM_PLAYER_SCALARS["x_ray"],)``.
 
     Example:
         >>> import jax
         >>> import factoriax
-        >>> env, params = factoriax.make()
+        >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        >>> obs = factoriax.global_array(state, params, state.selected_player)
+        >>> obs = factoriax.global_x_ray(state, params, state.selected_player)
         >>> obs.ndim
         1
     """
@@ -326,20 +410,20 @@ def global_array(
         ],
     )
     return jnp.concatenate(
-        [spatial, _player_scalars(state, params, player_idx)],
+        [spatial, _x_ray_scalars(state, params, player_idx)],
     )
 
 
-def local_array(
+def local_x_ray(
     state: EnvState,
     params: EnvParams,
     player_idx: int | jax.Array,
     radius: int = 10,
 ) -> jax.Array:
-    """Local windowed observation centered on one player.
+    """Local windowed x_ray observation centered on one player.
 
-    Extracts a ``(2*radius+1) x (2*radius+1)`` patch from four spatial
-    channels. Player scalars are appended.
+    Extracts a ``(2*radius+1) x (2*radius+1)`` patch from the ten x_ray
+    spatial channels and appends the 72-float x_ray scalar vector.
 
     Args:
         state: Current environment state.
@@ -348,15 +432,15 @@ def local_array(
         radius: Half-width of the observation window.
 
     Returns:
-        Float32 array of shape ``(NUM_SPATIAL_CHANNELS * (2r+1)^2
-        + NUM_PLAYER_SCALARS,)``.
+        Float32 array of shape
+        ``(NUM_SPATIAL_CHANNELS["x_ray"] * (2r+1)^2 + NUM_PLAYER_SCALARS["x_ray"],)``.
 
     Example:
         >>> import jax
         >>> import factoriax
-        >>> env, params = factoriax.make()
+        >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        >>> obs = factoriax.local_array(state, params, state.selected_player, radius=3)
+        >>> obs = factoriax.local_x_ray(state, params, state.selected_player, radius=3)
         >>> obs.ndim
         1
     """
@@ -416,8 +500,131 @@ def local_array(
         ]
     )
     return jnp.concatenate(
-        [spatial, _player_scalars(state, params, player_idx)],
+        [spatial, _x_ray_scalars(state, params, player_idx)],
     )
+
+
+def global_superficial(
+    state: EnvState,
+    params: EnvParams,
+    player_idx: int | jax.Array,
+) -> jax.Array:
+    """Full-map superficial observation for one player.
+
+    Three spatial channels (block type, machine type, machine direction)
+    flattened, followed by the 63-float superficial scalar vector.
+
+    Args:
+        state: Current environment state.
+        params: Environment parameters.
+        player_idx: Index of the observing player.
+
+    Returns:
+        Float32 array of shape
+        ``(NUM_SPATIAL_CHANNELS["superficial"] * H * W
+        + NUM_PLAYER_SCALARS["superficial"],)``.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make("EasyRocket-v1")
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> obs = factoriax.global_superficial(state, params, state.selected_player)
+        >>> obs.ndim
+        1
+    """
+    flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
+    flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
+    flat_direction = (
+        _reconstruct_machine_direction_grid(state).flatten().astype(jnp.float32)
+        / _DIR_NORM
+    )
+    spatial = jnp.concatenate([flat_blocks, flat_machines, flat_direction])
+    return jnp.concatenate(
+        [spatial, _superficial_scalars(state, params, player_idx)],
+    )
+
+
+def local_superficial(
+    state: EnvState,
+    params: EnvParams,
+    player_idx: int | jax.Array,
+    radius: int = 10,
+) -> jax.Array:
+    """Local windowed superficial observation centered on one player.
+
+    Extracts a ``(2*radius+1) x (2*radius+1)`` patch from the three
+    superficial spatial channels and appends the 63-float superficial
+    scalar vector.
+
+    Args:
+        state: Current environment state.
+        params: Environment parameters.
+        player_idx: Index of the observing player.
+        radius: Half-width of the observation window.
+
+    Returns:
+        Float32 array of shape
+        ``(NUM_SPATIAL_CHANNELS["superficial"] * (2r+1)^2
+        + NUM_PLAYER_SCALARS["superficial"],)``.
+
+    Example:
+        >>> import jax
+        >>> import factoriax
+        >>> env, params = factoriax.make("EasyRocket-v1")
+        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+        >>> obs = factoriax.local_superficial(
+        ...     state, params, state.selected_player, radius=3,
+        ... )
+        >>> obs.ndim
+        1
+    """
+    size = 2 * radius + 1
+    pw = ((radius, radius), (radius, radius))
+
+    padded_map = (
+        jnp.pad(state.map, pw, constant_values=BlockType.OUT_OF_BOUNDS).astype(
+            jnp.float32
+        )
+        / _MAP_NORM
+    )
+    padded_machines = (
+        jnp.pad(state.machine_types, pw, constant_values=Machine.NONE).astype(
+            jnp.float32
+        )
+        / _MACHINE_NORM
+    )
+    padded_direction = (
+        jnp.pad(
+            _reconstruct_machine_direction_grid(state), pw, constant_values=0
+        ).astype(jnp.float32)
+        / _DIR_NORM
+    )
+
+    pos = state.player_positions[player_idx]
+    start = (pos[1], pos[0])
+    slice_shape = (size, size)
+
+    spatial = jnp.concatenate(
+        [
+            jax.lax.dynamic_slice(padded_map, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_machines, start, slice_shape).ravel(),
+            jax.lax.dynamic_slice(padded_direction, start, slice_shape).ravel(),
+        ]
+    )
+    return jnp.concatenate(
+        [spatial, _superficial_scalars(state, params, player_idx)],
+    )
+
+
+#: Catalog of obs variants. The env takes the name (and a radius for
+#: ``_local`` variants) and dispatches through this dict.
+OBSERVATIONS: dict[str, jax.Array] = {  # type: ignore[type-arg]
+    "x_ray_global": global_x_ray,
+    "x_ray_local": local_x_ray,
+    "superficial_global": global_superficial,
+    "superficial_local": local_superficial,
+}
 
 
 def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
@@ -437,7 +644,7 @@ def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
     Example:
         >>> import jax
         >>> import factoriax
-        >>> env, params = factoriax.make()
+        >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
         >>> img = factoriax.rgb(state, block_pixel_size=8)
         >>> img.shape[2]

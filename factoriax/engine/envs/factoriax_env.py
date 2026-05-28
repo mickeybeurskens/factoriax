@@ -17,7 +17,7 @@ from factoriax.engine.levels import Level, build_state, generate_state
 from factoriax.engine.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
-    global_array,
+    OBSERVATIONS,
 )
 from factoriax.engine.state import EnvParams, EnvState
 
@@ -64,8 +64,9 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     Example:
         >>> import jax
-        >>> import factoriax
-        >>> env, params = factoriax.make()  # bare FactoriaXEnv
+        >>> from factoriax import FactoriaXEnv
+        >>> env = FactoriaXEnv()
+        >>> params = env.default_params
         >>> obs, state = env.reset_env(jax.random.PRNGKey(0), params)
         >>> obs.shape == env.observation_space(params).shape
         True
@@ -78,6 +79,8 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         reset_fn: ResetFn | None = None,
         step_hooks: tuple[StepHook, ...] = (),
         reward_fn: RewardFn | None = None,
+        obs: str = "x_ray_global",
+        obs_radius: int = 7,
     ) -> None:
         """Initialize the environment.
 
@@ -94,8 +97,18 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             reward_fn: Per-step reward ``(prev, new, params) -> float``. When
                 ``None``, :meth:`step_env` returns ``0.0`` (rewards then belong to
                 a wrapper or the training loop).
+            obs: Observation variant key into
+                :data:`~factoriax.engine.observations.OBSERVATIONS`. One of
+                ``"x_ray_global"``, ``"x_ray_local"``,
+                ``"superficial_global"``, ``"superficial_local"``.
+            obs_radius: Half-width of the local window; ignored for
+                ``_global`` obs variants.
         """
         super().__init__()
+        if obs not in OBSERVATIONS:
+            raise ValueError(
+                f"unknown obs {obs!r}; valid choices: {sorted(OBSERVATIONS)}"
+            )
         self._achievement_fn = achievement_fn
         self._level = level
         self._reset_fn = reset_fn
@@ -104,15 +117,28 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         if achievement_fn is not None:
             hooks = hooks + (achievement_hook(achievement_fn),)
         self._step_hooks = hooks
+        self.obs = obs
+        self.obs_radius = int(obs_radius)
+        self._obs_profile = "superficial" if obs.startswith("superficial") else "x_ray"
+        self._obs_is_local = obs.endswith("_local")
 
     @property
     def default_params(self) -> EnvParams:
         """Return default environment parameters.
 
+        When the env is bound to a :class:`Level`, the level's
+        ``map_width`` and ``map_height`` are propagated into the
+        returned params so callers don't need a manual ``replace``.
+
         Returns:
             Default EnvParams instance.
         """
-        return EnvParams()
+        if self._level is None:
+            return EnvParams()
+        return EnvParams(
+            map_width=self._level.map_width,
+            map_height=self._level.map_height,
+        )
 
     @partial(jax.jit, static_argnames=("self",))
     def step(
@@ -222,7 +248,10 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Float32 observation array.
         """
-        return global_array(state, params, state.selected_player)
+        fn = OBSERVATIONS[self.obs]
+        if self._obs_is_local:
+            return fn(state, params, state.selected_player, radius=self.obs_radius)
+        return fn(state, params, state.selected_player)
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
         """Check if the current state is terminal.
@@ -256,9 +285,14 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns:
             Box observation space.
         """
+        if self._obs_is_local:
+            side = 2 * self.obs_radius + 1
+            tiles = side * side
+        else:
+            tiles = params.map_width * params.map_height
         obs_size = (
-            NUM_SPATIAL_CHANNELS * params.map_width * params.map_height
-            + NUM_PLAYER_SCALARS
+            NUM_SPATIAL_CHANNELS[self._obs_profile] * tiles
+            + NUM_PLAYER_SCALARS[self._obs_profile]
         )
         return spaces.Box(
             low=0.0,

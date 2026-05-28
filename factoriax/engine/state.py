@@ -24,7 +24,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     Example:
         >>> import jax
         >>> import factoriax
-        >>> env, params = factoriax.make()
+        >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
         >>> ni = factoriax.NUM_ITEM_TYPES
         >>> state.player_inventory.shape == (params.num_players, ni)
@@ -112,7 +112,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
     Example:
         >>> import factoriax
-        >>> _, params = factoriax.make()
+        >>> _, params = factoriax.make("EasyRocket-v1")
         >>> larger = params.replace(map_width=64, map_height=64)
         >>> larger.map_width, larger.map_height
         (64, 64)

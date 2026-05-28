@@ -14,7 +14,6 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-import factoriax
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
 from factoriax.engine.envs import AutoResetWrapper, FactoriaXEnv
 from factoriax.engine.envs.hooks import achievement_hook
@@ -30,8 +29,7 @@ def level8():
 
 @pytest.fixture(scope="module")
 def params(level8):
-    _, p = factoriax.make(level8)
-    return p
+    return FactoriaXEnv(level=level8).default_params
 
 
 def _bit(index: int) -> jnp.ndarray:

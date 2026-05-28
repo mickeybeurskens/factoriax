@@ -54,7 +54,7 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
     Example:
         >>> import factoriax
         >>> from factoriax import ScienceTallyWrapper
-        >>> inner, params = factoriax.make()
+        >>> inner, params = factoriax.make("EasyRocket-v1")
         >>> env = ScienceTallyWrapper(inner)
         >>> # ``env.reset_env(...)`` returns a ``ScienceTallyState`` with
         >>> # ``total_science_consumed`` initialized to zeros.

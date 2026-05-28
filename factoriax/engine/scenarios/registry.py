@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from factoriax.engine.envs.auto_reset_wrapper import AutoResetWrapper
-from factoriax.engine.envs.local_observation_wrapper import LocalObservationWrapper
 from factoriax.engine.scenarios.easy_rocket import easy_rocket
 from factoriax.engine.scenarios.rocket import rocket
 from factoriax.engine.state import EnvParams
@@ -63,17 +62,20 @@ SCENARIOS: dict[str, ScenarioSpec] = {
 def make(
     env_id: str,
     *,
-    obs: str = "global",
-    obs_radius: int = 7,
+    obs: str | None = None,
+    obs_radius: int | None = None,
     auto_reset: bool = False,
     resample: bool | None = None,
 ) -> tuple[Any, EnvParams]:
-    """Resolve a scenario id to ``(env, params)``, applying optional wrappers.
+    """Resolve a scenario id to ``(env, params)``.
 
     Args:
         env_id: Registered scenario id (e.g. ``"EasyRocket-v1"``).
-        obs: ``"global"`` (default) or ``"local"`` for a windowed observation.
-        obs_radius: Local-observation half-width (ignored for global obs).
+        obs: Observation variant name (one of the keys in
+            :data:`~factoriax.engine.observations.OBSERVATIONS`). ``None``
+            uses the scenario's opinionated default.
+        obs_radius: Local-window half-width. ``None`` uses the scenario's
+            opinionated default; ignored for ``_global`` obs variants.
         auto_reset: Wrap in :class:`AutoResetWrapper`.
         resample: Auto-reset mode. ``None`` (default) uses the scenario's
             ``resample`` setting; pass ``True``/``False`` to override — e.g.
@@ -86,9 +88,12 @@ def make(
         KeyError: If ``env_id`` is not registered.
     """
     spec = SCENARIOS[env_id]
-    env, params = spec.build()
-    if obs == "local":
-        env = LocalObservationWrapper(env, radius=obs_radius)
+    overrides: dict[str, Any] = {}
+    if obs is not None:
+        overrides["obs"] = obs
+    if obs_radius is not None:
+        overrides["obs_radius"] = obs_radius
+    env, params = spec.build(**overrides)
     if auto_reset:
         use_resample = spec.resample if resample is None else resample
         env = AutoResetWrapper(env, resample=use_resample)
