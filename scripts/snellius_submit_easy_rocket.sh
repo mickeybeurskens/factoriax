@@ -38,6 +38,9 @@
 #   PARTITION=gpu_h100 WALL_TIME=08:00:00 ./scripts/snellius_submit_easy_rocket.sh
 #   NUM_ENVS=4096 TOTAL_STEPS=2_000_000_000 ./scripts/snellius_submit_easy_rocket.sh
 #   PROJECT_DIR=$HOME/code/factoriax ./scripts/snellius_submit_easy_rocket.sh
+#
+# Edit ``seeds`` and ``fixed_env_flag`` at the top of the script for
+# seed / layout-fixing changes.
 # ------------------------------------------------------------------
 
 set -euo pipefail
@@ -51,6 +54,11 @@ total_steps_list=("${TOTAL_STEPS:-1_000_000_000}")   # 1B steps — a real "high
 num_envs_list=("${NUM_ENVS:-2048}")                  # 16x16 env is tiny; A100 fits thousands.
 rollout_steps_list=("${ROLLOUT_STEPS:-128}")
 run_names=("${RUN_NAME:-ppo_easy_rocket_procgen}")
+
+# Set to "--fixed-env-seed" to broadcast a single reset key to all parallel
+# envs (every worker draws the same procgen layout — layout-invariance
+# ablation). Leave empty for the default per-env keyed reset.
+fixed_env_flag=""
 
 # ---- SLURM / environment (override via env vars, defaults below) -------------
 
@@ -144,7 +152,8 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
 "\${PY}" --version
 
 # easy_rocket is global-obs (no --obs-radius); each env gets its own procgen
-# terrain automatically via make("EasyRocket-v1").
+# terrain automatically via make("EasyRocket-v1"), unless --fixed-env-seed
+# is passed (then all envs share the same layout).
 "\${PY}" -m baselines.easy_rocket.train_ppo \\
     --num-envs ${num_envs} \\
     --rollout-steps ${rollout_steps} \\
@@ -152,6 +161,7 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     --max-timesteps 2000 \\
     --seed ${seed} \\
     --log-interval 32 \\
+    ${fixed_env_flag} \\
     --use-wandb \\
     --wandb-project ${WANDB_PROJECT} \\
     --wandb-run-name ${run_name}

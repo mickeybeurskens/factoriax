@@ -92,6 +92,11 @@ class Config:
     ppo: PPOConfig = dataclasses.field(default_factory=PPOConfig)
     max_timesteps: int = 2000
     anneal_lr: bool = True
+    #: When True, every parallel env resets from the same PRNG key, so all
+    #: ``num_envs`` workers draw the same procgen layout. Useful for
+    #: layout-invariant ablations. Default keeps the per-env keyed reset
+    #: (procgen variation across parallel envs).
+    fixed_env_seed: bool = False
     out_dir: str | None = None
     save_final_model: bool = True
     save_final_video: bool = True
@@ -431,11 +436,14 @@ def train(config: Config) -> dict[str, float]:
 
     # Each parallel env draws its own keyed layout from the scenario's reset_fn
     # and restores it on episode end (cheap cached reset). Reward comes from the
-    # env's bound reward_fn via step_env.
+    # env's bound reward_fn via step_env. ``fixed_env_seed`` broadcasts a single
+    # key to all workers so every env starts on the same layout (procgen off).
     rng, reset_rng = jax.random.split(rng)
-    _reset_obs, reset_states = vmap_reset(
-        jax.random.split(reset_rng, ppo.num_envs), env_params
-    )
+    if config.fixed_env_seed:
+        env_reset_keys = jnp.broadcast_to(reset_rng, (ppo.num_envs, *reset_rng.shape))
+    else:
+        env_reset_keys = jax.random.split(reset_rng, ppo.num_envs)
+    _reset_obs, reset_states = vmap_reset(env_reset_keys, env_params)
 
     mb_size = steps_per_iter // ppo.num_minibatches
 
@@ -779,6 +787,14 @@ def main() -> None:
     parser.add_argument("--max-timesteps", type=int, default=2000)
     parser.add_argument("--no-anneal-lr", action="store_true")
     parser.add_argument(
+        "--fixed-env-seed",
+        action="store_true",
+        help=(
+            "Broadcast a single reset key to all parallel envs so every "
+            "worker draws the same procgen layout. Default is per-env keyed."
+        ),
+    )
+    parser.add_argument(
         "--out-dir",
         type=str,
         default=None,
@@ -805,6 +821,7 @@ def main() -> None:
         ppo=ppo,
         max_timesteps=args.max_timesteps,
         anneal_lr=not args.no_anneal_lr,
+        fixed_env_seed=args.fixed_env_seed,
         out_dir=args.out_dir,
         save_final_model=not args.no_save_model,
         save_final_video=not args.no_save_video,
