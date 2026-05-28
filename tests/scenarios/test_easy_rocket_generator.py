@@ -14,6 +14,8 @@ from jax import random
 
 from factoriax.engine.constants import BlockType
 from factoriax.engine.scenarios.easy_rocket import (
+    _INNER_ZONE_MAX,
+    _INNER_ZONE_MIN,
     _MAP_SIZE,
     _PATCH_BLOCKS,
     _SPAWN,
@@ -46,13 +48,30 @@ def test_generator_places_one_2x2_patch_per_block() -> None:
     assert ore_total == _TILES_PER_PATCH * len(_ORE_VALUES)
 
 
-def test_generator_avoids_spawn_and_keeps_spawn_dirt() -> None:
+def test_generator_avoids_inner_zone_and_keeps_spawn_dirt() -> None:
+    """No ore inside the 4x4 zone (2x2 spawn area + 1-cell inner ring)."""
     world = np.asarray(generate_easy_rocket_state(random.PRNGKey(1), _PARAMS).map)
     sx, sy = _SPAWN
     assert int(world[sy, sx]) == int(BlockType.DIRT)
     for block in _ORE_VALUES:
         for ty, tx in _patch_tiles(world, block):
-            assert not (abs(int(tx) - sx) <= 1 and abs(int(ty) - sy) <= 1)
+            assert not (
+                _INNER_ZONE_MIN <= int(tx) <= _INNER_ZONE_MAX
+                and _INNER_ZONE_MIN <= int(ty) <= _INNER_ZONE_MAX
+            )
+
+
+def test_generator_avoids_outer_ring() -> None:
+    """No ore on the outer 1-cell dirt ring (first/last row, first/last col)."""
+    for seed in range(20):
+        world = np.asarray(
+            generate_easy_rocket_state(random.PRNGKey(seed), _PARAMS).map,
+        )
+        ore_mask = np.isin(world, _ORE_VALUES)
+        assert not bool(ore_mask[0, :].any()), f"seed {seed}: ore on top row"
+        assert not bool(ore_mask[-1, :].any()), f"seed {seed}: ore on bottom row"
+        assert not bool(ore_mask[:, 0].any()), f"seed {seed}: ore on left col"
+        assert not bool(ore_mask[:, -1].any()), f"seed {seed}: ore on right col"
 
 
 def test_generator_resources_on_ore_only() -> None:

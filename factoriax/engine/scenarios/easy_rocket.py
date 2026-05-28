@@ -23,11 +23,31 @@ from factoriax.engine.rewards import achievement_reward
 from factoriax.engine.state import EnvParams, EnvState
 
 _MAP_SIZE: int = 16
-_SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
 _PATCH_SIZE: int = 2
-_FORBID_RADIUS: int = 1
 _ORE_RESOURCES_PER_TILE: int = 3000
 _MAX_SAMPLE_ATTEMPTS: int = 1000
+
+# --- Centre spawn area (2x2; room for multi-agent later). ---
+_SPAWN_AREA_SIZE: int = 2
+_SPAWN_AREA_MIN: int = (_MAP_SIZE - _SPAWN_AREA_SIZE) // 2  # 7
+_SPAWN_AREA_MAX: int = _SPAWN_AREA_MIN + _SPAWN_AREA_SIZE - 1  # 8
+
+# --- Guaranteed-dirt rings flanking the play area. ---
+_OUTER_RING_WIDTH: int = 1
+_INNER_RING_WIDTH: int = 1
+
+# No-patch zone = spawn area expanded by the inner ring on every side.
+_INNER_ZONE_MIN: int = _SPAWN_AREA_MIN - _INNER_RING_WIDTH  # 6
+_INNER_ZONE_MAX: int = _SPAWN_AREA_MAX + _INNER_RING_WIDTH  # 9
+
+# Patch corners must keep the 2x2 patch fully inside the inner play area
+# (i.e. clear of the outer ring on every side).
+_MIN_CORNER: int = _OUTER_RING_WIDTH  # 1
+_MAX_CORNER: int = _MAP_SIZE - _PATCH_SIZE - _OUTER_RING_WIDTH  # 13
+
+# Active-agent spawn cell. One of the four cells of the 2x2 spawn area;
+# future multi-agent setups fill the other three.
+_SPAWN: tuple[int, int] = (_SPAWN_AREA_MAX, _SPAWN_AREA_MAX)  # (8, 8)
 
 _PATCH_BLOCKS: tuple[BlockType, ...] = (
     BlockType.IRON,
@@ -39,12 +59,16 @@ _PATCH_BLOCKS: tuple[BlockType, ...] = (
 )
 
 
-def _patch_touches_spawn_zone(px: int, py: int) -> bool:
-    sx, sy = _SPAWN
+def _patch_touches_inner_zone(px: int, py: int) -> bool:
+    """True if a 2x2 patch at ``(px, py)`` overlaps the spawn area or its
+    inner-ring buffer."""
     for dy in range(_PATCH_SIZE):
         for dx in range(_PATCH_SIZE):
             tx, ty = px + dx, py + dy
-            if abs(tx - sx) <= _FORBID_RADIUS and abs(ty - sy) <= _FORBID_RADIUS:
+            if (
+                _INNER_ZONE_MIN <= tx <= _INNER_ZONE_MAX
+                and _INNER_ZONE_MIN <= ty <= _INNER_ZONE_MAX
+            ):
                 return True
     return False
 
@@ -56,12 +80,13 @@ def _patches_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
 def _sample_patch_corner(
     key: jax.Array, placed: list[tuple[int, int]]
 ) -> tuple[int, int]:
-    max_corner = _MAP_SIZE - _PATCH_SIZE
     for _ in range(_MAX_SAMPLE_ATTEMPTS):
         key, subkey = jax.random.split(key)
-        coords = jax.random.randint(subkey, shape=(2,), minval=0, maxval=max_corner + 1)
+        coords = jax.random.randint(
+            subkey, shape=(2,), minval=_MIN_CORNER, maxval=_MAX_CORNER + 1
+        )
         corner = (int(coords[0]), int(coords[1]))
-        if _patch_touches_spawn_zone(*corner):
+        if _patch_touches_inner_zone(*corner):
             continue
         if any(_patches_overlap(corner, other) for other in placed):
             continue
@@ -75,8 +100,9 @@ def _sample_patch_corner(
 def build_easy_rocket_level(key: jax.Array) -> Level:
     """Build a 16x16 easy-rocket level with six 2x2 ore patches placed by PRNG.
 
-    Patches do not overlap each other and stay outside the 3x3 ring centered on
-    the player spawn at (8, 8). Same key returns equal Levels; different keys
+    Patches do not overlap each other, stay clear of the outer 1-cell dirt
+    ring, and stay clear of the 4x4 zone covering the 2x2 spawn area plus its
+    1-cell inner-ring buffer. Same key returns equal Levels; different keys
     produce different layouts.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
@@ -97,16 +123,16 @@ def build_easy_rocket_level(key: jax.Array) -> Level:
     return builder.build("easy_rocket_v1")
 
 
-_MAX_CORNER: int = _MAP_SIZE - _PATCH_SIZE
-#: Every 2x2 patch corner that does not touch the spawn zone, computed once.
-#: The JAX generator draws non-overlapping patches from this fixed set, so the
-#: spawn-avoidance rule matches the host builder exactly.
+#: Every 2x2 patch corner inside the outer ring that does not touch the
+#: inner spawn+ring zone, computed once. The JAX generator draws
+#: non-overlapping patches from this fixed set, so the avoidance rules
+#: match the host builder exactly.
 _VALID_PATCH_CORNERS: np.ndarray = np.array(
     [
         (cx, cy)
-        for cx in range(_MAX_CORNER + 1)
-        for cy in range(_MAX_CORNER + 1)
-        if not _patch_touches_spawn_zone(cx, cy)
+        for cx in range(_MIN_CORNER, _MAX_CORNER + 1)
+        for cy in range(_MIN_CORNER, _MAX_CORNER + 1)
+        if not _patch_touches_inner_zone(cx, cy)
     ],
     dtype=np.int32,
 )
