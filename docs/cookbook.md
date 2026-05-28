@@ -65,7 +65,7 @@ observations, rewards, analysis, benchmarks — without a wrapper.
 
 → Pattern: see `factoriax.benchmarks.rocket.rocket_conditions`
 for a worked function across 38 achievements;
-[`baselines/rocket/train_ppo.py`](../baselines/rocket/train_ppo.py)
+[`baselines/easy_rocket/ppo/train_ppo.py`](../baselines/easy_rocket/ppo/train_ppo.py)
 is the end-to-end run.
 
 ## Use a built-in level
@@ -87,9 +87,6 @@ in `ActionMaskWrapper`. Listed actions are silently rewritten to
 blocked action just no-ops that step. The rocket benchmark uses
 this to forbid hand-crafting and force production through machines.
 
-→ [`baselines/rocket/train_ppo.py`](../baselines/rocket/train_ppo.py)
-sets `blocked_actions=ROCKET_BLOCKED_ACTIONS` on construction.
-
 ## Switch to a local observation window
 
 For policies that don't need the full map, `obs="local"` swaps in
@@ -100,7 +97,7 @@ constant as the map grows.
 
 → [`examples/wrapped_env.py`](../examples/wrapped_env.py) shows
 construction; the full PPO setup is in
-[`baselines/rocket/train_ppo.py`](../baselines/rocket/train_ppo.py).
+[`baselines/easy_rocket/ppo/train_ppo.py`](../baselines/easy_rocket/ppo/train_ppo.py).
 
 ## Render an RGB frame
 

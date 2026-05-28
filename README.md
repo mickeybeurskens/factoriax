@@ -52,8 +52,8 @@ adds and placing consumes — no separate "crafting mode."
   symbol with its stability tier. Auto-generated; CI-validated.
 - [`examples/`](examples) — five runnable scripts under 80 lines
   each, one per pattern, that the cookbook recipes link into.
-- [`baselines/rocket/train_ppo.py`](baselines/rocket/train_ppo.py)
-  — a complete PPO run against the rocket achievement benchmark.
+- [`baselines/easy_rocket/ppo/train_ppo.py`](baselines/easy_rocket/ppo/train_ppo.py)
+  — a complete PPO run against the easy rocket achievement benchmark.
 - [`scripts/README.md`](scripts/README.md) — what each
   command-line tool does and where its output goes (benchmarks,
   profiling, atlas regen, api-reference regen).

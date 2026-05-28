@@ -13,7 +13,7 @@ in minutes per run instead of hours.
 The PPO infrastructure under `baselines/ppo/` (network, GAE, loss,
 normalization, CLI) and the rocket reference script at
 `baselines/rocket/train_ppo.py` already exist. This spec adds a thin
-training entry point at `baselines/easy_rocket/train_ppo.py` that
+training entry point at `baselines/easy_rocket/ppo/train_ppo.py` that
 reuses that shared infrastructure and tunes only the bits that need
 to change for the small-map, short-horizon shape of easy rocket. No
 new PPO algorithmic surface is introduced.
@@ -30,7 +30,7 @@ as a near-mechanical reuse of the rocket script.
 
 ### User-facing summary
 
-- `python -m baselines.easy_rocket.train_ppo` runs a pilot in a few
+- `python -m baselines.easy_rocket.ppo.train_ppo` runs a pilot in a few
   minutes on one GPU and prints achievement counts as it learns.
 - Same CLI shape as `baselines.rocket.train_ppo` (`add_ppo_args`
   contract), with easy-rocket-specific defaults (smaller map, smaller
@@ -42,7 +42,7 @@ as a near-mechanical reuse of the rocket script.
 
 ### Success criteria
 
-- `baselines/easy_rocket/train_ppo.py` exists and runs end-to-end on
+- `baselines/easy_rocket/ppo/train_ppo.py` exists and runs end-to-end on
   one consumer GPU within the configured budget, with no NaNs, no
   shape errors, and no JIT recompilations after the first iteration.
 - A pilot run at the default config (defined below) finishes in
@@ -86,8 +86,8 @@ as a near-mechanical reuse of the rocket script.
 ## Commands
 
 ```
-Train (pilot):     uv run python -m baselines.easy_rocket.train_ppo
-Train (wandb):     uv run python -m baselines.easy_rocket.train_ppo --use-wandb
+Train (pilot):     uv run python -m baselines.easy_rocket.ppo.train_ppo
+Train (wandb):     uv run python -m baselines.easy_rocket.ppo.train_ppo --use-wandb
 Test (smoke):      uv run pytest tests/baselines/easy_rocket -q
 Lint:              uv run ruff check baselines/easy_rocket --fix
 Format:            uv run ruff format baselines/easy_rocket

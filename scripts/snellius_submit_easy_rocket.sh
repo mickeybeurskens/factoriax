@@ -158,7 +158,7 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
 # easy_rocket is global-obs (no --obs-radius); each env gets its own procgen
 # terrain automatically via make("EasyRocket-v1"), unless --fixed-env-seed
 # is passed (then all envs share the same layout).
-"\${PY}" -m baselines.easy_rocket.train_ppo \\
+"\${PY}" -m baselines.easy_rocket.ppo.train_ppo \\
     --num-envs ${num_envs} \\
     --rollout-steps ${rollout_steps} \\
     --total-steps ${total_steps} \\

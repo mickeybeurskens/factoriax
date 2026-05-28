@@ -56,7 +56,7 @@ suggestions to be reorganized.
   placed miners.
 - **Implementation scope.** Code lives only under
   `baselines/easy_rocket/scripted/`. No modifications to
-  `factoriax/` or `baselines/easy_rocket/train_ppo.py`.
+  `factoriax/` or `baselines/easy_rocket/ppo/train_ppo.py`.
 
 ### Recipe-derived layout (two DAG passes, no throughput math)
 

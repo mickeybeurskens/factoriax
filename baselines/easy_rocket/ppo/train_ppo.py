@@ -8,14 +8,14 @@ Each parallel env draws its own keyed layout from the scenario's reset_fn and
 restores it on episode end (cheap cached reset). Per-episode regeneration is
 available via the scenario's keyed ``AutoResetWrapper`` if wanted later.
 
-Reuses the shared PPO infrastructure from ``baselines.ppo``. The
-collect/GAE/update pipeline is fused into one JIT-compiled step to
-keep GPU throughput high.
+Reuses the PPO infrastructure in this package (network, GAE, update,
+normalization). The collect/GAE/update pipeline is fused into one
+JIT-compiled step to keep GPU throughput high.
 
 Usage::
 
-    python -m baselines.easy_rocket.train_ppo
-    python -m baselines.easy_rocket.train_ppo --num-envs 4 \\
+    python -m baselines.easy_rocket.ppo.train_ppo
+    python -m baselines.easy_rocket.ppo.train_ppo --num-envs 4 \\
         --rollout-steps 4 --total-steps 16
 """
 
@@ -34,11 +34,11 @@ import numpy as np
 import optax
 
 import factoriax
-from baselines.ppo.cli import add_ppo_args, ppo_config_from_args
-from baselines.ppo.config import PPOConfig
-from baselines.ppo.gae import Transition, compute_gae
-from baselines.ppo.network import ActorCritic
-from baselines.ppo.normalization import (
+from baselines.easy_rocket.ppo.cli import add_ppo_args, ppo_config_from_args
+from baselines.easy_rocket.ppo.config import PPOConfig
+from baselines.easy_rocket.ppo.gae import Transition, compute_gae
+from baselines.easy_rocket.ppo.network import ActorCritic
+from baselines.easy_rocket.ppo.normalization import (
     RunningStats,
     init_running_stats,
     normalize_obs,

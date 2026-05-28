@@ -100,8 +100,8 @@ shows the pattern over 16 seeds.
 - [`docs/api-reference.md`](api-reference.md) — every public symbol,
   its signature, and its stability tier. Auto-generated from
   `factoriax.__all__`.
-- [`baselines/rocket/train_ppo.py`](../baselines/rocket/train_ppo.py)
-  — a complete PPO run against the rocket achievement benchmark.
+- [`baselines/easy_rocket/ppo/train_ppo.py`](../baselines/easy_rocket/ppo/train_ppo.py)
+  — a complete PPO run against the easy rocket achievement benchmark.
 
 If something doesn't fit a pattern in `examples/`, the test suite
 under [`tests/`](../tests) is the next-best reference — most public
