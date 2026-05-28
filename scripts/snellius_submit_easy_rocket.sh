@@ -53,6 +53,8 @@ seeds=(0)
 total_steps_list=("${TOTAL_STEPS:-1_000_000_000}")   # 1B steps — a real "higher count" test.
 num_envs_list=("${NUM_ENVS:-2048}")                  # 16x16 env is tiny; A100 fits thousands.
 rollout_steps_list=("${ROLLOUT_STEPS:-128}")
+entropy_coef_list=("${ENTROPY_COEF:-0.01}")          # PPOConfig default; bump to ~0.03-0.05 for more action exploration.
+lr_list=("${LR:-2.5e-4}")                            # PPOConfig default; lower for slower convergence.
 run_names=("${RUN_NAME:-ppo_easy_rocket_procgen}")
 
 # Set to "true" to broadcast a single reset key to all parallel envs (every
@@ -116,9 +118,11 @@ for i in "${!seeds[@]}"; do
     total_steps="${total_steps_list[$i]}"
     num_envs="${num_envs_list[$i]}"
     rollout_steps="${rollout_steps_list[$i]}"
+    entropy_coef="${entropy_coef_list[$i]}"
+    lr="${lr_list[$i]}"
     run_name="${run_names[$i]}"
 
-    echo "Submitting: seed=${seed} steps=${total_steps} envs=${num_envs} rollout=${rollout_steps} name=${run_name}"
+    echo "Submitting: seed=${seed} steps=${total_steps} envs=${num_envs} rollout=${rollout_steps} ent=${entropy_coef} lr=${lr} name=${run_name}"
 
     cat <<EOF | sbatch
 #!/bin/bash
@@ -158,6 +162,8 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     --num-envs ${num_envs} \\
     --rollout-steps ${rollout_steps} \\
     --total-steps ${total_steps} \\
+    --entropy-coef ${entropy_coef} \\
+    --lr ${lr} \\
     --max-timesteps 2000 \\
     --seed ${seed} \\
     --log-interval 32 \\
