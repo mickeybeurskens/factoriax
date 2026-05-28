@@ -9,11 +9,18 @@ stacked area chart.
 from __future__ import annotations
 
 from collections import OrderedDict
+from enum import IntEnum
 
 import matplotlib.colors as mcolors
 import numpy as np
 
-from factoriax.engine.constants import Action, ItemType
+from factoriax.engine.constants import (
+    Action,
+    HalfFabricate,
+    ItemType,
+    Machine,
+    Resource,
+)
 
 # ---------------------------------------------------------------
 # Action groups: (base_hex, [Action members])
@@ -141,71 +148,29 @@ ACTION_GROUPS: OrderedDict[str, tuple[str, list[int]]] = OrderedDict(
 # Item groups: (base_hex, [ItemType members])
 # ---------------------------------------------------------------
 
-ITEM_GROUPS: OrderedDict[str, tuple[str, list[int]]] = OrderedDict(
-    [
-        (
-            "Ores",
-            (
-                "#8c564b",
-                [
-                    ItemType.COAL,
-                    ItemType.IRON_ORE,
-                    ItemType.COPPER_ORE,
-                    ItemType.TIN_ORE,
-                    ItemType.SILICON,
-                ],
-            ),
-        ),
-        (
-            "Plates",
-            (
-                "#aaa9ad",
-                [
-                    ItemType.IRON_PLATE,
-                    ItemType.COPPER_PLATE,
-                    ItemType.TIN_PLATE,
-                ],
-            ),
-        ),
-        (
-            "Intermediates",
-            (
-                "#1f77b4",
-                [
-                    ItemType.WAFER,
-                    ItemType.FRAME,
-                    ItemType.CIRCUIT,
-                    ItemType.WIRE,
-                    ItemType.MOTOR,
-                    ItemType.SENSOR,
-                ],
-            ),
-        ),
-        (
-            "Science",
-            (
-                "#d62728",
-                [
-                    ItemType.BASIC_SCIENCE_PACK,
-                    ItemType.ADVANCED_SCIENCE_PACK,
-                ],
-            ),
-        ),
-        (
-            "Machines",
-            (
-                "#2ca02c",
-                [
-                    ItemType.CONVEYOR_BELT,
-                    ItemType.MINER,
-                    ItemType.ASSEMBLER,
-                    ItemType.PALLET,
-                    ItemType.ROCKET,
-                ],
-            ),
-        ),
-    ]
+# Each item category is one of the engine's source enums. The visual
+# label and base colour are paper-side concerns; the membership comes
+# straight from the engine so categories.py never drifts from the item
+# table in constants.py.
+_CATEGORY_SOURCES: tuple[tuple[str, str, type[IntEnum]], ...] = (
+    ("Machines", "#2ca02c", Machine),
+    ("Half Fabricates", "#ff7f0e", HalfFabricate),
+    ("Resources", "#8c564b", Resource),
 )
+
+
+def _build_item_groups() -> OrderedDict[str, tuple[str, list[int]]]:
+    """Mirror the engine's ``Resource``/``HalfFabricate``/``Machine`` enums."""
+    groups: OrderedDict[str, tuple[str, list[int]]] = OrderedDict()
+    for label, base_hex, enum in _CATEGORY_SOURCES:
+        members = [
+            int(ItemType[member.name]) for member in enum if member.name != "NONE"
+        ]
+        groups[label] = (base_hex, members)
+    return groups
+
+
+ITEM_GROUPS: OrderedDict[str, tuple[str, list[int]]] = _build_item_groups()
 
 
 def shade_palette(
@@ -232,3 +197,38 @@ def shade_palette(
     rgb = np.array(mcolors.to_rgb(base_hex))
     factors = np.linspace(0.6, 1.3, n)
     return [mcolors.to_hex(np.clip(rgb * f, 0.0, 1.0)) for f in factors]
+
+
+def item_palette() -> dict[str, str]:
+    """Return ``{ItemType.name: hex_color}`` with one colour per category.
+
+    Every item in a group shares its category's base colour. Items
+    within a category remain distinguishable by name; the colour
+    encodes category membership only. Items not covered by
+    :data:`ITEM_GROUPS` are absent; callers that may encounter
+    ungrouped items should provide a fallback.
+
+    Example:
+        >>> palette = item_palette()
+        >>> palette["IRON_ORE"] == palette["COAL"]
+        True
+    """
+    palette: dict[str, str] = {}
+    for _name, (base_hex, members) in ITEM_GROUPS.items():
+        for item in members:
+            palette[ItemType(item).name] = base_hex
+    return palette
+
+
+def category_palette() -> dict[str, str]:
+    """Return ``{category_name: hex_color}`` for legend rendering."""
+    return {name: base_hex for name, (base_hex, _) in ITEM_GROUPS.items()}
+
+
+def item_to_category() -> dict[str, str]:
+    """Return ``{ItemType.name: category_name}`` for category lookup by item."""
+    mapping: dict[str, str] = {}
+    for name, (_, members) in ITEM_GROUPS.items():
+        for item in members:
+            mapping[ItemType(item).name] = name
+    return mapping
