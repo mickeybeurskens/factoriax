@@ -468,7 +468,7 @@ def easy_rocket_reward(
 
 def easy_rocket(
     *,
-    obs: str = "x_ray_global",
+    obs: str = "superficial_global",
     obs_radius: int = 7,
 ) -> tuple[FactoriaXEnv, EnvParams]:
     """Return the easy-rocket env (keyed procgen reset) and its params.
@@ -480,7 +480,9 @@ def easy_rocket(
     auto default of 64) to avoid overflowing the entity arrays mid-build.
 
     Args:
-        obs: Observation variant; defaults to the full-map x_ray view.
+        obs: Observation variant; defaults to the full-map superficial view
+            (3 spatial channels + 63 scalars). Pass ``"x_ray_global"`` for
+            the full 10-channel + facing-readout view.
         obs_radius: Local-window half-width; ignored for ``_global`` obs.
     """
     env = FactoriaXEnv(
