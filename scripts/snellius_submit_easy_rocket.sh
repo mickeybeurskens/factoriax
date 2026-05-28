@@ -59,8 +59,6 @@ run_names=("${RUN_NAME:-ppo_easy_rocket_procgen}")
 # worker draws the same procgen layout — layout-invariance ablation).
 # "false" keeps the default per-env keyed reset.
 fixed_env_seed=false
-fixed_env_flag=""
-[[ "${fixed_env_seed}" == "true" ]] && fixed_env_flag="--fixed-env-seed"
 
 # ---- SLURM / environment (override via env vars, defaults below) -------------
 
@@ -163,7 +161,7 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     --max-timesteps 2000 \\
     --seed ${seed} \\
     --log-interval 32 \\
-    ${fixed_env_flag} \\
+    $([[ "${fixed_env_seed}" == "true" ]] && echo "--fixed-env-seed") \\
     --use-wandb \\
     --wandb-project ${WANDB_PROJECT} \\
     --wandb-run-name ${run_name}
