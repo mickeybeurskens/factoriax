@@ -403,6 +403,9 @@ def _write_throughput_json(
     warmup_wall_samples: list[float],
     iter_wall_samples: list[float],
     steps_per_iter: int,
+    achievement_names: tuple[str, ...] | None = None,
+    first_unlock_step: np.ndarray | None = None,
+    final_unlock_rate: np.ndarray | None = None,
 ) -> Path:
     """Write the throughput JSON consumed by paper/figures/throughput.py.
 
@@ -462,6 +465,20 @@ def _write_throughput_json(
             }
         ],
     }
+    # Per-bit empirical-order data, if the caller collected it.
+    if achievement_names is not None and (
+        first_unlock_step is not None or final_unlock_rate is not None
+    ):
+        achievements_block: dict[str, object] = {"names": list(achievement_names)}
+        if first_unlock_step is not None:
+            achievements_block["first_unlock_step"] = [
+                int(x) for x in first_unlock_step.tolist()
+            ]
+        if final_unlock_rate is not None:
+            achievements_block["final_unlock_rate"] = [
+                float(x) for x in final_unlock_rate.tolist()
+            ]
+        payload["achievements"] = achievements_block
     out_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
     logger.info(
         "wrote throughput JSON to %s (gpu=%s, %d iters, %.0f sps)",
@@ -694,9 +711,16 @@ def train(config: Config) -> dict[str, float]:
     obs = vmap_obs(reset_states, env_params)
     ep_returns: deque[float] = deque(maxlen=500)
     ep_ach_counts: deque[int] = deque(maxlen=500)
+    # Per-episode bit vector deque for computing rolling per-bit
+    # unlock rates; sibling of ``ep_ach_counts`` but keeps the vector
+    # instead of collapsing to a sum.
+    ep_ach_masks: deque[np.ndarray] = deque(maxlen=500)
     running_return = np.zeros(ppo.num_envs, dtype=np.float32)
     running_peak_mask = np.zeros((ppo.num_envs, MAX_ACHIEVEMENTS), dtype=bool)
     best_ach_count_ever = 0
+    # First env-step at which each bit unlocked in any parallel env (-1
+    # while still locked). Updated each iter from the live mask.
+    first_unlock_step = np.full(NUM_EASY_ROCKET_ACHIEVEMENTS, -1, dtype=np.int64)
     total_episodes = 0
     current_step = 0
     # Throughput is reported warmup-free. Iter 0 pays the one-time JIT
@@ -741,13 +765,21 @@ def train(config: Config) -> dict[str, float]:
         running_peak_mask[:, :NUM_EASY_ROCKET_ACHIEVEMENTS] = np.maximum(
             running_peak_mask[:, :NUM_EASY_ROCKET_ACHIEVEMENTS], live_mask
         )
+        # Stamp first_unlock_step for any bit that just appeared
+        # anywhere in the batch and has not been stamped yet.
+        any_unlocked = live_mask.any(axis=0)
+        newly_unlocked = any_unlocked & (first_unlock_step == -1)
+        if newly_unlocked.any():
+            first_unlock_step[newly_unlocked] = current_step
 
         for t in range(rewards_np.shape[0]):
             running_return += rewards_np[t]
             done_idx = np.where(dones_np[t])[0]
             for n in done_idx:
                 ep_returns.append(float(running_return[n]))
-                ach_n = int(running_peak_mask[n, :NUM_EASY_ROCKET_ACHIEVEMENTS].sum())
+                ep_mask = running_peak_mask[n, :NUM_EASY_ROCKET_ACHIEVEMENTS].copy()
+                ep_ach_masks.append(ep_mask)
+                ach_n = int(ep_mask.sum())
                 ep_ach_counts.append(ach_n)
                 best_ach_count_ever = max(best_ach_count_ever, ach_n)
                 total_episodes += 1
@@ -800,6 +832,18 @@ def train(config: Config) -> dict[str, float]:
                     "train/mean_ep_achievements": mean_ach,
                     "train/best_achievements_ever": float(best_ach_count_ever),
                 }
+                # Per-bit rolling unlock rate + first-unlock-step so the
+                # paper-side empirical-order analysis can read off
+                # which bits fired when. Rates are means over the
+                # ep_ach_masks deque (last 500 episodes).
+                if ep_ach_masks:
+                    rates = np.mean(np.stack(list(ep_ach_masks)), axis=0)
+                    for idx, name in enumerate(EASY_ROCKET_ACHIEVEMENT_NAMES):
+                        log_data[f"bit/{name}/recent_unlock_rate"] = float(rates[idx])
+                for idx, name in enumerate(EASY_ROCKET_ACHIEVEMENT_NAMES):
+                    fu = int(first_unlock_step[idx])
+                    if fu >= 0:
+                        log_data[f"bit/{name}/first_unlock_step"] = float(fu)
                 # Warmup-free throughput: per-iteration steps/sec, skipping
                 # iter 0 (which pays the one-time JIT compile).
                 if it > 0:
@@ -860,6 +904,11 @@ def train(config: Config) -> dict[str, float]:
     if ppo.throughput_json != "":
         out_dir = _resolve_out_dir(config)
         throughput_target = ppo.throughput_json or str(out_dir / "ppo_throughput.json")
+        final_unlock_rate = (
+            np.mean(np.stack(list(ep_ach_masks)), axis=0)
+            if ep_ach_masks
+            else np.zeros(NUM_EASY_ROCKET_ACHIEVEMENTS, dtype=np.float32)
+        )
         throughput_path = _write_throughput_json(
             output_path=throughput_target,
             scenario=_SCENARIO_ID,
@@ -868,6 +917,9 @@ def train(config: Config) -> dict[str, float]:
             warmup_wall_samples=warmup_wall_samples,
             iter_wall_samples=iter_wall_samples,
             steps_per_iter=steps_per_iter,
+            achievement_names=EASY_ROCKET_ACHIEVEMENT_NAMES,
+            first_unlock_step=first_unlock_step,
+            final_unlock_rate=final_unlock_rate,
         )
         if wandb_run is not None:
             try:
