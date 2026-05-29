@@ -14,7 +14,12 @@ class RunningStats:
     Attributes:
         mean: Running mean of shape ``(obs_dim,)``.
         var: Running variance of shape ``(obs_dim,)``.
-        count: Total number of samples seen.
+        count: Total number of samples seen. Stored as float32, not an
+            integer: with JAX x64 disabled an int32 count wraps negative
+            at 2**31 samples (~2.1B env-steps), poisoning the variance and
+            collapsing training. As float32 it never overflows; past ~2^24
+            samples it loses integer precision and the long-converged stats
+            simply stop updating, which is harmless.
     """
 
     mean: jax.Array
@@ -34,7 +39,7 @@ def init_running_stats(obs_dim: int) -> RunningStats:
     return RunningStats(
         mean=jnp.zeros(obs_dim, dtype=jnp.float32),
         var=jnp.ones(obs_dim, dtype=jnp.float32),
-        count=jnp.array(0, dtype=jnp.int32),
+        count=jnp.array(0.0, dtype=jnp.float32),
     )
 
 
