@@ -56,6 +56,37 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
 # Block textures
 # ---------------------------------------------------------------------------
 
+# Tile colours per BlockType. Single source of truth for the procedural
+# textures used by :func:`create_default_textures` (and therefore the
+# baked sprite atlas at ``factoriax/assets/atlas.png``) and the paper's
+# reset-grid figure, so the engine render and the paper plot agree on
+# what each resource looks like.
+BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
+    int(BlockType.DIRT): (201, 167, 121),
+    int(BlockType.WATER): (50, 120, 190),
+    int(BlockType.IRON): (111, 138, 166),
+    int(BlockType.COPPER): (209, 138, 74),
+    int(BlockType.COAL): (43, 43, 43),
+    int(BlockType.TIN): (185, 185, 185),
+    int(BlockType.SILICON): (111, 90, 138),
+    int(BlockType.LIMESTONE): (232, 220, 181),
+}
+
+# Ores rendered with a crystal-pattern overlay rather than the default
+# blob pattern. Currently SILICON only; the set leaves room for future
+# crystalline ores without touching the texture code.
+_CRYSTALLINE_ORES: frozenset[int] = frozenset({int(BlockType.SILICON)})
+
+_SOLID_BLOCKS: tuple[int, ...] = (int(BlockType.DIRT), int(BlockType.WATER))
+_ORE_BLOCKS: tuple[int, ...] = (
+    int(BlockType.IRON),
+    int(BlockType.COPPER),
+    int(BlockType.COAL),
+    int(BlockType.TIN),
+    int(BlockType.SILICON),
+    int(BlockType.LIMESTONE),
+)
+
 
 def _resize_texture(texture: np.ndarray, size: int) -> np.ndarray:
     """Resize a texture to *size* × *size* using nearest-neighbour sampling.
@@ -107,25 +138,16 @@ def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarra
     Returns:
         Dictionary mapping BlockType values to RGBA texture arrays.
     """
-    solid_colors: dict[int, tuple[int, int, int]] = {
-        int(BlockType.DIRT): (139, 90, 43),
-        int(BlockType.WATER): (50, 120, 190),
-    }
-    ore_colors: dict[int, tuple[tuple[int, int, int], bool]] = {
-        int(BlockType.IRON): ((180, 185, 200), False),
-        int(BlockType.COPPER): ((200, 120, 45), False),
-        int(BlockType.COAL): ((50, 50, 55), False),
-        int(BlockType.TIN): ((195, 195, 175), False),
-        int(BlockType.SILICON): ((80, 95, 150), True),
-        int(BlockType.LIMESTONE): ((215, 200, 165), False),
-    }
-
     textures: dict[int, np.ndarray] = {
-        block_id: _solid_texture(size, rgb) for block_id, rgb in solid_colors.items()
+        block_id: _solid_texture(size, BLOCK_COLORS[block_id])
+        for block_id in _SOLID_BLOCKS
     }
-    for block_id, (rgb, crystalline) in ore_colors.items():
+    for block_id in _ORE_BLOCKS:
+        rgb = BLOCK_COLORS[block_id]
         tex = _solid_texture(size, rgb)
-        _draw_ore_patches(tex, rgb, seed=block_id, crystalline=crystalline)
+        _draw_ore_patches(
+            tex, rgb, seed=block_id, crystalline=block_id in _CRYSTALLINE_ORES
+        )
         textures[block_id] = tex
     return textures
 
@@ -930,10 +952,11 @@ def _draw_rocket(
     icon[body_top:body_bot, mid - body_w // 2 : mid - body_w // 2 + body_w] = body
     icon[body_top:body_bot, mid - body_w // 2] = dark
     icon[body_top:body_bot, mid - body_w // 2 + body_w - 1] = dark
-    # Conical nose.
+    # Conical nose: widest at the base (y just above the body) and tapering
+    # to a point at the icon's top edge.
     for t in range(body_top):
         y = body_top - 1 - t
-        half = body_w // 2 - (body_top - 1 - t) // 2
+        half = body_w // 2 - t // 2
         if half < 0:
             continue
         icon[y, mid - half : mid + half + 1] = body
