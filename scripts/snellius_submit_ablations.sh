@@ -48,7 +48,7 @@ read -r -a seeds <<< "${SEEDS:-0 1 2 3 4}"
 num_envs="${NUM_ENVS:-2048}"
 rollout_steps="${ROLLOUT_STEPS:-128}"
 # Set from the calibration plateau (~1.3x the step where return flattens).
-total_steps="${TOTAL_STEPS:-1_000_000_000}"
+total_steps="${TOTAL_STEPS:-2_000_000_000}"
 run_prefix="${RUN_NAME:-ppo_a100}"
 
 # ---- SLURM / environment (override via env vars, defaults below) -------------
