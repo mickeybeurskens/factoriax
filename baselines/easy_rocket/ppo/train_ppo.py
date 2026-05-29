@@ -873,6 +873,9 @@ def train(config: Config) -> dict[str, float]:
             try:
                 import wandb  # noqa: PLC0415
 
+                # Files tab (visible on the run page) + a versioned artifact
+                # the paper-side consolidator can pull.
+                wandb_run.save(str(throughput_path), policy="now")
                 artifact = wandb.Artifact(
                     f"ppo-throughput-{wandb_run.id}", type="throughput"
                 )
