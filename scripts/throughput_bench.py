@@ -78,7 +78,7 @@ Output schema (``./throughput_<device-label>.json`` by default)::
 
     {
       "device_label":            "laptop",
-      "device_full":             "NVIDIA GeForce RTX 4070",
+      "device_full":             "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
       "obs":                     "x_ray_global",
       "achievement_fn":          "easy_rocket_conditions",
       "trials":                  50,
@@ -89,7 +89,7 @@ Output schema (``./throughput_<device-label>.json`` by default)::
       "measurements": [
         {
           "device":               "laptop",
-          "device_full":          "NVIDIA GeForce RTX 4070",
+          "device_full":          "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
           "map_size":             16,
           "batch_size":           256,
           "inner_steps":          4096,
