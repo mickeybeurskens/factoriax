@@ -1,4 +1,4 @@
-"""Shared PPO update function for all baselines.
+"""PPO update function for the easy rocket baseline.
 
 The ``make_update_fn`` factory builds a JIT-compiled update closure that
 runs PPO epochs on a flattened trajectory batch. It is parameterised by
@@ -14,8 +14,8 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from baselines.ppo.network import ActorCritic
-from baselines.ppo.normalization import RunningStats, normalize_obs
+from baselines.easy_rocket.ppo.network import ActorCritic
+from baselines.easy_rocket.ppo.normalization import RunningStats, normalize_obs
 
 
 class PPOHyperParams(Protocol):

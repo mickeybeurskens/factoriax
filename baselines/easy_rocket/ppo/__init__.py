@@ -1,16 +1,16 @@
-"""Shared PPO training infrastructure for FactoriaX baselines.
+"""PPO training infrastructure for the easy rocket baseline.
 
-Provides the common building blocks used by all baseline training scripts:
-network architecture, observation normalization, GAE computation, and the
-PPO update function. Each baseline imports these and wires in its own
-reward function, level sampling strategy, and domain-specific configuration.
+Provides the building blocks used by ``train_ppo``: network architecture,
+observation normalization, GAE computation, and the PPO update function.
+``train_ppo`` imports these and wires in the scenario's reward function,
+level sampling strategy, and domain-specific configuration.
 """
 
-from baselines.ppo.config import PPOConfig
-from baselines.ppo.gae import Transition, compute_gae
-from baselines.ppo.loss import PPOHyperParams, make_update_fn
-from baselines.ppo.network import ActorCritic
-from baselines.ppo.normalization import (
+from baselines.easy_rocket.ppo.config import PPOConfig
+from baselines.easy_rocket.ppo.gae import Transition, compute_gae
+from baselines.easy_rocket.ppo.loss import PPOHyperParams, make_update_fn
+from baselines.easy_rocket.ppo.network import ActorCritic
+from baselines.easy_rocket.ppo.normalization import (
     RunningStats,
     init_running_stats,
     normalize_obs,
