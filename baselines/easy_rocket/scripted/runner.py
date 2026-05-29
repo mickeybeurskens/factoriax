@@ -111,6 +111,25 @@ def run_policy(
     return states, actions
 
 
+def _first_unlock_steps(states: list[EnvState], num_ach: int) -> np.ndarray:
+    """Per-bit first-unlock step over the rollout (-1 if never unlocked).
+
+    ``states[t]`` is the state after ``t`` env steps, so the index of the
+    first ``True`` in a bit's column is the env-step at which it fired —
+    the scripted analogue of the PPO trainer's per-bit
+    ``first_unlock_step``.
+    """
+    masks = np.stack(
+        [np.asarray(s.achievements_unlocked)[:num_ach] for s in states]
+    )  # (T+1, num_ach) bool
+    fu = np.full(num_ach, -1, dtype=int)
+    for bit in range(num_ach):
+        hits = np.flatnonzero(masks[:, bit])
+        if hits.size:
+            fu[bit] = int(hits[0])
+    return fu
+
+
 def _save_video(states: list[EnvState], out_path: Path, fps: int) -> None:
     """Compose per-tick map+inventory frames and write to mp4."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -126,6 +145,7 @@ def _log_wandb(
     seed: int,
     max_timesteps: int,
     ach_mask: np.ndarray,
+    first_unlock_step: np.ndarray,
     ticks: int,
     elapsed: float,
     phase_outcomes: list[tuple[str, bool, int]],
@@ -135,9 +155,12 @@ def _log_wandb(
     """Log the scripted rollout to wandb: per-achievement results + video.
 
     Each achievement bit is logged as a 0/1 scalar under ``achievements/``
-    and collected into a table for a readable per-bit view. The mp4 rollout
-    is logged inline. Raises ``ImportError`` (caught by the caller) if wandb
-    is not installed.
+    and collected into a table for a readable per-bit view. The per-bit
+    ``bit/<name>/recent_unlock_rate`` (0/1 over this single episode) and
+    ``bit/<name>/first_unlock_step`` mirror the PPO trainer's keys so the
+    paper-side empirical-order analysis reads scripted and PPO runs the
+    same way. The mp4 rollout is logged inline. Raises ``ImportError``
+    (caught by the caller) if wandb is not installed.
     """
     import wandb  # noqa: PLC0415  # type: ignore[import-untyped]
 
@@ -148,12 +171,16 @@ def _log_wandb(
         tags=["easy_rocket", "scripted", "achievement", "validation"],
     )
     unlocked = ach_mask.astype(bool)
-    table = wandb.Table(columns=["index", "name", "unlocked"])
+    table = wandb.Table(columns=["index", "name", "unlocked", "first_unlock_step"])
     log: dict[str, object] = {}
     for idx, name in enumerate(EASY_ROCKET_ACHIEVEMENT_NAMES):
         hit = bool(unlocked[idx])
+        fu = int(first_unlock_step[idx])
         log[f"achievements/{name}"] = int(hit)
-        table.add_data(idx, name, hit)
+        log[f"bit/{name}/recent_unlock_rate"] = float(hit)
+        if fu >= 0:
+            log[f"bit/{name}/first_unlock_step"] = float(fu)
+        table.add_data(idx, name, hit, fu)
     phase_table = wandb.Table(columns=["phase", "ok", "ticks"])
     for name, ok, pticks in phase_outcomes:
         phase_table.add_data(name, bool(ok), pticks)
@@ -221,6 +248,7 @@ def main() -> None:
     ach_mask = np.asarray(final_state.achievements_unlocked)[
         :NUM_EASY_ROCKET_ACHIEVEMENTS
     ]
+    first_unlock = _first_unlock_steps(states, NUM_EASY_ROCKET_ACHIEVEMENTS)
     ach_count = int(ach_mask.sum())
     action_counts = np.bincount(np.asarray(actions), minlength=NUM_ACTIONS)
     top1 = int(np.argmax(action_counts))
@@ -235,7 +263,8 @@ def main() -> None:
     )
     logger.info("Achievements:")
     for idx, name in enumerate(EASY_ROCKET_ACHIEVEMENT_NAMES):
-        logger.info("  %-20s %s", name, "OK" if bool(ach_mask[idx]) else "--")
+        fu = int(first_unlock[idx])
+        logger.info("  %-20s %s", name, f"OK @ step {fu}" if fu >= 0 else "--")
     logger.info("Phase report:")
     for name, ok, ticks in agent.report.phase_outcomes:
         logger.info(
@@ -260,6 +289,7 @@ def main() -> None:
                 seed=args.seed,
                 max_timesteps=env_params.max_timesteps,
                 ach_mask=ach_mask,
+                first_unlock_step=first_unlock,
                 ticks=len(actions),
                 elapsed=elapsed,
                 phase_outcomes=agent.report.phase_outcomes,
