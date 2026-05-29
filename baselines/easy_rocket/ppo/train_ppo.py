@@ -317,6 +317,11 @@ def _finalize_artifacts(
     if model_path is not None:
         artifact = wandb.Artifact(f"easy-rocket-ppo-model-{run_id}", type="model")
         artifact.add_file(str(model_path))
+        # Ship the sibling config JSON too, so the artifact is self-describing
+        # (seed, num_envs, hidden_dims) without consulting the run record.
+        config_path = model_path.with_suffix(".config.json")
+        if config_path.exists():
+            artifact.add_file(str(config_path))
         wandb_run.log_artifact(artifact)
         logger.info("Uploaded model artifact to wandb.")
 
