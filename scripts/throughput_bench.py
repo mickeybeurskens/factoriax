@@ -46,7 +46,7 @@ Measurement methodology
      ``--probe-inner-steps`` (default 64), warm it once to absorb
      the JIT compile, time a second call, derive a per-tick wall
      estimate, and choose ``inner_steps`` so each timed trial
-     targets ``--target-trial-seconds`` (default 1.0 s). This keeps
+     targets ``--target-trial-seconds`` (default 0.3 s). This keeps
      small batch sizes out of the CPU-scheduling noise floor and
      stops large batch sizes from spending minutes per trial.
 
@@ -55,13 +55,13 @@ Measurement methodology
      launch; that wall time is reported as ``startup_seconds`` and
      is NOT folded into the throughput numbers.
 
-  3. **Trials**: ``--trials`` (default 50) runs at the calibrated
+  3. **Trials**: ``--trials`` (default 20) runs at the calibrated
      ``inner_steps`` with the JIT cached. Each trial is a fresh
      ``reset_env`` followed by ``inner_steps`` batched random ticks;
      wall time covers everything from reset through the final
      ``block_until_ready``. Steps/sec for a trial is
-     ``num_envs * inner_steps / wall``. All 50 samples are stored
-     in the JSON and logged individually to wandb.
+     ``num_envs * inner_steps / wall``. Every trial sample is
+     stored in the JSON and logged individually to wandb.
 
 * **Optional addition baseline** (``--baseline``): replaces the real
   step with ``jax.tree.map(x + 1)`` on the state pytree. Same
@@ -216,14 +216,21 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--target-trial-seconds",
         type=float,
-        default=1.0,
-        help="Autoscale target wall time per trial.",
+        default=0.3,
+        help=(
+            "Autoscale target wall time per trial. The default is "
+            "set short enough that the full sweep finishes in a few "
+            "minutes; raise to 1.0 for a slower, more precise run."
+        ),
     )
     parser.add_argument(
         "--trials",
         type=int,
-        default=50,
-        help="Timing trials per (map_size, batch_size).",
+        default=20,
+        help=(
+            "Timing trials per (map_size, batch_size). Bump to 50 "
+            "for tighter dispersion estimates."
+        ),
     )
     parser.add_argument(
         "--obs",
