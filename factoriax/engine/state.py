@@ -47,31 +47,24 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         ent_asm_out_type: Assembler output type, shape ``(MAX_M,)``, int8.
         ent_asm_out_count: Assembler output count, shape ``(MAX_M,)``, int16.
         ent_health: Per-entity machine health, shape ``(MAX_M,)``, int16.
-            Initialized to ``params.machine_config.max_health[ent_type]``
-            on placement. Inactive slots hold ``0``. Read by
+            Initialized to ``params.machine_config.max_health[ent_type]`` on
+            placement; inactive slots hold ``0``. Only
             :func:`~factoriax.engine.placement.apply_repair` and
-            :func:`~factoriax.engine.placement.pickup_machine`; no other engine
-            kernel reads or writes this field, so wrappers can layer
-            arbitrary degradation/repair models on top without engine
-            changes.
+            :func:`~factoriax.engine.placement.pickup_machine` touch it, so
+            wrappers can layer their own degradation/repair models.
         player_positions: (x, y) per player, shape ``(P, 2)``, int16.
         player_directions: Facing per player, shape ``(P,)``, int8.
         player_inventory: Item counts per player, shape ``(P, N)``, int16.
         selected_player: Active player index, scalar.
         timestep: Current step, scalar.
         items_mined: Lifetime mined per type, shape ``(N,)``, int32.
-        science_consumed_step: Per-step signal from SCIENCE_LAB entities,
-            shape ``(NUM_SCIENCE_PACK_TYPES,)``, int32. Summed over every
-            lab's input slots during each step, reset to zero at the next
-            step. Read by :class:`ScienceTallyWrapper` to accumulate
-            total research consumption without touching the engine.
+        science_consumed_step: Science packs consumed this step by
+            SCIENCE_LAB entities, shape ``(NUM_SCIENCE_PACK_TYPES,)``, int32.
+            Reset to zero each step; :class:`ScienceTallyWrapper` accumulates
+            the running total.
         achievements_unlocked: Latched achievement flags, shape
-            ``(MAX_ACHIEVEMENTS,)``, bool. Once a bit flips on it stays
-            on for the rest of the episode. The engine evaluates the
-            condition function bound at env-construction time inside
-            :func:`~factoriax.engine.game_logic.factoriax_step` and folds the
-            result in with ``|``. Wrappers, observations, rewards, and
-            scenarios read this field directly — no wrapper needed.
+            ``(MAX_ACHIEVEMENTS,)``, bool. Once a bit flips on it stays on
+            for the rest of the episode.
     """
 
     # Grid (terrain + spatial lookup)
@@ -122,14 +115,12 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         map_width: Grid width.
         map_height: Grid height.
         num_players: Number of players.
-        max_machines: Maximum entity slots for machines. Controls the
+        max_machines: Maximum entity slots for machines; sizes the
             fixed-size entity arrays that all machine operations iterate
-            over. Cost scales linearly with this value regardless of how
-            many machines are actually placed. Default uses
-            ``max(64, map_width * map_height // 4)`` which gives a 4x
-            speedup over grid-based iteration while supporting up to 25%
-            machine density. Reduce for faster stepping on small maps
-            with few machines; increase if the agent needs to place more.
+            over. Step cost scales with this value, not with the number of
+            machines actually placed. ``0`` selects the auto default
+            ``max(64, map_width * map_height // 4)``. Reduce for faster
+            stepping on small, sparse maps; increase to allow more machines.
         water_probability: Tile water probability during generation.
         iron_probability: Iron ore probability.
         copper_probability: Copper ore probability.
@@ -141,27 +132,17 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         player_mining_yield: Ore extracted per successful MINE action by
             the player. Defaults to 1.
         recipe_table: Per-recipe balance numbers (input/output counts,
-            ticks) and identity arrays (machine type, output items)
-            packed as a :class:`~factoriax.engine.recipes.RecipeTable`. Defaults
-            to :data:`~factoriax.engine.recipes.DEFAULT_RECIPE_TABLE`. Stored as
-            a PyTree leaf so JIT'd kernels in :mod:`factoriax.engine.machines`
-            and :mod:`factoriax.engine.crafting` can read recipe values from
-            ``params.recipe_table.*`` without re-baking the XLA graph
-            when the user constructs an :class:`EnvParams` with a tuned
-            balance overlay (added in Step 5+). Shape is fixed by
-            :data:`~factoriax.engine.recipes.NUM_RECIPES` and
-            :data:`~factoriax.engine.recipes.MAX_RECIPE_INPUTS` so JIT cache
-            reuse is preserved across overlays.
-        machine_config: Per-machine-type tunable knobs (currently just
-            ``max_stack``) packed as a
-            :class:`~factoriax.engine.machine_config.MachineConfig`. Defaults
-            to :data:`~factoriax.engine.machine_config.DEFAULT_MACHINE_CONFIG`.
-            Engine kernels in :mod:`factoriax.engine.machines` read from
-            ``params.machine_config.max_stack`` when computing buffer
-            caps; constructing an :class:`EnvParams` with overrides via
-            ``DEFAULT_MACHINE_CONFIG.with_overrides({...})`` retunes
-            those caps without rebuilding the JIT cache (the array
-            shape is fixed by ``len(Machine)``).
+            ticks) and identity arrays (machine type, output items) packed
+            as a :class:`~factoriax.engine.recipes.RecipeTable`. Defaults to
+            :data:`~factoriax.engine.recipes.DEFAULT_RECIPE_TABLE`. A PyTree
+            leaf of fixed shape, so kernels read values without retracing and
+            tuned balance overlays reuse the JIT cache.
+        machine_config: Per-machine-type tunable knobs packed as a
+            :class:`~factoriax.engine.machine_config.MachineConfig`. Defaults to
+            :data:`~factoriax.engine.machine_config.DEFAULT_MACHINE_CONFIG`.
+            Overrides via ``DEFAULT_MACHINE_CONFIG.with_overrides({...})``
+            retune kernels without rebuilding the JIT cache (array shape is
+            fixed by ``len(Machine)``).
     """
 
     max_timesteps: int = 1000
@@ -184,11 +165,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     NUM_ACTIONS: ClassVar[int] = len(Action)
 
     def resolved_max_machines(self) -> int:
-        """Return max_machines, resolving 0 to the auto default.
-
-        Returns:
-            Concrete max_machines value.
-        """
+        """Return max_machines, resolving 0 to the auto default."""
         if self.max_machines > 0:
             return self.max_machines
         return max(64, self.map_width * self.map_height // 4)

@@ -2,8 +2,7 @@
 
 :mod:`factoriax.engine.constants` holds pure-Python definitions; this is the JAX layer
 that projects them into the jnp gather tables and state-array dtypes the engine
-uses. It imports only ``constants`` and is imported by the engine modules, so
-it sits one layer above ``constants`` and below everything else.
+uses.
 """
 
 from __future__ import annotations

@@ -70,7 +70,7 @@ def achievement_reward(
             uniformity).
         weights: Per-slot reward magnitudes, shape
             ``(MAX_ACHIEVEMENTS,)``. Defaults to the core game weights
-            (1.0 for the 17 tutorial milestones, 0.0 elsewhere).
+            (1.0 for each core tutorial milestone, 0.0 elsewhere).
 
     Returns:
         Scalar float32 reward.
@@ -87,11 +87,11 @@ def mining_reward(
 
     Two components are summed:
 
-    - **Proximity**: ``0.1 / (1 + d)`` where ``d`` is the Manhattan distance
+    - **Proximity**: ``0.05 / (1 + d)`` where ``d`` is the Manhattan distance
       from the selected player to the nearest ore tile (coal, iron, or copper).
-      This is a small shaping signal (max 0.1) that guides the agent toward
+      This is a small shaping signal (max 0.05) that guides the agent toward
       ore without dominating the mining bonus.
-    - **Mining bonus**: 10.0 per ore item extracted during this step, computed
+    - **Mining bonus**: 20.0 per ore item extracted during this step, computed
       as the delta in ``items_mined`` between ``prev_state`` and ``new_state``
       summed over the three mineable item types.
 

@@ -488,8 +488,7 @@ def run_labs(state: EnvState) -> EnvState:
     for wrappers (e.g. :class:`ScienceTallyWrapper`) to integrate.
 
     Vectorised over all entities: one mask, one gather, one
-    :func:`jax.ops.segment_sum`. No scatter — touches the
-    scatter-free pattern the rest of the engine is converging toward.
+    :func:`jax.ops.segment_sum`, no scatter.
 
     Args:
         state: Current environment state.

@@ -79,11 +79,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
     @property
     def default_params(self) -> EnvParams:
-        """Return default environment parameters.
-
-        Returns:
-            Default EnvParams from the inner environment.
-        """
+        """Return default environment parameters."""
         return self._inner.default_params
 
     def step_env(
@@ -149,47 +145,17 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         return obs, state
 
     def get_obs(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Get observation for the selected player.
-
-        Args:
-            state: Current wrapped state.
-            params: Environment parameters.
-
-        Returns:
-            Float32 observation array.
-        """
+        """Pass-through observation from the inner env."""
         return self._inner.get_obs(state.env_state, params)
 
     def is_terminal(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Check if the current state is terminal.
-
-        Args:
-            state: Current wrapped state.
-            params: Environment parameters.
-
-        Returns:
-            Boolean indicating whether state is terminal.
-        """
+        """Delegate termination to the inner env."""
         return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Return the action space.
-
-        Args:
-            params: Environment parameters.
-
-        Returns:
-            Discrete action space.
-        """
+        """Action space is unchanged."""
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Return the observation space.
-
-        Args:
-            params: Environment parameters.
-
-        Returns:
-            Box observation space.
-        """
+        """Observation space is unchanged."""
         return self._inner.observation_space(params)

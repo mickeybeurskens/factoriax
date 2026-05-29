@@ -128,7 +128,7 @@ ItemType.__doc__ = "Item types that can be stored in inventory."
 
 
 class MoveAction(IntEnum):
-    """Movement and facing. A fixed action family."""
+    """Movement and facing."""
 
     NOOP = 0
     UP = 1
@@ -142,7 +142,7 @@ class MoveAction(IntEnum):
 
 
 class InteractAction(IntEnum):
-    """Non-parametric world interactions. A fixed action family."""
+    """World interactions that take no item parameter."""
 
     MINE = 0
     PICKUP = 1
@@ -202,9 +202,8 @@ ROTATE_BASE: int = len(MoveAction) + int(InteractAction.ROTATE_LEFT)
 # Item / machine / block mappings
 # ---------------------------------------------------------------------------
 
-# The item<->machine bijection and anchor for the machine cluster: every
-# placeable item and the machine it becomes. The placeable list and the
-# factoriax.engine.placement gather arrays are projections of it.
+# Maps each placeable item to the machine it becomes. PLACEABLE_ITEM_LIST and
+# the factoriax.engine.placement gather arrays derive from this.
 ITEM_TO_MACHINE = {
     ItemType.MINER: Machine.MINER,
     ItemType.PALLET: Machine.PALLET,

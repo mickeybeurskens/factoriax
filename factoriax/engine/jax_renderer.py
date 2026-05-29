@@ -29,9 +29,7 @@ gathers by ``(direction, machine_type)`` for the machine layer and
 by ``player_directions[i]`` for each player so placed objects show
 their orientation.
 
-The HUD lives in the editor and play UI, not here. Earlier versions
-of this module rendered a 4-quadrant HUD via the now-removed
-``render_q*`` helpers; that path is gone.
+The HUD lives in the editor and play UI, not here.
 
 Usage::
 
@@ -72,16 +70,10 @@ DIGIT_W: int = 3
 # ---------------------------------------------------------------------------
 # Texture atlas construction
 #
-# Sprites for blocks, machines, and the player come from the committed
-# sprite atlas at ``factoriax/assets/atlas.png``. Per-tile-size atlases
-# are derived by slicing the atlas row for the category and downsampling
-# each 32×32 cell to ``tile_px`` via nearest-neighbour. The atlas
-# itself is built by ``scripts/build_atlas.py``; the layout is pinned
-# in ``factoriax/assets/atlas.layout.md`` and verified by
-# ``tests/test_atlas_fresh.py``.
-#
-# Item-color and digit-glyph atlases stay procedural — see the module
-# docstring for why. The atlas's items/digits rows are unused here.
+# The atlas is built by ``scripts/build_atlas.py``; the layout is pinned in
+# ``factoriax/assets/atlas.layout.md`` and verified by
+# ``tests/test_atlas_fresh.py``. Item-color and digit-glyph atlases stay
+# procedural; the atlas's items/digits rows are unused here.
 # ---------------------------------------------------------------------------
 
 _ATLAS_PATH: Path = Path(__file__).resolve().parent.parent / "assets" / "atlas.png"
@@ -469,20 +461,6 @@ def render_map(
 
     composited: jnp.ndarray = jax.lax.fori_loop(0, num_players, _stamp_player, image)
     return composited.astype(jnp.uint8)
-
-
-# ---------------------------------------------------------------------------
-# Removed: HUD renderers and inventory strip
-#
-# ``render_q1_inspector``, ``render_q2_machine_inv``, ``render_q3_inventory``,
-# ``render_q4_crafting``, ``render_hud``, ``render_inventory_strip``, and
-# ``render_map_with_inventory`` lived here until Phase C item 8.4. They
-# referenced EnvState fields (``machine_inventory``, ``machine_power``,
-# ``machine_direction``) that were removed during the entity-array
-# migration; the only callers were two dev scripts that have also been
-# deleted. The HUD is the editor and play-UI's job, not the engine
-# renderer's.
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,7 @@ Player crafting is instant: check if the player has the required inputs,
 consume them, produce the output. Uses the same recipe table as assemblers.
 
 Recipe arrays flow in via :class:`~factoriax.engine.state.EnvParams.recipe_table`
-so balance overlays (Step 5+) can tune input/output counts without
-rebaking the XLA graph.
+so balance overlays can tune input/output counts without rebaking the XLA graph.
 """
 
 import jax

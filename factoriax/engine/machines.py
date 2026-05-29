@@ -235,11 +235,7 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     ``ent_asm_out``, and an adjacent arm pulls from there to free
     the slot for the next cycle. Buffer machines (miner, pallet,
     belt) keep their items in ``ent_buf``, so the same arm can
-    drain those too. Pre-fix, arms only saw ``ent_buf`` — recipe
-    outputs got stuck in ``asm_out`` with no automated way out, and
-    the docstring intent at the bottom of ``run_assemblers`` ("a
-    withdraw (player, arm, or downstream belt/pallet) pulls it
-    out") didn't match the code.
+    drain those too.
 
     Args:
         state: Current environment state.
@@ -650,17 +646,8 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     crossing_horiz_dir = crossing_axes[:, 1]  # output direction of horizontal axis
 
     has_pair = buf_count >= 2
-    # Pair-gated firing. A splitter attempts to fire *both* perpendicular
-    # outputs whenever its buffer holds a pair (>= 2 items). Each output
-    # is dispatched as an independent push in the d-loop below, where the
-    # standard per-iteration receptivity check (``dn_empty | (dn_same &
-    # dn_space)``) decides whether that side actually commits — so a
-    # blocked downstream on one side simply skips that iteration while
-    # the other side still pushes one item, instead of stalling the
-    # whole splitter. Buffer of 1 holds: the pair-firing semantic
-    # preserves the even-split contract under symmetric flow, and the
-    # second-iteration ``has_item`` check ensures we never overdraw the
-    # buffer when the second side is also receptive.
+    # A splitter fires both perpendicular outputs when it holds a pair;
+    # each side commits independently in the d-loop below (see docstring).
     splitter_pushers_vert = is_vert_split & has_pair
     splitter_pushers_horiz = is_horiz_split & has_pair
 

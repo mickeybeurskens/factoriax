@@ -382,9 +382,8 @@ ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
 
 #: :class:`RecipeBook` used by the rocket scenario — applies
 #: :data:`ROCKET_RECIPE_BALANCE` over :data:`BASE_RECIPE_BOOK`.
-#: Pass to recipe-driven scripted agents (e.g.
-#: :func:`make_advanced_factory_rocket_agent`) so their BOM math
-#: tracks the engine's recipe table.
+#: Pass to recipe-driven scripted agents so their BOM math tracks
+#: the engine's recipe table.
 ROCKET_RECIPE_BOOK: RecipeBook = BASE_RECIPE_BOOK.with_balance(ROCKET_RECIPE_BALANCE)
 
 #: :class:`RecipeTable` projection of :data:`ROCKET_RECIPE_BOOK`.

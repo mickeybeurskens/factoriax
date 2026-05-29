@@ -127,11 +127,8 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """Return default environment parameters.
 
         When the env is bound to a :class:`Level`, the level's
-        ``map_width`` and ``map_height`` are propagated into the
-        returned params so callers don't need a manual ``replace``.
-
-        Returns:
-            Default EnvParams instance.
+        ``map_width`` and ``map_height`` are propagated into the returned
+        params so callers don't need a manual ``replace``.
         """
         if self._level is None:
             return EnvParams()
@@ -239,52 +236,22 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return obs, state
 
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Get observation for the selected player.
-
-        Args:
-            state: Current environment state.
-            params: Environment parameters.
-
-        Returns:
-            Float32 observation array.
-        """
+        """Observation for the selected player via the configured variant."""
         fn = OBSERVATIONS[self.obs]
         if self._obs_is_local:
             return fn(state, params, state.selected_player, radius=self.obs_radius)
         return fn(state, params, state.selected_player)
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Check if the current state is terminal.
-
-        Args:
-            state: Current environment state.
-            params: Environment parameters.
-
-        Returns:
-            Boolean indicating whether state is terminal.
-        """
+        """Whether the episode has ended."""
         return is_game_over(state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Return the action space.
-
-        Args:
-            params: Environment parameters.
-
-        Returns:
-            Discrete action space.
-        """
+        """Discrete action space over all actions."""
         return spaces.Discrete(NUM_ACTIONS)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Return the observation space.
-
-        Args:
-            params: Environment parameters.
-
-        Returns:
-            Box observation space.
-        """
+        """Box observation space sized for the configured obs variant."""
         if self._obs_is_local:
             side = 2 * self.obs_radius + 1
             tiles = side * side

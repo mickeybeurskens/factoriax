@@ -1,26 +1,9 @@
 """Achievement system for tracking player progress and awarding rewards.
 
-Achievements are ordered as a tutorial progression that guides the player
-from hand-mining raw ore all the way to launching a rocket.  Each
-achievement teaches one new concept or mechanic:
-
- 1. First Ore          — mine any ore (teaches mining)
- 2. Stockpile          — mine 10 total (build up resources for crafting)
- 3. Apprentice Engineer — craft a machine (teaches crafting UI)
- 4. Breaking Ground    — place a machine (teaches placement)
- 5. Coal Gathered      — hold any coal in inventory (teaches resource gathering)
- 6. Automated Mining   — miner produces ore (confirms extraction)
- 7. Moving Parts       — place an arm and a pallet (pipeline building blocks)
- 8. First Pipeline     — a pallet holds items (full miner-to-arm-to-pallet flow)
- 9. Belt Network       — place 5 belts (transport layer)
-10. Scaling Up         — 3 miners on the map (replicate the pattern)
-11. Industrialist      — 10 machines total (capstone of tier 1)
-12. Assembler Crafted  — craft an assembler (tier 2 entry)
-13. Assembly Line      — place an assembler (teaches assembler placement)
-14. First Assembly     — assembler produces output (confirms assembler works)
-15. Hull Production    — hold 10 hulls (building toward rocket)
-16. Fuel Production    — hold 10 fuel packs (second rocket ingredient)
-17. Rocket Complete    — hold a rocket (game won)
+Achievements form a tutorial progression that guides the player from
+hand-mining raw ore to launching a rocket, each one teaching a new
+mechanic. :data:`ACHIEVEMENT_INFO` holds the display names and hints;
+:func:`core_game_conditions` defines what unlocks each slot.
 """
 
 from dataclasses import dataclass
@@ -149,8 +132,8 @@ NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
 
 #: Per-achievement reward magnitudes for the core game, used by
 #: :func:`factoriax.engine.rewards.achievement_reward` as the default weights.
-#: Shape ``(MAX_ACHIEVEMENTS,)`` — slots beyond the 17 core achievements
-#: are zero so they contribute no reward.
+#: Shape ``(MAX_ACHIEVEMENTS,)`` — slots beyond the ``NUM_ACHIEVEMENTS`` core
+#: achievements are zero so they contribute no reward.
 CORE_ACHIEVEMENT_WEIGHTS = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
 CORE_ACHIEVEMENT_WEIGHTS = CORE_ACHIEVEMENT_WEIGHTS.at[:NUM_ACHIEVEMENTS].set(1.0)
 
@@ -233,7 +216,7 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
 
 
 def core_game_conditions(state: EnvState) -> jax.Array:
-    """Compute the 21 core game achievement conditions.
+    """Compute the core game achievement conditions.
 
     Returns a boolean array of shape ``(MAX_ACHIEVEMENTS,)``. The
     first ``NUM_ACHIEVEMENTS`` slots correspond to the core tutorial
@@ -267,47 +250,47 @@ def core_game_conditions(state: EnvState) -> jax.Array:
 
     conditions = jnp.array(
         [
-            # 0  First Ore — mine any ore
+            # 0  First Ore
             total_mined >= 1,
-            # 1  Stockpile — mine 10 total
+            # 1  Stockpile
             total_mined >= 10,
-            # 2  Apprentice Engineer — craft any machine
+            # 2  Apprentice Engineer
             machine_items_held >= 1,
-            # 3  Breaking Ground — place any machine
+            # 3  Breaking Ground
             total_machines >= 1,
-            # 4  Coal Gathered — hold any coal in player inventory
+            # 4  Coal Gathered
             count_total_items(state, ItemType.COAL) >= 1,
-            # 5  Automated Mining — miner output slot non-empty
+            # 5  Automated Mining
             _any_miner_has_output(state),
-            # 6  Moving Parts — place a pallet
+            # 6  Moving Parts — checks the pallet only; name/hint also mention an arm
             count_machines(state, Machine.PALLET) >= 1,
-            # 7  First Pipeline — any pallet holds items
+            # 7  First Pipeline
             _any_pallet_has_items(state),
-            # 8  Belt Network — place 5 belts
+            # 8  Belt Network
             count_machines(state, Machine.CONVEYOR_BELT) >= 5,
-            # 9  Scaling Up — 3 miners on the map
+            # 9  Scaling Up
             count_machines(state, Machine.MINER) >= 3,
-            # 10 Industrialist — 10 machines total
+            # 10 Industrialist
             total_machines >= 10,
-            # 11 Assembler Crafted — hold an assembler
+            # 11 Assembler Crafted
             count_total_items(state, ItemType.ASSEMBLER) >= 1,
-            # 12 Assembly Line — place an assembler
+            # 12 Assembly Line
             count_machines(state, Machine.ASSEMBLER) >= 1,
-            # 13 First Assembly — assembler output non-empty
+            # 13 First Assembly
             _any_assembler_has_output(state),
             # 14 Hull Production — placeholder (item removed, always False)
             jnp.bool_(False),
             # 15 Fuel Production — placeholder (item removed, always False)
             jnp.bool_(False),
-            # 16 Rocket Complete — place a rocket on the map
+            # 16 Rocket Complete
             count_machines(state, Machine.ROCKET) >= 1,
-            # 17 First Science — hold any science pack
+            # 17 First Science
             (
                 count_total_items(state, ItemType.BASIC_SCIENCE_PACK)
                 + count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK)
             )
             >= 1,
-            # 18 Advanced Science — hold an advanced science pack
+            # 18 Advanced Science
             count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK) >= 1,
         ],
         dtype=jnp.bool_,

@@ -6,30 +6,20 @@ Single source of truth for recipe data. Two layers:
   (output item, input pairs, machine type) and balance numbers
   (input counts via the ``inputs`` tuple, ``output_count``, ``ticks``).
 - :data:`BASE_RECIPES` is the canonical tuple of :class:`Recipe`
-  instances shipped with the engine. The five JAX arrays consumed by
-  :mod:`factoriax.engine.crafting` and :mod:`factoriax.engine.machines` (outputs,
-  input items, input counts, output counts, ticks, machine type) are
+  instances shipped with the engine. The JAX arrays consumed by
+  :mod:`factoriax.engine.crafting` and :mod:`factoriax.engine.machines` are
   derived projections of this tuple.
 
-Recipe shapes:
+Furnace recipes take 1 or 2 input types; the projection pads the unused
+slot with ``(EMPTY, 0)`` so every recipe is a 2-slot lookup. Assembler
+recipes take exactly 2 input types, and the unordered input pair is
+unique per machine type — the invariant that lets the combiner
+forward-match dispatch deterministically (see ``tests/test_recipes.py``).
 
-- **Furnace recipes** take 1 or 2 input types. As of the LIMESTONE
-  addition every shipped furnace recipe is 2-input (the four plate
-  smelts pair their ore with COAL, REFRACTORY pairs LIMESTONE with
-  COAL). The 1-input branch is still supported by the projection —
-  the unused slot is padded with ``(EMPTY, 0)`` so the Phase 3
-  matcher in ``run_combiners`` can treat every recipe as a 2-slot
-  lookup.
-- **Assembler recipes** take exactly 2 input types, and the
-  (unordered) pair is unique across the table at the same machine
-  type. Uniqueness is the invariant that lets Phase 3 forward-match
-  deterministically; see ``tests/test_recipes.py``.
-
-Player crafting consumes materials from inventory and produces
-``output_count`` output items instantly. Combiners use ``ticks`` as
-the production delay and the same ``output_count`` for the cycle's
-deposit. The output slot can't be overwritten, so combiner
-throughput is bounded by withdrawal.
+Player crafting consumes inventory and produces ``output_count`` items
+instantly; combiners use ``ticks`` as the production delay. The output
+slot can't be overwritten, so combiner throughput is bounded by
+withdrawal.
 """
 
 from __future__ import annotations
@@ -67,8 +57,8 @@ class Recipe:
     Identity (``output``, ``inputs``-types, ``machine_type``) is fixed
     in the canonical ``BASE_RECIPES`` tuple; tuning it requires a code
     change. Balance numbers (input counts via ``inputs``-amounts,
-    ``output_count``, ``ticks``) are construction-time-tunable through
-    the upcoming :class:`RecipeBalance` overlay.
+    ``output_count``, ``ticks``) are tunable through the
+    :class:`RecipeBalance` overlay.
 
     Attributes:
         output: ``ItemType`` integer this recipe produces.
@@ -366,11 +356,8 @@ class RecipeBook:
 # rocket sub-assemblies.
 BASE_RECIPES: tuple[Recipe, ...] = (
     # -------- CRAFT-addressable slots 0–17 --------
-    # Furnace smelts — coal is consumed as fuel for every plate
-    # (1 ore + 1 coal → 1 plate). Refractory pairs LIMESTONE with
-    # COAL so every furnace recipe is shaped the same — two inputs
-    # with COAL as fuel — and downstream belt logistics never have
-    # to special-case a single-input outlier.
+    # Furnace smelts — 1 ore + 1 coal (fuel) -> 1 plate. Every furnace
+    # recipe is 2-input so logistics never special-case a 1-input outlier.
     Recipe(
         output=int(ItemType.IRON_PLATE),
         inputs=((int(ItemType.IRON_ORE), 1), (int(ItemType.COAL), 1)),
@@ -494,10 +481,8 @@ BASE_RECIPES: tuple[Recipe, ...] = (
         ticks=8,
         name="Science Lab",
     ),
-    # Belt-network pieces — same logistical tier as CONVEYOR_BELT.
-    # Pair each with COAL so the type-sets {TIN_PLATE, COAL} and
-    # {COPPER_PLATE, COAL} stay unique (the four ore+COAL pairs are
-    # all FURNACE-gated, so they don't collide on the ASSEMBLER side).
+    # Belt-network pieces. Paired with COAL to keep their assembler
+    # input type-sets unique (the ore+COAL smelts are FURNACE-gated).
     Recipe(
         output=int(ItemType.SPLITTER),
         inputs=((int(ItemType.TIN_PLATE), 1), (int(ItemType.COAL), 1)),
@@ -511,10 +496,7 @@ BASE_RECIPES: tuple[Recipe, ...] = (
         name="Crossing",
     ),
     # -------- Machine-only slots 21+ (no CRAFT action) --------
-    # Furnace half-fab — limestone calcined with coal heat. Two
-    # inputs, so the (input-type-set) uniqueness invariant in
-    # tests/test_recipes.py still holds and the recipe shares the
-    # same 2-slot shape as every plate smelt.
+    # Furnace half-fab — limestone + coal, 2-input like every smelt.
     Recipe(
         output=int(ItemType.REFRACTORY),
         inputs=((int(ItemType.LIMESTONE), 1), (int(ItemType.COAL), 1)),
@@ -661,15 +643,10 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 BASE_RECIPE_BOOK: RecipeBook = RecipeBook(recipes=BASE_RECIPES)
 
 #: Default :class:`RecipeTable` derived from :data:`BASE_RECIPE_BOOK`.
-#: Step 4 will add this to :class:`EnvParams` as the runtime-tunable
-#: source of recipe arrays. Module-level constants below alias its
-#: fields so existing call sites keep working until the migration is
-#: complete.
 DEFAULT_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(BASE_RECIPE_BOOK)
 
-# Module-level aliases (deprecated — Step 4 will route call sites
-# through ``EnvParams.recipe_table`` instead). Kept until every
-# import is migrated so this commit is a pure-additive refactor.
+# Deprecated module-level aliases of the default table's fields. Prefer
+# ``params.recipe_table.*``; kept until all call sites are migrated, then remove.
 RECIPE_OUTPUTS: jnp.ndarray = DEFAULT_RECIPE_TABLE.outputs
 RECIPE_OUTPUT_COUNTS: jnp.ndarray = DEFAULT_RECIPE_TABLE.output_counts
 RECIPE_INPUT_ITEMS: jnp.ndarray = DEFAULT_RECIPE_TABLE.input_items

@@ -1,27 +1,10 @@
 """Machine configuration — per-machine-type tunable knobs.
 
-Parallel structure to :mod:`factoriax.engine.recipes`, but for machine
-behavior rather than recipes. Currently exposes a single knob —
-``max_stack``, the per-machine-type buffer cap — but the dataclass
-shape is designed to grow (extra arrays for craft rate, distinct
-type cap, etc.) without breaking the JIT cache.
-
-Two layers:
-
-- :class:`MachineConfigOverride` is a frozen dataclass holding the
-  optional override fields a caller wants to apply for one machine
-  type. Fields are ``None`` by default; only non-None fields take
-  effect.
-- :class:`MachineConfig` is the JAX-friendly :class:`PyTreeNode`
-  that the engine reads from. Its arrays are indexed by machine
-  type (length = ``len(Machine)``), so the JIT cache survives
-  any override (the shape is fixed; only the values change).
-
-Default values come from :data:`~factoriax.engine.machine_spec.MACHINE_MAX_STACK`
-so the constant remains the single source of truth for the engine's
-shipped stack caps. Override-aware overlays use
-:meth:`MachineConfig.with_overrides` which mirrors
-:meth:`factoriax.engine.recipes.RecipeBook.with_balance`.
+:class:`MachineConfig` is the JAX PyTree the engine reads from, with one array
+per knob indexed by machine type. :class:`MachineConfigOverride` lets a caller
+retune individual machine types via :meth:`MachineConfig.with_overrides`.
+Defaults come from :mod:`factoriax.engine.machine_spec`, keeping the specs the
+single source of truth for shipped values.
 """
 
 from __future__ import annotations
@@ -39,11 +22,8 @@ from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 class MachineConfigOverride:
     """Optional per-machine-type overrides.
 
-    Each field is ``None`` by default; only non-None fields actually
-    override the corresponding entry in :class:`MachineConfig`. Bundles
-    the override knobs into one record so callers can extend
-    :class:`MachineConfig` (more arrays) without changing every call
-    site that builds an override dict.
+    Each field is ``None`` by default; only non-None fields override the
+    corresponding entry in :class:`MachineConfig`.
 
     Attributes:
         max_stack: New per-machine buffer cap. Must be a non-negative
@@ -60,11 +40,8 @@ class MachineConfigOverride:
 class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Per-machine-type tuning the engine consumes inside JIT'd kernels.
 
-    Stored as a PyTree leaf on :class:`~factoriax.engine.state.EnvParams` so
-    JIT'd kernels in :mod:`factoriax.engine.machines` can read
-    ``params.machine_config.max_stack`` without re-baking the XLA
-    graph when overrides change. Shape is fixed by ``len(Machine)``
-    so the JIT cache survives across different override sets.
+    A PyTree leaf on :class:`~factoriax.engine.state.EnvParams` of fixed shape
+    ``(len(Machine),)``, so overrides change values without retracing.
 
     Attributes:
         max_stack: Per-machine buffer cap, shape
@@ -80,14 +57,7 @@ class MachineConfig(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
     @classmethod
     def default(cls) -> MachineConfig:
-        """Construct the default config from shipped engine constants.
-
-        Returns:
-            :class:`MachineConfig` whose ``max_stack`` mirrors
-            :data:`~factoriax.engine.machine_spec.MACHINE_MAX_STACK` and whose
-            ``max_health`` mirrors
-            :data:`~factoriax.engine.machine_spec.MACHINE_MAX_HEALTH`.
-        """
+        """Construct the default config from the shipped machine specs."""
         return cls(
             max_stack=jnp.asarray(MACHINE_MAX_STACK, dtype=jnp.int16),
             max_health=jnp.asarray(MACHINE_MAX_HEALTH, dtype=jnp.int16),
