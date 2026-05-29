@@ -45,17 +45,16 @@
 
 set -euo pipefail
 
-# ---- Sweep parameters (edit to add more jobs) --------------------------------
-# A single override (NUM_ENVS / TOTAL_STEPS / ...) seeds the one-job default;
-# for a real sweep, edit the arrays directly.
-
-seeds=(0)
-total_steps_list=("${TOTAL_STEPS:-1_000_000_000}")   # 1B steps — a real "higher count" test.
-num_envs_list=("${NUM_ENVS:-2048}")                  # 16x16 env is tiny; A100 fits thousands.
-rollout_steps_list=("${ROLLOUT_STEPS:-128}")
-entropy_coef_list=("${ENTROPY_COEF:-0.01}")          # PPOConfig default; bump to ~0.03-0.05 for more action exploration.
-lr_list=("${LR:-2.5e-4}")                            # PPOConfig default; lower for slower convergence.
-run_names=("${RUN_NAME:-ppo_easy_rocket_procgen}")
+# ---- Sweep parameters --------------------------------------------------------
+# One parallel A100 job per (seed, num_envs); the submit loop below is a nested
+# loop over these two arrays. Other knobs are scalars shared across all jobs.
+seeds=(0 1 2)
+num_envs_list=(2048 4096 8192 16384 32768 65536)     # 16x16 env is tiny; A100 fits thousands.
+total_steps="${TOTAL_STEPS:-200_000_000}"
+rollout_steps="${ROLLOUT_STEPS:-128}"
+entropy_coef="${ENTROPY_COEF:-0.01}"                 # bump to ~0.03-0.05 for more exploration.
+lr="${LR:-2.5e-4}"
+run_prefix="${RUN_NAME:-ppo_a100}"
 
 # Set to "true" to broadcast a single reset key to all parallel envs (every
 # worker draws the same procgen layout — layout-invariance ablation).
@@ -83,10 +82,10 @@ if [[ -z "${CPUS_PER_TASK:-}" ]]; then
 fi
 SLURM_OUT_DIR="${SLURM_OUT_DIR:-${HOME}/slurm}"
 WANDB_PROJECT="${WANDB_PROJECT:-factoriax_easy_rocket}"
-THROUGHPUT_JSON="${THROUGHPUT_JSON:-${PROJECT_DIR}/ppo_throughput.json}"
+THROUGHPUT_DIR="${THROUGHPUT_DIR:-${PROJECT_DIR}/throughput_runs}"
 VENV_DIR="${VENV_DIR:-${PROJECT_DIR}/.venv}"
 
-mkdir -p "${SLURM_OUT_DIR}"
+mkdir -p "${SLURM_OUT_DIR}" "${THROUGHPUT_DIR}"
 
 # Fail fast if the project checkout looks wrong.
 if [[ ! -f "${PROJECT_DIR}/pyproject.toml" ]]; then
@@ -111,20 +110,15 @@ echo "  WALL_TIME     = ${WALL_TIME}"
 echo "  CPUS_PER_TASK = ${CPUS_PER_TASK}"
 echo "  SLURM_OUT_DIR = ${SLURM_OUT_DIR}"
 echo "  WANDB_PROJECT = ${WANDB_PROJECT}"
-echo "  THROUGHPUT_JSON = ${THROUGHPUT_JSON}"
+echo "  THROUGHPUT_DIR  = ${THROUGHPUT_DIR}"
 
 # ---- Submit loop -------------------------------------------------------------
 
-for i in "${!seeds[@]}"; do
-    seed="${seeds[$i]}"
-    total_steps="${total_steps_list[$i]}"
-    num_envs="${num_envs_list[$i]}"
-    rollout_steps="${rollout_steps_list[$i]}"
-    entropy_coef="${entropy_coef_list[$i]}"
-    lr="${lr_list[$i]}"
-    run_name="${run_names[$i]}"
+for seed in "${seeds[@]}"; do
+  for num_envs in "${num_envs_list[@]}"; do
+    run_name="${run_prefix}_e${num_envs}_s${seed}"
 
-    echo "Submitting: seed=${seed} steps=${total_steps} envs=${num_envs} rollout=${rollout_steps} ent=${entropy_coef} lr=${lr} name=${run_name}"
+    echo "Submitting: seed=${seed} envs=${num_envs} steps=${total_steps} rollout=${rollout_steps} ent=${entropy_coef} lr=${lr} name=${run_name}"
 
     cat <<EOF | sbatch
 #!/bin/bash
@@ -173,8 +167,8 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     --use-wandb \\
     --wandb-project ${WANDB_PROJECT} \\
     --wandb-run-name ${run_name} \\
-    --throughput-json ${THROUGHPUT_JSON}
+    --throughput-json ${THROUGHPUT_DIR}/${run_name}.json
 EOF
-
     sleep 0.1
+  done
 done
