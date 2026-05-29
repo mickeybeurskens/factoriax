@@ -419,42 +419,28 @@ _EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
         partial(_has_n_machines, machine=int(Machine.MINER), n=3),
     ),
     (
-        "place_6_miners",
+        "metal_in_motion",
         partial(_has_n_machines, machine=int(Machine.MINER), n=6),
     ),
     # ---- Miners up ----
     ("automated_mining", _any_producing_miner),
     ("ore_fields", _distinct_producing_ore_types),
-    ("full_supply", _all_ore_types_covered),
+    ("mining_master", _all_ore_types_covered),
+    # ---- Storage ----
+    ("one_pallet", partial(_has_n_machines, machine=int(Machine.PALLET), n=1)),
+    ("three_pallets", partial(_has_n_machines, machine=int(Machine.PALLET), n=3)),
+    ("stacked", partial(_has_n_machines, machine=int(Machine.PALLET), n=6)),
+    # ---- Hull ----
+    ("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
     (
-        "one_arm_pallet",
+        "assembler_and_arm",
         partial(
             _has_n_machines_pair,
-            machine_a=int(Machine.ARM),
-            machine_b=int(Machine.PALLET),
+            machine_a=int(Machine.ASSEMBLER),
+            machine_b=int(Machine.ARM),
             n=1,
         ),
     ),
-    (
-        "three_arm_pallets",
-        partial(
-            _has_n_machines_pair,
-            machine_a=int(Machine.ARM),
-            machine_b=int(Machine.PALLET),
-            n=3,
-        ),
-    ),
-    (
-        "six_arm_pallets",
-        partial(
-            _has_n_machines_pair,
-            machine_a=int(Machine.ARM),
-            machine_b=int(Machine.PALLET),
-            n=6,
-        ),
-    ),
-    # ---- Hull ----
-    ("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
     (
         "one_belt",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=1),
@@ -470,6 +456,15 @@ _EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
         partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=2),
     ),
     (
+        "an_arm_and_a_leg",
+        partial(
+            _has_n_machines_pair,
+            machine_a=int(Machine.ASSEMBLER),
+            machine_b=int(Machine.ARM),
+            n=2,
+        ),
+    ),
+    (
         "six_belts",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=6),
     ),
@@ -478,12 +473,9 @@ _EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
         partial(_assembler_outputs_item, item=int(ItemType.ENGINE_UNIT)),
     ),
     # ---- Rocket production ----
+    ("auto_bots", partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3)),
     (
-        "three_assemblers",
-        partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3),
-    ),
-    (
-        "ten_belts",
+        "belt_spaghetti",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=10),
     ),
     ("rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))),

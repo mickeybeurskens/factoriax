@@ -168,22 +168,24 @@ _A_MINE_3_ORE = _ach_index("mine_3_ore")
 _A_PROSPECTOR = _ach_index("prospector")
 _A_PLACE_MINER = _ach_index("place_miner")
 _A_PLACE_3_MINERS = _ach_index("place_3_miners")
-_A_PLACE_6_MINERS = _ach_index("place_6_miners")
+_A_METAL_IN_MOTION = _ach_index("metal_in_motion")
 _A_AUTOMATED_MINING = _ach_index("automated_mining")
 _A_ORE_FIELDS = _ach_index("ore_fields")
-_A_FULL_SUPPLY = _ach_index("full_supply")
-_A_ONE_ARM_PALLET = _ach_index("one_arm_pallet")
-_A_THREE_ARM_PALLETS = _ach_index("three_arm_pallets")
-_A_SIX_ARM_PALLETS = _ach_index("six_arm_pallets")
+_A_MINING_MASTER = _ach_index("mining_master")
+_A_ONE_PALLET = _ach_index("one_pallet")
+_A_THREE_PALLETS = _ach_index("three_pallets")
+_A_STACKED = _ach_index("stacked")
 _A_ASSEMBLER_ONLINE = _ach_index("assembler_online")
+_A_ASSEMBLER_AND_ARM = _ach_index("assembler_and_arm")
 _A_ONE_BELT = _ach_index("one_belt")
 _A_THREE_BELTS = _ach_index("three_belts")
 _A_HULL_PRODUCED = _ach_index("hull_production")
 _A_TWO_ASSEMBLERS = _ach_index("two_assemblers")
+_A_AN_ARM_AND_A_LEG = _ach_index("an_arm_and_a_leg")
 _A_SIX_BELTS = _ach_index("six_belts")
 _A_ENGINE_PRODUCED = _ach_index("engine_production")
-_A_THREE_ASSEMBLERS = _ach_index("three_assemblers")
-_A_TEN_BELTS = _ach_index("ten_belts")
+_A_AUTO_BOTS = _ach_index("auto_bots")
+_A_BELT_SPAGHETTI = _ach_index("belt_spaghetti")
 _A_ROCKET_PRODUCED = _ach_index("rocket_assembled")
 _A_LIFTOFF = _ach_index("liftoff")
 
@@ -328,12 +330,12 @@ def test_ore_fields_needs_three_distinct_producing(state_factory) -> None:
     )
 
 
-def test_full_supply_needs_all_six_producing(state_factory) -> None:
+def test_mining_master_needs_all_six_producing(state_factory) -> None:
     all_producing = _miner_row(state_factory, _ALL_ORE_BLOCKS, (1,) * 6)
-    assert bool(easy_rocket_conditions(all_producing)[_A_FULL_SUPPLY])
+    assert bool(easy_rocket_conditions(all_producing)[_A_MINING_MASTER])
     # Five producing, the sixth idle -> not complete.
     five = _miner_row(state_factory, _ALL_ORE_BLOCKS, (1, 1, 1, 1, 1, 0))
-    assert not bool(easy_rocket_conditions(five)[_A_FULL_SUPPLY])
+    assert not bool(easy_rocket_conditions(five)[_A_MINING_MASTER])
 
 
 def test_assembler_online_counts_placed_assembler(state_factory) -> None:
@@ -408,22 +410,24 @@ def test_inventory_does_not_unlock_machine_bits(state_factory) -> None:
     machine_sourced = (
         _A_PLACE_MINER,
         _A_PLACE_3_MINERS,
-        _A_PLACE_6_MINERS,
+        _A_METAL_IN_MOTION,
         _A_AUTOMATED_MINING,
         _A_ORE_FIELDS,
-        _A_FULL_SUPPLY,
-        _A_ONE_ARM_PALLET,
-        _A_THREE_ARM_PALLETS,
-        _A_SIX_ARM_PALLETS,
+        _A_MINING_MASTER,
+        _A_ONE_PALLET,
+        _A_THREE_PALLETS,
+        _A_STACKED,
         _A_ASSEMBLER_ONLINE,
+        _A_ASSEMBLER_AND_ARM,
         _A_ONE_BELT,
         _A_THREE_BELTS,
         _A_HULL_PRODUCED,
         _A_TWO_ASSEMBLERS,
+        _A_AN_ARM_AND_A_LEG,
         _A_SIX_BELTS,
         _A_ENGINE_PRODUCED,
-        _A_THREE_ASSEMBLERS,
-        _A_TEN_BELTS,
+        _A_AUTO_BOTS,
+        _A_BELT_SPAGHETTI,
         _A_ROCKET_PRODUCED,
         _A_LIFTOFF,
     )
