@@ -372,6 +372,103 @@ def _finalize_artifacts(
         )
 
 
+def _query_gpu_name() -> str:
+    """One-shot nvidia-smi query for the GPU model. ``"unknown"`` on miss."""
+    import subprocess  # noqa: PLC0415
+
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            text=True,
+            timeout=5,
+        ).strip()
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
+        return "unknown"
+    first = out.split("\n", 1)[0].strip()
+    return first or "unknown"
+
+
+def _write_throughput_json(
+    output_path: str,
+    scenario: str,
+    config: Config,
+    steady_sps: float,
+    warmup_wall_samples: list[float],
+    iter_wall_samples: list[float],
+    steps_per_iter: int,
+) -> None:
+    """Write the throughput JSON consumed by paper/figures/throughput.py.
+
+    The GPU model name (via ``nvidia-smi``) is suffixed onto the
+    basename so a caller can pass the same ``--throughput-json`` path
+    across devices without overwriting prior runs, and so the
+    resulting filename matches the paper-side consolidator's
+    ``ppo_throughput_*.json`` glob. The schema mirrors
+    :mod:`scripts.ppo_throughput_bench` so the paper-side consolidator
+    and figure builder consume both producers interchangeably.
+    """
+    import re  # noqa: PLC0415
+    import statistics  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    import orjson  # noqa: PLC0415
+
+    gpu_name = _query_gpu_name()
+    safe_name = re.sub(r"[^A-Za-z0-9]+", "-", gpu_name).strip("-") or "unknown"
+
+    ppo = config.ppo
+    p = Path(output_path)
+    out_path = p.with_name(f"{p.stem}_{safe_name}_envs{ppo.num_envs}{p.suffix}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    measured_steps = len(iter_wall_samples) * steps_per_iter
+    warmup_seconds = sum(warmup_wall_samples) if warmup_wall_samples else 0.0
+    if iter_wall_samples:
+        mean_wall = statistics.mean(iter_wall_samples)
+        sps_mean = steps_per_iter / mean_wall if mean_wall > 0 else 0.0
+    else:
+        sps_mean = 0.0
+    wallclock_seconds = sum(iter_wall_samples)
+
+    payload = {
+        "scenario": scenario,
+        "gpu_name": gpu_name,
+        "num_envs": ppo.num_envs,
+        "rollout_steps": ppo.rollout_steps,
+        "update_epochs": ppo.update_epochs,
+        "num_minibatches": ppo.num_minibatches,
+        "hidden_dims": list(ppo.hidden_dims),
+        "total_steps": ppo.total_steps,
+        "jax_version": jax.__version__,
+        "runs": [
+            {
+                "device": gpu_name,
+                "device_full": gpu_name,
+                "num_envs": ppo.num_envs,
+                "rollout_steps": ppo.rollout_steps,
+                "measured_steps": measured_steps,
+                "steady_state_sps": steady_sps,
+                "steady_state_sps_mean": sps_mean,
+                "wallclock_seconds": wallclock_seconds,
+                "startup_seconds": warmup_seconds,
+                "warmup_samples": warmup_wall_samples,
+                "iter_samples": iter_wall_samples,
+            }
+        ],
+    }
+    out_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
+    logger.info(
+        "wrote throughput JSON to %s (gpu=%s, %d iters, %.0f sps)",
+        out_path,
+        gpu_name,
+        len(iter_wall_samples),
+        steady_sps,
+    )
+
+
 def train(config: Config) -> dict[str, float]:
     """Train PPO against the easy_rocket scenario and return final metrics."""
     ppo = config.ppo
@@ -606,6 +703,13 @@ def train(config: Config) -> dict[str, float]:
     steady_start = 0.0
     marginal_sps = 0.0
     t_prev = time.time()
+    # Per-iteration wall time samples for the throughput-json dump.
+    # ``warmup_wall_samples`` captures iter 0 (compile + first launch);
+    # ``iter_wall_samples`` captures every steady-state iter that
+    # follows. Kept as separate lists so a downstream consumer never
+    # mixes the one-time compile cost into the throughput aggregates.
+    warmup_wall_samples: list[float] = []
+    iter_wall_samples: list[float] = []
 
     for it in range(num_iters):
         (params, opt_state, obs_stats, env_states, obs, rng, traj, metrics) = (
@@ -618,10 +722,12 @@ def train(config: Config) -> dict[str, float]:
         current_step += steps_per_iter
         if it == 0:
             warmup_seconds = iter_seconds
+            warmup_wall_samples.append(iter_seconds)
             steady_start = t_now
         else:
             steady_steps += steps_per_iter
             marginal_sps = steps_per_iter / iter_seconds
+            iter_wall_samples.append(iter_seconds)
 
         rewards_np = np.asarray(traj.reward)
         dones_np = np.asarray(traj.done)
@@ -743,6 +849,17 @@ def train(config: Config) -> dict[str, float]:
                 "perf/steady_sps": steady_sps,
             },
             step=current_step,
+        )
+
+    if ppo.throughput_json:
+        _write_throughput_json(
+            output_path=ppo.throughput_json,
+            scenario=_SCENARIO_ID,
+            config=config,
+            steady_sps=steady_sps,
+            warmup_wall_samples=warmup_wall_samples,
+            iter_wall_samples=iter_wall_samples,
+            steps_per_iter=steps_per_iter,
         )
 
     _, eval_initial_state = env.reset_env(jax.random.PRNGKey(ppo.seed), env_params)

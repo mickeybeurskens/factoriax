@@ -35,6 +35,12 @@ class PPOConfig:
         use_wandb: Whether to log to Weights & Biases.
         wandb_project: W&B project name.
         wandb_run_name: W&B run name (None = auto-generated).
+        throughput_json: Path to write a runs.json compatible with
+            ``paper/scripts/figures/throughput.py``. The GPU model
+            is suffixed onto the basename at write time so the file
+            name matches the paper-side consolidator's
+            ``ppo_throughput_*.json`` glob. Empty string or ``None``
+            disables the dump.
     """
 
     hidden_dims: tuple[int, ...] = (256, 256)
@@ -58,3 +64,4 @@ class PPOConfig:
     use_wandb: bool = False
     wandb_project: str = "factoriax"
     wandb_run_name: str | None = None
+    throughput_json: str | None = "./ppo_throughput.json"

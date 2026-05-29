@@ -376,6 +376,32 @@ def _has_machine(state: EnvState, machine: int) -> jax.Array:
     return _count_machines(state, machine) >= 1
 
 
+def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
+    """At least ``n`` machines of ``machine`` type are placed on the map."""
+    return _count_machines(state, machine) >= n
+
+
+def _has_n_machines_pair(
+    state: EnvState, machine_a: int, machine_b: int, n: int
+) -> jax.Array:
+    """At least ``n`` of ``machine_a`` AND at least ``n`` of ``machine_b``."""
+    return (_count_machines(state, machine_a) >= n) & (
+        _count_machines(state, machine_b) >= n
+    )
+
+
+def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
+    """Player inventory holds at least one of ``n`` distinct raw ore types.
+
+    Sibling of :func:`_has_any_raw_ore` (n=1) and
+    :func:`_has_each_raw_ore` (n=len(_RAW_ORE_ITEMS)); use this when
+    you want a mid-curriculum variety milestone such as "half the ore
+    types collected".
+    """
+    held_types = jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
+    return jnp.sum(held_types.astype(jnp.int32)) >= n
+
+
 #: Achievement bits in curriculum order, each paired with a stable name. This
 #: is the single source of truth for the bit set: the condition tuple, the
 #: public name list, and :data:`NUM_EASY_ROCKET_ACHIEVEMENTS` all derive from
@@ -383,41 +409,82 @@ def _has_machine(state: EnvState, machine: int) -> jax.Array:
 #: buffers, so hand crafting cannot unlock them. The four sections are raw ore,
 #: hulls, engines, and final assembly.
 _EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
+    # ---- Bootstrap ----
     ("mine_1_ore", _has_any_raw_ore),
+    ("mine_3_ore", partial(_has_n_raw_ore_types, n=3)),
     ("prospector", _has_each_raw_ore),
-    ("craft_miner", partial(_holds_item, item=int(ItemType.MINER))),
+    ("place_miner", partial(_has_machine, machine=int(Machine.MINER))),
+    (
+        "place_3_miners",
+        partial(_has_n_machines, machine=int(Machine.MINER), n=3),
+    ),
+    (
+        "place_6_miners",
+        partial(_has_n_machines, machine=int(Machine.MINER), n=6),
+    ),
+    # ---- Miners up ----
     ("automated_mining", _any_producing_miner),
     ("ore_fields", _distinct_producing_ore_types),
     ("full_supply", _all_ore_types_covered),
-    ("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
     (
-        "hull_line_fed",
+        "one_arm_pallet",
         partial(
-            _assembler_holds_inputs,
-            item_a=int(ItemType.IRON_ORE),
-            item_b=int(ItemType.LIMESTONE),
+            _has_n_machines_pair,
+            machine_a=int(Machine.ARM),
+            machine_b=int(Machine.PALLET),
+            n=1,
         ),
     ),
-    ("hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))),
     (
-        "engine_line_fed",
+        "three_arm_pallets",
         partial(
-            _assembler_holds_inputs,
-            item_a=int(ItemType.COPPER_ORE),
-            item_b=int(ItemType.LIMESTONE),
+            _has_n_machines_pair,
+            machine_a=int(Machine.ARM),
+            machine_b=int(Machine.PALLET),
+            n=3,
         ),
+    ),
+    (
+        "six_arm_pallets",
+        partial(
+            _has_n_machines_pair,
+            machine_a=int(Machine.ARM),
+            machine_b=int(Machine.PALLET),
+            n=6,
+        ),
+    ),
+    # ---- Hull ----
+    ("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
+    (
+        "one_belt",
+        partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=1),
+    ),
+    (
+        "three_belts",
+        partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=3),
+    ),
+    ("hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))),
+    # ---- Engine ----
+    (
+        "two_assemblers",
+        partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=2),
+    ),
+    (
+        "six_belts",
+        partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=6),
     ),
     (
         "engine_production",
         partial(_assembler_outputs_item, item=int(ItemType.ENGINE_UNIT)),
     ),
+    # ---- Rocket production ----
     (
-        "rocket_line_fed",
-        partial(
-            _assembler_holds_inputs,
-            item_a=int(ItemType.HULL),
-            item_b=int(ItemType.ENGINE_UNIT),
-        ),
+        "three_assemblers",
+        partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3),
+    ),
+    (
+        "ten_belts",
+        partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=10),
     ),
     ("rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))),
     ("liftoff", partial(_has_machine, machine=int(Machine.ROCKET))),

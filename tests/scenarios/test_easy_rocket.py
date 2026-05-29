@@ -17,6 +17,7 @@ from factoriax.engine.constants import (
 from factoriax.engine.levels import Level
 from factoriax.engine.recipes import RecipeBook, RecipeTable
 from factoriax.engine.scenarios.easy_rocket import (
+    EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     EASY_ROCKET_RECIPE_BOOK,
     EASY_ROCKET_RECIPE_TABLE,
@@ -155,21 +156,36 @@ def test_build_level_patches_avoid_spawn() -> None:
                 )
 
 
-# Achievement indices in the condition mask, in curriculum order.
-_A_MINE_1_ORE = 0
-_A_PROSPECTOR = 1
-_A_CRAFT_MINER = 2
-_A_AUTOMATED_MINING = 3
-_A_ORE_FIELDS = 4
-_A_FULL_SUPPLY = 5
-_A_ASSEMBLER_ONLINE = 6
-_A_HULL_FED = 7
-_A_HULL_PRODUCED = 8
-_A_ENGINE_FED = 9
-_A_ENGINE_PRODUCED = 10
-_A_ROCKET_FED = 11
-_A_ROCKET_PRODUCED = 12
-_A_LIFTOFF = 13
+# Achievement indices in the condition mask, derived from the engine's
+# name list so tests track future bit additions / reorderings without a
+# manual update.
+def _ach_index(name: str) -> int:
+    return EASY_ROCKET_ACHIEVEMENT_NAMES.index(name)
+
+
+_A_MINE_1_ORE = _ach_index("mine_1_ore")
+_A_MINE_3_ORE = _ach_index("mine_3_ore")
+_A_PROSPECTOR = _ach_index("prospector")
+_A_PLACE_MINER = _ach_index("place_miner")
+_A_PLACE_3_MINERS = _ach_index("place_3_miners")
+_A_PLACE_6_MINERS = _ach_index("place_6_miners")
+_A_AUTOMATED_MINING = _ach_index("automated_mining")
+_A_ORE_FIELDS = _ach_index("ore_fields")
+_A_FULL_SUPPLY = _ach_index("full_supply")
+_A_ONE_ARM_PALLET = _ach_index("one_arm_pallet")
+_A_THREE_ARM_PALLETS = _ach_index("three_arm_pallets")
+_A_SIX_ARM_PALLETS = _ach_index("six_arm_pallets")
+_A_ASSEMBLER_ONLINE = _ach_index("assembler_online")
+_A_ONE_BELT = _ach_index("one_belt")
+_A_THREE_BELTS = _ach_index("three_belts")
+_A_HULL_PRODUCED = _ach_index("hull_production")
+_A_TWO_ASSEMBLERS = _ach_index("two_assemblers")
+_A_SIX_BELTS = _ach_index("six_belts")
+_A_ENGINE_PRODUCED = _ach_index("engine_production")
+_A_THREE_ASSEMBLERS = _ach_index("three_assemblers")
+_A_TEN_BELTS = _ach_index("ten_belts")
+_A_ROCKET_PRODUCED = _ach_index("rocket_assembled")
+_A_LIFTOFF = _ach_index("liftoff")
 
 
 def _inv(**items: int) -> jnp.ndarray:
@@ -259,9 +275,19 @@ def _assembler(
     )
 
 
-def test_craft_miner_unlocks_on_inventory(state_factory) -> None:
+def test_place_miner_unlocks_on_placed_machine(state_factory) -> None:
+    state = state_factory(
+        world_map=_dirt_map(),
+        machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
+    )
+    assert bool(easy_rocket_conditions(state)[_A_PLACE_MINER])
+
+
+def test_place_miner_does_not_fire_from_inventory(state_factory) -> None:
+    # Inventory miner alone (no placed machine) must not flip the
+    # placement-checking bit; this pins the inventory-vs-placement split.
     state = state_factory(world_map=_dirt_map(), player_inventory=_inv(MINER=1))
-    assert bool(easy_rocket_conditions(state)[_A_CRAFT_MINER])
+    assert not bool(easy_rocket_conditions(state)[_A_PLACE_MINER])
 
 
 def test_automated_mining_needs_producing_miner(state_factory) -> None:
@@ -318,34 +344,6 @@ def test_assembler_online_counts_placed_assembler(state_factory) -> None:
     assert bool(easy_rocket_conditions(placed)[_A_ASSEMBLER_ONLINE])
     empty = state_factory(world_map=_dirt_map())
     assert not bool(easy_rocket_conditions(empty)[_A_ASSEMBLER_ONLINE])
-
-
-@pytest.mark.parametrize(
-    "in_a,in_b,fed_idx,other_idx",
-    [
-        (ItemType.IRON_ORE, ItemType.LIMESTONE, _A_HULL_FED, _A_ENGINE_FED),
-        (ItemType.COPPER_ORE, ItemType.LIMESTONE, _A_ENGINE_FED, _A_HULL_FED),
-        (ItemType.HULL, ItemType.ENGINE_UNIT, _A_ROCKET_FED, _A_HULL_FED),
-    ],
-)
-def test_assembler_fed_disambiguates_sections(
-    state_factory, in_a, in_b, fed_idx: int, other_idx: int
-) -> None:
-    state = _assembler(state_factory, in_types=(int(in_a), int(in_b)), in_counts=(1, 1))
-    mask = easy_rocket_conditions(state)
-    assert bool(mask[fed_idx])
-    assert not bool(mask[other_idx])
-
-
-def test_assembler_fed_needs_both_inputs(state_factory) -> None:
-    # The shared limestone input alone must not satisfy any 'fed' bit.
-    only_lime = _assembler(
-        state_factory, in_types=(int(ItemType.LIMESTONE), 0), in_counts=(1, 0)
-    )
-    mask = easy_rocket_conditions(only_lime)
-    assert not bool(mask[_A_HULL_FED])
-    assert not bool(mask[_A_ENGINE_FED])
-    assert not bool(mask[_A_ROCKET_FED])
 
 
 @pytest.mark.parametrize(
@@ -408,24 +406,33 @@ def test_inventory_does_not_unlock_machine_bits(state_factory) -> None:
         state_factory(world_map=_dirt_map(), player_inventory=inv)
     )
     machine_sourced = (
+        _A_PLACE_MINER,
+        _A_PLACE_3_MINERS,
+        _A_PLACE_6_MINERS,
         _A_AUTOMATED_MINING,
         _A_ORE_FIELDS,
         _A_FULL_SUPPLY,
+        _A_ONE_ARM_PALLET,
+        _A_THREE_ARM_PALLETS,
+        _A_SIX_ARM_PALLETS,
         _A_ASSEMBLER_ONLINE,
-        _A_HULL_FED,
+        _A_ONE_BELT,
+        _A_THREE_BELTS,
         _A_HULL_PRODUCED,
-        _A_ENGINE_FED,
+        _A_TWO_ASSEMBLERS,
+        _A_SIX_BELTS,
         _A_ENGINE_PRODUCED,
-        _A_ROCKET_FED,
+        _A_THREE_ASSEMBLERS,
+        _A_TEN_BELTS,
         _A_ROCKET_PRODUCED,
         _A_LIFTOFF,
     )
     for idx in machine_sourced:
         assert not bool(mask[idx]), f"bit {idx} wrongly flipped from player inventory"
-    # The hand-skill bits, by contrast, do fire from inventory alone.
+    # The inventory-sourced bits, by contrast, do fire from inventory alone.
     assert bool(mask[_A_MINE_1_ORE])
+    assert bool(mask[_A_MINE_3_ORE])
     assert bool(mask[_A_PROSPECTOR])
-    assert bool(mask[_A_CRAFT_MINER])
 
 
 def test_weights_and_max_score() -> None:
@@ -449,21 +456,21 @@ def _ach_state(state_factory, mask_indices: list[int]):
 
 def test_reward_single_unlock_returns_weight(state_factory) -> None:
     prev = _ach_state(state_factory, [])
-    new = _ach_state(state_factory, [_A_CRAFT_MINER])
+    new = _ach_state(state_factory, [_A_PLACE_MINER])
     reward = easy_rocket_reward(prev, new, EnvParams())
     assert float(reward) == 1.0
 
 
 def test_reward_no_unlock_is_zero(state_factory) -> None:
-    same = _ach_state(state_factory, [_A_CRAFT_MINER])
+    same = _ach_state(state_factory, [_A_PLACE_MINER])
     reward = easy_rocket_reward(same, same, EnvParams())
     assert float(reward) == 0.0
 
 
 def test_reward_only_counts_newly_unlocked(state_factory) -> None:
     # Already-unlocked bits do not re-fire reward.
-    prev = _ach_state(state_factory, [_A_CRAFT_MINER])
-    new = _ach_state(state_factory, [_A_CRAFT_MINER, _A_ASSEMBLER_ONLINE])
+    prev = _ach_state(state_factory, [_A_PLACE_MINER])
+    new = _ach_state(state_factory, [_A_PLACE_MINER, _A_ASSEMBLER_ONLINE])
     reward = easy_rocket_reward(prev, new, EnvParams())
     assert float(reward) == 1.0
 

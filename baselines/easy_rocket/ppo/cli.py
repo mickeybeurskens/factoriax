@@ -1,4 +1,4 @@
-"""Shared CLI argument helpers for PPO baselines.
+"""CLI argument helpers for the easy rocket PPO baseline.
 
 Provides ``add_ppo_args`` to register the common PPO hyperparameters on
 an ``argparse.ArgumentParser``, and ``ppo_config_from_args`` to extract
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 
-from baselines.ppo.config import PPOConfig
+from baselines.easy_rocket.ppo.config import PPOConfig
 
 
 def add_ppo_args(parser: argparse.ArgumentParser) -> None:
@@ -40,6 +40,19 @@ def add_ppo_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--use-wandb", action="store_true")
     parser.add_argument("--wandb-project", type=str, default="factoriax")
     parser.add_argument("--wandb-run-name", type=str, default=None)
+    parser.add_argument(
+        "--throughput-json",
+        type=str,
+        default="./ppo_throughput.json",
+        help=(
+            "Write per-iteration timing + GPU info to this path. "
+            "The GPU model (queried from nvidia-smi at start of run) "
+            "is suffixed onto the basename so the same path is safe "
+            "to reuse across devices and the file name matches the "
+            "paper-side consolidator's ``ppo_throughput_*.json`` "
+            "glob. Pass an empty string to disable."
+        ),
+    )
 
 
 def ppo_config_from_args(
@@ -79,6 +92,7 @@ def ppo_config_from_args(
         "use_wandb": args.use_wandb,
         "wandb_project": args.wandb_project,
         "wandb_run_name": args.wandb_run_name,
+        "throughput_json": args.throughput_json,
     }
     values.update(overrides)
     return PPOConfig(**values)  # type: ignore[arg-type]

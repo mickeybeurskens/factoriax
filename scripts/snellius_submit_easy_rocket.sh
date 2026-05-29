@@ -83,6 +83,7 @@ if [[ -z "${CPUS_PER_TASK:-}" ]]; then
 fi
 SLURM_OUT_DIR="${SLURM_OUT_DIR:-${HOME}/slurm}"
 WANDB_PROJECT="${WANDB_PROJECT:-factoriax_easy_rocket}"
+THROUGHPUT_JSON="${THROUGHPUT_JSON:-${PROJECT_DIR}/ppo_throughput.json}"
 VENV_DIR="${VENV_DIR:-${PROJECT_DIR}/.venv}"
 
 mkdir -p "${SLURM_OUT_DIR}"
@@ -110,6 +111,7 @@ echo "  WALL_TIME     = ${WALL_TIME}"
 echo "  CPUS_PER_TASK = ${CPUS_PER_TASK}"
 echo "  SLURM_OUT_DIR = ${SLURM_OUT_DIR}"
 echo "  WANDB_PROJECT = ${WANDB_PROJECT}"
+echo "  THROUGHPUT_JSON = ${THROUGHPUT_JSON}"
 
 # ---- Submit loop -------------------------------------------------------------
 
@@ -170,7 +172,8 @@ nvidia-smi --query-gpu=name,memory.free,memory.total,driver_version --format=csv
     $([[ "${fixed_env_seed}" == "true" ]] && echo "--fixed-env-seed") \\
     --use-wandb \\
     --wandb-project ${WANDB_PROJECT} \\
-    --wandb-run-name ${run_name}
+    --wandb-run-name ${run_name} \\
+    --throughput-json ${THROUGHPUT_JSON}
 EOF
 
     sleep 0.1
