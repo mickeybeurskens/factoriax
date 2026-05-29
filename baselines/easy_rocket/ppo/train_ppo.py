@@ -936,7 +936,10 @@ def train(config: Config) -> dict[str, float]:
             except Exception:  # noqa: BLE001
                 logger.exception("Throughput JSON upload to W&B failed.")
 
-    _, eval_initial_state = env.reset_env(jax.random.PRNGKey(ppo.seed), env_params)
+    # Render the eval episode on the layout the agent actually trained on:
+    # env 0 of the training reset. A fresh PRNGKey(seed) reset would draw a
+    # different procgen layout, filming the policy on a map it never saw.
+    eval_initial_state = jax.tree_util.tree_map(lambda leaf: leaf[0], reset_states)
     try:
         _finalize_artifacts(
             config=config,
