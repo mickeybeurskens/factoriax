@@ -43,15 +43,22 @@ def add_ppo_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--throughput-json",
         type=str,
-        default="./ppo_throughput.json",
+        default=None,
         help=(
-            "Write per-iteration timing + GPU info to this path. "
-            "The GPU model (queried from nvidia-smi at start of run) "
-            "is suffixed onto the basename so the same path is safe "
-            "to reuse across devices and the file name matches the "
-            "paper-side consolidator's ``ppo_throughput_*.json`` "
-            "glob. Pass an empty string to disable."
+            "Location override for the throughput JSON. Default (unset) "
+            "writes it into the run's output directory "
+            "(``<out_dir>/ppo_throughput.json``); pass a path to write it "
+            "elsewhere. The GPU model (from nvidia-smi) and num_envs are "
+            "suffixed onto the basename so files don't collide across "
+            "devices/configs and match the paper-side "
+            "``ppo_throughput_*.json`` glob. Uploaded to W&B when --use-wandb "
+            "is set. Disable with --no-throughput-json."
         ),
+    )
+    parser.add_argument(
+        "--no-throughput-json",
+        action="store_true",
+        help="Disable throughput JSON output entirely.",
     )
 
 
@@ -92,7 +99,7 @@ def ppo_config_from_args(
         "use_wandb": args.use_wandb,
         "wandb_project": args.wandb_project,
         "wandb_run_name": args.wandb_run_name,
-        "throughput_json": args.throughput_json,
+        "throughput_json": ("" if args.no_throughput_json else args.throughput_json),
     }
     values.update(overrides)
     return PPOConfig(**values)  # type: ignore[arg-type]

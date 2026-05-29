@@ -26,7 +26,7 @@ import dataclasses
 import logging
 import time
 from collections import deque
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
@@ -54,6 +54,9 @@ from factoriax.engine.scenarios.easy_rocket import (
     NUM_EASY_ROCKET_ACHIEVEMENTS,
 )
 from factoriax.engine.state import EnvParams, EnvState
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _SCENARIO_ID = "EasyRocket-v1"
 
@@ -400,7 +403,7 @@ def _write_throughput_json(
     warmup_wall_samples: list[float],
     iter_wall_samples: list[float],
     steps_per_iter: int,
-) -> None:
+) -> Path:
     """Write the throughput JSON consumed by paper/figures/throughput.py.
 
     The GPU model name (via ``nvidia-smi``) is suffixed onto the
@@ -467,6 +470,7 @@ def _write_throughput_json(
         len(iter_wall_samples),
         steady_sps,
     )
+    return out_path
 
 
 def train(config: Config) -> dict[str, float]:
@@ -851,9 +855,13 @@ def train(config: Config) -> dict[str, float]:
             step=current_step,
         )
 
-    if ppo.throughput_json:
-        _write_throughput_json(
-            output_path=ppo.throughput_json,
+    # Throughput JSON: default into the run's output directory (per-run);
+    # an explicit --throughput-json path overrides the location; "" disables.
+    if ppo.throughput_json != "":
+        out_dir = _resolve_out_dir(config)
+        throughput_target = ppo.throughput_json or str(out_dir / "ppo_throughput.json")
+        throughput_path = _write_throughput_json(
+            output_path=throughput_target,
             scenario=_SCENARIO_ID,
             config=config,
             steady_sps=steady_sps,
@@ -861,6 +869,17 @@ def train(config: Config) -> dict[str, float]:
             iter_wall_samples=iter_wall_samples,
             steps_per_iter=steps_per_iter,
         )
+        if wandb_run is not None:
+            try:
+                import wandb  # noqa: PLC0415
+
+                artifact = wandb.Artifact(
+                    f"ppo-throughput-{wandb_run.id}", type="throughput"
+                )
+                artifact.add_file(str(throughput_path))
+                wandb_run.log_artifact(artifact)
+            except Exception:  # noqa: BLE001
+                logger.exception("Throughput JSON upload to W&B failed.")
 
     _, eval_initial_state = env.reset_env(jax.random.PRNGKey(ppo.seed), env_params)
     try:
