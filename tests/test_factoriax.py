@@ -28,7 +28,7 @@ from factoriax.engine.game_logic import (
 from factoriax.engine.levels import generate_state
 from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.tables import SOLID_BLOCKS
-from factoriax.playground.ui.icons import create_default_textures
+from factoriax.playground.ui.icons import BLOCK_COLORS, create_default_textures
 
 
 class TestConstants:
@@ -318,9 +318,9 @@ class TestRenderer:
         textures = create_default_textures()
 
         expected = {
-            int(BlockType.IRON): (180, 185, 200),
-            int(BlockType.COPPER): (200, 120, 45),
-            int(BlockType.COAL): (50, 50, 55),
+            int(BlockType.IRON): BLOCK_COLORS[int(BlockType.IRON)],
+            int(BlockType.COPPER): BLOCK_COLORS[int(BlockType.COPPER)],
+            int(BlockType.COAL): BLOCK_COLORS[int(BlockType.COAL)],
         }
         for block_id, base_rgb in expected.items():
             tex = textures[block_id]

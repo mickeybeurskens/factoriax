@@ -156,7 +156,7 @@ def render_strip(
     for k in range(n_panels):
         ax = axes_flat[k]
         ax.imshow(frames[k], interpolation="nearest")
-        ax.set_title(snapshot_labels[k], fontsize=11)
+        ax.set_title(snapshot_labels[k], fontsize=33)
         _bare_axes(ax)
         if k > 0:
             built_so_far = (placement_phase >= 1) & (placement_phase <= k)
