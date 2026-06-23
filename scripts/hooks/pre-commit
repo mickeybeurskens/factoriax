@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Pre-commit hook: runs linting and tests before allowing a commit.
-# Install with: make install-hooks
 
 set -e
 
@@ -15,11 +14,7 @@ if [ -n "$STAGED" ]; then
     uv run ruff format --check $STAGED
 fi
 
-# Skip tests unless a staged file could actually change their outcome:
-# anything under factoriax/ (production code), tests/ (the tests
-# themselves + conftest), or the dependency manifest. Commits that only
-# touch scripts/, baselines/, docs/, paper/, or top-level text files
-# don't need the ~70s test run.
+# Skip tests unless a staged file could actually change their outcome
 TEST_RELEVANT=$(
     git diff --cached --name-only --diff-filter=ACMR \
         | grep -E '^(factoriax/|tests/|pyproject\.toml$|uv\.lock$)' \
@@ -27,16 +22,12 @@ TEST_RELEVANT=$(
 )
 
 if [ -z "$TEST_RELEVANT" ]; then
-    echo "[pre-commit] No staged changes under factoriax/, tests/, or"
-    echo "[pre-commit] dependency manifests; skipping pytest."
+    echo "[pre-commit] No staged changes under factoriax/, tests/"
+    echo "[pre-commit] skipping pytest."
 else
-    echo "[pre-commit] Running fast tests with coverage gate..."
-    echo "[pre-commit] The full suite — including JIT-heavy integration"
-    echo "[pre-commit] tests (invariants, smoke, benchmarks, debugger) — runs in CI."
+    echo "[pre-commit] Running tests."
     # The fail-under floor lives in pyproject.toml's
-    # [tool.coverage.report]. The hook fails when coverage drops
-    # below it; raising the floor is a deliberate act in a follow-up.
-    uv run pytest tests/ -x -q -m "not slow" \
+    uv run pytest tests/ -x \
         --cov --cov-report=term:skip-covered
 fi
 
