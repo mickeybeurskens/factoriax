@@ -2,7 +2,7 @@
 
 Source of truth for `factoriax/assets/atlas.png` and its sidecar
 `factoriax/assets/atlas.json`. Both are regenerated from
-`scripts/build_atlas.py`; CI verifies they match this layout via
+`factoriax/assets/build_atlas.py`; CI verifies they match this layout via
 `tests/test_atlas_fresh.py`.
 
 ## Grid

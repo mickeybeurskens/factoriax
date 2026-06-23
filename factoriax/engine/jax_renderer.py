@@ -62,7 +62,7 @@ from factoriax.engine.state import EnvState
 DEFAULT_TILE_PX: int = 8
 
 # Digit-glyph constants — the bitmap font produced by build_digit_atlas
-# is consumed by scripts/build_atlas.py to fill the atlas's digits row.
+# is consumed by factoriax/assets/build_atlas.py to fill the atlas's digits row.
 DIGIT_H: int = 5
 DIGIT_W: int = 3
 
@@ -70,7 +70,7 @@ DIGIT_W: int = 3
 # ---------------------------------------------------------------------------
 # Texture atlas construction
 #
-# The atlas is built by ``scripts/build_atlas.py``; the layout is pinned in
+# The atlas is built by ``factoriax/assets/build_atlas.py``; the layout is pinned in
 # ``factoriax/assets/atlas.layout.md`` and verified by
 # ``tests/test_atlas_fresh.py``. Item-color and digit-glyph atlases stay
 # procedural; the atlas's items/digits rows are unused here.

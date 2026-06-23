@@ -38,8 +38,8 @@ Directional categories carry one cell per
 
 Usage::
 
-    uv run python scripts/build_atlas.py
-    uv run python scripts/build_atlas.py --out custom_dir/
+    uv run python -m factoriax.assets.build_atlas
+    uv run python -m factoriax.assets.build_atlas --out custom_dir/
 
 The output is hash-stable across runs; CI verifies this via
 ``tests/test_atlas_fresh.py``.
@@ -382,7 +382,7 @@ def main() -> None:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "factoriax" / "assets",
+        default=Path(__file__).resolve().parent,
         help="Output directory for atlas.png and atlas.json.",
     )
     args = parser.parse_args()

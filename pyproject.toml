@@ -28,22 +28,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Default to running the full suite through all failures so a single
-# broken test doesn't mask the rest. Use ``make test-fast-fail`` (or
-# ``pytest -x`` explicitly) to stop at the first failure when
-# iterating on a known-broken test. The pre-commit hook continues to
-# pass ``-x`` itself — the dev loop wants fast feedback.
 addopts = "-q"
-markers = [
-    "slow: marks tests as slow (e.g. CPU JIT compilation)",
-]
 
 [tool.coverage.run]
-# Coverage targets the core environment tree (factoriax/) only. The
-# baselines/ training code, tests, scripts, and vendored craftax/ are
-# excluded — they're either the measurement instrument, out-of-tree
-# references, or ahead-of-time agent code whose churn shouldn't move
-# the floor that gates the engine.
+# Coverage targets the core environment tree (factoriax/) only.
 source = ["factoriax"]
 omit = [
     "factoriax/__main__.py",
@@ -51,13 +39,6 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Floor re-measured at 64.43% over the fast suite once coverage was
-# narrowed to the factoriax/ core (baselines/ dropped from scope, so
-# its agent churn no longer dilutes the engine number). The pre-commit
-# hook enforces this — a PR that drops coverage below it fails to
-# commit. Raising the floor is a deliberate act: bump this number when
-# adding tests, never lower it. The ratchet practice itself is the
-# load-bearing part, not the absolute number.
 fail_under = 64
 show_missing = false
 skip_covered = true
@@ -70,7 +51,6 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-# Tensor dimension variables (B, T, A, P, S, N, L) are uppercase by convention in ML code.
 "factoriax/analysis/*.py" = ["N806"]
 
 [tool.mypy]

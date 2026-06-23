@@ -1,4 +1,4 @@
-"""Verify that the committed sprite atlas matches what build_atlas.py produces.
+"""Verify the committed sprite atlas matches what build_atlas.py produces.
 
 The atlas at ``factoriax/assets/atlas.png`` (and its sidecar
 ``atlas.json``) is the source of truth for sprite gathers in the JAX
@@ -9,18 +9,14 @@ asserts byte-equivalence.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import imageio.v3 as iio
 import orjson
 
-# Make scripts/ importable for the build_atlas function.
+from factoriax.assets.build_atlas import build_atlas
+
 _REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO / "scripts"))
-
-from build_atlas import build_atlas  # noqa: E402
-
 _COMMITTED_PNG = _REPO / "factoriax" / "assets" / "atlas.png"
 _COMMITTED_JSON = _REPO / "factoriax" / "assets" / "atlas.json"
 
@@ -32,7 +28,7 @@ def test_atlas_png_matches_committed(tmp_path: Path) -> None:
     build_atlas(out_png, out_json)
 
     assert out_png.read_bytes() == _COMMITTED_PNG.read_bytes(), (
-        "atlas.png is stale. Re-run scripts/build_atlas.py after editing "
+        "atlas.png is stale. Re-run factoriax/assets/build_atlas.py after editing "
         "the procedural sprite code."
     )
 
@@ -44,7 +40,7 @@ def test_atlas_json_matches_committed(tmp_path: Path) -> None:
     build_atlas(out_png, out_json)
 
     assert out_json.read_bytes() == _COMMITTED_JSON.read_bytes(), (
-        "atlas.json is stale. Re-run scripts/build_atlas.py."
+        "atlas.json is stale. Re-run factoriax/assets/build_atlas.py."
     )
 
 
@@ -85,5 +81,5 @@ def test_atlas_alpha_channel_is_non_trivial() -> None:
     transparent_pixels = (img[..., 3] < 255).sum()
     assert transparent_pixels > 0, (
         "Atlas has no transparent pixels — alpha compositing in "
-        "render_map will be a no-op. Re-run scripts/build_atlas.py."
+        "render_map will be a no-op. Re-run factoriax/assets/build_atlas.py."
     )
