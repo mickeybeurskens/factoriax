@@ -1,6 +1,6 @@
 from typing import Any
 
-from factoriax.engine.scenarios.registry import make as _registry_make
+from factoriax.engine.envs.registry import make as _registry_make
 from factoriax.engine.state import EnvParams
 
 

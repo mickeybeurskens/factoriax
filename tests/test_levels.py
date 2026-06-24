@@ -527,38 +527,38 @@ class TestGenerateState:
 
 
 # ---------------------------------------------------------------------------
-# FactoriaXEnv(level=...) + reset_env
+# FactoriaxEnv(level=...) + reset_env
 # ---------------------------------------------------------------------------
 
 
 class TestResetWithBoundLevel:
-    """FactoriaXEnv constructed with ``level=`` resets to that level."""
+    """FactoriaxEnv constructed with ``level=`` resets to that level."""
 
     def test_obs_and_state_returned(self) -> None:
-        from factoriax.engine.envs import FactoriaXEnv
+        from factoriax.engine.envs.base import FactoriaxEnv
 
         level = get_level("15x15_resources")
-        env = FactoriaXEnv(level=level)
+        env = FactoriaxEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
         obs, state = env.reset_env(jax.random.PRNGKey(0), params)
         assert obs.ndim == 1
         assert state.map.shape == (15, 15)
 
     def test_obs_shape_matches_observation_space(self) -> None:
-        from factoriax.engine.envs import FactoriaXEnv
+        from factoriax.engine.envs.base import FactoriaxEnv
 
         level = get_level("15x15_resources")
-        env = FactoriaXEnv(level=level)
+        env = FactoriaxEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
         obs, _ = env.reset_env(jax.random.PRNGKey(0), params)
         expected = env.observation_space(params).shape[0]
         assert obs.shape == (expected,)
 
     def test_deterministic_no_key_needed(self) -> None:
-        from factoriax.engine.envs import FactoriaXEnv
+        from factoriax.engine.envs.base import FactoriaxEnv
 
         level = get_level("15x15_resources")
-        env = FactoriaXEnv(level=level)
+        env = FactoriaxEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
         _, s1 = env.reset_env(jax.random.PRNGKey(0), params)
         _, s2 = env.reset_env(jax.random.PRNGKey(123), params)

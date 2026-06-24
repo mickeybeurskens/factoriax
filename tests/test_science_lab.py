@@ -10,7 +10,7 @@ Every non-trivial science lab invariant is tested here so that:
 3. Non-science-pack items sitting in a lab slot are left alone (the
    lab is a pack sink, not a generic consumer).
 
-The ``ScienceTallyWrapper`` uses ``science_consumed_step`` as its
+The engine exposes ``science_consumed_step`` as its
 input, so these invariants are load-bearing for anything built on top.
 """
 

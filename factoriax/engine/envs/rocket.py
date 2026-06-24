@@ -37,9 +37,9 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
-from factoriax.engine.envs.hooks import achievement_hook
+from factoriax.engine.envs.wrappers import ActionMaskWrapper
+from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.envs.base import achievement_hook
 from factoriax.engine.levels import Level, LevelBuilder
 from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
@@ -330,7 +330,7 @@ def rocket_conditions(state: EnvState) -> jax.Array:
     
     Every condition is a pure function of ``state``. The returned array
     is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
-    :class:`~factoriax.engine.envs.factoriax_env.FactoriaXEnv`'s
+    :class:`~factoriax.engine.envs.base.FactoriaxEnv`'s
     ``achievement_fn`` constructor argument directly.
 
     Parameters
@@ -606,7 +606,7 @@ def rocket(
     Parameters
     ----------
     obs :
-        Observation variant passed to :class:`~factoriax.engine.envs.FactoriaXEnv`.
+        Observation variant passed to :class:`~factoriax.engine.envs.FactoriaxEnv`.
     obs_radius :
         Radius for local observation variants.
 
@@ -615,7 +615,7 @@ def rocket(
     tuple
         ``(env, params)`` ready for gymnax-style rollouts.
     """
-    env: Any = FactoriaXEnv(
+    env: Any = FactoriaxEnv(
         level=build_rocket_level(),
         step_hooks=(achievement_hook(rocket_conditions),),
         reward_fn=rocket_reward,

@@ -12,8 +12,8 @@ import pytest
 from jax import random
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
-from factoriax.engine.envs import ActionMaskWrapper, AutoResetWrapper
-from factoriax.engine.scenarios import ScenarioSpec, list_scenarios, make
+from factoriax.engine.envs.wrappers import ActionMaskWrapper, AutoResetWrapper
+from factoriax.engine.envs.registry import ScenarioSpec, list_scenarios, make
 
 _NOOP = int(Action.NOOP)
 

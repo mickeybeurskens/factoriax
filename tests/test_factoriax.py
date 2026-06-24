@@ -7,7 +7,7 @@ import pytest
 from jax import random
 
 from factoriax.engine.constants import Action, BlockType, Direction
-from factoriax.engine.envs import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.constants import (
     NUM_ACTIONS,
@@ -80,10 +80,10 @@ class TestEnvConstructorLevel:
     """Tests for the level-on-constructor reset path (gymnax conformance)."""
 
     def test_default_level_none_resets_procedurally(self) -> None:
-        """FactoriaXEnv(level=None).reset_env produces a procedural state."""
-        from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+        """FactoriaxEnv(level=None).reset_env produces a procedural state."""
+        from factoriax.engine.envs.base import FactoriaxEnv
 
-        env = FactoriaXEnv()  # level=None default
+        env = FactoriaxEnv()  # level=None default
         params = EnvParams(map_width=8, map_height=8, num_players=1)
 
         _, state = env.reset_env(random.PRNGKey(0), params)
@@ -95,12 +95,12 @@ class TestEnvConstructorLevel:
         assert not jnp.array_equal(state.map, state2.map)
 
     def test_level_constructor_arg_resets_to_level(self) -> None:
-        """FactoriaXEnv(level=L).reset_env produces a state matching L's geometry."""
-        from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+        """FactoriaxEnv(level=L).reset_env produces a state matching L's geometry."""
+        from factoriax.engine.envs.base import FactoriaxEnv
         from factoriax.engine.levels import get_level
 
         level = get_level("15x15_resources")
-        env = FactoriaXEnv(level=level)
+        env = FactoriaxEnv(level=level)
         params = EnvParams(map_width=15, map_height=15, num_players=1)
 
         _, state = env.reset_env(random.PRNGKey(0), params)
@@ -342,14 +342,14 @@ class TestEnvironment:
 
     def test_make(self) -> None:
         """Environment factory should return env and params."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
         assert env is not None
         assert params is not None
 
     def test_reset_returns_obs_and_state(self) -> None:
         """Reset should return observation and state."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
         rng = random.PRNGKey(0)
         obs, state = env.reset_env(rng, params)
@@ -360,7 +360,7 @@ class TestEnvironment:
 
     def test_step_returns_correct_tuple(self) -> None:
         """Step should return (obs, state, reward, done, info)."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
         rng = random.PRNGKey(0)
         rng, reset_key, step_key = random.split(rng, 3)
@@ -378,7 +378,7 @@ class TestEnvironment:
 
     def test_step_increments_timestep(self) -> None:
         """Each step should increment the timestep."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
         rng = random.PRNGKey(0)
         rng, reset_key, step_key = random.split(rng, 3)
@@ -394,14 +394,14 @@ class TestEnvironment:
 
     def test_action_space(self) -> None:
         """Action space should match the number of defined actions."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
         action_space = env.action_space(params)
         assert action_space.n == NUM_ACTIONS
 
     def test_observation_space(self) -> None:
         """Observation space should match expected dimensions."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
         obs_space = env.observation_space(params)
         expected_size = (
@@ -412,7 +412,7 @@ class TestEnvironment:
 
     def test_jit_compilation(self) -> None:
         """Environment should be JIT-compilable."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = env.default_params
 
         @jax.jit

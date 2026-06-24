@@ -18,7 +18,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.scenarios.rocket import (
+from factoriax.engine.envs.rocket import (
     MAX_ROCKET_SCORE,
     ROCKET_ACHIEVEMENT_INFO,
     ROCKET_ACHIEVEMENT_WEIGHTS,

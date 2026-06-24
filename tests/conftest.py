@@ -5,7 +5,7 @@ Standard env fixtures across the test suite — pick one before you make your ow
 ============================================================================
 
 JIT cache thrash is the single biggest driver of test wall time on this
-project. Every fresh ``FactoriaXEnv(...)`` + ``jax.jit(env.step_env)``
+project. Every fresh ``FactoriaxEnv(...)`` + ``jax.jit(env.step_env)``
 combination triggers a ~7s XLA compile. The catalogue below lists the
 fixtures that already exist; consume them in preference to building your
 own env. If you must build your own, add a comment naming the property
@@ -13,11 +13,9 @@ you assert that prevents you from using a standard.
 
 Catalogue (env, wrapper, shape -> fixture name @ file):
 
-- 8x8 1p plain ``FactoriaXEnv()``
+- 8x8 1p plain ``FactoriaxEnv()``
     -> ``canonical_env_8x8_1p`` @ this file
        returns ``(env, params, jit_step_fn, state)``
-- 8x8 1p with ``ScienceTallyWrapper``
-    -> ``tally_env`` @ ``tests/test_science_tally_wrapper.py``
 - 10x10 1p inside ``ScenarioRunner``
     -> ``runner`` @ ``tests/scenarios/conftest.py``
        (multi-entry cache; new ``blocked_actions`` configs compile once)
@@ -80,7 +78,7 @@ from factoriax.engine.constants import (  # noqa: E402
     Direction,
     Machine,
 )
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv  # noqa: E402
+from factoriax.engine.envs.base import FactoriaxEnv  # noqa: E402
 from factoriax.engine.state import EnvParams  # noqa: E402
 from factoriax.engine.tables import BLOCK_RESOURCE_DTYPE
 
@@ -105,12 +103,12 @@ def pygame_session() -> None:
 
 
 @pytest.fixture(scope="session")
-def canonical_env_8x8_1p() -> tuple[FactoriaXEnv, EnvParams, Any, Any]:
+def canonical_env_8x8_1p() -> tuple[FactoriaxEnv, EnvParams, Any, Any]:
     """Session-scoped 8x8 single-player env + JITted step + reset state.
 
     The load-bearing fixture for the Phase 2 rollout in
     ``SPEC_TEST_SUITE.md``. Tests that currently build their own
-    :class:`FactoriaXEnv` + ``jax.jit(env.step_env)`` for the canonical
+    :class:`FactoriaxEnv` + ``jax.jit(env.step_env)`` for the canonical
     shape switch to consuming this fixture, so the XLA compile of
     ``env.step_env`` happens exactly once per session instead of once
     per test.
@@ -124,7 +122,7 @@ def canonical_env_8x8_1p() -> tuple[FactoriaXEnv, EnvParams, Any, Any]:
     Consumers must NOT replace ``initial_state`` in-place — pass a
     different state forward locally if a test needs to step further.
     """
-    env = FactoriaXEnv()
+    env = FactoriaxEnv()
     params = EnvParams(map_width=8, map_height=8, num_players=1)
     _, initial_state = env.reset_env(random.PRNGKey(0), params)
     jit_step_fn = jax.jit(env.step_env)

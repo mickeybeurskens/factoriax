@@ -599,7 +599,7 @@ def run_labs(state: EnvState) -> EnvState:
     
     Greedy: whatever's in a lab's two input slots this tick is fully
     consumed. The per-type delta goes into ``science_consumed_step``
-    for wrappers (e.g. :class:`ScienceTallyWrapper`) to integrate.
+    available on ``EnvState.science_consumed_step`` each step.
     
     Vectorised over all entities: one mask, one gather, one
     :func:`jax.ops.segment_sum`, no scatter.

@@ -17,10 +17,10 @@ from baselines.easy_rocket.scripted.layout import (
     _walk_dag,
     plan_factory,
 )
-from factoriax.engine.envs import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.constants import Direction, ItemType
 from factoriax.engine.levels import build_state
-from factoriax.engine.scenarios.easy_rocket import (
+from factoriax.engine.envs.easy_rocket import (
     EASY_ROCKET_RECIPE_TABLE,
     build_easy_rocket_level,
     easy_rocket_conditions,
@@ -97,7 +97,7 @@ def test_consumers_per_ore() -> None:
 
 def _easy_rocket_state(seed: int):
     level = build_easy_rocket_level(jax.random.PRNGKey(seed))
-    env = FactoriaXEnv(level=level, achievement_fn=easy_rocket_conditions)
+    env = FactoriaxEnv(level=level, achievement_fn=easy_rocket_conditions)
     params = env.default_params.replace(
         num_players=1,
         max_timesteps=2000,

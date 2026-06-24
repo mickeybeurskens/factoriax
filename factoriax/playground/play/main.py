@@ -18,7 +18,7 @@ from jax import random
 
 from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
 from factoriax.engine.constants import Action, Direction
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.levels import Level
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.playground.config import (
@@ -170,7 +170,7 @@ def play_level(
 
         seed = int(load_config().seed)
 
-    env = FactoriaXEnv(achievement_fn=core_game_conditions, level=level)
+    env = FactoriaxEnv(achievement_fn=core_game_conditions, level=level)
     params = EnvParams(
         map_width=level.map_width,
         map_height=level.map_height,
@@ -429,7 +429,7 @@ def _handle_welcome_event(
 
 
 def _play_loop(
-    env: FactoriaXEnv,
+    env: FactoriaxEnv,
     state: EnvState,
     params: EnvParams,
     screen: pygame.Surface,
@@ -462,7 +462,7 @@ def _play_loop(
         build_controller_lookup
     bindings :
         when
-    env : FactoriaXEnv :
+    env : FactoriaxEnv :
         
     state : EnvState :
         
@@ -476,7 +476,7 @@ def _play_loop(
         (Default value = None)
     ctrl_lookup : ControllerLookup | None :
         (Default value = None)
-    env: FactoriaXEnv :
+    env: FactoriaxEnv :
         
     state: EnvState :
         
@@ -781,9 +781,9 @@ def main() -> None:
     screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
 
-    def _make_env() -> tuple[FactoriaXEnv, EnvParams]:
+    def _make_env() -> tuple[FactoriaxEnv, EnvParams]:
         """ """
-        e = FactoriaXEnv(achievement_fn=core_game_conditions)
+        e = FactoriaxEnv(achievement_fn=core_game_conditions)
         return e, e.default_params
 
     env_result = _run_with_loading_screen(
@@ -791,7 +791,7 @@ def main() -> None:
         "Initialising environment",
         _make_env,
     )
-    env: FactoriaXEnv = env_result[0]  # type: ignore[index]
+    env: FactoriaxEnv = env_result[0]  # type: ignore[index]
     params: EnvParams = env_result[1]  # type: ignore[index]
 
     from factoriax.playground.config import load_config

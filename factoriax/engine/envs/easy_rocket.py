@@ -15,8 +15,8 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
-from factoriax.engine.envs.hooks import achievement_hook
+from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.envs.base import achievement_hook
 from factoriax.engine.levels import Level, LevelBuilder, initial_state
 from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.engine.rewards import achievement_reward
@@ -822,7 +822,7 @@ def easy_rocket(
     *,
     obs: str = "superficial_global",
     obs_radius: int = 7,
-) -> tuple[FactoriaXEnv, EnvParams]:
+) -> tuple[FactoriaxEnv, EnvParams]:
     """
 
     Parameters
@@ -852,7 +852,7 @@ def easy_rocket(
         auto default of 64) to avoid overflowing the entity arrays mid-build.
 
     """
-    env = FactoriaXEnv(
+    env = FactoriaxEnv(
         reset_fn=generate_easy_rocket_state,
         step_hooks=(achievement_hook(easy_rocket_conditions),),
         reward_fn=easy_rocket_reward,

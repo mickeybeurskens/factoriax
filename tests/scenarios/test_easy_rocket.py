@@ -16,7 +16,7 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.levels import Level
 from factoriax.engine.recipes import RecipeBook, RecipeTable
-from factoriax.engine.scenarios.easy_rocket import (
+from factoriax.engine.envs.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
     EASY_ROCKET_RECIPE_BOOK,

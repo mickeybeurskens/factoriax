@@ -1,4 +1,4 @@
-"""FactoriaX environment implementing the gymnax interface."""
+"""FactoriaX base environment and hooks."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
-from factoriax.engine.constants import NUM_ACTIONS
-from factoriax.engine.envs.hooks import StepHook, achievement_hook
+from factoriax.engine.constants import Action, NUM_ACTIONS
 from factoriax.engine.game_logic import factoriax_step, is_game_over
 from factoriax.engine.levels import Level, build_state, generate_state
 from factoriax.engine.observations import (
@@ -21,15 +21,29 @@ from factoriax.engine.observations import (
 )
 from factoriax.engine.state import EnvParams, EnvState
 
+# ---------------------------------------------------------------------------
+# Hooks
+# ---------------------------------------------------------------------------
+
 AchievementFn = Callable[[EnvState], jax.Array]
-#: World generator: ``(key, params) -> EnvState``. Overrides the level/procgen
-#: branch in :meth:`FactoriaXEnv.reset_env` when supplied.
+StepHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
 ResetFn = Callable[[jax.Array, EnvParams], EnvState]
-#: Per-step reward: ``(prev_state, new_state, params) -> float``.
 RewardFn = Callable[[EnvState, EnvState, EnvParams], jax.Array]
 
 
-class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
+def achievement_hook(condition_fn: AchievementFn) -> StepHook:
+    """Return a step hook that OR-folds ``condition_fn`` into the latched achievement mask."""
+
+    def hook(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
+        del key, params
+        return state.replace(
+            achievements_unlocked=state.achievements_unlocked | condition_fn(state),
+        )
+
+    return hook
+
+
+class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """FactoriaX JAX-based grid environment.
     
     Advances world state (terrain, machines, player inventories) and
@@ -72,8 +86,8 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     
     >>> import jax
-        >>> from factoriax import FactoriaXEnv
-        >>> env = FactoriaXEnv()
+        >>> from factoriax import FactoriaxEnv
+        >>> env = FactoriaxEnv()
         >>> params = env.default_params
         >>> obs, state = env.reset_env(jax.random.PRNGKey(0), params)
         >>> obs.shape == env.observation_space(params).shape
@@ -157,7 +171,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         when the episode is not done, roughly tripling the per-step
         cost. This override simply calls ``step_env`` directly.
         
-        Use :class:`~factoriax.engine.envs.auto_reset_wrapper.AutoResetWrapper`
+        Use :class:`~factoriax.engine.envs.wrappers.AutoResetWrapper`
         if you need auto-reset for ``lax.scan`` training loops.
         
         Parameters
@@ -386,3 +400,5 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             shape=(obs_size,),
             dtype=jnp.float32,
         )
+
+

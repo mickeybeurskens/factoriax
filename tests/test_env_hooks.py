@@ -1,4 +1,4 @@
-"""Tests for the additive FactoriaXEnv extension points (Phase 0 of the
+"""Tests for the additive FactoriaxEnv extension points (Phase 0 of the
 scenario refactor): ``reset_fn``, ``step_hooks``, ``reward_fn``, the
 ``achievement_hook`` helper, and ``AutoResetWrapper(resample=True)``.
 
@@ -15,8 +15,9 @@ import pytest
 from jax import random
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
-from factoriax.engine.envs import AutoResetWrapper, FactoriaXEnv
-from factoriax.engine.envs.hooks import achievement_hook
+from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.envs.wrappers import AutoResetWrapper
+from factoriax.engine.envs.base import achievement_hook
 from factoriax.engine.levels import LevelBuilder, build_state
 
 _NOOP = int(Action.NOOP)
@@ -29,7 +30,7 @@ def level8():
 
 @pytest.fixture(scope="module")
 def params(level8):
-    return FactoriaXEnv(level=level8).default_params
+    return FactoriaxEnv(level=level8).default_params
 
 
 def _bit(index: int) -> jnp.ndarray:
@@ -43,7 +44,7 @@ def test_reset_fn_overrides_level(level8, params) -> None:
         del key
         return build_state(level8, p).replace(achievements_unlocked=_bit(2))
 
-    env = FactoriaXEnv(reset_fn=custom_reset, level=level8)
+    env = FactoriaxEnv(reset_fn=custom_reset, level=level8)
     _, state = env.reset_env(random.PRNGKey(0), params)
     assert bool(state.achievements_unlocked[2])
 
@@ -57,7 +58,7 @@ def test_step_hooks_run_after_step(params) -> None:
             achievements_unlocked=state.achievements_unlocked.at[0].set(True)
         )
 
-    env = FactoriaXEnv(step_hooks=(set_bit0,))
+    env = FactoriaxEnv(step_hooks=(set_bit0,))
     _, state = env.reset_env(random.PRNGKey(0), params)
     assert not bool(state.achievements_unlocked[0])
     _, new_state, _, _, _ = env.step_env(random.PRNGKey(1), state, _NOOP, params)
@@ -66,12 +67,12 @@ def test_step_hooks_run_after_step(params) -> None:
 
 def test_reward_fn_used_else_zero(params) -> None:
     """``step_env`` returns ``reward_fn``'s value, or 0.0 when unset."""
-    env_r = FactoriaXEnv(reward_fn=lambda prev, new, p: jnp.float32(7.0))
+    env_r = FactoriaxEnv(reward_fn=lambda prev, new, p: jnp.float32(7.0))
     _, state = env_r.reset_env(random.PRNGKey(0), params)
     _, _, reward, _, _ = env_r.step_env(random.PRNGKey(1), state, _NOOP, params)
     assert float(reward) == 7.0
 
-    env_0 = FactoriaXEnv()
+    env_0 = FactoriaxEnv()
     _, state0 = env_0.reset_env(random.PRNGKey(0), params)
     _, _, reward0, _, _ = env_0.step_env(random.PRNGKey(1), state0, _NOOP, params)
     assert float(reward0) == 0.0
@@ -102,7 +103,7 @@ def test_autoreset_resample_regenerates_on_done(level8, params) -> None:
         )
 
     p1 = dataclasses.replace(params, max_timesteps=1)
-    inner = FactoriaXEnv(reset_fn=stamped_reset)
+    inner = FactoriaxEnv(reset_fn=stamped_reset)
     step_key = random.PRNGKey(1)
     reset_key = jax.random.split(step_key)[1]
 

@@ -1,8 +1,8 @@
-"""Tests for the achievement-evaluation pass baked into FactoriaXEnv.step_env.
+"""Tests for the achievement-evaluation pass baked into FactoriaxEnv.step_env.
 
 The achievement system used to live in a wrapper (AchievementWrapper);
 this set of tests pins the engine-state version: a constructor argument
-on FactoriaXEnv, evaluated and OR-folded inside step_env, with the
+on FactoriaxEnv, evaluated and OR-folded inside step_env, with the
 result available on state.achievements_unlocked. Spec: SPEC.md Phase A
 items 1.2 and 1.3.
 
@@ -26,7 +26,7 @@ from factoriax.engine.constants import (
     BlockType,
     ItemType,
 )
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.state import EnvParams, EnvState
 
 
@@ -77,9 +77,9 @@ def make_env():
         if key in cache:
             return cache[key]
         env = (
-            FactoriaXEnv(achievement_fn=achievement_fn)
+            FactoriaxEnv(achievement_fn=achievement_fn)
             if achievement_fn is not None
-            else FactoriaXEnv()
+            else FactoriaxEnv()
         )
         params = EnvParams(map_width=8, map_height=8, num_players=1)
         _, state = env.reset_env(random.PRNGKey(0), params)
@@ -146,7 +146,7 @@ def test_core_game_conditions_vmaps(canonical_env_8x8_1p) -> None:
 
     Tests the achievement function directly under ``jax.vmap``, not
     the full ``env.step_env`` path. The original test built a fresh
-    ``FactoriaXEnv(achievement_fn=core_game_conditions)`` and vmapped
+    ``FactoriaxEnv(achievement_fn=core_game_conditions)`` and vmapped
     reset+step over 4 envs to verify ``achievements_unlocked.shape ==
     (4, MAX_ACHIEVEMENTS)`` — a ~14s XLA compile of the vmapped step.
     The shape assertion only depends on ``MAX_ACHIEVEMENTS`` and the

@@ -16,7 +16,7 @@ from factoriax.engine.constants import (
     Machine,
     MoveAction,
 )
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.game_logic import factoriax_step
 from factoriax.engine.machine_spec import MAX_HEALTH, MACHINE_MAX_HEALTH
 from factoriax.engine.placement import (
@@ -72,7 +72,7 @@ class TestEntHealth:
     def test_reset_env_initializes_ent_health_zeros(self) -> None:
         """After reset, ``ent_health`` exists with the right shape and
         every slot is zero (no entities placed yet)."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = EnvParams(map_width=8, map_height=8, num_players=1)
         _, state = env.reset_env(jax.random.key(0), params)
         mm = params.resolved_max_machines()

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pygame
 
-from factoriax.engine.scenarios import list_scenarios
+from factoriax.engine.envs.registry import list_scenarios
 from factoriax.playground.config import (
     ControllerLookup,
     KeyLookup,
@@ -34,7 +34,7 @@ def discover_scenarios() -> list[_ScenarioEntry]:
     """List registered scenarios for the picker, sorted by display name.
     
     Reads the scenario registry
-    (:func:`factoriax.engine.scenarios.list_scenarios`); each entry's
+    (:func:`factoriax.engine.envs.list_scenarios`); each entry's
     ``scenario_id`` is the id passed to :func:`factoriax.make`.
 
     Parameters

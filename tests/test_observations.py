@@ -189,15 +189,15 @@ class TestGlobalArray:
         assert all_obs.shape == (2, _GLOBAL_OBS_SIZE)
 
     def test_matches_env_get_obs(self, state_factory) -> None:
-        """global_x_ray for selected_player matches FactoriaXEnv.get_obs."""
-        from factoriax.engine.envs import FactoriaXEnv
+        """global_x_ray for selected_player matches FactoriaxEnv.get_obs."""
+        from factoriax.engine.envs.base import FactoriaxEnv
 
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(3, 3),
             selected_player=0,
         )
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         env_obs = np.array(env.get_obs(state, _DEFAULT_PARAMS))
         obs_fn = np.array(global_x_ray(state, _DEFAULT_PARAMS, state.selected_player))
         np.testing.assert_allclose(env_obs, obs_fn)

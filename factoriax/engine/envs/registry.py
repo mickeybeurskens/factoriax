@@ -12,9 +12,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from factoriax.engine.envs.auto_reset_wrapper import AutoResetWrapper
-from factoriax.engine.scenarios.easy_rocket import easy_rocket
-from factoriax.engine.scenarios.rocket import rocket
+from factoriax.engine.envs.wrappers import AutoResetWrapper
+from factoriax.engine.envs.easy_rocket import easy_rocket
+from factoriax.engine.envs.rocket import rocket
 from factoriax.engine.state import EnvParams
 
 

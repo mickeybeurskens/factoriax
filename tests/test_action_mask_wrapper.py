@@ -1,4 +1,4 @@
-"""Unit tests for :class:`factoriax.engine.envs.action_mask_wrapper.ActionMaskWrapper`.
+"""Unit tests for :class:`factoriax.engine.envs.wrappers.ActionMaskWrapper`.
 
 The wrapper rewrites blocked actions to ``Action.NOOP`` before calling
 ``inner.step_env``. These tests exercise the rewriting logic directly
@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax.engine.constants import Action
-from factoriax.engine.envs.action_mask_wrapper import ActionMaskWrapper
+from factoriax.engine.envs.wrappers import ActionMaskWrapper
 
 
 class _StubInner:

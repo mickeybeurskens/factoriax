@@ -13,7 +13,7 @@ import numpy as np
 from jax import random
 
 from factoriax.engine.constants import BlockType
-from factoriax.engine.scenarios.easy_rocket import (
+from factoriax.engine.envs.easy_rocket import (
     _INNER_ZONE_MAX,
     _INNER_ZONE_MIN,
     _MAP_SIZE,

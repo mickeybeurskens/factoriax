@@ -18,7 +18,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.game_logic import factoriax_step, mine_block
 from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
@@ -48,7 +48,7 @@ def random_episode():
     share the trace: the costly ``lax.scan`` over ``factoriax_step``
     is compiled exactly once for the file instead of once per test.
     """
-    env = FactoriaXEnv()
+    env = FactoriaxEnv()
     params = _SMALL_PARAMS
 
     def _step(
@@ -230,7 +230,7 @@ class TestObservationFidelity:
 
     def test_observation_shape_matches_space(self) -> None:
         """Observation shape must match the declared observation_space."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         rng = random.PRNGKey(0)
         obs, _ = env.reset_env(rng, _SMALL_PARAMS)
         obs_space = env.observation_space(_SMALL_PARAMS)
@@ -257,7 +257,7 @@ class TestObservationFidelity:
 
     def test_inventory_observation_encodes_state(self) -> None:
         """Inventory portion of the observation must match state arrays."""
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         rng = random.PRNGKey(17)
         _, state = env.reset_env(rng, _SMALL_PARAMS)
 

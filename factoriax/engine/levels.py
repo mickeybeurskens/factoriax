@@ -76,8 +76,8 @@ class Level:
     -------
 
     
-    >>> from factoriax import FactoriaXEnv, get_level
-        >>> env = FactoriaXEnv(level=get_level("15x15_resources"))
+    >>> from factoriax import FactoriaxEnv, get_level
+        >>> env = FactoriaxEnv(level=get_level("15x15_resources"))
         >>> # ``env`` is bound to the registered Level for the lifetime
         >>> # of the env; ``factoriax.LEVELS`` lists every built-in.
     """

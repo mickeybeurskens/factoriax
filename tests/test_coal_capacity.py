@@ -13,7 +13,7 @@ import jax.numpy as jnp
 
 from factoriax.engine.constants import BLOCK_MAX_RESOURCES, BlockType
 from factoriax.engine.levels import build_state
-from factoriax.engine.scenarios.rocket import build_rocket_level
+from factoriax.engine.envs.rocket import build_rocket_level
 from factoriax.engine.state import EnvParams
 
 
@@ -55,7 +55,7 @@ def test_coal_capacity_fits_within_block_max() -> None:
     Ore-tile observations are normalised by ``BLOCK_MAX_RESOURCES``.
     Letting any patch exceed it would push the obs channel past 1.0
     and break the ``Box[0, 1)`` invariant that
-    :class:`FactoriaXEnv.observation_space` declares.
+    :class:`FactoriaxEnv.observation_space` declares.
     """
     level = build_rocket_level()
     params = EnvParams(map_width=32, map_height=32, num_players=1)

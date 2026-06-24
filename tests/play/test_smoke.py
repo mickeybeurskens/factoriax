@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from factoriax.engine.constants import Action
-from factoriax.engine.envs.factoriax_env import FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.state import EnvParams
 from factoriax.playground.config import build_key_lookup, default_keyboard
 
@@ -25,7 +25,7 @@ from factoriax.playground.config import build_key_lookup, default_keyboard
 @pytest.fixture(scope="module")
 def env_and_state():
     """Create a small environment and state for smoke tests."""
-    env = FactoriaXEnv()
+    env = FactoriaxEnv()
     params = EnvParams(map_width=16, map_height=16, num_players=1)
     _, state = env.reset_env(jax.random.key(42), params)
     return env, params, state
@@ -147,7 +147,7 @@ class TestEnvStepSmoke:
         case shares compile with TestRendererSmoke and TestPlayUISmoke
         in this file, so its cost is near-free.
         """
-        env = FactoriaXEnv()
+        env = FactoriaxEnv()
         params = EnvParams(
             map_width=size,
             map_height=size,

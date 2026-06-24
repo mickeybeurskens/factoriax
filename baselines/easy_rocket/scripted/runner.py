@@ -28,7 +28,7 @@ import numpy as np
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import NUM_ACTIONS, Action
 from factoriax.env import make_factoriax_env_from_name
-from factoriax.engine.scenarios.easy_rocket import (
+from factoriax.engine.envs.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
 )

@@ -258,7 +258,7 @@ def core_game_conditions(state: EnvState) -> jax.Array:
     milestones. Remaining slots are False.
     
     This is the default condition function used when constructing a
-    :class:`~factoriax.engine.envs.factoriax_env.FactoriaXEnv` via
+    :class:`~factoriax.engine.envs.base.FactoriaxEnv` via
     :func:`factoriax.make`. Benchmarks can provide their own
     function with the same signature.
 

@@ -1,4 +1,4 @@
-"""Lightweight gymnax-contract tests for :class:`FactoriaXEnv`.
+"""Lightweight gymnax-contract tests for :class:`FactoriaxEnv`.
 
 Pins the RL interface that consumers bind to: the declared spaces match the
 real observation/action, ``step_env`` returns the gymnax 5-tuple with the right
@@ -16,7 +16,8 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax.engine.envs import AutoResetWrapper, FactoriaXEnv
+from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.envs.wrappers import AutoResetWrapper
 from factoriax.engine.constants import NUM_ACTIONS, Action
 from factoriax.engine.levels import LevelBuilder
 
@@ -30,7 +31,7 @@ def level8():
 @pytest.fixture(scope="module")
 def default_env(level8):
     """The default (global-obs, unwrapped) env."""
-    env = FactoriaXEnv(level=level8)
+    env = FactoriaxEnv(level=level8)
     return env, env.default_params
 
 
@@ -51,7 +52,7 @@ def test_observation_space_matches_obs(default_env) -> None:
 
 def test_local_observation_space_matches_obs(level8) -> None:
     """``observation_space`` matches ``get_obs`` for a local x_ray env."""
-    env = FactoriaXEnv(level=level8, obs="x_ray_local", obs_radius=3)
+    env = FactoriaxEnv(level=level8, obs="x_ray_local", obs_radius=3)
     params = env.default_params
     obs, _ = env.reset_env(random.PRNGKey(0), params)
     space = env.observation_space(params)
@@ -90,7 +91,7 @@ def test_step_is_vmappable(default_env) -> None:
 
 def test_auto_reset_restores_episode_on_done(level8) -> None:
     """AutoResetWrapper restores the cached reset state when ``done`` fires."""
-    env = AutoResetWrapper(FactoriaXEnv(level=level8))
+    env = AutoResetWrapper(FactoriaxEnv(level=level8))
     params = dataclasses.replace(env.default_params, max_timesteps=1)
     _, state = env.reset_env(random.PRNGKey(0), params)
     _, state1, _, done, _ = env.step_env(
