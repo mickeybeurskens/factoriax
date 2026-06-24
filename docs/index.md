@@ -10,6 +10,7 @@ Python in the inner loop.
 :hidden:
 
 quickstart
+notebooks/getting_started
 guides/action-design
 api/index
 ```
@@ -17,6 +18,7 @@ api/index
 ## Where to go next
 
 - {doc}`quickstart` — install and open the launcher.
+- {doc}`notebooks/getting_started` — create an env, step through an episode, run batched rollouts.
 - {doc}`guides/action-design` — the three properties the action set
   is built around.
 - {doc}`api/index` — auto-generated reference for every public module.

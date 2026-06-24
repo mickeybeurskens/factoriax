@@ -1,13 +1,17 @@
 SPHINXBUILD = uv run --group docs sphinx-build
+NBSTRIPOUT  = uv run --group dev nbstripout
 SOURCEDIR   = .
 BUILDDIR    = _build
 
-.PHONY: help html clean
+.PHONY: help html clean strip-notebooks
 
 help:
 	$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)"
 
-html:
+strip-notebooks:
+	find . -name "*.ipynb" -not -path "./_build/*" -exec $(NBSTRIPOUT) {} +
+
+html: strip-notebooks
 	$(SPHINXBUILD) -b html "$(SOURCEDIR)" "$(BUILDDIR)/html"
 
 clean:

@@ -63,6 +63,7 @@ warn_unused_ignores = true
 dev = [
     "kaleido>=1.2.0",
     "mypy>=1.19.1",
+    "nbstripout>=0.9.1",
     "plotly>=6.6.0",
     "pytest>=9.0.2",
     "pytest-cov>=5.0.0",
@@ -71,7 +72,7 @@ dev = [
     "wandb>=0.25.1",
 ]
 docs = [
-    "myst-parser>=5.1.0",
+    "myst-nb>=1.4.0",
     "sphinx>=9.0.4",
     "sphinx-book-theme>=1.2.0",
     "sphinx-copybutton>=0.5.2",

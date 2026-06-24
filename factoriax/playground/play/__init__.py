@@ -10,7 +10,7 @@ Quick start
 
 Or import directly:
 
->>> from factoriax.playground.play import main
+>>> from factoriax.playground.play.main import main
 >>> main()
 
 Submodules
@@ -21,19 +21,15 @@ Submodules
 """
 
 from factoriax.playground.play.game_ui import GameUI, GameUIResult
-from factoriax.playground.play.main import main
 from factoriax.playground.play.ui import (
     render_achievement_menu,
     render_inventory_menu,
     render_pause_menu,
 )
-from factoriax.playground.ui.primitives import ClickRegion
 
 __all__ = [
     "GameUI",
     "GameUIResult",
-    "main",
-    "ClickRegion",
     "render_achievement_menu",
     "render_inventory_menu",
     "render_pause_menu",

@@ -13,7 +13,7 @@ from factoriax.playground.ui.compositing import (
     composite_rgba_over_rgb,
 )
 from factoriax.playground.ui.fonts import get_pixel_font, render_text_rgba
-from factoriax.playground.ui.primitives import ClickRegion, draw_panel, hit_test_regions
+from factoriax.playground.ui.primitives import draw_panel, hit_test_regions
 from factoriax.playground.ui.scaling import ScaledCanvas
 from factoriax.playground.ui.theme import (
     BORDER,
@@ -38,7 +38,6 @@ from factoriax.playground.ui.window import auto_ui_scale, calculate_window_size
 __all__ = [
     "ScaledCanvas",
     "auto_ui_scale",
-    "ClickRegion",
     "blit_rgba",
     "blit_scroll_view",
     "calculate_window_size",

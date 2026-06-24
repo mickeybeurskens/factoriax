@@ -7,6 +7,7 @@ of the factory, assemble the three rocket sub-components (hull, engine,
 avionics), then launch the rocket.
 
 Setup:
+
 - A **furnace** and **assembler** are pre-placed adjacent to the player's
   spawn. The agent doesn't need to hand-craft the starter machinery — all
   crafting goes through these placed machines. Producing a *second*
@@ -600,29 +601,19 @@ def rocket(
     obs: str = "x_ray_local",
     obs_radius: int = 5,
 ) -> tuple[Any, EnvParams]:
-    """
+    """Build the canonical Rocket-v1 env with achievement hook and action mask applied.
 
     Parameters
     ----------
     obs :
-        Observation variant
+        Observation variant passed to :class:`~factoriax.engine.envs.FactoriaXEnv`.
     obs_radius :
-        Local
-    * :
-        
-    obs : str :
-        (Default value = "x_ray_local")
-    obs_radius : int :
-        (Default value = 5)
-    obs: str :
-         (Default value = "x_ray_local")
-    obs_radius: int :
-         (Default value = 5)
+        Radius for local observation variants.
 
     Returns
     -------
-
-    
+    tuple
+        ``(env, params)`` ready for gymnax-style rollouts.
     """
     env: Any = FactoriaXEnv(
         level=build_rocket_level(),

@@ -108,21 +108,11 @@ def order_within_tiers(
         ``{node: tier}`` from :func:`assign_tiers`.
     iterations :
         number of forward-backward passes.
-    adjacency: Mapping[str :
-        
-    Iterable[str]] :
-        
-    tiers: Mapping[str :
-        
-    int] :
-        
-    iterations: int :
-         (Default value = 8)
 
     Returns
     -------
-    ``{node
-        row}`` giving each node's 0-indexed row within its tier.
+    dict
+        ``{node: row}`` giving each node's 0-indexed row within its tier.
 
     """
     predecessors: dict[str, list[str]] = defaultdict(list)

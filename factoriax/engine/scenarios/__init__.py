@@ -8,20 +8,16 @@ catalog (used by the playground picker).
 
 from __future__ import annotations
 
-from factoriax.engine.scenarios.easy_rocket import easy_rocket
 from factoriax.engine.scenarios.registry import (
     SCENARIOS,
     ScenarioSpec,
     list_scenarios,
     make,
 )
-from factoriax.engine.scenarios.rocket import rocket
 
 __all__ = [
     "SCENARIOS",
     "ScenarioSpec",
-    "easy_rocket",
     "list_scenarios",
     "make",
-    "rocket",
 ]
