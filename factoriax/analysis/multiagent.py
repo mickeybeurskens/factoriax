@@ -28,6 +28,7 @@ from .actions import (
     action_raster,
 )
 from .trajectory import Trajectory
+from .utils import resolve_ax
 
 
 def _require_multi_player(traj: Trajectory) -> None:
@@ -291,10 +292,7 @@ def plot_spatial_overlap(
     -------
     fig, ax : Figure, Axes
     """
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     for d in distance_thresholds:
         overlap = spatial_overlap(traj, d)
@@ -387,10 +385,7 @@ def plot_joint_actions(
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS[:num_actions]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     im = ax.imshow(mat, cmap="Blues")
     fig.colorbar(im, ax=ax, label="Joint probability")

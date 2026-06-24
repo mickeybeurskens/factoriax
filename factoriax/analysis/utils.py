@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 from .trajectory import Trajectory
+
+
+def resolve_ax(
+    ax: Axes | None,
+    figsize: tuple[float, float],
+) -> tuple[Figure, Axes]:
+    """Return (fig, ax), creating a new figure when ax is None."""
+    if ax is None:
+        return plt.subplots(figsize=figsize)
+    return ax.figure, ax  # type: ignore[return-value]
 
 
 def resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:

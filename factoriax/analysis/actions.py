@@ -31,7 +31,7 @@ from matplotlib.patches import Patch
 from factoriax.engine.constants import NUM_ACTIONS, Action
 
 from .trajectory import Trajectory
-from .utils import resolve_player_actions
+from .utils import resolve_ax, resolve_player_actions
 
 # Derived from the Action enum so labels stay in sync automatically.
 DEFAULT_ACTION_LABELS: list[str] = [a.name for a in Action]
@@ -129,10 +129,7 @@ def action_raster(
     cmap = _get_action_cmap(num_actions, colors)
     norm = mcolors.BoundaryNorm(np.arange(-0.5, num_actions), num_actions)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     ax.imshow(
         actions,
@@ -249,10 +246,7 @@ def plot_transition_matrix(
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS[:num_actions]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     im = ax.imshow(mat, cmap=cmap, vmin=0)
     fig.colorbar(im, ax=ax, label="Probability" if normalize else "Count")
@@ -583,10 +577,7 @@ def plot_ngrams(
     labels = [" → ".join(g) for g, _ in grams]
     counts = [c for _, c in grams]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     ax.barh(range(len(labels)), counts, color="#4c72b0")
     ax.set_yticks(range(len(labels)))
@@ -670,10 +661,7 @@ def plot_entropy(
     """
     ent = action_entropy(traj, player, num_actions, window)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     ax.plot(ent, color="#4c72b0", linewidth=1.2)
     ax.fill_between(range(len(ent)), ent, alpha=0.15, color="#4c72b0")
@@ -766,10 +754,7 @@ def plot_run_lengths(
 
     runs = run_lengths(traj, player)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     data = [runs.get(i, []) for i in range(num_actions)]
     present = [(i, d) for i, d in enumerate(data) if d]
@@ -853,10 +838,7 @@ def plot_action_distribution(
         # Renormalize after smoothing
         dist = dist / dist.sum(axis=1, keepdims=True)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     ax.stackplot(
         range(T),

@@ -18,6 +18,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .trajectory import Trajectory
+from .utils import resolve_ax
 
 # Default item labels matching factoriax ItemType enum
 DEFAULT_ITEM_LABELS = ["EMPTY", "COAL", "IRON", "COPPER", "MINER"]
@@ -96,10 +97,7 @@ def plot_inventory(
     if item_colors is None:
         item_colors = DEFAULT_ITEM_COLORS[:num_item_types]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     start = 1 if exclude_empty else 0
     for i in range(start, num_item_types):
@@ -193,10 +191,7 @@ def plot_position_heatmap(
     """
     hm = position_heatmap(traj, player, map_width, map_height, time_range)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     im = ax.imshow(hm, cmap=cmap, interpolation="nearest", origin="upper")
     fig.colorbar(im, ax=ax, label="Visit frequency")
@@ -247,10 +242,7 @@ def plot_trajectory_trace(
     else:
         pos = traj.positions[episode, :, :]  # (T, 2)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     T = pos.shape[0]
     colors = plt.cm.get_cmap(cmap)(np.linspace(0, 1, T))
@@ -324,10 +316,7 @@ def plot_resource_depletion(
     mean = total.mean(axis=0)
     std = total.std(axis=0)
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     T = mean.shape[0]
     ax.plot(mean, color="#d62728", linewidth=1.5)

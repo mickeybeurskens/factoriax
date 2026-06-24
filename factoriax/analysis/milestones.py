@@ -13,7 +13,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .trajectory import Trajectory
-from .utils import resolve_player_actions
+from .utils import resolve_ax, resolve_player_actions
 
 
 def achievement_timing(
@@ -73,10 +73,7 @@ def plot_achievement_timing(
     if achievement_labels is None:
         achievement_labels = [f"Achievement {i}" for i in range(A)]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     # Filter to only include episodes where achievement was unlocked
     data = []
@@ -136,10 +133,7 @@ def plot_achievement_progress(
     if achievement_labels is None:
         achievement_labels = [f"Achievement {i}" for i in range(A)]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     for a in range(A):
         times = timing[:, a]
@@ -231,10 +225,7 @@ def plot_first_action_timing(
 
         action_labels = [DEFAULT_ACTION_LABELS[a] for a in action_ids]
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.figure  # type: ignore[assignment]
+    fig, ax = resolve_ax(ax, figsize)
 
     data = []
     labels_used = []
