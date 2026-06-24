@@ -31,6 +31,7 @@ from matplotlib.patches import Patch
 from factoriax.engine.constants import NUM_ACTIONS, Action
 
 from .trajectory import Trajectory
+from .utils import resolve_player_actions
 
 # Derived from the Action enum so labels stay in sync automatically.
 DEFAULT_ACTION_LABELS: list[str] = [a.name for a in Action]
@@ -70,15 +71,6 @@ def _get_action_cmap(
     if colors is None:
         colors = DEFAULT_ACTION_COLORS[:num_actions]
     return mcolors.ListedColormap(colors[:num_actions])
-
-
-def _resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:
-    """Extract a (B, T) action array, selecting a player if multi-player."""
-    if traj.is_multi_player:
-        if player is None:
-            player = 0
-        return traj.player(player).actions
-    return traj.actions
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +120,7 @@ def action_raster(
     -------
     fig, ax : Figure, Axes
     """
-    actions = _resolve_player_actions(traj, player)  # (B, T)
+    actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape
 
     if action_labels is None:
@@ -210,7 +202,7 @@ def transition_matrix(
         Shape ``(num_actions, num_actions)``.  ``T[i, j]`` is the
         probability (or count) of action *j* following action *i*.
     """
-    actions = _resolve_player_actions(traj, player)  # (B, T)
+    actions = resolve_player_actions(traj, player)  # (B, T)
     if time_range is not None:
         actions = actions[:, time_range[0] : time_range[1]]
 
@@ -383,7 +375,7 @@ def action_ngrams(
     list of (ngram, count)
         Sorted by count descending.
     """
-    actions = _resolve_player_actions(traj, player)  # (B, T)
+    actions = resolve_player_actions(traj, player)  # (B, T)
     counter: Counter[tuple[int, ...]] = Counter()
 
     for ep in actions:
@@ -637,7 +629,7 @@ def action_entropy(
     entropy : np.ndarray
         Shape ``(T,)`` — entropy in bits at each timestep.
     """
-    actions = _resolve_player_actions(traj, player)  # (B, T)
+    actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape
 
     entropy = np.zeros(T)
@@ -720,7 +712,7 @@ def run_lengths(
     -------
     dict mapping action_id -> list of run lengths
     """
-    actions = _resolve_player_actions(traj, player)
+    actions = resolve_player_actions(traj, player)
     result: dict[int, list[int]] = {}
 
     for ep in actions:
@@ -838,7 +830,7 @@ def plot_action_distribution(
     -------
     fig, ax : Figure, Axes
     """
-    actions = _resolve_player_actions(traj, player)  # (B, T)
+    actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape
 
     if action_labels is None:

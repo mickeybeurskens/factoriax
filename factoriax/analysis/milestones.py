@@ -13,6 +13,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .trajectory import Trajectory
+from .utils import resolve_player_actions
 
 
 def achievement_timing(
@@ -190,13 +191,7 @@ def first_action_timestep(
     timesteps : np.ndarray
         Shape ``(B,)``.  -1 if the action is never taken.
     """
-    if traj.is_multi_player:
-        if player is None:
-            player = 0
-        actions = traj.player(player).actions  # (B, T)
-    else:
-        actions = traj.actions
-
+    actions = resolve_player_actions(traj, player)
     B, T = actions.shape
     result = np.full(B, -1, dtype=np.int32)
     for b in range(B):
