@@ -6,14 +6,9 @@ import numpy as np
 import pytest
 from jax import random
 
-from factoriax import (
-    Action,
-    BlockType,
-    Direction,
-    EnvParams,
-    EnvState,
-    FactoriaXEnv,
-)
+from factoriax.engine.constants import Action, BlockType, Direction
+from factoriax.engine.envs import FactoriaXEnv
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.constants import (
     NUM_ACTIONS,
     Machine,

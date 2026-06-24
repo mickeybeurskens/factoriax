@@ -3,7 +3,8 @@
 import jax.numpy as jnp
 from jax import random
 
-from factoriax import BlockType, EnvParams, EnvState, ItemType
+from factoriax.engine.constants import BlockType, ItemType
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.constants import (
     Direction,
     Machine,

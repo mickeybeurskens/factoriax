@@ -190,7 +190,7 @@ class TestGlobalArray:
 
     def test_matches_env_get_obs(self, state_factory) -> None:
         """global_x_ray for selected_player matches FactoriaXEnv.get_obs."""
-        from factoriax import FactoriaXEnv
+        from factoriax.engine.envs import FactoriaXEnv
 
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),

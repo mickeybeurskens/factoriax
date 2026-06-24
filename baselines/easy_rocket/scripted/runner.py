@@ -25,9 +25,9 @@ from pathlib import Path
 import jax
 import numpy as np
 
-import factoriax
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import NUM_ACTIONS, Action
+from factoriax.env import make_factoriax_env_from_name
 from factoriax.engine.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     NUM_EASY_ROCKET_ACHIEVEMENTS,
@@ -53,7 +53,7 @@ def _make_env_and_state(seed: int) -> tuple[object, EnvState, EnvParams]:
     keyed generator with ``PRNGKey(seed)``, so each seed gives a distinct (but
     reproducible) layout the scripted agent plans around.
     """
-    env, env_params = factoriax.make(_SCENARIO_ID)
+    env, env_params = make_factoriax_env_from_name(_SCENARIO_ID)
     _, state0 = env.reset_env(jax.random.PRNGKey(seed), env_params)
     return env, state0, env_params
 

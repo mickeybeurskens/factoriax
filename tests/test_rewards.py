@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from factoriax import BlockType, ItemType
+from factoriax.engine.constants import BlockType, ItemType
 from factoriax.engine.achievements import core_game_conditions
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
 from factoriax.engine.rewards import (

@@ -3,7 +3,7 @@
 import jax.numpy as jnp
 from jax import random
 
-from factoriax import ItemType
+from factoriax.engine.constants import ItemType
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
 )

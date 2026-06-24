@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax import AutoResetWrapper, FactoriaXEnv
+from factoriax.engine.envs import AutoResetWrapper, FactoriaXEnv
 from factoriax.engine.constants import NUM_ACTIONS, Action
 from factoriax.engine.levels import LevelBuilder
 

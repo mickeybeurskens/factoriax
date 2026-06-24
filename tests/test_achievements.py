@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from factoriax import BlockType, ItemType
+from factoriax.engine.constants import BlockType, ItemType
 from factoriax.engine.achievements import (
     ACHIEVEMENT_INFO,
     core_game_conditions,

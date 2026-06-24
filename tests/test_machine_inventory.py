@@ -9,7 +9,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax import BlockType, EnvParams, EnvState, ItemType
+from factoriax.engine.constants import BlockType, ItemType
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.constants import Machine
 from factoriax.engine.levels import generate_state
 from factoriax.engine.machine_spec import MACHINE_MAX_STACK, MACHINE_MAX_TYPES

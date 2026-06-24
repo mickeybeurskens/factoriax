@@ -10,7 +10,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax import Action, BlockType, Direction, ItemType
+from factoriax.engine.constants import Action, BlockType, Direction, ItemType
 from factoriax.engine.constants import Machine
 from factoriax.engine.game_logic import deposit_to_adjacent, withdraw_from_adjacent
 

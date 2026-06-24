@@ -33,7 +33,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-import factoriax
 from baselines.easy_rocket.ppo.cli import add_ppo_args, ppo_config_from_args
 from baselines.easy_rocket.ppo.config import PPOConfig
 from baselines.easy_rocket.ppo.gae import Transition, compute_gae
@@ -47,6 +46,7 @@ from baselines.easy_rocket.ppo.normalization import (
 from factoriax.analysis.eval import EvalRollout, generate_eval_plots
 from factoriax.analysis.video import compose_frame_with_inventory, write_video
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ACTIONS, Action
+from factoriax.env import make_factoriax_env_from_name
 from factoriax.engine.scenarios.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
@@ -498,7 +498,7 @@ def _write_throughput_json(
 def train(config: Config) -> dict[str, float]:
     """Train PPO against the easy_rocket scenario and return final metrics."""
     ppo = config.ppo
-    env, env_params = factoriax.make(_SCENARIO_ID)
+    env, env_params = make_factoriax_env_from_name(_SCENARIO_ID)
     env_params = env_params.replace(max_timesteps=config.max_timesteps)
     obs_dim = int(env.observation_space(env_params).shape[0])
     logger.info(

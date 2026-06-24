@@ -72,7 +72,7 @@ import pygame  # noqa: E402
 import pytest  # noqa: E402
 from jax import random  # noqa: E402
 
-from factoriax import EnvState  # noqa: E402
+from factoriax.engine.state import EnvState  # noqa: E402
 from factoriax.engine.constants import (  # noqa: E402
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,

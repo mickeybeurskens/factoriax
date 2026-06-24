@@ -481,9 +481,9 @@ def test_reward_only_counts_newly_unlocked(state_factory) -> None:
 
 def test_easy_rocket_factory_builds_env() -> None:
     """The registry factory yields a steppable env at the scenario's params."""
-    import factoriax
+    from factoriax.env import make_factoriax_env_from_name
 
-    env, params = factoriax.make("EasyRocket-v1")
+    env, params = make_factoriax_env_from_name("EasyRocket-v1")
     assert params.map_width == _MAP_SIZE and params.map_height == _MAP_SIZE
     assert params.max_timesteps == 2000
     assert params.recipe_table is EASY_ROCKET_RECIPE_TABLE

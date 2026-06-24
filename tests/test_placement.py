@@ -4,13 +4,15 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from factoriax import BlockType, Direction, ItemType
 from factoriax.engine.constants import (
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
     PLACEABLE_ITEM_LIST,
     Action,
+    BlockType,
+    Direction,
     InteractAction,
+    ItemType,
     Machine,
     MoveAction,
 )

@@ -57,9 +57,9 @@ def test_all_ids_unique() -> None:
 
 def test_rocket_factory_builds_env() -> None:
     """The registry factory yields the rocket env at the advertised params."""
-    import factoriax
+    from factoriax.env import make_factoriax_env_from_name
 
-    _env, params = factoriax.make("Rocket-v1")
+    _env, params = make_factoriax_env_from_name("Rocket-v1")
     assert params.max_timesteps == 8000
     assert params.map_width == 32
     assert params.map_height == 32

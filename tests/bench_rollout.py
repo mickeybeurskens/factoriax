@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
-from factoriax import FactoriaXEnv
+from factoriax.engine.envs import FactoriaXEnv
 from factoriax.engine.constants import NUM_ACTIONS
 from factoriax.engine.state import EnvParams
 

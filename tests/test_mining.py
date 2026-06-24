@@ -11,7 +11,8 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax import BlockType, EnvParams, EnvState, ItemType
+from factoriax.engine.constants import BlockType, ItemType
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.constants import BLOCK_MAX_RESOURCES, Direction
 from factoriax.engine.game_logic import mine_block
 from factoriax.engine.levels import generate_state

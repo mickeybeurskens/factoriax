@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 from jax import random
 
-import factoriax
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
 from factoriax.engine.envs import ActionMaskWrapper, AutoResetWrapper
 from factoriax.engine.scenarios import ScenarioSpec, list_scenarios, make
@@ -51,10 +50,3 @@ def test_make_auto_reset_wraps() -> None:
 def test_make_unknown_id_raises() -> None:
     with pytest.raises(KeyError):
         make("Nope-v1")
-
-
-def test_factoriax_make_dispatches_scenario_ids() -> None:
-    env, params = factoriax.make("EasyRocket-v1")
-    assert params.map_width == 16
-    obs, _ = env.reset_env(random.PRNGKey(0), params)
-    assert obs.shape == env.observation_space(params).shape

@@ -535,7 +535,7 @@ class TestResetWithBoundLevel:
     """FactoriaXEnv constructed with ``level=`` resets to that level."""
 
     def test_obs_and_state_returned(self) -> None:
-        from factoriax import FactoriaXEnv
+        from factoriax.engine.envs import FactoriaXEnv
 
         level = get_level("15x15_resources")
         env = FactoriaXEnv(level=level)
@@ -545,7 +545,7 @@ class TestResetWithBoundLevel:
         assert state.map.shape == (15, 15)
 
     def test_obs_shape_matches_observation_space(self) -> None:
-        from factoriax import FactoriaXEnv
+        from factoriax.engine.envs import FactoriaXEnv
 
         level = get_level("15x15_resources")
         env = FactoriaXEnv(level=level)
@@ -555,7 +555,7 @@ class TestResetWithBoundLevel:
         assert obs.shape == (expected,)
 
     def test_deterministic_no_key_needed(self) -> None:
-        from factoriax import FactoriaXEnv
+        from factoriax.engine.envs import FactoriaXEnv
 
         level = get_level("15x15_resources")
         env = FactoriaXEnv(level=level)

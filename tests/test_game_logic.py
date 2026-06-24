@@ -8,11 +8,15 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from factoriax import Action, BlockType, Direction, EnvParams, ItemType
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
+    Action,
+    BlockType,
+    Direction,
+    ItemType,
     Machine,
 )
+from factoriax.engine.state import EnvParams
 from factoriax.engine.game_logic import (
     _handle_player_action,
     deposit_to_adjacent,
