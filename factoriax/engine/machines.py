@@ -35,6 +35,40 @@ _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
 MINER_OUTPUT_CAP: int = 3
 
 
+def _subtract_buffer(
+    cond: jnp.ndarray,
+    buf_type: jnp.ndarray,
+    buf_count: jnp.ndarray,
+    amt: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Subtract amt from buf_count where cond, clear buf_type when count hits 0."""
+    new_c = jnp.where(cond, buf_count - amt, buf_count)
+    return jnp.where(cond & (new_c == 0), jnp.int8(0), buf_type), new_c
+
+
+def _lookup_neighbor(
+    ey: jnp.ndarray,
+    ex: jnp.ndarray,
+    dy: int,
+    dx: int,
+    h: int,
+    w: int,
+    tile_entity: jnp.ndarray,
+    n: int,
+) -> tuple[
+    jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
+]:
+    """Look up the neighbor at (ey+dy, ex+dx), clipped to grid bounds.
+
+    Returns (ny, nx, eidx, valid, diff, safe) where valid = eidx >= 0,
+    diff = clipped position differs from (ey, ex), safe = eidx clipped to [0, n].
+    """
+    ny = jnp.clip(ey + dy, 0, h - 1)
+    nx = jnp.clip(ex + dx, 0, w - 1)
+    eidx = tile_entity[ny, nx]
+    return ny, nx, eidx, eidx >= 0, (ny != ey) | (nx != ex), jnp.clip(eidx, 0, n)
+
+
 def update_all_machines(
     state: EnvState,
     params: EnvParams,
@@ -152,17 +186,14 @@ def run_miners(
         )
 
     # --- Push buffer to adjacent entity in facing direction ---
+    n = new_buf_type.shape[0] - 1
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
         facing_d = (state.ent_direction == d) & is_miner
 
-        dn_y = jnp.clip(ey + dy, 0, h - 1)
-        dn_x = jnp.clip(ex + dx, 0, w - 1)
-        dn_eidx = state.tile_entity[dn_y, dn_x]
-        dn_valid = dn_eidx >= 0
-        dn_diff = (dn_y != ey) | (dn_x != ex)
-        dn_safe = jnp.clip(dn_eidx, 0, new_buf_type.shape[0] - 1)
-
+        _, _, dn_eidx, dn_valid, dn_diff, dn_safe = _lookup_neighbor(
+            ey, ex, dy, dx, h, w, state.tile_entity, n
+        )
         dn_bc = new_buf_count[dn_safe]
         dn_bt = new_buf_type[dn_safe]
         dn_max = params.machine_config.max_stack[
@@ -184,34 +215,18 @@ def run_miners(
 
         # Gather: each entity checks if a miner behind it (opposite
         # of d) is pushing to it.
-        up_y = jnp.clip(ey - dy, 0, h - 1)
-        up_x = jnp.clip(ex - dx, 0, w - 1)
-        up_diff = (up_y != ey) | (up_x != ex)
-        up_eidx = state.tile_entity[up_y, up_x]
-        up_safe = jnp.clip(up_eidx, 0, new_buf_type.shape[0] - 1)
+        _, _, up_eidx, _, up_diff, up_safe = _lookup_neighbor(
+            ey, ex, -dy, -dx, h, w, state.tile_entity, n
+        )
         # Gate on the receiver being active: inactive slots all clip to
         # tile (0, 0), so without this they would each pull in a push
         # aimed at the real entity on (0, 0)'s neighbour -- duplicating
         # the item and leaking it into slots later reused by placement.
         incoming = active & can_push[up_safe] & (up_eidx >= 0) & up_diff
-        in_type = new_buf_type[up_safe]
-        in_xfer = xfer[up_safe]
+        new_buf_type = jnp.where(incoming, new_buf_type[up_safe], new_buf_type)
+        new_buf_count = jnp.where(incoming, new_buf_count + xfer[up_safe], new_buf_count)
 
-        new_buf_type = jnp.where(incoming, in_type, new_buf_type)
-        new_buf_count = jnp.where(
-            incoming,
-            new_buf_count + in_xfer,
-            new_buf_count,
-        )
-
-        # Subtract sent items from source.
-        remaining = new_buf_count - xfer
-        new_buf_type = jnp.where(
-            can_push & (remaining == 0),
-            jnp.int8(0),
-            new_buf_type,
-        )
-        new_buf_count = jnp.where(can_push, remaining, new_buf_count)
+        new_buf_type, new_buf_count = _subtract_buffer(can_push, new_buf_type, new_buf_count, xfer)
 
     return state.replace(
         map=new_map,
@@ -266,6 +281,7 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     in_t1 = state.ent_asm_in_type[..., 1]
     in_c1 = state.ent_asm_in_count[..., 1]
 
+    n = buf_type.shape[0] - 1
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
         facing_d = (state.ent_direction == d) & is_arm
@@ -274,13 +290,11 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         # (assembler/furnace recipe output) so adjacent arms can
         # drain the output slot; fall back to buf for everything
         # else (miners, pallets, belts).
-        src_y = jnp.clip(ey - dy, 0, h - 1)
-        src_x = jnp.clip(ex - dx, 0, w - 1)
-        src_eidx = state.tile_entity[src_y, src_x]
-        src_valid = src_eidx >= 0
-        src_diff = (src_y != ey) | (src_x != ex)
-        src_safe = jnp.clip(src_eidx, 0, buf_type.shape[0] - 1)
-
+        # rcv_* (gather dest side) looks at the same tile as src_*, so
+        # we reuse those values below instead of computing them twice.
+        _, _, src_eidx, src_valid, src_diff, src_safe = _lookup_neighbor(
+            ey, ex, -dy, -dx, h, w, state.tile_entity, n
+        )
         src_out_t = out_type[src_safe]
         src_out_c = out_count[src_safe]
         src_buf_t = buf_type[src_safe]
@@ -294,13 +308,10 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         # destinations route the push to ``ent_asm_in`` (slot 0
         # first if empty/type-match, else slot 1); everything else
         # writes to ``ent_buf``.
-        dst_y = jnp.clip(ey + dy, 0, h - 1)
-        dst_x = jnp.clip(ex + dx, 0, w - 1)
-        dst_eidx = state.tile_entity[dst_y, dst_x]
-        dst_valid = dst_eidx >= 0
-        dst_diff = (dst_y != ey) | (dst_x != ex)
-        dst_safe = jnp.clip(dst_eidx, 0, buf_type.shape[0] - 1)
-
+        # giv_* (gather source side) looks at the same tile as dst_*.
+        _, _, dst_eidx, dst_valid, dst_diff, dst_safe = _lookup_neighbor(
+            ey, ex, dy, dx, h, w, state.tile_entity, n
+        )
         dst_type = state.ent_type[dst_safe]
         dst_is_combiner = (dst_type == Machine.ASSEMBLER) | (
             dst_type == Machine.FURNACE
@@ -327,27 +338,14 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
         can_xfer = facing_d & src_has & dst_valid & dst_diff & dst_accepts
 
-        # Gather: each entity checks if an arm behind it (opposite
-        # of d) is transferring to it, and if an arm in front of it
-        # is taking from it.
-        # -- Destination side: look at tile (ey - dy, ex - dx). If an
-        #    arm there faces d and can_xfer, this entity receives.
-        rcv_y = jnp.clip(ey - dy, 0, h - 1)
-        rcv_x = jnp.clip(ex - dx, 0, w - 1)
-        rcv_diff = (rcv_y != ey) | (rcv_x != ex)
-        rcv_eidx = state.tile_entity[rcv_y, rcv_x]
-        rcv_safe = jnp.clip(rcv_eidx, 0, buf_type.shape[0] - 1)
-        receiving = can_xfer[rcv_safe] & (rcv_eidx >= 0) & rcv_diff
-        rcv_bt = src_bt[rcv_safe]
+        # Gather destination side: entity at (ey-dy, ex-dx) = src_* tile.
+        receiving = can_xfer[src_safe] & (src_eidx >= 0) & src_diff
+        rcv_bt = src_bt[src_safe]
 
         # ent_buf-track: combiners receive into ``ent_asm_in`` instead.
         receives_buf = receiving & ~self_is_combiner
         buf_type = jnp.where(receives_buf, rcv_bt, buf_type)
-        buf_count = jnp.where(
-            receives_buf,
-            buf_count + jnp.int16(1),
-            buf_count,
-        )
+        buf_count = jnp.where(receives_buf, buf_count + jnp.int16(1), buf_count)
 
         # ent_asm_in track: pick slot 0 first if empty or matches the
         # incoming type, else slot 1. Per-slot scalar updates avoid
@@ -362,36 +360,13 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         in_t1 = jnp.where(to_s1, rcv_bt, in_t1)
         in_c1 = jnp.where(to_s1, in_c1 + jnp.int16(1), in_c1)
 
-        # -- Source side: look at tile (ey + dy, ex + dx). If an arm
-        #    there faces d and can_xfer, this entity loses 1 item.
-        #    Decrement asm_out first if it has stuff (matches the
-        #    arm's read decision via ``src_use_out``); otherwise
-        #    decrement buf.
-        giv_y = jnp.clip(ey + dy, 0, h - 1)
-        giv_x = jnp.clip(ex + dx, 0, w - 1)
-        giv_diff = (giv_y != ey) | (giv_x != ex)
-        giv_eidx = state.tile_entity[giv_y, giv_x]
-        giv_safe = jnp.clip(giv_eidx, 0, buf_type.shape[0] - 1)
-        giving = can_xfer[giv_safe] & (giv_eidx >= 0) & giv_diff
-
+        # Gather source side: entity at (ey+dy, ex+dx) = dst_* tile.
+        # Decrement asm_out first if it has stuff; otherwise decrement buf.
+        giving = can_xfer[dst_safe] & (dst_eidx >= 0) & dst_diff
         gave_out = giving & (out_count > 0)
         gave_buf = giving & ~(out_count > 0)
-
-        new_out_c = out_count - jnp.where(gave_out, jnp.int16(1), jnp.int16(0))
-        out_type = jnp.where(
-            gave_out & (new_out_c == 0),
-            jnp.int8(0),
-            out_type,
-        )
-        out_count = jnp.where(gave_out, new_out_c, out_count)
-
-        new_buf_c = buf_count - jnp.where(gave_buf, jnp.int16(1), jnp.int16(0))
-        buf_type = jnp.where(
-            gave_buf & (new_buf_c == 0),
-            jnp.int8(0),
-            buf_type,
-        )
-        buf_count = jnp.where(gave_buf, new_buf_c, buf_count)
+        out_type, out_count = _subtract_buffer(gave_out, out_type, out_count, jnp.int16(1))
+        buf_type, buf_count = _subtract_buffer(gave_buf, buf_type, buf_count, jnp.int16(1))
 
     return state.replace(
         ent_buf_type=buf_type,
@@ -450,16 +425,12 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     # is parallel/perpendicular to the scan are also excluded — only
     # a belt aimed at the machine counts as a feed.
     opposite_dir = {1: 2, 2: 1, 3: 4, 4: 3}
+    n = buf_type.shape[0] - 1
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
-        ny = jnp.clip(ey + dy, 0, h - 1)
-        nx = jnp.clip(ex + dx, 0, w - 1)
-
-        nb_eidx = state.tile_entity[ny, nx]
-        nb_valid = nb_eidx >= 0
-        nb_diff = (ny != ey) | (nx != ex)
-        nb_safe = jnp.clip(nb_eidx, 0, buf_type.shape[0] - 1)
-
+        _, _, nb_eidx, nb_valid, nb_diff, nb_safe = _lookup_neighbor(
+            ey, ex, dy, dx, h, w, state.tile_entity, n
+        )
         nb_bt = buf_type[nb_safe]
         nb_bc = buf_count[nb_safe]
         nb_type = state.ent_type[nb_safe]
@@ -481,20 +452,11 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
 
         # Gather: each entity checks if a combiner on the opposite
         # side (direction d) is pulling from it.
-        asm_y = jnp.clip(ey - dy, 0, h - 1)
-        asm_x = jnp.clip(ex - dx, 0, w - 1)
-        asm_diff = (asm_y != ey) | (asm_x != ex)
-        asm_eidx = state.tile_entity[asm_y, asm_x]
-        asm_safe = jnp.clip(asm_eidx, 0, buf_type.shape[0] - 1)
-        taken = tk[asm_safe] & (asm_eidx >= 0) & asm_diff
-
-        new_c = buf_count - jnp.where(taken, jnp.int16(1), jnp.int16(0))
-        buf_type = jnp.where(
-            taken & (new_c == 0),
-            jnp.int8(0),
-            buf_type,
+        _, _, asm_eidx, _, asm_diff, asm_safe = _lookup_neighbor(
+            ey, ex, -dy, -dx, h, w, state.tile_entity, n
         )
-        buf_count = jnp.where(taken, new_c, buf_count)
+        taken = tk[asm_safe] & (asm_eidx >= 0) & asm_diff
+        buf_type, buf_count = _subtract_buffer(taken, buf_type, buf_count, jnp.int16(1))
 
     # --- Phase 1: Complete crafts (power == 1) ---
     completing = is_combiner & (state.ent_power == 1)
@@ -660,9 +622,10 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         splitter_pushers_vert,  # LEFT  — vert-facing splitters output here
         splitter_pushers_vert,  # RIGHT
         splitter_pushers_horiz,  # UP   — horiz-facing splitters output here
-        splitter_pushers_horiz,  # DOWN
+        splitter_pushers_horiz,  # Down
     )
 
+    n = buf_type.shape[0] - 1
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
 
@@ -698,13 +661,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         src_type = jnp.where(is_axis_pusher, axis_slot_type, buf_type)
 
         # Destination side.
-        dn_y = jnp.clip(ey + dy, 0, h - 1)
-        dn_x = jnp.clip(ex + dx, 0, w - 1)
-        dn_eidx = state.tile_entity[dn_y, dn_x]
-        dn_valid = dn_eidx >= 0
-        dn_diff = (dn_y != ey) | (dn_x != ex)
-        dn_safe = jnp.clip(dn_eidx, 0, buf_type.shape[0] - 1)
-
+        _, _, dn_eidx, dn_valid, dn_diff, dn_safe = _lookup_neighbor(
+            ey, ex, dy, dx, h, w, state.tile_entity, n
+        )
         dn_type = state.ent_type[dn_safe]
         dn_is_crossing = dn_type == Machine.CROSSING
         # Reject pushes into combiner destinations. Combiners receive
@@ -766,11 +725,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         # ent_buf track for belt/splitter/pallet receivers, and the
         # ent_asm_in[*, axis] track for crossing receivers (the axis is
         # the same constant the iteration's pushers use).
-        up_y = jnp.clip(ey - dy, 0, h - 1)
-        up_x = jnp.clip(ex - dx, 0, w - 1)
-        up_diff = (up_y != ey) | (up_x != ex)
-        up_eidx = state.tile_entity[up_y, up_x]
-        up_safe = jnp.clip(up_eidx, 0, buf_type.shape[0] - 1)
+        _, _, up_eidx, _, up_diff, up_safe = _lookup_neighbor(
+            ey, ex, -dy, -dx, h, w, state.tile_entity, n
+        )
         # Gate on the receiver being active: inactive slots all clip to
         # tile (0, 0), so without this a belt or splitter pushing toward
         # (0, 0)'s neighbour would duplicate its item into every inactive
@@ -800,20 +757,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         # are what we subtract from — same chain semantics as the
         # original belt loop (an entity that both received and pushed
         # in the same iteration ends with old + in_xfer - xfer).
-        new_buf_c = buf_count - xfer
-        buf_type = jnp.where(
-            can_push & is_buf_pusher & (new_buf_c == 0), jnp.int8(0), buf_type
-        )
-        buf_count = jnp.where(can_push & is_buf_pusher, new_buf_c, buf_count)
-
-        new_axis_c = axis_slot_count_after - xfer
-        axis_slot_type_after = jnp.where(
-            can_push & is_axis_pusher & (new_axis_c == 0),
-            jnp.int8(0),
-            axis_slot_type_after,
-        )
-        axis_slot_count_after = jnp.where(
-            can_push & is_axis_pusher, new_axis_c, axis_slot_count_after
+        buf_type, buf_count = _subtract_buffer(can_push & is_buf_pusher, buf_type, buf_count, xfer)
+        axis_slot_type_after, axis_slot_count_after = _subtract_buffer(
+            can_push & is_axis_pusher, axis_slot_type_after, axis_slot_count_after, xfer
         )
 
         # Persist axis-slot updates back into the (N, 2) ent_asm_in arrays.

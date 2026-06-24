@@ -11,6 +11,8 @@ from factoriax.engine.constants import (
 from factoriax.engine.levels import generate_state
 from factoriax.engine.machine_spec import MACHINE_MAX_STACK
 from factoriax.engine.machines import (
+    _lookup_neighbor,
+    _subtract_buffer,
     run_conveyor_belts,
     run_miners,
     update_all_machines,
@@ -387,3 +389,63 @@ class TestUpdateAllMachines:
         eid = _eid(new_state, 0, 0)
         assert new_state.ent_buf_count[eid] == 3
         assert new_state.block_resources[0, 0] == 47
+
+
+class TestMachineHelpers:
+    """Unit tests for private machine helpers — JIT-free, no state_factory."""
+
+    def test_subtract_buffer_decrements_by_amount(self) -> None:
+        cond = jnp.array([True, True, False])
+        bt = jnp.array([5, 5, 5], dtype=jnp.int8)
+        bc = jnp.array([3, 2, 10], dtype=jnp.int16)
+        new_bt, new_bc = _subtract_buffer(cond, bt, bc, jnp.int16(2))
+        assert new_bc.tolist() == [1, 0, 10]
+        assert int(new_bt[0]) == 5  # still positive
+        assert int(new_bt[1]) == 0  # count hit zero — cleared
+        assert int(new_bt[2]) == 5  # unconditioned
+
+    def test_subtract_buffer_clears_type_exactly_at_zero(self) -> None:
+        cond = jnp.array([True, True])
+        bt = jnp.array([7, 7], dtype=jnp.int8)
+        bc = jnp.array([1, 2], dtype=jnp.int16)
+        new_bt, new_bc = _subtract_buffer(cond, bt, bc, jnp.int16(1))
+        assert int(new_bc[0]) == 0 and int(new_bt[0]) == 0  # zero — cleared
+        assert int(new_bc[1]) == 1 and int(new_bt[1]) == 7  # still positive
+
+    def test_subtract_buffer_no_change_when_false(self) -> None:
+        cond = jnp.array([False])
+        bt = jnp.array([3], dtype=jnp.int8)
+        bc = jnp.array([5], dtype=jnp.int16)
+        new_bt, new_bc = _subtract_buffer(cond, bt, bc, jnp.int16(1))
+        assert int(new_bc[0]) == 5
+        assert int(new_bt[0]) == 3
+
+    def test_lookup_neighbor_finds_entity_at_neighbor_tile(self) -> None:
+        h, w = 3, 3
+        ey = jnp.array([1], dtype=jnp.int16)
+        ex = jnp.array([1], dtype=jnp.int16)
+        tile_entity = jnp.full((h, w), -1, dtype=jnp.int16).at[1, 2].set(5)
+        _, _, eidx, valid, diff, safe = _lookup_neighbor(ey, ex, 0, 1, h, w, tile_entity, 9)
+        assert int(eidx[0]) == 5
+        assert bool(valid[0])
+        assert bool(diff[0])
+        assert int(safe[0]) == 5
+
+    def test_lookup_neighbor_invalid_on_empty_tile(self) -> None:
+        h, w = 3, 3
+        ey = jnp.array([1], dtype=jnp.int16)
+        ex = jnp.array([1], dtype=jnp.int16)
+        tile_entity = jnp.full((h, w), -1, dtype=jnp.int16)
+        _, _, eidx, valid, _, safe = _lookup_neighbor(ey, ex, 0, 1, h, w, tile_entity, 9)
+        assert int(eidx[0]) == -1
+        assert not bool(valid[0])
+        assert int(safe[0]) == 0  # -1 clipped to 0
+
+    def test_lookup_neighbor_diff_false_at_grid_edge(self) -> None:
+        h, w = 3, 3
+        # Entity at row 0 moving UP (dy=-1): clamped ny==ey, so diff=False
+        ey = jnp.array([0], dtype=jnp.int16)
+        ex = jnp.array([1], dtype=jnp.int16)
+        tile_entity = jnp.full((h, w), -1, dtype=jnp.int16)
+        _, _, _, _, diff, _ = _lookup_neighbor(ey, ex, -1, 0, h, w, tile_entity, 9)
+        assert not bool(diff[0])
