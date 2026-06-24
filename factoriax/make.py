@@ -4,7 +4,7 @@ from factoriax.engine.envs.registry import make as _registry_make
 from factoriax.engine.state import EnvParams
 
 
-def make_factoriax_env_from_name(
+def env_from_name(
     env_id: str,
     *,
     obs: str | None = None,
