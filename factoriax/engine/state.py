@@ -6,7 +6,6 @@ import jax.numpy as jnp
 from flax import struct
 
 from factoriax.engine.constants import Action
-from factoriax.engine.machine_config import DEFAULT_MACHINE_CONFIG, MachineConfig
 from factoriax.engine.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
 
 
@@ -47,8 +46,8 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         ent_asm_out_type: Assembler output type, shape ``(MAX_M,)``, int8.
         ent_asm_out_count: Assembler output count, shape ``(MAX_M,)``, int16.
         ent_health: Per-entity machine health, shape ``(MAX_M,)``, int16.
-            Initialized to ``params.machine_config.max_health[ent_type]`` on
-            placement; inactive slots hold ``0``. Only
+            Initialized to ``MACHINE_MAX_HEALTH[ent_type]`` on placement;
+            inactive slots hold ``0``. Only
             :func:`~factoriax.engine.placement.apply_repair` and
             :func:`~factoriax.engine.placement.pickup_machine` touch it, so
             wrappers can layer their own degradation/repair models.
@@ -137,12 +136,6 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             :data:`~factoriax.engine.recipes.DEFAULT_RECIPE_TABLE`. A PyTree
             leaf of fixed shape, so kernels read values without retracing and
             tuned balance overlays reuse the JIT cache.
-        machine_config: Per-machine-type tunable knobs packed as a
-            :class:`~factoriax.engine.machine_config.MachineConfig`. Defaults to
-            :data:`~factoriax.engine.machine_config.DEFAULT_MACHINE_CONFIG`.
-            Overrides via ``DEFAULT_MACHINE_CONFIG.with_overrides({...})``
-            retune kernels without rebuilding the JIT cache (array shape is
-            fixed by ``len(Machine)``).
     """
 
     max_timesteps: int = 1000
@@ -160,7 +153,6 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     miner_mining_rate: int = 3
     player_mining_yield: int = 1
     recipe_table: RecipeTable = DEFAULT_RECIPE_TABLE
-    machine_config: MachineConfig = DEFAULT_MACHINE_CONFIG
 
     NUM_ACTIONS: ClassVar[int] = len(Action)
 

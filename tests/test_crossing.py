@@ -32,9 +32,7 @@ from factoriax.engine.constants import (
 from factoriax.engine.machines import run_conveyor_belts
 from factoriax.engine.state import EnvParams, EnvState
 
-# Default params — engine kernels read params.machine_config.max_stack
-# for buffer caps; the default config matches what these tests already
-# implicitly assumed.
+# Default params for run_conveyor_belts calls.
 _PARAMS = EnvParams()
 
 

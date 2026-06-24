@@ -20,7 +20,7 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.envs.factoriax_env import FactoriaXEnv
 from factoriax.engine.game_logic import factoriax_step, mine_block
-from factoriax.engine.machine_spec import MACHINE_MAX_STACK
+from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
@@ -132,7 +132,7 @@ class TestStateConsistency:
         _, params, run = random_episode
         final = run(random.PRNGKey(101))
 
-        max_health_per_type = params.machine_config.max_health
+        max_health_per_type = MACHINE_MAX_HEALTH
         cap = max_health_per_type[final.ent_type]
         active = final.ent_y >= 0
         # For active entities: 0 <= ent_health <= max_health[type].

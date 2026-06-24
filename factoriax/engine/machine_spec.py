@@ -31,7 +31,7 @@ class MachineSpec:
             the engine enforces. Applies even to slot-less machines whose
             ``ent_buf`` carries items in transit (e.g. ARM).
         max_types: Distinct item types the buffer may hold at once.
-        max_health: Default maximum health; ``MachineConfig`` seeds from it.
+        max_health: Maximum health for this machine type.
     """
 
     machine_type: Machine
@@ -139,5 +139,5 @@ MACHINE_MAX_STACK = jnp.array([s.buffer_stack for s in MACHINE_SPECS], dtype=jnp
 #: Distinct item types each buffer may hold. jnp int32.
 MACHINE_MAX_TYPES = jnp.array([s.max_types for s in MACHINE_SPECS], dtype=jnp.int32)
 
-#: Default maximum health per machine. jnp int16; MachineConfig seeds from it.
+#: Maximum health per machine type. jnp int16.
 MACHINE_MAX_HEALTH = jnp.array([s.max_health for s in MACHINE_SPECS], dtype=jnp.int16)

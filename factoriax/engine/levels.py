@@ -50,6 +50,7 @@ from factoriax.engine.constants import (
     Direction,
     Machine,
 )
+from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import MINEABLE_BLOCKS
 
@@ -598,7 +599,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     ent_type = jnp.zeros(mm, dtype=jnp.int8)
     ent_dir = jnp.zeros(mm, dtype=jnp.int8)
     ent_health = jnp.zeros(mm, dtype=jnp.int16)
-    max_health_arr = params.machine_config.max_health
+    max_health_arr = MACHINE_MAX_HEALTH
     tile_ent = jnp.full(map_shape, -1, dtype=jnp.int16)
 
     # Entity inventory arrays (populated from level.machine_inventory).

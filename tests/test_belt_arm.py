@@ -27,9 +27,7 @@ from factoriax.engine.state import EnvParams
 _BELT_MAX = 3
 _NOOP = 0  # Direction that does not push anywhere.
 
-# Default params — every call to run_conveyor_belts / run_arms now
-# needs params for machine_config.max_stack lookups; the default is
-# what these tests already implicitly assumed.
+# Default params for run_conveyor_belts / run_arms calls.
 _PARAMS = EnvParams()
 
 

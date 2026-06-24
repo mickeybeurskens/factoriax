@@ -40,9 +40,7 @@ from factoriax.engine.state import EnvParams, EnvState
 # Splitter behaviour is exercised through the merged belt-network pass.
 run_splitters = run_conveyor_belts
 
-# Default params — engine kernels read params.machine_config.max_stack
-# for buffer caps; the default config matches what these tests already
-# implicitly assumed.
+# Default params for run_conveyor_belts (splitter) calls.
 _PARAMS = EnvParams()
 
 

@@ -425,7 +425,9 @@ class TestMachineHelpers:
         ey = jnp.array([1], dtype=jnp.int16)
         ex = jnp.array([1], dtype=jnp.int16)
         tile_entity = jnp.full((h, w), -1, dtype=jnp.int16).at[1, 2].set(5)
-        _, _, eidx, valid, diff, safe = _lookup_neighbor(ey, ex, 0, 1, h, w, tile_entity, 9)
+        _, _, eidx, valid, diff, safe = _lookup_neighbor(
+            ey, ex, 0, 1, h, w, tile_entity, 9
+        )
         assert int(eidx[0]) == 5
         assert bool(valid[0])
         assert bool(diff[0])
@@ -436,7 +438,9 @@ class TestMachineHelpers:
         ey = jnp.array([1], dtype=jnp.int16)
         ex = jnp.array([1], dtype=jnp.int16)
         tile_entity = jnp.full((h, w), -1, dtype=jnp.int16)
-        _, _, eidx, valid, _, safe = _lookup_neighbor(ey, ex, 0, 1, h, w, tile_entity, 9)
+        _, _, eidx, valid, _, safe = _lookup_neighbor(
+            ey, ex, 0, 1, h, w, tile_entity, 9
+        )
         assert int(eidx[0]) == -1
         assert not bool(valid[0])
         assert int(safe[0]) == 0  # -1 clipped to 0

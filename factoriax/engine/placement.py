@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.engine.constants import Machine
+from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import (
     DIRECTIONS,
@@ -87,8 +88,7 @@ def place_machine(
 
     Allocates an entity slot for the new machine and updates both the
     grid (machine_types, tile_entity) and entity arrays. The new
-    entity is initialized to its configured maximum health
-    (``params.machine_config.max_health[machine_type]``).
+    entity is initialized to ``MACHINE_MAX_HEALTH[machine_type]``.
 
     Args:
         state: Current environment state.
@@ -121,7 +121,7 @@ def place_machine(
 
     mt = ITEM_TO_MACHINE_ARRAY[item_type]
     direction = state.player_directions[player_idx]
-    full_hp = params.machine_config.max_health[mt]
+    full_hp = MACHINE_MAX_HEALTH[mt]
 
     new_count = jnp.where(should_place, player_count - 1, player_count)
     new_mt = jnp.where(
@@ -239,7 +239,7 @@ def pickup_machine(
 
     # Gate pickup on full health for the entity's type.
     target_type = state.ent_type[eidx]
-    full_hp = params.machine_config.max_health[target_type]
+    full_hp = MACHINE_MAX_HEALTH[target_type]
     is_full_health = state.ent_health[eidx] >= full_hp
     should_pickup = in_bounds & has_machine & fits & is_full_health
 
@@ -391,7 +391,7 @@ def apply_repair(
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
     target_type = state.ent_type[eidx]
-    full_hp = params.machine_config.max_health[target_type]
+    full_hp = MACHINE_MAX_HEALTH[target_type]
     cur_hp = state.ent_health[eidx]
     needs_repair = cur_hp < full_hp
     should_repair = has_entity & needs_repair

@@ -20,6 +20,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.machine_spec import MACHINE_MAX_STACK
 from factoriax.engine.recipes import NUM_RECIPES
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY
@@ -196,9 +197,7 @@ def run_miners(
         )
         dn_bc = new_buf_count[dn_safe]
         dn_bt = new_buf_type[dn_safe]
-        dn_max = params.machine_config.max_stack[
-            state.ent_type[dn_safe].astype(jnp.int32)
-        ]
+        dn_max = MACHINE_MAX_STACK[state.ent_type[dn_safe].astype(jnp.int32)]
         dn_empty = dn_bc == 0
         dn_same = dn_bt == new_buf_type
         has_buf = new_buf_count > 0
@@ -224,9 +223,13 @@ def run_miners(
         # the item and leaking it into slots later reused by placement.
         incoming = active & can_push[up_safe] & (up_eidx >= 0) & up_diff
         new_buf_type = jnp.where(incoming, new_buf_type[up_safe], new_buf_type)
-        new_buf_count = jnp.where(incoming, new_buf_count + xfer[up_safe], new_buf_count)
+        new_buf_count = jnp.where(
+            incoming, new_buf_count + xfer[up_safe], new_buf_count
+        )
 
-        new_buf_type, new_buf_count = _subtract_buffer(can_push, new_buf_type, new_buf_count, xfer)
+        new_buf_type, new_buf_count = _subtract_buffer(
+            can_push, new_buf_type, new_buf_count, xfer
+        )
 
     return state.replace(
         map=new_map,
@@ -254,8 +257,7 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
     Args:
         state: Current environment state.
-        params: Environment parameters (supplies the per-machine
-            buffer cap via ``params.machine_config.max_stack``).
+        params: Environment parameters.
 
     Returns:
         Updated state.
@@ -319,7 +321,7 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
         dst_bc = buf_count[dst_safe]
         dst_bt = buf_type[dst_safe]
-        dst_max = params.machine_config.max_stack[dst_type.astype(jnp.int32)]
+        dst_max = MACHINE_MAX_STACK[dst_type.astype(jnp.int32)]
         dst_empty = dst_bc == 0
         dst_same = dst_bt == src_bt
         dst_space = dst_bc < dst_max
@@ -365,8 +367,12 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         giving = can_xfer[dst_safe] & (dst_eidx >= 0) & dst_diff
         gave_out = giving & (out_count > 0)
         gave_buf = giving & ~(out_count > 0)
-        out_type, out_count = _subtract_buffer(gave_out, out_type, out_count, jnp.int16(1))
-        buf_type, buf_count = _subtract_buffer(gave_buf, buf_type, buf_count, jnp.int16(1))
+        out_type, out_count = _subtract_buffer(
+            gave_out, out_type, out_count, jnp.int16(1)
+        )
+        buf_type, buf_count = _subtract_buffer(
+            gave_buf, buf_type, buf_count, jnp.int16(1)
+        )
 
     return state.replace(
         ent_buf_type=buf_type,
@@ -570,8 +576,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
 
     Args:
         state: Current environment state.
-        params: Environment parameters (supplies the per-machine
-            buffer cap via ``params.machine_config.max_stack``).
+        params: Environment parameters.
 
     Returns:
         Updated state.
@@ -690,7 +695,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         dn_bc_axis = axis_slot_count[dn_safe]
         dn_bt = jnp.where(dn_is_crossing, dn_bt_axis, dn_bt_buf)
         dn_bc = jnp.where(dn_is_crossing, dn_bc_axis, dn_bc_buf)
-        dn_max = params.machine_config.max_stack[dn_type.astype(jnp.int32)]
+        dn_max = MACHINE_MAX_STACK[dn_type.astype(jnp.int32)]
 
         dn_empty = dn_bc == 0
         dn_same = dn_bt == src_type
@@ -757,7 +762,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         # are what we subtract from — same chain semantics as the
         # original belt loop (an entity that both received and pushed
         # in the same iteration ends with old + in_xfer - xfer).
-        buf_type, buf_count = _subtract_buffer(can_push & is_buf_pusher, buf_type, buf_count, xfer)
+        buf_type, buf_count = _subtract_buffer(
+            can_push & is_buf_pusher, buf_type, buf_count, xfer
+        )
         axis_slot_type_after, axis_slot_count_after = _subtract_buffer(
             can_push & is_axis_pusher, axis_slot_type_after, axis_slot_count_after, xfer
         )
