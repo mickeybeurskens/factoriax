@@ -90,6 +90,7 @@ _SETTING_FIELDS: tuple[SettingField, ...] = tuple(
 
 @dataclass(frozen=True)
 class _PageOption:
+    """ """
     action: str
     label: str
     description: str
@@ -130,6 +131,19 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
 
 
 def _get_value(config: PlayerConfig, field: SettingField) -> float:
+    """
+
+    Parameters
+    ----------
+    config: PlayerConfig :
+        
+    field: SettingField :
+        
+
+    Returns
+    -------
+
+    """
     if field.key == "seed":
         return float(config.seed)
     raw = config.env_params.get(field.key)
@@ -139,6 +153,21 @@ def _get_value(config: PlayerConfig, field: SettingField) -> float:
 
 
 def _set_value(config: PlayerConfig, field: SettingField, value: float) -> None:
+    """
+
+    Parameters
+    ----------
+    config: PlayerConfig :
+        
+    field: SettingField :
+        
+    value: float :
+        
+
+    Returns
+    -------
+
+    """
     if field.key == "seed":
         config.seed = int(value)
         return
@@ -146,12 +175,37 @@ def _set_value(config: PlayerConfig, field: SettingField, value: float) -> None:
 
 
 def _reset_to_defaults(config: PlayerConfig) -> None:
+    """
+
+    Parameters
+    ----------
+    config: PlayerConfig :
+        
+
+    Returns
+    -------
+
+    """
     config.env_params = env_params_to_dict(EnvParams())
     config.seed = int.from_bytes(os.urandom(4), "little")
 
 
 def _randomize_button_rect(rect: pygame.Rect, scale: int, bottom_y: int) -> pygame.Rect:
-    """Compact button right-aligned under the rendered settings block."""
+    """Compact button right-aligned under the rendered settings block.
+
+    Parameters
+    ----------
+    rect: pygame.Rect :
+        
+    scale: int :
+        
+    bottom_y: int :
+        
+
+    Returns
+    -------
+
+    """
     btn_w = _BASE_BUTTON_W * scale
     btn_h = _BASE_BUTTON_H * scale
     btn_x = rect.right - _theme.ROW_PAD - btn_w
@@ -173,12 +227,30 @@ def run_settings_menu(
 ) -> PlayerConfig | None:
     """Show the launch screen and return the user's choice.
 
-    Returns:
-        The :class:`PlayerConfig` if the user pressed Enter on *Play* (the
+    Parameters
+    ----------
+    screen: pygame.Surface :
+        
+    initial_config: PlayerConfig | None :
+         (Default value = None)
+
+    Returns
+    -------
+    The
+        class:`PlayerConfig` if the user pressed Enter on *Play* (the
+    The
+        class:`PlayerConfig` if the user pressed Enter on *Play* (the
+        caller should hand it to the play loop), or ``None`` if the user
+    The
+        class:`PlayerConfig` if the user pressed Enter on *Play* (the
         caller should hand it to the play loop), or ``None`` if the user
         backed out via Backspace (return to main menu). Edits are persisted
-        via :func:`factoriax.playground.config.save_config` before the function returns
+    via
+        func:`factoriax.playground.config.save_config` before the function returns
+    via
+        func:`factoriax.playground.config.save_config` before the function returns
         in either case.
+
     """
     from factoriax.playground.config import load_config
 
@@ -216,6 +288,7 @@ def run_settings_menu(
     saved = False
 
     def _persist() -> None:
+        """ """
         nonlocal saved
         if not saved:
             save_config(config)
@@ -224,20 +297,36 @@ def run_settings_menu(
             saved = True
 
     def _launch() -> PlayerConfig:
+        """ """
         _persist()
         return config
 
     def _cancel() -> None:
+        """ """
         _persist()
         return None
 
     def _adjust_setting(field: SettingField, direction: int) -> None:
+        """
+
+        Parameters
+        ----------
+        field: SettingField :
+            
+        direction: int :
+            
+
+        Returns
+        -------
+
+        """
         if direction == 0:
             return
         current = _get_value(config, field)
         _set_value(config, field, field.clamp(current + field.step * direction))
 
     def _randomize_seed() -> None:
+        """ """
         config.seed = int.from_bytes(os.urandom(4), "little")
 
     while True:
@@ -435,7 +524,19 @@ _CONFIRM_TIMEOUT_MS: int = 10_000
 
 
 def _apply_display_state(fullscreen: bool, ui_scale: int) -> pygame.Surface:
-    """Reapply theme scale and recreate the pygame display surface."""
+    """Reapply theme scale and recreate the pygame display surface.
+
+    Parameters
+    ----------
+    fullscreen: bool :
+        
+    ui_scale: int :
+        
+
+    Returns
+    -------
+
+    """
     applied = ui_scale if ui_scale > 0 else auto_ui_scale()
     _theme.apply_scale(applied)
     if fullscreen:
@@ -452,11 +553,26 @@ def _confirm_display_change(
     new_ui_scale: int,
 ) -> bool:
     """Apply the new (fullscreen, ui_scale) state and prompt to keep or revert.
-
+    
     Shows a centered Keep / Revert dialog with a countdown. On revert (or
     timeout, Escape, or Backspace), restores the previous display state and
     returns ``False``. On confirm (Enter / Keep), returns ``True`` and leaves
     the new state applied.
+
+    Parameters
+    ----------
+    old_fullscreen: bool :
+        
+    old_ui_scale: int :
+        
+    new_fullscreen: bool :
+        
+    new_ui_scale: int :
+        
+
+    Returns
+    -------
+
     """
     screen = _apply_display_state(new_fullscreen, new_ui_scale)
     applied = new_ui_scale if new_ui_scale > 0 else auto_ui_scale()
@@ -478,6 +594,17 @@ def _confirm_display_change(
     btn_y = box_y + box_h - btn_h - 16 * applied
 
     def _finish(confirmed: bool) -> bool:
+        """
+
+        Parameters
+        ----------
+        confirmed: bool :
+            
+
+        Returns
+        -------
+
+        """
         if not confirmed:
             _apply_display_state(old_fullscreen, old_ui_scale)
         return confirmed

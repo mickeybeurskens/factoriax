@@ -42,7 +42,32 @@ def _subtract_buffer(
     buf_count: jnp.ndarray,
     amt: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Subtract amt from buf_count where cond, clear buf_type when count hits 0."""
+    """Subtract amt from buf_count where cond, clear buf_type when count hits 0.
+
+    Parameters
+    ----------
+    cond : jnp.ndarray :
+        
+    buf_type : jnp.ndarray :
+        
+    buf_count : jnp.ndarray :
+        
+    amt : jnp.ndarray :
+        
+    cond: jnp.ndarray :
+        
+    buf_type: jnp.ndarray :
+        
+    buf_count: jnp.ndarray :
+        
+    amt: jnp.ndarray :
+        
+
+    Returns
+    -------
+
+    
+    """
     new_c = jnp.where(cond, buf_count - amt, buf_count)
     return jnp.where(cond & (new_c == 0), jnp.int8(0), buf_type), new_c
 
@@ -60,9 +85,49 @@ def _lookup_neighbor(
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
     """Look up the neighbor at (ey+dy, ex+dx), clipped to grid bounds.
-
+    
     Returns (ny, nx, eidx, valid, diff, safe) where valid = eidx >= 0,
     diff = clipped position differs from (ey, ex), safe = eidx clipped to [0, n].
+
+    Parameters
+    ----------
+    ey : jnp.ndarray :
+        
+    ex : jnp.ndarray :
+        
+    dy : int :
+        
+    dx : int :
+        
+    h : int :
+        
+    w : int :
+        
+    tile_entity : jnp.ndarray :
+        
+    n : int :
+        
+    ey: jnp.ndarray :
+        
+    ex: jnp.ndarray :
+        
+    dy: int :
+        
+    dx: int :
+        
+    h: int :
+        
+    w: int :
+        
+    tile_entity: jnp.ndarray :
+        
+    n: int :
+        
+
+    Returns
+    -------
+
+    
     """
     ny = jnp.clip(ey + dy, 0, h - 1)
     nx = jnp.clip(ex + dx, 0, w - 1)
@@ -75,13 +140,26 @@ def update_all_machines(
     params: EnvParams,
 ) -> EnvState:
     """Update all machines for one step.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
 
-    Returns:
-        Updated state.
+    Parameters
+    ----------
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     state = run_miners(state, params)
     state = run_assemblers(state, params)
@@ -95,26 +173,39 @@ def run_miners(
     params: EnvParams,
 ) -> EnvState:
     """Extract ore from the tile a miner is standing on.
-
+    
     Miners mine the tile **directly underneath them** — they read
     ``state.block_resources`` at their own ``(ent_y, ent_x)``, never
     at an adjacent tile. To start a node, place the miner ON an
     ore-patch tile (typically the south-edge tile, with its facing
     direction pointing at an adjacent pallet to receive the push).
-
+    
     Per tick, the miner extracts ``params.miner_mining_rate`` ore,
     capped by the tile's remaining ``block_resources`` and the
     miner's ``MINER_OUTPUT_CAP`` buffer slot. The miner stops once
     its tile is depleted, even if other tiles of the same patch
     still hold ore — covering a full patch needs one miner per
     tile, or moving the miner.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
 
-    Returns:
-        Updated state.
+    Parameters
+    ----------
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -242,25 +333,38 @@ def run_miners(
 
 def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     """Transfer one item from source (behind) to destination (in front).
-
+    
     Arms perform instant pass-through: no internal buffer. Each tick
     an arm looks at the entity behind it (opposite of facing), takes
     one item from it, and deposits it into the entity it faces (if
     that entity has space).
-
+    
     The source slot picks ``ent_asm_out`` over ``ent_buf``: when an
     assembler/furnace finishes a recipe its output sits in
     ``ent_asm_out``, and an adjacent arm pulls from there to free
     the slot for the next cycle. Buffer machines (miner, pallet,
     belt) keep their items in ``ent_buf``, so the same arm can
     drain those too.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
 
-    Returns:
-        Updated state.
+    Parameters
+    ----------
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -386,19 +490,32 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
 def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     """Run assemblers: pull inputs, craft, push output to buffer.
-
+    
     Entity-based: iterates over entity slots. Neighbor lookups use
     ``tile_entity`` grid to find adjacent entities. Recipe identity
     and balance numbers are read via ``params.recipe_table`` so a
     tuned :class:`~factoriax.engine.state.EnvParams` re-uses the cached XLA
     trace (shape stable) but applies the user's balance overlay.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters (supplies the recipe table).
 
-    Returns:
-        Updated state.
+    Parameters
+    ----------
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     table = params.recipe_table
     h, w = state.map.shape
@@ -542,9 +659,9 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
 
 def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     """Advance the belt network one tick — belts, splitters, crossings.
-
+    
     Three tile types share this pass:
-
+    
     * **CONVEYOR_BELT** — pushes its buffer in the single direction it
       faces (1 item every tick, capped by destination space).
     * **SPLITTER** — buffers up to 2 items in ``ent_buf``. When the
@@ -568,18 +685,31 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
       without a separate look-ahead pass: the gather puts incoming +
       old (= 2) into the slot, the scatter subtracts the outgoing
       (= 1), leaving 1 in steady state.
-
+    
     Folding all three tile types into a single 4-iteration
     scatter-gather loop shares the receptivity work (one pass instead
     of three). The branching per entity is constant-time and remains
     XLA-friendly because every branch is a ``jnp.where`` over masks.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
 
-    Returns:
-        Updated state.
+    Parameters
+    ----------
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     h, w = state.map.shape
     active = state.ent_y >= 0

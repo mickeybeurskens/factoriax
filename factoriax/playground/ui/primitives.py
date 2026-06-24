@@ -12,16 +12,15 @@ from factoriax.playground.ui import theme as _theme
 @dataclass(frozen=True, slots=True)
 class ClickRegion:
     """Represents a clickable rectangular area in the UI.
-
+    
     Coordinates are in base render resolution (before window scaling).
 
-    Attributes:
-        x: Left edge of the region in pixels.
-        y: Top edge of the region in pixels.
-        w: Width of the region in pixels.
-        h: Height of the region in pixels.
-        action: Action identifier string.
-        param: Action-specific parameter (index, option, etc.).
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     x: int
@@ -35,13 +34,26 @@ class ClickRegion:
 def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion | None:
     """Find the first click region containing the given point.
 
-    Args:
-        regions: List of click regions to test.
-        x: X coordinate in base resolution.
-        y: Y coordinate in base resolution.
+    Parameters
+    ----------
+    regions :
+        List of click regions to test.
+    x :
+        X coordinate in base resolution.
+    y :
+        Y coordinate in base resolution.
+    regions: list[ClickRegion] :
+        
+    x: int :
+        
+    y: int :
+        
 
-    Returns:
+    Returns
+    -------
+    
         The first matching ClickRegion, or None if no hit.
+
     """
     for region in regions:
         if region.x <= x < region.x + region.w and region.y <= y < region.y + region.h:
@@ -61,18 +73,53 @@ def draw_panel(
     border_px: int | None = None,
 ) -> None:
     """Draw a rectangular panel: solid background with a uniform border.
-
+    
     Modifies *overlay* in place.
 
-    Args:
-        overlay: Destination RGBA array of shape (H, W, 4).
-        x: Left column of the panel.
-        y: Top row of the panel.
-        w: Panel width in pixels.
-        h: Panel height in pixels.
-        bg: Background RGBA colour.
-        border: Border RGBA colour.
-        border_px: Border thickness in pixels.
+    Parameters
+    ----------
+    overlay :
+        Destination RGBA array of shape (H, W, 4).
+    x :
+        Left column of the panel.
+    y :
+        Top row of the panel.
+    w :
+        Panel width in pixels.
+    h :
+        Panel height in pixels.
+    bg :
+        Background RGBA colour.
+    border :
+        Border RGBA colour.
+    border_px :
+        Border thickness in pixels.
+    overlay: np.ndarray :
+        
+    x: int :
+        
+    y: int :
+        
+    w: int :
+        
+    h: int :
+        
+    * :
+        
+    bg: tuple[int :
+        
+    int :
+        
+    int] | None :
+         (Default value = None)
+    border: tuple[int :
+        
+    border_px: int | None :
+         (Default value = None)
+
+    Returns
+    -------
+
     """
     if bg is None:
         bg = _theme.PANEL_BG

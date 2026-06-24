@@ -68,7 +68,20 @@ _RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 
 def _renderer_for(tile_px: int) -> JaxRenderer:
-    """Return a cached :class:`JaxRenderer` for ``tile_px``."""
+    """
+
+    Parameters
+    ----------
+    tile_px : int :
+        
+    tile_px: int :
+        
+
+    Returns
+    -------
+
+    
+    """
     renderer = _RENDERER_CACHE.get(tile_px)
     if renderer is None:
         renderer = JaxRenderer(tile_px=tile_px)
@@ -144,16 +157,7 @@ _PLAYER_ACTIONS: dict[str, int] = {
 
 @dataclasses.dataclass
 class GameUIResult:
-    """Result of processing a single pygame event through GameUI.
-
-    Attributes:
-        action: Game action to execute, or ``None`` if no action
-            should be taken this event.
-        state: Environment state, possibly modified by slot swaps
-            or player selection changes.
-        quit: Whether the user requested quit.
-        reset: Whether the user requested a level reset.
-    """
+    """Result of processing a single pygame event through GameUI."""
 
     action: int | None = None
     state: EnvState | None = None
@@ -164,12 +168,25 @@ class GameUIResult:
 def _tile_in_front(state: EnvState, player_idx: int) -> tuple[int, int]:
     """Return the (x, y) tile immediately in front of a player.
 
-    Args:
-        state: Current environment state.
-        player_idx: Index of the player.
+    Parameters
+    ----------
+    state :
+        Current environment state
+    player_idx :
+        Index of the player
+    state : EnvState :
+        
+    player_idx : int :
+        
+    state: EnvState :
+        
+    player_idx: int :
+        
 
-    Returns:
-        ``(tx, ty)`` tile coordinates in front of the player.
+    Returns
+    -------
+
+    
     """
     pos = np.array(state.player_positions[player_idx])
     direction = int(state.player_directions[player_idx])
@@ -185,15 +202,25 @@ def _tile_in_front(state: EnvState, player_idx: int) -> tuple[int, int]:
 
 class GameUI:
     """Reusable game UI component for menus, hotbar, and input dispatch.
-
+    
     Owns a :class:`PlayState` internally. Callers feed it pygame events
     and the current :class:`EnvState`; it returns rendered overlays and
     action intents via :class:`GameUIResult`.
+    
+    Parameters
+    ----------
 
-    Args:
-        params: Environment parameters (used for player count, map size).
-        kb_lookup: Key lookup table from :func:`build_key_lookup`.
-        welcome_open: Whether to show the welcome screen initially.
+    Parameters
+    ----------
+    kb_lookup :
+        Key lookup table from
+    welcome_open :
+        Whether to show the welcome screen initially
+
+    Returns
+    -------
+
+    
     """
 
     def __init__(
@@ -225,17 +252,38 @@ class GameUI:
     ) -> None:
         """Update the window-to-canvas coordinate transform.
 
-        Args:
-            win_ox: Window X offset of the canvas origin.
-            win_oy: Window Y offset of the canvas origin.
-            win_scale: Integer scale factor from canvas to window pixels.
+        Parameters
+        ----------
+        win_ox :
+            Window X offset of the canvas origin.
+        win_oy :
+            Window Y offset of the canvas origin.
+        win_scale :
+            Integer scale factor from canvas to window pixels.
+        win_ox : int :
+            
+        win_oy : int :
+            
+        win_scale : int :
+            
+        win_ox: int :
+            
+        win_oy: int :
+            
+        win_scale: int :
+            
+
+        Returns
+        -------
+
+        
         """
         self._win_ox = win_ox
         self._win_oy = win_oy
         self._win_scale = win_scale
 
     def has_menu_open(self) -> bool:
-        """Return True if any menu overlay is currently open."""
+        """ """
         ps = self._ps
         return (
             ps.inventory_open
@@ -251,18 +299,31 @@ class GameUI:
         state: EnvState,
     ) -> GameUIResult:
         """Process a single pygame event and return the result.
-
+        
         The caller is responsible for acting on the result: stepping
         the environment if ``result.action`` is set, resetting if
         ``result.reset`` is True, and quitting if ``result.quit``
         is True.
 
-        Args:
-            event: Pygame event to process.
-            state: Current environment state.
+        Parameters
+        ----------
+        event :
+            Pygame event to process.
+        state :
+            Current environment state.
+        event : pygame.event.Event :
+            
+        state : EnvState :
+            
+        event: pygame.event.Event :
+            
+        state: EnvState :
+            
 
-        Returns:
-            A :class:`GameUIResult` describing what to do.
+        Returns
+        -------
+
+        
         """
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             return self._handle_click(event, state)
@@ -277,11 +338,22 @@ class GameUI:
 
     def update_hover(self, state: EnvState) -> None:
         """Update the tile highlight to the tile the player faces.
-
+        
         Call once per frame after event processing.
 
-        Args:
-            state: Current environment state.
+        Parameters
+        ----------
+        state :
+            Current environment state.
+        state : EnvState :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
         """
         ftx, fty = _tile_in_front(state, int(state.selected_player))
         map_h = int(state.map.shape[0])
@@ -304,21 +376,59 @@ class GameUI:
         achievements: jnp.ndarray | None = None,
     ) -> tuple[np.ndarray, list[ClickRegion]]:
         """Build one UI frame with all active overlays.
-
+        
         Renders the game world and composites all menu overlays on top.
 
-        Args:
-            state: Current environment state.
-            ui_w: UI canvas width.
-            ui_h: UI canvas height.
-            tile_px: Tile pixel size.
-            world_ox: World X offset within canvas.
-            world_oy: World Y offset within canvas.
-            achievements: Achievement flags from the wrapper state.
-                Required when the achievement menu is open.
+        Parameters
+        ----------
+        state :
+            Current environment state.
+        ui_w :
+            UI canvas width.
+        ui_h :
+            UI canvas height.
+        tile_px :
+            Tile pixel size.
+        world_ox :
+            World X offset within canvas.
+        world_oy :
+            World Y offset within canvas.
+        achievements :
+            Achievement flags from the wrapper state.
+            Required when the achievement menu is open.
+        state : EnvState :
+            
+        ui_w : int :
+            
+        ui_h : int :
+            
+        tile_px : int :
+            
+        world_ox : int :
+            
+        world_oy : int :
+            
+        achievements : jnp.ndarray | None :
+            (Default value = None)
+        state: EnvState :
+            
+        ui_w: int :
+            
+        ui_h: int :
+            
+        tile_px: int :
+            
+        world_ox: int :
+            
+        world_oy: int :
+            
+        achievements: jnp.ndarray | None :
+             (Default value = None)
 
-        Returns:
-            Tuple of (RGB frame array, click regions for this frame).
+        Returns
+        -------
+
+        
         """
         ps = self._ps
         pixels = np.asarray(_renderer_for(tile_px).jit_render_map(state))
@@ -421,7 +531,24 @@ class GameUI:
     # ------------------------------------------------------------------
 
     def _to_canvas(self, window_x: int, window_y: int) -> tuple[int, int]:
-        """Transform window pixel coordinates to canvas coordinates."""
+        """Transform window pixel coordinates to canvas coordinates.
+
+        Parameters
+        ----------
+        window_x : int :
+            
+        window_y : int :
+            
+        window_x: int :
+            
+        window_y: int :
+            
+
+        Returns
+        -------
+
+        
+        """
         return (
             (window_x - self._win_ox) // self._win_scale,
             (window_y - self._win_oy) // self._win_scale,
@@ -432,7 +559,24 @@ class GameUI:
         event: pygame.event.Event,
         state: EnvState,
     ) -> GameUIResult:
-        """Process a mouse click against the current click regions."""
+        """Process a mouse click against the current click regions.
+
+        Parameters
+        ----------
+        event : pygame.event.Event :
+            
+        state : EnvState :
+            
+        event: pygame.event.Event :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
+        """
         ps = self._ps
         action: int | None = None
         quit_flag = False
@@ -489,7 +633,24 @@ class GameUI:
         event: pygame.event.Event,
         state: EnvState,
     ) -> GameUIResult:
-        """Dispatch a KEYDOWN event to the appropriate context handler."""
+        """Dispatch a KEYDOWN event to the appropriate context handler.
+
+        Parameters
+        ----------
+        event : pygame.event.Event :
+            
+        state : EnvState :
+            
+        event: pygame.event.Event :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
+        """
         ps = self._ps
 
         if ps.help_open:
@@ -518,18 +679,38 @@ class GameUI:
         is_escape: bool = False,
     ) -> GameUIResult:
         """Route a set of player actions through the context dispatch.
-
+        
         Shared by keyboard and controller event handlers. The
         ``is_escape`` flag triggers the universal back/pause logic
         (closing the topmost open menu, or opening the pause menu).
 
-        Args:
-            actions: Resolved player action names.
-            state: Current environment state.
-            is_escape: Whether to apply escape/back logic.
+        Parameters
+        ----------
+        actions :
+            Resolved player action names.
+        state :
+            Current environment state.
+        is_escape :
+            Whether to apply escape/back logic.
+        actions : frozenset[str] :
+            
+        state : EnvState :
+            
+        * :
+            
+        is_escape : bool :
+            (Default value = False)
+        actions: frozenset[str] :
+            
+        state: EnvState :
+            
+        is_escape: bool :
+             (Default value = False)
 
-        Returns:
-            A :class:`GameUIResult` describing what to do.
+        Returns
+        -------
+
+        
         """
         ps = self._ps
         action: int | None = None
@@ -592,7 +773,24 @@ class GameUI:
         event: pygame.event.Event,
         state: EnvState,
     ) -> GameUIResult:
-        """Dispatch a controller button or hat event."""
+        """Dispatch a controller button or hat event.
+
+        Parameters
+        ----------
+        event : pygame.event.Event :
+            
+        state : EnvState :
+            
+        event: pygame.event.Event :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
+        """
         if self._ctrl_lookup is None:
             return GameUIResult(state=state)
 
@@ -627,8 +825,21 @@ class GameUI:
     ) -> tuple[EnvState, bool, bool]:
         """Handle keys while pause menu is open.
 
-        Returns:
-            ``(state, reset, quit)`` tuple.
+        Parameters
+        ----------
+        actions : frozenset[str] :
+            
+        state : EnvState :
+            
+        actions: frozenset[str] :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
         """
         ps = self._ps
         reset_flag = False
@@ -651,7 +862,20 @@ class GameUI:
         return state, reset_flag, quit_flag
 
     def _handle_machine_toggle(self, state: EnvState) -> EnvState:
-        """Toggle the machine inspection menu."""
+        """Toggle the machine inspection menu.
+
+        Parameters
+        ----------
+        state : EnvState :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
+        """
         ps = self._ps
         if ps.machine_open:
             ps.machine_open = False
@@ -679,8 +903,21 @@ class GameUI:
     ) -> tuple[EnvState, int | None]:
         """Handle keys while machine menu is open.
 
-        Returns:
-            ``(state, action)`` tuple.
+        Parameters
+        ----------
+        actions : frozenset[str] :
+            
+        state : EnvState :
+            
+        actions: frozenset[str] :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
         """
         ps = self._ps
         action: int | None = None
@@ -729,9 +966,21 @@ class GameUI:
         state: EnvState,
     ) -> EnvState:
         """Handle Q key (no-op, assemblers auto-detect recipes).
-
+        
         Retained as a stub so the dispatch table entry and key binding
         continue to resolve without error.
+
+        Parameters
+        ----------
+        state : EnvState :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
         """
         return state
 
@@ -739,7 +988,20 @@ class GameUI:
         self,
         actions: frozenset[str],
     ) -> None:
-        """Handle keys in the achievement menu."""
+        """Handle keys in the achievement menu.
+
+        Parameters
+        ----------
+        actions : frozenset[str] :
+            
+        actions: frozenset[str] :
+            
+
+        Returns
+        -------
+
+        
+        """
         ps = self._ps
         row_h = 36
         if PlayerAction.NAV_UP in actions:
@@ -762,8 +1024,17 @@ class GameUI:
     ) -> int | None:
         """Handle keys in the crafting panel.
 
-        Returns:
-            Action integer, or ``None`` if no action.
+        Parameters
+        ----------
+        actions : frozenset[str] :
+            
+        actions: frozenset[str] :
+            
+
+        Returns
+        -------
+
+        
         """
         ps = self._ps
         if PlayerAction.NAV_UP in actions:
@@ -783,8 +1054,21 @@ class GameUI:
     ) -> tuple[EnvState, int | None]:
         """Handle keys in the world (no menu open).
 
-        Returns:
-            ``(state, action)`` tuple.
+        Parameters
+        ----------
+        actions : frozenset[str] :
+            
+        state : EnvState :
+            
+        actions: frozenset[str] :
+            
+        state: EnvState :
+            
+
+        Returns
+        -------
+
+        
         """
         action: int | None = None
         params = self._params
@@ -830,17 +1114,24 @@ class GameUI:
 
 def _rotate_action_for_tile(state: EnvState) -> int:
     """Compute the ROTATE_* action to cycle a machine clockwise.
-
+    
     Looks up the machine in front of the player, reads its current
     direction, advances it one step clockwise via TURN_RIGHT_MAP,
     and returns the corresponding absolute ROTATE_* action.
 
-    Args:
-        state: Current environment state.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    state : EnvState :
+        
+    state: EnvState :
+        
 
-    Returns:
-        ``ROTATE_LEFT/RIGHT/UP/DOWN`` action, or ``NOOP`` if no
-        machine is in front.
+    Returns
+    -------
+
+    
     """
     selected_player = int(state.selected_player)
     tx, ty = _tile_in_front(state, selected_player)
@@ -864,17 +1155,30 @@ def _handle_world_interact(
     selected_item: int,
 ) -> int | None:
     """Determine action for the interact key (pickup or place).
-
+    
     If the tile in front of the player has a machine, returns PICKUP.
     Otherwise, returns the placement action for the currently selected
     machine, or ``None`` if no placeable machine is selected.
 
-    Args:
-        state: Current environment state.
-        selected_item: Currently selected item type from the hotbar.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    selected_item :
+        Currently selected item type from the hotbar.
+    state : EnvState :
+        
+    selected_item : int :
+        
+    state: EnvState :
+        
+    selected_item: int :
+        
 
-    Returns:
-        Action integer, or ``None`` if nothing to do.
+    Returns
+    -------
+
+    
     """
     selected_player = int(state.selected_player)
     tx, ty = _tile_in_front(state, selected_player)

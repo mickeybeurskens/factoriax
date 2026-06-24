@@ -72,15 +72,22 @@ def _run() -> None:
 
 def _apply_display_config(config: PlayerConfig) -> pygame.Surface:
     """Apply display settings from config and return the new screen.
-
+    
     Reapplies the theme scale and recreates the pygame display at the
     correct size and mode.
 
-    Args:
-        config: Player configuration with display settings.
+    Parameters
+    ----------
+    config :
+        Player configuration with display settings.
+    config: PlayerConfig :
+        
 
-    Returns:
+    Returns
+    -------
+    
         The new pygame display surface.
+
     """
     ui_scale = config.ui_scale if config.ui_scale > 0 else auto_ui_scale()
     _theme.apply_scale(ui_scale)
@@ -95,7 +102,19 @@ def _apply_display_config(config: PlayerConfig) -> pygame.Surface:
 
 
 def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
-    """Show play settings, then launch the game with chosen parameters."""
+    """Show play settings, then launch the game with chosen parameters.
+
+    Parameters
+    ----------
+    screen: pygame.Surface :
+        
+    config: PlayerConfig :
+        
+
+    Returns
+    -------
+
+    """
     from factoriax.playground.play.launch_screen import run_settings_menu
 
     new_config = run_settings_menu(screen, initial_config=config)
@@ -148,7 +167,19 @@ def _handle_play(screen: pygame.Surface, config: PlayerConfig) -> None:
 
 
 def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
-    """Show the scenarios menu, then launch the chosen scenario in the play loop."""
+    """Show the scenarios menu, then launch the chosen scenario in the play loop.
+
+    Parameters
+    ----------
+    screen: pygame.Surface :
+        
+    config: PlayerConfig :
+        
+
+    Returns
+    -------
+
+    """
     import os
 
     from jax import random
@@ -193,7 +224,17 @@ def _handle_scenarios(screen: pygame.Surface, config: PlayerConfig) -> None:
 
 
 def _handle_editor(screen: pygame.Surface) -> None:
-    """Launch the level editor."""
+    """Launch the level editor.
+
+    Parameters
+    ----------
+    screen: pygame.Surface :
+        
+
+    Returns
+    -------
+
+    """
     from factoriax.playground.editor.main import main as editor_main
 
     editor_main(screen=screen)
@@ -201,7 +242,19 @@ def _handle_editor(screen: pygame.Surface) -> None:
 
 
 def _handle_settings(screen: pygame.Surface, config: PlayerConfig) -> None:
-    """Open the controls/rebinding screen and persist changes."""
+    """Open the controls/rebinding screen and persist changes.
+
+    Parameters
+    ----------
+    screen: pygame.Surface :
+        
+    config: PlayerConfig :
+        
+
+    Returns
+    -------
+
+    """
     from factoriax.playground.menu.controls_menu import run_controls_menu
 
     new_fullscreen, new_scale = run_controls_menu(screen, config)

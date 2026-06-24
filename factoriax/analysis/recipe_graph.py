@@ -42,10 +42,17 @@ from factoriax.analysis.graph_layout import assign_tiers, order_within_tiers
 @dataclass(frozen=True)
 class RecipeSpec:
     """Plain-Python recipe used by the renderer.
-
+    
     Mirrors :class:`factoriax.engine.recipes.Recipe` but stores item
     names as strings so callers can render diagrams from a JSON dump
     without importing the JAX-backed engine module directly.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     output: str
@@ -58,10 +65,17 @@ class RecipeSpec:
 @dataclass(frozen=True)
 class Layout:
     """Geometry constants for the recipe DAG render.
-
+    
     Tuned against the easy-rocket recipe set. Override fields when the
     figure needs different proportions; the renderer accepts any
     instance through the ``layout=`` argument.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     box_w: float = 4.0
@@ -90,7 +104,17 @@ class Layout:
 
 
 def _adjacency(recipes: Iterable[RecipeSpec]) -> dict[str, list[str]]:
-    """Build the ``{output: [input_names]}`` map used for layering."""
+    """Build the ``{output: [input_names]}`` map used for layering.
+
+    Parameters
+    ----------
+    recipes: Iterable[RecipeSpec] :
+        
+
+    Returns
+    -------
+
+    """
     return {recipe.output: [inp for inp, _ in recipe.inputs] for recipe in recipes}
 
 
@@ -99,7 +123,25 @@ def _positions(
     rows: Mapping[str, int],
     layout: Layout,
 ) -> dict[str, tuple[float, float]]:
-    """Return ``{item: (x, y)}`` centres, vertically centred within each tier."""
+    """
+
+    Parameters
+    ----------
+    tiers: Mapping[str :
+        
+    int] :
+        
+    rows: Mapping[str :
+        
+    layout: Layout :
+        
+
+    Returns
+    -------
+    type
+        
+
+    """
     by_tier: dict[int, list[str]] = defaultdict(list)
     for item, tier in tiers.items():
         by_tier[tier].append(item)
@@ -115,10 +157,21 @@ def _positions(
 
 
 def _darken(hex_color: str, factor: float) -> str:
-    """Return a darker variant of ``hex_color`` in the HLS lightness channel.
+    """
 
-    Drops lightness via the HLS model rather than multiplying RGB so
-    hues stay recognisable even when the original is very light.
+    Parameters
+    ----------
+    hex_color: str :
+        
+    factor: float :
+        
+
+    Returns
+    -------
+    type
+        Drops lightness via the HLS model rather than multiplying RGB so
+        hues stay recognisable even when the original is very light.
+
     """
     r, g, b = mcolors.to_rgb(hex_color)
     hue, lightness, sat = colorsys.rgb_to_hls(r, g, b)
@@ -131,12 +184,23 @@ def _node_colors(
     items: Iterable[str],
     layout: Layout,
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """Return ``(fill, stroke)`` colour dicts keyed by item name.
+    """
 
-    Fills come from :func:`factoriax.analysis.categories.item_palette`,
-    which shades each item by its index within its category. Strokes
-    are darker variants of the fill so edges leaving a node read as
-    the same colour family as the node itself.
+    Parameters
+    ----------
+    items: Iterable[str] :
+        
+    layout: Layout :
+        
+
+    Returns
+    -------
+    type
+        Fills come from :func:`factoriax.analysis.categories.item_palette`,
+        which shades each item by its index within its category. Strokes
+        are darker variants of the fill so edges leaving a node read as
+        the same colour family as the node itself.
+
     """
     palette = item_palette()
     fill: dict[str, str] = {}
@@ -149,12 +213,21 @@ def _node_colors(
 
 
 def _text_palette(fill_hex: str) -> tuple[str, str, str]:
-    """Return label colours (strong, subtle, muted) that contrast with ``fill_hex``.
+    """
 
-    Selects dark or light label colours based on the fill's relative
-    luminance (sRGB coefficients). The threshold sits above the saturated
-    orange used for Rocket Parts so that warm fills still read with
-    light labels rather than dark ones.
+    Parameters
+    ----------
+    fill_hex: str :
+        
+
+    Returns
+    -------
+    type
+        Selects dark or light label colours based on the fill's relative
+        luminance (sRGB coefficients). The threshold sits above the saturated
+        orange used for Rocket Parts so that warm fills still read with
+        light labels rather than dark ones.
+
     """
     r, g, b = mcolors.to_rgb(fill_hex)
     luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
@@ -169,7 +242,17 @@ def _text_palette(fill_hex: str) -> tuple[str, str, str]:
 
 
 def _pretty(name: str) -> str:
-    """Display form of an item name: title case, no underscores."""
+    """Display form of an item name: title case, no underscores.
+
+    Parameters
+    ----------
+    name: str :
+        
+
+    Returns
+    -------
+
+    """
     return name.replace("_", " ").title()
 
 
@@ -182,18 +265,33 @@ def _assign_ports(
     dict[str, dict[str, tuple[str, int]]],
 ]:
     """Assign each recipe input a top, middle, or bottom port.
-
+    
     For two-input recipes the input whose source row is visually higher
     enters the top port; the other enters the bottom. This minimises
     arrow crossings near the target. Single-input recipes use a middle
     port.
 
-    Returns:
-        ``port_y[(input, output)]`` — y-coordinate where the edge from
-        ``input`` meets ``output``'s left edge.
+    Parameters
+    ----------
+    recipes: Iterable[RecipeSpec] :
+        
+    positions: Mapping[str :
+        
+    tuple[float :
+        
+    float]] :
+        
+    layout: Layout :
+        
 
-        ``port_info[output]`` — ``{"top"/"bot"/"mid": (input_name, count)}``
+    Returns
+    -------
+    ``port_info[output]`` — ``{"top"/"bot"/"mid"
+        (input_name, count)}``
+    ``port_info[output]`` — ``{"top"/"bot"/"mid"
+        (input_name, count)}``
         for rendering the per-port labels inside the box.
+
     """
     port_y: dict[tuple[str, str], float] = {}
     port_info: dict[str, dict[str, tuple[str, int]]] = {}
@@ -217,12 +315,23 @@ def _assign_ports(
 
 
 def _gaps_for_edge(source_tier: int, target_tier: int) -> tuple[int, ...]:
-    """Return the gap indices where this edge needs a vertical channel.
+    """
 
-    Adjacent tiers use the single gap between them. Tier skips use the
-    gap on the source side and the gap on the target side; the
-    horizontal traverse between them happens in an inter-row lane or
-    the skyway, neither of which counts as a "gap" for channelling.
+    Parameters
+    ----------
+    source_tier: int :
+        
+    target_tier: int :
+        
+
+    Returns
+    -------
+    type
+        Adjacent tiers use the single gap between them. Tier skips use the
+        gap on the source side and the gap on the target side; the
+        horizontal traverse between them happens in an inter-row lane or
+        the skyway, neither of which counts as a "gap" for channelling.
+
     """
     if target_tier - source_tier == 1:
         return (source_tier,)
@@ -236,10 +345,27 @@ def _allocate_edge_channels(
     layout: Layout,
 ) -> dict[tuple[str, str, int], float]:
     """Give every edge a unique vertical x in every gap it traverses.
-
+    
     Edges within a gap are sorted by ``(source_row, target_row)`` so
     edges that fan out from the same source land in adjacent channels,
     keeping crossings rare.
+
+    Parameters
+    ----------
+    recipes: Iterable[RecipeSpec] :
+        
+    tiers: Mapping[str :
+        
+    int] :
+        
+    rows: Mapping[str :
+        
+    layout: Layout :
+        
+
+    Returns
+    -------
+
     """
     edges_in_gap: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for recipe in recipes:
@@ -274,16 +400,45 @@ def _route_edge(
     skyway_lane: float,
     layout: Layout,
 ) -> list[tuple[float, float]]:
-    """Return the polyline vertices for one edge.
+    """
 
-    Three routing regimes:
+    Parameters
+    ----------
+    source_pos: tuple[float :
+        
+    float] :
+        
+    target_pos: tuple[float :
+        
+    port_y: float :
+        
+    source_tier: int :
+        
+    target_tier: int :
+        
+    src_channel: float :
+        
+    tgt_channel: float | None :
+        
+    inter_row_ys: Sequence[float] :
+        
+    skyway_lane: float :
+        
+    layout: Layout :
+        
 
-    * Adjacent tiers: classic L-bend through the source-side gap to the
-      target's port.
-    * Single-tier skip: source-gap drop, inter-row lane traverse,
-      target-gap drop.
-    * Two-or-more-tier skip: source-gap rise into the skyway above the
-      top row, horizontal traverse, target-gap drop.
+    Returns
+    -------
+    type
+        Three routing regimes:
+        
+        * Adjacent tiers: classic L-bend through the source-side gap to the
+        target's port.
+        * Single-tier skip: source-gap drop, inter-row lane traverse,
+        target-gap drop.
+        * Two-or-more-tier skip: source-gap rise into the skyway above the
+        top row, horizontal traverse, target-gap drop.
+
     """
     sx, sy = source_pos
     tx, _ = target_pos
@@ -331,7 +486,25 @@ def _draw_tier_headers(
     skyway_headroom: float,
     layout: Layout,
 ) -> None:
-    """Draw the ``Tier N`` labels and dotted dividers between tiers."""
+    """Draw the ``Tier N`` labels and dotted dividers between tiers.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    max_tier: int :
+        
+    max_rows: int :
+        
+    skyway_headroom: float :
+        
+    layout: Layout :
+        
+
+    Returns
+    -------
+
+    """
     header_y = 0.8 + skyway_headroom
     for tier in range(max_tier + 1):
         x_center = tier * layout.tier_x_step + layout.box_w / 2
@@ -360,7 +533,19 @@ def _draw_tier_headers(
 
 
 def _truncate(name: str, limit: int) -> str:
-    """Cap ``name`` at ``limit`` characters with an ellipsis suffix."""
+    """Cap ``name`` at ``limit`` characters with an ellipsis suffix.
+
+    Parameters
+    ----------
+    name: str :
+        
+    limit: int :
+        
+
+    Returns
+    -------
+
+    """
     return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
 
 
@@ -375,10 +560,39 @@ def _draw_box(
     layout: Layout,
 ) -> None:
     """Draw one node box.
-
+    
     Raw materials get a single centred label. Recipe outputs get a
     recipe card: result name and ``×N · Tt`` subtitle on the right;
     ``×N InputName`` rows on the left at each used port.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    item: str :
+        
+    position: tuple[float :
+        
+    float] :
+        
+    recipe: RecipeSpec | None :
+        
+    port_info: Mapping[str :
+        
+    tuple[str :
+        
+    int]] | None :
+        
+    fill: str :
+        
+    stroke: str :
+        
+    layout: Layout :
+        
+
+    Returns
+    -------
+
     """
     x, y = position
     ax.add_patch(
@@ -433,6 +647,21 @@ def _draw_box(
     port_label_x = x - layout.box_w / 2 + layout.left_inset
 
     def write(port_y: float, data: tuple[str, int]) -> None:
+        """
+
+        Parameters
+        ----------
+        port_y: float :
+            
+        data: tuple[str :
+            
+        int] :
+            
+
+        Returns
+        -------
+
+        """
         name, count = data
         ax.text(
             port_label_x,
@@ -459,10 +688,25 @@ def _draw_legend(
     layout: Layout,
 ) -> None:
     """Attach a horizontal category legend below the axes.
-
+    
     ``entries`` is an ordered ``[(category_name, hex_color), ...]`` list.
     The legend renders one swatch per entry, in the order given, so
     callers control the visual ordering by sorting the list.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    entries: Sequence[tuple[str :
+        
+    str]] :
+        
+    layout: Layout :
+        
+
+    Returns
+    -------
+
     """
     if not entries:
         return
@@ -494,7 +738,25 @@ def _draw_edge(
     color: str,
     alpha: float,
 ) -> None:
-    """Draw the edge polyline plus a small arrowhead at the target end."""
+    """Draw the edge polyline plus a small arrowhead at the target end.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    vertices: Sequence[tuple[float :
+        
+    float]] :
+        
+    color: str :
+        
+    alpha: float :
+        
+
+    Returns
+    -------
+
+    """
     path = MplPath(
         list(vertices),
         [MplPath.MOVETO] + [MplPath.LINETO] * (len(vertices) - 1),
@@ -537,7 +799,25 @@ def render(
     title: str = "",
     layout: Layout | None = None,
 ) -> Path:
-    """Render the recipe DAG to ``out_path`` and return the resolved path."""
+    """Render the recipe DAG to ``out_path`` and return the resolved path.
+
+    Parameters
+    ----------
+    recipes: Sequence[RecipeSpec] :
+        
+    out_path: Path | str :
+        
+    * :
+        
+    title: str :
+         (Default value = "")
+    layout: Layout | None :
+         (Default value = None)
+
+    Returns
+    -------
+
+    """
     layout = layout or Layout()
     out_path = Path(out_path)
 
@@ -569,6 +849,17 @@ def render(
             out_degree[inp] += 1
 
     def alpha_for(source: str) -> float:
+        """
+
+        Parameters
+        ----------
+        source: str :
+            
+
+        Returns
+        -------
+
+        """
         return (
             layout.hub_alpha
             if out_degree[source] >= layout.hub_threshold

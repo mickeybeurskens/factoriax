@@ -17,6 +17,7 @@ map; ``local_*`` extracts a ``(2r+1) x (2r+1)`` window centred on the
 selected player.
 
 x_ray spatial channels (10):
+
 - ``block_type`` — terrain.
 - ``machine_type`` — ``Machine`` at each tile (or NONE).
 - ``block_resources`` — ore count under the tile.
@@ -86,14 +87,19 @@ _SlotGrids = tuple[
 def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
     """Project every machine's contents onto uniform 3-slot grids.
 
+    Parameters
+    ----------
+    state :
+        EnvState:
+    state : EnvState :
+        
+    state: EnvState :
+        
+
     Returns
     -------
-    ``(s0_type, s0_count, s1_type, s1_count, s2_type, s2_count)``
-    — six ``(H, W)`` arrays. For combiners, slots 0 and 1 hold the
-    two ``ent_asm_in`` slots and slot 2 holds ``ent_asm_out``. For
-    buffer machines (miner, pallet, belt) slots 0 and 1 are always
-    zero and slot 2 holds ``ent_buf``. Arms have no inventory at
-    all and appear as zeros everywhere.
+
+    
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -157,10 +163,24 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
 
 def _reconstruct_machine_direction_grid(state: EnvState) -> jnp.ndarray:
     """Per-tile ``ent_direction`` for active machines.
-
+    
     Values are :class:`Direction` ints (0 where no machine is
     placed). Lets agents plan push chains (miner → pallet, arm →
     furnace) from the obs alone.
+
+    Parameters
+    ----------
+    state :
+        EnvState:
+    state : EnvState :
+        
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    
     """
     h, w = state.map.shape
     grid = jnp.zeros((h, w), dtype=jnp.int8)
@@ -227,16 +247,39 @@ def _common_scalars(
     player_idx: int | jax.Array,
 ) -> jax.Array:
     """Pose, recipe affordability, and player inventory. 63 floats.
-
+    
     Shared by x_ray and superficial profiles.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
-        player_idx: Index of the player.
+    
+    Parameters
+    ----------
+      player_idx: Index of the player
+      state: EnvState:
 
-    Returns:
-        Float32 array of shape ``(63,)``.
+    Parameters
+    ----------
+    player_idx :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     pos = state.player_positions[player_idx]
     pose_time = jnp.array(
@@ -262,17 +305,34 @@ def _facing_scalars(
     player_idx: int | jax.Array,
 ) -> jax.Array:
     """Facing-machine readouts. 9 floats. x_ray only.
-
+    
     Reads the entity in front of the player and returns its machine
     type plus buffer/assembler-slot contents. Out-of-bounds tiles
     return zeros via a mask.
 
-    Args:
-        state: Current environment state.
-        player_idx: Index of the player.
+    Parameters
+    ----------
+    state :
+        Current environment state
+    player_idx :
+        Index of the player
+    state :
+        EnvState
+    player_idx :
+        int
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
 
-    Returns:
-        Float32 array of shape ``(9,)``.
+    Returns
+    -------
+
+    
     """
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
@@ -305,7 +365,34 @@ def _x_ray_scalars(
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """The 72-float x_ray scalar block: common (63) + facing (9)."""
+    """The 72-float x_ray scalar block: common (63) + facing (9).
+    
+    Parameters
+    ----------
+      state: EnvState:
+
+    Parameters
+    ----------
+    player_idx :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
+    """
     return jnp.concatenate(
         [
             _common_scalars(state, params, player_idx),
@@ -319,7 +406,34 @@ def _superficial_scalars(
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """The 63-float superficial scalar block: common only."""
+    """The 63-float superficial scalar block: common only.
+    
+    Parameters
+    ----------
+      state: EnvState:
+
+    Parameters
+    ----------
+    player_idx :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
+    """
     return _common_scalars(state, params, player_idx)
 
 
@@ -331,15 +445,47 @@ def observation_size(
     radius: int = 7,
 ) -> int:
     """Flat observation size for ``(profile, view)`` on ``params``.
+    
+    Parameters
+    ----------
+    
+    Parameters
+    ----------
+      profile: x_ray
+      view: global
+      radius: Half
 
-    Args:
-        params: Environment parameters (for ``map_width``/``map_height``).
-        profile: ``"x_ray"`` or ``"superficial"``.
-        view: ``"global"`` or ``"local"``.
-        radius: Half-width of the local window when ``view="local"``.
+    Parameters
+    ----------
+    profile :
+        str
+    view :
+        str
+    radius :
+        int
+    params : EnvParams :
+        
+    * :
+        
+    profile : str :
+        
+    view : str :
+        
+    radius : int :
+        (Default value = 7)
+    params: EnvParams :
+        
+    profile: str :
+        
+    view: str :
+        
+    radius: int :
+         (Default value = 7)
 
-    Returns:
-        Total flat observation length (spatial + scalar).
+    Returns
+    -------
+
+    
     """
     if view == "global":
         spatial_tiles = params.map_width * params.map_height
@@ -357,22 +503,42 @@ def global_x_ray(
     player_idx: int | jax.Array,
 ) -> jax.Array:
     """Full-map x_ray observation for one player.
-
+    
     Ten spatial channels (block type, machine type, ore resources, six
     slot channels, machine direction) flattened, followed by the 72-float
     x_ray scalar vector.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
-        player_idx: Index of the observing player.
+    
+    Parameters
+    ----------
+      player_idx: Index of the observing player
+      state: EnvState:
 
-    Returns:
-        Float32 array of shape
-        ``(NUM_SPATIAL_CHANNELS["x_ray"] * H * W + NUM_PLAYER_SCALARS["x_ray"],)``.
+    Parameters
+    ----------
+    player_idx :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
@@ -421,22 +587,48 @@ def local_x_ray(
     radius: int = 10,
 ) -> jax.Array:
     """Local windowed x_ray observation centered on one player.
-
+    
     Extracts a ``(2*radius+1) x (2*radius+1)`` patch from the ten x_ray
     spatial channels and appends the 72-float x_ray scalar vector.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
-        player_idx: Index of the observing player.
-        radius: Half-width of the observation window.
+    
+    Parameters
+    ----------
+      player_idx: Index of the observing player
+      radius: Half
+      state: EnvState:
 
-    Returns:
-        Float32 array of shape
-        ``(NUM_SPATIAL_CHANNELS["x_ray"] * (2r+1)^2 + NUM_PLAYER_SCALARS["x_ray"],)``.
+    Parameters
+    ----------
+    player_idx :
+        int
+    radius :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    radius : int :
+        (Default value = 10)
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+    radius: int :
+         (Default value = 10)
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
@@ -510,22 +702,41 @@ def global_superficial(
     player_idx: int | jax.Array,
 ) -> jax.Array:
     """Full-map superficial observation for one player.
-
+    
     Three spatial channels (block type, machine type, machine direction)
     flattened, followed by the 63-float superficial scalar vector.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
-        player_idx: Index of the observing player.
+    
+    Parameters
+    ----------
+      player_idx: Index of the observing player
+      state: EnvState:
 
-    Returns:
-        Float32 array of shape
-        ``(NUM_SPATIAL_CHANNELS["superficial"] * H * W
-        + NUM_PLAYER_SCALARS["superficial"],)``.
+    Parameters
+    ----------
+    player_idx :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
@@ -552,24 +763,49 @@ def local_superficial(
     radius: int = 10,
 ) -> jax.Array:
     """Local windowed superficial observation centered on one player.
-
+    
     Extracts a ``(2*radius+1) x (2*radius+1)`` patch from the three
     superficial spatial channels and appends the 63-float superficial
     scalar vector.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
-        player_idx: Index of the observing player.
-        radius: Half-width of the observation window.
+    
+    Parameters
+    ----------
+      player_idx: Index of the observing player
+      radius: Half
+      state: EnvState:
 
-    Returns:
-        Float32 array of shape
-        ``(NUM_SPATIAL_CHANNELS["superficial"] * (2r+1)^2
-        + NUM_PLAYER_SCALARS["superficial"],)``.
+    Parameters
+    ----------
+    player_idx :
+        int
+    radius :
+        int
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    radius : int :
+        (Default value = 10)
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+    radius: int :
+         (Default value = 10)
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
@@ -629,20 +865,35 @@ OBSERVATIONS: dict[str, jax.Array] = {  # type: ignore[type-arg]
 
 def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
     """Render the full map as an RGB image.
-
+    
     Routes through a process-wide :class:`JaxRenderer` cache keyed by
     ``block_pixel_size`` so vision-mode rollouts pay the atlas build
     and JIT compile cost once per tile size, not per call.
 
-    Args:
-        state: Current environment state.
-        block_pixel_size: Tile side length in pixels.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    block_pixel_size :
+        Tile side length in pixels.
+    state :
+        EnvState:
+    block_pixel_size :
+        int:  (Default value = 32)
+    state : EnvState :
+        
+    block_pixel_size : int :
+        (Default value = 32)
+    state: EnvState :
+        
+    block_pixel_size: int :
+         (Default value = 32)
 
-    Returns:
-        uint8 NumPy array of shape ``(H*px, W*px, 3)``.
+    Returns
+    -------
 
-    Example:
-        >>> import jax
+    
+    >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)

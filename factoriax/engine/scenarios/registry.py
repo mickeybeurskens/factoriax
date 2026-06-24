@@ -20,16 +20,7 @@ from factoriax.engine.state import EnvParams
 
 @dataclass(frozen=True)
 class ScenarioSpec:
-    """A registered scenario: display metadata plus its env factory.
-
-    Attributes:
-        name: Human-readable display name for the playground picker.
-        description: Description-panel text.
-        build: Factory returning ``(env, params)`` for the scenario.
-        resample: Whether the scenario's reset is keyed (a fresh layout per
-            episode). Controls ``AutoResetWrapper(resample=...)`` so fixed-level
-            scenarios use the cheap cached restore.
-    """
+    """A registered scenario: display metadata plus its env factory."""
 
     name: str
     description: str
@@ -69,23 +60,46 @@ def make(
 ) -> tuple[Any, EnvParams]:
     """Resolve a scenario id to ``(env, params)``.
 
-    Args:
-        env_id: Registered scenario id (e.g. ``"EasyRocket-v1"``).
-        obs: Observation variant name (one of the keys in
-            :data:`~factoriax.engine.observations.OBSERVATIONS`). ``None``
-            uses the scenario's opinionated default.
-        obs_radius: Local-window half-width. ``None`` uses the scenario's
-            opinionated default; ignored for ``_global`` obs variants.
-        auto_reset: Wrap in :class:`AutoResetWrapper`.
-        resample: Auto-reset mode. ``None`` (default) uses the scenario's
-            ``resample`` setting; pass ``True``/``False`` to override — e.g.
-            ``False`` for the cheap cached restore even on a keyed scenario.
+    Parameters
+    ----------
+    env_id :
+        Registered scenario id (e.g. ``"EasyRocket-v1"``).
+    obs :
+        Observation variant name (one of the keys in
+        :data:`~factoriax.engine.observations.OBSERVATIONS`). ``None``
+        uses the scenario's opinionated default.
+    obs_radius :
+        Local-window half-width. ``None`` uses the scenario's
+        opinionated default; ignored for ``_global`` obs variants.
+    auto_reset :
+        Wrap in :class:`AutoResetWrapper`.
+    resample :
+        Auto-reset mode. ``None`` (default) uses the scenario's
+        ``resample`` setting; pass ``True``/``False`` to override — e.g.
+        ``False`` for the cheap cached restore even on a keyed scenario.
+    env_id: str :
+        
+    * :
+        
+    obs: str | None :
+         (Default value = None)
+    obs_radius: int | None :
+         (Default value = None)
+    auto_reset: bool :
+         (Default value = False)
+    resample: bool | None :
+         (Default value = None)
 
-    Returns:
+    Returns
+    -------
+    
         ``(env, params)``.
 
-    Raises:
-        KeyError: If ``env_id`` is not registered.
+    Raises
+    ------
+    KeyError
+        If ``env_id`` is not registered.
+
     """
     spec = SCENARIOS[env_id]
     overrides: dict[str, Any] = {}
@@ -101,5 +115,5 @@ def make(
 
 
 def list_scenarios() -> tuple[tuple[str, ScenarioSpec], ...]:
-    """Return ``(id, spec)`` pairs for every registered scenario."""
+    """ """
     return tuple(SCENARIOS.items())

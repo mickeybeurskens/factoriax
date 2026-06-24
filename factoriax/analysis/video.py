@@ -27,7 +27,19 @@ _RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 
 def _get_renderer(block_pixel_size: int) -> JaxRenderer:
-    """Return a cached :class:`JaxRenderer` for ``block_pixel_size``."""
+    """
+
+    Parameters
+    ----------
+    block_pixel_size: int :
+        
+
+    Returns
+    -------
+    type
+        
+
+    """
     renderer = _RENDERER_CACHE.get(block_pixel_size)
     if renderer is None:
         renderer = JaxRenderer(tile_px=block_pixel_size)
@@ -38,11 +50,18 @@ def _get_renderer(block_pixel_size: int) -> JaxRenderer:
 @contextlib.contextmanager
 def _suppress_fork_warning() -> Iterator[None]:
     """Silence imageio/FFMPEG's harmless ``os.fork()`` RuntimeWarning.
-
+    
     JAX initializes a thread pool eagerly, and Python warns when a
     multithreaded process forks (which is what imageio does to spawn
     its FFMPEG worker). The warning is not actionable here — the
     fork happens in a child that immediately ``exec``s ffmpeg.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -63,20 +82,36 @@ def compose_frame_with_inventory(
     inv_panel_width: int = INV_PANEL_WIDTH,
 ) -> np.ndarray:
     """Return ``map_render | inventory_panel`` concatenated horizontally.
-
+    
     The inventory panel mirrors the side panel the agent debugger
     displays in its top-right quadrant, rendered at the same height as
     the map render so the two stitch together cleanly.
 
-    Args:
-        state: The environment state to render.
-        block_pixel_size: Tile size in the map render (pixels per
-            block). Defaults to 16.
-        inv_panel_width: Width of the inventory side-panel in pixels.
+    Parameters
+    ----------
+    state :
+        The environment state to render
+    block_pixel_size :
+        Tile size in the map render
+    block :
+        Defaults to 16
+    inv_panel_width :
+        Width of the inventory side
+    state: EnvState :
+        
+    * :
+        
+    block_pixel_size: int :
+         (Default value = 16)
+    inv_panel_width: int :
+         (Default value = INV_PANEL_WIDTH)
 
-    Returns:
+    Returns
+    -------
+    type
         RGB ``uint8`` array of shape
         ``(map_h, map_w + inv_panel_width, 3)``.
+
     """
     renderer = _get_renderer(block_pixel_size)
     map_img = np.asarray(renderer.jit_render_map(state))
@@ -92,18 +127,34 @@ def compose_frame_with_inventory(
 
 def write_video(path: Any, frames: list[np.ndarray], fps: int) -> None:
     """Encode *frames* to an MP4 at *path* using imageio / FFMPEG.
-
+    
     Buffers all frames as a single ``uint8`` array before encoding.
     Use :func:`write_video_streaming` instead when ``len(frames)`` or
     the per-frame size would push peak memory beyond a few hundred MB.
 
-    Args:
-        path: Destination ``.mp4`` path. Parent directories are created.
-        frames: List of RGB ``uint8`` arrays of identical shape.
-        fps: Output frame rate.
+    Parameters
+    ----------
+    path :
+        Destination ``.mp4`` path. Parent directories are created.
+    frames :
+        List of RGB ``uint8`` arrays of identical shape.
+    fps :
+        Output frame rate.
+    path: Any :
+        
+    frames: list[np.ndarray] :
+        
+    fps: int :
+        
 
-    Raises:
-        ImportError: If ``imageio[ffmpeg]`` is not installed.
+    Returns
+    -------
+
+    Raises
+    ------
+    ImportError
+        If ``imageio[ffmpeg]`` is not installed.
+
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -127,22 +178,37 @@ def write_video_streaming(
     fps: int,
 ) -> int:
     """Stream-encode *frames* to an MP4 one frame at a time.
-
+    
     Memory stays bounded to a single frame, which matters for long
     scripted episodes that buffer ~6000 frames at ~700x512x3 bytes
     each (~6 GB of raw RGB if buffered).
 
-    Args:
-        path: Destination ``.mp4`` path. Parent directories are created.
-        frames: Iterable of RGB ``uint8`` frames; consumed lazily so a
-            generator that renders on demand is the intended use.
-        fps: Output frame rate.
+    Parameters
+    ----------
+    path :
+        Destination ``.mp4`` path. Parent directories are created.
+    frames :
+        Iterable of RGB ``uint8`` frames; consumed lazily so a
+        generator that renders on demand is the intended use.
+    fps :
+        Output frame rate.
+    path: Any :
+        
+    frames: Iterable[np.ndarray] :
+        
+    fps: int :
+        
 
-    Returns:
+    Returns
+    -------
+    
         Number of frames written.
 
-    Raises:
-        ImportError: If ``imageio[ffmpeg]`` is not installed.
+    Raises
+    ------
+    ImportError
+        If ``imageio[ffmpeg]`` is not installed.
+
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)

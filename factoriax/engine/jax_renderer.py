@@ -102,14 +102,7 @@ _ATLAS_ROW_DIGITS: int = 7
 
 @functools.cache
 def _load_atlas_image() -> np.ndarray:
-    """Read the sprite atlas PNG once and cache the resulting array.
-
-    Returns:
-        uint8 RGBA array of shape (rows * 32, cols * 32, 4) where rows
-        and cols are defined in ``factoriax/assets/atlas.layout.md``.
-        If the source PNG is RGB the alpha channel is filled with 255
-        so downstream gathers can assume RGBA uniformly.
-    """
+    """Read the sprite atlas PNG once and cache the resulting array."""
     img: np.ndarray = np.asarray(iio.imread(_ATLAS_PATH))
     if img.ndim == 3 and img.shape[-1] == 3:
         alpha = np.full(img.shape[:2] + (1,), 255, dtype=np.uint8)
@@ -120,12 +113,25 @@ def _load_atlas_image() -> np.ndarray:
 def _atlas_row_cells(row: int, n_cols: int) -> np.ndarray:
     """Slice a row of the atlas and return its cells as a stack.
 
-    Args:
-        row: Row index into the atlas grid.
-        n_cols: Number of cells (from column 0) to extract.
+    Parameters
+    ----------
+    row :
+        Row index into the atlas grid.
+    n_cols :
+        Number of cells (from column 0) to extract.
+    row : int :
+        
+    n_cols : int :
+        
+    row: int :
+        
+    n_cols: int :
+        
 
-    Returns:
-        uint8 array of shape (n_cols, 32, 32, 4).
+    Returns
+    -------
+
+    
     """
     atlas = _load_atlas_image()
     s = _ATLAS_CELL_PX
@@ -140,8 +146,21 @@ def _atlas_row_cells(row: int, n_cols: int) -> np.ndarray:
 def _atlas_cell(row: int, col: int) -> np.ndarray:
     """Slice a single cell out of the atlas.
 
-    Returns:
-        uint8 array of shape (32, 32, 4).
+    Parameters
+    ----------
+    row : int :
+        
+    col : int :
+        
+    row: int :
+        
+    col: int :
+        
+
+    Returns
+    -------
+
+    
     """
     atlas = _load_atlas_image()
     s = _ATLAS_CELL_PX
@@ -151,10 +170,26 @@ def _atlas_cell(row: int, col: int) -> np.ndarray:
 
 def _downsample(cells: np.ndarray, target_px: int) -> np.ndarray:
     """Nearest-neighbour resample square cells to ``target_px``.
-
+    
     Accepts either a single cell of shape (S, S, 3) or a stack of
     cells of shape (N, S, S, 3). Returns the same rank with the
     spatial dims rescaled.
+
+    Parameters
+    ----------
+    cells : np.ndarray :
+        
+    target_px : int :
+        
+    cells: np.ndarray :
+        
+    target_px: int :
+        
+
+    Returns
+    -------
+
+    
     """
     src_px = cells.shape[-2]
     if src_px == target_px:
@@ -168,11 +203,19 @@ def _downsample(cells: np.ndarray, target_px: int) -> np.ndarray:
 def build_block_atlas(tile_px: int) -> jnp.ndarray:
     """Build a texture atlas for terrain block types from the sprite atlas.
 
-    Args:
-        tile_px: Tile side length in pixels.
+    Parameters
+    ----------
+    tile_px :
+        Tile side length in pixels.
+    tile_px : int :
+        
+    tile_px: int :
+        
 
-    Returns:
-        JAX array of shape ``(num_block_types, tile_px, tile_px, 4)``.
+    Returns
+    -------
+
+    
     """
     n_cells = max(int(b) for b in BlockType) + 1
     cells = _atlas_row_cells(_ATLAS_ROW_BLOCKS, n_cells)
@@ -181,19 +224,26 @@ def build_block_atlas(tile_px: int) -> jnp.ndarray:
 
 def build_machine_atlas(tile_px: int) -> jnp.ndarray:
     """Build a direction-indexed machine atlas from the sprite atlas.
-
+    
     The four rows starting at :data:`_ATLAS_ROW_MACHINES_BASE` hold one
     machine variant per :class:`~factoriax.engine.constants.Direction`, in the
     order LEFT, RIGHT, UP, DOWN. Non-directional machines are simply
     duplicated across all four rows so a uniform gather works at render
     time.
 
-    Args:
-        tile_px: Tile side length in pixels.
+    Parameters
+    ----------
+    tile_px :
+        Tile side length in pixels.
+    tile_px : int :
+        
+    tile_px: int :
+        
 
-    Returns:
-        JAX array of shape ``(4, num_machine_types, tile_px, tile_px, 4)``.
-        Index 0 is direction LEFT, 3 is direction DOWN.
+    Returns
+    -------
+
+    
     """
     n_machines = max(int(m) for m in Machine) + 1
     rows = []
@@ -205,20 +255,25 @@ def build_machine_atlas(tile_px: int) -> jnp.ndarray:
 
 def build_player_sprite(tile_px: int) -> jnp.ndarray:
     """Build the per-player, directional player sprite stack.
-
+    
     The misc row packs eight players × four directions starting at
     column :data:`_ATLAS_MISC_PLAYER_BASE`. Player ``p`` facing
     direction ``d`` (1..4) lives at column
     ``_ATLAS_MISC_PLAYER_BASE + p * _ATLAS_NUM_DIRECTIONS + (d - 1)``.
 
-    Args:
-        tile_px: Tile side length in pixels.
+    Parameters
+    ----------
+    tile_px :
+        Tile side length in pixels.
+    tile_px : int :
+        
+    tile_px: int :
+        
 
-    Returns:
-        JAX array of shape
-        ``(_ATLAS_NUM_PLAYERS, _ATLAS_NUM_DIRECTIONS, tile_px, tile_px, 4)``.
-        Players 0..7 each have four directional cells in the order
-        LEFT, RIGHT, UP, DOWN.
+    Returns
+    -------
+
+    
     """
     sprites: list[list[np.ndarray]] = []
     for p in range(_ATLAS_NUM_PLAYERS):
@@ -246,18 +301,27 @@ def build_player_sprite(tile_px: int) -> jnp.ndarray:
 @functools.lru_cache(maxsize=8)
 def block_textures_rgba(size: int) -> np.ndarray:
     """Return per-block RGBA textures sliced from the sprite atlas.
-
+    
     The shape mirrors what the editor canvas needs for its vectorised
     advanced-index blit: ``(num_block_types, size, size, 4)``. Block
     cells in the atlas are fully opaque, so the alpha channel is
     always 255 here — terrain is always the ground truth layer.
 
-    Args:
-        size: Tile side length in pixels. Downsampling from the atlas's
-            32×32 base is nearest-neighbour.
+    Parameters
+    ----------
+    size :
+        Tile side length in pixels
+    32 :
+        32 base is nearest
+    size : int :
+        
+    size: int :
+        
 
-    Returns:
-        uint8 RGBA array of shape ``(num_block_types, size, size, 4)``.
+    Returns
+    -------
+
+    
     """
     n_cells = max(int(b) for b in BlockType) + 1
     cells = _atlas_row_cells(_ATLAS_ROW_BLOCKS, n_cells)
@@ -267,7 +331,7 @@ def block_textures_rgba(size: int) -> np.ndarray:
 @functools.lru_cache(maxsize=64)
 def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarray:
     """Return the RGBA machine sprite for a placed machine.
-
+    
     Sliced from the atlas's directional machine rows; the editor
     canvas uses this in place of
     :func:`factoriax.playground.ui.icons.render_item_icon` so both surfaces
@@ -275,13 +339,31 @@ def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarra
     ``[1, 4]`` (e.g. an unset machine direction) are clipped to the
     LEFT row to keep the gather well-defined.
 
-    Args:
-        machine_type: ``Machine`` integer.
-        size: Side length in pixels for the returned sprite.
-        direction: ``Direction`` integer (1=LEFT, 2=RIGHT, 3=UP, 4=DOWN).
+    Parameters
+    ----------
+    machine_type :
+        Machine
+    size :
+        Side length in pixels for the returned sprite
+    direction :
+        Direction
+    machine_type : int :
+        
+    size : int :
+        
+    direction : int :
+        
+    machine_type: int :
+        
+    size: int :
+        
+    direction: int :
+        
 
-    Returns:
-        uint8 RGBA array of shape ``(size, size, 4)``.
+    Returns
+    -------
+
+    
     """
     direction_idx = max(0, min(_ATLAS_NUM_DIRECTIONS - 1, direction - 1))
     row = _ATLAS_ROW_MACHINES_BASE + direction_idx
@@ -293,11 +375,19 @@ def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarra
 def biter_icon_rgba(size: int) -> np.ndarray:
     """Return the RGBA biter sprite from the misc row's biter cell.
 
-    Args:
-        size: Side length in pixels for the returned sprite.
+    Parameters
+    ----------
+    size :
+        Side length in pixels for the returned sprite
+    size : int :
+        
+    size: int :
+        
 
-    Returns:
-        uint8 RGBA array of shape ``(size, size, 4)``.
+    Returns
+    -------
+
+    
     """
     cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_BITER)
     return _downsample(cell, size).astype(np.uint8, copy=False)
@@ -306,18 +396,36 @@ def biter_icon_rgba(size: int) -> np.ndarray:
 @functools.lru_cache(maxsize=64)
 def player_icon_rgba(player_idx: int, size: int, direction: int) -> np.ndarray:
     """Return the RGBA player sprite for the given slot and facing.
-
+    
     Players beyond :data:`_ATLAS_NUM_PLAYERS` wrap modulo the palette
     size, matching the renderer's runtime behaviour and the editor's
     legacy player-color recycling.
 
-    Args:
-        player_idx: Player slot (0-based).
-        size: Side length in pixels for the returned sprite.
-        direction: ``Direction`` integer (1=LEFT, 2=RIGHT, 3=UP, 4=DOWN).
+    Parameters
+    ----------
+    player_idx :
+        Player slot
+    size :
+        Side length in pixels for the returned sprite
+    direction :
+        Direction
+    player_idx : int :
+        
+    size : int :
+        
+    direction : int :
+        
+    player_idx: int :
+        
+    size: int :
+        
+    direction: int :
+        
 
-    Returns:
-        uint8 RGBA array of shape ``(size, size, 4)``.
+    Returns
+    -------
+
+    
     """
     slot = player_idx % _ATLAS_NUM_PLAYERS
     direction_idx = max(0, min(_ATLAS_NUM_DIRECTIONS - 1, direction - 1))
@@ -327,11 +435,7 @@ def player_icon_rgba(player_idx: int, size: int, direction: int) -> np.ndarray:
 
 
 def build_digit_atlas() -> jnp.ndarray:
-    """Build a 3x5 bitmap font atlas for digits 0-9.
-
-    Returns:
-        JAX bool array of shape (10, DIGIT_H, DIGIT_W).
-    """
+    """Build a 3x5 bitmap font atlas for digits 0-9."""
     glyphs = {
         0: "####.##.##.####",
         1: ".#.##..#..#.###",
@@ -359,14 +463,27 @@ def build_digit_atlas() -> jnp.ndarray:
 def _alpha_composite(below: jnp.ndarray, above_rgba: jnp.ndarray) -> jnp.ndarray:
     """Per-pixel ``over`` blend of an RGBA layer onto an RGB layer.
 
-    Args:
-        below: uint8 RGB array of shape ``(..., 3)`` (the background).
-        above_rgba: uint8 RGBA array of shape ``(..., 4)``. The alpha
-            channel acts as the per-pixel blend mask; ``alpha=0`` falls
-            through to ``below``, ``alpha=255`` overwrites it.
+    Parameters
+    ----------
+    below :
+        uint8 RGB array of shape ``(..., 3)`` (the background).
+    above_rgba :
+        uint8 RGBA array of shape ``(..., 4)``. The alpha
+        channel acts as the per-pixel blend mask; ``alpha=0`` falls
+        through to ``below``, ``alpha=255`` overwrites it.
+    below : jnp.ndarray :
+        
+    above_rgba : jnp.ndarray :
+        
+    below: jnp.ndarray :
+        
+    above_rgba: jnp.ndarray :
+        
 
-    Returns:
-        uint8 RGB array of the same leading shape as ``below``.
+    Returns
+    -------
+
+    
     """
     rgb_above = above_rgba[..., :3].astype(jnp.float32)
     alpha = above_rgba[..., 3:4].astype(jnp.float32) / 255.0
@@ -382,29 +499,52 @@ def render_map(
     player_sprite: jnp.ndarray,
 ) -> jnp.ndarray:
     """Render the map: terrain + machines + players.
-
+    
     Pure JAX, JIT-compilable, vmappable. Tile pixel size is inferred
     from the block_atlas shape. Layers composite back-to-front using
     each layer's alpha channel: terrain is fully opaque; machine and
     player cells reveal what's underneath wherever ``alpha < 255``.
-
+    
     Machine and player sprites are direction-indexed: the right cell
     is selected per tile from ``state.ent_direction[tile_entity]`` and
     per player from ``state.player_directions[i]``. The atlas builders
     duplicate non-directional machines across all four direction rows
     so this gather is uniform.
 
-    Args:
-        state: Single (non-batched) EnvState.
-        block_atlas: Shape ``(num_block_types, tile_px, tile_px, 4)``.
-        machine_atlas: Shape ``(4, num_machine_types, tile_px, tile_px, 4)``
-            indexed by ``(direction - 1, machine_type)``.
-        player_sprite: Shape
-            ``(_ATLAS_NUM_PLAYERS, 4, tile_px, tile_px, 4)`` indexed by
-            ``(player_idx % _ATLAS_NUM_PLAYERS, direction - 1)``.
+    Parameters
+    ----------
+    state :
+        Single (non-batched) EnvState.
+    block_atlas :
+        Shape ``(num_block_types, tile_px, tile_px, 4)``.
+    machine_atlas :
+        Shape ``(4, num_machine_types, tile_px, tile_px, 4)``
+        indexed by ``(direction - 1, machine_type)``.
+    player_sprite :
+        Shape
+        ``(_ATLAS_NUM_PLAYERS, 4, tile_px, tile_px, 4)`` indexed by
+        ``(player_idx % _ATLAS_NUM_PLAYERS, direction - 1)``.
+    state : EnvState :
+        
+    block_atlas : jnp.ndarray :
+        
+    machine_atlas : jnp.ndarray :
+        
+    player_sprite : jnp.ndarray :
+        
+    state: EnvState :
+        
+    block_atlas: jnp.ndarray :
+        
+    machine_atlas: jnp.ndarray :
+        
+    player_sprite: jnp.ndarray :
+        
 
-    Returns:
-        uint8 RGB image of shape ``(H * tile_px, W * tile_px, 3)``.
+    Returns
+    -------
+
+    
     """
     tile_px = block_atlas.shape[1]
     map_h, map_w = state.map.shape
@@ -441,6 +581,24 @@ def render_map(
     num_players = state.player_positions.shape[0]
 
     def _stamp_player(i: int, img: jnp.ndarray) -> jnp.ndarray:
+        """
+
+        Parameters
+        ----------
+        i : int :
+            
+        img : jnp.ndarray :
+            
+        i: int :
+            
+        img: jnp.ndarray :
+            
+
+        Returns
+        -------
+
+        
+        """
         px = state.player_positions[i, 0].astype(jnp.int32)
         py = state.player_positions[i, 1].astype(jnp.int32)
         pdir = state.player_directions[i].astype(jnp.int32)
@@ -470,20 +628,27 @@ def render_map(
 
 class JaxRenderer:
     """Stateful wrapper around the pure-JAX rendering functions.
-
+    
     Builds the per-tile-size sprite atlases once at construction,
     then exposes plain, JIT-compiled, and vmapped variants of
     :func:`render_map`. The atlases are device-resident JAX arrays
     for the lifetime of the renderer.
-
+    
     Example::
-
+    
         renderer = JaxRenderer(tile_px=8)
         img = renderer.jit_render_map(state)              # single state
         imgs = renderer.vmap_render_map(batched_states)   # batched
 
-    Args:
-        tile_px: Tile side length in pixels.
+    Parameters
+    ----------
+    tile_px :
+        Tile side length in pixels.
+
+    Returns
+    -------
+
+    
     """
 
     def __init__(self, tile_px: int = DEFAULT_TILE_PX) -> None:
@@ -495,11 +660,19 @@ class JaxRenderer:
     def render_map_single(self, state: EnvState) -> jnp.ndarray:
         """Render map for a single state (not jitted).
 
-        Args:
-            state: Single EnvState.
+        Parameters
+        ----------
+        state :
+            Single EnvState.
+        state : EnvState :
+            
+        state: EnvState :
+            
 
-        Returns:
-            uint8 RGB image.
+        Returns
+        -------
+
+        
         """
         return render_map(
             state,
@@ -521,11 +694,19 @@ class JaxRenderer:
     def jit_render_map(self, state: EnvState) -> jnp.ndarray:
         """JIT-compiled map render for a single state.
 
-        Args:
-            state: Single EnvState.
+        Parameters
+        ----------
+        state :
+            Single EnvState.
+        state : EnvState :
+            
+        state: EnvState :
+            
 
-        Returns:
-            uint8 RGB image.
+        Returns
+        -------
+
+        
         """
         result: jnp.ndarray = self._jit_render_map(
             state,
@@ -538,11 +719,19 @@ class JaxRenderer:
     def vmap_render_map(self, batched_state: EnvState) -> jnp.ndarray:
         """Batched map render (jit + vmap).
 
-        Args:
-            batched_state: Batched EnvState with leading batch dimension.
+        Parameters
+        ----------
+        batched_state :
+            Batched EnvState with leading batch dimension.
+        batched_state : EnvState :
+            
+        batched_state: EnvState :
+            
 
-        Returns:
-            uint8 RGB images with shape (batch, H, W, 3).
+        Returns
+        -------
+
+        
         """
         result: jnp.ndarray = self._vmap_render_map(
             batched_state,

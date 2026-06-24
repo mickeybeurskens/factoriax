@@ -23,23 +23,50 @@ _SENTINEL: float = 1e9
 def assign_tiers(adjacency: Mapping[str, Iterable[str]]) -> dict[str, int]:
     """Longest-path tier assignment for an acyclic ``{output: inputs}`` map.
 
-    Args:
-        adjacency: ``{node: iterable_of_input_nodes}``. Nodes that act
-            only as inputs (sources) need not appear as keys; they are
-            discovered while walking the recipes.
+    Parameters
+    ----------
+    adjacency :
+        ``{node: iterable_of_input_nodes}``. Nodes that act
+        only as inputs (sources) need not appear as keys; they are
+        discovered while walking the recipes.
+    adjacency: Mapping[str :
+        
+    Iterable[str]] :
+        
 
-    Returns:
-        ``{node: tier}`` for every node reachable from the adjacency
+    Returns
+    -------
+    ``{node
+        tier}`` for every node reachable from the adjacency
+    ``{node
+        tier}`` for every node reachable from the adjacency
+        map. Sources land at tier 0; every other node sits one tier
+    ``{node
+        tier}`` for every node reachable from the adjacency
         map. Sources land at tier 0; every other node sits one tier
         above the deepest input.
 
-    Raises:
-        ValueError: When a cycle is detected.
+    Raises
+    ------
+    ValueError
+        When a cycle is detected.
+
     """
     cache: dict[str, int] = {}
     visiting: set[str] = set()
 
     def tier_of(node: str) -> int:
+        """
+
+        Parameters
+        ----------
+        node: str :
+            
+
+        Returns
+        -------
+
+        """
         if node in cache:
             return cache[node]
         if node in visiting:
@@ -67,19 +94,36 @@ def order_within_tiers(
     iterations: int = 8,
 ) -> dict[str, int]:
     """Sugiyama barycenter sweep that reduces edge crossings.
-
+    
     Each tier's nodes are reordered so every node sits near the mean
     position of its neighbours in the adjacent tier. The sweep
     alternates direction; eight iterations is the standard default
     from the Sugiyama framework.
 
-    Args:
-        adjacency: same ``{output: inputs}`` map used for tier assignment.
-        tiers: ``{node: tier}`` from :func:`assign_tiers`.
-        iterations: number of forward-backward passes.
+    Parameters
+    ----------
+    adjacency :
+        same ``{output: inputs}`` map used for tier assignment.
+    tiers :
+        ``{node: tier}`` from :func:`assign_tiers`.
+    iterations :
+        number of forward-backward passes.
+    adjacency: Mapping[str :
+        
+    Iterable[str]] :
+        
+    tiers: Mapping[str :
+        
+    int] :
+        
+    iterations: int :
+         (Default value = 8)
 
-    Returns:
-        ``{node: row}`` giving each node's 0-indexed row within its tier.
+    Returns
+    -------
+    ``{node
+        row}`` giving each node's 0-indexed row within its tier.
+
     """
     predecessors: dict[str, list[str]] = defaultdict(list)
     successors: dict[str, list[str]] = defaultdict(list)
@@ -95,9 +139,39 @@ def order_within_tiers(
         nodes.sort()
 
     def position(node: str, tier: int) -> int:
+        """
+
+        Parameters
+        ----------
+        node: str :
+            
+        tier: int :
+            
+
+        Returns
+        -------
+
+        """
         return by_tier[tier].index(node)
 
     def neighbour_mean(node: str, tier: int, lookup: dict[str, list[str]]) -> float:
+        """
+
+        Parameters
+        ----------
+        node: str :
+            
+        tier: int :
+            
+        lookup: dict[str :
+            
+        list[str]] :
+            
+
+        Returns
+        -------
+
+        """
         ps = [position(n, tier) for n in lookup[node] if tiers.get(n) == tier]
         return sum(ps) / len(ps) if ps else _SENTINEL
 

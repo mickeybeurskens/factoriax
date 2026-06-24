@@ -33,9 +33,16 @@ from matplotlib.patches import FancyBboxPatch
 @dataclass(frozen=True)
 class AchievementSpec:
     """One bit in the curriculum.
-
+    
     Mirrors the engine's per-bit metadata but lives outside the JAX
     module so callers can render the strip from a JSON dump.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     bit: int
@@ -58,7 +65,19 @@ class StripLayout:
 
 
 def _darken(hex_color: str, factor: float) -> str:
-    """Multiply RGB by ``factor`` clamped to [0, 1] and return as hex."""
+    """Multiply RGB by ``factor`` clamped to [0, 1] and return as hex.
+
+    Parameters
+    ----------
+    hex_color: str :
+        
+    factor: float :
+        
+
+    Returns
+    -------
+
+    """
     r, g, b = mcolors.to_rgb(hex_color)
     return mcolors.to_hex(
         (max(0.0, r * factor), max(0.0, g * factor), max(0.0, b * factor))
@@ -66,7 +85,17 @@ def _darken(hex_color: str, factor: float) -> str:
 
 
 def _text_color(fill_hex: str) -> str:
-    """Pick a near-black or near-white label colour by sRGB luminance."""
+    """Pick a near-black or near-white label colour by sRGB luminance.
+
+    Parameters
+    ----------
+    fill_hex: str :
+        
+
+    Returns
+    -------
+
+    """
     r, g, b = mcolors.to_rgb(fill_hex)
     if 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55:
         return "#1A1A1A"
@@ -77,7 +106,21 @@ def _cell_x_positions(
     achievements: Sequence[AchievementSpec],
     layout: StripLayout,
 ) -> list[float]:
-    """Return the left-edge x of each cell, padding phase boundaries."""
+    """
+
+    Parameters
+    ----------
+    achievements: Sequence[AchievementSpec] :
+        
+    layout: StripLayout :
+        
+
+    Returns
+    -------
+    type
+        
+
+    """
     xs: list[float] = []
     cursor = 0.0
     prev_phase: str | None = None
@@ -98,7 +141,27 @@ def _draw_cell(
     stroke: str,
     layout: StripLayout,
 ) -> None:
-    """Draw one number-primary cell: bold bit integer, short name below."""
+    """Draw one number-primary cell: bold bit integer, short name below.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    spec: AchievementSpec :
+        
+    x: float :
+        
+    fill: str :
+        
+    stroke: str :
+        
+    layout: StripLayout :
+        
+
+    Returns
+    -------
+
+    """
     ax.add_patch(
         FancyBboxPatch(
             (x, 0.0),
@@ -139,7 +202,23 @@ def _draw_phase_labels(
     xs: Sequence[float],
     layout: StripLayout,
 ) -> None:
-    """Write each phase name above the centre of its cell group."""
+    """Write each phase name above the centre of its cell group.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    achievements: Sequence[AchievementSpec] :
+        
+    xs: Sequence[float] :
+        
+    layout: StripLayout :
+        
+
+    Returns
+    -------
+
+    """
     groups: dict[str, list[int]] = defaultdict(list)
     for index, spec in enumerate(achievements):
         groups[spec.phase].append(index)
@@ -166,10 +245,25 @@ def _draw_boundary(
     layout: StripLayout,
 ) -> None:
     """Draw the dashed line marking the hand-craftable → automation transition.
-
+    
     The line sits in the gap between the last hand-craftable cell and
     the first automation cell. Two short labels above and below name
     the regimes on either side.
+
+    Parameters
+    ----------
+    ax: plt.Axes :
+        
+    achievements: Sequence[AchievementSpec] :
+        
+    xs: Sequence[float] :
+        
+    layout: StripLayout :
+        
+
+    Returns
+    -------
+
     """
     last_hand = None
     first_auto = None
@@ -226,14 +320,35 @@ def render(
 ) -> Path:
     """Render the curriculum strip to ``out_path`` and return the resolved path.
 
-    Args:
-        achievements: Ordered bit specs. The strip honours the given
-            order; phases must appear contiguously (e.g. all Bootstrap
-            bits before any Miners-up bits).
-        out_path: Destination PNG (or SVG by extension).
-        phase_palette: ``{phase_name: hex}`` lookup. Phases missing from
-            the palette get :attr:`StripLayout.fallback_color`.
-        layout: Optional geometry override.
+    Parameters
+    ----------
+    achievements :
+        Ordered bit specs. The strip honours the given
+        order; phases must appear contiguously (e.g. all Bootstrap
+        bits before any Miners-up bits).
+    out_path :
+        Destination PNG (or SVG by extension).
+    phase_palette :
+        ``{phase_name: hex}`` lookup. Phases missing from
+        the palette get :attr:`StripLayout.fallback_color`.
+    layout :
+        Optional geometry override.
+    achievements: Sequence[AchievementSpec] :
+        
+    out_path: Path | str :
+        
+    * :
+        
+    phase_palette: Mapping[str :
+        
+    str] :
+        
+    layout: StripLayout | None :
+         (Default value = None)
+
+    Returns
+    -------
+
     """
     layout = layout or StripLayout()
     out_path = Path(out_path)

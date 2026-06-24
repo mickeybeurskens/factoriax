@@ -26,14 +26,7 @@ from factoriax.engine.state import EnvParams, EnvState
 
 
 class ScienceTallyState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
-    """Composite state pairing an env state with a cumulative science total.
-
-    Attributes:
-        env_state: Inner environment state.
-        total_science_consumed: Running total, shape
-            ``(NUM_SCIENCE_PACK_TYPES,)``, int32. Index 0 is basic,
-            index 1 is advanced.
-    """
+    """Composite state pairing an env state with a cumulative science total."""
 
     env_state: EnvState
     total_science_consumed: jnp.ndarray
@@ -41,18 +34,25 @@ class ScienceTallyState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams]):  # type: ignore[misc]
     """Accumulate per-step science pack consumption into a running total.
-
+    
     Reads ``new_env_state.science_consumed_step`` after every step and
     adds it to ``total_science_consumed``. Exposes the total through the
     wrapped state; does not inject it into the observation vector (that
     decision is left to the scenario that composes this wrapper).
 
-    Args:
-        inner: Any gymnax-compatible env whose state type is :class:`EnvState`
-            and which exposes ``science_consumed_step`` on every step.
+    Parameters
+    ----------
+    inner :
+        Any gymnax-compatible env whose state type is :class:`EnvState`
+        and which exposes ``science_consumed_step`` on every step.
+        Examples
+        --------
 
-    Example:
-        >>> import factoriax
+    Returns
+    -------
+
+    
+    >>> import factoriax
         >>> from factoriax import ScienceTallyWrapper
         >>> inner, params = factoriax.make("EasyRocket-v1")
         >>> env = ScienceTallyWrapper(inner)
@@ -63,7 +63,8 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
     def __init__(self, inner: FactoriaXEnv) -> None:
         """Initialize the wrapper.
 
-        Args:
+        Parameters
+        ----------
             inner: Core environment instance.
         """
         super().__init__()
@@ -71,7 +72,7 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
 
     @property
     def default_params(self) -> EnvParams:
-        """Return default environment parameters."""
+        """ """
         return self._inner.default_params
 
     def step_env(
@@ -81,7 +82,32 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, ScienceTallyState, jax.Array, jax.Array, dict[str, Any]]:
-        """Forward to inner, then fold the per-step delta into the total."""
+        """Forward to inner, then fold the per-step delta into the total.
+
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        state : ScienceTallyState :
+            
+        action : int | jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        state: ScienceTallyState :
+            
+        action: int | jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         obs, new_env, reward, done, info = self._inner.step_env(
             key,
             state.env_state,
@@ -100,7 +126,24 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
     def reset_env(
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, ScienceTallyState]:
-        """Reset the inner env and zero the tally."""
+        """Reset the inner env and zero the tally.
+
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         obs, env_state = self._inner.reset_env(key, params)
         state = ScienceTallyState(
             env_state=env_state,
@@ -109,17 +152,77 @@ class ScienceTallyWrapper(environment.Environment[ScienceTallyState, EnvParams])
         return obs, state
 
     def get_obs(self, state: ScienceTallyState, params: EnvParams) -> jax.Array:
-        """Pass-through observation from the inner env."""
+        """Pass-through observation from the inner env.
+
+        Parameters
+        ----------
+        state : ScienceTallyState :
+            
+        params : EnvParams :
+            
+        state: ScienceTallyState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.get_obs(state.env_state, params)
 
     def is_terminal(self, state: ScienceTallyState, params: EnvParams) -> jax.Array:
-        """Delegate termination to the inner env."""
+        """Delegate termination to the inner env.
+
+        Parameters
+        ----------
+        state : ScienceTallyState :
+            
+        params : EnvParams :
+            
+        state: ScienceTallyState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Action space is unchanged."""
+        """Action space is unchanged.
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Observation space is unchanged."""
+        """Observation space is unchanged.
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.observation_space(params)

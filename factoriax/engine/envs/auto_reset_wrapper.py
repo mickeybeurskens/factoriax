@@ -22,22 +22,25 @@ from factoriax.engine.state import EnvParams, EnvState
 
 class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """State that caches the initial configuration for cheap auto-reset.
-
+    
     Stores a frozen copy of the initial state alongside the live state.
     On episode termination, ``lax.select`` swaps in the cached copy
     instead of calling ``reset_env`` (which runs full procedural
     terrain generation).
-
+    
     The memory cost is one extra copy of ``EnvState`` per batch
     element. At 32x32 that is roughly 12 KB per element. At 128x128
     with ``max_machines=4096`` it grows to roughly 185 KB per element,
     which doubles total state memory. For large maps, reduce
     ``batch_size`` or ``max_machines`` accordingly.
 
-    Attributes:
-        env_state: Live environment state that evolves each step.
-        reset_state: Frozen copy from the initial reset, restored
-            on episode termination.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
+    
     """
 
     env_state: EnvState
@@ -46,16 +49,23 @@ class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # type: ignore[misc]
     """Gymnax wrapper providing cached-state auto-reset.
-
+    
     Use this wrapper when you need auto-reset inside ``lax.scan``
     training loops (e.g. PureJaxRL-style PPO). For manual episode
     management, use :class:`FactoriaXEnv` directly.
 
-    Args:
-        inner: Core FactoriaX environment to wrap.
+    Parameters
+    ----------
+    inner :
+        Core FactoriaX environment to wrap.
+        Examples
+        --------
 
-    Example:
-        >>> import factoriax
+    Returns
+    -------
+
+    
+    >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1", auto_reset=True)
         >>> # ``env.step_env`` now returns the next-episode reset state
         >>> # whenever ``done`` flips True, with no Python-side branch.
@@ -64,7 +74,8 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     def __init__(self, inner: FactoriaXEnv, resample: bool = False) -> None:
         """Initialize the auto-reset wrapper.
 
-        Args:
+        Parameters
+        ----------
             inner: Core environment instance.
             resample: When ``False`` (default), termination restores the cached
                 initial state (cheap, same layout every episode). When ``True``,
@@ -79,7 +90,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
     @property
     def default_params(self) -> EnvParams:
-        """Return default environment parameters."""
+        """ """
         return self._inner.default_params
 
     def step_env(
@@ -90,19 +101,40 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         params: EnvParams,
     ) -> tuple[jax.Array, AutoResetState, jax.Array, jax.Array, dict[str, Any]]:
         """Step the environment with cached auto-reset on termination.
-
+        
         When ``done`` is True, the live state is replaced with the
         cached reset state via ``lax.select``. No terrain generation
         occurs.
-
-        Args:
+        
+        Parameters
+        ----------
             key: JAX random key.
             state: Current wrapped state with cached reset.
             action: Action to take.
-            params: Environment parameters.
 
-        Returns:
-            Tuple of (observation, new_state, reward, done, info).
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        state : AutoResetState :
+            
+        action : int | jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        state: AutoResetState :
+            
+        action: int | jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
         """
         step_key, reset_key = jax.random.split(key)
         obs_step, new_env, reward, done, info = self._inner.step_env(
@@ -129,13 +161,26 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, AutoResetState]:
         """Reset and cache the initial state for future auto-resets.
-
-        Args:
+        
+        Parameters
+        ----------
             key: JAX random key for world generation.
-            params: Environment parameters.
 
-        Returns:
-            Tuple of (initial_observation, wrapped_state).
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
         """
         obs, env_state = self._inner.reset_env(key, params)
         state = AutoResetState(
@@ -145,17 +190,77 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         return obs, state
 
     def get_obs(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Pass-through observation from the inner env."""
+        """Pass-through observation from the inner env.
+
+        Parameters
+        ----------
+        state : AutoResetState :
+            
+        params : EnvParams :
+            
+        state: AutoResetState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.get_obs(state.env_state, params)
 
     def is_terminal(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Delegate termination to the inner env."""
+        """Delegate termination to the inner env.
+
+        Parameters
+        ----------
+        state : AutoResetState :
+            
+        params : EnvParams :
+            
+        state: AutoResetState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Action space is unchanged."""
+        """Action space is unchanged.
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Observation space is unchanged."""
+        """Observation space is unchanged.
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.observation_space(params)

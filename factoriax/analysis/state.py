@@ -45,13 +45,25 @@ def inventory_over_time(
         count vector per state, so the slot-aggregation step the
         old slot-model required is gone.
     player : int
+        
     num_item_types : int
+        
+    traj :
+        Trajectory:
+    player :
+        int:  (Default value = 0)
+    num_item_types :
+        int:  (Default value = 5)
+    traj: Trajectory :
+        
+    player: int :
+         (Default value = 0)
+    num_item_types: int :
+         (Default value = 5)
 
     Returns
     -------
-    counts : np.ndarray
-        Shape ``(T, num_item_types)`` — mean across episodes of
-        inventory count per item type for the requested player.
+
     """
     if traj.player_inventory is None:
         raise ValueError("inventory_over_time requires player_inventory")
@@ -80,15 +92,59 @@ def plot_inventory(
     Parameters
     ----------
     traj : Trajectory
+        
     player : int
+        
     num_item_types : int
-    item_labels, item_colors : optional
+        
+    item_labels, item_colors :
+        
     exclude_empty : bool
         If *True*, skip the EMPTY item type.
+    traj :
+        Trajectory:
+    player :
+        int:  (Default value = 0)
+    num_item_types :
+        int:  (Default value = 5)
+    item_labels :
+        list[str] | None:  (Default value = None)
+    item_colors :
+        Sequence[str] | None:  (Default value = None)
+    exclude_empty :
+        bool:  (Default value = True)
+    ax :
+        Axes | None:  (Default value = None)
+    figsize :
+        tuple[float:
+    float] :
+        (Default value = (12)
+    5) :
+        
+    title :
+        str | None:  (Default value = None)
+    traj: Trajectory :
+        
+    player: int :
+         (Default value = 0)
+    num_item_types: int :
+         (Default value = 5)
+    item_labels: list[str] | None :
+         (Default value = None)
+    item_colors: Sequence[str] | None :
+         (Default value = None)
+    exclude_empty: bool :
+         (Default value = True)
+    ax: Axes | None :
+         (Default value = None)
+    figsize: tuple[float :
+        
+    title: str | None :
+         (Default value = None)
 
     Returns
     -------
-    fig, ax : Figure, Axes
+
     """
     inv = inventory_over_time(traj, player, num_item_types)  # (T, num_item_types)
 
@@ -132,13 +188,37 @@ def position_heatmap(
     traj : Trajectory
         Must have ``positions``.
     player : int
-    map_width, map_height : int
-    time_range : tuple[int, int], optional
+        
+    map_width, map_height :
+        
+    time_range : tuple[int
+        
+    traj :
+        Trajectory:
+    player :
+        int:  (Default value = 0)
+    map_width :
+        int:  (Default value = 32)
+    map_height :
+        int:  (Default value = 32)
+    time_range :
+        tuple[int:
+    int] | None :
+        (Default value = None)
+    traj: Trajectory :
+        
+    player: int :
+         (Default value = 0)
+    map_width: int :
+         (Default value = 32)
+    map_height: int :
+         (Default value = 32)
+    time_range: tuple[int :
+        
 
     Returns
     -------
-    heatmap : np.ndarray
-        Shape ``(map_height, map_width)``, normalized to sum to 1.
+
     """
     if traj.positions is None:
         raise ValueError("position_heatmap requires positions data")
@@ -182,12 +262,54 @@ def plot_position_heatmap(
 
     Parameters
     ----------
-    traj, player, map_width, map_height, time_range
+    traj, player, map_width, map_height, time_range :
         See :func:`position_heatmap`.
+    traj :
+        Trajectory:
+    player :
+        int:  (Default value = 0)
+    map_width :
+        int:  (Default value = 32)
+    map_height :
+        int:  (Default value = 32)
+    time_range :
+        tuple[int:
+    int] | None :
+        (Default value = None)
+    ax :
+        Axes | None:  (Default value = None)
+    figsize :
+        tuple[float:
+    float] :
+        (Default value = (7)
+    7) :
+        
+    cmap :
+        str:  (Default value = "hot")
+    title :
+        str | None:  (Default value = None)
+    traj: Trajectory :
+        
+    player: int :
+         (Default value = 0)
+    map_width: int :
+         (Default value = 32)
+    map_height: int :
+         (Default value = 32)
+    time_range: tuple[int :
+        
+    ax: Axes | None :
+         (Default value = None)
+    figsize: tuple[float :
+        
+    cmap: str :
+         (Default value = "hot")
+    title: str | None :
+         (Default value = None)
 
     Returns
     -------
-    fig, ax : Figure, Axes
+
     """
     hm = position_heatmap(traj, player, map_width, map_height, time_range)
 
@@ -220,19 +342,61 @@ def plot_trajectory_trace(
     cmap: str = "viridis",
 ) -> tuple[Figure, Axes]:
     """Plot the movement path of a player for a single episode.
-
+    
     Color intensity encodes time progression (dark = early, bright = late).
 
     Parameters
     ----------
     traj : Trajectory
         Must have ``positions``.
-    episode, player : int
-    map_width, map_height : int
+    episode, player :
+        
+    map_width, map_height :
+        
+    traj :
+        Trajectory:
+    episode :
+        int:  (Default value = 0)
+    player :
+        int:  (Default value = 0)
+    map_width :
+        int:  (Default value = 32)
+    map_height :
+        int:  (Default value = 32)
+    ax :
+        Axes | None:  (Default value = None)
+    figsize :
+        tuple[float:
+    float] :
+        (Default value = (7)
+    7) :
+        
+    title :
+        str | None:  (Default value = None)
+    cmap :
+        str:  (Default value = "viridis")
+    traj: Trajectory :
+        
+    episode: int :
+         (Default value = 0)
+    player: int :
+         (Default value = 0)
+    map_width: int :
+         (Default value = 32)
+    map_height: int :
+         (Default value = 32)
+    ax: Axes | None :
+         (Default value = None)
+    figsize: tuple[float :
+        
+    title: str | None :
+         (Default value = None)
+    cmap: str :
+         (Default value = "viridis")
 
     Returns
     -------
-    fig, ax : Figure, Axes
+
     """
     if traj.positions is None:
         raise ValueError("plot_trajectory_trace requires positions data")
@@ -296,14 +460,37 @@ def plot_resource_depletion(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot total remaining block resources over time.
-
+    
     Requires the ``block_resources`` field on the trajectory,
     shaped ``(B, T, H, W)``.  This is not stored by default; researchers
     need to snapshot ``env_state.block_resources`` during rollouts.
 
+    Parameters
+    ----------
+    traj :
+        Trajectory:
+    ax :
+        Axes | None:  (Default value = None)
+    figsize :
+        tuple[float:
+    float] :
+        (Default value = (12)
+    5) :
+        
+    title :
+        str | None:  (Default value = None)
+    traj: Trajectory :
+        
+    ax: Axes | None :
+         (Default value = None)
+    figsize: tuple[float :
+        
+    title: str | None :
+         (Default value = None)
+
     Returns
     -------
-    fig, ax : Figure, Axes
+
     """
     if traj.block_resources is None:
         raise ValueError(
@@ -342,22 +529,54 @@ def plot_episode_rewards(
     title: str | None = None,
 ) -> tuple[Figure, np.ndarray]:
     """Plot per-step and cumulative rewards for a single episode.
-
+    
     The top panel shows a bar chart of per-step rewards and the bottom
     panel shows the cumulative reward curve with shaded area.
 
-    Args:
-        traj: Trajectory with the ``rewards`` field populated.
-        episode: Episode index to plot.
-        figsize: Figure size.
-        title: Title for the top panel.
+    Parameters
+    ----------
+    traj :
+        Trajectory with the ``rewards`` field populated.
+    episode :
+        Episode index to plot.
+    figsize :
+        Figure size.
+    title :
+        Title for the top panel.
+    traj :
+        Trajectory:
+    episode :
+        int:  (Default value = 0)
+    figsize :
+        tuple[float:
+    float] :
+        (Default value = (10)
+    6) :
+        
+    title :
+        str | None:  (Default value = None)
+    traj: Trajectory :
+        
+    episode: int :
+         (Default value = 0)
+    figsize: tuple[float :
+        
+    title: str | None :
+         (Default value = None)
 
-    Returns:
+    Returns
+    -------
+    
+        Tuple of ``(fig, axes)`` where *axes* is a length-2 array
+    
         Tuple of ``(fig, axes)`` where *axes* is a length-2 array
         of the step-reward and cumulative-reward axes.
 
-    Raises:
-        ValueError: If the trajectory has no ``rewards`` field.
+    Raises
+    ------
+    ValueError
+        If the trajectory has no ``rewards`` field.
+
     """
     if traj.rewards is None:
         raise ValueError("plot_episode_rewards requires the rewards field.")

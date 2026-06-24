@@ -53,26 +53,19 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
 @dataclass(frozen=True)
 class Recipe:
     """One recipe's full record: identity plus default balance.
-
+    
     Identity (``output``, ``inputs``-types, ``machine_type``) is fixed
     in the canonical ``BASE_RECIPES`` tuple; tuning it requires a code
     change. Balance numbers (input counts via ``inputs``-amounts,
     ``output_count``, ``ticks``) are tunable through the
     :class:`RecipeBalance` overlay.
 
-    Attributes:
-        output: ``ItemType`` integer this recipe produces.
-        inputs: One or two ``(ItemType, count)`` pairs. The matcher
-            in :func:`factoriax.engine.machines.run_assemblers` requires
-            unordered uniqueness of the input *type-set* per machine
-            type — two recipes with the same input items on the same
-            machine would race the deterministic forward-match.
-        ticks: Combiner cycle length in ticks. Player crafting is
-            instant and ignores this field.
-        output_count: How many output items are deposited per
-            completed cycle (or per player craft). Defaults to 1.
-        name: Human-readable display name for renderer / logging.
-            Falls back to the ItemType repr if empty.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     output: int
@@ -99,20 +92,19 @@ class Recipe:
 @dataclass(frozen=True)
 class RecipeOverride:
     """Per-recipe balance override.
-
+    
     Each field is optional; ``None`` means "keep the default from the
     base :class:`Recipe`". Identity (output item, input item *types*,
     machine type) is not tunable through this class — only the
     balance numbers. To rewire item flow, modify the base
     :data:`BASE_RECIPES` tuple.
 
-    Attributes:
-        input_counts: New per-input counts as a tuple ordered the same
-            as :class:`Recipe.inputs`. Length must match the target
-            recipe's input count or :meth:`RecipeBook.with_balance`
-            raises ``ValueError``. Item types are not changed.
-        output_count: New count of output items per cycle.
-        ticks: New combiner cycle length in ticks.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     input_counts: tuple[int, ...] | None = None
@@ -123,11 +115,24 @@ class RecipeOverride:
 @dataclass(frozen=True)
 class RecipeBalance:
     """Sparse balance overlay keyed by output ``ItemType``.
-
+    
     A :class:`RecipeBalance` is the user-facing config for tuning a
     game without forking the recipe table. Construct one with the
     overrides you want, then apply it via
     :meth:`RecipeBook.with_balance`:
+    
+    
+    The overrides are stored as a tuple of pairs (rather than a dict)
+    so :class:`RecipeBalance` is hashable and safe to share across
+    JIT cache keys; lookups are linear but the overrides list is
+    typically tiny (single-digit entries) and only consulted at
+    book construction time, not in the hot path.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
 
     >>> balance = RecipeBalance(overrides=(
     ...     (int(ItemType.IRON_PLATE), RecipeOverride(ticks=1)),
@@ -136,19 +141,6 @@ class RecipeBalance:
     >>> book = BASE_RECIPE_BOOK.with_balance(balance)
     >>> table = RecipeTable.from_book(book)
     >>> params = EnvParams(recipe_table=table)
-
-    The overrides are stored as a tuple of pairs (rather than a dict)
-    so :class:`RecipeBalance` is hashable and safe to share across
-    JIT cache keys; lookups are linear but the overrides list is
-    typically tiny (single-digit entries) and only consulted at
-    book construction time, not in the hot path.
-
-    Attributes:
-        overrides: Tuple of ``(output_item, RecipeOverride)`` pairs.
-            An output may appear at most once; duplicates raise
-            ``ValueError`` at construction time. An empty tuple means
-            "no overrides" — :meth:`RecipeBook.with_balance` returns
-            the same book unchanged in that case.
     """
 
     overrides: tuple[tuple[int, RecipeOverride], ...] = ()
@@ -165,7 +157,19 @@ class RecipeBalance:
             seen.add(output)
 
     def get(self, output_item: int) -> RecipeOverride | None:
-        """Return the override for ``output_item`` or ``None`` if absent."""
+        """
+
+        Parameters
+        ----------
+        output_item: int :
+            
+
+        Returns
+        -------
+        type
+            
+
+        """
         for output, override in self.overrides:
             if output == output_item:
                 return override
@@ -180,10 +184,10 @@ class RecipeBalance:
 @dataclass(frozen=True)
 class RecipeBook:
     """Validated bundle of :class:`Recipe` records.
-
+    
     Wraps a tuple of recipes and enforces two structural invariants
     that downstream JAX kernels rely on:
-
+    
     1. **Unique outputs** — each ``ItemType`` appears as the output of
        at most one recipe. The reverse-lookup ``OUTPUT_TO_RECIPE`` is a
        single-valued mapping; two recipes producing the same item would
@@ -198,20 +202,24 @@ class RecipeBook:
        gates 1-input recipes on slot-emptiness; different machines are
        always allowed because the matcher already partitions by
        machine.
-
+    
     Both invariants are checked at construction time so a bad book
     fails fast with a named offender rather than producing wrong
     arrays at runtime.
 
-    Attributes:
-        recipes: Ordered tuple of :class:`Recipe` records. Order is
-            load-bearing — positions 0–N map directly to the
-            ``CRAFT_*`` action enum slots.
+    Parameters
+    ----------
 
-    Raises:
-        ValueError: If two recipes share an output, or if two recipes
-            on the same machine type at the same arity share an
-            unordered input type-set.
+    Returns
+    -------
+
+    Raises
+    ------
+    ValueError
+        If two recipes share an output, or if two recipes
+        on the same machine type at the same arity share an
+        unordered input type-set.
+
     """
 
     recipes: tuple[Recipe, ...]
@@ -255,7 +263,7 @@ class RecipeBook:
 
     def with_balance(self, balance: RecipeBalance) -> RecipeBook:
         """Apply a balance overlay, returning a new validated book.
-
+        
         Identity (output items, machine type, recipe order, input
         item types) is preserved — only the per-recipe balance numbers
         (input counts, ``output_count``, ``ticks``) are tunable.
@@ -266,19 +274,28 @@ class RecipeBook:
         introduce duplicate outputs or input pairs because they only
         touch counts/ticks.
 
-        Args:
-            balance: Sparse :class:`RecipeBalance` keyed by output
-                ``ItemType``. Overrides for outputs that don't exist
-                in this book are silently ignored.
+        Parameters
+        ----------
+        balance :
+            Sparse :class:`RecipeBalance` keyed by output
+            ``ItemType``. Overrides for outputs that don't exist
+            in this book are silently ignored.
+        balance: RecipeBalance :
+            
 
-        Returns:
-            New :class:`RecipeBook` with the overrides applied.
+        Returns
+        -------
+        New
+            class:`RecipeBook` with the overrides applied.
 
-        Raises:
-            ValueError: If a :class:`RecipeOverride` specifies an
-                ``input_counts`` tuple whose length does not match the
-                target recipe's input count, or if any count / ticks
-                value is negative.
+        Raises
+        ------
+        ValueError
+            If a :class:`RecipeOverride` specifies an
+            ``input_counts`` tuple whose length does not match the
+            target recipe's input count, or if any count / ticks
+            value is negative.
+
         """
         if not balance.overrides:
             return self
@@ -544,7 +561,7 @@ RECIPE_NAMES: list[str] = [r.name for r in BASE_RECIPES]
 
 class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Stacked JAX arrays projected from a :class:`RecipeBook`.
-
+    
     Holds every per-recipe number the engine consumes inside JIT'd
     kernels (combiner cycle matching, crafting yield, action dispatch)
     as a single PyTree leaf set. Stored on :class:`EnvParams` so the
@@ -554,22 +571,12 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     across all balance overlays since :class:`RecipeBook` fixes the
     recipe count and arity at construction time).
 
-    Attributes:
-        outputs: ``[NUM_RECIPES]`` — output ``ItemType`` per recipe.
-        output_counts: ``[NUM_RECIPES]`` — items deposited per cycle.
-        input_items: ``[NUM_RECIPES, MAX_RECIPE_INPUTS]`` — input item
-            types, EMPTY-padded for 1-input recipes.
-        input_counts: ``[NUM_RECIPES, MAX_RECIPE_INPUTS]`` — input
-            counts, zero-padded for 1-input recipes.
-        ticks: ``[NUM_RECIPES]`` — combiner cycle length.
-        machine_type: ``[NUM_RECIPES]`` — FURNACE / ASSEMBLER gate.
-        output_to_recipe: ``[len(ItemType)]`` — reverse lookup from
-            ``ItemType`` to recipe index, ``-1`` for non-output items.
-        craft_action_to_recipe: ``[NUM_RECIPES]`` — identity map from
-            ``CRAFT_*`` action offset to recipe index. Currently
-            ``arange(NUM_RECIPES)`` since the action enum and recipe
-            order are aligned, but kept as an explicit array so a
-            future re-ordering can rewire the mapping cheaply.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     outputs: jnp.ndarray
@@ -584,17 +591,24 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     @classmethod
     def from_book(cls, book: RecipeBook) -> RecipeTable:
         """Project a :class:`RecipeBook` into stacked JAX arrays.
-
+        
         The book has already validated uniqueness, so this method is
         a pure shape-and-dtype projection — no further checks. Pads
         1-input recipes with ``(EMPTY, 0)`` so every recipe row has
         the same arity (``MAX_RECIPE_INPUTS``).
 
-        Args:
-            book: Validated :class:`RecipeBook`.
+        Parameters
+        ----------
+        book :
+            Validated :class:`RecipeBook`.
+        book: RecipeBook :
+            
 
-        Returns:
-            New :class:`RecipeTable` containing the projected arrays.
+        Returns
+        -------
+        New
+            class:`RecipeTable` containing the projected arrays.
+
         """
         recipes = book.recipes
         n = len(recipes)

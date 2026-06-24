@@ -36,31 +36,34 @@ from .trajectory import _STATE_TO_TRAJ, Trajectory
 @dataclass
 class RolloutRecorder:
     """Accumulates rollout data across training iterations.
-
+    
     This recorder is designed to slot into an existing training loop
     with **zero changes** to your ``collect_fn`` or JIT'd code.  It
     works by extracting numpy arrays from the trajectory struct and
     env states that your collection function already returns.
-
+    
     The recorder segments the continuous stream of ``(T, N)`` rollout
     chunks into complete episodes using the ``done`` flags.
 
     Parameters
     ----------
-    max_episodes : int, optional
+    max_episodes : int
         Stop recording after this many complete episodes.  If *None*,
         record indefinitely until :meth:`finish` is called.
     record_states : bool
         If *True*, also extract ``player_positions`` and
         ``player_inventory`` from ``env_states`` at each step.
         This increases memory usage but enables state-evolution analyses.
-    state_fields : list[str], optional
+    state_fields : list[str]
         Which ``EnvState`` fields to record when ``record_states=True``.
         Defaults to ``["player_positions", "player_inventory"]``.
 
+    Returns
+    -------
     Examples
     --------
-    Minimal integration (actions + rewards only):
+    Minimal integration : actions + rewards only
+        With state recording:
 
     >>> recorder = RolloutRecorder(max_episodes=64)
     >>> for it in range(total_iters):
@@ -69,9 +72,7 @@ class RolloutRecorder:
     ...     if recorder.is_full:
     ...         break
     >>> traj = recorder.finish()
-
-    With state recording:
-
+    
     >>> recorder = RolloutRecorder(max_episodes=32, record_states=True)
     >>> for it in range(total_iters):
     ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
@@ -104,20 +105,18 @@ class RolloutRecorder:
 
         Parameters
         ----------
-        trajectories
-            The trajectory struct returned by ``collect_fn``.  Must have
-            ``.action``, ``.reward``, and ``.done`` attributes, each
-            shaped ``(T, N)`` or ``(T, N, ...)``.
-        env_states : optional
-            The ``EnvState`` pytree returned by ``collect_fn``.  Only
-            needed if ``record_states=True``.  The recorder extracts
-            fields listed in ``self.state_fields``.
+        trajectories :
+            Any:
+        env_states :
+            Any:  (Default value = None)
+        trajectories: Any :
+            
+        env_states: Any :
+             (Default value = None)
 
-            **Important:** ``env_states`` as returned by ``collect_fn``
-            is typically the *final* state after the rollout, not the
-            per-step states.  If your ``collect_fn`` returns per-step
-            states inside the trajectory struct, pass those instead.
-            See the note on ``record_states`` below.
+        Returns
+        -------
+
         """
         if self.is_full:
             return
@@ -162,7 +161,7 @@ class RolloutRecorder:
 
     def finish(self, pad_incomplete: bool = True) -> Trajectory:
         """Segment recorded chunks into complete episodes and build a Trajectory.
-
+        
         This method concatenates all recorded chunks along the time axis,
         then splits them into individual episodes using the ``done`` flags.
         When ``record_states=True`` was set, state fields are segmented
@@ -175,14 +174,14 @@ class RolloutRecorder:
             If *True*, include the last (possibly incomplete) episode in
             each environment, zero-padded to match the longest episode.
             If *False*, only include fully completed episodes.
+        pad_incomplete :
+            bool:  (Default value = True)
+        pad_incomplete: bool :
+             (Default value = True)
 
         Returns
         -------
-        Trajectory
-            With actions shaped ``(B, T_max)`` or ``(B, T_max, P)`` for
-            multi-player, where B is the number of episodes and T_max
-            is the length of the longest episode. State fields are
-            included when ``record_states=True``.
+
         """
         if not self._action_chunks:
             raise ValueError("No data recorded. Call record() first.")

@@ -50,16 +50,30 @@ _OVERRIDE_FIELDS: dict[str, type] = {
 def _parse_override(name: str, raw: dict[str, Any]) -> RecipeOverride:
     """Parse one TOML table into a :class:`RecipeOverride`.
 
-    Args:
-        name: Recipe key (used in error messages).
-        raw: Decoded TOML table.
+    Parameters
+    ----------
+    name :
+        Recipe key (used in error messages).
+    raw :
+        Decoded TOML table.
+    name: str :
+        
+    raw: dict[str :
+        
+    Any] :
+        
 
-    Returns:
-        The constructed :class:`RecipeOverride`.
+    Returns
+    -------
+    The constructed
+        class:`RecipeOverride`.
 
-    Raises:
-        ValueError: If ``raw`` contains an unknown field, the wrong
-            type for a known field, or an empty ``input_counts`` list.
+    Raises
+    ------
+    ValueError
+        If ``raw`` contains an unknown field, the wrong
+        type for a known field, or an empty ``input_counts`` list.
+
     """
     unknown = set(raw) - set(_OVERRIDE_FIELDS)
     if unknown:
@@ -106,14 +120,23 @@ def _parse_override(name: str, raw: dict[str, Any]) -> RecipeOverride:
 def _resolve_item(name: str) -> int:
     """Resolve a TOML key into an ``ItemType`` integer (case-insensitive).
 
-    Args:
-        name: TOML table key (e.g. ``"iron_plate"``).
+    Parameters
+    ----------
+    name :
+        TOML table key (e.g. ``"iron_plate"``).
+    name: str :
+        
 
-    Returns:
-        Integer value of the matching :class:`ItemType` member.
+    Returns
+    -------
+    Integer value of the matching
+        class:`ItemType` member.
 
-    Raises:
-        ValueError: If ``name`` does not match any ``ItemType``.
+    Raises
+    ------
+    ValueError
+        If ``name`` does not match any ``ItemType``.
+
     """
     target = name.upper()
     for member in ItemType:
@@ -128,22 +151,33 @@ def _resolve_item(name: str) -> int:
 
 def load_balance_from_toml(path: str | Path) -> RecipeBalance:
     """Load a :class:`RecipeBalance` from a TOML file.
-
+    
     The file's top-level tables are recipe keys (matched against
     :class:`ItemType` member names, case-insensitive). Each table's
     fields populate a :class:`RecipeOverride`.
 
-    Args:
-        path: Path to the TOML file.
+    Parameters
+    ----------
+    path :
+        Path to the TOML file.
+    path: str | Path :
+        
 
-    Returns:
-        Parsed :class:`RecipeBalance`.
+    Returns
+    -------
+    Parsed
+        class:`RecipeBalance`.
 
-    Raises:
-        FileNotFoundError: If ``path`` does not exist.
-        ValueError: If the file contains an unknown recipe key, an
-            unknown override field, or a value of the wrong type.
-        tomllib.TOMLDecodeError: If the TOML is malformed.
+    Raises
+    ------
+    FileNotFoundError
+        If ``path`` does not exist.
+    ValueError
+        If the file contains an unknown recipe key, an
+        unknown override field, or a value of the wrong type.
+    tomllib.TOMLDecodeError
+        If the TOML is malformed.
+
     """
     path = Path(path)
     with path.open("rb") as fh:

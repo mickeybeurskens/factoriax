@@ -61,7 +61,19 @@ _PATCH_BLOCKS: tuple[BlockType, ...] = (
 
 def _patch_touches_inner_zone(px: int, py: int) -> bool:
     """True if a 2x2 patch at ``(px, py)`` overlaps the spawn area or its
-    inner-ring buffer."""
+    inner-ring buffer.
+
+    Parameters
+    ----------
+    px: int :
+        
+    py: int :
+        
+
+    Returns
+    -------
+
+    """
     for dy in range(_PATCH_SIZE):
         for dx in range(_PATCH_SIZE):
             tx, ty = px + dx, py + dy
@@ -74,12 +86,42 @@ def _patch_touches_inner_zone(px: int, py: int) -> bool:
 
 
 def _patches_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    """
+
+    Parameters
+    ----------
+    a: tuple[int :
+        
+    int] :
+        
+    b: tuple[int :
+        
+
+    Returns
+    -------
+
+    """
     return abs(a[0] - b[0]) < _PATCH_SIZE and abs(a[1] - b[1]) < _PATCH_SIZE
 
 
 def _sample_patch_corner(
     key: jax.Array, placed: list[tuple[int, int]]
 ) -> tuple[int, int]:
+    """
+
+    Parameters
+    ----------
+    key: jax.Array :
+        
+    placed: list[tuple[int :
+        
+    int]] :
+        
+
+    Returns
+    -------
+
+    """
     for _ in range(_MAX_SAMPLE_ATTEMPTS):
         key, subkey = jax.random.split(key)
         coords = jax.random.randint(
@@ -99,11 +141,20 @@ def _sample_patch_corner(
 
 def build_easy_rocket_level(key: jax.Array) -> Level:
     """Build a 16x16 easy-rocket level with six 2x2 ore patches placed by PRNG.
-
+    
     Patches do not overlap each other, stay clear of the outer 1-cell dirt
     ring, and stay clear of the 4x4 zone covering the 2x2 spawn area plus its
     1-cell inner-ring buffer. Same key returns equal Levels; different keys
     produce different layouts.
+
+    Parameters
+    ----------
+    key: jax.Array :
+        
+
+    Returns
+    -------
+
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     placed: list[tuple[int, int]] = []
@@ -140,12 +191,23 @@ _VALID_PATCH_CORNERS: np.ndarray = np.array(
 
 def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
     """Build a dirt map with one non-overlapping 2x2 patch per ore block.
-
+    
     Jittable, vmappable port of :func:`build_easy_rocket_level`'s placement:
     shuffle the valid (spawn-avoiding) corners with ``key`` and greedily take
     the first ``len(_PATCH_BLOCKS)`` that do not overlap an already-placed
     patch. With ~200 candidates and six patches this always succeeds, so no
     rejection-failure branch is needed.
+
+    Parameters
+    ----------
+    key: jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
     """
     corners = jnp.asarray(_VALID_PATCH_CORNERS)
     shuffled = corners[jax.random.permutation(key, corners.shape[0])]
@@ -155,6 +217,21 @@ def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
     def place(
         carry: tuple[jax.Array, jax.Array], cand: jax.Array
     ) -> tuple[tuple[jax.Array, jax.Array], None]:
+        """
+
+        Parameters
+        ----------
+        carry: tuple[jax.Array :
+            
+        jax.Array] :
+            
+        cand: jax.Array :
+            
+
+        Returns
+        -------
+
+        """
         placed, count = carry
         dx = jnp.abs(placed[:, 0] - cand[0])
         dy = jnp.abs(placed[:, 1] - cand[1])
@@ -176,12 +253,23 @@ def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
 
 def generate_easy_rocket_state(key: jax.Array, params: EnvParams) -> EnvState:
     """Generate an easy-rocket initial state from a PRNG key.
-
+    
     JAX-native and JIT/vmap-compatible: the six ore patches are placed from
     ``key`` (see :func:`_easy_rocket_terrain`), then :func:`initial_state`
     assembles the full :class:`EnvState` (player at centre, ore resources from
     ``params.base_resources``, empty machines/inventory). Suitable as a
     scenario ``reset_fn`` so every reset/episode draws a fresh layout.
+
+    Parameters
+    ----------
+    key: jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
     """
     return initial_state(_easy_rocket_terrain(key, params), params)
 
@@ -274,19 +362,54 @@ _ORE_BLOCKS: tuple[int, ...] = (
 
 
 def _holds_item(state: EnvState, item: int) -> jax.Array:
+    """
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    item: int :
+        
+
+    Returns
+    -------
+
+    """
     return jnp.sum(state.player_inventory[:, item]) >= 1
 
 
 def _count_machines(state: EnvState, machine_type: int) -> jax.Array:
+    """
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    machine_type: int :
+        
+
+    Returns
+    -------
+
+    """
     return jnp.sum(state.machine_types == machine_type)
 
 
 def _blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
-    """Return (active_mask, block_at_pos) over all entity slots.
+    """
 
-    ``active_mask`` is True for slots that hold an active miner. ``block_at_pos``
-    is the block under the entity's ``(ent_y, ent_x)`` tile, computed with
-    clamped indices so inactive slots stay JIT-safe.
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+    type
+        ``active_mask`` is True for slots that hold an active miner. ``block_at_pos``
+        is the block under the entity's ``(ent_y, ent_x)`` tile, computed with
+        clamped indices so inactive slots stay JIT-safe.
+
     """
     active = (state.ent_type == int(Machine.MINER)) & (state.ent_y >= 0)
     safe_y = jnp.maximum(state.ent_y, 0)
@@ -296,11 +419,20 @@ def _blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
 
 
 def _producing_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
-    """Return (producing_mask, block_at_pos) over all entity slots.
+    """
 
-    Like :func:`_blocks_under_active_miners` but the mask also requires a
-    non-empty output buffer, so a slot counts only once its miner has
-    actually mined ore rather than merely being placed on an ore tile.
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+    type
+        Like :func:`_blocks_under_active_miners` but the mask also requires a
+        non-empty output buffer, so a slot counts only once its miner has
+        actually mined ore rather than merely being placed on an ore tile.
+
     """
     active, blocks = _blocks_under_active_miners(state)
     producing = active & (state.ent_buf_count > 0)
@@ -308,7 +440,17 @@ def _producing_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
 
 
 def _producing_ore_presence(state: EnvState) -> jax.Array:
-    """Per-ore-block presence: True where a producing miner sits on it."""
+    """Per-ore-block presence: True where a producing miner sits on it.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    """
     producing, blocks = _producing_miners(state)
     return jnp.stack(
         [jnp.any(producing & (blocks == ore_block)) for ore_block in _ORE_BLOCKS]
@@ -316,24 +458,57 @@ def _producing_ore_presence(state: EnvState) -> jax.Array:
 
 
 def _distinct_producing_ore_types(state: EnvState) -> jax.Array:
-    """At least three distinct ore blocks sit under producing miners."""
+    """At least three distinct ore blocks sit under producing miners.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    """
     result: jax.Array = jnp.sum(_producing_ore_presence(state).astype(jnp.int32)) >= 3
     return result
 
 
 def _all_ore_types_covered(state: EnvState) -> jax.Array:
-    """Every one of the six raw ores sits under a producing miner."""
+    """Every one of the six raw ores sits under a producing miner.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    """
     result: jax.Array = jnp.all(_producing_ore_presence(state))
     return result
 
 
 def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Array:
     """An active assembler holds both ``item_a`` and ``item_b`` in its inputs.
-
+    
     Each input item must occupy one of the two input slots with a
     non-empty count. Requiring both inputs in the same assembler keeps
     the hull, engine, and rocket feeds distinct despite their shared
     limestone input.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    item_a: int :
+        
+    item_b: int :
+        
+
+    Returns
+    -------
+
     """
     is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
     in_type = state.ent_asm_in_type
@@ -345,10 +520,21 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
 
 def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
     """An active assembler carries ``item`` in its output or buffer slot.
-
+    
     Reads both ``ent_asm_out`` and ``ent_buf`` because the engine drains
     a finished output into the buffer on the next tick; checking only the
     output slot would blink off for that tick.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    item: int :
+        
+
+    Returns
+    -------
+
     """
     is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
     out_has = (state.ent_asm_out_type == item) & (state.ent_asm_out_count > 0)
@@ -357,34 +543,106 @@ def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
 
 
 def _has_any_raw_ore(state: EnvState) -> jax.Array:
-    """Player holds at least one of any raw ore type."""
+    """Player holds at least one of any raw ore type.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    """
     return jnp.any(jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS]))
 
 
 def _has_each_raw_ore(state: EnvState) -> jax.Array:
-    """Player holds at least one of every raw ore type."""
+    """Player holds at least one of every raw ore type.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    """
     return jnp.all(jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS]))
 
 
 def _any_producing_miner(state: EnvState) -> jax.Array:
-    """At least one placed miner has ore in its output buffer."""
+    """At least one placed miner has ore in its output buffer.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    """
     return jnp.any(_producing_miners(state)[0])
 
 
 def _has_machine(state: EnvState, machine: int) -> jax.Array:
-    """At least one machine of ``machine`` type is placed on the map."""
+    """At least one machine of ``machine`` type is placed on the map.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    machine: int :
+        
+
+    Returns
+    -------
+
+    """
     return _count_machines(state, machine) >= 1
 
 
 def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
-    """At least ``n`` machines of ``machine`` type are placed on the map."""
+    """At least ``n`` machines of ``machine`` type are placed on the map.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    machine: int :
+        
+    n: int :
+        
+
+    Returns
+    -------
+
+    """
     return _count_machines(state, machine) >= n
 
 
 def _has_n_machines_pair(
     state: EnvState, machine_a: int, machine_b: int, n: int
 ) -> jax.Array:
-    """At least ``n`` of ``machine_a`` AND at least ``n`` of ``machine_b``."""
+    """At least ``n`` of ``machine_a`` AND at least ``n`` of ``machine_b``.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    machine_a: int :
+        
+    machine_b: int :
+        
+    n: int :
+        
+
+    Returns
+    -------
+
+    """
     return (_count_machines(state, machine_a) >= n) & (
         _count_machines(state, machine_b) >= n
     )
@@ -392,11 +650,22 @@ def _has_n_machines_pair(
 
 def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
     """Player inventory holds at least one of ``n`` distinct raw ore types.
-
+    
     Sibling of :func:`_has_any_raw_ore` (n=1) and
     :func:`_has_each_raw_ore` (n=len(_RAW_ORE_ITEMS)); use this when
     you want a mid-curriculum variety milestone such as "half the ore
     types collected".
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+    n: int :
+        
+
+    Returns
+    -------
+
     """
     held_types = jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
     return jnp.sum(held_types.astype(jnp.int32)) >= n
@@ -496,12 +765,21 @@ NUM_EASY_ROCKET_ACHIEVEMENTS: int = len(_EASY_ROCKET_ACHIEVEMENTS)
 
 def easy_rocket_conditions(state: EnvState) -> jax.Array:
     """Compute the easy-rocket achievement bits, zero-padded to MAX_ACHIEVEMENTS.
-
+    
     The bits walk a four-section production curriculum: raw ore, hulls,
     engines, and final assembly. Automated-production bits read
     machine-internal buffers, which only the simulation fills; hand actions
     deposit into the player inventory, so those bits cannot be unlocked by
     hand crafting.
+
+    Parameters
+    ----------
+    state: EnvState :
+        
+
+    Returns
+    -------
+
     """
     conditions = jnp.stack([condition(state) for condition in _EASY_ROCKET_CONDITIONS])
     padding = jnp.zeros(MAX_ACHIEVEMENTS - conditions.shape[0], dtype=jnp.bool_)
@@ -520,6 +798,21 @@ MAX_EASY_ROCKET_SCORE: float = float(NUM_EASY_ROCKET_ACHIEVEMENTS)
 def easy_rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
+    """
+
+    Parameters
+    ----------
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    """
     return achievement_reward(
         prev_state, new_state, params, weights=EASY_ROCKET_ACHIEVEMENT_WEIGHTS
     )
@@ -530,19 +823,34 @@ def easy_rocket(
     obs: str = "superficial_global",
     obs_radius: int = 7,
 ) -> tuple[FactoriaXEnv, EnvParams]:
-    """Return the easy-rocket env (keyed procgen reset) and its params.
+    """
 
-    Binds the keyed generator as ``reset_fn`` (a fresh layout per reset), the
-    production achievement conditions as a step hook, and the achievement
-    reward. Loaded via ``factoriax.make("EasyRocket-v1")``. The 16x16 factory
-    runs to ~80 entities, so ``max_machines`` is budgeted to 100 (above the
-    auto default of 64) to avoid overflowing the entity arrays mid-build.
+    Parameters
+    ----------
+    obs :
+        Observation variant
+    3 :
+        spatial channels
+    the :
+        full 10
+    obs_radius :
+        Local
+    * :
+        
+    obs: str :
+         (Default value = "superficial_global")
+    obs_radius: int :
+         (Default value = 7)
 
-    Args:
-        obs: Observation variant; defaults to the full-map superficial view
-            (3 spatial channels + 63 scalars). Pass ``"x_ray_global"`` for
-            the full 10-channel + facing-readout view.
-        obs_radius: Local-window half-width; ignored for ``_global`` obs.
+    Returns
+    -------
+    type
+        Binds the keyed generator as ``reset_fn`` (a fresh layout per reset), the
+        production achievement conditions as a step hook, and the achievement
+        reward. Loaded via ``factoriax.make("EasyRocket-v1")``. The 16x16 factory
+        runs to ~80 entities, so ``max_machines`` is budgeted to 100 (above the
+        auto default of 64) to avoid overflowing the entity arrays mid-build.
+
     """
     env = FactoriaXEnv(
         reset_fn=generate_easy_rocket_state,

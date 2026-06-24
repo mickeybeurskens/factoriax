@@ -56,13 +56,31 @@ def is_position_in_bounds(
 ) -> jax.Array:
     """Check if a position is within map bounds.
 
-    Args:
-        position: (x, y) array.
-        map_width: Map width.
-        map_height: Map height.
+    Parameters
+    ----------
+    position :
+        (x, y) array.
+    map_width :
+        Map width.
+    map_height :
+        Map height.
+    position : jax.Array :
+        
+    map_width : int :
+        
+    map_height : int :
+        
+    position: jax.Array :
+        
+    map_width: int :
+        
+    map_height: int :
+        
 
-    Returns:
-        Boolean scalar.
+    Returns
+    -------
+
+    
     """
     return (
         (position[0] >= 0)
@@ -75,12 +93,25 @@ def is_position_in_bounds(
 def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
     """Get the block type at a position, or OUT_OF_BOUNDS.
 
-    Args:
-        state: Current environment state.
-        position: (x, y) coordinates.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    position :
+        (x, y) coordinates.
+    state : EnvState :
+        
+    position : jax.Array :
+        
+    state: EnvState :
+        
+    position: jax.Array :
+        
 
-    Returns:
-        Block type at position.
+    Returns
+    -------
+
+    
     """
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
@@ -101,12 +132,25 @@ def is_position_walkable(
 ) -> jax.Array:
     """Check if a position can be walked on.
 
-    Args:
-        state: Current environment state.
-        position: (x, y) coordinates.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    position :
+        (x, y) coordinates.
+    state : EnvState :
+        
+    position : jax.Array :
+        
+    state: EnvState :
+        
+    position: jax.Array :
+        
 
-    Returns:
-        Boolean: walkable.
+    Returns
+    -------
+
+    
     """
     block = get_block_at(state, position)
     is_solid = jnp.any(
@@ -134,13 +178,31 @@ def move_player(
 ) -> EnvState:
     """Move or face a player based on the action.
 
-    Args:
-        state: Current environment state.
-        action: Movement or facing action.
-        player_idx: Player index.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    action :
+        Movement or facing action.
+    player_idx :
+        Player index.
+    state : EnvState :
+        
+    action : int | jax.Array :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    action: int | jax.Array :
+        
+    player_idx: int | jax.Array :
+        
 
-    Returns:
-        Updated state.
+    Returns
+    -------
+
+    
     """
     pos = state.player_positions[player_idx]
     current_dir = state.player_directions[player_idx]
@@ -197,22 +259,40 @@ def mine_block(
     params: EnvParams,
 ) -> EnvState:
     """Mine the block on the tile in front of the player.
-
+    
     Targets the tile in the player's facing direction. NOOP when the
     target is out of bounds, not a mineable block, depleted, or when
     the player's inventory has no space for any of the resulting yield.
     Each successful action extracts up to ``params.player_mining_yield``
     units, capped by remaining tile resources and remaining inventory
     stack space.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
         player_idx: Player index.
-        params: Environment parameters (reads
-            :attr:`EnvParams.player_mining_yield`).
 
-    Returns:
-        Updated state. Pytree-equal to the input on NOOP.
+    Parameters
+    ----------
+    attr :
+        EnvParams
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -268,17 +348,35 @@ def deposit_to_adjacent(
     item_type: int | jax.Array,
 ) -> EnvState:
     """Deposit an item into the machine in front of the player.
-
+    
     For assemblers: deposits into asm_in slots.
     For buffer machines: deposits into buffer.
 
-    Args:
-        state: Current environment state.
-        player_idx: Player index.
-        item_type: ItemType to deposit.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    player_idx :
+        Player index.
+    item_type :
+        ItemType to deposit.
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    item_type : int | jax.Array :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
+    item_type: int | jax.Array :
+        
 
-    Returns:
-        Updated state.
+    Returns
+    -------
+
+    
     """
     item_type_arr = jnp.int32(item_type)
     tx, ty = get_tile_in_front(state, player_idx)
@@ -377,13 +475,29 @@ def withdraw_from_adjacent(
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Withdraw from the output slot of the machine in front of the player.
-
+    
     Each machine exposes exactly one output slot at a time
     (``ent_asm_out`` for combiners mid-cycle, otherwise ``ent_buf``).
     A single WITHDRAW action pulls **as many items as can fit** —
     the min of what's in the slot and the player's remaining
     inventory space. That keeps agents from burning 100 ticks
     emptying a 100-ore pallet one item at a time.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
@@ -482,20 +596,27 @@ def withdraw_from_adjacent(
 
 def run_labs(state: EnvState) -> EnvState:
     """Consume every science pack sitting in any SCIENCE_LAB input slot.
-
+    
     Greedy: whatever's in a lab's two input slots this tick is fully
     consumed. The per-type delta goes into ``science_consumed_step``
     for wrappers (e.g. :class:`ScienceTallyWrapper`) to integrate.
-
+    
     Vectorised over all entities: one mask, one gather, one
     :func:`jax.ops.segment_sum`, no scatter.
 
-    Args:
-        state: Current environment state.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    state : EnvState :
+        
+    state: EnvState :
+        
 
-    Returns:
-        State with lab input slots zeroed (where they held packs) and
-        ``science_consumed_step`` populated with the summed counts.
+    Returns
+    -------
+
+    
     """
     is_lab = (state.ent_type == Machine.SCIENCE_LAB) & (state.ent_y >= 0)
     # Shape (E, 2) after broadcasting.
@@ -524,15 +645,38 @@ def _handle_player_action(
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Handle a single player action.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters (supplies the recipe table).
-        action: Action to take.
-        player_idx: Index of the player.
 
-    Returns:
-        Updated environment state.
+    Parameters
+    ----------
+    action :
+        Action to take
+    player_idx :
+        Index of the player
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    action : int | jax.Array :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    action: int | jax.Array :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     # Pre-compute all derived action parameters (cheap indexing).
     # CRAFT dispatch: action -> output item (fixed) -> recipe row in the
@@ -605,15 +749,36 @@ def factoriax_step(
     params: EnvParams,
 ) -> EnvState:
     """Execute one step of the environment.
-
-    Args:
+    
+    Parameters
+    ----------
         rng: JAX random key (unused, kept for API compat).
         state: Current environment state.
         action: Action to take.
-        params: Environment parameters.
 
-    Returns:
-        Updated environment state.
+    Parameters
+    ----------
+    rng : jax.Array :
+        
+    state : EnvState :
+        
+    action : int | jax.Array :
+        
+    params : EnvParams :
+        
+    rng: jax.Array :
+        
+    state: EnvState :
+        
+    action: int | jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     player_idx = state.selected_player
     # Reset the per-step science-lab delta before the action runs. Any
@@ -632,12 +797,25 @@ def is_game_over(
     params: EnvParams,
 ) -> jax.Array:
     """Check if the episode has ended.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters.
 
-    Returns:
-        Boolean indicating game over.
+    Parameters
+    ----------
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     return jnp.asarray(state.timestep >= params.max_timesteps, dtype=jnp.bool_)

@@ -26,17 +26,30 @@ from factoriax.engine.tables import MINEABLE_BLOCKS
 def _proximity(state: EnvState, tile_mask: jax.Array) -> jax.Array:
     """Inverse Manhattan distance from the selected player to the nearest
     True tile in *tile_mask*.
-
+    
     Returns ``1 / (1 + d)`` where *d* is the Manhattan distance, giving
     a value in (0, 1] when at least one tile matches and a small value
     when no tile matches (distance clamped to map_h + map_w).
 
-    Args:
-        state: Current environment state.
-        tile_mask: Boolean array of shape ``(map_h, map_w)``.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    tile_mask :
+        Boolean array of shape ``(map_h, map_w)``.
+    state : EnvState :
+        
+    tile_mask : jax.Array :
+        
+    state: EnvState :
+        
+    tile_mask: jax.Array :
+        
 
-    Returns:
-        Scalar float32 proximity value.
+    Returns
+    -------
+
+    
     """
     pos = state.player_positions[state.selected_player]
     px, py = pos[0], pos[1]
@@ -55,25 +68,50 @@ def achievement_reward(
     weights: jax.Array = CORE_ACHIEVEMENT_WEIGHTS,
 ) -> jax.Array:
     """Sparse reward for newly unlocked achievements.
-
+    
     Compares ``achievements_unlocked`` between the two ``EnvState``
     instances and returns the weighted sum of newly satisfied slots.
     The ``weights`` vector controls the magnitude per slot — slots with
     zero weight contribute nothing. Achievements live on
     :class:`~factoriax.engine.state.EnvState` directly; the env's
     ``achievement_fn`` constructor argument latches them each step.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: EnvState immediately before the step.
         new_state: EnvState immediately after the step.
-        params: Environment parameters (unused; present for interface
-            uniformity).
-        weights: Per-slot reward magnitudes, shape
-            ``(MAX_ACHIEVEMENTS,)``. Defaults to the core game weights
-            (1.0 for each core tutorial milestone, 0.0 elsewhere).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    uniformity :
+        
+    weights :
+        Per
+    MAX_ACHIEVEMENTS :
+        Defaults to the core game weights
+    1 :
+        0 for each core tutorial milestone
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    weights : jax.Array :
+        (Default value = CORE_ACHIEVEMENT_WEIGHTS)
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+    weights: jax.Array :
+         (Default value = CORE_ACHIEVEMENT_WEIGHTS)
+
+    Returns
+    -------
+
+    
     """
     newly_unlocked = new_state.achievements_unlocked & ~prev_state.achievements_unlocked
     reward: jax.Array = jnp.sum(weights * newly_unlocked)
@@ -84,9 +122,9 @@ def mining_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward combining proximity to ore and a bonus for each ore mined.
-
+    
     Two components are summed:
-
+    
     - **Proximity**: ``0.05 / (1 + d)`` where ``d`` is the Manhattan distance
       from the selected player to the nearest ore tile (coal, iron, or copper).
       This is a small shaping signal (max 0.05) that guides the agent toward
@@ -94,17 +132,32 @@ def mining_reward(
     - **Mining bonus**: 20.0 per ore item extracted during this step, computed
       as the delta in ``items_mined`` between ``prev_state`` and ``new_state``
       summed over the three mineable item types.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")
         >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
@@ -146,19 +199,36 @@ def sparse_mining_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward of 1.0 for each ore item mined during this step.
-
+    
     Counts the total delta across coal, iron, and copper in ``items_mined``
     between the two states.  This signal is zero on every step where nothing
     is extracted, which makes it harder to shape behaviour but trivial to
     interpret: one unit of reward per one unit of ore.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     ore_items = jnp.array(
         [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
@@ -174,19 +244,36 @@ def sparse_pallet_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward of 1.0 for each pallet gained via crafting.
-
+    
     Detects crafting by requiring that the player's inventory gained
     pallets *and* lost iron in the same step. Moving pallets between
     inventory and machines changes pallet count without consuming iron,
     so place/pickup/deposit/withdraw exploits yield zero reward.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
 
     p = new_state.selected_player
@@ -209,20 +296,38 @@ def sparse_miner_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward of 1.0 for each miner gained via crafting.
-
+    
     Detects crafting by requiring that the player's inventory gained
     miners *and* lost both iron and copper in the same step. Moving
     miners between inventory and the map via place/pickup does not
     consume resources, so those actions yield zero reward.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface
-            uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    uniformity :
+        
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
 
     p = new_state.selected_player
@@ -248,19 +353,37 @@ def miner_output_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward for each ore item produced by placed miners.
-
+    
     Counts the total increase in buffer item counts across all
     miner-type entities. This gives a dense signal that fires every
     tick a miner extracts ore.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface
-            uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    uniformity :
+        
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     is_miner = (new_state.ent_type == Machine.MINER) & (new_state.ent_y >= 0)
     prev_output = jnp.where(is_miner, prev_state.ent_buf_count, 0)
@@ -274,20 +397,38 @@ def miner_throughput_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward for ore extracted from blocks by placed miners each tick.
-
+    
     Measures the decrease in ``block_resources`` on tiles that have a
     miner. This counts actual extraction from the ground rather than
     output slot changes, so it is unaffected by the agent withdrawing
     from or ignoring the output slot.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface
-            uniformity).
 
-    Returns:
-        Scalar float32 reward (non-negative).
+    Parameters
+    ----------
+    uniformity :
+        
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     is_miner = new_state.machine_types == Machine.MINER
     prev_res = prev_state.block_resources.astype(jnp.int32)
@@ -301,19 +442,37 @@ def pallet_filling_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward of 1.0 for each item deposited into a pallet machine.
-
+    
     Counts the total increase in buffer item counts across all
     pallet-type entities. This gives a dense signal for every
     successful deposit action rather than waiting for a full stack.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface
-            uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    uniformity :
+        
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     is_pallet = (new_state.ent_type == Machine.PALLET) & (new_state.ent_y >= 0)
     prev_counts = jnp.where(is_pallet, prev_state.ent_buf_count, 0)
@@ -327,19 +486,37 @@ def player_inventory_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward for each item gained in the selected player's inventory.
-
+    
     Counts the total increase in item counts across all inventory slots.
     Positive when items are added (withdraw, mine), zero or negative when
     items are consumed (craft, deposit, place).
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters (unused; present for interface
-            uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    uniformity :
+        
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     p = new_state.selected_player
     prev_total = jnp.sum(prev_state.player_inventory[p])
@@ -354,13 +531,43 @@ def player_inventory_reward(
 
 
 def _ore_proximity(state: EnvState) -> jax.Array:
-    """Proximity to the nearest mineable ore tile."""
+    """Proximity to the nearest mineable ore tile.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    
+    """
     is_ore = jnp.any(state.map[..., None] == MINEABLE_BLOCKS, axis=-1)
     return _proximity(state, is_ore)
 
 
 def _mining_delta(prev: EnvState, new: EnvState) -> jax.Array:
-    """Total ore items mined this step."""
+    """Total ore items mined this step.
+
+    Parameters
+    ----------
+    prev : EnvState :
+        
+    new : EnvState :
+        
+    prev: EnvState :
+        
+    new: EnvState :
+        
+
+    Returns
+    -------
+
+    
+    """
     ore = jnp.array(
         [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
     )
@@ -368,7 +575,24 @@ def _mining_delta(prev: EnvState, new: EnvState) -> jax.Array:
 
 
 def _pallet_filling_delta(prev: EnvState, new: EnvState) -> jax.Array:
-    """Total items deposited into pallets this step."""
+    """Total items deposited into pallets this step.
+
+    Parameters
+    ----------
+    prev : EnvState :
+        
+    new : EnvState :
+        
+    prev: EnvState :
+        
+    new: EnvState :
+        
+
+    Returns
+    -------
+
+    
+    """
     is_pallet = (new.ent_type == Machine.PALLET) & (new.ent_y >= 0)
     prev_c = jnp.sum(jnp.where(is_pallet, prev.ent_buf_count, 0))
     new_c = jnp.sum(jnp.where(is_pallet, new.ent_buf_count, 0))
@@ -376,7 +600,24 @@ def _pallet_filling_delta(prev: EnvState, new: EnvState) -> jax.Array:
 
 
 def _inventory_delta(prev: EnvState, new: EnvState) -> jax.Array:
-    """Net items gained in the selected player's inventory."""
+    """Net items gained in the selected player's inventory.
+
+    Parameters
+    ----------
+    prev : EnvState :
+        
+    new : EnvState :
+        
+    prev: EnvState :
+        
+    new: EnvState :
+        
+
+    Returns
+    -------
+
+    
+    """
     p = new.selected_player
     return (
         jnp.sum(new.player_inventory[p]) - jnp.sum(prev.player_inventory[p])
@@ -384,7 +625,24 @@ def _inventory_delta(prev: EnvState, new: EnvState) -> jax.Array:
 
 
 def _item_count(state: EnvState, item: int) -> jax.Array:
-    """Count of a specific item type in player 0's inventory."""
+    """Count of a specific item type in player 0's inventory.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    item : int :
+        
+    state: EnvState :
+        
+    item: int :
+        
+
+    Returns
+    -------
+
+    
+    """
     return state.player_inventory[0, item]
 
 
@@ -392,19 +650,36 @@ def dense_craft_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for crafting levels (craft_pallets, craft_miners).
-
+    
     Combines ore proximity (guides toward materials), mining delta
     (rewards collecting), and a large bonus per item crafted. Crafting
     is detected by checking that a placeable item count increased while
     raw materials decreased.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     proximity = _ore_proximity(new_state)
     mining = _mining_delta(prev_state, new_state)
@@ -430,17 +705,34 @@ def dense_fill_pallet_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for the fill_pallet level.
-
+    
     Combines ore proximity, pallet proximity, mining delta, and pallet
     filling delta.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     ore_prox = _ore_proximity(new_state)
     pallet_prox = _proximity(new_state, new_state.machine_types == Machine.PALLET)
@@ -454,16 +746,33 @@ def dense_deploy_reward(
 ) -> jax.Array:
     """Dense reward for deployment levels (deploy_miner, place_and_fuel,
     mining_factory).
-
+    
     Combines ore proximity, mining delta, and miner output delta.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     proximity = _ore_proximity(new_state)
     mining = _mining_delta(prev_state, new_state)
@@ -475,17 +784,34 @@ def dense_withdraw_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for the withdraw_ore level.
-
+    
     Proximity to the nearest miner that still has items in its output
     slot, plus a bonus per item withdrawn into inventory.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     has_output = (
         (new_state.ent_type == Machine.MINER)
@@ -507,16 +833,33 @@ def dense_deposit_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for the deposit_into_pallets level.
-
+    
     Proximity to nearest pallet plus pallet filling bonus.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     pallet_prox = _proximity(new_state, new_state.machine_types == Machine.PALLET)
     filling = _pallet_filling_delta(prev_state, new_state)
@@ -527,17 +870,34 @@ def dense_pickup_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for the pickup_machines level.
-
+    
     Proximity to nearest machine on the map plus bonus for picking up
     machines (detected by machine count decrease on map).
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     has_machine = new_state.machine_types != Machine.NONE
     proximity = _proximity(new_state, has_machine)
@@ -551,17 +911,34 @@ def dense_belt_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for the belt_line level.
-
+    
     Rewards belt placement and items reaching the destination pallet.
     No proximity component (gap tile not identifiable from state).
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     prev_belts = jnp.sum(prev_state.machine_types == Machine.CONVEYOR_BELT)
     new_belts = jnp.sum(new_state.machine_types == Machine.CONVEYOR_BELT)
@@ -574,17 +951,34 @@ def dense_assembler_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward for the assembler_production level.
-
+    
     Proximity to assembler, bonus for depositing inputs, and large
     bonus for science packs gained in inventory.
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-        params: Environment parameters.
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     asm_prox = _proximity(new_state, new_state.machine_types == Machine.ASSEMBLER)
     # Input deposited = total items in assembler entity buffers.

@@ -62,36 +62,21 @@ from factoriax.engine.tables import MINEABLE_BLOCKS
 @dataclasses.dataclass
 class Level:
     """Serializable description of an initial world state.
-
+    
     A Level captures only the static world geometry — block layout and
     optional pre-set resource amounts or machines.  Player placement is
     not part of the level; use :func:`build_state` with an
     :class:`~factoriax.engine.state.EnvParams` to materialise the full
     :class:`~factoriax.engine.state.EnvState`.
 
-    Attributes:
-        name: Human-readable identifier used in the level registry.
-        map_width: Number of tiles along the x-axis.
-        map_height: Number of tiles along the y-axis.
-        block_map: Integer block-type grid of shape ``(map_height, map_width)``.
-        block_resources: Per-tile resource amounts of shape
-            ``(map_height, map_width)``, or ``None`` to auto-fill: ore
-            tiles receive ``BLOCK_MAX_RESOURCES``, others receive 0.
-        machine_types: Per-tile machine-type grid of shape
-            ``(map_height, map_width)``, or ``None`` for an empty world.
-        player_inventory: Starting items for every player, as a list of
-            ``(ItemType, count)`` pairs.  Each pair fills one inventory
-            slot, applied in order.  ``None`` (default) means empty.
-        player_inventories: Per-player inventory overrides.  Maps player
-            index to a list of ``(ItemType, count)`` pairs.  Applied
-            after ``player_inventory``, so specific players can have
-            different loadouts.  ``None`` (default) means no overrides.
-        player_positions: Explicit spawn positions as a list of
-            ``(x, y)`` tuples, one per player.  ``None`` (default)
-            uses the automatic centre-of-map placement.
+    Parameters
+    ----------
 
-    Example:
-        >>> from factoriax import FactoriaXEnv, get_level
+    Returns
+    -------
+
+    
+    >>> from factoriax import FactoriaXEnv, get_level
         >>> env = FactoriaXEnv(level=get_level("15x15_resources"))
         >>> # ``env`` is bound to the registered Level for the lifetime
         >>> # of the env; ``factoriax.LEVELS`` lists every built-in.
@@ -114,7 +99,8 @@ class Level:
     def __post_init__(self) -> None:
         """Validate array shapes match declared dimensions.
 
-        Raises:
+        Raises
+        ------
             ValueError: If any array has an unexpected shape.
         """
         expected = (self.map_height, self.map_width)
@@ -143,18 +129,26 @@ class Level:
 
 class LevelBuilder:
     """Fluent builder for constructing :class:`Level` objects programmatically.
-
+    
     All mutating methods return ``self`` to support method chaining.  Call
     :meth:`build` to produce the final :class:`Level`.
-
+    
     Example::
-
+    
         level = (
             LevelBuilder(15, 15)
             .fill_rect(0, 0, 4, 4, BlockType.COAL)
             .fill_rect(11, 0, 4, 4, BlockType.COPPER)
             .build("my_level")
         )
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
+    
     """
 
     def __init__(
@@ -165,7 +159,8 @@ class LevelBuilder:
     ) -> None:
         """Initialise a blank canvas filled with *default_block*.
 
-        Args:
+        Parameters
+        ----------
             width: Map width in tiles.
             height: Map height in tiles.
             default_block: Block type to fill the canvas with.
@@ -191,22 +186,55 @@ class LevelBuilder:
         resources: int | None = None,
     ) -> LevelBuilder:
         """Fill a rectangular region with *block*, optionally overriding resources.
-
+        
         The rectangle is clipped to the map boundary so callers do not
         need to guard against out-of-bounds coordinates.
 
-        Args:
-            x: Left column (inclusive, 0-indexed).
-            y: Top row (inclusive, 0-indexed).
-            w: Width of the rectangle in tiles.
-            h: Height of the rectangle in tiles.
-            block: Block type to place.
-            resources: If given, set every tile in the region to this resource
-                count instead of the default (``BLOCK_MAX_RESOURCES`` for ore,
-                0 for non-ore).
+        Parameters
+        ----------
+        x :
+            Left column (inclusive, 0-indexed).
+        y :
+            Top row (inclusive, 0-indexed).
+        w :
+            Width of the rectangle in tiles.
+        h :
+            Height of the rectangle in tiles.
+        block :
+            Block type to place.
+        resources :
+            If given, set every tile in the region to this resource
+            count instead of the default (``BLOCK_MAX_RESOURCES`` for ore,
+            0 for non-ore).
+        x : int :
+            
+        y : int :
+            
+        w : int :
+            
+        h : int :
+            
+        block : BlockType :
+            
+        resources : int | None :
+            (Default value = None)
+        x: int :
+            
+        y: int :
+            
+        w: int :
+            
+        h: int :
+            
+        block: BlockType :
+            
+        resources: int | None :
+             (Default value = None)
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
+
+        
         """
         x0 = max(0, x)
         y0 = max(0, y)
@@ -221,21 +249,36 @@ class LevelBuilder:
 
     def set_resources(self, x: int, y: int, amount: int) -> LevelBuilder:
         """Override the resource amount at a single tile.
-
+        
         If no resource array has been set yet, one is created with the
         auto-fill defaults (ore tiles → ``BLOCK_MAX_RESOURCES``, others → 0)
         before applying the override.
 
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
-            amount: Resource amount to place.
+        Parameters
+        ----------
+        x :
+            Column (0-indexed).
+        y :
+            Row (0-indexed).
+        amount :
+            Resource amount to place.
+        x : int :
+            
+        y : int :
+            
+        amount : int :
+            
+        x: int :
+            
+        y: int :
+            
+        amount: int :
+            
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
 
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
+        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -255,17 +298,37 @@ class LevelBuilder:
     ) -> LevelBuilder:
         """Set the count of an item type in a machine's pouch inventory.
 
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
-            item_type: ``ItemType`` integer value (1-14).
-            count: Stack count.
+        Parameters
+        ----------
+        x :
+            Column (0-indexed).
+        y :
+            Row (0-indexed).
+        item_type :
+            ``ItemType`` integer value (1-14).
+        count :
+            Stack count.
+        x : int :
+            
+        y : int :
+            
+        item_type : int :
+            
+        count : int :
+            
+        x: int :
+            
+        y: int :
+            
+        item_type: int :
+            
+        count: int :
+            
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
 
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
+        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -280,16 +343,31 @@ class LevelBuilder:
     def set_machine_recipe(self, x: int, y: int, recipe_idx: int) -> LevelBuilder:
         """Set the selected assembler recipe for a machine tile.
 
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
-            recipe_idx: Assembler recipe index.
+        Parameters
+        ----------
+        x :
+            Column (0-indexed).
+        y :
+            Row (0-indexed).
+        recipe_idx :
+            Assembler recipe index.
+        x : int :
+            
+        y : int :
+            
+        recipe_idx : int :
+            
+        x: int :
+            
+        y: int :
+            
+        recipe_idx: int :
+            
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
 
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
+        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -311,18 +389,38 @@ class LevelBuilder:
     ) -> LevelBuilder:
         """Place a machine on a tile with an optional facing direction.
 
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
-            machine_type: ``Machine`` integer value.
-            direction: Facing direction as an ``Action`` integer value
-                (e.g. ``Direction.RIGHT``).  Defaults to 0 (no direction).
+        Parameters
+        ----------
+        x :
+            Column (0-indexed).
+        y :
+            Row (0-indexed).
+        machine_type :
+            ``Machine`` integer value.
+        direction :
+            Facing direction as an ``Action`` integer value
+            (e.g. ``Direction.RIGHT``).  Defaults to 0 (no direction).
+        x : int :
+            
+        y : int :
+            
+        machine_type : int :
+            
+        direction : int :
+            (Default value = 0)
+        x: int :
+            
+        y: int :
+            
+        machine_type: int :
+            
+        direction: int :
+             (Default value = 0)
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
 
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
+        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -344,19 +442,29 @@ class LevelBuilder:
 
     def set_player_position(self, x: int, y: int) -> LevelBuilder:
         """Set the spawn position for the first player.
-
+        
         For multi-player levels, call this method once per player in
         order.  Each call appends a position to the list.
 
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
+        Parameters
+        ----------
+        x :
+            Column (0-indexed).
+        y :
+            Row (0-indexed).
+        x : int :
+            
+        y : int :
+            
+        x: int :
+            
+        y: int :
+            
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
 
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
+        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -370,15 +478,25 @@ class LevelBuilder:
     def add_biter(self, x: int, y: int) -> LevelBuilder:
         """Add a biter spawn position.
 
-        Args:
-            x: Column (0-indexed).
-            y: Row (0-indexed).
+        Parameters
+        ----------
+        x :
+            Column (0-indexed).
+        y :
+            Row (0-indexed).
+        x : int :
+            
+        y : int :
+            
+        x: int :
+            
+        y: int :
+            
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
 
-        Raises:
-            IndexError: If ``(x, y)`` is outside the map.
+        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -392,11 +510,21 @@ class LevelBuilder:
     def set_player_inventory(self, items: list[tuple[int, int]]) -> LevelBuilder:
         """Set starting inventory for all players.
 
-        Args:
-            items: List of ``(ItemType, count)`` tuples.
+        Parameters
+        ----------
+        items :
+            List of ``(ItemType, count)`` tuples.
+        items : list[tuple[int :
+            
+        int]] :
+            
+        items: list[tuple[int :
+            
 
-        Returns:
-            ``self`` for chaining.
+        Returns
+        -------
+
+        
         """
         self._player_inventory = list(items)
         return self
@@ -404,11 +532,19 @@ class LevelBuilder:
     def build(self, name: str) -> Level:
         """Finalise and return the :class:`Level`.
 
-        Args:
-            name: Human-readable identifier for the level.
+        Parameters
+        ----------
+        name :
+            Human-readable identifier for the level.
+        name : str :
+            
+        name: str :
+            
 
-        Returns:
-            The constructed :class:`Level`.
+        Returns
+        -------
+
+        
         """
         return Level(
             name=name,
@@ -457,15 +593,23 @@ class LevelBuilder:
 
 def default_resources(block_map: np.ndarray) -> np.ndarray:
     """Build a resource array from a block map using natural defaults.
-
+    
     Ore tiles (COAL, IRON, COPPER) receive ``BLOCK_MAX_RESOURCES``; all
     other tiles receive 0.
 
-    Args:
-        block_map: Integer block-type grid of shape ``(H, W)``.
+    Parameters
+    ----------
+    block_map :
+        Integer block-type grid of shape ``(H, W)``.
+    block_map : np.ndarray :
+        
+    block_map: np.ndarray :
+        
 
-    Returns:
-        int32 resource array of the same shape.
+    Returns
+    -------
+
+    
     """
     mineable = np.isin(
         block_map, [int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)]
@@ -477,20 +621,30 @@ def _place_players(
     block_map: np.ndarray, num_players: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Place *num_players* players near the centre of the map on dirt tiles.
-
+    
     Players are spread horizontally around the centre column.  Each spawn
     tile is forced to DIRT so players never appear inside a wall or ore
     body (the block_map is not modified in place; a copy is returned).
 
-    Args:
-        block_map: Integer block-type grid of shape ``(H, W)``.
-        num_players: Number of players to place.
+    Parameters
+    ----------
+    block_map :
+        Integer block-type grid of shape ``(H, W)``.
+    num_players :
+        Number of players to place.
+    block_map : np.ndarray :
+        
+    num_players : int :
+        
+    block_map: np.ndarray :
+        
+    num_players: int :
+        
 
-    Returns:
-        Tuple ``(block_map_copy, player_positions)`` where
-        ``player_positions`` has shape ``(num_players, 2)`` and dtype
-        int32.  Column ``0`` is x (column index); column ``1`` is y (row
-        index).
+    Returns
+    -------
+
+    
     """
     h, w = block_map.shape
     block_map = block_map.copy()
@@ -513,24 +667,34 @@ def _place_players(
 
 def build_state(level: Level, params: EnvParams) -> EnvState:
     """Construct a JAX :class:`~factoriax.engine.state.EnvState` from a :class:`Level`.
-
+    
     Players are placed at the centre of the map, spread horizontally,
     each guaranteed to land on a DIRT tile.  All dynamic fields
     (inventory, craft progress, machine state) are zero-initialised.
-
-    Args:
+    
+    Parameters
+    ----------
         level: Level definition.  Its ``map_width`` and ``map_height``
             must match ``params.map_width`` and ``params.map_height``.
-        params: Environment parameters, including ``num_players``.
 
-    Returns:
+    Parameters
+    ----------
+    level : Level :
+        
+    params : EnvParams :
+        
+    level: Level :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+    type
         A fully initialised :class:`~factoriax.engine.state.EnvState`.
 
-    Raises:
-        ValueError: If the level dimensions do not match ``params``.
-
-    Example:
-        >>> import factoriax
+    
+    >>> import factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
         >>> _, params = factoriax.make("EasyRocket-v1")
         >>> params = params.replace(map_width=8, map_height=8, num_players=1)
@@ -699,19 +863,33 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
 
 def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
     """Assemble an initial :class:`EnvState` from a generated block map.
-
+    
     Places players near the centre (forcing their spawn tiles to DIRT),
     derives ore resources from the mineable mask, and zeroes machines,
     inventory, and progress. Shared by :func:`generate_state` and the
     per-scenario world generators so they agree on state assembly.
-
-    Args:
+    
+    Parameters
+    ----------
         world_map: Block-type grid of shape ``(map_height, map_width)``.
-        params: Environment parameters (map dimensions, player count,
-            ``base_resources``).
 
-    Returns:
-        Initial :class:`~factoriax.engine.state.EnvState`.
+    Parameters
+    ----------
+    base_resources :
+        
+    world_map : jax.Array :
+        
+    params : EnvParams :
+        
+    world_map: jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     center_x = params.map_width // 2
     center_y = params.map_height // 2
@@ -769,21 +947,32 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
 
 def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
     """Generate a procedural world state from a random key.
-
+    
     JAX-native and JIT-compatible.  Players spawn near the centre of the
     map; spawn tiles are forced to DIRT after random terrain generation.
-
-    Args:
+    
+    Parameters
+    ----------
         rng: JAX random key for reproducible generation.
-        params: Environment parameters including map dimensions and
-            terrain probabilities.
 
-    Returns:
-        Initial :class:`~factoriax.engine.state.EnvState` with a randomly
-        generated map and players near the centre.
+    Parameters
+    ----------
+    terrain :
+        probabilities
+    rng : jax.Array :
+        
+    params : EnvParams :
+        
+    rng: jax.Array :
+        
+    params: EnvParams :
+        
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> import factoriax
         >>> _, params = factoriax.make("EasyRocket-v1")
         >>> state = factoriax.generate_state(jax.random.PRNGKey(0), params)
@@ -797,18 +986,31 @@ def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
 
 def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
     """Generate a random terrain map using patch-based noise.
-
+    
     Delegates to :func:`_generate_terrain_patched`, the default
     algorithm that produces natural-looking resource clusters and
     water bodies.  See also :func:`_generate_terrain_uniform` for
     the original per-tile random approach.
-
-    Args:
+    
+    Parameters
+    ----------
         rng: JAX random key.
-        params: Environment parameters with terrain probabilities.
 
-    Returns:
-        2D int32 array of shape ``(map_height, map_width)``.
+    Parameters
+    ----------
+    rng : jax.Array :
+        
+    params : EnvParams :
+        
+    rng: jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     return _generate_terrain_patched(rng, params)
 
@@ -826,19 +1028,32 @@ def _generate_terrain_uniform(
     params: EnvParams,
 ) -> jax.Array:
     """Generate terrain with independent per-tile random rolls.
-
+    
     Every tile gets a uniform random value and is assigned a block
     type via cumulative probability thresholds.  Produces a scattered
     salt-and-pepper distribution with no spatial coherence.
-
+    
     Priority (highest to lowest): water, iron, copper, coal.
-
-    Args:
+    
+    Parameters
+    ----------
         rng: JAX random key.
-        params: Environment parameters with terrain probabilities.
 
-    Returns:
-        2D int32 array of shape ``(map_height, map_width)``.
+    Parameters
+    ----------
+    rng : jax.Array :
+        
+    params : EnvParams :
+        
+    rng: jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     random_values = random.uniform(
         rng,
@@ -898,19 +1113,42 @@ def _smooth_noise(
     scale: int = 4,
 ) -> jax.Array:
     """Generate a smooth 2D noise field via low-res sampling and upscale.
-
+    
     A small random grid is bilinearly upscaled to the full map size,
     producing natural-looking blobs suitable for patch-based terrain.
 
-    Args:
-        rng: JAX random key.
-        height: Output height in tiles.
-        width: Output width in tiles.
-        scale: Downscale factor.  Larger values produce bigger, smoother
-            patches.  The low-res grid is ``ceil(dim / scale) + 1``.
+    Parameters
+    ----------
+    rng :
+        JAX random key.
+    height :
+        Output height in tiles.
+    width :
+        Output width in tiles.
+    scale :
+        Downscale factor.  Larger values produce bigger, smoother
+        patches.  The low-res grid is ``ceil(dim / scale) + 1``.
+    rng : jax.Array :
+        
+    height : int :
+        
+    width : int :
+        
+    scale : int :
+        (Default value = 4)
+    rng: jax.Array :
+        
+    height: int :
+        
+    width: int :
+        
+    scale: int :
+         (Default value = 4)
 
-    Returns:
-        Float32 array of shape ``(height, width)`` in ``[0, 1)``.
+    Returns
+    -------
+
+    
     """
     lo_h = height // scale + 2
     lo_w = width // scale + 2
@@ -929,19 +1167,32 @@ def _generate_terrain_patched(
     params: EnvParams,
 ) -> jax.Array:
     """Generate terrain with smooth resource patches and water bodies.
-
+    
     Each terrain type gets its own smooth noise field so deposits form
     organic-looking clusters instead of single scattered tiles.  Water
     uses a coarser noise scale to produce larger lakes.
-
+    
     Priority (highest to lowest): water, iron, copper, coal.
-
-    Args:
+    
+    Parameters
+    ----------
         rng: JAX random key.
-        params: Environment parameters with terrain probabilities.
 
-    Returns:
-        2D int32 array of shape ``(map_height, map_width)``.
+    Parameters
+    ----------
+    rng : jax.Array :
+        
+    params : EnvParams :
+        
+    rng: jax.Array :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     h, w = params.map_height, params.map_width
     keys = random.split(rng, 6)
@@ -995,17 +1246,33 @@ def _generate_terrain_patched(
 
 def save_level(level: Level, path: Path) -> None:
     """Serialize a :class:`Level` to a JSON file using orjson.
-
+    
     Arrays are stored as nested integer lists.  The file is
     human-readable and can be edited in any text editor.
 
-    Args:
-        path: Destination file path.  Parent directories are created if
-            they do not exist.
-        level: Level to serialize.
+    Parameters
+    ----------
+    path :
+        Destination file path.  Parent directories are created if
+        they do not exist.
+    level :
+        Level to serialize.
+        Examples
+        --------
+    level : Level :
+        
+    path : Path :
+        
+    level: Level :
+        
+    path: Path :
+        
 
-    Example:
-        >>> from pathlib import Path
+    Returns
+    -------
+
+    
+    >>> from pathlib import Path
         >>> import tempfile, factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
         >>> with tempfile.TemporaryDirectory() as d:
@@ -1056,17 +1323,22 @@ def save_level(level: Level, path: Path) -> None:
 def load_level(path: Path) -> Level:
     """Deserialize a :class:`Level` from a JSON file written by :func:`save_level`.
 
-    Args:
-        path: Path to the JSON file.
+    Parameters
+    ----------
+    path :
+        Path to the JSON file.
+    path : Path :
+        
+    path: Path :
+        
 
-    Returns:
-        The reconstructed :class:`Level`.
+    Returns
+    -------
+    The reconstructed
+        class:`Level`.
 
-    Raises:
-        FileNotFoundError: If *path* does not exist.
-
-    Example:
-        >>> from pathlib import Path
+    
+    >>> from pathlib import Path
         >>> import tempfile, factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
         >>> with tempfile.TemporaryDirectory() as d:
@@ -1145,18 +1417,22 @@ LEVELS: dict[str, Level] = {
 def get_level(name: str) -> Level:
     """Look up a built-in level by name.
 
-    Args:
-        name: Level name as registered in :data:`LEVELS`.
+    Parameters
+    ----------
+    name :
+        Level name as registered in :data:`LEVELS`.
+    name : str :
+        
+    name: str :
+        
 
-    Returns:
-        The corresponding :class:`Level`.
+    Returns
+    -------
+    The corresponding
+        class:`Level`.
 
-    Raises:
-        KeyError: If *name* is not found.  The error message lists
-            available names.
-
-    Example:
-        >>> import factoriax
+    
+    >>> import factoriax
         >>> factoriax.get_level("15x15_resources").name
         '15x15_resources'
     """

@@ -15,17 +15,24 @@ _PIXEL_FONT_PREFERENCE = "terminus,fixedsys excelsior,courier new,monospace,cour
 @functools.lru_cache(maxsize=16)
 def get_pixel_font(size: int) -> pygame.font.Font:
     """Return a pixel-style monospace font at the requested size.
-
+    
     Results are cached so font objects are created at most once per unique
     size, regardless of how many frames are rendered. Self-initialises
     :mod:`pygame.font` on first call — callers don't need to know about
     pygame init order.
 
-    Args:
-        size: Desired font height in pixels.
+    Parameters
+    ----------
+    size :
+        Desired font height in pixels
+    size: int :
+        
 
-    Returns:
+    Returns
+    -------
+    type
         A ``pygame.font.Font`` instance.
+
     """
     if not pygame.font.get_init():
         pygame.font.init()
@@ -45,17 +52,34 @@ def render_text_rgba(
     color: tuple[int, int, int],
 ) -> np.ndarray:
     """Render text to an RGBA array with a fully transparent background.
-
+    
     Results are cached by ``(id(font), text, color)`` so that identical
     text drawn on consecutive frames is rasterised at most once.
 
-    Args:
-        text: String to render.
-        font: pygame Font to use.
-        color: RGB glyph colour.
+    Parameters
+    ----------
+    text :
+        String to render.
+    font :
+        pygame Font to use.
+    color :
+        RGB glyph colour.
+    text: str :
+        
+    font: pygame.font.Font :
+        
+    color: tuple[int :
+        
+    int :
+        
+    int] :
+        
 
-    Returns:
+    Returns
+    -------
+    
         RGBA uint8 array of shape ``(h, w, 4)``.
+
     """
     key = (id(font), text, color)
     cached = _text_rgba_cache.get(key)

@@ -14,14 +14,42 @@ def resolve_ax(
     ax: Axes | None,
     figsize: tuple[float, float],
 ) -> tuple[Figure, Axes]:
-    """Return (fig, ax), creating a new figure when ax is None."""
+    """
+
+    Parameters
+    ----------
+    ax: Axes | None :
+        
+    figsize: tuple[float :
+        
+    float] :
+        
+
+    Returns
+    -------
+    type
+        
+
+    """
     if ax is None:
         return plt.subplots(figsize=figsize)
     return ax.figure, ax  # type: ignore[return-value]
 
 
 def resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:
-    """Extract a (B, T) action array, selecting a player if multi-player."""
+    """Extract a (B, T) action array, selecting a player if multi-player.
+
+    Parameters
+    ----------
+    traj: Trajectory :
+        
+    player: int | None :
+        
+
+    Returns
+    -------
+
+    """
     if traj.is_multi_player:
         if player is None:
             player = 0

@@ -31,20 +31,20 @@ RewardFn = Callable[[EnvState, EnvState, EnvParams], jax.Array]
 
 class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """FactoriaX JAX-based grid environment.
-
+    
     Advances world state (terrain, machines, player inventories) and
     evaluates an optional achievement-condition function each step.
     Reward computation and other policy-shaping concerns still belong
     in gymnax wrappers that compose over this environment. Pixel
     rendering is provided by :class:`factoriax.engine.jax_renderer.JaxRenderer`;
     the env itself does not expose a render method.
-
+    
     The ``achievement_fn`` parameter is captured at construction time
     and folded into ``state.achievements_unlocked`` inside
     :meth:`step_env`. Different functions produce different JIT
     cache entries via ``static_argnames=("self",)`` on :meth:`step`.
     Pass ``None`` to skip the eval pass entirely (zero added cost).
-
+    
     Reset behavior is selected by ``reset_fn`` then ``level``: when
     ``reset_fn`` is supplied, :meth:`reset_env` calls it with the PRNG key
     (the scenario owns world generation); otherwise a ``None`` ``level``
@@ -54,16 +54,24 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     gymnax conformance — ``reset_env(key, params)`` is the only reset
     surface.
 
-    Args:
-        achievement_fn: Pure function ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``
-            evaluated each step. Returned True bits are OR-folded into
-            ``state.achievements_unlocked`` and latch for the rest of
-            the episode. ``None`` (default) skips evaluation.
-        level: Fixed :class:`Level` used by :meth:`reset_env`. ``None``
-            (default) means procedural generation from the PRNG key.
+    Parameters
+    ----------
+    achievement_fn :
+        Pure function ``(EnvState) -> bool[MAX_ACHIEVEMENTS]``
+        evaluated each step. Returned True bits are OR-folded into
+        ``state.achievements_unlocked`` and latch for the rest of
+        the episode. ``None`` (default) skips evaluation.
+    level :
+        Fixed :class:`Level` used by :meth:`reset_env`. ``None``
+        (default) means procedural generation from the PRNG key.
+        Examples
+        --------
 
-    Example:
-        >>> import jax
+    Returns
+    -------
+
+    
+    >>> import jax
         >>> from factoriax import FactoriaXEnv
         >>> env = FactoriaXEnv()
         >>> params = env.default_params
@@ -84,7 +92,8 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     ) -> None:
         """Initialize the environment.
 
-        Args:
+        Parameters
+        ----------
             achievement_fn: Optional achievement condition function. Convenience
                 for ``step_hooks=(achievement_hook(achievement_fn),)``; when both
                 are given the achievement fold runs after the explicit hooks.
@@ -124,12 +133,7 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     @property
     def default_params(self) -> EnvParams:
-        """Return default environment parameters.
-
-        When the env is bound to a :class:`Level`, the level's
-        ``map_width`` and ``map_height`` are propagated into the returned
-        params so callers don't need a manual ``replace``.
-        """
+        """ """
         if self._level is None:
             return EnvParams()
         return EnvParams(
@@ -146,24 +150,45 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         params: EnvParams | None = None,
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
         """Step the environment without auto-reset.
-
+        
         Overrides the gymnax base ``step()`` which unconditionally
         calls ``reset_env`` every tick for auto-reset. That design
         runs full procedural terrain generation on every step even
         when the episode is not done, roughly tripling the per-step
         cost. This override simply calls ``step_env`` directly.
-
+        
         Use :class:`~factoriax.engine.envs.auto_reset_wrapper.AutoResetWrapper`
         if you need auto-reset for ``lax.scan`` training loops.
-
-        Args:
+        
+        Parameters
+        ----------
             key: JAX random key.
             state: Current environment state.
             action: Action to take.
-            params: Environment parameters. Uses default when None.
 
-        Returns:
-            Tuple of (observation, new_state, reward, done, info).
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        state : EnvState :
+            
+        action : int | jax.Array :
+            
+        params : EnvParams | None :
+            (Default value = None)
+        key: jax.Array :
+            
+        state: EnvState :
+            
+        action: int | jax.Array :
+            
+        params: EnvParams | None :
+             (Default value = None)
+
+        Returns
+        -------
+
+        
         """
         if params is None:
             params = self.default_params
@@ -177,22 +202,43 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         params: EnvParams,
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
         """Execute one environment step.
-
+        
         Runs game mechanics, then evaluates the optional achievement
         condition function and OR-folds the result into
         ``state.achievements_unlocked``. The eval pass is skipped
         entirely when no ``achievement_fn`` was provided at
         construction (the ``is None`` check is resolved at JIT trace
         time, so there is no per-step branch cost in that path).
-
-        Args:
+        
+        Parameters
+        ----------
             key: JAX random key.
             state: Current environment state.
             action: Action to take.
-            params: Environment parameters.
 
-        Returns:
-            Tuple of (observation, new_state, reward, done, info).
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        state : EnvState :
+            
+        action : int | jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        state: EnvState :
+            
+        action: int | jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
         """
         action_arr = jnp.int32(action)
         new_state = factoriax_step(key, state, action_arr, params)
@@ -212,19 +258,32 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, EnvState]:
         """Reset the environment to an initial state.
-
+        
         Dispatches on the env's bound ``level``: when ``None``,
         procedurally generates a world from the PRNG key; when a
         :class:`Level` is bound, materializes that level via
         :func:`~factoriax.engine.levels.build_state` (the key is unused for
         layout).
-
-        Args:
+        
+        Parameters
+        ----------
             key: JAX random key for world generation.
-            params: Environment parameters.
 
-        Returns:
-            Tuple of (initial_observation, initial_state).
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
         """
         if self._reset_fn is not None:
             state = self._reset_fn(key, params)
@@ -236,22 +295,82 @@ class FactoriaXEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return obs, state
 
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Observation for the selected player via the configured variant."""
+        """Observation for the selected player via the configured variant.
+
+        Parameters
+        ----------
+        state : EnvState :
+            
+        params : EnvParams :
+            
+        state: EnvState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         fn = OBSERVATIONS[self.obs]
         if self._obs_is_local:
             return fn(state, params, state.selected_player, radius=self.obs_radius)
         return fn(state, params, state.selected_player)
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Whether the episode has ended."""
+        """Whether the episode has ended.
+
+        Parameters
+        ----------
+        state : EnvState :
+            
+        params : EnvParams :
+            
+        state: EnvState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return is_game_over(state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Discrete action space over all actions."""
+        """Discrete action space over all actions.
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return spaces.Discrete(NUM_ACTIONS)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Box observation space sized for the configured obs variant."""
+        """Box observation space sized for the configured obs variant.
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         if self._obs_is_local:
             side = 2 * self.obs_radius + 1
             tiles = side * side

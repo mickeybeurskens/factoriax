@@ -23,13 +23,31 @@ def count_item_in_inventory(
 ) -> jax.Array:
     """Count how many of an item a player has.
 
-    Args:
-        state: Current environment state.
-        player_idx: Index of the player.
-        item_type: Item type to count.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    player_idx :
+        Index of the player.
+    item_type :
+        Item type to count.
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    item_type : int | jax.Array :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
+    item_type: int | jax.Array :
+        
 
-    Returns:
-        Item count.
+    Returns
+    -------
+
+    
     """
     return state.player_inventory[player_idx, item_type]
 
@@ -41,15 +59,38 @@ def can_afford_recipe(
     recipe_idx: int | jax.Array,
 ) -> jax.Array:
     """Check if a player can afford to craft a recipe.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters (supplies the recipe table).
-        player_idx: Index of the player.
-        recipe_idx: Index of the recipe.
 
-    Returns:
-        Boolean indicating if player has all required materials.
+    Parameters
+    ----------
+    player_idx :
+        Index of the player
+    recipe_idx :
+        Index of the recipe
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    recipe_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+    recipe_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     table = params.recipe_table
     input_items = table.input_items[recipe_idx]
@@ -73,18 +114,41 @@ def craft_recipe(
     recipe_idx: int | jax.Array,
 ) -> EnvState:
     """Instantly craft a recipe for a player.
-
+    
     Checks affordability, consumes inputs, produces output. Does nothing
     if the player can't afford it or has no space for the output.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters (supplies the recipe table).
-        player_idx: Index of the player.
-        recipe_idx: Index of the recipe to craft.
 
-    Returns:
-        Updated state with recipe crafted (or unchanged).
+    Parameters
+    ----------
+    player_idx :
+        Index of the player
+    recipe_idx :
+        Index of the recipe to craft
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    recipe_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+    recipe_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     table = params.recipe_table
     # ``recipe_idx`` is -1 when the active table has no recipe for the

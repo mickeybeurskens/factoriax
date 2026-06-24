@@ -59,11 +59,28 @@ _ITEM_NAMES: dict[int, str] = {
 def _blit_alpha(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     """Alpha-composite *src* onto *dst* with boundary clipping.
 
-    Args:
-        dst: Destination RGBA array (mutated in place).
-        src: Source RGBA array.
-        y: Top row in destination.
-        x: Left column in destination.
+    Parameters
+    ----------
+    dst :
+        Destination RGBA array (mutated in place).
+    src :
+        Source RGBA array.
+    y :
+        Top row in destination.
+    x :
+        Left column in destination.
+    dst: np.ndarray :
+        
+    src: np.ndarray :
+        
+    y: int :
+        
+    x: int :
+        
+
+    Returns
+    -------
+
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -97,10 +114,24 @@ def _draw_player_header(
 ) -> None:
     """Draw a player inventory header with colored dot and title text.
 
-    Args:
-        panel: Destination RGBA panel (mutated in place).
-        player_idx: Player index (determines color).
-        font: Font used for the header text.
+    Parameters
+    ----------
+    panel :
+        Destination RGBA panel (mutated in place).
+    player_idx :
+        Player index (determines color).
+    font :
+        Font used for the header text.
+    panel: np.ndarray :
+        
+    player_idx: int :
+        
+    font: pygame.font.Font :
+        
+
+    Returns
+    -------
+
     """
     color_idx = player_idx % len(PLAYER_COLORS)
     body_rgb = PLAYER_COLORS[color_idx][0]
@@ -135,12 +166,32 @@ def _draw_machine_header(
 ) -> None:
     """Draw a machine inventory header with type name and coordinates.
 
-    Args:
-        panel: Destination RGBA panel (mutated in place).
-        state: Editor state (for machine type lookup).
-        tx: Tile x coordinate.
-        ty: Tile y coordinate.
-        font: Font used for the header text.
+    Parameters
+    ----------
+    panel :
+        Destination RGBA panel (mutated in place).
+    state :
+        Editor state (for machine type lookup).
+    tx :
+        Tile x coordinate.
+    ty :
+        Tile y coordinate.
+    font :
+        Font used for the header text.
+    panel: np.ndarray :
+        
+    state: EditorState :
+        
+    tx: int :
+        
+    ty: int :
+        
+    font: pygame.font.Font :
+        
+
+    Returns
+    -------
+
     """
     mt = int(state.machine_types[ty, tx])
     name = MACHINE_TYPE_NAMES.get(mt, "Unknown")
@@ -163,21 +214,56 @@ def _draw_slot(
     small_font: pygame.font.Font,
 ) -> None:
     """Render a single inventory slot cell onto the panel.
-
+    
     Draws the slot background, optional role badge, item icon, count
     label, and item name (or "(empty)" placeholder).
 
-    Args:
-        panel: Destination RGBA panel (mutated in place).
-        sx: Left edge of the slot cell.
-        sy: Top edge of the slot cell.
-        sw: Width of the slot cell.
-        sh: Height of the slot cell.
-        item_type: ItemType integer for this slot.
-        count: Stack count.
-        focused: Whether this slot is currently focused.
-        role: SlotRole integer for machine slots, or None for players.
-        small_font: Font for count and name text.
+    Parameters
+    ----------
+    panel :
+        Destination RGBA panel (mutated in place).
+    sx :
+        Left edge of the slot cell.
+    sy :
+        Top edge of the slot cell.
+    sw :
+        Width of the slot cell.
+    sh :
+        Height of the slot cell.
+    item_type :
+        ItemType integer for this slot.
+    count :
+        Stack count.
+    focused :
+        Whether this slot is currently focused.
+    role :
+        SlotRole integer for machine slots, or None for players.
+    small_font :
+        Font for count and name text.
+    panel: np.ndarray :
+        
+    sx: int :
+        
+    sy: int :
+        
+    sw: int :
+        
+    sh: int :
+        
+    item_type: int :
+        
+    count: int :
+        
+    focused: bool :
+        
+    role: int | None :
+        
+    small_font: pygame.font.Font :
+        
+
+    Returns
+    -------
+
     """
     bg = _FOCUSED_SLOT_BG if focused else _SLOT_BG
     panel[sy : sy + sh, sx : sx + sw] = bg
@@ -254,22 +340,40 @@ def render_inventory_panel(
     panel_h: int,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the right-side inventory panel for the active target.
-
+    
     Draws a header identifying the target (player or machine), followed
     by a grid of inventory slots. Each slot shows its item icon, stack
     count, name, and (for machines) a role badge.
 
-    Args:
-        state: Current editor state.
-        target: ``("player", player_idx, 0)`` or
-            ``("machine", tile_x, tile_y)``.
-        focused_slot: Slot index that should be highlighted, or -1.
-        panel_w: Desired panel width in pixels.
-        panel_h: Desired panel height in pixels.
+    Parameters
+    ----------
+    state :
+        Current editor state.
+    target :
+        ``("player", player_idx, 0)`` or
+        ``("machine", tile_x, tile_y)``.
+    focused_slot :
+        Slot index that should be highlighted, or -1.
+    panel_w :
+        Desired panel width in pixels.
+    panel_h :
+        Desired panel height in pixels.
+    state: EditorState :
+        
+    target: InvTarget :
+        
+    focused_slot: int :
+        
+    panel_w: int :
+        
+    panel_h: int :
+        
 
-    Returns:
-        Tuple of (RGBA image of shape ``(panel_h, panel_w, 4)``,
-        list of :class:`ClickRegion` for slot hit-testing).
+    Returns
+    -------
+    list of
+        class:`ClickRegion` for slot hit-testing).
+
     """
     panel = np.zeros((panel_h, panel_w, 4), dtype=np.uint8)
     panel[:] = _PANEL_BG

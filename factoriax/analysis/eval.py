@@ -24,20 +24,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class EvalRollout:
-    """Collected artifacts from a single deterministic eval episode.
-
-    Attributes:
-        frames: Rendered RGB frames, length ``T + 1`` (includes the
-            pre-step state so the video starts from the initial
-            state). ``None`` when the producer streamed frames to disk
-            instead of buffering them in memory.
-        actions: Actions taken, shape ``(T,)`` int32.
-        env_states: Inner ``EnvState`` at each step, length ``T + 1``.
-            Consumed by ``factoriax.analysis.states_to_trajectory``.
-        ach_per_step: Per-step achievement masks, shape
-            ``(T + 1, MAX_ACHIEVEMENTS)`` bool. ``ach_per_step[t]`` is
-            the latched mask after step ``t-1`` (row 0 = all False).
-    """
+    """Collected artifacts from a single deterministic eval episode."""
 
     frames: list[np.ndarray] | None
     actions: np.ndarray
@@ -58,23 +45,40 @@ def plot_item_counts(
     title: str = "Item counts over time",
 ) -> Any:
     """Line plot of player item counts over time.
-
+    
     Draws one line per :class:`ItemType` that exceeds zero at some
     point in the episode. The dense ``player_inventory`` field on the
     trajectory (shape ``(1, T+1, P, N)``) is already per-item, so no
     slot-to-item aggregation is needed.
 
-    Args:
-        traj: Trajectory pytree from
-            :func:`factoriax.analysis.trajectory.states_to_trajectory`.
-        out_path: PNG destination.
-        title: Figure title.
+    Parameters
+    ----------
+    traj :
+        Trajectory pytree from
+        :func:`factoriax.analysis.trajectory.states_to_trajectory`.
+    out_path :
+        PNG destination.
+    title :
+        Figure title.
+    traj: Any :
+        
+    out_path: Any :
+        
+    * :
+        
+    title: str :
+         (Default value = "Item counts over time")
 
-    Returns:
+    Returns
+    -------
+    
         ``out_path`` as written.
 
-    Raises:
-        ValueError: If the trajectory has no ``player_inventory``.
+    Raises
+    ------
+    ValueError
+        If the trajectory has no ``player_inventory``.
+
     """
     import matplotlib.pyplot as plt  # noqa: PLC0415
 
@@ -112,18 +116,33 @@ def plot_action_counts(
     title: str = "Action counts",
 ) -> Any:
     """Bar chart of per-action counts over a single eval episode.
-
+    
     Single-episode action distribution over time is noisy, so this
     helper plots a simple counts view. A moving-average distribution
     is a better fit for multi-episode analyses.
 
-    Args:
-        actions: 1-D int32 array of action indices.
-        out_path: PNG destination.
-        title: Figure title.
+    Parameters
+    ----------
+    actions :
+        1-D int32 array of action indices.
+    out_path :
+        PNG destination.
+    title :
+        Figure title.
+    actions: np.ndarray :
+        
+    out_path: Any :
+        
+    * :
+        
+    title: str :
+         (Default value = "Action counts")
 
-    Returns:
+    Returns
+    -------
+    
         ``out_path`` as written.
+
     """
     import matplotlib.pyplot as plt  # noqa: PLC0415
 
@@ -156,19 +175,42 @@ def generate_eval_plots(
 ) -> dict[str, Any]:
     """Render inventory, action-count, and achievement-timing plots.
 
-    Args:
-        rollout: Recorded episode artifacts.
-        out_dir: Destination directory; created if missing.
-        achievement_labels: Per-achievement display names; length
-            equals ``num_achievements``.
-        num_achievements: How many leading slots of
-            ``rollout.ach_per_step`` are real achievements (the
-            trailing slots are padding from ``MAX_ACHIEVEMENTS``).
-        title_prefix: Prepended to each figure title.
+    Parameters
+    ----------
+    rollout :
+        Recorded episode artifacts.
+    out_dir :
+        Destination directory; created if missing.
+    achievement_labels :
+        Per-achievement display names; length
+        equals ``num_achievements``.
+    num_achievements :
+        How many leading slots of
+        ``rollout.ach_per_step`` are real achievements (the
+        trailing slots are padding from ``MAX_ACHIEVEMENTS``).
+    title_prefix :
+        Prepended to each figure title.
+    rollout: EvalRollout :
+        
+    out_dir: Any :
+        
+    * :
+        
+    achievement_labels: list[str] :
+        
+    num_achievements: int :
+        
+    title_prefix: str :
+         (Default value = "Final rollout")
 
-    Returns:
-        Mapping ``{"items": path, "actions": path, "achievements": path}``.
+    Returns
+    -------
+    Mapping ``{"items"
+        path, "actions": path, "achievements": path}``.
+    Mapping ``{"items"
+        path, "actions": path, "achievements": path}``.
         Keys are omitted when their plot fails to generate.
+
     """
     import matplotlib  # noqa: PLC0415
 

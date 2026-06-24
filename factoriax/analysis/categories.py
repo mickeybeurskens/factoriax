@@ -178,17 +178,30 @@ def shade_palette(
     n: int,
 ) -> list[str]:
     """Generate ``n`` shades of a base color from dark to light.
-
+    
     Interpolates lightness between 60% and 130% of the base RGB,
     clamped to [0, 1]. With one member the base color is returned
     unchanged.
 
-    Args:
-        base_hex: Base color as a hex string (e.g. ``"#2ca02c"``).
-        n: Number of shades to produce.
+    Parameters
+    ----------
+    base_hex :
+        Base color as a hex string (e.g. ``"#2ca02c"``).
+    n :
+        Number of shades to produce.
+    base_hex : str :
+        
+    n : int :
+        
+    base_hex: str :
+        
+    n: int :
+        
 
-    Returns:
-        List of hex color strings.
+    Returns
+    -------
+
+    
     """
     if n <= 0:
         return []
@@ -200,19 +213,7 @@ def shade_palette(
 
 
 def item_palette() -> dict[str, str]:
-    """Return ``{ItemType.name: hex_color}`` with one colour per category.
-
-    Every item in a group shares its category's base colour. Items
-    within a category remain distinguishable by name; the colour
-    encodes category membership only. Items not covered by
-    :data:`ITEM_GROUPS` are absent; callers that may encounter
-    ungrouped items should provide a fallback.
-
-    Example:
-        >>> palette = item_palette()
-        >>> palette["IRON_ORE"] == palette["COAL"]
-        True
-    """
+    """ """
     palette: dict[str, str] = {}
     for _name, (base_hex, members) in ITEM_GROUPS.items():
         for item in members:
@@ -221,12 +222,12 @@ def item_palette() -> dict[str, str]:
 
 
 def category_palette() -> dict[str, str]:
-    """Return ``{category_name: hex_color}`` for legend rendering."""
+    """ """
     return {name: base_hex for name, (base_hex, _) in ITEM_GROUPS.items()}
 
 
 def item_to_category() -> dict[str, str]:
-    """Return ``{ItemType.name: category_name}`` for category lookup by item."""
+    """ """
     mapping: dict[str, str] = {}
     for name, (_, members) in ITEM_GROUPS.items():
         for item in members:

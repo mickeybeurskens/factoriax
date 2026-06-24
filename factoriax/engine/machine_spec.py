@@ -20,19 +20,7 @@ from factoriax.engine.constants import Machine, SlotRole
 
 @dataclass(frozen=True)
 class MachineSpec:
-    """Complete definition of one machine type.
-
-    Attributes:
-        machine_type: The ``Machine`` this record defines.
-        slots: Role of each logical inventory slot, in order. The length
-            is the machine's slot count and the editor displays exactly
-            these slots.
-        buffer_stack: Per-machine buffer capacity (items per buffer slot)
-            the engine enforces. Applies even to slot-less machines whose
-            ``ent_buf`` carries items in transit (e.g. ARM).
-        max_types: Distinct item types the buffer may hold at once.
-        max_health: Maximum health for this machine type.
-    """
+    """Complete definition of one machine type."""
 
     machine_type: Machine
     slots: tuple[SlotRole, ...]
@@ -92,13 +80,25 @@ MACHINE_SPECS: tuple[MachineSpec, ...] = (
 def _validate(specs: tuple[MachineSpec, ...]) -> None:
     """Validate the spec table at import time.
 
-    Args:
-        specs: The full machine spec table.
+    Parameters
+    ----------
+    specs :
+        The full machine spec table.
+    specs: tuple[MachineSpec :
+        
+    ...] :
+        
 
-    Raises:
-        ValueError: If the table does not hold exactly one record per
-            ``Machine`` in value order, or a record has a negative
-            capacity.
+    Returns
+    -------
+
+    Raises
+    ------
+    ValueError
+        If the table does not hold exactly one record per
+        ``Machine`` in value order, or a record has a negative
+        capacity.
+
     """
     if len(specs) != len(Machine):
         raise ValueError(

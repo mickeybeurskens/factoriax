@@ -12,13 +12,7 @@ import pygame
 
 
 class ScaledCanvas:
-    """A fixed-size pygame surface that integer-scales to the window.
-
-    Attributes:
-        surface: The fixed-resolution drawing target.
-        width: Canvas width in pixels (constant after creation).
-        height: Canvas height in pixels (constant after creation).
-    """
+    """A fixed-size pygame surface that integer-scales to the window."""
 
     def __init__(
         self,
@@ -28,7 +22,8 @@ class ScaledCanvas:
     ) -> None:
         """Create a canvas and compute the initial scale for the window.
 
-        Args:
+        Parameters
+        ----------
             base_size: Logical base resolution (e.g. 1024).
             ui_scale: Theme scale factor (1, 2, or 3).
             window: The pygame display surface.
@@ -59,9 +54,25 @@ class ScaledCanvas:
     def handle_resize(self, window_w: int, window_h: int) -> None:
         """Recompute scale and offsets after a window resize event.
 
-        Args:
-            window_w: New window width in pixels.
-            window_h: New window height in pixels.
+        Parameters
+        ----------
+        window_w :
+            New window width in pixels.
+        window_h :
+            New window height in pixels.
+        window_w : int :
+            
+        window_h : int :
+            
+        window_w: int :
+            
+        window_h: int :
+            
+
+        Returns
+        -------
+
+        
         """
         self._scale = max(
             1,
@@ -73,12 +84,25 @@ class ScaledCanvas:
     def to_canvas(self, window_x: int, window_y: int) -> tuple[int, int]:
         """Transform window pixel coordinates to canvas coordinates.
 
-        Args:
-            window_x: X position in window pixels.
-            window_y: Y position in window pixels.
+        Parameters
+        ----------
+        window_x :
+            X position in window pixels.
+        window_y :
+            Y position in window pixels.
+        window_x : int :
+            
+        window_y : int :
+            
+        window_x: int :
+            
+        window_y: int :
+            
 
-        Returns:
-            ``(canvas_x, canvas_y)`` in base resolution pixels.
+        Returns
+        -------
+
+        
         """
         return (
             (window_x - self._ox) // self._scale,
@@ -87,12 +111,23 @@ class ScaledCanvas:
 
     def present(self, screen: pygame.Surface) -> None:
         """Scale the canvas and blit it centered onto the display surface.
-
+        
         Fills the screen with black for letterboxing, integer-scales the
         canvas, and blits it centered.
 
-        Args:
-            screen: The pygame display surface.
+        Parameters
+        ----------
+        screen :
+            The pygame display surface.
+        screen : pygame.Surface :
+            
+        screen: pygame.Surface :
+            
+
+        Returns
+        -------
+
+        
         """
         scaled = pygame.transform.scale(
             self._surface,

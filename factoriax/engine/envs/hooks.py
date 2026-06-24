@@ -25,19 +25,41 @@ StepHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
 
 def achievement_hook(condition_fn: AchievementFn) -> StepHook:
     """Return a step hook that OR-folds ``condition_fn`` into the latched mask.
-
+    
     The returned transform evaluates ``condition_fn`` on the post-step state and
     folds the result into ``state.achievements_unlocked`` with ``|``, so unlocked
     bits latch for the rest of the episode.
 
-    Args:
-        condition_fn: Pure ``(state) -> bool[MAX_ACHIEVEMENTS]`` condition.
+    Parameters
+    ----------
+    condition_fn :
+        Pure
+    condition_fn: AchievementFn :
+        
 
-    Returns:
+    Returns
+    -------
+    type
         A :data:`StepHook` that latches the evaluated bits.
+
     """
 
     def hook(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
+        """
+
+        Parameters
+        ----------
+        key: jax.Array :
+            
+        state: EnvState :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        """
         del key, params
         return state.replace(
             achievements_unlocked=state.achievements_unlocked | condition_fn(state),

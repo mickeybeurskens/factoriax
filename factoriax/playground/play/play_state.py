@@ -17,33 +17,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class PlayState:
-    """UI-only state managed by the play loop.
-
-    Attributes:
-        inventory_open: Whether the inventory/crafting menu is visible.
-        achievement_open: Whether the achievement menu is visible.
-        pause_open: Whether the pause menu is visible.
-        help_open: Whether the help overlay is visible.
-        machine_open: Whether the machine inspection menu is visible.
-        welcome_open: Whether the one-time welcome screen is showing.
-        victory_open: Whether the victory screen is showing.
-        victory_shown: Whether the victory screen has been shown this session.
-        achievement_scroll: Vertical pixel scroll offset in the achievement list.
-        achievement_selection: Currently highlighted achievement row.
-        pause_selection: Currently highlighted pause option (0-2).
-        menu_focus: Which side of the inventory menu has focus.
-        machine_tx: X tile coordinate of the inspected machine.
-        machine_ty: Y tile coordinate of the inspected machine.
-        machine_panel_active: Whether the machine panel (vs player panel) has focus.
-        held_item: Item type currently held for swapping, or None.
-        selected_item: Currently selected item type (machine for building).
-        focused_machine_item: Currently focused machine item type.
-        record_enabled: Whether trajectory recording is active.
-        recorded_states: Captured EnvState snapshots for trajectory.
-        recorded_actions: Captured action integers per step.
-        recorded_rewards: Captured reward floats per step.
-        frame_tick: Frame counter for animation timing.
-    """
+    """UI-only state managed by the play loop."""
 
     # Menu visibility
     inventory_open: bool = False

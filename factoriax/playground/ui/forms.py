@@ -57,12 +57,32 @@ def draw_button(
 ) -> None:
     """Draw a button with gold border, optional hover highlight.
 
-    Args:
-        surface: Destination surface.
-        rect: Button bounding rectangle.
-        text: Button label.
-        font: Font for the label.
-        hovered: Whether the mouse is over the button.
+    Parameters
+    ----------
+    surface :
+        Destination surface.
+    rect :
+        Button bounding rectangle.
+    text :
+        Button label.
+    font :
+        Font for the label.
+    hovered :
+        Whether the mouse is over the button.
+    surface: pygame.Surface :
+        
+    rect: pygame.Rect :
+        
+    text: str :
+        
+    font: pygame.font.Font :
+        
+    hovered: bool :
+        
+
+    Returns
+    -------
+
     """
     bg = BTN_HOVER if hovered else BTN_BG
     pygame.draw.rect(surface, bg, rect)
@@ -83,16 +103,38 @@ def draw_checkbox(
 ) -> pygame.Rect:
     """Draw a checkbox square and return its bounding rect.
 
-    Args:
-        surface: Destination surface.
-        x: Left edge in pixels.
-        y: Top edge in pixels.
-        size: Side length of the checkbox in pixels.
-        checked: Whether the box is checked.
-        hovered: Whether the mouse is over the checkbox area.
+    Parameters
+    ----------
+    surface :
+        Destination surface.
+    x :
+        Left edge in pixels.
+    y :
+        Top edge in pixels.
+    size :
+        Side length of the checkbox in pixels.
+    checked :
+        Whether the box is checked.
+    hovered :
+        Whether the mouse is over the checkbox area.
+    surface: pygame.Surface :
+        
+    x: int :
+        
+    y: int :
+        
+    size: int :
+        
+    checked: bool :
+        
+    hovered: bool :
+        
 
-    Returns:
+    Returns
+    -------
+    
         The bounding rectangle of the checkbox.
+
     """
     rect = pygame.Rect(x, y, size, size)
     bg = BTN_HOVER if hovered else INPUT_BG
@@ -116,12 +158,32 @@ def draw_scrollbar(
 ) -> None:
     """Draw a vertical scrollbar on the right edge when content overflows.
 
-    Args:
-        surface: Target surface.
-        scroll_offset: Current scroll position.
-        max_scroll: Maximum scroll offset.
-        content_h: Total content height.
-        top_bar_h: Height of the top bar (scrollbar starts below it).
+    Parameters
+    ----------
+    surface :
+        Target surface.
+    scroll_offset :
+        Current scroll position.
+    max_scroll :
+        Maximum scroll offset.
+    content_h :
+        Total content height.
+    top_bar_h :
+        Height of the top bar (scrollbar starts below it).
+    surface: pygame.Surface :
+        
+    scroll_offset: int :
+        
+    max_scroll: int :
+        
+    content_h: int :
+        
+    top_bar_h: int :
+        
+
+    Returns
+    -------
+
     """
     if max_scroll <= 0:
         return

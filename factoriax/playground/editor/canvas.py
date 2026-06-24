@@ -36,15 +36,7 @@ _SELECT_COLOR = (100, 200, 255, 100)
 
 @dataclasses.dataclass
 class Viewport:
-    """Camera state for the scrollable/zoomable canvas.
-
-    Attributes:
-        camera_x: Leftmost visible tile column (fractional for smooth pan).
-        camera_y: Topmost visible tile row.
-        tile_size: Current zoom level in pixels per tile.
-        canvas_w: Width of the canvas area in pixels.
-        canvas_h: Height of the canvas area in pixels.
-    """
+    """Camera state for the scrollable/zoomable canvas."""
 
     camera_x: float = 0.0
     camera_y: float = 0.0
@@ -56,13 +48,26 @@ class Viewport:
 def screen_to_tile(vp: Viewport, sx: int, sy: int) -> tuple[int, int]:
     """Convert canvas-relative pixel coordinates to tile coordinates.
 
-    Args:
-        vp: Current viewport state.
-        sx: X pixel offset from the canvas left edge.
-        sy: Y pixel offset from the canvas top edge.
+    Parameters
+    ----------
+    vp :
+        Current viewport state.
+    sx :
+        X pixel offset from the canvas left edge.
+    sy :
+        Y pixel offset from the canvas top edge.
+    vp: Viewport :
+        
+    sx: int :
+        
+    sy: int :
+        
 
-    Returns:
+    Returns
+    -------
+    
         ``(tile_x, tile_y)`` integer tile coordinates.
+
     """
     tx = int(vp.camera_x + sx / vp.tile_size)
     ty = int(vp.camera_y + sy / vp.tile_size)
@@ -72,13 +77,26 @@ def screen_to_tile(vp: Viewport, sx: int, sy: int) -> tuple[int, int]:
 def tile_to_screen(vp: Viewport, tx: int, ty: int) -> tuple[int, int]:
     """Convert tile coordinates to canvas-relative pixel coordinates.
 
-    Args:
-        vp: Current viewport state.
-        tx: Tile column.
-        ty: Tile row.
+    Parameters
+    ----------
+    vp :
+        Current viewport state.
+    tx :
+        Tile column.
+    ty :
+        Tile row.
+    vp: Viewport :
+        
+    tx: int :
+        
+    ty: int :
+        
 
-    Returns:
+    Returns
+    -------
+    
         ``(px, py)`` pixel offset from the canvas top-left.
+
     """
     px = int((tx - vp.camera_x) * vp.tile_size)
     py = int((ty - vp.camera_y) * vp.tile_size)
@@ -88,10 +106,24 @@ def tile_to_screen(vp: Viewport, tx: int, ty: int) -> tuple[int, int]:
 def clamp_camera(vp: Viewport, map_w: int, map_h: int) -> None:
     """Clamp camera so visible area stays within map bounds.
 
-    Args:
-        vp: Viewport (mutated in place).
-        map_w: Map width in tiles.
-        map_h: Map height in tiles.
+    Parameters
+    ----------
+    vp :
+        Viewport (mutated in place).
+    map_w :
+        Map width in tiles.
+    map_h :
+        Map height in tiles.
+    vp: Viewport :
+        
+    map_w: int :
+        
+    map_h: int :
+        
+
+    Returns
+    -------
+
     """
     max_x = max(0.0, map_w - vp.canvas_w / vp.tile_size)
     max_y = max(0.0, map_h - vp.canvas_h / vp.tile_size)
@@ -102,12 +134,32 @@ def clamp_camera(vp: Viewport, map_w: int, map_h: int) -> None:
 def pan(vp: Viewport, dx: float, dy: float, map_w: int, map_h: int) -> None:
     """Pan the camera by a tile-space offset, clamped to map bounds.
 
-    Args:
-        vp: Viewport (mutated in place).
-        dx: Horizontal offset in tiles (positive = right).
-        dy: Vertical offset in tiles (positive = down).
-        map_w: Map width in tiles.
-        map_h: Map height in tiles.
+    Parameters
+    ----------
+    vp :
+        Viewport (mutated in place).
+    dx :
+        Horizontal offset in tiles (positive = right).
+    dy :
+        Vertical offset in tiles (positive = down).
+    map_w :
+        Map width in tiles.
+    map_h :
+        Map height in tiles.
+    vp: Viewport :
+        
+    dx: float :
+        
+    dy: float :
+        
+    map_w: int :
+        
+    map_h: int :
+        
+
+    Returns
+    -------
+
     """
     vp.camera_x += dx
     vp.camera_y += dy
@@ -123,16 +175,39 @@ def zoom(
     map_h: int,
 ) -> None:
     """Zoom in or out, keeping the tile under the mouse fixed.
-
+    
     Cycles through :data:`TILE_SIZES` in the given direction.
 
-    Args:
-        vp: Viewport (mutated in place).
-        direction: ``+1`` to zoom in, ``-1`` to zoom out.
-        mouse_sx: Mouse x relative to canvas left edge.
-        mouse_sy: Mouse y relative to canvas top edge.
-        map_w: Map width in tiles.
-        map_h: Map height in tiles.
+    Parameters
+    ----------
+    vp :
+        Viewport (mutated in place).
+    direction :
+        ``+1`` to zoom in, ``-1`` to zoom out.
+    mouse_sx :
+        Mouse x relative to canvas left edge.
+    mouse_sy :
+        Mouse y relative to canvas top edge.
+    map_w :
+        Map width in tiles.
+    map_h :
+        Map height in tiles.
+    vp: Viewport :
+        
+    direction: int :
+        
+    mouse_sx: int :
+        
+    mouse_sy: int :
+        
+    map_w: int :
+        
+    map_h: int :
+        
+
+    Returns
+    -------
+
     """
     idx = TILE_SIZES.index(vp.tile_size) if vp.tile_size in TILE_SIZES else 2
     new_idx = max(0, min(len(TILE_SIZES) - 1, idx + direction))
@@ -157,22 +232,45 @@ def render_canvas(
     show_resources: bool = False,
 ) -> np.ndarray:
     """Render the visible canvas area as an RGBA image.
-
+    
     Draws terrain tiles via the vectorized texture lookup, overlays
     machines, grid lines, and cursor / selection highlights.  When
     *show_resources* is ``True``, the resource count is drawn on each
     tile that has resources.
 
-    Args:
-        state: :class:`~factoriax.playground.editor.state.EditorState` instance.
-        vp: Current viewport.
-        cursor_tile: ``(tx, ty)`` of the tile under the mouse, or ``None``.
-        selection_rect: ``(x0, y0, x1, y1)`` tile coordinates of the
-            fill-rect selection, or ``None``.
-        show_resources: Whether to draw resource amounts on tiles.
+    Parameters
+    ----------
+    state :
+        :class:`~factoriax.playground.editor.state.EditorState` instance.
+    vp :
+        Current viewport.
+    cursor_tile :
+        ``(tx, ty)`` of the tile under the mouse, or ``None``.
+    selection_rect :
+        ``(x0, y0, x1, y1)`` tile coordinates of the
+        fill-rect selection, or ``None``.
+    show_resources :
+        Whether to draw resource amounts on tiles.
+    state: object :
+        
+    vp: Viewport :
+        
+    cursor_tile: tuple[int :
+        
+    int] | None :
+         (Default value = None)
+    selection_rect: tuple[int :
+        
+    int :
+        
+    show_resources: bool :
+         (Default value = False)
 
-    Returns:
+    Returns
+    -------
+    
         RGBA uint8 array of shape ``(canvas_h, canvas_w, 4)``.
+
     """
     es: EditorState = state  # type: ignore[assignment]
     canvas = np.zeros((vp.canvas_h, vp.canvas_w, 4), dtype=np.uint8)
@@ -284,7 +382,19 @@ def render_canvas(
 
 @functools.lru_cache(maxsize=72)
 def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
-    """Cached player start icon for the editor canvas."""
+    """Cached player start icon for the editor canvas.
+
+    Parameters
+    ----------
+    player_idx: int :
+        
+    size: int :
+        
+
+    Returns
+    -------
+
+    """
     from factoriax.playground.ui.icons import create_player_start_icon
 
     return create_player_start_icon(player_idx, size)
@@ -292,17 +402,31 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
 
 def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
     """Draw player start markers and biters on the canvas.
-
+    
     Biters are drawn first so player markers appear on top when
     they overlap. Biter sprites come from the atlas (same source the
     play renderer uses); player start markers stay procedural since
     they're editor-only spawn-point indicators with no in-game
     counterpart.
 
-    Args:
-        canvas: RGBA canvas array (mutated in place).
-        es: Current editor state.
-        vp: Current viewport.
+    Parameters
+    ----------
+    canvas :
+        RGBA canvas array (mutated in place).
+    es :
+        Current editor state.
+    vp :
+        Current viewport.
+    canvas: np.ndarray :
+        
+    es: EditorState :
+        
+    vp: Viewport :
+        
+
+    Returns
+    -------
+
     """
     ts = vp.tile_size
     biter_sprite = biter_icon_rgba(ts)
@@ -323,12 +447,36 @@ def _highlight_tile(
 ) -> None:
     """Draw a translucent highlight over a single tile.
 
-    Args:
-        canvas: RGBA canvas array (mutated in place).
-        vp: Current viewport.
-        tx: Tile column.
-        ty: Tile row.
-        color: RGBA highlight colour.
+    Parameters
+    ----------
+    canvas :
+        RGBA canvas array (mutated in place).
+    vp :
+        Current viewport.
+    tx :
+        Tile column.
+    ty :
+        Tile row.
+    color :
+        RGBA highlight colour.
+    canvas: np.ndarray :
+        
+    vp: Viewport :
+        
+    tx: int :
+        
+    ty: int :
+        
+    color: tuple[int :
+        
+    int :
+        
+    int] :
+        
+
+    Returns
+    -------
+
     """
     px, py = tile_to_screen(vp, tx, ty)
     ts = vp.tile_size
@@ -351,11 +499,28 @@ def _highlight_tile(
 def _blit_clipped(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     """Copy *src* onto *dst* at ``(y, x)`` with boundary clipping.
 
-    Args:
-        dst: Destination RGBA array (mutated in place).
-        src: Source RGBA array.
-        y: Top row in destination.
-        x: Left column in destination.
+    Parameters
+    ----------
+    dst :
+        Destination RGBA array (mutated in place).
+    src :
+        Source RGBA array.
+    y :
+        Top row in destination.
+    x :
+        Left column in destination.
+    dst: np.ndarray :
+        
+    src: np.ndarray :
+        
+    y: int :
+        
+    x: int :
+        
+
+    Returns
+    -------
+
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -378,11 +543,18 @@ def _blit_clipped(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
 def _get_resource_font(tile_size: int) -> pygame.font.Font:
     """Return a font sized for resource labels at the given tile size.
 
-    Args:
-        tile_size: Current tile pixel size.
+    Parameters
+    ----------
+    tile_size :
+        Current tile pixel size
+    tile_size: int :
+        
 
-    Returns:
+    Returns
+    -------
+    type
         A pygame font instance.
+
     """
     from factoriax.playground.ui.fonts import get_pixel_font
 
@@ -393,16 +565,26 @@ def _get_resource_font(tile_size: int) -> pygame.font.Font:
 @functools.lru_cache(maxsize=256)
 def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
     """Render a resource amount as a small RGBA text label.
-
+    
     Results are cached per ``(font, amount)`` pair so repeated
     amounts on the same zoom level don't re-render.
 
-    Args:
-        font: Pygame font for rendering.
-        amount: Resource count to display.
+    Parameters
+    ----------
+    font :
+        Pygame font for rendering.
+    amount :
+        Resource count to display.
+    font: pygame.font.Font :
+        
+    amount: int :
+        
 
-    Returns:
+    Returns
+    -------
+    
         RGBA uint8 array of shape ``(H, W, 4)``.
+
     """
     color = (255, 255, 255)
     surface = font.render(str(amount), False, color)
@@ -417,11 +599,28 @@ def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
 def _blit_alpha(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     """Alpha-composite *src* onto *dst* with boundary clipping.
 
-    Args:
-        dst: Destination RGBA array (mutated in place).
-        src: Source RGBA array.
-        y: Top row in destination.
-        x: Left column in destination.
+    Parameters
+    ----------
+    dst :
+        Destination RGBA array (mutated in place).
+    src :
+        Source RGBA array.
+    y :
+        Top row in destination.
+    x :
+        Left column in destination.
+    dst: np.ndarray :
+        
+    src: np.ndarray :
+        
+    y: int :
+        
+    x: int :
+        
+
+    Returns
+    -------
+
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]

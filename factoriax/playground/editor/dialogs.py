@@ -45,15 +45,16 @@ _DIALOG_H = 180
 @dataclasses.dataclass
 class NewLevelDialog:
     """In-editor dialog for specifying a new level's dimensions and name.
-
+    
     Rendered as an RGBA overlay centred on the screen.  Handles its own
     keyboard events and returns ``"ok"`` or ``"cancel"`` when done.
 
-    Attributes:
-        width_text: Editable string for the map width.
-        height_text: Editable string for the map height.
-        name_text: Editable string for the level name.
-        active_field: Index of the focused text field (0-2).
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     width_text: str = "15"
@@ -64,12 +65,19 @@ class NewLevelDialog:
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Process a pygame event and return a result if the dialog closes.
 
-        Args:
-            event: A ``pygame.KEYDOWN`` event.
+        Parameters
+        ----------
+        event :
+            A ``pygame.KEYDOWN`` event.
+        event: pygame.event.Event :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``"ok"`` when Enter is pressed, ``"cancel"`` on Escape,
             or ``None`` if the dialog stays open.
+
         """
         if event.type != pygame.KEYDOWN:
             return None
@@ -99,8 +107,16 @@ class NewLevelDialog:
     def _insert_char(self, ch: str) -> None:
         """Append a character to the active field.
 
-        Args:
-            ch: Character to insert.
+        Parameters
+        ----------
+        ch :
+            Character to insert.
+        ch: str :
+            
+
+        Returns
+        -------
+
         """
         if self.active_field == 0:
             if ch.isdigit():
@@ -114,12 +130,22 @@ class NewLevelDialog:
     def render(self, base_w: int, base_h: int) -> np.ndarray:
         """Render the dialog as an RGBA overlay.
 
-        Args:
-            base_w: Base window width.
-            base_h: Base window height.
+        Parameters
+        ----------
+        base_w :
+            Base window width.
+        base_h :
+            Base window height.
+        base_w: int :
+            
+        base_h: int :
+            
 
-        Returns:
+        Returns
+        -------
+        
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+
         """
         overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
         overlay[:, :] = (0, 0, 0, 140)
@@ -169,9 +195,15 @@ class NewLevelDialog:
     def get_values(self) -> tuple[int, int, str]:
         """Parse the dialog fields into typed values.
 
-        Returns:
+        Parameters
+        ----------
+
+        Returns
+        -------
+        
             ``(width, height, name)`` with fallback defaults for empty
             or invalid inputs.
+
         """
         try:
             w = max(3, int(self.width_text))
@@ -188,16 +220,16 @@ class NewLevelDialog:
 @dataclasses.dataclass
 class NumberInputDialog:
     """Small overlay for typing a single integer value.
-
+    
     Renders as a compact RGBA overlay centred on the screen.  Accepts
     digits, backspace, Enter to confirm, and Escape to cancel.
 
-    Attributes:
-        label: Prompt shown above the input field.
-        text: Current input text.
-        min_value: Minimum allowed value (clamped on confirm).
-        max_value: Maximum allowed value (clamped on confirm).
-        default: Fallback value when the input is empty or invalid.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     label: str = "Value:"
@@ -209,11 +241,18 @@ class NumberInputDialog:
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Process a pygame event.
 
-        Args:
-            event: A ``pygame.KEYDOWN`` event.
+        Parameters
+        ----------
+        event :
+            A ``pygame.KEYDOWN`` event.
+        event: pygame.event.Event :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
+
         """
         if event.type != pygame.KEYDOWN:
             return None
@@ -231,8 +270,14 @@ class NumberInputDialog:
     def get_value(self) -> int:
         """Parse the text field into a clamped integer.
 
-        Returns:
+        Parameters
+        ----------
+
+        Returns
+        -------
+        
             Integer between ``min_value`` and ``max_value``.
+
         """
         try:
             val = int(self.text)
@@ -243,12 +288,22 @@ class NumberInputDialog:
     def render(self, base_w: int, base_h: int) -> np.ndarray:
         """Render the dialog as an RGBA overlay.
 
-        Args:
-            base_w: Base window width.
-            base_h: Base window height.
+        Parameters
+        ----------
+        base_w :
+            Base window width.
+        base_h :
+            Base window height.
+        base_w: int :
+            
+        base_h: int :
+            
 
-        Returns:
+        Returns
+        -------
+        
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+
         """
         w, h = 180, 80
         overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
@@ -302,17 +357,17 @@ _FILE_ROW_BG: tuple[int, int, int, int] = (35, 35, 35, 255)
 @dataclasses.dataclass
 class FileDialog:
     """In-editor dialog for choosing or typing a filename.
-
+    
     Works for both save and load. Shows a text field for the filename
     and a scrollable list of existing ``.json`` files in ``levels/``.
     Press W/S to navigate the list, Enter to confirm, Escape to cancel.
 
-    Attributes:
-        mode: ``"save"`` or ``"load"``.
-        filename_text: Editable filename (without extension).
-        files: List of existing level filenames (stems only).
-        selected_index: Currently highlighted file in the list.
-        scroll_offset: First visible row in the file list.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     mode: str = "save"
@@ -331,11 +386,18 @@ class FileDialog:
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Process a pygame event.
 
-        Args:
-            event: A ``pygame.KEYDOWN`` event.
+        Parameters
+        ----------
+        event :
+            A ``pygame.KEYDOWN`` event.
+        event: pygame.event.Event :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
+
         """
         if event.type != pygame.KEYDOWN:
             return None
@@ -359,7 +421,17 @@ class FileDialog:
         return None
 
     def _move_selection(self, delta: int) -> None:
-        """Move the file list selection by *delta* rows."""
+        """Move the file list selection by *delta* rows.
+
+        Parameters
+        ----------
+        delta: int :
+            
+
+        Returns
+        -------
+
+        """
         if not self.files:
             return
         new_idx = self.selected_index + delta
@@ -374,8 +446,14 @@ class FileDialog:
     def get_path(self) -> Path | None:
         """Return the chosen path, or ``None`` for empty input.
 
-        Returns:
+        Parameters
+        ----------
+
+        Returns
+        -------
+        type
             :class:`Path` in the levels directory, or ``None``.
+
         """
         name = self.filename_text.strip()
         if not name:
@@ -388,12 +466,22 @@ class FileDialog:
     def render(self, base_w: int, base_h: int) -> np.ndarray:
         """Render the dialog as an RGBA overlay.
 
-        Args:
-            base_w: Base window width.
-            base_h: Base window height.
+        Parameters
+        ----------
+        base_w :
+            Base window width.
+        base_h :
+            Base window height.
+        base_w: int :
+            
+        base_h: int :
+            
 
-        Returns:
+        Returns
+        -------
+        
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+
         """
         overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
         overlay[:, :] = (0, 0, 0, 140)
@@ -463,8 +551,14 @@ class FileDialog:
 def _list_level_files() -> list[str]:
     """Return sorted list of level filenames (stems) in the levels dir.
 
-    Returns:
+    Parameters
+    ----------
+
+    Returns
+    -------
+    type
         List of filename stems, sorted alphabetically.
+
     """
     if not LEVELS_DIR.is_dir():
         return []
@@ -509,12 +603,19 @@ _ALL_ITEMS: list[int] = [int(it) for it in ItemType if it != ItemType.EMPTY]
 def _valid_items_for_role(role: int) -> list[int]:
     """Return the list of item types valid for a given slot role.
 
-    Args:
-        role: ``SlotRole`` integer value.
+    Parameters
+    ----------
+    role :
+        SlotRole
+    role: int :
+        
 
-    Returns:
+    Returns
+    -------
+    type
         List of ``ItemType`` integer values (always includes EMPTY
         as the first entry for clearing).
+
     """
     if role == int(SlotRole.NONE):
         return []
@@ -535,24 +636,17 @@ _INSP_PICKER_ITEM_H = 18
 @dataclasses.dataclass
 class MachineInspectorDialog:
     """Editor dialog for inspecting and editing machine inventory contents.
-
+    
     Shows each slot with its role badge, current item, and count. Users
     navigate with A/D to select slots, click or press Enter to open an
     item picker, type a count, and press Q to cycle assembler recipes.
 
-    Attributes:
-        tile_x: X coordinate of the inspected machine tile.
-        tile_y: Y coordinate of the inspected machine tile.
-        machine_type: ``Machine`` integer value.
-        inv_items: Reference to editor state inventory items at this tile.
-        inv_counts: Reference to editor state inventory counts at this tile.
-        selected_recipe: Current assembler recipe index (mutable ref via
-            the editor state array).
-        focused_slot: Currently focused slot index.
-        editing_slot: Slot index being edited, or -1.
-        editing_count: Whether we are in count-editing mode.
-        count_text: Text buffer for count entry.
-        picker_scroll: Scroll offset in the item picker list.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     tile_x: int
@@ -582,11 +676,18 @@ class MachineInspectorDialog:
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Process a pygame event.
 
-        Args:
-            event: A pygame event (KEYDOWN or MOUSEBUTTONDOWN).
+        Parameters
+        ----------
+        event :
+            A pygame event (KEYDOWN or MOUSEBUTTONDOWN).
+        event: pygame.event.Event :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``"close"`` to dismiss, or ``None`` to stay open.
+
         """
         if event.type == pygame.KEYDOWN:
             return self._handle_key(event)
@@ -595,11 +696,18 @@ class MachineInspectorDialog:
     def _handle_key(self, event: pygame.event.Event) -> str | None:
         """Handle keyboard input for the inspector dialog.
 
-        Args:
-            event: A pygame KEYDOWN event.
+        Parameters
+        ----------
+        event :
+            A pygame KEYDOWN event.
+        event: pygame.event.Event :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``"close"`` to dismiss, or ``None`` to stay open.
+
         """
         key = event.key
 
@@ -639,11 +747,18 @@ class MachineInspectorDialog:
     def _handle_picker_key(self, key: int) -> str | None:
         """Handle keys while the item picker is open.
 
-        Args:
-            key: Pygame key constant.
+        Parameters
+        ----------
+        key :
+            Pygame key constant.
+        key: int :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``None`` (picker stays within the dialog).
+
         """
         role = int(MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot])
         valid = _valid_items_for_role(role)
@@ -672,12 +787,22 @@ class MachineInspectorDialog:
     def _handle_count_key(self, key: int, event: pygame.event.Event) -> str | None:
         """Handle keys while editing a slot count.
 
-        Args:
-            key: Pygame key constant.
-            event: Full pygame event for unicode access.
+        Parameters
+        ----------
+        key :
+            Pygame key constant.
+        event :
+            Full pygame event for unicode access.
+        key: int :
+            
+        event: pygame.event.Event :
+            
 
-        Returns:
+        Returns
+        -------
+        
             ``None``.
+
         """
         if key == pygame.K_ESCAPE:
             self.editing_count = False
@@ -702,12 +827,22 @@ class MachineInspectorDialog:
     def render(self, base_w: int, base_h: int) -> np.ndarray:
         """Render the inspector dialog as an RGBA overlay.
 
-        Args:
-            base_w: Base window width.
-            base_h: Base window height.
+        Parameters
+        ----------
+        base_w :
+            Base window width.
+        base_h :
+            Base window height.
+        base_w: int :
+            
+        base_h: int :
+            
 
-        Returns:
+        Returns
+        -------
+        
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+
         """
         overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
         overlay[:, :] = (0, 0, 0, 140)
@@ -799,10 +934,24 @@ class MachineInspectorDialog:
     ) -> None:
         """Render the item type picker sub-dialog.
 
-        Args:
-            overlay: RGBA overlay (mutated in place).
-            base_w: Base window width.
-            base_h: Base window height.
+        Parameters
+        ----------
+        overlay :
+            RGBA overlay (mutated in place).
+        base_w :
+            Base window width.
+        base_h :
+            Base window height.
+        overlay: np.ndarray :
+            
+        base_w: int :
+            
+        base_h: int :
+            
+
+        Returns
+        -------
+
         """
         role = int(MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot])
         valid = _valid_items_for_role(role)
@@ -863,10 +1012,24 @@ class MachineInspectorDialog:
     ) -> None:
         """Render the count entry sub-dialog.
 
-        Args:
-            overlay: RGBA overlay (mutated in place).
-            base_w: Base window width.
-            base_h: Base window height.
+        Parameters
+        ----------
+        overlay :
+            RGBA overlay (mutated in place).
+        base_w :
+            Base window width.
+        base_h :
+            Base window height.
+        overlay: np.ndarray :
+            
+        base_w: int :
+            
+        base_h: int :
+            
+
+        Returns
+        -------
+
         """
         font = get_pixel_font(14)
         small = get_pixel_font(10)
@@ -926,12 +1089,22 @@ _HELP_LINES = [
 def render_help_overlay(base_w: int, base_h: int) -> np.ndarray:
     """Render a controls reference overlay.
 
-    Args:
-        base_w: Base window width.
-        base_h: Base window height.
+    Parameters
+    ----------
+    base_w :
+        Base window width.
+    base_h :
+        Base window height.
+    base_w: int :
+        
+    base_h: int :
+        
 
-    Returns:
+    Returns
+    -------
+    
         RGBA uint8 array of shape ``(base_h, base_w, 4)``.
+
     """
     overlay = np.zeros((base_h, base_w, 4), dtype=np.uint8)
     overlay[:, :] = (0, 0, 0, 180)
@@ -976,13 +1149,30 @@ def _render_text_rgba(
 ) -> np.ndarray:
     """Render text to RGBA with transparent background.
 
-    Args:
-        text: String to render.
-        font: Pygame font.
-        color: RGB text colour.
+    Parameters
+    ----------
+    text :
+        String to render.
+    font :
+        Pygame font.
+    color :
+        RGB text colour.
+    text: str :
+        
+    font: pygame.font.Font :
+        
+    color: tuple[int :
+        
+    int :
+        
+    int] :
+        
 
-    Returns:
+    Returns
+    -------
+    
         RGBA uint8 array of shape ``(H, W, 4)``.
+
     """
     surface = font.render(text, False, color)
     w, h = surface.get_size()
@@ -996,11 +1186,28 @@ def _render_text_rgba(
 def _blit_rgba(overlay: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     """Alpha-composite *src* onto *overlay* with clipping.
 
-    Args:
-        overlay: Destination RGBA array (mutated in place).
-        src: Source RGBA array.
-        y: Top row.
-        x: Left column.
+    Parameters
+    ----------
+    overlay :
+        Destination RGBA array (mutated in place).
+    src :
+        Source RGBA array.
+    y :
+        Top row.
+    x :
+        Left column.
+    overlay: np.ndarray :
+        
+    src: np.ndarray :
+        
+    y: int :
+        
+    x: int :
+        
+
+    Returns
+    -------
+
     """
     oh, ow = overlay.shape[:2]
     sh, sw = src.shape[:2]

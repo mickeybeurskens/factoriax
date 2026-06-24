@@ -225,19 +225,69 @@ MAX_ROCKET_SCORE: int = int(sum(_TIER_WEIGHTS))  # 140
 
 
 def _holds_item(state: EnvState, item: int) -> jax.Array:
-    """True when any player inventory contains at least one of *item*."""
+    """True when any player inventory contains at least one of *item*.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    item : int :
+        
+    state: EnvState :
+        
+    item: int :
+        
+
+    Returns
+    -------
+
+    
+    """
     return jnp.sum(state.player_inventory[:, item]) >= 1
 
 
 def _count_machines(state: EnvState, mt: int) -> jax.Array:
-    """Count placed machines of a given type."""
+    """Count placed machines of a given type.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    mt : int :
+        
+    state: EnvState :
+        
+    mt: int :
+        
+
+    Returns
+    -------
+
+    
+    """
     return jnp.sum(state.machine_types == mt)
 
 
 def _any_entity_buf_nonempty(state: EnvState, mt: int) -> jax.Array:
     """True when any active entity of type *mt* has items in its buffer.
-
+    
     Used for ``automated_mining`` (miner output) and ``pallet_filled``.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    mt : int :
+        
+    state: EnvState :
+        
+    mt: int :
+        
+
+    Returns
+    -------
+
+    
     """
     matches = (state.ent_type == mt) & (state.ent_y >= 0) & (state.ent_buf_count > 0)
     return jnp.any(matches)
@@ -245,9 +295,21 @@ def _any_entity_buf_nonempty(state: EnvState, mt: int) -> jax.Array:
 
 def _any_assembler_has_output(state: EnvState) -> jax.Array:
     """True when any active assembler holds a recipe output.
-
+    
     The engine parks completed output in ``ent_asm_out`` until a
     withdraw pulls it out (no buffer drain), so that's where we check.
+
+    Parameters
+    ----------
+    state : EnvState :
+        
+    state: EnvState :
+        
+
+    Returns
+    -------
+
+    
     """
     matches = (
         (state.ent_type == Machine.ASSEMBLER)
@@ -264,17 +326,25 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
 
 def rocket_conditions(state: EnvState) -> jax.Array:
     """Compute the 38 rocket-scenario achievement conditions.
-
+    
     Every condition is a pure function of ``state``. The returned array
     is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
     :class:`~factoriax.engine.envs.factoriax_env.FactoriaXEnv`'s
     ``achievement_fn`` constructor argument directly.
 
-    Args:
-        state: Current environment state.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    state : EnvState :
+        
+    state: EnvState :
+        
 
-    Returns:
-        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
+    Returns
+    -------
+
+    
     """
     total_machines = jnp.sum(state.machine_types != Machine.NONE)
 
@@ -342,20 +412,37 @@ def rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward for newly-unlocked rocket-scenario achievements.
-
+    
     Thin wrapper around :func:`factoriax.engine.rewards.achievement_reward`
     bound to :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. Assumes *prev_state*
     and *new_state* are :class:`~factoriax.engine.state.EnvState` instances
     whose ``achievements_unlocked`` field has been latched by the env's
     ``achievement_fn`` (typically :func:`rocket_conditions`).
-
-    Args:
+    
+    Parameters
+    ----------
         prev_state: EnvState before the step.
         new_state: EnvState after the step.
-        params: Environment parameters (unused; interface uniformity).
 
-    Returns:
-        Scalar float32 reward.
+    Parameters
+    ----------
+    prev_state : EnvState :
+        
+    new_state : EnvState :
+        
+    params : EnvParams :
+        
+    prev_state: EnvState :
+        
+    new_state: EnvState :
+        
+    params: EnvParams :
+        
+
+    Returns
+    -------
+
+    
     """
     return achievement_reward(
         prev_state, new_state, params, weights=ROCKET_ACHIEVEMENT_WEIGHTS
@@ -438,7 +525,7 @@ _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
 
 def build_rocket_level() -> Level:
     """Construct the canonical 32x32 rocket scenario level.
-
+    
     Player spawns at :data:`_SPAWN`. Five 2x2 ore patches (iron,
     copper, tin, silicon, limestone) sit on cols 3-4, vertically
     stacked with 1-tile dirt gaps (rows 9, 12, 15, 18, 21). A 1-wide
@@ -448,8 +535,13 @@ def build_rocket_level() -> Level:
     assembler are pre-placed one tile west and east of spawn
     respectively.
 
-    Returns:
-        Deterministic :class:`Level` used as the scenario's only level.
+    Parameters
+    ----------
+
+    Returns
+    -------
+
+    
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     # Coal column — one tile wide, full map height.
@@ -508,17 +600,29 @@ def rocket(
     obs: str = "x_ray_local",
     obs_radius: int = 5,
 ) -> tuple[Any, EnvParams]:
-    """Return the rocket env (fixed level, hand-craft masked) and its params.
+    """
 
-    Loaded via ``factoriax.make("Rocket-v1")``. A fixed pre-placed 32x32 level
-    is the reset target (no keyed procgen); the rocket achievement conditions
-    run as a step hook; hand-craft actions are masked so production flows
-    through the pre-placed furnace + assembler. The 8000-step budget gives a
-    factory-scale plan room to parallelise smelts and assemblies.
+    Parameters
+    ----------
+    obs :
+        Observation variant
+    obs_radius :
+        Local
+    * :
+        
+    obs : str :
+        (Default value = "x_ray_local")
+    obs_radius : int :
+        (Default value = 5)
+    obs: str :
+         (Default value = "x_ray_local")
+    obs_radius: int :
+         (Default value = 5)
 
-    Args:
-        obs: Observation variant; defaults to an 11x11 local x_ray window.
-        obs_radius: Local-window half-width; ignored for ``_global`` obs.
+    Returns
+    -------
+
+    
     """
     env: Any = FactoriaXEnv(
         level=build_rocket_level(),

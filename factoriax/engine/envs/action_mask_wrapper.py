@@ -28,15 +28,23 @@ from factoriax.engine.state import EnvParams, EnvState
 class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """Replace blocked actions with :data:`Action.NOOP`.
 
-    Args:
-        inner: Environment to wrap. Any gymnax-compatible env that uses
-            :class:`EnvState` as its state type works.
-        blocked_actions: Iterable of ``Action`` integers to block. The
-            mask is captured at construction time and baked into the
-            JIT graph of :meth:`step_env`.
+    Parameters
+    ----------
+    inner :
+        Environment to wrap. Any gymnax-compatible env that uses
+        :class:`EnvState` as its state type works.
+    blocked_actions :
+        Iterable of ``Action`` integers to block. The
+        mask is captured at construction time and baked into the
+        JIT graph of :meth:`step_env`.
+        Examples
+        --------
 
-    Example:
-        >>> from factoriax import ActionMaskWrapper, FactoriaXEnv, Action
+    Returns
+    -------
+
+    
+    >>> from factoriax import ActionMaskWrapper, FactoriaXEnv, Action
         >>> env = ActionMaskWrapper(FactoriaXEnv(), blocked_actions=(int(Action.MINE),))
         >>> # MINE actions become NOOPs inside ``env.step_env``.
     """
@@ -57,13 +65,27 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
 
     @property
     def default_params(self) -> EnvParams:
+        """ """
         # gymnax's environment.Environment is untyped so the inner attribute
         # is Any; the runtime contract guarantees an EnvParams.
         params: EnvParams = self._inner.default_params
         return params
 
     def _rewrite(self, action: int | jax.Array) -> jax.Array:
-        """Return ``Action.NOOP`` when *action* is masked, else pass through."""
+        """
+
+        Parameters
+        ----------
+        action : int | jax.Array :
+            
+        action: int | jax.Array :
+            
+
+        Returns
+        -------
+
+        
+        """
         action_i = jnp.asarray(action, dtype=jnp.int32)
         is_blocked = self._mask[action_i]
         return jnp.asarray(jnp.where(is_blocked, self._noop, action_i))
@@ -75,7 +97,32 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]]:
-        """Step the inner env after rewriting blocked actions to NOOP."""
+        """Step the inner env after rewriting blocked actions to NOOP.
+
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        state : Any :
+            
+        action : int | jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        state: Any :
+            
+        action: int | jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         result: tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]] = (
             self._inner.step_env(key, state, self._rewrite(action), params)
         )
@@ -86,19 +133,101 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         key: jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any]:
+        """
+
+        Parameters
+        ----------
+        key : jax.Array :
+            
+        params : EnvParams :
+            
+        key: jax.Array :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         result: tuple[jax.Array, Any] = self._inner.reset_env(key, params)
         return result
 
     def get_obs(self, state: Any, params: EnvParams) -> jax.Array:
+        """
+
+        Parameters
+        ----------
+        state : Any :
+            
+        params : EnvParams :
+            
+        state: Any :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         obs: jax.Array = self._inner.get_obs(state, params)
         return obs
 
     def is_terminal(self, state: Any, params: EnvParams) -> jax.Array:
+        """
+
+        Parameters
+        ----------
+        state : Any :
+            
+        params : EnvParams :
+            
+        state: Any :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         terminal: jax.Array = self._inner.is_terminal(state, params)
         return terminal
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
+        """
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
+        """
+
+        Parameters
+        ----------
+        params : EnvParams :
+            
+        params: EnvParams :
+            
+
+        Returns
+        -------
+
+        
+        """
         return self._inner.observation_space(params)

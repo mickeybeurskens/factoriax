@@ -27,12 +27,25 @@ def get_tile_in_front(
 ) -> tuple[jax.Array, jax.Array]:
     """Get the tile coordinates in front of a player.
 
-    Args:
-        state: Current environment state.
-        player_idx: Player index.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    player_idx :
+        Player index.
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
 
-    Returns:
-        Tuple of (x, y) coordinates.
+    Returns
+    -------
+
+    
     """
     pos = state.player_positions[player_idx]
     direction = state.player_directions[player_idx]
@@ -44,11 +57,19 @@ def get_tile_in_front(
 def is_placeable_item(item_type: int | jax.Array) -> jax.Array:
     """Check if an item type can be placed as a machine.
 
-    Args:
-        item_type: ItemType to check.
+    Parameters
+    ----------
+    item_type :
+        ItemType to check.
+    item_type : int | jax.Array :
+        
+    item_type: int | jax.Array :
+        
 
-    Returns:
-        Boolean scalar.
+    Returns
+    -------
+
+    
     """
     return jnp.any(item_type == PLACEABLE_ITEMS)
 
@@ -60,13 +81,31 @@ def is_valid_placement_tile(
 ) -> jax.Array:
     """Check if a tile is valid for machine placement.
 
-    Args:
-        state: Current environment state.
-        tx: Target tile x.
-        ty: Target tile y.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    tx :
+        Target tile x.
+    ty :
+        Target tile y.
+    state : EnvState :
+        
+    tx : jax.Array :
+        
+    ty : jax.Array :
+        
+    state: EnvState :
+        
+    tx: jax.Array :
+        
+    ty: jax.Array :
+        
 
-    Returns:
-        Boolean: valid for placement.
+    Returns
+    -------
+
+    
     """
     h, w = state.map.shape
     in_bounds = (tx >= 0) & (tx < w) & (ty >= 0) & (ty < h)
@@ -85,20 +124,44 @@ def place_machine(
     item_type: int | jax.Array,
 ) -> EnvState:
     """Place a machine on the tile in front of the player.
-
+    
     Allocates an entity slot for the new machine and updates both the
     grid (machine_types, tile_entity) and entity arrays. The new
     entity is initialized to ``MACHINE_MAX_HEALTH[machine_type]``.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters; supplies the per-type max
-            health used to seed ``ent_health``.
-        player_idx: Player index.
-        item_type: ItemType of the machine to place.
 
-    Returns:
-        Updated state with machine placed (or unchanged).
+    Parameters
+    ----------
+    health :
+        used to seed
+    player_idx :
+        Player index
+    item_type :
+        ItemType of the machine to place
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    item_type : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+    item_type: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     item_type = jnp.int32(item_type)
     player_count = state.player_inventory[player_idx, item_type]
@@ -199,23 +262,42 @@ def pickup_machine(
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Pick up the machine in front of the player.
-
+    
     Returns the machine item and any buffer contents to the player.
     Deactivates the entity slot and clears tile_entity.
-
+    
     Pickup is gated on the target being at full health for its type;
     damaged machines must be repaired (or destroyed by a wrapper)
     before they can be picked up. On success, the freed entity slot's
     ``ent_health`` is cleared to ``0``.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters; supplies the per-type max
-            health used for the full-HP gate.
-        player_idx: Player index.
 
-    Returns:
-        Updated state with machine removed (or unchanged).
+    Parameters
+    ----------
+    health :
+        used for the full
+    player_idx :
+        Player index
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -357,7 +439,7 @@ def apply_repair(
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Restore the entity in front of the player to full health.
-
+    
     The base engine implements REPAIR as a full restore with no item
     cost. Wrappers that want a different policy (per-tick repair,
     inventory consumption, partial restore) pre-empt
@@ -365,19 +447,36 @@ def apply_repair(
     :data:`~factoriax.engine.constants.Action.NOOP` before calling
     ``step_env`` and then applying their own update to
     ``state.ent_health``.
-
+    
     No-op when the target tile is out of bounds, contains no entity,
     or the entity is already at full health for its type. The
     function is JIT-compatible and pure: it never raises.
-
-    Args:
+    
+    Parameters
+    ----------
         state: Current environment state.
-        params: Environment parameters; supplies per-type max health.
-        player_idx: Player index.
 
-    Returns:
-        Updated state with the target entity's health restored, or
-        unchanged when no valid target exists.
+    Parameters
+    ----------
+    player_idx :
+        Player index
+    state : EnvState :
+        
+    params : EnvParams :
+        
+    player_idx : int | jax.Array :
+        
+    state: EnvState :
+        
+    params: EnvParams :
+        
+    player_idx: int | jax.Array :
+        
+
+    Returns
+    -------
+
+    
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -409,17 +508,35 @@ def set_machine_direction(
     target_dir: int | jax.Array,
 ) -> EnvState:
     """Set the direction of the machine in front of the player.
-
+    
     Sets the entity's direction to *target_dir* absolutely. No-op
     if the tile has no machine or is out of bounds.
 
-    Args:
-        state: Current environment state.
-        player_idx: Player index.
-        target_dir: Target Direction value to set.
+    Parameters
+    ----------
+    state :
+        Current environment state.
+    player_idx :
+        Player index.
+    target_dir :
+        Target Direction value to set.
+    state : EnvState :
+        
+    player_idx : int | jax.Array :
+        
+    target_dir : int | jax.Array :
+        
+    state: EnvState :
+        
+    player_idx: int | jax.Array :
+        
+    target_dir: int | jax.Array :
+        
 
-    Returns:
-        Updated state with the machine direction set (or unchanged).
+    Returns
+    -------
+
+    
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
