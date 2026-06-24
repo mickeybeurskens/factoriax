@@ -128,12 +128,11 @@ class TestConfigSmoke:
         assert config is not None
 
 
-@pytest.mark.slow
 class TestEnvStepSmoke:
     """Environment should reset and step at various map sizes.
 
     Every method triggers a fresh JIT compile for the env at a given
-    map size. Slow but load-bearing — gated behind ``-m slow``.
+    map size.
     """
 
     @pytest.mark.parametrize("size", [16])

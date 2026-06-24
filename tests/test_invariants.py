@@ -24,12 +24,6 @@ from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
-# Every test in this file runs a 100-step random rollout through
-# ``factoriax_step``, which triggers the full env JIT compile. They
-# are the highest-value regression guards (emergent invariants) but
-# too slow for the pre-commit inner loop.
-pytestmark = pytest.mark.slow
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
