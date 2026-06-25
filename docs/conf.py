@@ -1,6 +1,6 @@
-"""Sphinx configuration for FactoriaX documentation."""
+"""Sphinx configuration for Factoriax documentation."""
 
-project = "FactoriaX"
+project = "Factoriax"
 copyright = "2026, Mickey Beurskens"
 author = "Mickey Beurskens"
 

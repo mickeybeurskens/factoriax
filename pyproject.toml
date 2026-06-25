@@ -61,6 +61,7 @@ warn_unused_ignores = true
 
 [dependency-groups]
 dev = [
+    "jupyterlab>=4.6.0",
     "kaleido>=1.2.0",
     "mypy>=1.19.1",
     "nbstripout>=0.9.1",

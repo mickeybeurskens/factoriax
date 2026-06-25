@@ -7,5 +7,6 @@ API Reference
 
    factoriax.engine
    factoriax.analysis
-   factoriax.scenarios
    factoriax.playground
+   factoriax.assets
+   factoriax.make

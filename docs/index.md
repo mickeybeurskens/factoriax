@@ -1,4 +1,4 @@
-# FactoriaX
+# Factoriax
 
 A Factorio-inspired grid-world RL environment, written in JAX.
 State lives in JAX arrays; `step` and `reset` compile to a single
@@ -9,16 +9,13 @@ Python in the inner loop.
 :maxdepth: 2
 :hidden:
 
-quickstart
-notebooks/getting_started
-guides/action-design
+guides/getting_started
+guides/quick_start
 api/index
 ```
 
 ## Where to go next
 
-- {doc}`quickstart` — install and open the launcher.
-- {doc}`notebooks/getting_started` — create an env, step through an episode, run batched rollouts.
-- {doc}`guides/action-design` — the three properties the action set
-  is built around.
+- {doc}`guides/quick_start` — Installation instructions and basic examples for people already comfortable with JAX based reinforcement learning environments.
+- {doc}`guides/getting_started` — Start here for a more in depth overview of Factoriax and its functionalities.
 - {doc}`api/index` — auto-generated reference for every public module.
