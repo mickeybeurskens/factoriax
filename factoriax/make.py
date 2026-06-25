@@ -1,3 +1,5 @@
+"""Public entry point for building registered FactoriaX environments."""
+
 from typing import Any
 
 from factoriax.engine.envs.registry import make as _registry_make

@@ -47,7 +47,7 @@ class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # type: ignore[misc]
     """Gymnax wrapper providing cached-state auto-reset.
-    
+
     Use this wrapper when you need auto-reset inside ``lax.scan``
     training loops (e.g. PureJaxRL-style PPO). For manual episode
     management, use :class:`FactoriaxEnv` directly.
@@ -88,7 +88,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
     @property
     def default_params(self) -> EnvParams:
-        """ """
+        """Delegate to the inner env's default params."""
         return self._inner.default_params
 
     def step_env(
@@ -308,27 +308,14 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
 
     @property
     def default_params(self) -> EnvParams:
-        """ """
+        """Delegate to the inner env's default params."""
         # gymnax's environment.Environment is untyped so the inner attribute
         # is Any; the runtime contract guarantees an EnvParams.
         params: EnvParams = self._inner.default_params
         return params
 
     def _rewrite(self, action: int | jax.Array) -> jax.Array:
-        """
-
-        Parameters
-        ----------
-        action : int | jax.Array :
-            
-        action: int | jax.Array :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Rewrite a blocked action to NOOP; pass others through unchanged."""
         action_i = jnp.asarray(action, dtype=jnp.int32)
         is_blocked = self._mask[action_i]
         return jnp.asarray(jnp.where(is_blocked, self._noop, action_i))
@@ -376,101 +363,24 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         key: jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any]:
-        """
-
-        Parameters
-        ----------
-        key : jax.Array :
-            
-        params : EnvParams :
-            
-        key: jax.Array :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Pass-through reset to the inner env."""
         result: tuple[jax.Array, Any] = self._inner.reset_env(key, params)
         return result
 
     def get_obs(self, state: Any, params: EnvParams) -> jax.Array:
-        """
-
-        Parameters
-        ----------
-        state : Any :
-            
-        params : EnvParams :
-            
-        state: Any :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Pass-through observation from the inner env."""
         obs: jax.Array = self._inner.get_obs(state, params)
         return obs
 
     def is_terminal(self, state: Any, params: EnvParams) -> jax.Array:
-        """
-
-        Parameters
-        ----------
-        state : Any :
-            
-        params : EnvParams :
-            
-        state: Any :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Pass-through termination check to the inner env."""
         terminal: jax.Array = self._inner.is_terminal(state, params)
         return terminal
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """
-
-        Parameters
-        ----------
-        params : EnvParams :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Action space is unchanged."""
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """
-
-        Parameters
-        ----------
-        params : EnvParams :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Observation space is unchanged."""
         return self._inner.observation_space(params)

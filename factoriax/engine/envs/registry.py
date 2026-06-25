@@ -115,5 +115,5 @@ def make(
 
 
 def list_scenarios() -> tuple[tuple[str, ScenarioSpec], ...]:
-    """ """
+    """Return all registered scenario ids and their specs."""
     return tuple(SCENARIOS.items())

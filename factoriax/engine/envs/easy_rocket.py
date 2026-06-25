@@ -823,34 +823,19 @@ def easy_rocket(
     obs: str = "superficial_global",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """
+    """Build the EasyRocket-v1 env with achievement hook and reward bound.
+
+    Binds the keyed generator as ``reset_fn`` (fresh layout each episode),
+    the production achievement conditions as a step hook, and the achievement
+    reward. ``max_machines`` is 100 to avoid overflowing entity arrays on a
+    fully-built 16x16 factory (~80 entities at peak).
 
     Parameters
     ----------
     obs :
-        Observation variant
-    3 :
-        spatial channels
-    the :
-        full 10
+        Observation variant passed to :class:`FactoriaxEnv`.
     obs_radius :
-        Local
-    * :
-        
-    obs: str :
-         (Default value = "superficial_global")
-    obs_radius: int :
-         (Default value = 7)
-
-    Returns
-    -------
-    type
-        Binds the keyed generator as ``reset_fn`` (a fresh layout per reset), the
-        production achievement conditions as a step hook, and the achievement
-        reward. Loaded via ``factoriax.make("EasyRocket-v1")``. The 16x16 factory
-        runs to ~80 entities, so ``max_machines`` is budgeted to 100 (above the
-        auto default of 64) to avoid overflowing the entity arrays mid-build.
-
+        Half-width of the local observation window.
     """
     env = FactoriaxEnv(
         reset_fn=generate_easy_rocket_state,

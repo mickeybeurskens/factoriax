@@ -147,7 +147,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     @property
     def default_params(self) -> EnvParams:
-        """ """
+        """Params sized to the bound level; falls back to EnvParams defaults when unbound."""
         if self._level is None:
             return EnvParams()
         return EnvParams(
