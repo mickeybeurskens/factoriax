@@ -14,6 +14,7 @@ from typing import Any
 
 from factoriax.engine.envs.wrappers import AutoResetWrapper
 from factoriax.engine.envs.easy_rocket import easy_rocket
+from factoriax.engine.envs.mining import mining
 from factoriax.engine.envs.rocket import rocket
 from factoriax.engine.state import EnvParams
 
@@ -29,6 +30,15 @@ class ScenarioSpec:
 
 
 SCENARIOS: dict[str, ScenarioSpec] = {
+    "Mining-v1": ScenarioSpec(
+        name="Mining",
+        description=(
+            "Hand-mine ore on a randomly generated 8×8 map. "
+            "Ten iron-ore tiles with 3 resources each; 100-step budget."
+        ),
+        build=mining,
+        resample=True,
+    ),
     "EasyRocket-v1": ScenarioSpec(
         name="Easy Rocket",
         description=(

@@ -25,6 +25,9 @@ dev = [
     "mypy>=1.8.0",
     "ruff>=0.2.0",
 ]
+docs = [
+    "distrax>=0.1.9",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -73,6 +76,7 @@ dev = [
     "wandb>=0.25.1",
 ]
 docs = [
+    "distrax>=0.1.9",
     "myst-nb>=1.4.0",
     "sphinx>=9.0.4",
     "sphinx-book-theme>=1.2.0",
