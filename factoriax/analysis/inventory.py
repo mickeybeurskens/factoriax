@@ -249,13 +249,20 @@ def render_inventory_panel(
         # Label.
         label = _item_label(item)
         label_color = (220, 220, 210) if active else (110, 110, 110)
+        col_right = slot_x + col_w
+        lx = sx + swatch_sz + 5
+        avail_w = col_right - 20 - lx  # reserve 20 px for the count on the right
         label_rgba = render_text_rgba(label, font, label_color)
         lh, lw = label_rgba.shape[:2]
-        lx = sx + swatch_sz + 5
+        if lw > avail_w:
+            for fallback_size in (9, 7):
+                small_font = get_pixel_font(fallback_size)
+                label_rgba = render_text_rgba(label, small_font, label_color)
+                lh, lw = label_rgba.shape[:2]
+                if lw <= avail_w:
+                    break
         ly = y + (row_h - lh) // 2
-        # Count area is ~20 px from the right edge of this slot's column.
-        col_right = slot_x + col_w
-        if lx + lw < col_right - 20 and 0 <= ly and ly + lh <= height:
+        if lw <= avail_w and 0 <= ly and ly + lh <= height:
             composite_rgba_over_rgb(img[ly : ly + lh, lx : lx + lw], label_rgba)
 
         # Count, right-aligned inside this slot's column.
