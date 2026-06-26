@@ -1,4 +1,4 @@
-SPHINXBUILD = uv run --group docs sphinx-build
+SPHINXBUILD = JAX_PLATFORMS=cpu uv run --group docs sphinx-build
 NBSTRIPOUT  = uv run --group dev nbstripout
 SOURCEDIR   = .
 BUILDDIR    = _build
