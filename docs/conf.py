@@ -38,6 +38,8 @@ html_theme_options = {
     "use_repository_button": True,
     "show_toc_level": 2,
 }
+html_favicon = '_static/favicon.ico'
+html_logo = "_static/logo.png"
 
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]

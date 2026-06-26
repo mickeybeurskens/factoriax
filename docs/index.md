@@ -1,4 +1,4 @@
-# Factoriax
+# Factoriax Documentation
 
 A Factorio-inspired grid-world RL environment, written in JAX.
 State lives in JAX arrays; `step` and `reset` compile to a single
