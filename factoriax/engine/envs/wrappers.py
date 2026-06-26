@@ -91,6 +91,14 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         """Delegate to the inner env's default params."""
         return self._inner.default_params
 
+    @property
+    def map_width(self) -> int:
+        return self._inner.map_width
+
+    @property
+    def map_height(self) -> int:
+        return self._inner.map_height
+
     def step_env(
         self,
         key: jax.Array,
@@ -309,10 +317,16 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
     @property
     def default_params(self) -> EnvParams:
         """Delegate to the inner env's default params."""
-        # gymnax's environment.Environment is untyped so the inner attribute
-        # is Any; the runtime contract guarantees an EnvParams.
         params: EnvParams = self._inner.default_params
         return params
+
+    @property
+    def map_width(self) -> int:
+        return self._inner.map_width  # type: ignore[no-any-return]
+
+    @property
+    def map_height(self) -> int:
+        return self._inner.map_height  # type: ignore[no-any-return]
 
     def _rewrite(self, action: int | jax.Array) -> jax.Array:
         """Rewrite a blocked action to NOOP; pass others through unchanged."""

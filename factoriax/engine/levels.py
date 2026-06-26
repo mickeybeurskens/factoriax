@@ -667,47 +667,25 @@ def _place_players(
 
 def build_state(level: Level, params: EnvParams) -> EnvState:
     """Construct a JAX :class:`~factoriax.engine.state.EnvState` from a :class:`Level`.
-    
+
     Players are placed at the centre of the map, spread horizontally,
     each guaranteed to land on a DIRT tile.  All dynamic fields
     (inventory, craft progress, machine state) are zero-initialised.
-    
-    Parameters
-    ----------
-        level: Level definition.  Its ``map_width`` and ``map_height``
-            must match ``params.map_width`` and ``params.map_height``.
-
-    Parameters
-    ----------
-    level : Level :
-        
-    params : EnvParams :
-        
-    level: Level :
-        
-    params: EnvParams :
-        
 
     Returns
     -------
-    type
+    EnvState
         A fully initialised :class:`~factoriax.engine.state.EnvState`.
 
     
     >>> import factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
         >>> _, params = factoriax.make("EasyRocket-v1")
-        >>> params = params.replace(map_width=8, map_height=8, num_players=1)
+        >>> params = EnvParams(num_players=1)
         >>> state = factoriax.build_state(level, params)
         >>> state.map.shape
         (8, 8)
     """
-    if level.map_width != params.map_width or level.map_height != params.map_height:
-        raise ValueError(
-            f"Level dimensions ({level.map_width}x{level.map_height}) do not "
-            f"match params ({params.map_width}x{params.map_height})."
-        )
-
     if level.player_positions is not None:
         block_map = level.block_map.copy()
         player_positions_np = np.array(level.player_positions, dtype=np.int32)
@@ -754,7 +732,8 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             for item_type, count in items:
                 player_inv_np[p_idx, item_type] += count
 
-    mm = params.resolved_max_machines()
+    h, w = level.map_height, level.map_width
+    mm = params.max_machines if params.max_machines > 0 else max(64, h * w // 4)
 
     # Build entity arrays from grid machine data.
     mt_jnp = jnp.array(machine_types_np, dtype=jnp.int8)
@@ -891,12 +870,13 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
 
     
     """
-    center_x = params.map_width // 2
-    center_y = params.map_height // 2
+    h, w = world_map.shape
+    center_x = w // 2
+    center_y = h // 2
     player_positions = []
     for i in range(params.num_players):
         offset = i - params.num_players // 2
-        px = jnp.clip(center_x + offset, 0, params.map_width - 1)
+        px = jnp.clip(center_x + offset, 0, w - 1)
         py = center_y
         player_positions.append([px, py])
         world_map = world_map.at[py, px].set(jnp.int8(BlockType.DIRT))
@@ -913,9 +893,9 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
         0,
     ).astype(jnp.int16)
 
-    map_shape = (params.map_height, params.map_width)
+    map_shape = (h, w)
     inv_shape = (params.num_players, NUM_ITEM_TYPES)
-    mm = params.resolved_max_machines()
+    mm = params.max_machines if params.max_machines > 0 else max(64, h * w // 4)
 
     return EnvState(
         map=world_map.astype(jnp.int8),
@@ -945,74 +925,19 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
     )
 
 
-def generate_state(rng: jax.Array, params: EnvParams) -> EnvState:
-    """Generate a procedural world state from a random key.
-    
-    JAX-native and JIT-compatible.  Players spawn near the centre of the
-    map; spawn tiles are forced to DIRT after random terrain generation.
-    
-    Parameters
-    ----------
-        rng: JAX random key for reproducible generation.
-
-    Parameters
-    ----------
-    terrain :
-        probabilities
-    rng : jax.Array :
-        
-    params : EnvParams :
-        
-    rng: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
-    >>> import jax
-        >>> import factoriax
-        >>> _, params = factoriax.make("EasyRocket-v1")
-        >>> state = factoriax.generate_state(jax.random.PRNGKey(0), params)
-        >>> state.map.shape == (params.map_height, params.map_width)
-        True
-    """
+def generate_state(
+    rng: jax.Array, params: EnvParams, map_height: int = 32, map_width: int = 32
+) -> EnvState:
+    """Generate a procedural world state from a random key."""
     rng_map, _ = random.split(rng)
-    world_map = _generate_terrain(rng_map, params)
+    world_map = _generate_terrain(rng_map, params, map_height, map_width)
     return initial_state(world_map, params)
 
 
-def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
-    """Generate a random terrain map using patch-based noise.
-    
-    Delegates to :func:`_generate_terrain_patched`, the default
-    algorithm that produces natural-looking resource clusters and
-    water bodies.  See also :func:`_generate_terrain_uniform` for
-    the original per-tile random approach.
-    
-    Parameters
-    ----------
-        rng: JAX random key.
-
-    Parameters
-    ----------
-    rng : jax.Array :
-        
-    params : EnvParams :
-        
-    rng: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
-    """
-    return _generate_terrain_patched(rng, params)
+def _generate_terrain(
+    rng: jax.Array, params: EnvParams, map_height: int, map_width: int
+) -> jax.Array:
+    return _generate_terrain_patched(rng, params, map_height, map_width)
 
 
 # ---------------------------------------------------------------------------
@@ -1026,39 +951,10 @@ def _generate_terrain(rng: jax.Array, params: EnvParams) -> jax.Array:
 def _generate_terrain_uniform(
     rng: jax.Array,
     params: EnvParams,
+    map_height: int,
+    map_width: int,
 ) -> jax.Array:
-    """Generate terrain with independent per-tile random rolls.
-    
-    Every tile gets a uniform random value and is assigned a block
-    type via cumulative probability thresholds.  Produces a scattered
-    salt-and-pepper distribution with no spatial coherence.
-    
-    Priority (highest to lowest): water, iron, copper, coal.
-    
-    Parameters
-    ----------
-        rng: JAX random key.
-
-    Parameters
-    ----------
-    rng : jax.Array :
-        
-    params : EnvParams :
-        
-    rng: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
-    """
-    random_values = random.uniform(
-        rng,
-        (params.map_height, params.map_width),
-    )
+    random_values = random.uniform(rng, (map_height, map_width))
 
     water_threshold = params.water_probability
     iron_threshold = water_threshold + params.iron_probability
@@ -1068,7 +964,7 @@ def _generate_terrain_uniform(
     silicon_threshold = tin_threshold + params.silicon_probability
 
     terrain = jnp.full(
-        (params.map_height, params.map_width),
+        (map_height, map_width),
         int(BlockType.DIRT),
         dtype=jnp.int32,
     )
@@ -1165,36 +1061,10 @@ def _smooth_noise(
 def _generate_terrain_patched(
     rng: jax.Array,
     params: EnvParams,
+    map_height: int,
+    map_width: int,
 ) -> jax.Array:
-    """Generate terrain with smooth resource patches and water bodies.
-    
-    Each terrain type gets its own smooth noise field so deposits form
-    organic-looking clusters instead of single scattered tiles.  Water
-    uses a coarser noise scale to produce larger lakes.
-    
-    Priority (highest to lowest): water, iron, copper, coal.
-    
-    Parameters
-    ----------
-        rng: JAX random key.
-
-    Parameters
-    ----------
-    rng : jax.Array :
-        
-    params : EnvParams :
-        
-    rng: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
-    """
-    h, w = params.map_height, params.map_width
+    h, w = map_height, map_width
     keys = random.split(rng, 6)
 
     noise_water = _smooth_noise(keys[0], h, w, scale=6)

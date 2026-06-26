@@ -43,8 +43,6 @@ class TestSettingFields:
 
     def test_required_env_params_present(self) -> None:
         required = {
-            "map_width",
-            "map_height",
             "num_players",
             "max_timesteps",
             "water_probability",
@@ -79,10 +77,10 @@ class TestValueOps:
 
     def test_set_value_casts_int_for_int_field(self) -> None:
         config = _make_config()
-        field = next(f for f in _SETTING_FIELDS if f.key == "map_width")
-        _set_value(config, field, 17.0)
-        assert config.env_params["map_width"] == 17
-        assert isinstance(config.env_params["map_width"], int)
+        field = next(f for f in _SETTING_FIELDS if f.key == "num_players")
+        _set_value(config, field, 3.0)
+        assert config.env_params["num_players"] == 3
+        assert isinstance(config.env_params["num_players"], int)
 
     def test_field_clamp_respects_min_max_for_int(self) -> None:
         field = next(f for f in _SETTING_FIELDS if f.key == "num_players")

@@ -624,8 +624,6 @@ def rocket(
     )
     env = ActionMaskWrapper(env, tuple(ROCKET_BLOCKED_ACTIONS))
     params = EnvParams(
-        map_width=_MAP_SIZE,
-        map_height=_MAP_SIZE,
         num_players=1,
         max_timesteps=8000,
         recipe_table=ROCKET_RECIPE_TABLE,

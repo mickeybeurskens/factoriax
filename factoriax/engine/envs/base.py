@@ -103,30 +103,10 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         reward_fn: RewardFn | None = None,
         obs: str = "x_ray_global",
         obs_radius: int = 7,
+        map_width: int = 32,
+        map_height: int = 32,
     ) -> None:
-        """Initialize the environment.
-
-        Parameters
-        ----------
-            achievement_fn: Optional achievement condition function. Convenience
-                for ``step_hooks=(achievement_hook(achievement_fn),)``; when both
-                are given the achievement fold runs after the explicit hooks.
-            level: Fixed level for :meth:`reset_env`, or ``None`` for procedural
-                generation. Ignored when ``reset_fn`` is supplied.
-            reset_fn: World generator ``(key, params) -> EnvState``. When set,
-                :meth:`reset_env` calls it instead of the level/procgen branch.
-            step_hooks: Post-step transforms applied in order after
-                :func:`factoriax_step`, each ``(key, state, params) -> state``.
-            reward_fn: Per-step reward ``(prev, new, params) -> float``. When
-                ``None``, :meth:`step_env` returns ``0.0`` (rewards then belong to
-                a wrapper or the training loop).
-            obs: Observation variant key into
-                :data:`~factoriax.engine.observations.OBSERVATIONS`. One of
-                ``"x_ray_global"``, ``"x_ray_local"``,
-                ``"superficial_global"``, ``"superficial_local"``.
-            obs_radius: Half-width of the local window; ignored for
-                ``_global`` obs variants.
-        """
+        """Initialize the environment."""
         super().__init__()
         if obs not in OBSERVATIONS:
             raise ValueError(
@@ -144,16 +124,17 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         self.obs_radius = int(obs_radius)
         self._obs_profile = "superficial" if obs.startswith("superficial") else "x_ray"
         self._obs_is_local = obs.endswith("_local")
+        if level is not None:
+            self.map_width: int = level.map_width
+            self.map_height: int = level.map_height
+        else:
+            self.map_width = map_width
+            self.map_height = map_height
 
     @property
     def default_params(self) -> EnvParams:
-        """Params sized to the bound level; falls back to EnvParams defaults when unbound."""
-        if self._level is None:
-            return EnvParams()
-        return EnvParams(
-            map_width=self._level.map_width,
-            map_height=self._level.map_height,
-        )
+        """Default params for this environment."""
+        return EnvParams()
 
     @partial(jax.jit, static_argnames=("self",))
     def step(
@@ -302,7 +283,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         if self._reset_fn is not None:
             state = self._reset_fn(key, params)
         elif self._level is None:
-            state = generate_state(key, params)
+            state = generate_state(key, params, self.map_height, self.map_width)
         else:
             state = build_state(self._level, params)
         obs = self.get_obs(state, params)
@@ -389,7 +370,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             side = 2 * self.obs_radius + 1
             tiles = side * side
         else:
-            tiles = params.map_width * params.map_height
+            tiles = self.map_width * self.map_height
         obs_size = (
             NUM_SPATIAL_CHANNELS[self._obs_profile] * tiles
             + NUM_PLAYER_SCALARS[self._obs_profile]

@@ -53,11 +53,11 @@ class TestMachineInitialization:
     def test_machine_arrays_match_map_shape(self) -> None:
         """Machine state arrays should have the expected shapes."""
         rng = random.PRNGKey(0)
-        params = EnvParams(map_width=16, map_height=24)
-        state = generate_state(rng, params)
+        params = EnvParams()
+        state = generate_state(rng, params, 16, 24)
 
         assert state.machine_types.shape == state.map.shape
-        mm = params.resolved_max_machines()
+        mm = max(64, 16 * 24 // 4)
         assert state.ent_power.shape == (mm,)
         assert state.ent_buf_type.shape == (mm,)
         assert state.ent_buf_count.shape == (mm,)
@@ -73,7 +73,7 @@ class TestMinerOperation:
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -94,7 +94,7 @@ class TestMinerOperation:
                 dtype=jnp.int16,
             ),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -109,7 +109,7 @@ class TestMinerOperation:
             block_resources=jnp.array([[0]], dtype=jnp.int16),
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -124,7 +124,7 @@ class TestMinerOperation:
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
             max_machines=1,
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -143,7 +143,7 @@ class TestMinerOperation:
             block_resources=jnp.array([[1]], dtype=jnp.int16),
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -169,7 +169,7 @@ class TestMinerOperation:
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array([[MINER_OUTPUT_CAP - 1]], dtype=jnp.int16),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -198,7 +198,7 @@ class TestMinerDifferentOres:
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -229,7 +229,7 @@ class TestMultipleMiners:
                 dtype=jnp.int32,
             ),
         )
-        params = EnvParams(map_width=2, map_height=2)
+        params = EnvParams()
 
         new_state = run_miners(state, params)
 
@@ -288,7 +288,7 @@ class TestMinerPushDoesNotLeakIntoInactiveSlots:
     ) -> None:
         """Inactive slots keep an empty buffer while the pallet fills."""
         state = self._push_into_corner_state(state_factory)
-        params = EnvParams(map_width=2, map_height=1)
+        params = EnvParams()
 
         for _ in range(5):
             state = run_miners(state, params)
@@ -304,7 +304,7 @@ class TestMinerPushDoesNotLeakIntoInactiveSlots:
     def test_push_conserves_items(self, state_factory) -> None:
         """Total buffered ore equals total mined ore (no duplication)."""
         state = self._push_into_corner_state(state_factory)
-        params = EnvParams(map_width=2, map_height=1)
+        params = EnvParams()
 
         for _ in range(5):
             state = run_miners(state, params)
@@ -350,7 +350,7 @@ class TestBeltPushDoesNotLeakIntoInactiveSlots:
     def test_inactive_slots_stay_empty_under_belt_push(self, state_factory) -> None:
         """Inactive slots keep an empty buffer while the pallet fills."""
         state = self._belt_into_corner_state(state_factory)
-        params = EnvParams(map_width=2, map_height=1)
+        params = EnvParams()
 
         state = run_conveyor_belts(state, params)
 
@@ -365,7 +365,7 @@ class TestBeltPushDoesNotLeakIntoInactiveSlots:
     def test_belt_push_conserves_items(self, state_factory) -> None:
         """The single COAL on the belt is moved, never duplicated."""
         state = self._belt_into_corner_state(state_factory)
-        params = EnvParams(map_width=2, map_height=1)
+        params = EnvParams()
 
         before = int(jnp.sum(state.ent_buf_count.astype(jnp.int32)))
         state = run_conveyor_belts(state, params)
@@ -383,7 +383,7 @@ class TestUpdateAllMachines:
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
         )
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
 
         new_state = update_all_machines(state, params)
 

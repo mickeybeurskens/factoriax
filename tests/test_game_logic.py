@@ -241,7 +241,7 @@ class TestFactoriaxStep:
             ),
         )
         rng = jax.random.PRNGKey(0)
-        params = EnvParams(map_width=1, map_height=1)
+        params = EnvParams()
         new_state = factoriax_step(rng, state, Action.NOOP, params)
         assert int(new_state.timestep) == int(state.timestep) + 1
 
@@ -265,7 +265,7 @@ class TestFactoriaxStep:
             machine_power=jnp.array([[0, 0, 10]], dtype=jnp.int32),
         )
         rng = jax.random.PRNGKey(0)
-        params = EnvParams(map_width=3, map_height=1)
+        params = EnvParams()
         new_state = factoriax_step(rng, state, Action.MINE, params)
 
         assert int(new_state.block_resources[0, 0]) == 9

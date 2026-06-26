@@ -25,7 +25,7 @@ def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
     are what set how long a single miner can run before depletion.
     """
     level = build_rocket_level()
-    params = EnvParams(map_width=32, map_height=32, num_players=1)
+    params = EnvParams(num_players=1)
     state = build_state(level, params)
 
     block_map = state.map
@@ -58,7 +58,7 @@ def test_coal_capacity_fits_within_block_max() -> None:
     :class:`FactoriaxEnv.observation_space` declares.
     """
     level = build_rocket_level()
-    params = EnvParams(map_width=32, map_height=32, num_players=1)
+    params = EnvParams(num_players=1)
     state = build_state(level, params)
 
     assert int(state.block_resources.max()) <= BLOCK_MAX_RESOURCES

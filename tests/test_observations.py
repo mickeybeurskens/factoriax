@@ -37,15 +37,15 @@ from factoriax.engine.state import EnvParams
 
 _DEFAULT_PARAMS = EnvParams(
     max_timesteps=100,
-    map_width=8,
-    map_height=8,
     num_players=2,
 )
+_MAP_W: int = 8
+_MAP_H: int = 8
 
 _GLOBAL_OBS_SIZE = (
     NUM_SPATIAL_CHANNELS["x_ray"]
-    * _DEFAULT_PARAMS.map_width
-    * _DEFAULT_PARAMS.map_height
+    * _MAP_W
+    * _MAP_H
     + NUM_PLAYER_SCALARS["x_ray"]
 )
 
@@ -85,8 +85,8 @@ class TestPlayerScalars:
             player_position=(4, 6),
         )
         out = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
-        assert out[0] == pytest.approx(4 / _DEFAULT_PARAMS.map_width)
-        assert out[1] == pytest.approx(6 / _DEFAULT_PARAMS.map_height)
+        assert out[0] == pytest.approx(4 / _MAP_W)
+        assert out[1] == pytest.approx(6 / _MAP_H)
 
     def test_timestep_normalized(self, state_factory) -> None:
         """Timestep fraction matches timestep / max_timesteps."""
@@ -146,7 +146,7 @@ class TestGlobalArray:
         world_map = jnp.array([[int(BlockType.COAL)] * 8] * 8, dtype=jnp.int32)
         state = state_factory(world_map=world_map)
         out = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
-        tiles = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
+        tiles = _MAP_W * _MAP_H
         expected_val = float(BlockType.COAL) / float(max(BlockType))
         np.testing.assert_allclose(out[:tiles], expected_val)
 
@@ -162,8 +162,8 @@ class TestGlobalArray:
         # Spatial channels are identical; player scalars differ.
         spatial_size = (
             NUM_SPATIAL_CHANNELS["x_ray"]
-            * _DEFAULT_PARAMS.map_width
-            * _DEFAULT_PARAMS.map_height
+            * _MAP_W
+            * _MAP_H
         )
         np.testing.assert_array_equal(obs0[:spatial_size], obs1[:spatial_size])
         assert not np.allclose(obs0[spatial_size:], obs1[spatial_size:])
@@ -228,7 +228,7 @@ class TestLocalArray:
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),
         )
-        params = EnvParams(map_width=32, map_height=32, num_players=1)
+        params = EnvParams(num_players=1)
         out = local_x_ray(state, params, 0)
         assert out.shape == (expected,)
 
@@ -426,10 +426,10 @@ class TestRgb:
 def _slice_channel(obs: jax.Array, params: EnvParams, name: str) -> np.ndarray:
     """Return the ``(H, W)`` float view of a named spatial channel."""
     idx = _X_RAY_SPATIAL_CHANNEL_NAMES.index(name)
-    tile_count = params.map_width * params.map_height
+    tile_count = _MAP_W * _MAP_H
     start = idx * tile_count
     end = start + tile_count
-    return np.asarray(obs[start:end]).reshape(params.map_height, params.map_width)
+    return np.asarray(obs[start:end]).reshape(_MAP_H, _MAP_W)
 
 
 class TestSlotProjection:
@@ -457,7 +457,7 @@ class TestSlotProjection:
         must surface those on slot 0, slot 1, slot 2 channels."""
         from factoriax.engine.constants import ItemType
 
-        shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
+        shape = (_MAP_H, _MAP_W)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
         mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
         mt = mt.at[3, 2].set(int(Machine.ASSEMBLER))
@@ -506,7 +506,7 @@ class TestSlotProjection:
         slot 2 and leave slots 0 and 1 at zero."""
         from factoriax.engine.constants import ItemType
 
-        shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
+        shape = (_MAP_H, _MAP_W)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
         mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
         mt = mt.at[1, 1].set(int(Machine.PALLET))
@@ -534,7 +534,7 @@ class TestSlotProjection:
     def test_empty_machine_has_zero_slots(self, state_factory) -> None:
         """A freshly placed assembler with no inputs/output shows 0 in
         every slot channel."""
-        shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
+        shape = (_MAP_H, _MAP_W)
         world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
         mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
         mt = mt.at[2, 2].set(int(Machine.ASSEMBLER))
@@ -633,8 +633,6 @@ class TestLocalGlobalEquivalence:
         )
 
         params = EnvParams(
-            map_width=w,
-            map_height=h,
             num_players=1,
             max_timesteps=100,
         )
@@ -682,8 +680,8 @@ class TestLocalGlobalEquivalence:
 
         global_spatial = (
             NUM_SPATIAL_CHANNELS["x_ray"]
-            * _DEFAULT_PARAMS.map_width
-            * _DEFAULT_PARAMS.map_height
+            * _MAP_W
+            * _MAP_H
         )
         window = 2 * radius + 1
         local_spatial = NUM_SPATIAL_CHANNELS["x_ray"] * window * window
@@ -700,7 +698,7 @@ class TestMachineDirectionChannel:
         """A miner facing RIGHT shows the RIGHT enum value at its tile."""
         from factoriax.engine.constants import Direction
 
-        shape = (_DEFAULT_PARAMS.map_height, _DEFAULT_PARAMS.map_width)
+        shape = (_MAP_H, _MAP_W)
         world_map = jnp.full(shape, int(BlockType.IRON), dtype=jnp.int32)
         mt = jnp.full(shape, int(Machine.NONE), dtype=jnp.int32)
         mt = mt.at[4, 4].set(int(Machine.MINER))

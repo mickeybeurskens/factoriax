@@ -672,8 +672,6 @@ def controller_event_to_name(event: pygame.event.Event) -> str | None:
 # Field names shared between EnvParams and the config dict.
 _ENV_PARAM_FIELDS: tuple[str, ...] = (
     "max_timesteps",
-    "map_width",
-    "map_height",
     "num_players",
     "max_machines",
     "water_probability",

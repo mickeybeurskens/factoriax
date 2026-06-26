@@ -72,10 +72,10 @@ class TestEntHealth:
     def test_reset_env_initializes_ent_health_zeros(self) -> None:
         """After reset, ``ent_health`` exists with the right shape and
         every slot is zero (no entities placed yet)."""
-        env = FactoriaxEnv()
-        params = EnvParams(map_width=8, map_height=8, num_players=1)
+        env = FactoriaxEnv(map_width=8, map_height=8)
+        params = EnvParams(num_players=1)
         _, state = env.reset_env(jax.random.key(0), params)
-        mm = params.resolved_max_machines()
+        mm = max(64, 8 * 8 // 4)
         assert state.ent_health.shape == (mm,)
         assert state.ent_health.dtype == jnp.int16
         assert bool(jnp.all(state.ent_health == 0))
@@ -347,7 +347,7 @@ class TestPlacementInitializesHealth:
             .place_machine(2, 2, int(Machine.FURNACE), int(Direction.UP))
             .build("hp_init_test")
         )
-        params = EnvParams(map_width=4, map_height=4, num_players=1)
+        params = EnvParams(num_players=1)
         state = build_state(level, params)
         eidx = int(state.tile_entity[2, 2])
         assert eidx >= 0

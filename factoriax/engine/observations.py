@@ -282,10 +282,11 @@ def _common_scalars(
     
     """
     pos = state.player_positions[player_idx]
+    _h, _w = state.map.shape
     pose_time = jnp.array(
         [
-            pos[0] / params.map_width,
-            pos[1] / params.map_height,
+            pos[0] / _w,
+            pos[1] / _h,
             state.player_directions[player_idx] / _DIR_NORM,
             state.timestep / params.max_timesteps,
         ],
@@ -438,57 +439,16 @@ def _superficial_scalars(
 
 
 def observation_size(
-    params: EnvParams,
     *,
     profile: str,
     view: str,
     radius: int = 7,
+    map_height: int = 32,
+    map_width: int = 32,
 ) -> int:
-    """Flat observation size for ``(profile, view)`` on ``params``.
-    
-    Parameters
-    ----------
-    
-    Parameters
-    ----------
-      profile: x_ray
-      view: global
-      radius: Half
-
-    Parameters
-    ----------
-    profile :
-        str
-    view :
-        str
-    radius :
-        int
-    params : EnvParams :
-        
-    * :
-        
-    profile : str :
-        
-    view : str :
-        
-    radius : int :
-        (Default value = 7)
-    params: EnvParams :
-        
-    profile: str :
-        
-    view: str :
-        
-    radius: int :
-         (Default value = 7)
-
-    Returns
-    -------
-
-    
-    """
+    """Flat observation size for ``(profile, view)`` with the given map dimensions."""
     if view == "global":
-        spatial_tiles = params.map_width * params.map_height
+        spatial_tiles = map_width * map_height
     elif view == "local":
         side = 2 * radius + 1
         spatial_tiles = side * side

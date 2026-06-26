@@ -73,30 +73,11 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
-    """Environment parameters.
-    
-    Examples
-    --------
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
-    
-    >>> import factoriax
-        >>> _, params = factoriax.make("EasyRocket-v1")
-        >>> larger = params.replace(map_width=64, map_height=64)
-        >>> larger.map_width, larger.map_height
-        (64, 64)
-    """
+    """Environment parameters."""
 
     max_timesteps: int = 1000
-    map_width: int = 32
-    map_height: int = 32
     num_players: int = 2
-    max_machines: int = 0  # 0 = auto: max(64, map_area // 4)
+    max_machines: int = 0
     water_probability: float = 0.1
     iron_probability: float = 0.12
     copper_probability: float = 0.12
@@ -109,9 +90,3 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     recipe_table: RecipeTable = DEFAULT_RECIPE_TABLE
 
     NUM_ACTIONS: ClassVar[int] = len(Action)
-
-    def resolved_max_machines(self) -> int:
-        """ """
-        if self.max_machines > 0:
-            return self.max_machines
-        return max(64, self.map_width * self.map_height // 4)

@@ -20,7 +20,7 @@ from factoriax.playground.play.game_ui import GameUI
 @pytest.fixture
 def params() -> EnvParams:
     """Return default environment parameters."""
-    return EnvParams(map_width=4, map_height=4, num_players=1)
+    return EnvParams(num_players=1)
 
 
 @pytest.fixture

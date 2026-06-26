@@ -29,7 +29,7 @@ from factoriax.playground.play.game_ui import GameUI, GameUIResult
 @pytest.fixture
 def params() -> EnvParams:
     """Small environment parameters."""
-    return EnvParams(map_width=8, map_height=8, num_players=2)
+    return EnvParams(num_players=2)
 
 
 @pytest.fixture

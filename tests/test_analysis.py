@@ -516,13 +516,13 @@ class TestState:
     def test_position_heatmap_shape(self) -> None:
         """position_heatmap returns shape (map_height, map_width)."""
         traj = make_multi_player_traj(4, 20, num_p=2)
-        hm = position_heatmap(traj, player=0, map_width=32, map_height=32)
+        hm = position_heatmap(traj, player=0)
         assert hm.shape == (32, 32)
 
     def test_position_heatmap_sums_to_one(self) -> None:
         """position_heatmap sums to 1.0."""
         traj = make_multi_player_traj(4, 20, num_p=2)
-        hm = position_heatmap(traj, player=0, map_width=32, map_height=32)
+        hm = position_heatmap(traj, player=0)
         assert hm.sum() == pytest.approx(1.0)
 
     def test_position_heatmap_all_same_position(self) -> None:
@@ -535,7 +535,7 @@ class TestState:
             actions=np.zeros((num_eps, num_steps, num_p), dtype=np.int32),
             positions=positions,
         )
-        hm = position_heatmap(traj, player=0, map_width=32, map_height=32)
+        hm = position_heatmap(traj, player=0)
         assert hm[7, 5] == pytest.approx(1.0)
         mask = np.zeros((32, 32), dtype=bool)
         mask[7, 5] = True
@@ -550,7 +550,7 @@ class TestState:
             actions=np.zeros((num_eps, num_steps, num_p), dtype=np.int32),
             positions=positions,
         )
-        hm = position_heatmap(traj, player=0, map_width=32, map_height=32)
+        hm = position_heatmap(traj, player=0)
         assert hm.sum() == pytest.approx(1.0)
         assert hm[31, 31] == pytest.approx(1.0)
 

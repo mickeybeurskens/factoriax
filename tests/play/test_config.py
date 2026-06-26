@@ -174,17 +174,16 @@ class TestEnvParamsConversion:
 
     def test_custom_values(self) -> None:
         """Custom param values should be preserved."""
-        params = EnvParams(map_width=64, map_height=64, num_players=4)
+        params = EnvParams(num_players=4)
         d = env_params_to_dict(params)
-        assert d["map_width"] == 64
         assert d["num_players"] == 4
 
     def test_missing_fields_use_defaults(self) -> None:
         """Missing fields in the dict should fall back to defaults."""
-        config = PlayerConfig(env_params={"map_width": 16})
+        config = PlayerConfig(env_params={"num_players": 3})
         params = config_to_env_params(config)
-        assert params.map_width == 16
-        assert params.map_height == EnvParams().map_height
+        assert params.num_players == 3
+        assert params.max_timesteps == EnvParams().max_timesteps
 
     def test_player_mining_yield_default(self) -> None:
         """EnvParams should expose a default player_mining_yield of 1."""
@@ -212,20 +211,20 @@ class TestLoadSaveConfig:
         path = tmp_path / "test_config.json"
         kb = default_keyboard()
         ctrl = default_controller()
-        env_dict = env_params_to_dict(EnvParams(map_width=48))
+        env_dict = env_params_to_dict(EnvParams(num_players=3))
         config = PlayerConfig(env_params=env_dict, keyboard=kb, controller=ctrl)
 
         save_config(config, path)
         loaded = load_config(path)
 
-        assert loaded.env_params["map_width"] == 48
+        assert loaded.env_params["num_players"] == 3
         assert loaded.keyboard[PlayerAction.MINE] == kb[PlayerAction.MINE]
 
     def test_load_missing_file_returns_defaults(self, tmp_path: Path) -> None:
         """Loading from a missing file should return default config."""
         path = tmp_path / "nonexistent.json"
         config = load_config(path)
-        assert config.env_params["map_width"] == EnvParams().map_width
+        assert config.env_params["num_players"] == EnvParams().num_players
         assert PlayerAction.MINE in config.keyboard
 
     def test_load_merges_missing_actions(self, tmp_path: Path) -> None:
@@ -234,7 +233,7 @@ class TestLoadSaveConfig:
         import orjson
 
         partial = {
-            "env_params": {"map_width": 20},
+            "env_params": {"num_players": 3},
             "keyboard": {"mine": ["K_x"]},
             "controller": {},
         }
@@ -252,7 +251,7 @@ class TestLoadSaveConfig:
         path = tmp_path / "corrupt.json"
         path.write_text("not valid json {{{")
         config = load_config(path)
-        assert config.env_params["map_width"] == EnvParams().map_width
+        assert config.env_params["num_players"] == EnvParams().num_players
 
 
 class TestPlayerConfigSeed:

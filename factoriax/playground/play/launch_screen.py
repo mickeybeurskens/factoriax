@@ -51,8 +51,6 @@ _SECTIONS: tuple[SettingSection, ...] = (
     SettingSection(
         "World",
         (
-            SettingField("map_width", "Map width", False, 1, 8, 64),
-            SettingField("map_height", "Map height", False, 1, 8, 64),
             SettingField("num_players", "Players", False, 1, 1, 4),
             SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
         ),

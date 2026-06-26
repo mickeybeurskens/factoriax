@@ -46,7 +46,7 @@ class TestWorldGeneration:
         params = EnvParams()
         state = generate_state(rng, params)
 
-        assert state.map.shape == (params.map_height, params.map_width)
+        assert state.map.shape == (32, 32)
         assert state.player_positions.shape == (params.num_players, 2)
         assert state.timestep == 0
 
@@ -83,8 +83,8 @@ class TestEnvConstructorLevel:
         """FactoriaxEnv(level=None).reset_env produces a procedural state."""
         from factoriax.engine.envs.base import FactoriaxEnv
 
-        env = FactoriaxEnv()  # level=None default
-        params = EnvParams(map_width=8, map_height=8, num_players=1)
+        env = FactoriaxEnv(map_width=8, map_height=8)  # level=None default
+        params = EnvParams(num_players=1)
 
         _, state = env.reset_env(random.PRNGKey(0), params)
 
@@ -101,7 +101,7 @@ class TestEnvConstructorLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(map_width=15, map_height=15, num_players=1)
+        params = EnvParams(num_players=1)
 
         _, state = env.reset_env(random.PRNGKey(0), params)
 
@@ -405,7 +405,7 @@ class TestEnvironment:
         params = env.default_params
         obs_space = env.observation_space(params)
         expected_size = (
-            NUM_SPATIAL_CHANNELS["x_ray"] * params.map_width * params.map_height
+            NUM_SPATIAL_CHANNELS["x_ray"] * env.map_width * env.map_height
             + NUM_PLAYER_SCALARS["x_ray"]
         )
         assert obs_space.shape == (expected_size,)

@@ -83,14 +83,13 @@ class TestStatesToTrajectoryWithParams:
 
     def test_params_kwarg_populates_scheme(self, state_factory) -> None:
         """Passing params records env_params_to_dict on the trajectory."""
-        params = EnvParams(
-            map_width=8, map_height=8, num_players=1, player_mining_yield=3
+        params = EnvParams(num_players=1, player_mining_yield=3
         )
         states, actions = self._fake_states(state_factory, count=4)
         traj = states_to_trajectory(states, actions=actions, params=params)
         assert traj.env_params_scheme is not None
         assert traj.env_params_scheme["player_mining_yield"] == 3
-        assert traj.env_params_scheme["map_width"] == 8
+        assert traj.env_params_scheme["player_mining_yield"] == 3
 
     def test_omitting_params_leaves_scheme_none(self, state_factory) -> None:
         """Default call (no params kwarg) keeps env_params_scheme=None."""

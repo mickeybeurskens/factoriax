@@ -52,7 +52,7 @@ class TestEditorInventoryInit:
     def test_pallet_items_go_to_buffer(self) -> None:
         """Items in a pallet's inventory should populate buffer."""
         level = _make_level_with_pallet_items()
-        params = EnvParams(map_width=5, map_height=5, num_players=1)
+        params = EnvParams(num_players=1)
         state = build_state(level, params)
 
         eidx = int(state.tile_entity[2, 2])

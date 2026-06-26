@@ -84,7 +84,7 @@ class TestInventoryObservation:
         obs = env.get_obs(state, params)
 
         expected_size = (
-            NUM_SPATIAL_CHANNELS["x_ray"] * params.map_width * params.map_height
+            NUM_SPATIAL_CHANNELS["x_ray"] * env.map_width * env.map_height
             + NUM_PLAYER_SCALARS["x_ray"]
         )
         assert obs.shape == (expected_size,)
@@ -103,7 +103,7 @@ class TestInventoryObservation:
         obs = env.get_obs(state, params)
 
         spatial_size = (
-            NUM_SPATIAL_CHANNELS["x_ray"] * params.map_width * params.map_height
+            NUM_SPATIAL_CHANNELS["x_ray"] * env.map_width * env.map_height
         )
         inv_start = spatial_size
         inv_data = obs[inv_start:]
@@ -138,8 +138,8 @@ class TestInventoryRenderer:
     def test_render_pixels_excludes_inventory(self) -> None:
         """The renderer should return an RGB array sized to the map, no menu."""
         rng = random.PRNGKey(0)
-        params = EnvParams(map_width=8, map_height=8)
-        state = generate_state(rng, params)
+        params = EnvParams()
+        state = generate_state(rng, params, map_height=8, map_width=8)
 
         renderer = JaxRenderer(tile_px=BLOCK_PIXEL_SIZE)
         pixels = renderer.jit_render_map(state)

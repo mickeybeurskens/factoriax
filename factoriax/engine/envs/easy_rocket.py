@@ -244,7 +244,7 @@ def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
 
     (placed, _count), _ = jax.lax.scan(place, (placed0, jnp.int32(0)), shuffled)
 
-    world = jnp.full((params.map_height, params.map_width), jnp.int8(BlockType.DIRT))
+    world = jnp.full((_MAP_SIZE, _MAP_SIZE), jnp.int8(BlockType.DIRT))
     for i, block in enumerate(_PATCH_BLOCKS):
         patch = jnp.full((_PATCH_SIZE, _PATCH_SIZE), jnp.int8(int(block)))
         world = jax.lax.dynamic_update_slice(world, patch, (placed[i, 1], placed[i, 0]))
@@ -843,10 +843,10 @@ def easy_rocket(
         reward_fn=easy_rocket_reward,
         obs=obs,
         obs_radius=obs_radius,
-    )
-    params = EnvParams(
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
+    )
+    params = EnvParams(
         num_players=1,
         max_timesteps=2000,
         max_machines=100,

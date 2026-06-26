@@ -81,7 +81,7 @@ def make_env():
             if achievement_fn is not None
             else FactoriaxEnv()
         )
-        params = EnvParams(map_width=8, map_height=8, num_players=1)
+        params = EnvParams(num_players=1)
         _, state = env.reset_env(random.PRNGKey(0), params)
         cache[key] = (env, params, state)
         return cache[key]
@@ -135,7 +135,7 @@ def test_core_game_conditions_unlock_through_engine(make_env, state_factory) -> 
     )
 
     env, _, _ = make_env(core_game_conditions)
-    params = EnvParams(map_width=1, map_height=1, num_players=1, max_machines=4)
+    params = EnvParams(num_players=1, max_machines=4)
     _, state, _, _, _ = env.step_env(random.PRNGKey(0), state, 0, params)
 
     assert bool(state.achievements_unlocked[_achievement_index("first_ore")])

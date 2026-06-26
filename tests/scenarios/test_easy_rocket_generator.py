@@ -24,9 +24,7 @@ from factoriax.engine.envs.easy_rocket import (
 )
 from factoriax.engine.state import EnvParams
 
-_PARAMS = EnvParams(
-    map_width=_MAP_SIZE, map_height=_MAP_SIZE, num_players=1, base_resources=3000
-)
+_PARAMS = EnvParams(num_players=1, base_resources=3000)
 _ORE_VALUES: tuple[int, ...] = tuple(int(b) for b in _PATCH_BLOCKS)
 _TILES_PER_PATCH = 4
 

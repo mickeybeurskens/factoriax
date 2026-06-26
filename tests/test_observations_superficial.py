@@ -41,15 +41,15 @@ from factoriax.engine.state import EnvParams
 
 _DEFAULT_PARAMS = EnvParams(
     max_timesteps=100,
-    map_width=8,
-    map_height=8,
     num_players=2,
 )
+_MAP_W: int = 8
+_MAP_H: int = 8
 
 _GLOBAL_SIZE = (
     NUM_SPATIAL_CHANNELS["superficial"]
-    * _DEFAULT_PARAMS.map_width
-    * _DEFAULT_PARAMS.map_height
+    * _MAP_W
+    * _MAP_H
     + NUM_PLAYER_SCALARS["superficial"]
 )
 _RADIUS = 3
@@ -130,7 +130,7 @@ class TestGlobalSuperficial:
         x_ray = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         super_obs = np.array(global_superficial(state, _DEFAULT_PARAMS, 0))
 
-        tile_count = _DEFAULT_PARAMS.map_width * _DEFAULT_PARAMS.map_height
+        tile_count = _MAP_W * _MAP_H
         for super_idx, name in enumerate(_SUPERFICIAL_SPATIAL_CHANNEL_NAMES):
             x_ray_idx = _X_RAY_SPATIAL_CHANNEL_NAMES.index(name)
             x_ray_channel = x_ray[x_ray_idx * tile_count : (x_ray_idx + 1) * tile_count]
@@ -158,8 +158,8 @@ class TestGlobalSuperficial:
         out = np.array(global_superficial(state, _DEFAULT_PARAMS, 0))
         spatial_size = (
             NUM_SPATIAL_CHANNELS["superficial"]
-            * _DEFAULT_PARAMS.map_width
-            * _DEFAULT_PARAMS.map_height
+            * _MAP_W
+            * _MAP_H
         )
         tail = out[spatial_size:]
         expected = np.array(_common_scalars(state, _DEFAULT_PARAMS, 0))
@@ -231,10 +231,7 @@ class TestLocalSuperficial:
             machine_types=machine_types,
             machine_direction=machine_direction,
         )
-        params = EnvParams(
-            map_width=16,
-            map_height=16,
-            num_players=1,
+        params = EnvParams(num_players=1,
             max_timesteps=100,
         )
         x_ray = np.array(local_x_ray(state, params, 0, radius=_RADIUS))

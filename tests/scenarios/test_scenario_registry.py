@@ -20,7 +20,7 @@ _NOOP = int(Action.NOOP)
 
 def test_catalog_lists_expected_scenarios() -> None:
     catalog = dict(list_scenarios())
-    assert set(catalog) == {"EasyRocket-v1", "Rocket-v1"}
+    assert set(catalog) == {"EasyRocket-v1", "Rocket-v1", "Mining-v1"}
     for spec in catalog.values():
         assert isinstance(spec, ScenarioSpec)
         assert spec.name and spec.description and callable(spec.build)
@@ -28,7 +28,7 @@ def test_catalog_lists_expected_scenarios() -> None:
 
 def test_make_easy_rocket_builds_and_steps() -> None:
     env, params = make("EasyRocket-v1")
-    assert params.map_width == 16 and params.map_height == 16
+    assert env.map_width == 16 and env.map_height == 16
     obs, state = env.reset_env(random.PRNGKey(0), params)
     assert obs.shape == env.observation_space(params).shape
     assert state.achievements_unlocked.shape == (MAX_ACHIEVEMENTS,)
@@ -38,7 +38,7 @@ def test_make_easy_rocket_builds_and_steps() -> None:
 
 def test_make_rocket_is_32x32_and_masked() -> None:
     env, params = make("Rocket-v1")
-    assert params.map_width == 32 and params.map_height == 32
+    assert env.map_width == 32 and env.map_height == 32
     assert isinstance(env, ActionMaskWrapper)
 
 

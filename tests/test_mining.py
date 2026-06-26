@@ -76,7 +76,7 @@ class TestBlockResources:
     def test_block_resources_shape_matches_map(self) -> None:
         """Block resources should have same shape as map."""
         rng = random.PRNGKey(0)
-        params = EnvParams(map_width=16, map_height=24)
+        params = EnvParams()
         state = generate_state(rng, params)
         assert state.block_resources.shape == state.map.shape
 

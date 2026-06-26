@@ -35,8 +35,8 @@ from factoriax.engine.state import EnvParams
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
-_PARAMS_1P = EnvParams(map_width=8, map_height=8, num_players=1)
-_PARAMS_2P = EnvParams(map_width=8, map_height=8, num_players=2)
+_PARAMS_1P = EnvParams(num_players=1)
+_PARAMS_2P = EnvParams(num_players=2)
 
 
 def _dirt_level(w: int = 8, h: int = 8, name: str = "dirt") -> Level:
@@ -55,8 +55,8 @@ class TestLevelValidation:
         with pytest.raises(ValueError, match="block_map shape"):
             Level(
                 name="bad",
-                map_width=4,
-                map_height=4,
+                map_width=8,
+                map_height=8,
                 block_map=np.zeros((3, 4), dtype=np.int32),
             )
 
@@ -244,7 +244,7 @@ class TestBuildState:
 
     def test_auto_fill_resources_from_ore(self) -> None:
         level = LevelBuilder(4, 4).fill_rect(0, 0, 2, 2, BlockType.COAL).build("t")
-        state = build_state(level, EnvParams(map_width=4, map_height=4, num_players=1))
+        state = build_state(level, EnvParams(num_players=1))
         resources = np.array(state.block_resources)
         assert (resources[:2, :2] == BLOCK_MAX_RESOURCES).all()
         assert (resources[2:, :] == 0).all()
@@ -259,13 +259,8 @@ class TestBuildState:
             block_map=np.full((4, 4), int(BlockType.DIRT), dtype=np.int32),
             block_resources=custom,
         )
-        state = build_state(level, EnvParams(map_width=4, map_height=4, num_players=1))
+        state = build_state(level, EnvParams(num_players=1))
         assert int(state.block_resources[0, 0]) == 42
-
-    def test_mismatched_dimensions_raises(self) -> None:
-        level = _dirt_level(w=4, h=4)
-        with pytest.raises(ValueError, match="dimensions"):
-            build_state(level, EnvParams(map_width=8, map_height=8, num_players=1))
 
     def test_player_directions_default_down(self) -> None:
         state = build_state(_dirt_level(), _PARAMS_1P)
@@ -450,7 +445,7 @@ class TestRegistry:
 
     def test_15x15_buildable_for_1_player(self) -> None:
         level = get_level("15x15_resources")
-        params = EnvParams(map_width=15, map_height=15, num_players=1)
+        params = EnvParams(num_players=1)
         state = build_state(level, params)
         assert state.player_positions.shape == (1, 2)
 
@@ -464,18 +459,18 @@ class TestGenerateState:
     """generate_state produces correctly-shaped states."""
 
     def test_map_shape_matches_params(self) -> None:
-        params = EnvParams(map_width=16, map_height=16, num_players=1)
-        state = generate_state(jax.random.PRNGKey(0), params)
+        params = EnvParams(num_players=1)
+        state = generate_state(jax.random.PRNGKey(0), params, map_height=16, map_width=16)
         assert state.map.shape == (16, 16)
 
     def test_player_count_matches_params(self) -> None:
-        params = EnvParams(map_width=16, map_height=16, num_players=3)
+        params = EnvParams(num_players=3)
         state = generate_state(jax.random.PRNGKey(1), params)
         assert state.player_positions.shape == (3, 2)
 
     def test_spawn_tiles_are_dirt(self) -> None:
         """Every player spawn tile must be DIRT after generation."""
-        params = EnvParams(map_width=16, map_height=16, num_players=2)
+        params = EnvParams(num_players=2)
         state = generate_state(jax.random.PRNGKey(2), params)
         positions = np.array(state.player_positions)
         world_map = np.array(state.map)
@@ -483,13 +478,13 @@ class TestGenerateState:
             assert world_map[py, px] == int(BlockType.DIRT)
 
     def test_different_seeds_differ(self) -> None:
-        params = EnvParams(map_width=16, map_height=16, num_players=1)
+        params = EnvParams(num_players=1)
         s0 = generate_state(jax.random.PRNGKey(0), params)
         s1 = generate_state(jax.random.PRNGKey(99), params)
         assert not jnp.array_equal(s0.map, s1.map)
 
     def test_same_seed_deterministic(self) -> None:
-        params = EnvParams(map_width=16, map_height=16, num_players=1)
+        params = EnvParams(num_players=1)
         s0 = generate_state(jax.random.PRNGKey(7), params)
         s1 = generate_state(jax.random.PRNGKey(7), params)
         np.testing.assert_array_equal(np.array(s0.map), np.array(s1.map))
@@ -500,7 +495,7 @@ class TestGenerateState:
 
         from factoriax.engine.tables import MINEABLE_BLOCKS
 
-        params = EnvParams(map_width=32, map_height=32, num_players=1, base_resources=3)
+        params = EnvParams(num_players=1, base_resources=3)
         state = generate_state(jax.random.PRNGKey(5), params)
         world_map = np.array(state.map)
         resources = np.array(state.block_resources)
@@ -515,8 +510,7 @@ class TestGenerateState:
         from factoriax.engine.tables import MINEABLE_BLOCKS
 
         for count in (1, 5, 10):
-            params = EnvParams(
-                map_width=16, map_height=16, num_players=1, base_resources=count
+            params = EnvParams(num_players=1, base_resources=count
             )
             state = generate_state(jax.random.PRNGKey(0), params)
             world_map = np.array(state.map)
@@ -539,7 +533,7 @@ class TestResetWithBoundLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(map_width=15, map_height=15, num_players=1)
+        params = EnvParams(num_players=1)
         obs, state = env.reset_env(jax.random.PRNGKey(0), params)
         assert obs.ndim == 1
         assert state.map.shape == (15, 15)
@@ -549,7 +543,7 @@ class TestResetWithBoundLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(map_width=15, map_height=15, num_players=1)
+        params = EnvParams(num_players=1)
         obs, _ = env.reset_env(jax.random.PRNGKey(0), params)
         expected = env.observation_space(params).shape[0]
         assert obs.shape == (expected,)
@@ -559,7 +553,7 @@ class TestResetWithBoundLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(map_width=15, map_height=15, num_players=1)
+        params = EnvParams(num_players=1)
         _, s1 = env.reset_env(jax.random.PRNGKey(0), params)
         _, s2 = env.reset_env(jax.random.PRNGKey(123), params)
         np.testing.assert_array_equal(np.array(s1.map), np.array(s2.map))

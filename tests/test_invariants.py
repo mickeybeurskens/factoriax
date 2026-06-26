@@ -28,7 +28,7 @@ from factoriax.engine.tables import PLAYER_MAX_STACK
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SMALL_PARAMS = EnvParams(map_width=8, map_height=8, max_timesteps=200)
+_SMALL_PARAMS = EnvParams(max_timesteps=200)
 _NUM_RANDOM_STEPS = 100
 
 
@@ -42,7 +42,7 @@ def random_episode():
     share the trace: the costly ``lax.scan`` over ``factoriax_step``
     is compiled exactly once for the file instead of once per test.
     """
-    env = FactoriaxEnv()
+    env = FactoriaxEnv(map_width=8, map_height=8)
     params = _SMALL_PARAMS
 
     def _step(
@@ -76,13 +76,13 @@ class TestStateConsistency:
 
     def test_player_positions_in_bounds(self, random_episode) -> None:
         """Player positions must stay within map boundaries."""
-        _, params, run = random_episode
+        env, params, run = random_episode
         final = run(random.PRNGKey(42))
 
         assert jnp.all(final.player_positions[:, 0] >= 0)
-        assert jnp.all(final.player_positions[:, 0] < params.map_width)
+        assert jnp.all(final.player_positions[:, 0] < env.map_width)
         assert jnp.all(final.player_positions[:, 1] >= 0)
-        assert jnp.all(final.player_positions[:, 1] < params.map_height)
+        assert jnp.all(final.player_positions[:, 1] < env.map_height)
 
     def test_inventory_counts_non_negative(self, random_episode) -> None:
         """No inventory count should go below zero."""

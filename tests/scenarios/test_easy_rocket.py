@@ -484,7 +484,7 @@ def test_easy_rocket_factory_builds_env() -> None:
     from factoriax.make import env_from_name
 
     env, params = env_from_name("EasyRocket-v1")
-    assert params.map_width == _MAP_SIZE and params.map_height == _MAP_SIZE
+    assert env.map_width == _MAP_SIZE and env.map_height == _MAP_SIZE
     assert params.max_timesteps == 2000
     assert params.recipe_table is EASY_ROCKET_RECIPE_TABLE
     assert MAX_EASY_ROCKET_SCORE == float(NUM_EASY_ROCKET_ACHIEVEMENTS)

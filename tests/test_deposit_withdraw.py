@@ -543,7 +543,7 @@ class TestDepositWithdrawViaStep:
             player_inventory=p_inv,
             machine_types=_machine_types(3, 3, {(2, 1): Machine.PALLET}),
         )
-        params = EnvParams(map_width=3, map_height=3, num_players=1)
+        params = EnvParams(num_players=1)
         rng = jax.random.PRNGKey(0)
 
         state = factoriax_step(rng, state, Action.DEPOSIT_COAL, params)
@@ -568,7 +568,7 @@ class TestDepositWithdrawViaStep:
             buffer_type=bt,
             buffer_count=bc,
         )
-        params = EnvParams(map_width=3, map_height=3, num_players=1)
+        params = EnvParams(num_players=1)
         rng = jax.random.PRNGKey(0)
 
         state = factoriax_step(rng, state, Action.WITHDRAW, params)

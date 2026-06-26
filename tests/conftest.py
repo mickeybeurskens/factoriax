@@ -122,8 +122,8 @@ def canonical_env_8x8_1p() -> tuple[FactoriaxEnv, EnvParams, Any, Any]:
     Consumers must NOT replace ``initial_state`` in-place — pass a
     different state forward locally if a test needs to step further.
     """
-    env = FactoriaxEnv()
-    params = EnvParams(map_width=8, map_height=8, num_players=1)
+    env = FactoriaxEnv(map_width=8, map_height=8)
+    params = EnvParams(num_players=1)
     _, initial_state = env.reset_env(random.PRNGKey(0), params)
     jit_step_fn = jax.jit(env.step_env)
     return env, params, jit_step_fn, initial_state

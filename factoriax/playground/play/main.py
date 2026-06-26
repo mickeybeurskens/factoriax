@@ -171,11 +171,7 @@ def play_level(
         seed = int(load_config().seed)
 
     env = FactoriaxEnv(achievement_fn=core_game_conditions, level=level)
-    params = EnvParams(
-        map_width=level.map_width,
-        map_height=level.map_height,
-        num_players=num_players,
-    )
+    params = EnvParams(num_players=num_players)
 
     if screen is None:
         # Standalone launch: open at the play window's preferred size.
@@ -530,9 +526,9 @@ def _play_loop(
     ui_w = _BASE_UI_SIZE * _play_theme.UI_SCALE
     ui_h = _BASE_UI_SIZE * _play_theme.UI_SCALE
     world_area_h = ui_h - _hotbar_h()
-    tile_px = _tile_pixel_size(params.map_width, params.map_height)
-    world_pw = params.map_width * tile_px
-    world_ph = params.map_height * tile_px
+    tile_px = _tile_pixel_size(env.map_width, env.map_height)
+    world_pw = env.map_width * tile_px
+    world_ph = env.map_height * tile_px
     world_ox = (ui_w - world_pw) // 2
     world_oy = (world_area_h - world_ph) // 2
     win_scale = max(1, min(window_width // ui_w, window_height // ui_h))

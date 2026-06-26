@@ -25,8 +25,8 @@ from factoriax.playground.config import build_key_lookup, default_keyboard
 @pytest.fixture(scope="module")
 def env_and_state():
     """Create a small environment and state for smoke tests."""
-    env = FactoriaxEnv()
-    params = EnvParams(map_width=16, map_height=16, num_players=1)
+    env = FactoriaxEnv(map_width=16, map_height=16)
+    params = EnvParams(num_players=1)
     _, state = env.reset_env(jax.random.key(42), params)
     return env, params, state
 
@@ -108,17 +108,17 @@ class TestConfigSmoke:
 
         d = env_params_to_dict(EnvParams())
         assert isinstance(d, dict)
-        assert "map_width" in d
+        assert "num_players" in d
         assert "max_timesteps" in d
 
     def test_env_params_round_trip(self) -> None:
         """env_params_to_dict values match EnvParams fields."""
         from factoriax.playground.config import env_params_to_dict
 
-        params = EnvParams(map_width=64, map_height=64)
+        params = EnvParams()
         d = env_params_to_dict(params)
-        assert d["map_width"] == 64
-        assert d["map_height"] == 64
+        assert d["num_players"] == EnvParams().num_players
+        assert d["max_timesteps"] == EnvParams().max_timesteps
 
     def test_load_config(self) -> None:
         """load_config returns a PlayerConfig without crashing."""
@@ -146,12 +146,8 @@ class TestEnvStepSmoke:
         case shares compile with TestRendererSmoke and TestPlayUISmoke
         in this file, so its cost is near-free.
         """
-        env = FactoriaxEnv()
-        params = EnvParams(
-            map_width=size,
-            map_height=size,
-            num_players=1,
-        )
+        env = FactoriaxEnv(map_width=size, map_height=size)
+        params = EnvParams(num_players=1)
         _, state = env.reset_env(jax.random.key(0), params)
         obs, state2, reward, done, info = env.step_env(
             jax.random.key(1),

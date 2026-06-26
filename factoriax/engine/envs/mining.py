@@ -37,7 +37,7 @@ def _mining_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
     shuffled = positions[jax.random.permutation(key, positions.shape[0])]
     ore_xy = shuffled[:_N_ORE_TILES]  # (10, 2)
 
-    world = jnp.full((params.map_height, params.map_width), jnp.int8(BlockType.DIRT))
+    world = jnp.full((_MAP_SIZE, _MAP_SIZE), jnp.int8(BlockType.DIRT))
 
     def place(w: jax.Array, pos: jax.Array) -> tuple[jax.Array, None]:
         return w.at[pos[1], pos[0]].set(jnp.int8(BlockType.IRON)), None
@@ -74,10 +74,10 @@ def mining(
         reward_fn=_mining_reward,
         obs=obs,
         obs_radius=obs_radius,
-    )
-    params = EnvParams(
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
+    )
+    params = EnvParams(
         num_players=1,
         max_timesteps=100,
         base_resources=_ORE_RESOURCES,
