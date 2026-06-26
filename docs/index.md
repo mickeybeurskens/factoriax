@@ -10,12 +10,12 @@ Python in the inner loop.
 :hidden:
 
 guides/getting_started
-guides/quick_start
+guides/ppo_training_example
 api/index
 ```
 
 ## Where to go next
 
-- {doc}`guides/quick_start` — Installation instructions and basic examples for people already comfortable with JAX based reinforcement learning environments.
 - {doc}`guides/getting_started` — Start here for a more in depth overview of Factoriax and its functionalities.
+- {doc}`guides/ppo_training_example` — Train a PPO algorithm on a Factoriax navigation task.
 - {doc}`api/index` — auto-generated reference for every public module.
