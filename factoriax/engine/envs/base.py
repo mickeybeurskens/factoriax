@@ -13,7 +13,7 @@ from gymnax.environments import environment, spaces  # type: ignore[import-untyp
 
 from factoriax.engine.constants import Action, NUM_ACTIONS
 from factoriax.engine.game_logic import factoriax_step, is_game_over
-from factoriax.engine.levels import Level, build_state, generate_state
+from factoriax.engine.levels import Level, build_state, generate_terrain, initial_state
 from factoriax.engine.observations import (
     NUM_PLAYER_SCALARS,
     NUM_SPATIAL_CHANNELS,
@@ -27,7 +27,7 @@ from factoriax.engine.state import EnvParams, EnvState
 
 AchievementFn = Callable[[EnvState], jax.Array]
 StepHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
-ResetFn = Callable[[jax.Array, EnvParams], EnvState]
+TerrainFn = Callable[[jax.Array, EnvParams], jax.Array]
 RewardFn = Callable[[EnvState, EnvState, EnvParams], jax.Array]
 
 
@@ -98,13 +98,15 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         self,
         achievement_fn: AchievementFn | None = None,
         level: Level | None = None,
-        reset_fn: ResetFn | None = None,
+        terrain_fn: TerrainFn | None = None,
         step_hooks: tuple[StepHook, ...] = (),
         reward_fn: RewardFn | None = None,
         obs: str = "x_ray_global",
         obs_radius: int = 7,
         map_width: int = 32,
         map_height: int = 32,
+        num_players: int = 1,
+        max_machines: int = 0,
     ) -> None:
         """Initialize the environment."""
         super().__init__()
@@ -114,7 +116,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             )
         self._achievement_fn = achievement_fn
         self._level = level
-        self._reset_fn = reset_fn
+        self._terrain_fn = terrain_fn
         self._reward_fn = reward_fn
         hooks = tuple(step_hooks)
         if achievement_fn is not None:
@@ -124,6 +126,8 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         self.obs_radius = int(obs_radius)
         self._obs_profile = "superficial" if obs.startswith("superficial") else "x_ray"
         self._obs_is_local = obs.endswith("_local")
+        self.num_players: int = int(num_players)
+        self.max_machines: int = int(max_machines)
         if level is not None:
             self.map_width: int = level.map_width
             self.map_height: int = level.map_height
@@ -280,12 +284,14 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
         
         """
-        if self._reset_fn is not None:
-            state = self._reset_fn(key, params)
+        if self._terrain_fn is not None:
+            world_map = self._terrain_fn(key, params)
         elif self._level is None:
-            state = generate_state(key, params, self.map_height, self.map_width)
+            world_map = generate_terrain(key, params, self.map_height, self.map_width)
         else:
-            state = build_state(self._level, params)
+            state = build_state(self._level, self.num_players, self.max_machines)
+            return self.get_obs(state, params), state
+        state = initial_state(world_map, params, self.num_players, self.max_machines)
         obs = self.get_obs(state, params)
         return obs, state
 

@@ -1088,7 +1088,7 @@ class GameUI:
             if player_match:
                 player_name = next(iter(player_match))
                 player_idx = _PLAYER_ACTIONS[player_name]
-                if player_idx < params.num_players:
+                if player_idx < state.player_positions.shape[0]:
                     state = state.replace(selected_player=player_idx)
                 return state, action
 

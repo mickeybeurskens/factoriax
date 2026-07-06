@@ -51,7 +51,6 @@ _SECTIONS: tuple[SettingSection, ...] = (
     SettingSection(
         "World",
         (
-            SettingField("num_players", "Players", False, 1, 1, 4),
             SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
         ),
     ),
@@ -70,7 +69,6 @@ _SECTIONS: tuple[SettingSection, ...] = (
     SettingSection(
         "Machines",
         (
-            SettingField("max_machines", "Max machines", False, 16, 0, 1024),
             SettingField("miner_mining_rate", "Miner mining rate", False, 1, 1, 20),
             SettingField("player_mining_yield", "Player mining yield", False, 1, 1, 10),
         ),

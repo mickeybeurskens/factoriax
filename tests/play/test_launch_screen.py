@@ -43,7 +43,6 @@ class TestSettingFields:
 
     def test_required_env_params_present(self) -> None:
         required = {
-            "num_players",
             "max_timesteps",
             "water_probability",
             "iron_probability",
@@ -52,7 +51,6 @@ class TestSettingFields:
             "tin_probability",
             "silicon_probability",
             "base_resources",
-            "max_machines",
             "miner_mining_rate",
             "player_mining_yield",
         }
@@ -77,15 +75,15 @@ class TestValueOps:
 
     def test_set_value_casts_int_for_int_field(self) -> None:
         config = _make_config()
-        field = next(f for f in _SETTING_FIELDS if f.key == "num_players")
-        _set_value(config, field, 3.0)
-        assert config.env_params["num_players"] == 3
-        assert isinstance(config.env_params["num_players"], int)
+        field = next(f for f in _SETTING_FIELDS if f.key == "max_timesteps")
+        _set_value(config, field, 500.0)
+        assert config.env_params["max_timesteps"] == 500
+        assert isinstance(config.env_params["max_timesteps"], int)
 
     def test_field_clamp_respects_min_max_for_int(self) -> None:
-        field = next(f for f in _SETTING_FIELDS if f.key == "num_players")
+        field = next(f for f in _SETTING_FIELDS if f.key == "max_timesteps")
         assert field.clamp(0) == field.min_value
-        assert field.clamp(99) == field.max_value
+        assert field.clamp(99999) == field.max_value
 
     def test_field_clamp_rounds_float_to_two_decimals(self) -> None:
         field = next(f for f in _SETTING_FIELDS if f.key == "iron_probability")

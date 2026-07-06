@@ -41,7 +41,6 @@ from factoriax.engine.state import EnvParams
 
 _DEFAULT_PARAMS = EnvParams(
     max_timesteps=100,
-    num_players=2,
 )
 _MAP_W: int = 8
 _MAP_H: int = 8
@@ -231,9 +230,7 @@ class TestLocalSuperficial:
             machine_types=machine_types,
             machine_direction=machine_direction,
         )
-        params = EnvParams(num_players=1,
-            max_timesteps=100,
-        )
+        params = EnvParams(max_timesteps=100)
         x_ray = np.array(local_x_ray(state, params, 0, radius=_RADIUS))
         super_obs = np.array(local_superficial(state, params, 0, radius=_RADIUS))
 

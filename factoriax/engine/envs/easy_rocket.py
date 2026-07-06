@@ -17,10 +17,10 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.envs.base import achievement_hook
-from factoriax.engine.levels import Level, LevelBuilder, initial_state
+from factoriax.engine.levels import Level, LevelBuilder
 from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.engine.rewards import achievement_reward
-from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.state import EnvParams
 
 _MAP_SIZE: int = 16
 _PATCH_SIZE: int = 2
@@ -250,28 +250,6 @@ def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
         world = jax.lax.dynamic_update_slice(world, patch, (placed[i, 1], placed[i, 0]))
     return world
 
-
-def generate_easy_rocket_state(key: jax.Array, params: EnvParams) -> EnvState:
-    """Generate an easy-rocket initial state from a PRNG key.
-    
-    JAX-native and JIT/vmap-compatible: the six ore patches are placed from
-    ``key`` (see :func:`_easy_rocket_terrain`), then :func:`initial_state`
-    assembles the full :class:`EnvState` (player at centre, ore resources from
-    ``params.base_resources``, empty machines/inventory). Suitable as a
-    scenario ``reset_fn`` so every reset/episode draws a fresh layout.
-
-    Parameters
-    ----------
-    key: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    """
-    return initial_state(_easy_rocket_terrain(key, params), params)
 
 
 EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
@@ -838,18 +816,18 @@ def easy_rocket(
         Half-width of the local observation window.
     """
     env = FactoriaxEnv(
-        reset_fn=generate_easy_rocket_state,
+        terrain_fn=_easy_rocket_terrain,
         step_hooks=(achievement_hook(easy_rocket_conditions),),
         reward_fn=easy_rocket_reward,
         obs=obs,
         obs_radius=obs_radius,
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
+        num_players=1,
+        max_machines=100,
     )
     params = EnvParams(
-        num_players=1,
         max_timesteps=2000,
-        max_machines=100,
         recipe_table=EASY_ROCKET_RECIPE_TABLE,
         base_resources=_ORE_RESOURCES_PER_TILE,
     )

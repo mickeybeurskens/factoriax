@@ -46,8 +46,9 @@ class TestWorldGeneration:
         params = EnvParams()
         state = generate_state(rng, params)
 
+        num_players = state.player_positions.shape[0]
         assert state.map.shape == (32, 32)
-        assert state.player_positions.shape == (params.num_players, 2)
+        assert state.player_positions.shape == (num_players, 2)
         assert state.timestep == 0
 
     def test_player_spawns_on_dirt(self) -> None:
@@ -56,7 +57,8 @@ class TestWorldGeneration:
         params = EnvParams()
         state = generate_state(rng, params)
 
-        for i in range(params.num_players):
+        num_players = state.player_positions.shape[0]
+        for i in range(num_players):
             px, py = state.player_positions[i]
             assert state.map[py, px] == BlockType.DIRT
 
@@ -84,7 +86,7 @@ class TestEnvConstructorLevel:
         from factoriax.engine.envs.base import FactoriaxEnv
 
         env = FactoriaxEnv(map_width=8, map_height=8)  # level=None default
-        params = EnvParams(num_players=1)
+        params = EnvParams()
 
         _, state = env.reset_env(random.PRNGKey(0), params)
 
@@ -101,7 +103,7 @@ class TestEnvConstructorLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(num_players=1)
+        params = EnvParams()
 
         _, state = env.reset_env(random.PRNGKey(0), params)
 

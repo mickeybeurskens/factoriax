@@ -13,6 +13,14 @@ from factoriax.engine.constants import Action
 from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.state import EnvParams, EnvState
 
+__all__ = [
+    "AutoResetState",
+    "AutoResetWrapper",
+    "ActionMaskWrapper",
+    "LogEnvState",
+    "LogWrapper",
+]
+
 
 # ---------------------------------------------------------------------------
 # Auto-reset wrapper
@@ -328,6 +336,10 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
     def map_height(self) -> int:
         return self._inner.map_height  # type: ignore[no-any-return]
 
+    @property
+    def num_players(self) -> int:
+        return self._inner.num_players  # type: ignore[no-any-return]
+
     def _rewrite(self, action: int | jax.Array) -> jax.Array:
         """Rewrite a blocked action to NOOP; pass others through unchanged."""
         action_i = jnp.asarray(action, dtype=jnp.int32)
@@ -390,6 +402,161 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         """Pass-through termination check to the inner env."""
         terminal: jax.Array = self._inner.is_terminal(state, params)
         return terminal
+
+    def action_space(self, params: EnvParams) -> spaces.Discrete:
+        """Action space is unchanged."""
+        return self._inner.action_space(params)
+
+    def observation_space(self, params: EnvParams) -> spaces.Box:
+        """Observation space is unchanged."""
+        return self._inner.observation_space(params)
+
+
+# ---------------------------------------------------------------------------
+# Episode-logging wrapper
+# ---------------------------------------------------------------------------
+
+
+class LogEnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
+    """State that accumulates per-episode return and length for logging.
+
+    All scalar fields are JAX arrays so the state is vmap- and scan-safe.
+    ``returned_*`` hold the last *completed* episode's stats; they are
+    non-zero only on the step where ``done`` fires.
+
+    Parameters
+    ----------
+    env_state :
+        Inner wrapper's state (any JAX pytree).
+    episode_returns :
+        Running return for the current episode (reset to 0 on done).
+    episode_lengths :
+        Running step count for the current episode (reset to 0 on done).
+    returned_episode_returns :
+        Return of the episode that just completed (0 while in-progress).
+    returned_episode_lengths :
+        Length of the episode that just completed (0 while in-progress).
+    timestep :
+        Global step counter (never reset).
+    """
+
+    env_state: Any
+    episode_returns: jnp.ndarray
+    episode_lengths: jnp.ndarray
+    returned_episode_returns: jnp.ndarray
+    returned_episode_lengths: jnp.ndarray
+    timestep: jnp.ndarray
+
+
+class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: ignore[misc]
+    """Inject per-episode statistics into the ``info`` dict on every step.
+
+    Wraps any gymnax-compatible env and augments the step ``info`` dict
+    with the following keys on every call to :meth:`step_env`:
+
+    - ``"returned_episode_returns"`` — return of the most recently completed
+      episode (non-zero only on the terminal step).
+    - ``"returned_episode_lengths"`` — length of the most recently completed
+      episode (non-zero only on the terminal step).
+    - ``"returned_episode"`` — ``True`` on the step an episode ends.
+    - ``"timestep"`` — global step counter, incremented every call.
+
+    These keys mirror the PureJaxRL ``LogWrapper`` convention so downstream
+    training loops can extract episode stats directly from ``traj_batch.info``
+    returned by ``jax.lax.scan``.
+
+    Examples
+    --------
+    >>> import factoriax
+    >>> env, params = factoriax.make("Mining-v1", auto_reset=True)
+    >>> from factoriax.engine.envs.wrappers import LogWrapper
+    >>> log_env = LogWrapper(env)
+    >>> # log_env.step_env(...) now returns info["returned_episode_returns"]
+    """
+
+    def __init__(self, inner: environment.Environment[Any, EnvParams]) -> None:
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def default_params(self) -> EnvParams:
+        """Delegate to the inner env's default params."""
+        return self._inner.default_params  # type: ignore[return-value]
+
+    @property
+    def map_width(self) -> int:
+        return self._inner.map_width  # type: ignore[no-any-return]
+
+    @property
+    def map_height(self) -> int:
+        return self._inner.map_height  # type: ignore[no-any-return]
+
+    def reset_env(
+        self, key: jax.Array, params: EnvParams
+    ) -> tuple[jax.Array, LogEnvState]:
+        """Reset the inner env and initialise all episode counters to zero."""
+        obs, env_state = self._inner.reset_env(key, params)
+        state = LogEnvState(
+            env_state=env_state,
+            episode_returns=jnp.float32(0.0),
+            episode_lengths=jnp.int32(0),
+            returned_episode_returns=jnp.float32(0.0),
+            returned_episode_lengths=jnp.int32(0),
+            timestep=jnp.int32(0),
+        )
+        return obs, state
+
+    def step_env(
+        self,
+        key: jax.Array,
+        state: LogEnvState,
+        action: int | jax.Array,
+        params: EnvParams,
+    ) -> tuple[jax.Array, LogEnvState, jax.Array, jax.Array, dict[str, Any]]:
+        """Step the inner env and update episode accumulators.
+
+        On termination (``done=True``):
+        - ``returned_episode_returns`` captures the just-completed return.
+        - ``returned_episode_lengths`` captures the just-completed length.
+        - ``episode_returns`` and ``episode_lengths`` reset to zero.
+
+        All info keys are always present; use ``info["returned_episode"]``
+        as a boolean mask to select valid ``returned_episode_returns`` entries.
+        """
+        obs, env_state, reward, done, info = self._inner.step_env(
+            key, state.env_state, action, params
+        )
+        done_f = done.astype(jnp.float32)
+        done_i = done.astype(jnp.int32)
+        new_return = state.episode_returns + reward
+        new_length = state.episode_lengths + jnp.int32(1)
+        new_state = state.replace(
+            env_state=env_state,
+            episode_returns=new_return * (jnp.float32(1.0) - done_f),
+            episode_lengths=new_length * (jnp.int32(1) - done_i),
+            returned_episode_returns=(
+                state.returned_episode_returns * (jnp.float32(1.0) - done_f)
+                + new_return * done_f
+            ),
+            returned_episode_lengths=(
+                state.returned_episode_lengths * (jnp.int32(1) - done_i)
+                + new_length * done_i
+            ),
+            timestep=state.timestep + jnp.int32(1),
+        )
+        info["returned_episode_returns"] = new_state.returned_episode_returns
+        info["returned_episode_lengths"] = new_state.returned_episode_lengths
+        info["returned_episode"] = done
+        info["timestep"] = new_state.timestep
+        return obs, new_state, reward, done, info
+
+    def get_obs(self, state: LogEnvState, params: EnvParams) -> jax.Array:
+        """Pass-through observation from the inner env."""
+        return self._inner.get_obs(state.env_state, params)
+
+    def is_terminal(self, state: LogEnvState, params: EnvParams) -> jax.Array:
+        """Pass-through termination check to the inner env."""
+        return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
         """Action space is unchanged."""

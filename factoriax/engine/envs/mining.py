@@ -13,8 +13,7 @@ import numpy as np
 
 from factoriax.engine.constants import BlockType
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.levels import initial_state
-from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.state import EnvParams
 
 _MAP_SIZE: int = 8
 _N_ORE_TILES: int = 10
@@ -46,11 +45,6 @@ def _mining_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
     return world
 
 
-def generate_mining_state(key: jax.Array, params: EnvParams) -> EnvState:
-    """Generate a mining-scenario initial state from a PRNG key."""
-    return initial_state(_mining_terrain(key, params), params)
-
-
 def _mining_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
@@ -70,15 +64,15 @@ def mining(
     length is 100 steps.
     """
     env = FactoriaxEnv(
-        reset_fn=generate_mining_state,
+        terrain_fn=_mining_terrain,
         reward_fn=_mining_reward,
         obs=obs,
         obs_radius=obs_radius,
         map_width=_MAP_SIZE,
         map_height=_MAP_SIZE,
+        num_players=1,
     )
     params = EnvParams(
-        num_players=1,
         max_timesteps=100,
         base_resources=_ORE_RESOURCES,
     )

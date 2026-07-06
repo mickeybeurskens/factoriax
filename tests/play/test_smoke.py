@@ -26,7 +26,7 @@ from factoriax.playground.config import build_key_lookup, default_keyboard
 def env_and_state():
     """Create a small environment and state for smoke tests."""
     env = FactoriaxEnv(map_width=16, map_height=16)
-    params = EnvParams(num_players=1)
+    params = EnvParams()
     _, state = env.reset_env(jax.random.key(42), params)
     return env, params, state
 
@@ -108,7 +108,6 @@ class TestConfigSmoke:
 
         d = env_params_to_dict(EnvParams())
         assert isinstance(d, dict)
-        assert "num_players" in d
         assert "max_timesteps" in d
 
     def test_env_params_round_trip(self) -> None:
@@ -117,7 +116,6 @@ class TestConfigSmoke:
 
         params = EnvParams()
         d = env_params_to_dict(params)
-        assert d["num_players"] == EnvParams().num_players
         assert d["max_timesteps"] == EnvParams().max_timesteps
 
     def test_load_config(self) -> None:
@@ -147,7 +145,7 @@ class TestEnvStepSmoke:
         in this file, so its cost is near-free.
         """
         env = FactoriaxEnv(map_width=size, map_height=size)
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         _, state = env.reset_env(jax.random.key(0), params)
         obs, state2, reward, done, info = env.step_env(
             jax.random.key(1),

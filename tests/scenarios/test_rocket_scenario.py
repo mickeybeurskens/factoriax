@@ -63,7 +63,7 @@ def test_rocket_factory_builds_env() -> None:
     assert params.max_timesteps == 8000
     assert env.map_width == 32
     assert env.map_height == 32
-    assert params.num_players == 1
+    assert env.num_players == 1
 
 
 def test_build_rocket_level_has_all_ore_types() -> None:

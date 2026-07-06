@@ -174,16 +174,16 @@ class TestEnvParamsConversion:
 
     def test_custom_values(self) -> None:
         """Custom param values should be preserved."""
-        params = EnvParams(num_players=4)
+        params = EnvParams(player_mining_yield=5)
         d = env_params_to_dict(params)
-        assert d["num_players"] == 4
+        assert d["player_mining_yield"] == 5
 
     def test_missing_fields_use_defaults(self) -> None:
         """Missing fields in the dict should fall back to defaults."""
-        config = PlayerConfig(env_params={"num_players": 3})
+        config = PlayerConfig(env_params={"max_timesteps": 500})
         params = config_to_env_params(config)
-        assert params.num_players == 3
-        assert params.max_timesteps == EnvParams().max_timesteps
+        assert params.max_timesteps == 500
+        assert params.player_mining_yield == EnvParams().player_mining_yield
 
     def test_player_mining_yield_default(self) -> None:
         """EnvParams should expose a default player_mining_yield of 1."""
@@ -211,20 +211,20 @@ class TestLoadSaveConfig:
         path = tmp_path / "test_config.json"
         kb = default_keyboard()
         ctrl = default_controller()
-        env_dict = env_params_to_dict(EnvParams(num_players=3))
+        env_dict = env_params_to_dict(EnvParams(player_mining_yield=3))
         config = PlayerConfig(env_params=env_dict, keyboard=kb, controller=ctrl)
 
         save_config(config, path)
         loaded = load_config(path)
 
-        assert loaded.env_params["num_players"] == 3
+        assert loaded.env_params["player_mining_yield"] == 3
         assert loaded.keyboard[PlayerAction.MINE] == kb[PlayerAction.MINE]
 
     def test_load_missing_file_returns_defaults(self, tmp_path: Path) -> None:
         """Loading from a missing file should return default config."""
         path = tmp_path / "nonexistent.json"
         config = load_config(path)
-        assert config.env_params["num_players"] == EnvParams().num_players
+        assert config.env_params["max_timesteps"] == EnvParams().max_timesteps
         assert PlayerAction.MINE in config.keyboard
 
     def test_load_merges_missing_actions(self, tmp_path: Path) -> None:
@@ -233,7 +233,7 @@ class TestLoadSaveConfig:
         import orjson
 
         partial = {
-            "env_params": {"num_players": 3},
+            "env_params": {"max_timesteps": 500},
             "keyboard": {"mine": ["K_x"]},
             "controller": {},
         }
@@ -251,7 +251,7 @@ class TestLoadSaveConfig:
         path = tmp_path / "corrupt.json"
         path.write_text("not valid json {{{")
         config = load_config(path)
-        assert config.env_params["num_players"] == EnvParams().num_players
+        assert config.env_params["max_timesteps"] == EnvParams().max_timesteps
 
 
 class TestPlayerConfigSeed:

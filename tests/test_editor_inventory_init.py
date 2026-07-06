@@ -52,8 +52,8 @@ class TestEditorInventoryInit:
     def test_pallet_items_go_to_buffer(self) -> None:
         """Items in a pallet's inventory should populate buffer."""
         level = _make_level_with_pallet_items()
-        params = EnvParams(num_players=1)
-        state = build_state(level, params)
+        params = EnvParams()
+        state = build_state(level, num_players=1)
 
         eidx = int(state.tile_entity[2, 2])
         assert eidx >= 0, "Pallet entity not found"

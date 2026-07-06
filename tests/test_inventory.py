@@ -32,10 +32,8 @@ class TestInventoryState:
         params = EnvParams()
         state = generate_state(rng, params)
 
-        assert state.player_inventory.shape == (
-            params.num_players,
-            NUM_ITEM_TYPES,
-        )
+        num_players = state.player_positions.shape[0]
+        assert state.player_inventory.shape == (num_players, NUM_ITEM_TYPES)
 
     def test_inventory_arrays_are_int16(self) -> None:
         """Inventory array should be int16 dtype."""

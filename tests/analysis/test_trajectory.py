@@ -83,8 +83,7 @@ class TestStatesToTrajectoryWithParams:
 
     def test_params_kwarg_populates_scheme(self, state_factory) -> None:
         """Passing params records env_params_to_dict on the trajectory."""
-        params = EnvParams(num_players=1, player_mining_yield=3
-        )
+        params = EnvParams(player_mining_yield=3)
         states, actions = self._fake_states(state_factory, count=4)
         traj = states_to_trajectory(states, actions=actions, params=params)
         assert traj.env_params_scheme is not None

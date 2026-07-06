@@ -37,7 +37,6 @@ from factoriax.engine.state import EnvParams
 
 _DEFAULT_PARAMS = EnvParams(
     max_timesteps=100,
-    num_players=2,
 )
 _MAP_W: int = 8
 _MAP_H: int = 8
@@ -106,7 +105,6 @@ class TestPlayerScalars:
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_positions=jnp.array([[0, 0], [3, 3]], dtype=jnp.int32),
-            num_players=2,
             player_inventory=inv,
         )
         scalars_p0 = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
@@ -155,7 +153,6 @@ class TestGlobalArray:
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_positions=jnp.array([[0, 0], [7, 7]], dtype=jnp.int32),
-            num_players=2,
         )
         obs0 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         obs1 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 1))
@@ -182,7 +179,6 @@ class TestGlobalArray:
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_positions=jnp.array([[0, 0], [4, 4]], dtype=jnp.int32),
-            num_players=2,
         )
         vmap_fn = jax.vmap(global_x_ray, in_axes=(None, None, 0))
         all_obs = vmap_fn(state, _DEFAULT_PARAMS, jnp.arange(2))
@@ -228,7 +224,7 @@ class TestLocalArray:
             world_map=jnp.ones((32, 32), dtype=jnp.int32) * int(BlockType.DIRT),
             player_position=(15, 15),
         )
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         out = local_x_ray(state, params, 0)
         assert out.shape == (expected,)
 
@@ -342,7 +338,6 @@ class TestLocalArray:
         state = state_factory(
             world_map=jnp.ones((8, 8), dtype=jnp.int32) * int(BlockType.DIRT),
             player_positions=jnp.array([[1, 1], [6, 6]], dtype=jnp.int32),
-            num_players=2,
         )
         vmap_fn = jax.vmap(
             functools.partial(local_x_ray, radius=_RADIUS),
@@ -632,10 +627,7 @@ class TestLocalGlobalEquivalence:
             block_resources=resources,
         )
 
-        params = EnvParams(
-            num_players=1,
-            max_timesteps=100,
-        )
+        params = EnvParams(max_timesteps=100)
         global_obs = np.array(global_x_ray(state, params, 0))
         local_obs = np.array(local_x_ray(state, params, 0, radius=radius))
 

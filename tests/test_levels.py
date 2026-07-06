@@ -24,19 +24,18 @@ from factoriax.engine.levels import (
     _place_players,
     build_state,
     default_resources,
-    generate_state,
     get_level,
     load_level,
     save_level,
 )
 from factoriax.engine.state import EnvParams
+from factoriax.engine.levels import generate_state
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
-_PARAMS_1P = EnvParams(num_players=1)
-_PARAMS_2P = EnvParams(num_players=2)
+_PARAMS = EnvParams()
 
 
 def _dirt_level(w: int = 8, h: int = 8, name: str = "dirt") -> Level:
@@ -226,25 +225,25 @@ class TestBuildState:
     """build_state produces correctly-shaped, zero-initialised JAX states."""
 
     def test_map_shape(self) -> None:
-        state = build_state(_dirt_level(), _PARAMS_1P)
+        state = build_state(_dirt_level(), num_players=1)
         assert state.map.shape == (8, 8)
 
     def test_player_count_matches_params(self) -> None:
-        state2 = build_state(_dirt_level(), _PARAMS_2P)
+        state2 = build_state(_dirt_level(), num_players=2)
         assert state2.player_positions.shape == (2, 2)
         assert state2.player_directions.shape == (2,)
 
     def test_inventory_zero_initialised(self) -> None:
-        state = build_state(_dirt_level(), _PARAMS_1P)
+        state = build_state(_dirt_level(), num_players=1)
         assert jnp.all(state.player_inventory == 0)
 
     def test_timestep_zero(self) -> None:
-        state = build_state(_dirt_level(), _PARAMS_1P)
+        state = build_state(_dirt_level(), num_players=1)
         assert int(state.timestep) == 0
 
     def test_auto_fill_resources_from_ore(self) -> None:
         level = LevelBuilder(4, 4).fill_rect(0, 0, 2, 2, BlockType.COAL).build("t")
-        state = build_state(level, EnvParams(num_players=1))
+        state = build_state(level, num_players=1)
         resources = np.array(state.block_resources)
         assert (resources[:2, :2] == BLOCK_MAX_RESOURCES).all()
         assert (resources[2:, :] == 0).all()
@@ -259,20 +258,20 @@ class TestBuildState:
             block_map=np.full((4, 4), int(BlockType.DIRT), dtype=np.int32),
             block_resources=custom,
         )
-        state = build_state(level, EnvParams(num_players=1))
+        state = build_state(level, num_players=1)
         assert int(state.block_resources[0, 0]) == 42
 
     def test_player_directions_default_down(self) -> None:
-        state = build_state(_dirt_level(), _PARAMS_1P)
+        state = build_state(_dirt_level(), num_players=1)
         assert int(state.player_directions[0]) == int(Direction.DOWN)
 
     def test_machine_types_none_by_default(self) -> None:
-        state = build_state(_dirt_level(), _PARAMS_1P)
+        state = build_state(_dirt_level(), num_players=1)
         assert jnp.all(state.machine_types == int(Machine.NONE))
 
     def test_machine_directions_zero_by_default(self) -> None:
         """Without directions in the level, all entity directions default to zero."""
-        state = build_state(_dirt_level(), _PARAMS_1P)
+        state = build_state(_dirt_level(), num_players=1)
         assert jnp.all(state.ent_direction == 0)
 
     def test_machine_directions_preserved(self) -> None:
@@ -289,7 +288,7 @@ class TestBuildState:
             machine_types=machines,
             machine_directions=dirs,
         )
-        state = build_state(level, _PARAMS_1P)
+        state = build_state(level, num_players=1)
         eid = int(state.tile_entity[3, 3])
         assert eid >= 0, "Expected an entity at tile (3, 3)"
         assert int(state.ent_direction[eid]) == int(Direction.RIGHT)
@@ -445,9 +444,9 @@ class TestRegistry:
 
     def test_15x15_buildable_for_1_player(self) -> None:
         level = get_level("15x15_resources")
-        params = EnvParams(num_players=1)
-        state = build_state(level, params)
-        assert state.player_positions.shape == (1, 2)
+        num_players = 1
+        state = build_state(level, num_players=num_players)
+        assert state.player_positions.shape == (num_players, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -459,34 +458,31 @@ class TestGenerateState:
     """generate_state produces correctly-shaped states."""
 
     def test_map_shape_matches_params(self) -> None:
-        params = EnvParams(num_players=1)
-        state = generate_state(jax.random.PRNGKey(0), params, map_height=16, map_width=16)
+        state = generate_state(jax.random.PRNGKey(0), _PARAMS, map_height=16, map_width=16)
         assert state.map.shape == (16, 16)
 
     def test_player_count_matches_params(self) -> None:
-        params = EnvParams(num_players=3)
-        state = generate_state(jax.random.PRNGKey(1), params)
-        assert state.player_positions.shape == (3, 2)
+        num_players = 3
+        state = generate_state(jax.random.PRNGKey(1), _PARAMS, num_players=num_players)
+        assert state.player_positions.shape == (num_players, 2)
 
     def test_spawn_tiles_are_dirt(self) -> None:
         """Every player spawn tile must be DIRT after generation."""
-        params = EnvParams(num_players=2)
-        state = generate_state(jax.random.PRNGKey(2), params)
+        num_players = 2
+        state = generate_state(jax.random.PRNGKey(2), _PARAMS, num_players=num_players)
         positions = np.array(state.player_positions)
         world_map = np.array(state.map)
         for px, py in positions:
             assert world_map[py, px] == int(BlockType.DIRT)
 
     def test_different_seeds_differ(self) -> None:
-        params = EnvParams(num_players=1)
-        s0 = generate_state(jax.random.PRNGKey(0), params)
-        s1 = generate_state(jax.random.PRNGKey(99), params)
+        s0 = generate_state(jax.random.PRNGKey(0), _PARAMS)
+        s1 = generate_state(jax.random.PRNGKey(99), _PARAMS)
         assert not jnp.array_equal(s0.map, s1.map)
 
     def test_same_seed_deterministic(self) -> None:
-        params = EnvParams(num_players=1)
-        s0 = generate_state(jax.random.PRNGKey(7), params)
-        s1 = generate_state(jax.random.PRNGKey(7), params)
+        s0 = generate_state(jax.random.PRNGKey(7), _PARAMS)
+        s1 = generate_state(jax.random.PRNGKey(7), _PARAMS)
         np.testing.assert_array_equal(np.array(s0.map), np.array(s1.map))
 
     def test_ore_tiles_get_base_resources(self) -> None:
@@ -495,7 +491,7 @@ class TestGenerateState:
 
         from factoriax.engine.tables import MINEABLE_BLOCKS
 
-        params = EnvParams(num_players=1, base_resources=3)
+        params = EnvParams(base_resources=3)
         state = generate_state(jax.random.PRNGKey(5), params)
         world_map = np.array(state.map)
         resources = np.array(state.block_resources)
@@ -510,8 +506,7 @@ class TestGenerateState:
         from factoriax.engine.tables import MINEABLE_BLOCKS
 
         for count in (1, 5, 10):
-            params = EnvParams(num_players=1, base_resources=count
-            )
+            params = EnvParams(base_resources=count)
             state = generate_state(jax.random.PRNGKey(0), params)
             world_map = np.array(state.map)
             resources = np.array(state.block_resources)
@@ -533,7 +528,7 @@ class TestResetWithBoundLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         obs, state = env.reset_env(jax.random.PRNGKey(0), params)
         assert obs.ndim == 1
         assert state.map.shape == (15, 15)
@@ -543,7 +538,7 @@ class TestResetWithBoundLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         obs, _ = env.reset_env(jax.random.PRNGKey(0), params)
         expected = env.observation_space(params).shape[0]
         assert obs.shape == (expected,)
@@ -553,7 +548,7 @@ class TestResetWithBoundLevel:
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         _, s1 = env.reset_env(jax.random.PRNGKey(0), params)
         _, s2 = env.reset_env(jax.random.PRNGKey(123), params)
         np.testing.assert_array_equal(np.array(s1.map), np.array(s2.map))

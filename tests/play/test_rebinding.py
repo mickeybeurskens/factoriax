@@ -167,7 +167,7 @@ class TestGameUIWithReboundKey:
     @pytest.fixture
     def params(self) -> EnvParams:
         """Return small environment parameters."""
-        return EnvParams(num_players=1)
+        return EnvParams()
 
     def test_rebound_mine_key_dispatches(
         self,

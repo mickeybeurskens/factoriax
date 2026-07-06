@@ -665,7 +665,7 @@ def _place_players(
 # ---------------------------------------------------------------------------
 
 
-def build_state(level: Level, params: EnvParams) -> EnvState:
+def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvState:
     """Construct a JAX :class:`~factoriax.engine.state.EnvState` from a :class:`Level`.
 
     Players are placed at the centre of the map, spread horizontally,
@@ -694,7 +694,7 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
             block_map[py, px] = int(BlockType.DIRT)
     else:
         block_map, player_positions_np = _place_players(
-            level.block_map, params.num_players
+            level.block_map, num_players
         )
 
     resources_np = (
@@ -716,24 +716,24 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
     )
 
     map_shape = (level.map_height, level.map_width)
-    inv_shape = (params.num_players, NUM_ITEM_TYPES)
-    player_shape = (params.num_players,)
+    inv_shape = (num_players, NUM_ITEM_TYPES)
+    player_shape = (num_players,)
     # Build player pouch inventories from (item_type, count) pairs.
     player_inv_np = np.zeros(inv_shape, dtype=np.int32)
     if level.player_inventory is not None:
         for item_type, count in level.player_inventory:
-            for p in range(params.num_players):
+            for p in range(num_players):
                 player_inv_np[p, item_type] += count
     if level.player_inventories is not None:
         for p_idx, items in level.player_inventories.items():
-            if p_idx >= params.num_players:
+            if p_idx >= num_players:
                 continue
             player_inv_np[p_idx] = 0
             for item_type, count in items:
                 player_inv_np[p_idx, item_type] += count
 
     h, w = level.map_height, level.map_width
-    mm = params.max_machines if params.max_machines > 0 else max(64, h * w // 4)
+    mm = max_machines if max_machines > 0 else max(64, h * w // 4)
 
     # Build entity arrays from grid machine data.
     mt_jnp = jnp.array(machine_types_np, dtype=jnp.int8)
@@ -840,42 +840,19 @@ def build_state(level: Level, params: EnvParams) -> EnvState:
 # ---------------------------------------------------------------------------
 
 
-def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
-    """Assemble an initial :class:`EnvState` from a generated block map.
-    
-    Places players near the centre (forcing their spawn tiles to DIRT),
-    derives ore resources from the mineable mask, and zeroes machines,
-    inventory, and progress. Shared by :func:`generate_state` and the
-    per-scenario world generators so they agree on state assembly.
-    
-    Parameters
-    ----------
-        world_map: Block-type grid of shape ``(map_height, map_width)``.
-
-    Parameters
-    ----------
-    base_resources :
-        
-    world_map : jax.Array :
-        
-    params : EnvParams :
-        
-    world_map: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
-    """
+def initial_state(
+    world_map: jax.Array,
+    params: EnvParams,
+    num_players: int,
+    max_machines: int,
+) -> EnvState:
+    """Assemble an initial :class:`EnvState` from a generated block map."""
     h, w = world_map.shape
     center_x = w // 2
     center_y = h // 2
     player_positions = []
-    for i in range(params.num_players):
-        offset = i - params.num_players // 2
+    for i in range(num_players):
+        offset = i - num_players // 2
         px = jnp.clip(center_x + offset, 0, w - 1)
         py = center_y
         player_positions.append([px, py])
@@ -883,7 +860,7 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
 
     player_positions_arr = jnp.array(player_positions, dtype=jnp.int32)
     player_directions = jnp.full(
-        params.num_players, int(Direction.DOWN), dtype=jnp.int32
+        num_players, int(Direction.DOWN), dtype=jnp.int32
     )
 
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
@@ -894,8 +871,8 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
     ).astype(jnp.int16)
 
     map_shape = (h, w)
-    inv_shape = (params.num_players, NUM_ITEM_TYPES)
-    mm = params.max_machines if params.max_machines > 0 else max(64, h * w // 4)
+    inv_shape = (num_players, NUM_ITEM_TYPES)
+    mm = max_machines if max_machines > 0 else max(64, h * w // 4)
 
     return EnvState(
         map=world_map.astype(jnp.int8),
@@ -925,26 +902,14 @@ def initial_state(world_map: jax.Array, params: EnvParams) -> EnvState:
     )
 
 
-def generate_state(
-    rng: jax.Array, params: EnvParams, map_height: int = 32, map_width: int = 32
-) -> EnvState:
-    """Generate a procedural world state from a random key."""
-    rng_map, _ = random.split(rng)
-    world_map = _generate_terrain(rng_map, params, map_height, map_width)
-    return initial_state(world_map, params)
 
-
-def _generate_terrain(
-    rng: jax.Array, params: EnvParams, map_height: int, map_width: int
-) -> jax.Array:
-    return _generate_terrain_patched(rng, params, map_height, map_width)
 
 
 # ---------------------------------------------------------------------------
 # Terrain generation algorithms
 #
 # Each algorithm takes the same (rng, params) signature and returns
-# an int32 terrain grid.  _generate_terrain delegates to one of these.
+# an int32 terrain grid.  generate_terrain delegates to one of these.
 # ---------------------------------------------------------------------------
 
 
@@ -1058,7 +1023,7 @@ def _smooth_noise(
     return result
 
 
-def _generate_terrain_patched(
+def generate_terrain(
     rng: jax.Array,
     params: EnvParams,
     map_height: int,
@@ -1107,6 +1072,32 @@ def _generate_terrain_patched(
     )
 
     return terrain
+
+
+# ---------------------------------------------------------------------------
+# Convenience: procedural state for tests and scripting
+# ---------------------------------------------------------------------------
+
+
+def generate_state(
+    rng: jax.Array,
+    params: EnvParams,
+    map_height: int = 32,
+    map_width: int = 32,
+    num_players: int = 1,
+    max_machines: int = 0,
+) -> EnvState:
+    """Generate a procedural EnvState for use in tests and scripts."""
+    from factoriax.engine.envs.base import FactoriaxEnv  # avoid circular import
+
+    env = FactoriaxEnv(
+        num_players=num_players,
+        max_machines=max_machines,
+        map_height=map_height,
+        map_width=map_width,
+    )
+    _, state = env.reset_env(rng, params)
+    return state
 
 
 # ---------------------------------------------------------------------------

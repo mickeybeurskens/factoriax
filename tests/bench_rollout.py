@@ -25,7 +25,7 @@ def bench_single_env(num_steps: int = 2000) -> float:
         Steps per second.
     """
     env = FactoriaxEnv()
-    params = EnvParams(num_players=1)
+    params = EnvParams()
     rng = random.PRNGKey(0)
 
     rng, reset_key = random.split(rng)
@@ -69,7 +69,7 @@ def bench_batched_env(num_envs: int = 64, num_steps: int = 500) -> float:
         Total steps per second (num_envs * num_steps / elapsed).
     """
     env = FactoriaxEnv()
-    params = EnvParams(num_players=1)
+    params = EnvParams()
     rng = random.PRNGKey(0)
 
     # Reset all envs.

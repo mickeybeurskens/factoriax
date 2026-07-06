@@ -76,8 +76,6 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Environment parameters."""
 
     max_timesteps: int = 1000
-    num_players: int = 2
-    max_machines: int = 0
     water_probability: float = 0.1
     iron_probability: float = 0.12
     copper_probability: float = 0.12

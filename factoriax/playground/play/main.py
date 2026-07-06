@@ -170,8 +170,8 @@ def play_level(
 
         seed = int(load_config().seed)
 
-    env = FactoriaxEnv(achievement_fn=core_game_conditions, level=level)
-    params = EnvParams(num_players=num_players)
+    env = FactoriaxEnv(achievement_fn=core_game_conditions, level=level, num_players=num_players)
+    params = EnvParams()
 
     if screen is None:
         # Standalone launch: open at the play window's preferred size.

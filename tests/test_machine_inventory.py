@@ -39,14 +39,14 @@ class TestEntityStateFields:
 
     def test_entity_dtypes(self) -> None:
         """Entity buffer arrays should use expected dtypes."""
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         state = generate_state(jax.random.PRNGKey(0), params, 4, 4)
         assert state.ent_buf_type.dtype == jnp.int8
         assert state.ent_buf_count.dtype == jnp.int16
 
     def test_entity_shapes(self) -> None:
         """Entity arrays should be 1-D with max_machines length."""
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         state = generate_state(jax.random.PRNGKey(0), params, 4, 4)
         mm = 64
         assert state.ent_buf_type.shape == (mm,)
@@ -58,7 +58,7 @@ class TestGenerateStateEntityFields:
 
     def test_shapes(self) -> None:
         """Generated state entity arrays should match max_machines."""
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         state = generate_state(jax.random.PRNGKey(0), params, 8, 6)
         mm = max(64, 8 * 6 // 4)
         assert state.ent_buf_type.shape == (mm,)
@@ -66,7 +66,7 @@ class TestGenerateStateEntityFields:
 
     def test_zero_initialized(self) -> None:
         """Generated state should have zero-initialized entity buffers."""
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         state = generate_state(jax.random.PRNGKey(0), params)
         assert jnp.all(state.ent_buf_count == 0)
 
@@ -87,7 +87,7 @@ class TestMinerInventory:
                 dtype=jnp.int32,
             ),
         )
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         new = run_miners(state, params)
         eid = _eid(new, 0, 0)
         assert int(new.ent_buf_count[eid]) > 0
@@ -114,7 +114,7 @@ class TestMinerInventory:
                 dtype=jnp.int16,
             ),
         )
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         new = run_miners(state, params)
         eid = _eid(new, 0, 0)
         assert int(new.ent_buf_count[eid]) == _MINER_BUF_CAP
@@ -156,7 +156,7 @@ class TestPalletInventory:
             ),
             buffer_count=jnp.array([[10]], dtype=jnp.int16),
         )
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         new = update_all_machines(state, params)
         eid = _eid(new, 0, 0)
         assert int(new.ent_buf_count[eid]) == 10
@@ -201,7 +201,7 @@ class TestAssemblerInventory:
                 dtype=jnp.int32,
             ),
         )
-        params = EnvParams(num_players=1)
+        params = EnvParams()
         new = update_all_machines(state, params)
         eid = _eid(new, 0, 0)
         assert int(new.ent_buf_count[eid]) == 0

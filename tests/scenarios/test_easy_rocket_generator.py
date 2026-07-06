@@ -20,11 +20,17 @@ from factoriax.engine.envs.easy_rocket import (
     _PATCH_BLOCKS,
     _SPAWN,
     _easy_rocket_terrain,
-    generate_easy_rocket_state,
+    easy_rocket,
 )
 from factoriax.engine.state import EnvParams
 
-_PARAMS = EnvParams(num_players=1, base_resources=3000)
+_PARAMS = EnvParams(base_resources=3000)
+_ENV, _ = easy_rocket()
+
+
+def _gen_state(key):
+    _, state = _ENV.reset_env(key, _PARAMS)
+    return state
 _ORE_VALUES: tuple[int, ...] = tuple(int(b) for b in _PATCH_BLOCKS)
 _TILES_PER_PATCH = 4
 
@@ -35,7 +41,7 @@ def _patch_tiles(world: np.ndarray, block: int) -> np.ndarray:
 
 
 def test_generator_places_one_2x2_patch_per_block() -> None:
-    world = np.asarray(generate_easy_rocket_state(random.PRNGKey(0), _PARAMS).map)
+    world = np.asarray(_gen_state(random.PRNGKey(0)).map)
     for block in _ORE_VALUES:
         tiles = _patch_tiles(world, block)
         assert tiles.shape[0] == _TILES_PER_PATCH
@@ -48,7 +54,7 @@ def test_generator_places_one_2x2_patch_per_block() -> None:
 
 def test_generator_avoids_inner_zone_and_keeps_spawn_dirt() -> None:
     """No ore inside the 4x4 zone (2x2 spawn area + 1-cell inner ring)."""
-    world = np.asarray(generate_easy_rocket_state(random.PRNGKey(1), _PARAMS).map)
+    world = np.asarray(_gen_state(random.PRNGKey(1)).map)
     sx, sy = _SPAWN
     assert int(world[sy, sx]) == int(BlockType.DIRT)
     for block in _ORE_VALUES:
@@ -63,7 +69,7 @@ def test_generator_avoids_outer_ring() -> None:
     """No ore on the outer 1-cell dirt ring (first/last row, first/last col)."""
     for seed in range(20):
         world = np.asarray(
-            generate_easy_rocket_state(random.PRNGKey(seed), _PARAMS).map,
+            _gen_state(random.PRNGKey(seed)).map,
         )
         ore_mask = np.isin(world, _ORE_VALUES)
         assert not bool(ore_mask[0, :].any()), f"seed {seed}: ore on top row"
@@ -73,7 +79,7 @@ def test_generator_avoids_outer_ring() -> None:
 
 
 def test_generator_resources_on_ore_only() -> None:
-    state = generate_easy_rocket_state(random.PRNGKey(2), _PARAMS)
+    state = _gen_state(random.PRNGKey(2))
     world = np.asarray(state.map)
     resources = np.asarray(state.block_resources)
     ore_mask = np.isin(world, _ORE_VALUES)
@@ -82,16 +88,16 @@ def test_generator_resources_on_ore_only() -> None:
 
 
 def test_generator_deterministic() -> None:
-    a = generate_easy_rocket_state(random.PRNGKey(7), _PARAMS)
-    b = generate_easy_rocket_state(random.PRNGKey(7), _PARAMS)
+    a = _gen_state(random.PRNGKey(7))
+    b = _gen_state(random.PRNGKey(7))
     assert np.array_equal(np.asarray(a.map), np.asarray(b.map))
 
 
 def test_generator_varies_with_key() -> None:
-    base = np.asarray(generate_easy_rocket_state(random.PRNGKey(0), _PARAMS).map)
+    base = np.asarray(_gen_state(random.PRNGKey(0)).map)
     assert any(
         not np.array_equal(
-            base, np.asarray(generate_easy_rocket_state(random.PRNGKey(s), _PARAMS).map)
+            base, np.asarray(_gen_state(random.PRNGKey(s)).map)
         )
         for s in (1, 2, 3, 4, 5)
     )
