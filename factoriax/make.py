@@ -11,7 +11,7 @@ def env_from_name(
     *,
     obs: str | None = None,
     obs_radius: int | None = None,
-    auto_reset: bool = False,
+    auto_reset: bool = True,
     resample: bool | None = None,
 ) -> tuple[Any, EnvParams]:
     """Build a registered scenario env by id.
@@ -28,7 +28,8 @@ def env_from_name(
         Local-window half-width. ``None`` uses the scenario default;
         ignored for ``_global`` obs variants.
     auto_reset :
-        Wrap in :class:`~factoriax.engine.envs.AutoResetWrapper`.
+        Wrap in :class:`~factoriax.engine.envs.AutoResetWrapper`. Defaults
+        to ``True``; pass ``False`` for manual episode control.
     resample :
         Auto-reset mode. ``None`` uses the scenario's ``resample``
         setting.

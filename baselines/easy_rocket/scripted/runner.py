@@ -53,7 +53,7 @@ def _make_env_and_state(seed: int) -> tuple[object, EnvState, EnvParams]:
     keyed generator with ``PRNGKey(seed)``, so each seed gives a distinct (but
     reproducible) layout the scripted agent plans around.
     """
-    env, env_params = env_from_name(_SCENARIO_ID)
+    env, env_params = env_from_name(_SCENARIO_ID, auto_reset=False)
     _, state0 = env.reset_env(jax.random.PRNGKey(seed), env_params)
     return env, state0, env_params
 

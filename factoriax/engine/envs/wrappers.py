@@ -107,6 +107,10 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     def map_height(self) -> int:
         return self._inner.map_height
 
+    @property
+    def num_players(self) -> int:
+        return self._inner.num_players  # type: ignore[no-any-return]
+
     def step_env(
         self,
         key: jax.Array,

@@ -65,7 +65,7 @@ def make(
     *,
     obs: str | None = None,
     obs_radius: int | None = None,
-    auto_reset: bool = False,
+    auto_reset: bool = True,
     resample: bool | None = None,
 ) -> tuple[Any, EnvParams]:
     """Resolve a scenario id to ``(env, params)``.
@@ -82,7 +82,11 @@ def make(
         Local-window half-width. ``None`` uses the scenario's
         opinionated default; ignored for ``_global`` obs variants.
     auto_reset :
-        Wrap in :class:`AutoResetWrapper`.
+        Wrap in :class:`AutoResetWrapper`. Defaults to ``True`` since most
+        callers train inside a fixed-length ``lax.scan`` rollout and need
+        episodes to restart on ``done``. Pass ``False`` for manual episode
+        control (scripted rollouts, interactive play, or a training loop
+        that manages its own reset-on-done logic).
     resample :
         Auto-reset mode. ``None`` (default) uses the scenario's
         ``resample`` setting; pass ``True``/``False`` to override — e.g.

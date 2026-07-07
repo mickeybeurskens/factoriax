@@ -27,7 +27,7 @@ def test_catalog_lists_expected_scenarios() -> None:
 
 
 def test_make_easy_rocket_builds_and_steps() -> None:
-    env, params = make("EasyRocket-v1")
+    env, params = make("EasyRocket-v1", auto_reset=False)
     assert env.map_width == 16 and env.map_height == 16
     obs, state = env.reset_env(random.PRNGKey(0), params)
     assert obs.shape == env.observation_space(params).shape
@@ -37,7 +37,7 @@ def test_make_easy_rocket_builds_and_steps() -> None:
 
 
 def test_make_rocket_is_32x32_and_masked() -> None:
-    env, params = make("Rocket-v1")
+    env, params = make("Rocket-v1", auto_reset=False)
     assert env.map_width == 32 and env.map_height == 32
     assert isinstance(env, ActionMaskWrapper)
 

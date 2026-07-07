@@ -498,7 +498,7 @@ def _write_throughput_json(
 def train(config: Config) -> dict[str, float]:
     """Train PPO against the easy_rocket scenario and return final metrics."""
     ppo = config.ppo
-    env, env_params = env_from_name(_SCENARIO_ID)
+    env, env_params = env_from_name(_SCENARIO_ID, auto_reset=False)
     env_params = env_params.replace(max_timesteps=config.max_timesteps)
     obs_dim = int(env.observation_space(env_params).shape[0])
     logger.info(
