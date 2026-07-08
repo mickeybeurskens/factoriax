@@ -54,14 +54,21 @@ def _mining_reward(
 
 def mining(
     *,
-    obs: str = "superficial_global",
-    obs_radius: int = 4,
+    obs: str = "superficial_local",
+    obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
     """Build the Mining-v1 env.
 
     8×8 procgen map with ten randomly placed iron-ore tiles (3 resources
     each). The agent earns 1 reward per ore item mined manually. Episode
     length is 100 steps.
+
+    Defaults to the egocentric ``superficial_local`` obs with radius 7
+    (the window covers the full 8×8 map from any position): this
+    scenario is an RL baseline, and flat-MLP policies plateau near 7/30
+    on ``superficial_global`` versus 30/30 on ``superficial_local`` —
+    see :mod:`factoriax.engine.observations`. Pass
+    ``obs="superficial_global"`` for the absolute-grid variant.
     """
     env = FactoriaxEnv(
         terrain_fn=_mining_terrain,
