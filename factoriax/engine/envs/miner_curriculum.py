@@ -9,9 +9,13 @@ opens EasyRocket-v1, in increasing order of composition:
 4. ``MinerBootstrap-v1`` — the full loop from an empty inventory.
 
 Every scenario shares EasyRocket-v1's world (the 16x16 six-patch
-terrain from :mod:`factoriax.engine.envs.common`), observation variant,
-and recipe table, so one policy network transfers across all stages and
-onto EasyRocket-v1 itself without surgery.
+terrain from :mod:`factoriax.engine.envs.common`) and recipe table, and
+all four default to the same egocentric ``superficial_local`` obs with
+radius 7, so one policy network transfers across all stages — and onto
+EasyRocket-v1 built with the same obs kwargs — without surgery. The
+local default follows the Mining-v1 precedent: flat-MLP policies
+plateau on ``superficial_global`` but solve the equivalent task on
+``superficial_local`` (see :func:`factoriax.engine.envs.mining.mining`).
 
 Rewards are graded latched achievement bits: one bit per progress
 threshold, weight 1.0, latched by
@@ -157,7 +161,7 @@ def mine_ores_reward(
 
 def mine_ores(
     *,
-    obs: str = "superficial_global",
+    obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
     """Build the MineOres-v1 env — curriculum stage 1.
@@ -169,8 +173,9 @@ def mine_ores(
     obs :
         Observation variant passed to :class:`FactoriaxEnv`.
     obs_radius :
-        Half-width of the local observation window (ignored for the
-        default global variant).
+        Half-width of the egocentric local window (the default radius 7
+        gives a 15×15 view on the 16×16 map); ignored for ``_global``
+        variants.
     """
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,
@@ -237,7 +242,7 @@ def all_miners_producing(state: EnvState, params: EnvParams) -> jax.Array:
 
 def place_miners(
     *,
-    obs: str = "superficial_global",
+    obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
     """Build the PlaceMiners-v1 env — curriculum stage 3.
@@ -250,8 +255,9 @@ def place_miners(
     obs :
         Observation variant passed to :class:`FactoriaxEnv`.
     obs_radius :
-        Half-width of the local observation window (ignored for the
-        default global variant).
+        Half-width of the egocentric local window (the default radius 7
+        gives a 15×15 view on the 16×16 map); ignored for ``_global``
+        variants.
     """
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,
@@ -318,7 +324,7 @@ def craft_miners_reward(
 
 def craft_miners(
     *,
-    obs: str = "superficial_global",
+    obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
     """Build the CraftMiners-v1 env — curriculum stage 2.
@@ -331,8 +337,9 @@ def craft_miners(
     obs :
         Observation variant passed to :class:`FactoriaxEnv`.
     obs_radius :
-        Half-width of the local observation window (ignored for the
-        default global variant).
+        Half-width of the egocentric local window (the default radius 7
+        gives a 15×15 view on the 16×16 map); ignored for ``_global``
+        variants.
     """
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,
@@ -417,7 +424,7 @@ def miner_bootstrap_reward(
 
 def miner_bootstrap(
     *,
-    obs: str = "superficial_global",
+    obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
     """Build the MinerBootstrap-v1 env — curriculum stage 4 (capstone).
@@ -431,8 +438,9 @@ def miner_bootstrap(
     obs :
         Observation variant passed to :class:`FactoriaxEnv`.
     obs_radius :
-        Half-width of the local observation window (ignored for the
-        default global variant).
+        Half-width of the egocentric local window (the default radius 7
+        gives a 15×15 view on the 16×16 map); ignored for ``_global``
+        variants.
     """
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,

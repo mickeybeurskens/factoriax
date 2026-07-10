@@ -3,8 +3,9 @@
 Scenario-level contracts for the four-stage curriculum that decomposes
 EasyRocket-v1's bootstrap phase (see the module docstring of
 ``factoriax.engine.envs.miner_curriculum``). Covered per scenario:
-registration, the transfer invariant (obs shape identical to
-EasyRocket-v1), start-state contract, reward accounting against the
+registration, the transfer invariant (obs shape identical across the
+stages and to EasyRocket-v1 built with the same obs variant),
+start-state contract, reward accounting against the
 latched achievement bits, anti-hack regressions (cycling past the
 high-water mark earns nothing), and a scripted-oracle solvability
 check within the 300-step budget.
@@ -175,10 +176,11 @@ def test_mine_ores_registered() -> None:
 
 
 def test_mine_ores_obs_shape_matches_easy_rocket(mine_ores_env) -> None:
-    """The transfer invariant: policy weights must load on EasyRocket-v1."""
+    """The transfer invariant: policy weights must load on EasyRocket-v1
+    built with the curriculum's obs variant (the scenarios default to
+    ``superficial_local``; EasyRocket-v1's own default stays global)."""
     env, params = mine_ores_env
-    er_env, er_params = easy_rocket()
-    assert env.obs == er_env.obs
+    er_env, er_params = easy_rocket(obs=env.obs, obs_radius=env.obs_radius)
     assert (
         env.observation_space(params).shape
         == er_env.observation_space(er_params).shape
@@ -287,8 +289,7 @@ def test_craft_miners_registered() -> None:
 
 def test_craft_miners_obs_shape_matches_easy_rocket(craft_miners_env) -> None:
     env, params = craft_miners_env
-    er_env, er_params = easy_rocket()
-    assert env.obs == er_env.obs
+    er_env, er_params = easy_rocket(obs=env.obs, obs_radius=env.obs_radius)
     assert (
         env.observation_space(params).shape
         == er_env.observation_space(er_params).shape
@@ -391,8 +392,7 @@ def test_place_miners_registered() -> None:
 
 def test_place_miners_obs_shape_matches_easy_rocket(place_miners_env) -> None:
     env, params = place_miners_env
-    er_env, er_params = easy_rocket()
-    assert env.obs == er_env.obs
+    er_env, er_params = easy_rocket(obs=env.obs, obs_radius=env.obs_radius)
     assert (
         env.observation_space(params).shape
         == er_env.observation_space(er_params).shape
@@ -556,8 +556,7 @@ def test_bootstrap_registered() -> None:
 
 def test_bootstrap_obs_shape_matches_easy_rocket(bootstrap_env) -> None:
     env, params = bootstrap_env
-    er_env, er_params = easy_rocket()
-    assert env.obs == er_env.obs
+    er_env, er_params = easy_rocket(obs=env.obs, obs_radius=env.obs_radius)
     assert (
         env.observation_space(params).shape
         == er_env.observation_space(er_params).shape
@@ -644,3 +643,21 @@ def test_bootstrap_oracle_reaches_max_and_terminates_early(
     assert total == MINER_BOOTSTRAP_MAX_SCORE, f"oracle stalled at {total}"
     assert done and steps < MAX_TIMESTEPS
     print(f"\nMinerBootstrap-v1 oracle seed {seed}: solved in {steps} steps")
+
+
+# ---------------------------------------------------------------------------
+# Cross-stage transfer invariant
+# ---------------------------------------------------------------------------
+
+
+def test_curriculum_stages_share_obs_variant_and_shape(
+    mine_ores_env, craft_miners_env, place_miners_env, bootstrap_env
+) -> None:
+    """One obs variant, radius, and shape across all four stages."""
+    stages = [mine_ores_env, craft_miners_env, place_miners_env, bootstrap_env]
+    assert {env.obs for env, _ in stages} == {"superficial_local"}
+    assert len({env.obs_radius for env, _ in stages}) == 1
+    assert (
+        len({env.observation_space(params).shape for env, params in stages})
+        == 1
+    )
