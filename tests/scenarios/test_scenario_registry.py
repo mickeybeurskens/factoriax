@@ -20,7 +20,12 @@ _NOOP = int(Action.NOOP)
 
 def test_catalog_lists_expected_scenarios() -> None:
     catalog = dict(list_scenarios())
-    assert set(catalog) == {"EasyRocket-v1", "Rocket-v1", "Mining-v1"}
+    assert set(catalog) == {
+        "EasyRocket-v1",
+        "Rocket-v1",
+        "Mining-v1",
+        "MineOres-v1",
+    }
     for spec in catalog.values():
         assert isinstance(spec, ScenarioSpec)
         assert spec.name and spec.description and callable(spec.build)
