@@ -7,7 +7,6 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
@@ -17,239 +16,58 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.envs.base import achievement_hook
+from factoriax.engine.envs.common import (
+    MAP_SIZE,
+    ORE_RESOURCES_PER_TILE,
+    PATCH_BLOCKS,
+    PATCH_SIZE,
+    SPAWN,
+    count_machines,
+    holds_item,
+    producing_miners,
+    sample_patch_corner,
+    six_patch_terrain,
+)
 from factoriax.engine.levels import Level, LevelBuilder
 from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.engine.rewards import achievement_reward
 from factoriax.engine.state import EnvParams
 
-_MAP_SIZE: int = 16
-_PATCH_SIZE: int = 2
-_ORE_RESOURCES_PER_TILE: int = 3000
-_MAX_SAMPLE_ATTEMPTS: int = 1000
-
-# --- Centre spawn area (2x2; room for multi-agent later). ---
-_SPAWN_AREA_SIZE: int = 2
-_SPAWN_AREA_MIN: int = (_MAP_SIZE - _SPAWN_AREA_SIZE) // 2  # 7
-_SPAWN_AREA_MAX: int = _SPAWN_AREA_MIN + _SPAWN_AREA_SIZE - 1  # 8
-
-# --- Guaranteed-dirt rings flanking the play area. ---
-_OUTER_RING_WIDTH: int = 1
-_INNER_RING_WIDTH: int = 1
-
-# No-patch zone = spawn area expanded by the inner ring on every side.
-_INNER_ZONE_MIN: int = _SPAWN_AREA_MIN - _INNER_RING_WIDTH  # 6
-_INNER_ZONE_MAX: int = _SPAWN_AREA_MAX + _INNER_RING_WIDTH  # 9
-
-# Patch corners must keep the 2x2 patch fully inside the inner play area
-# (i.e. clear of the outer ring on every side).
-_MIN_CORNER: int = _OUTER_RING_WIDTH  # 1
-_MAX_CORNER: int = _MAP_SIZE - _PATCH_SIZE - _OUTER_RING_WIDTH  # 13
-
-# Active-agent spawn cell. One of the four cells of the 2x2 spawn area;
-# future multi-agent setups fill the other three.
-_SPAWN: tuple[int, int] = (_SPAWN_AREA_MAX, _SPAWN_AREA_MAX)  # (8, 8)
-
-_PATCH_BLOCKS: tuple[BlockType, ...] = (
-    BlockType.IRON,
-    BlockType.COPPER,
-    BlockType.TIN,
-    BlockType.SILICON,
-    BlockType.COAL,
-    BlockType.LIMESTONE,
-)
-
-
-def _patch_touches_inner_zone(px: int, py: int) -> bool:
-    """True if a 2x2 patch at ``(px, py)`` overlaps the spawn area or its
-    inner-ring buffer.
-
-    Parameters
-    ----------
-    px: int :
-        
-    py: int :
-        
-
-    Returns
-    -------
-
-    """
-    for dy in range(_PATCH_SIZE):
-        for dx in range(_PATCH_SIZE):
-            tx, ty = px + dx, py + dy
-            if (
-                _INNER_ZONE_MIN <= tx <= _INNER_ZONE_MAX
-                and _INNER_ZONE_MIN <= ty <= _INNER_ZONE_MAX
-            ):
-                return True
-    return False
-
-
-def _patches_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
-    """
-
-    Parameters
-    ----------
-    a: tuple[int :
-        
-    int] :
-        
-    b: tuple[int :
-        
-
-    Returns
-    -------
-
-    """
-    return abs(a[0] - b[0]) < _PATCH_SIZE and abs(a[1] - b[1]) < _PATCH_SIZE
-
-
-def _sample_patch_corner(
-    key: jax.Array, placed: list[tuple[int, int]]
-) -> tuple[int, int]:
-    """
-
-    Parameters
-    ----------
-    key: jax.Array :
-        
-    placed: list[tuple[int :
-        
-    int]] :
-        
-
-    Returns
-    -------
-
-    """
-    for _ in range(_MAX_SAMPLE_ATTEMPTS):
-        key, subkey = jax.random.split(key)
-        coords = jax.random.randint(
-            subkey, shape=(2,), minval=_MIN_CORNER, maxval=_MAX_CORNER + 1
-        )
-        corner = (int(coords[0]), int(coords[1]))
-        if _patch_touches_inner_zone(*corner):
-            continue
-        if any(_patches_overlap(corner, other) for other in placed):
-            continue
-        return corner
-    raise RuntimeError(
-        f"build_easy_rocket_level: failed to place a patch in "
-        f"{_MAX_SAMPLE_ATTEMPTS} attempts."
-    )
-
 
 def build_easy_rocket_level(key: jax.Array) -> Level:
     """Build a 16x16 easy-rocket level with six 2x2 ore patches placed by PRNG.
-    
+
     Patches do not overlap each other, stay clear of the outer 1-cell dirt
     ring, and stay clear of the 4x4 zone covering the 2x2 spawn area plus its
     1-cell inner-ring buffer. Same key returns equal Levels; different keys
-    produce different layouts.
+    produce different layouts. The JAX-native equivalent is
+    :func:`factoriax.engine.envs.common.six_patch_terrain`.
 
     Parameters
     ----------
     key: jax.Array :
-        
+
 
     Returns
     -------
 
     """
-    builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
+    builder = LevelBuilder(MAP_SIZE, MAP_SIZE)
     placed: list[tuple[int, int]] = []
-    patch_keys = jax.random.split(key, len(_PATCH_BLOCKS))
-    for patch_key, block in zip(patch_keys, _PATCH_BLOCKS, strict=True):
-        corner = _sample_patch_corner(patch_key, placed)
+    patch_keys = jax.random.split(key, len(PATCH_BLOCKS))
+    for patch_key, block in zip(patch_keys, PATCH_BLOCKS, strict=True):
+        corner = sample_patch_corner(patch_key, placed)
         placed.append(corner)
         builder.fill_rect(
             corner[0],
             corner[1],
-            _PATCH_SIZE,
-            _PATCH_SIZE,
+            PATCH_SIZE,
+            PATCH_SIZE,
             block,
-            resources=_ORE_RESOURCES_PER_TILE,
+            resources=ORE_RESOURCES_PER_TILE,
         )
-    builder.set_player_position(*_SPAWN)
+    builder.set_player_position(*SPAWN)
     return builder.build("easy_rocket_v1")
-
-
-#: Every 2x2 patch corner inside the outer ring that does not touch the
-#: inner spawn+ring zone, computed once. The JAX generator draws
-#: non-overlapping patches from this fixed set, so the avoidance rules
-#: match the host builder exactly.
-_VALID_PATCH_CORNERS: np.ndarray = np.array(
-    [
-        (cx, cy)
-        for cx in range(_MIN_CORNER, _MAX_CORNER + 1)
-        for cy in range(_MIN_CORNER, _MAX_CORNER + 1)
-        if not _patch_touches_inner_zone(cx, cy)
-    ],
-    dtype=np.int32,
-)
-
-
-def _easy_rocket_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
-    """Build a dirt map with one non-overlapping 2x2 patch per ore block.
-    
-    Jittable, vmappable port of :func:`build_easy_rocket_level`'s placement:
-    shuffle the valid (spawn-avoiding) corners with ``key`` and greedily take
-    the first ``len(_PATCH_BLOCKS)`` that do not overlap an already-placed
-    patch. With ~200 candidates and six patches this always succeeds, so no
-    rejection-failure branch is needed.
-
-    Parameters
-    ----------
-    key: jax.Array :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    """
-    corners = jnp.asarray(_VALID_PATCH_CORNERS)
-    shuffled = corners[jax.random.permutation(key, corners.shape[0])]
-    n_patches = len(_PATCH_BLOCKS)
-    placed0 = jnp.full((n_patches, 2), -_PATCH_SIZE, dtype=jnp.int32)
-
-    def place(
-        carry: tuple[jax.Array, jax.Array], cand: jax.Array
-    ) -> tuple[tuple[jax.Array, jax.Array], None]:
-        """
-
-        Parameters
-        ----------
-        carry: tuple[jax.Array :
-            
-        jax.Array] :
-            
-        cand: jax.Array :
-            
-
-        Returns
-        -------
-
-        """
-        placed, count = carry
-        dx = jnp.abs(placed[:, 0] - cand[0])
-        dy = jnp.abs(placed[:, 1] - cand[1])
-        filled = jnp.arange(n_patches) < count
-        overlaps = jnp.any(filled & (dx < _PATCH_SIZE) & (dy < _PATCH_SIZE))
-        do_place = (count < n_patches) & ~overlaps
-        slot = jnp.minimum(count, n_patches - 1)
-        placed = placed.at[slot].set(jnp.where(do_place, cand, placed[slot]))
-        return (placed, count + do_place.astype(jnp.int32)), None
-
-    (placed, _count), _ = jax.lax.scan(place, (placed0, jnp.int32(0)), shuffled)
-
-    world = jnp.full((_MAP_SIZE, _MAP_SIZE), jnp.int8(BlockType.DIRT))
-    for i, block in enumerate(_PATCH_BLOCKS):
-        patch = jnp.full((_PATCH_SIZE, _PATCH_SIZE), jnp.int8(int(block)))
-        world = jax.lax.dynamic_update_slice(world, patch, (placed[i, 1], placed[i, 0]))
-    return world
-
 
 
 EASY_ROCKET_RECIPES: tuple[Recipe, ...] = (
@@ -339,84 +157,6 @@ _ORE_BLOCKS: tuple[int, ...] = (
 )
 
 
-def _holds_item(state: EnvState, item: int) -> jax.Array:
-    """
-
-    Parameters
-    ----------
-    state: EnvState :
-        
-    item: int :
-        
-
-    Returns
-    -------
-
-    """
-    return jnp.sum(state.player_inventory[:, item]) >= 1
-
-
-def _count_machines(state: EnvState, machine_type: int) -> jax.Array:
-    """
-
-    Parameters
-    ----------
-    state: EnvState :
-        
-    machine_type: int :
-        
-
-    Returns
-    -------
-
-    """
-    return jnp.sum(state.machine_types == machine_type)
-
-
-def _blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
-    """
-
-    Parameters
-    ----------
-    state: EnvState :
-        
-
-    Returns
-    -------
-    type
-        ``active_mask`` is True for slots that hold an active miner. ``block_at_pos``
-        is the block under the entity's ``(ent_y, ent_x)`` tile, computed with
-        clamped indices so inactive slots stay JIT-safe.
-
-    """
-    active = (state.ent_type == int(Machine.MINER)) & (state.ent_y >= 0)
-    safe_y = jnp.maximum(state.ent_y, 0)
-    safe_x = jnp.maximum(state.ent_x, 0)
-    blocks = state.map[safe_y, safe_x]
-    return active, blocks
-
-
-def _producing_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
-    """
-
-    Parameters
-    ----------
-    state: EnvState :
-        
-
-    Returns
-    -------
-    type
-        Like :func:`_blocks_under_active_miners` but the mask also requires a
-        non-empty output buffer, so a slot counts only once its miner has
-        actually mined ore rather than merely being placed on an ore tile.
-
-    """
-    active, blocks = _blocks_under_active_miners(state)
-    producing = active & (state.ent_buf_count > 0)
-    return producing, blocks
-
-
 def _producing_ore_presence(state: EnvState) -> jax.Array:
     """Per-ore-block presence: True where a producing miner sits on it.
 
@@ -429,7 +169,7 @@ def _producing_ore_presence(state: EnvState) -> jax.Array:
     -------
 
     """
-    producing, blocks = _producing_miners(state)
+    producing, blocks = producing_miners(state)
     return jnp.stack(
         [jnp.any(producing & (blocks == ore_block)) for ore_block in _ORE_BLOCKS]
     )
@@ -532,7 +272,7 @@ def _has_any_raw_ore(state: EnvState) -> jax.Array:
     -------
 
     """
-    return jnp.any(jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS]))
+    return jnp.any(jnp.stack([holds_item(state, item) for item in _RAW_ORE_ITEMS]))
 
 
 def _has_each_raw_ore(state: EnvState) -> jax.Array:
@@ -547,7 +287,7 @@ def _has_each_raw_ore(state: EnvState) -> jax.Array:
     -------
 
     """
-    return jnp.all(jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS]))
+    return jnp.all(jnp.stack([holds_item(state, item) for item in _RAW_ORE_ITEMS]))
 
 
 def _any_producing_miner(state: EnvState) -> jax.Array:
@@ -562,7 +302,7 @@ def _any_producing_miner(state: EnvState) -> jax.Array:
     -------
 
     """
-    return jnp.any(_producing_miners(state)[0])
+    return jnp.any(producing_miners(state)[0])
 
 
 def _has_machine(state: EnvState, machine: int) -> jax.Array:
@@ -579,7 +319,7 @@ def _has_machine(state: EnvState, machine: int) -> jax.Array:
     -------
 
     """
-    return _count_machines(state, machine) >= 1
+    return count_machines(state, machine) >= 1
 
 
 def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
@@ -598,7 +338,7 @@ def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
     -------
 
     """
-    return _count_machines(state, machine) >= n
+    return count_machines(state, machine) >= n
 
 
 def _has_n_machines_pair(
@@ -621,8 +361,8 @@ def _has_n_machines_pair(
     -------
 
     """
-    return (_count_machines(state, machine_a) >= n) & (
-        _count_machines(state, machine_b) >= n
+    return (count_machines(state, machine_a) >= n) & (
+        count_machines(state, machine_b) >= n
     )
 
 
@@ -645,7 +385,7 @@ def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
     -------
 
     """
-    held_types = jnp.stack([_holds_item(state, item) for item in _RAW_ORE_ITEMS])
+    held_types = jnp.stack([holds_item(state, item) for item in _RAW_ORE_ITEMS])
     return jnp.sum(held_types.astype(jnp.int32)) >= n
 
 
@@ -816,19 +556,19 @@ def easy_rocket(
         Half-width of the local observation window.
     """
     env = FactoriaxEnv(
-        terrain_fn=_easy_rocket_terrain,
+        terrain_fn=six_patch_terrain,
         step_hooks=(achievement_hook(easy_rocket_conditions),),
         reward_fn=easy_rocket_reward,
         obs=obs,
         obs_radius=obs_radius,
-        map_width=_MAP_SIZE,
-        map_height=_MAP_SIZE,
+        map_width=MAP_SIZE,
+        map_height=MAP_SIZE,
         num_players=1,
         max_machines=100,
     )
     params = EnvParams(
         max_timesteps=2000,
         recipe_table=EASY_ROCKET_RECIPE_TABLE,
-        base_resources=_ORE_RESOURCES_PER_TILE,
+        base_resources=ORE_RESOURCES_PER_TILE,
     )
     return env, params
