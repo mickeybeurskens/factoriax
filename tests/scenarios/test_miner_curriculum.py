@@ -22,8 +22,10 @@ from factoriax.engine.envs.easy_rocket import easy_rocket
 from factoriax.engine.envs.miner_curriculum import (
     CRAFT_MINERS_MAX_SCORE,
     MINE_ORES_MAX_SCORE,
+    PLACE_MINERS_MAX_SCORE,
     craft_miners,
     mine_ores,
+    place_miners,
 )
 from factoriax.engine.tables import DIRECTIONS
 from factoriax.make import env_from_name
@@ -87,6 +89,59 @@ def _nearest(state, wanted_blocks: set[int]) -> tuple[int, int] | None:
     dists = np.abs(xs - px) + np.abs(ys - py)
     i = int(np.argmin(dists))
     return int(xs[i]), int(ys[i])
+
+
+def _bfs_step_toward(state, wanted: np.ndarray) -> int:
+    """First move of a shortest walkable path to a tile adjacent to
+    ``wanted``.
+
+    Machines (all solid on this map — no belts) block movement, which is
+    what defeats the greedy walker once placed miners appear: BFS routes
+    around them.
+
+    Parameters
+    ----------
+    wanted :
+        Boolean ``(h, w)`` mask of target tiles (stood *next to*, not on).
+    """
+    from collections import deque
+
+    m = np.asarray(state.map)
+    machines = np.asarray(state.machine_types)
+    h, w = m.shape
+    walkable = (m != int(BlockType.WATER)) & (machines == 0)
+    px, py = (int(v) for v in state.player_positions[0])
+
+    goal = np.zeros_like(wanted)
+    for d in _DIR_TO_MOVE:
+        off = np.asarray(DIRECTIONS[int(d)])
+        shifted = np.roll(wanted, (int(off[1]), int(off[0])), axis=(0, 1))
+        goal |= shifted
+    goal &= walkable
+
+    prev: dict[tuple[int, int], tuple[int, int]] = {}
+    seen = {(px, py)}
+    queue = deque([(px, py)])
+    found = None
+    while queue:
+        cx, cy = queue.popleft()
+        if goal[cy, cx]:
+            found = (cx, cy)
+            break
+        for d in _DIR_TO_MOVE:
+            off = np.asarray(DIRECTIONS[int(d)])
+            nx, ny = cx + int(off[0]), cy + int(off[1])
+            if 0 <= nx < w and 0 <= ny < h and walkable[ny, nx]:
+                if (nx, ny) not in seen:
+                    seen.add((nx, ny))
+                    prev[(nx, ny)] = (cx, cy)
+                    queue.append((nx, ny))
+
+    assert found is not None, "BFS: no reachable tile adjacent to a target"
+    cur = found
+    while prev.get(cur, (px, py)) != (px, py) and cur in prev:
+        cur = prev[cur]
+    return _approach(px, py, cur[0], cur[1])
 
 
 # ---------------------------------------------------------------------------
@@ -302,3 +357,168 @@ def test_craft_miners_cycling_past_high_water_earns_zero(
 
     assert extra == 0.0
     assert int(np.asarray(state.player_inventory[0, int(ItemType.MINER)])) == 6
+
+
+# ---------------------------------------------------------------------------
+# PlaceMiners-v1
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def place_miners_env():
+    return place_miners()
+
+
+@pytest.fixture(scope="module")
+def place_miners_step(place_miners_env):
+    env, _ = place_miners_env
+    return jax.jit(env.step_env)
+
+
+def test_place_miners_registered() -> None:
+    env, params = env_from_name("PlaceMiners-v1")
+    obs, _ = env.reset_env(random.PRNGKey(0), params)
+    assert obs.shape == env.observation_space(params).shape
+
+
+def test_place_miners_obs_shape_matches_easy_rocket(place_miners_env) -> None:
+    env, params = place_miners_env
+    er_env, er_params = easy_rocket()
+    assert env.obs == er_env.obs
+    assert (
+        env.observation_space(params).shape
+        == er_env.observation_space(er_params).shape
+    )
+
+
+def test_place_miners_start_inventory(place_miners_env) -> None:
+    """Six miners in inventory, nothing else."""
+    env, params = place_miners_env
+    _, state = env.reset_env(random.PRNGKey(0), params)
+    inv = np.asarray(state.player_inventory[0])
+    assert int(inv[int(ItemType.MINER)]) == 6
+    other = np.delete(inv, [int(ItemType.MINER)])
+    assert not other.any()
+
+
+def test_place_miners_dirt_placement_scores_zero(
+    place_miners_env, place_miners_step
+) -> None:
+    """A miner on dirt never produces, so it earns nothing."""
+    env, params = place_miners_env
+    key = random.PRNGKey(1)
+    _, state = env.reset_env(key, params)
+
+    # Spawn area and its ring are guaranteed dirt: place straight up.
+    total = 0.0
+    actions = [int(Action.FACE_UP), int(Action.PLACE_MINER)] + [
+        int(Action.NOOP)
+    ] * 20
+    for action in actions:
+        key, ks = random.split(key)
+        _, state, reward, _, _ = place_miners_step(ks, state, action, params)
+        total += float(reward)
+
+    assert total == 0.0
+    assert int(np.asarray(state.player_inventory[0, int(ItemType.MINER)])) == 5
+
+
+def test_place_miners_cycling_past_high_water_earns_zero(
+    place_miners_env, place_miners_step
+) -> None:
+    """Anti-hack: pickup/re-place of a producing miner re-earns nothing."""
+    env, params = place_miners_env
+    key = random.PRNGKey(2)
+    _, state = env.reset_env(key, params)
+
+    def run(action):
+        nonlocal key, state
+        key, ks = random.split(key)
+        _, state, reward, done, _ = place_miners_step(
+            ks, state, action, params
+        )
+        return float(reward), bool(done)
+
+    # Walk to the nearest ore tile and place one miner on it.
+    total = 0.0
+    for _ in range(60):
+        action = _face_or_mine_adjacent(state, set(_BLOCK_TO_ITEM))
+        if action == int(Action.MINE):
+            action = int(Action.PLACE_MINER)
+        if action is None:
+            px, py = (int(v) for v in state.player_positions[0])
+            target = _nearest(state, set(_BLOCK_TO_ITEM))
+            action = _approach(px, py, *target)
+        reward, _ = run(action)
+        total += reward
+        if int(np.asarray(state.player_inventory[0, int(ItemType.MINER)])) < 6:
+            break
+    # Let it produce: the >=1-producing bit latches.
+    for _ in range(3):
+        reward, _ = run(int(Action.NOOP))
+        total += reward
+    assert total == 1.0
+
+    # Pick it up (still facing it) and re-place; let it produce again.
+    extra = 0.0
+    for action in [int(Action.PICKUP), int(Action.PLACE_MINER)] + [
+        int(Action.NOOP)
+    ] * 5:
+        reward, _ = run(action)
+        extra += reward
+
+    assert extra == 0.0
+
+
+def _place_miners_oracle(state) -> int:
+    """Place each miner on the nearest machine-free ore tile."""
+    if int(np.asarray(state.player_inventory[0, int(ItemType.MINER)])) == 0:
+        return int(Action.NOOP)
+    m = np.asarray(state.map)
+    machines = np.asarray(state.machine_types)
+    px, py = (int(v) for v in state.player_positions[0])
+    h, w = m.shape
+
+    # Adjacent machine-free ore tile: face it, then place.
+    for d in _DIR_TO_MOVE:
+        off = np.asarray(DIRECTIONS[int(d)])
+        tx, ty = px + int(off[0]), py + int(off[1])
+        if (
+            0 <= tx < w
+            and 0 <= ty < h
+            and int(m[ty, tx]) in _BLOCK_TO_ITEM
+            and int(machines[ty, tx]) == 0
+        ):
+            if int(state.player_directions[0]) == int(d):
+                return int(Action.PLACE_MINER)
+            return int(_DIR_TO_FACE[d])
+
+    free_ore = np.isin(m, list(_BLOCK_TO_ITEM)) & (machines == 0)
+    assert free_ore.any(), "no machine-free ore tile left"
+    return _bfs_step_toward(state, free_ore)
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_place_miners_oracle_reaches_max_and_terminates_early(
+    place_miners_env, place_miners_step, seed
+) -> None:
+    """Oracle places all six miners on ore; episode ends before budget."""
+    env, params = place_miners_env
+    key = random.PRNGKey(seed)
+    _, state = env.reset_env(key, params)
+
+    total = 0.0
+    steps = 0
+    done = False
+    for _ in range(MAX_TIMESTEPS):
+        action = _place_miners_oracle(state)
+        key, ks = random.split(key)
+        _, state, reward, done, _ = place_miners_step(ks, state, action, params)
+        total += float(reward)
+        steps += 1
+        if done:
+            break
+
+    assert total == PLACE_MINERS_MAX_SCORE, f"oracle stalled at {total}"
+    assert done and steps < MAX_TIMESTEPS
+    print(f"\nPlaceMiners-v1 oracle seed {seed}: solved in {steps} steps")

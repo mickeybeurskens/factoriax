@@ -35,6 +35,7 @@ from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
 from factoriax.engine.envs.common import (
     MAP_SIZE,
     ORE_RESOURCES_PER_TILE,
+    producing_miners,
     six_patch_terrain,
 )
 from factoriax.engine.envs.easy_rocket import EASY_ROCKET_RECIPE_TABLE
@@ -90,6 +91,16 @@ def _mined_at_least(state: EnvState, item: int, count: int) -> jax.Array:
 def _holds_at_least(state: EnvState, item: int, count: int) -> jax.Array:
     """Player inventories hold at least ``count`` of ``item``."""
     return jnp.sum(state.player_inventory[:, item]) >= count
+
+
+def _producing_at_least(state: EnvState, count: int) -> jax.Array:
+    """At least ``count`` placed miners have ore in their output buffer.
+
+    A miner on dirt never fills its buffer, so this implies the miners
+    sit on ore tiles.
+    """
+    producing, _ = producing_miners(state)
+    return jnp.sum(producing) >= count
 
 
 def _stock_inventory(
@@ -164,6 +175,89 @@ def mine_ores(
         terrain_fn=six_patch_terrain,
         step_hooks=(achievement_hook(mine_ores_conditions),),
         reward_fn=mine_ores_reward,
+        obs=obs,
+        obs_radius=obs_radius,
+        map_width=MAP_SIZE,
+        map_height=MAP_SIZE,
+        num_players=1,
+        max_machines=100,
+    )
+    params = EnvParams(
+        max_timesteps=_MAX_TIMESTEPS,
+        recipe_table=EASY_ROCKET_RECIPE_TABLE,
+        base_resources=ORE_RESOURCES_PER_TILE,
+    )
+    return env, params
+
+
+# ---------------------------------------------------------------------------
+# PlaceMiners-v1
+# ---------------------------------------------------------------------------
+
+#: 6 bits: >= k producing miners, k = 1..6. Placement itself is legal
+#: on any free tile — the reward, not the engine, enforces "on ore",
+#: because only a miner on ore ever fills its output buffer.
+_PLACE_MINERS_CONDITIONS: tuple[_Condition, ...] = tuple(
+    partial(_producing_at_least, count=count)
+    for count in range(1, _N_MINERS + 1)
+)
+
+NUM_PLACE_MINERS_ACHIEVEMENTS: int = len(_PLACE_MINERS_CONDITIONS)
+
+PLACE_MINERS_MAX_SCORE: float = float(NUM_PLACE_MINERS_ACHIEVEMENTS)
+
+place_miners_conditions = _conditions_to_achievement_fn(
+    _PLACE_MINERS_CONDITIONS
+)
+
+PLACE_MINERS_ACHIEVEMENT_WEIGHTS: jax.Array = _unit_weights(
+    NUM_PLACE_MINERS_ACHIEVEMENTS
+)
+
+_PLACE_MINERS_STOCK: tuple[tuple[int, int], ...] = (
+    (int(ItemType.MINER), _N_MINERS),
+)
+
+
+def place_miners_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward for newly latched PlaceMiners-v1 bits."""
+    return achievement_reward(
+        prev_state, new_state, params, weights=PLACE_MINERS_ACHIEVEMENT_WEIGHTS
+    )
+
+
+def all_miners_producing(state: EnvState, params: EnvParams) -> jax.Array:
+    """Episode-ending condition: six miners producing at once."""
+    del params
+    return _producing_at_least(state, _N_MINERS)
+
+
+def place_miners(
+    *,
+    obs: str = "superficial_global",
+    obs_radius: int = 7,
+) -> tuple[FactoriaxEnv, EnvParams]:
+    """Build the PlaceMiners-v1 env — curriculum stage 3.
+
+    Inventory starts with six miners; get all six producing on ore.
+    Max score 6; the episode ends early once all six produce.
+
+    Parameters
+    ----------
+    obs :
+        Observation variant passed to :class:`FactoriaxEnv`.
+    obs_radius :
+        Half-width of the local observation window (ignored for the
+        default global variant).
+    """
+    env = FactoriaxEnv(
+        terrain_fn=six_patch_terrain,
+        step_hooks=(achievement_hook(place_miners_conditions),),
+        reset_hooks=(_stock_inventory(_PLACE_MINERS_STOCK),),
+        reward_fn=place_miners_reward,
+        done_fn=all_miners_producing,
         obs=obs,
         obs_radius=obs_radius,
         map_width=MAP_SIZE,
