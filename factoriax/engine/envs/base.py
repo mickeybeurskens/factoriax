@@ -30,6 +30,7 @@ StepHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
 ResetHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
 TerrainFn = Callable[[jax.Array, EnvParams], jax.Array]
 RewardFn = Callable[[EnvState, EnvState, EnvParams], jax.Array]
+DoneFn = Callable[[EnvState, EnvParams], jax.Array]
 
 
 def achievement_hook(condition_fn: AchievementFn) -> StepHook:
@@ -105,6 +106,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         step_hooks: tuple[StepHook, ...] = (),
         reset_hooks: tuple[ResetHook, ...] = (),
         reward_fn: RewardFn | None = None,
+        done_fn: DoneFn | None = None,
         obs: str = "x_ray_global",
         obs_radius: int = 7,
         map_width: int = 32,
@@ -127,6 +129,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             hooks = hooks + (achievement_hook(achievement_fn),)
         self._step_hooks = hooks
         self._reset_hooks = tuple(reset_hooks)
+        self._done_fn = done_fn
         self.obs = obs
         self.obs_radius = int(obs_radius)
         self._obs_profile = "superficial" if obs.startswith("superficial") else "x_ray"
@@ -253,7 +256,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             if self._reward_fn is not None
             else jnp.float32(0.0)
         )
-        done = is_game_over(new_state, params)
+        done = self.is_terminal(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}
         return obs, new_state, reward, done, info
@@ -349,7 +352,10 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
         
         """
-        return is_game_over(state, params)
+        over = is_game_over(state, params)
+        if self._done_fn is not None:
+            over = over | self._done_fn(state, params)
+        return over
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
         """Discrete action space over all actions.
