@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from factoriax.engine.envs.easy_rocket import easy_rocket
-from factoriax.engine.envs.miner_curriculum import mine_ores
+from factoriax.engine.envs.miner_curriculum import craft_miners, mine_ores
 from factoriax.engine.envs.mining import mining
 from factoriax.engine.envs.rocket import rocket
 from factoriax.engine.envs.wrappers import AutoResetWrapper
@@ -48,6 +48,16 @@ SCENARIOS: dict[str, ScenarioSpec] = {
             "300-step budget."
         ),
         build=mine_ores,
+        resample=True,
+    ),
+    "CraftMiners-v1": ScenarioSpec(
+        name="Craft Miners",
+        description=(
+            "Curriculum stage 2: craft six miners from a pre-stocked "
+            "inventory (6 limestone + 6 silicon). Graded latched bits, "
+            "max score 6; 300-step budget."
+        ),
+        build=craft_miners,
         resample=True,
     ),
     "EasyRocket-v1": ScenarioSpec(

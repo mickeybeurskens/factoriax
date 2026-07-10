@@ -20,7 +20,9 @@ from jax import random
 from factoriax.engine.constants import Action, BlockType, Direction, ItemType
 from factoriax.engine.envs.easy_rocket import easy_rocket
 from factoriax.engine.envs.miner_curriculum import (
+    CRAFT_MINERS_MAX_SCORE,
     MINE_ORES_MAX_SCORE,
+    craft_miners,
     mine_ores,
 )
 from factoriax.engine.tables import DIRECTIONS
@@ -196,3 +198,107 @@ def test_mine_ores_oracle_reaches_max_score(
 
     assert total == MINE_ORES_MAX_SCORE, f"oracle stalled at {total}"
     print(f"\nMineOres-v1 oracle seed {seed}: solved in {steps} steps")
+
+
+# ---------------------------------------------------------------------------
+# CraftMiners-v1
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def craft_miners_env():
+    return craft_miners()
+
+
+@pytest.fixture(scope="module")
+def craft_miners_step(craft_miners_env):
+    env, _ = craft_miners_env
+    return jax.jit(env.step_env)
+
+
+def test_craft_miners_registered() -> None:
+    env, params = env_from_name("CraftMiners-v1")
+    obs, _ = env.reset_env(random.PRNGKey(0), params)
+    assert obs.shape == env.observation_space(params).shape
+
+
+def test_craft_miners_obs_shape_matches_easy_rocket(craft_miners_env) -> None:
+    env, params = craft_miners_env
+    er_env, er_params = easy_rocket()
+    assert env.obs == er_env.obs
+    assert (
+        env.observation_space(params).shape
+        == er_env.observation_space(er_params).shape
+    )
+
+
+def test_craft_miners_start_inventory(craft_miners_env) -> None:
+    """Exactly the materials for six miners: 6 limestone + 6 silicon."""
+    env, params = craft_miners_env
+    _, state = env.reset_env(random.PRNGKey(0), params)
+    inv = np.asarray(state.player_inventory[0])
+    assert int(inv[int(ItemType.LIMESTONE)]) == 6
+    assert int(inv[int(ItemType.SILICON)]) == 6
+    other = np.delete(inv, [int(ItemType.LIMESTONE), int(ItemType.SILICON)])
+    assert not other.any()
+
+
+def test_craft_miners_six_crafts_reach_max_score(
+    craft_miners_env, craft_miners_step
+) -> None:
+    """Six CRAFT_MINER actions consume all materials and score 6."""
+    env, params = craft_miners_env
+    key = random.PRNGKey(0)
+    _, state = env.reset_env(key, params)
+
+    total = 0.0
+    for _ in range(6):
+        key, ks = random.split(key)
+        _, state, reward, _, _ = craft_miners_step(
+            ks, state, int(Action.CRAFT_MINER), params
+        )
+        total += float(reward)
+
+    assert total == CRAFT_MINERS_MAX_SCORE
+    inv = np.asarray(state.player_inventory[0])
+    assert int(inv[int(ItemType.MINER)]) == 6
+    assert int(inv[int(ItemType.LIMESTONE)]) == 0
+    assert int(inv[int(ItemType.SILICON)]) == 0
+
+
+def test_craft_miners_cycling_past_high_water_earns_zero(
+    craft_miners_env, craft_miners_step
+) -> None:
+    """Anti-hack: place/pickup cycling after max score earns nothing.
+
+    The bits latch on the >=k inventory thresholds; dropping below by
+    placing a miner and coming back up via pickup must not re-earn.
+    """
+    env, params = craft_miners_env
+    key = random.PRNGKey(3)
+    _, state = env.reset_env(key, params)
+
+    for _ in range(6):
+        key, ks = random.split(key)
+        _, state, _, _, _ = craft_miners_step(
+            ks, state, int(Action.CRAFT_MINER), params
+        )
+    assert int(np.asarray(state.achievements_unlocked).sum()) == 6
+
+    # Face a dirt neighbour, place a miner (inventory 6 -> 5), pick it
+    # back up (5 -> 6), repeatedly. No new reward may appear.
+    cycle = [
+        int(Action.FACE_UP),
+        int(Action.PLACE_MINER),
+        int(Action.PICKUP),
+        int(Action.PLACE_MINER),
+        int(Action.PICKUP),
+    ]
+    extra = 0.0
+    for action in cycle:
+        key, ks = random.split(key)
+        _, state, reward, _, _ = craft_miners_step(ks, state, action, params)
+        extra += float(reward)
+
+    assert extra == 0.0
+    assert int(np.asarray(state.player_inventory[0, int(ItemType.MINER)])) == 6

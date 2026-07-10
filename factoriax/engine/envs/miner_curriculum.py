@@ -87,6 +87,26 @@ def _mined_at_least(state: EnvState, item: int, count: int) -> jax.Array:
     return state.items_mined[item] >= count
 
 
+def _holds_at_least(state: EnvState, item: int, count: int) -> jax.Array:
+    """Player inventories hold at least ``count`` of ``item``."""
+    return jnp.sum(state.player_inventory[:, item]) >= count
+
+
+def _stock_inventory(
+    items: tuple[tuple[int, int], ...],
+) -> Callable[[jax.Array, EnvState, EnvParams], EnvState]:
+    """Reset hook setting ``(item, count)`` pairs on every player."""
+
+    def hook(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
+        del key, params
+        inventory = state.player_inventory
+        for item, count in items:
+            inventory = inventory.at[:, item].set(count)
+        return state.replace(player_inventory=inventory)
+
+    return hook
+
+
 # ---------------------------------------------------------------------------
 # MineOres-v1
 # ---------------------------------------------------------------------------
@@ -144,6 +164,86 @@ def mine_ores(
         terrain_fn=six_patch_terrain,
         step_hooks=(achievement_hook(mine_ores_conditions),),
         reward_fn=mine_ores_reward,
+        obs=obs,
+        obs_radius=obs_radius,
+        map_width=MAP_SIZE,
+        map_height=MAP_SIZE,
+        num_players=1,
+        max_machines=100,
+    )
+    params = EnvParams(
+        max_timesteps=_MAX_TIMESTEPS,
+        recipe_table=EASY_ROCKET_RECIPE_TABLE,
+        base_resources=ORE_RESOURCES_PER_TILE,
+    )
+    return env, params
+
+
+# ---------------------------------------------------------------------------
+# CraftMiners-v1
+# ---------------------------------------------------------------------------
+
+#: 6 bits: inventory holds >= k miners, k = 1..6. The start inventory
+#: carries exactly the materials for six miners, so the intended policy
+#: is six CRAFT_MINER actions; the thresholds latch, so placing miners
+#: (dropping below k) and picking them back up re-earns nothing.
+_CRAFT_MINERS_CONDITIONS: tuple[_Condition, ...] = tuple(
+    partial(_holds_at_least, item=int(ItemType.MINER), count=count)
+    for count in range(1, _N_MINERS + 1)
+)
+
+NUM_CRAFT_MINERS_ACHIEVEMENTS: int = len(_CRAFT_MINERS_CONDITIONS)
+
+CRAFT_MINERS_MAX_SCORE: float = float(NUM_CRAFT_MINERS_ACHIEVEMENTS)
+
+craft_miners_conditions = _conditions_to_achievement_fn(
+    _CRAFT_MINERS_CONDITIONS
+)
+
+CRAFT_MINERS_ACHIEVEMENT_WEIGHTS: jax.Array = _unit_weights(
+    NUM_CRAFT_MINERS_ACHIEVEMENTS
+)
+
+#: Start inventory: materials for exactly six miners under the
+#: EasyRocket recipe (1 limestone + 1 silicon each).
+_CRAFT_MINERS_STOCK: tuple[tuple[int, int], ...] = (
+    (int(ItemType.LIMESTONE), _N_MINERS),
+    (int(ItemType.SILICON), _N_MINERS),
+)
+
+
+def craft_miners_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward for newly latched CraftMiners-v1 bits."""
+    return achievement_reward(
+        prev_state, new_state, params, weights=CRAFT_MINERS_ACHIEVEMENT_WEIGHTS
+    )
+
+
+def craft_miners(
+    *,
+    obs: str = "superficial_global",
+    obs_radius: int = 7,
+) -> tuple[FactoriaxEnv, EnvParams]:
+    """Build the CraftMiners-v1 env — curriculum stage 2.
+
+    Inventory starts with 6 limestone + 6 silicon; craft six miners.
+    Max score 6.
+
+    Parameters
+    ----------
+    obs :
+        Observation variant passed to :class:`FactoriaxEnv`.
+    obs_radius :
+        Half-width of the local observation window (ignored for the
+        default global variant).
+    """
+    env = FactoriaxEnv(
+        terrain_fn=six_patch_terrain,
+        step_hooks=(achievement_hook(craft_miners_conditions),),
+        reset_hooks=(_stock_inventory(_CRAFT_MINERS_STOCK),),
+        reward_fn=craft_miners_reward,
         obs=obs,
         obs_radius=obs_radius,
         map_width=MAP_SIZE,
