@@ -30,11 +30,12 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType
+from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType, Machine
 from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
 from factoriax.engine.envs.common import (
     MAP_SIZE,
     ORE_RESOURCES_PER_TILE,
+    count_machines,
     producing_miners,
     six_patch_terrain,
 )
@@ -338,6 +339,106 @@ def craft_miners(
         step_hooks=(achievement_hook(craft_miners_conditions),),
         reset_hooks=(_stock_inventory(_CRAFT_MINERS_STOCK),),
         reward_fn=craft_miners_reward,
+        obs=obs,
+        obs_radius=obs_radius,
+        map_width=MAP_SIZE,
+        map_height=MAP_SIZE,
+        num_players=1,
+        max_machines=100,
+    )
+    params = EnvParams(
+        max_timesteps=_MAX_TIMESTEPS,
+        recipe_table=EASY_ROCKET_RECIPE_TABLE,
+        base_resources=ORE_RESOURCES_PER_TILE,
+    )
+    return env, params
+
+
+# ---------------------------------------------------------------------------
+# MinerBootstrap-v1
+# ---------------------------------------------------------------------------
+
+
+def _placed_at_least(state: EnvState, count: int) -> jax.Array:
+    """At least ``count`` miners are placed on the map."""
+    return count_machines(state, int(Machine.MINER)) >= count
+
+
+#: 14 bits, an EasyRocket-style gate ladder over the full
+#: mine -> craft -> place loop, so a from-scratch agent always has a
+#: nearby next gate:
+#:
+#: - mining (4): 1 and 6 of each miner ingredient, on the monotone
+#:   ``items_mined`` counter (6 of each = materials for six miners);
+#: - craft (1): hold a miner (graded hold thresholds would never fire
+#:   for a policy that places miners as it crafts them);
+#: - placement (3): 1 / 3 / 6 miners placed — the same thresholds as
+#:   EasyRocket's place_miner / place_3_miners / metal_in_motion;
+#: - production (6): 1..6 producing miners.
+_MINER_BOOTSTRAP_CONDITIONS: tuple[_Condition, ...] = (
+    partial(_mined_at_least, item=int(ItemType.LIMESTONE), count=1),
+    partial(_mined_at_least, item=int(ItemType.LIMESTONE), count=_N_MINERS),
+    partial(_mined_at_least, item=int(ItemType.SILICON), count=1),
+    partial(_mined_at_least, item=int(ItemType.SILICON), count=_N_MINERS),
+    partial(_holds_at_least, item=int(ItemType.MINER), count=1),
+    partial(_placed_at_least, count=1),
+    partial(_placed_at_least, count=3),
+    partial(_placed_at_least, count=_N_MINERS),
+    *(
+        partial(_producing_at_least, count=count)
+        for count in range(1, _N_MINERS + 1)
+    ),
+)
+
+NUM_MINER_BOOTSTRAP_ACHIEVEMENTS: int = len(_MINER_BOOTSTRAP_CONDITIONS)
+
+MINER_BOOTSTRAP_MAX_SCORE: float = float(NUM_MINER_BOOTSTRAP_ACHIEVEMENTS)
+
+miner_bootstrap_conditions = _conditions_to_achievement_fn(
+    _MINER_BOOTSTRAP_CONDITIONS
+)
+
+MINER_BOOTSTRAP_ACHIEVEMENT_WEIGHTS: jax.Array = _unit_weights(
+    NUM_MINER_BOOTSTRAP_ACHIEVEMENTS
+)
+
+
+def miner_bootstrap_reward(
+    prev_state: EnvState, new_state: EnvState, params: EnvParams
+) -> jax.Array:
+    """Sparse reward for newly latched MinerBootstrap-v1 bits."""
+    return achievement_reward(
+        prev_state,
+        new_state,
+        params,
+        weights=MINER_BOOTSTRAP_ACHIEVEMENT_WEIGHTS,
+    )
+
+
+def miner_bootstrap(
+    *,
+    obs: str = "superficial_global",
+    obs_radius: int = 7,
+) -> tuple[FactoriaxEnv, EnvParams]:
+    """Build the MinerBootstrap-v1 env — curriculum stage 4 (capstone).
+
+    Empty inventory; mine limestone + silicon, craft six miners, and get
+    all six producing on ore. Max score 14; the episode ends early once
+    all six produce.
+
+    Parameters
+    ----------
+    obs :
+        Observation variant passed to :class:`FactoriaxEnv`.
+    obs_radius :
+        Half-width of the local observation window (ignored for the
+        default global variant).
+    """
+    env = FactoriaxEnv(
+        terrain_fn=six_patch_terrain,
+        step_hooks=(achievement_hook(miner_bootstrap_conditions),),
+        reward_fn=miner_bootstrap_reward,
+        done_fn=all_miners_producing,
         obs=obs,
         obs_radius=obs_radius,
         map_width=MAP_SIZE,

@@ -17,14 +17,22 @@ import numpy as np
 import pytest
 from jax import random
 
-from factoriax.engine.constants import Action, BlockType, Direction, ItemType
+from factoriax.engine.constants import (
+    Action,
+    BlockType,
+    Direction,
+    ItemType,
+    Machine,
+)
 from factoriax.engine.envs.easy_rocket import easy_rocket
 from factoriax.engine.envs.miner_curriculum import (
     CRAFT_MINERS_MAX_SCORE,
     MINE_ORES_MAX_SCORE,
+    MINER_BOOTSTRAP_MAX_SCORE,
     PLACE_MINERS_MAX_SCORE,
     craft_miners,
     mine_ores,
+    miner_bootstrap,
     place_miners,
 )
 from factoriax.engine.tables import DIRECTIONS
@@ -522,3 +530,117 @@ def test_place_miners_oracle_reaches_max_and_terminates_early(
     assert total == PLACE_MINERS_MAX_SCORE, f"oracle stalled at {total}"
     assert done and steps < MAX_TIMESTEPS
     print(f"\nPlaceMiners-v1 oracle seed {seed}: solved in {steps} steps")
+
+
+# ---------------------------------------------------------------------------
+# MinerBootstrap-v1
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def bootstrap_env():
+    return miner_bootstrap()
+
+
+@pytest.fixture(scope="module")
+def bootstrap_step(bootstrap_env):
+    env, _ = bootstrap_env
+    return jax.jit(env.step_env)
+
+
+def test_bootstrap_registered() -> None:
+    env, params = env_from_name("MinerBootstrap-v1")
+    obs, _ = env.reset_env(random.PRNGKey(0), params)
+    assert obs.shape == env.observation_space(params).shape
+
+
+def test_bootstrap_obs_shape_matches_easy_rocket(bootstrap_env) -> None:
+    env, params = bootstrap_env
+    er_env, er_params = easy_rocket()
+    assert env.obs == er_env.obs
+    assert (
+        env.observation_space(params).shape
+        == er_env.observation_space(er_params).shape
+    )
+
+
+def test_bootstrap_starts_empty(bootstrap_env) -> None:
+    env, params = bootstrap_env
+    _, state = env.reset_env(random.PRNGKey(0), params)
+    assert not np.asarray(state.player_inventory).any()
+    assert int(params.max_timesteps) == MAX_TIMESTEPS
+
+
+def test_bootstrap_reward_matches_latched_bits(
+    bootstrap_env, bootstrap_step
+) -> None:
+    """sum(rewards) == latched bit count over a random rollout."""
+    env, params = bootstrap_env
+    key = random.PRNGKey(5)
+    _, state = env.reset_env(key, params)
+
+    total = 0.0
+    for _ in range(MAX_TIMESTEPS):
+        key, ka, ks = random.split(key, 3)
+        action = int(random.randint(ka, (), 0, 30))
+        _, state, reward, done, _ = bootstrap_step(ks, state, action, params)
+        total += float(reward)
+        if bool(done):
+            break
+
+    assert total == int(np.asarray(state.achievements_unlocked).sum())
+
+
+def _bootstrap_oracle(state) -> int:
+    """Full loop: mine 6 limestone + 6 silicon, craft 6, place on ore."""
+    inv = np.asarray(state.player_inventory[0])
+    machines = np.asarray(state.machine_types)
+    placed = int((machines == int(Machine.MINER)).sum())
+    in_hand = int(inv[int(ItemType.MINER)])
+    crafted_total = in_hand + placed
+
+    limestone_block = int(BlockType.LIMESTONE)
+    silicon_block = int(BlockType.SILICON)
+    need_limestone = int(inv[int(ItemType.LIMESTONE)]) < 6 - crafted_total
+    need_silicon = int(inv[int(ItemType.SILICON)]) < 6 - crafted_total
+
+    if need_limestone or need_silicon:
+        block = limestone_block if need_limestone else silicon_block
+        action = _face_or_mine_adjacent(state, {block})
+        if action is not None:
+            return action
+        return _bfs_step_toward(state, np.asarray(state.map) == block)
+
+    if crafted_total < 6:
+        return int(Action.CRAFT_MINER)
+
+    if in_hand > 0:
+        return _place_miners_oracle(state)
+
+    return int(Action.NOOP)
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_bootstrap_oracle_reaches_max_and_terminates_early(
+    bootstrap_env, bootstrap_step, seed
+) -> None:
+    """Mine -> craft -> place solves within the 300-step budget."""
+    env, params = bootstrap_env
+    key = random.PRNGKey(seed)
+    _, state = env.reset_env(key, params)
+
+    total = 0.0
+    steps = 0
+    done = False
+    for _ in range(MAX_TIMESTEPS):
+        action = _bootstrap_oracle(state)
+        key, ks = random.split(key)
+        _, state, reward, done, _ = bootstrap_step(ks, state, action, params)
+        total += float(reward)
+        steps += 1
+        if done:
+            break
+
+    assert total == MINER_BOOTSTRAP_MAX_SCORE, f"oracle stalled at {total}"
+    assert done and steps < MAX_TIMESTEPS
+    print(f"\nMinerBootstrap-v1 oracle seed {seed}: solved in {steps} steps")

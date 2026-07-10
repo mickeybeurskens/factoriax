@@ -16,6 +16,7 @@ from factoriax.engine.envs.easy_rocket import easy_rocket
 from factoriax.engine.envs.miner_curriculum import (
     craft_miners,
     mine_ores,
+    miner_bootstrap,
     place_miners,
 )
 from factoriax.engine.envs.mining import mining
@@ -72,6 +73,17 @@ SCENARIOS: dict[str, ScenarioSpec] = {
             "300-step budget, early exit when all six produce."
         ),
         build=place_miners,
+        resample=True,
+    ),
+    "MinerBootstrap-v1": ScenarioSpec(
+        name="Miner Bootstrap",
+        description=(
+            "Curriculum capstone: from an empty inventory, mine limestone "
+            "and silicon, craft six miners, and get all six producing. "
+            "14-bit gate ladder, max score 14; 300-step budget, early "
+            "exit when all six produce."
+        ),
+        build=miner_bootstrap,
         resample=True,
     ),
     "EasyRocket-v1": ScenarioSpec(
