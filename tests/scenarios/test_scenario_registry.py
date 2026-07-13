@@ -27,6 +27,7 @@ def test_catalog_lists_expected_scenarios() -> None:
         "MineOres-v1",
         "PlaceMiners-v1",
         "MinerBootstrap-v1",
+        "ScienceTiers-v1",
     }
     for spec in catalog.values():
         assert isinstance(spec, ScenarioSpec)

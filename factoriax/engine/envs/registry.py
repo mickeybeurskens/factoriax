@@ -19,6 +19,7 @@ from factoriax.engine.envs.miner_curriculum import (
     place_miners,
 )
 from factoriax.engine.envs.mining import mining
+from factoriax.engine.envs.science_tiers import science_tiers
 from factoriax.engine.envs.rocket import rocket
 from factoriax.engine.envs.wrappers import AutoResetWrapper
 from factoriax.engine.state import EnvParams
@@ -73,6 +74,18 @@ SCENARIOS: dict[str, ScenarioSpec] = {
             "exit when all six produce."
         ),
         build=miner_bootstrap,
+        resample=True,
+    ),
+    "ScienceTiers-v1": ScenarioSpec(
+        name="Science Tiers",
+        description=(
+            "Three-tier science economy on the 16x16 six-patch map with "
+            "one pre-placed lab. Labs pay 1 per pack consumed, any tier; "
+            "ore costs double per tier while output quadruples, so "
+            "science/ore doubles: 0.5 / 1.0 / 2.0. Dense throughput "
+            "reward, unbounded score; 1000-step budget."
+        ),
+        build=science_tiers,
         resample=True,
     ),
     "EasyRocket-v1": ScenarioSpec(
