@@ -1,16 +1,15 @@
 """Miner-curriculum scenarios — staged decomposition of EasyRocket's bootstrap.
 
-Four independent scenarios teach the mine -> craft -> place loop that
+Three independent scenarios teach the mine -> craft -> place loop that
 opens EasyRocket-v1, in increasing order of composition:
 
 1. ``MineOres-v1`` — mine 5 of every ore type.
-2. ``CraftMiners-v1`` — materials pre-stocked; craft six miners.
-3. ``PlaceMiners-v1`` — miners pre-stocked; get six producing on ore.
-4. ``MinerBootstrap-v1`` — the full loop from an empty inventory.
+2. ``PlaceMiners-v1`` — miners pre-stocked; get six producing on ore.
+3. ``MinerBootstrap-v1`` — the full loop from an empty inventory.
 
 Every scenario shares EasyRocket-v1's world (the 16x16 six-patch
 terrain from :mod:`factoriax.engine.envs.common`) and recipe table, and
-all four default to the same egocentric ``superficial_local`` obs with
+all three default to the same egocentric ``superficial_local`` obs with
 radius 7, so one policy network transfers across all stages — and onto
 EasyRocket-v1 built with the same obs kwargs — without surgery. The
 local default follows the Mining-v1 precedent: flat-MLP policies
@@ -245,7 +244,7 @@ def place_miners(
     obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the PlaceMiners-v1 env — curriculum stage 3.
+    """Build the PlaceMiners-v1 env — curriculum stage 2.
 
     Inventory starts with six miners; get all six producing on ore.
     Max score 6; the episode ends early once all six produce.
@@ -265,87 +264,6 @@ def place_miners(
         reset_hooks=(_stock_inventory(_PLACE_MINERS_STOCK),),
         reward_fn=place_miners_reward,
         done_fn=all_miners_producing,
-        obs=obs,
-        obs_radius=obs_radius,
-        map_width=MAP_SIZE,
-        map_height=MAP_SIZE,
-        num_players=1,
-        max_machines=100,
-    )
-    params = EnvParams(
-        max_timesteps=_MAX_TIMESTEPS,
-        recipe_table=EASY_ROCKET_RECIPE_TABLE,
-        base_resources=ORE_RESOURCES_PER_TILE,
-    )
-    return env, params
-
-
-# ---------------------------------------------------------------------------
-# CraftMiners-v1
-# ---------------------------------------------------------------------------
-
-#: 6 bits: inventory holds >= k miners, k = 1..6. The start inventory
-#: carries exactly the materials for six miners, so the intended policy
-#: is six CRAFT_MINER actions; the thresholds latch, so placing miners
-#: (dropping below k) and picking them back up re-earns nothing.
-_CRAFT_MINERS_CONDITIONS: tuple[_Condition, ...] = tuple(
-    partial(_holds_at_least, item=int(ItemType.MINER), count=count)
-    for count in range(1, _N_MINERS + 1)
-)
-
-NUM_CRAFT_MINERS_ACHIEVEMENTS: int = len(_CRAFT_MINERS_CONDITIONS)
-
-CRAFT_MINERS_MAX_SCORE: float = float(NUM_CRAFT_MINERS_ACHIEVEMENTS)
-
-craft_miners_conditions = _conditions_to_achievement_fn(
-    _CRAFT_MINERS_CONDITIONS
-)
-
-CRAFT_MINERS_ACHIEVEMENT_WEIGHTS: jax.Array = _unit_weights(
-    NUM_CRAFT_MINERS_ACHIEVEMENTS
-)
-
-#: Start inventory: materials for exactly six miners under the
-#: EasyRocket recipe (1 limestone + 1 silicon each).
-_CRAFT_MINERS_STOCK: tuple[tuple[int, int], ...] = (
-    (int(ItemType.LIMESTONE), _N_MINERS),
-    (int(ItemType.SILICON), _N_MINERS),
-)
-
-
-def craft_miners_reward(
-    prev_state: EnvState, new_state: EnvState, params: EnvParams
-) -> jax.Array:
-    """Sparse reward for newly latched CraftMiners-v1 bits."""
-    return achievement_reward(
-        prev_state, new_state, params, weights=CRAFT_MINERS_ACHIEVEMENT_WEIGHTS
-    )
-
-
-def craft_miners(
-    *,
-    obs: str = "superficial_local",
-    obs_radius: int = 7,
-) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the CraftMiners-v1 env — curriculum stage 2.
-
-    Inventory starts with 6 limestone + 6 silicon; craft six miners.
-    Max score 6.
-
-    Parameters
-    ----------
-    obs :
-        Observation variant passed to :class:`FactoriaxEnv`.
-    obs_radius :
-        Half-width of the egocentric local window (the default radius 7
-        gives a 15×15 view on the 16×16 map); ignored for ``_global``
-        variants.
-    """
-    env = FactoriaxEnv(
-        terrain_fn=six_patch_terrain,
-        step_hooks=(achievement_hook(craft_miners_conditions),),
-        reset_hooks=(_stock_inventory(_CRAFT_MINERS_STOCK),),
-        reward_fn=craft_miners_reward,
         obs=obs,
         obs_radius=obs_radius,
         map_width=MAP_SIZE,
@@ -427,7 +345,7 @@ def miner_bootstrap(
     obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the MinerBootstrap-v1 env — curriculum stage 4 (capstone).
+    """Build the MinerBootstrap-v1 env — curriculum stage 3 (capstone).
 
     Empty inventory; mine limestone + silicon, craft six miners, and get
     all six producing on ore. Max score 14; the episode ends early once

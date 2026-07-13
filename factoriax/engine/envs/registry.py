@@ -14,7 +14,6 @@ from typing import Any
 
 from factoriax.engine.envs.easy_rocket import easy_rocket
 from factoriax.engine.envs.miner_curriculum import (
-    craft_miners,
     mine_ores,
     miner_bootstrap,
     place_miners,
@@ -55,20 +54,10 @@ SCENARIOS: dict[str, ScenarioSpec] = {
         build=mine_ores,
         resample=True,
     ),
-    "CraftMiners-v1": ScenarioSpec(
-        name="Craft Miners",
-        description=(
-            "Curriculum stage 2: craft six miners from a pre-stocked "
-            "inventory (6 limestone + 6 silicon). Graded latched bits, "
-            "max score 6; 300-step budget."
-        ),
-        build=craft_miners,
-        resample=True,
-    ),
     "PlaceMiners-v1": ScenarioSpec(
         name="Place Miners",
         description=(
-            "Curriculum stage 3: six miners pre-stocked; get all six "
+            "Curriculum stage 2: six miners pre-stocked; get all six "
             "producing on ore patches. Graded latched bits, max score 6; "
             "300-step budget, early exit when all six produce."
         ),

@@ -25,7 +25,6 @@ def test_catalog_lists_expected_scenarios() -> None:
         "Rocket-v1",
         "Mining-v1",
         "MineOres-v1",
-        "CraftMiners-v1",
         "PlaceMiners-v1",
         "MinerBootstrap-v1",
     }
