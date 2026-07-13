@@ -395,8 +395,14 @@ def deposit_to_adjacent(
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    # Assemblers and furnaces share the 2-input-slot shape.
-    is_combiner = (mt == Machine.ASSEMBLER) | (mt == Machine.FURNACE)
+    # Assemblers, furnaces, and science labs share the 2-input-slot
+    # shape; labs must receive into ``ent_asm_in`` because ``run_labs``
+    # only consumes from there.
+    is_combiner = (
+        (mt == Machine.ASSEMBLER)
+        | (mt == Machine.FURNACE)
+        | (mt == Machine.SCIENCE_LAB)
+    )
 
     # Deposit to combiner input slot.
     in_t0 = state.ent_asm_in_type[eidx, 0]

@@ -297,6 +297,33 @@ class TestArm:
         _, belt_count = _get_buf(result, 0, 0)
         assert belt_count == 2
 
+    def test_delivers_pack_into_lab_input_slot(self, state_factory) -> None:
+        """Arm feeds a science lab's ``ent_asm_in`` slot, not its buffer.
+
+        ``run_labs`` only consumes from the input slots, so automated
+        lab feeding depends on arms routing packs there.
+        """
+        # [BELT, ARM(RIGHT), LAB]
+        types = jnp.array([[B, Machine.ARM, Machine.SCIENCE_LAB]])
+        dirs = jnp.array([[_NOOP, R, _NOOP]])
+        bt, bc = _buf_grids((1, 3), {(0, 0): (ItemType.TIER1_SCIENCE_PACK, 3)})
+        state = _make_state(
+            state_factory,
+            machine_types=types,
+            machine_direction=dirs,
+            buffer_type=bt,
+            buffer_count=bc,
+        )
+        result = run_arms(state, _PARAMS)
+        eid = int(result.tile_entity[0, 2])
+        assert int(result.ent_asm_in_type[eid, 0]) == int(
+            ItemType.TIER1_SCIENCE_PACK
+        )
+        assert int(result.ent_asm_in_count[eid, 0]) == 1
+        assert int(result.ent_buf_count[eid]) == 0
+        _, belt_count = _get_buf(result, 0, 0)
+        assert belt_count == 2
+
     def test_merges_same_item_into_destination(self, state_factory) -> None:
         """Arm merges item into destination holding the same type."""
         # [MINER, ARM(RIGHT), PALLET with existing COAL]

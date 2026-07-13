@@ -331,6 +331,34 @@ class TestDepositToAssembler:
         assert int(state.ent_asm_in_count[eidx, 1]) == 1
 
 
+class TestDepositToScienceLab:
+    """Deposit science packs into a lab's input slots.
+
+    ``run_labs`` consumes from ``ent_asm_in`` — the deposit must land
+    there (not in the buffer track) or hand-fed labs never consume.
+    """
+
+    def test_deposit_pack_into_lab_input_slot(self, state_factory) -> None:
+        p_inv = _player_inv(1, {ItemType.TIER1_SCIENCE_PACK: 2})
+        state = state_factory(
+            world_map=_DIRT_3X3,
+            player_position=(1, 1),
+            player_direction=Direction.RIGHT,
+            player_inventory=p_inv,
+            machine_types=_machine_types(3, 3, {(2, 1): Machine.SCIENCE_LAB}),
+        )
+
+        state = deposit_to_adjacent(state, 0, ItemType.TIER1_SCIENCE_PACK)
+
+        eidx = _ent_lookup(state, 1, 2)
+        assert int(state.ent_asm_in_type[eidx, 0]) == int(
+            ItemType.TIER1_SCIENCE_PACK
+        )
+        assert int(state.ent_asm_in_count[eidx, 0]) == 1
+        assert int(state.ent_buf_count[eidx]) == 0
+        assert int(state.player_inventory[0, ItemType.TIER1_SCIENCE_PACK]) == 1
+
+
 # ===========================================================================
 # WITHDRAW tests
 # ===========================================================================
