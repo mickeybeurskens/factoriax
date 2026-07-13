@@ -328,12 +328,12 @@ def core_game_conditions(state: EnvState) -> jax.Array:
             count_machines(state, Machine.ROCKET) >= 1,
             # 17 First Science
             (
-                count_total_items(state, ItemType.BASIC_SCIENCE_PACK)
-                + count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK)
+                count_total_items(state, ItemType.TIER1_SCIENCE_PACK)
+                + count_total_items(state, ItemType.TIER2_SCIENCE_PACK)
             )
             >= 1,
             # 18 Advanced Science
-            count_total_items(state, ItemType.ADVANCED_SCIENCE_PACK) >= 1,
+            count_total_items(state, ItemType.TIER2_SCIENCE_PACK) >= 1,
         ],
         dtype=jnp.bool_,
     )

@@ -72,9 +72,13 @@ class TestProfileShape:
         assert NUM_SPATIAL_CHANNELS["superficial"] == 3
 
     def test_player_scalar_counts(self) -> None:
-        """x_ray has 72 scalars, superficial has 63 (drops 9 facing)."""
-        assert NUM_PLAYER_SCALARS["x_ray"] == 72
-        assert NUM_PLAYER_SCALARS["superficial"] == 63
+        """x_ray has 74 scalars, superficial has 65 (drops 9 facing).
+
+        The tier-3 science pack added one inventory scalar and one
+        recipe-affordability scalar (its BASE_RECIPES entry).
+        """
+        assert NUM_PLAYER_SCALARS["x_ray"] == 74
+        assert NUM_PLAYER_SCALARS["superficial"] == 65
         assert NUM_PLAYER_SCALARS["x_ray"] - NUM_PLAYER_SCALARS["superficial"] == 9
 
     def test_superficial_channels_are_subset_of_x_ray(self) -> None:

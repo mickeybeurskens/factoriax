@@ -80,45 +80,54 @@ class TestRunLabsDelta:
             lab_slot_counts=((0, 0),),
         )
         new_state = run_labs(state)
-        assert tuple(new_state.science_consumed_step.tolist()) == (0, 0)
+        assert tuple(new_state.science_consumed_step.tolist()) == (0, 0, 0)
 
     def test_single_basic_pack(self, state_factory) -> None:
         state = _lab_state(
             state_factory,
-            lab_slot_types=((int(ItemType.BASIC_SCIENCE_PACK), 0),),
+            lab_slot_types=((int(ItemType.TIER1_SCIENCE_PACK), 0),),
             lab_slot_counts=((5, 0),),
         )
         new_state = run_labs(state)
-        assert tuple(new_state.science_consumed_step.tolist()) == (5, 0)
+        assert tuple(new_state.science_consumed_step.tolist()) == (5, 0, 0)
 
     def test_single_advanced_pack(self, state_factory) -> None:
         state = _lab_state(
             state_factory,
-            lab_slot_types=((0, int(ItemType.ADVANCED_SCIENCE_PACK)),),
+            lab_slot_types=((0, int(ItemType.TIER2_SCIENCE_PACK)),),
             lab_slot_counts=((0, 3),),
         )
         new_state = run_labs(state)
-        assert tuple(new_state.science_consumed_step.tolist()) == (0, 3)
+        assert tuple(new_state.science_consumed_step.tolist()) == (0, 3, 0)
+
+    def test_single_ultimate_pack(self, state_factory) -> None:
+        state = _lab_state(
+            state_factory,
+            lab_slot_types=((int(ItemType.TIER3_SCIENCE_PACK), 0),),
+            lab_slot_counts=((2, 0),),
+        )
+        new_state = run_labs(state)
+        assert tuple(new_state.science_consumed_step.tolist()) == (0, 0, 2)
 
     def test_both_pack_types_in_one_lab(self, state_factory) -> None:
         state = _lab_state(
             state_factory,
             lab_slot_types=(
                 (
-                    int(ItemType.BASIC_SCIENCE_PACK),
-                    int(ItemType.ADVANCED_SCIENCE_PACK),
+                    int(ItemType.TIER1_SCIENCE_PACK),
+                    int(ItemType.TIER2_SCIENCE_PACK),
                 ),
             ),
             lab_slot_counts=((2, 4),),
         )
         new_state = run_labs(state)
-        assert tuple(new_state.science_consumed_step.tolist()) == (2, 4)
+        assert tuple(new_state.science_consumed_step.tolist()) == (2, 4, 0)
 
     def test_slots_zeroed_after_consumption(self, state_factory) -> None:
         """Slots that held packs are cleared so double-counting is impossible."""
         state = _lab_state(
             state_factory,
-            lab_slot_types=((int(ItemType.BASIC_SCIENCE_PACK), 0),),
+            lab_slot_types=((int(ItemType.TIER1_SCIENCE_PACK), 0),),
             lab_slot_counts=((7, 0),),
         )
         new_state = run_labs(state)
@@ -132,11 +141,11 @@ class TestRunLabsDelta:
         state = _lab_state(
             state_factory,
             lab_slot_types=(
-                (int(ItemType.BASIC_SCIENCE_PACK), 0),
-                (0, int(ItemType.ADVANCED_SCIENCE_PACK)),
+                (int(ItemType.TIER1_SCIENCE_PACK), 0),
+                (0, int(ItemType.TIER2_SCIENCE_PACK)),
                 (
-                    int(ItemType.BASIC_SCIENCE_PACK),
-                    int(ItemType.ADVANCED_SCIENCE_PACK),
+                    int(ItemType.TIER1_SCIENCE_PACK),
+                    int(ItemType.TIER2_SCIENCE_PACK),
                 ),
             ),
             lab_slot_counts=((4, 0), (0, 1), (2, 2)),
@@ -144,7 +153,7 @@ class TestRunLabsDelta:
         )
         new_state = run_labs(state)
         # basic: 4 + 0 + 2 = 6, advanced: 0 + 1 + 2 = 3.
-        assert tuple(new_state.science_consumed_step.tolist()) == (6, 3)
+        assert tuple(new_state.science_consumed_step.tolist()) == (6, 3, 0)
 
     def test_non_pack_items_not_consumed(self, state_factory) -> None:
         """A lab slot holding iron plate is left alone, delta is zero."""
@@ -154,7 +163,7 @@ class TestRunLabsDelta:
             lab_slot_counts=((10, 0),),
         )
         new_state = run_labs(state)
-        assert tuple(new_state.science_consumed_step.tolist()) == (0, 0)
+        assert tuple(new_state.science_consumed_step.tolist()) == (0, 0, 0)
         idx = int(jnp.argmax(new_state.ent_type == int(Machine.SCIENCE_LAB)))
         # Non-pack item stays put.
         assert int(new_state.ent_asm_in_type[idx, 0]) == int(ItemType.IRON_PLATE)
@@ -178,7 +187,7 @@ class TestLabInEnvStep:
         """With no labs consuming, delta is zero every step."""
         _, params, jit_step_fn, state = canonical_env_8x8_1p
         _, state, _, _, _ = jit_step_fn(jax.random.PRNGKey(1), state, 0, params)
-        assert tuple(state.science_consumed_step.tolist()) == (0, 0)
+        assert tuple(state.science_consumed_step.tolist()) == (0, 0, 0)
 
     def test_step_consumes_and_resets(
         self, canonical_env_8x8_1p, state_factory
@@ -190,20 +199,20 @@ class TestLabInEnvStep:
             state_factory,
             lab_slot_types=(
                 (
-                    int(ItemType.BASIC_SCIENCE_PACK),
-                    int(ItemType.ADVANCED_SCIENCE_PACK),
+                    int(ItemType.TIER1_SCIENCE_PACK),
+                    int(ItemType.TIER2_SCIENCE_PACK),
                 ),
             ),
             lab_slot_counts=((3, 2),),
         )
         _, state_after, _, _, _ = jit_step_fn(jax.random.PRNGKey(1), state, 0, params)
-        assert tuple(state_after.science_consumed_step.tolist()) == (3, 2)
+        assert tuple(state_after.science_consumed_step.tolist()) == (3, 2, 0)
 
         # Second step: slots were zeroed by the first step, so delta is 0.
         _, state_after2, _, _, _ = jit_step_fn(
             jax.random.PRNGKey(2), state_after, 0, params
         )
-        assert tuple(state_after2.science_consumed_step.tolist()) == (0, 0)
+        assert tuple(state_after2.science_consumed_step.tolist()) == (0, 0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -214,11 +223,12 @@ class TestLabInEnvStep:
 class TestScienceConstants:
     """New constants declared in factoriax.engine.constants cohere."""
 
-    def test_science_pack_index_maps_both_packs(self) -> None:
+    def test_science_pack_index_maps_all_packs(self) -> None:
         from factoriax.engine.tables import SCIENCE_PACK_INDEX
 
-        assert int(SCIENCE_PACK_INDEX[int(ItemType.BASIC_SCIENCE_PACK)]) == 0
-        assert int(SCIENCE_PACK_INDEX[int(ItemType.ADVANCED_SCIENCE_PACK)]) == 1
+        assert int(SCIENCE_PACK_INDEX[int(ItemType.TIER1_SCIENCE_PACK)]) == 0
+        assert int(SCIENCE_PACK_INDEX[int(ItemType.TIER2_SCIENCE_PACK)]) == 1
+        assert int(SCIENCE_PACK_INDEX[int(ItemType.TIER3_SCIENCE_PACK)]) == 2
         # Non-pack items map to the sentinel.
         assert int(SCIENCE_PACK_INDEX[int(ItemType.IRON_PLATE)]) == -1
         assert int(SCIENCE_PACK_INDEX[int(ItemType.EMPTY)]) == -1

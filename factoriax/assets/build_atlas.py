@@ -74,7 +74,8 @@ from factoriax.playground.ui.icons import (
 logger = logging.getLogger(__name__)
 
 CELL_PX: int = 32
-NUM_COLS: int = 33  # max(num_block, num_machine, num_item, ...) — driven by ItemType
+# max(num_block, num_machine, num_item, ...) — ItemType is the widest row.
+NUM_COLS: int = NUM_ITEM_TYPES
 
 
 # Direction order used for the atlas's directional rows / columns.

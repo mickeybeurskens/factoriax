@@ -999,7 +999,7 @@ def dense_assembler_reward(
     )
     input_delta = jnp.maximum(new_inputs - prev_inputs, 0).astype(jnp.float32)
     # Science packs gained in player inventory.
-    prev_packs = _item_count(prev_state, ItemType.BASIC_SCIENCE_PACK)
-    new_packs = _item_count(new_state, ItemType.BASIC_SCIENCE_PACK)
+    prev_packs = _item_count(prev_state, ItemType.TIER1_SCIENCE_PACK)
+    new_packs = _item_count(new_state, ItemType.TIER1_SCIENCE_PACK)
     pack_delta = jnp.maximum(new_packs - prev_packs, 0).astype(jnp.float32)
     return asm_prox + 2.0 * input_delta + 10.0 * pack_delta

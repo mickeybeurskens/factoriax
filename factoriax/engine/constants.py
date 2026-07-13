@@ -79,13 +79,17 @@ class HalfFabricate(IntEnum):
     WIRE = 7
     MOTOR = 8
     SENSOR = 9
-    BASIC_SCIENCE_PACK = 10
-    ADVANCED_SCIENCE_PACK = 11
+    TIER1_SCIENCE_PACK = 10
+    TIER2_SCIENCE_PACK = 11
     REFRACTORY = 12
     HULL = 13
     ENGINE_UNIT = 14
     AVIONICS = 15
     ROCKET_CORE = 16
+    # Appended last so existing HalfFabricate values stay stable; the
+    # composed ItemType still renumbers the Machine-derived items (+1)
+    # and Action grows its CRAFT_/DEPOSIT_ entries (+2).
+    TIER3_SCIENCE_PACK = 17
 
 
 class Machine(IntEnum):
@@ -245,7 +249,8 @@ BLOCK_TO_ITEM: dict[int, int] = {
 # Science packs consumed by SCIENCE_LAB entities, indexed by position into the
 # per-step delta vector ``EnvState.science_consumed_step``.
 SCIENCE_PACK_TYPES: tuple[int, ...] = (
-    int(ItemType.BASIC_SCIENCE_PACK),
-    int(ItemType.ADVANCED_SCIENCE_PACK),
+    int(ItemType.TIER1_SCIENCE_PACK),
+    int(ItemType.TIER2_SCIENCE_PACK),
+    int(ItemType.TIER3_SCIENCE_PACK),
 )
 NUM_SCIENCE_PACK_TYPES: int = len(SCIENCE_PACK_TYPES)

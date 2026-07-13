@@ -77,8 +77,9 @@ _ITEM_NAMES: dict[int, str] = {
     ItemType.ASSEMBLER: "Assembler",
     ItemType.ARM: "Arm",
     ItemType.ROCKET: "Rocket",
-    ItemType.BASIC_SCIENCE_PACK: "Basic Sci",
-    ItemType.ADVANCED_SCIENCE_PACK: "Adv Sci",
+    ItemType.TIER1_SCIENCE_PACK: "T1 Sci",
+    ItemType.TIER2_SCIENCE_PACK: "T2 Sci",
+    ItemType.TIER3_SCIENCE_PACK: "T3 Sci",
     ItemType.LIMESTONE: "Limestone",
 }
 
