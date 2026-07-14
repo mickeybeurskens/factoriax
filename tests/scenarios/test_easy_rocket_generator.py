@@ -13,15 +13,15 @@ import numpy as np
 from jax import random
 
 from factoriax.engine.constants import BlockType
-from factoriax.engine.envs.easy_rocket import (
-    _INNER_ZONE_MAX,
-    _INNER_ZONE_MIN,
-    _MAP_SIZE,
-    _PATCH_BLOCKS,
-    _SPAWN,
-    _easy_rocket_terrain,
-    easy_rocket,
+from factoriax.engine.envs.common import (
+    INNER_ZONE_MAX as _INNER_ZONE_MAX,
+    INNER_ZONE_MIN as _INNER_ZONE_MIN,
+    MAP_SIZE as _MAP_SIZE,
+    PATCH_BLOCKS as _PATCH_BLOCKS,
+    SPAWN as _SPAWN,
+    six_patch_terrain as _easy_rocket_terrain,
 )
+from factoriax.engine.envs.easy_rocket import easy_rocket
 from factoriax.engine.state import EnvParams
 
 _PARAMS = EnvParams(base_resources=3000)

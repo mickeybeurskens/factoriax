@@ -37,8 +37,9 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.ASSEMBLER: (160, 80, 200),
     ItemType.PALLET: (170, 170, 175),
     ItemType.ARM: (220, 160, 100),
-    ItemType.BASIC_SCIENCE_PACK: (200, 50, 50),
-    ItemType.ADVANCED_SCIENCE_PACK: (50, 50, 200),
+    ItemType.TIER1_SCIENCE_PACK: (200, 50, 50),
+    ItemType.TIER2_SCIENCE_PACK: (50, 50, 200),
+    ItemType.TIER3_SCIENCE_PACK: (230, 180, 40),
     ItemType.ROCKET: (240, 240, 240),
     ItemType.FURNACE: (120, 60, 40),
     ItemType.REFRACTORY: (210, 170, 120),
@@ -1810,8 +1811,9 @@ def render_item_icon(
         int(ItemType.MOTOR),
         int(ItemType.SENSOR),
         int(ItemType.FRAME),
-        int(ItemType.BASIC_SCIENCE_PACK),
-        int(ItemType.ADVANCED_SCIENCE_PACK),
+        int(ItemType.TIER1_SCIENCE_PACK),
+        int(ItemType.TIER2_SCIENCE_PACK),
+        int(ItemType.TIER3_SCIENCE_PACK),
     }
     # ROCKET is both a machine (placed on map) and a shaped item; always
     # render as a transparent silhouette because its sprite is iconic.
@@ -1856,10 +1858,13 @@ def render_item_icon(
     if item_type == int(ItemType.FRAME):
         _draw_frame_ibeam(icon, rgb)
         return icon
-    if item_type == int(ItemType.BASIC_SCIENCE_PACK):
+    if item_type == int(ItemType.TIER1_SCIENCE_PACK):
         _draw_flask(icon, rgb, advanced=False)
         return icon
-    if item_type == int(ItemType.ADVANCED_SCIENCE_PACK):
+    if item_type == int(ItemType.TIER2_SCIENCE_PACK):
+        _draw_flask(icon, rgb, advanced=True)
+        return icon
+    if item_type == int(ItemType.TIER3_SCIENCE_PACK):
         _draw_flask(icon, rgb, advanced=True)
         return icon
     if item_type == int(ItemType.ROCKET):

@@ -16,6 +16,19 @@ Each profile pairs with a view extent: ``global_*`` flattens the whole
 map; ``local_*`` extracts a ``(2r+1) x (2r+1)`` window centred on the
 selected player.
 
+Choosing a view extent: ``global_*`` keeps the map in absolute
+coordinates and encodes the observing player's position only as two
+scalars — it is built for function approximators that exploit the
+spatial channels (e.g. a CNN over the unflattened grid, ideally with a
+player-position plane added by the training code). Flat MLPs generally
+fail to localize the player in this encoding. The egocentric
+``local_*`` variants are translation-invariant and are the better fit
+for MLPs; with ``radius >= map size - 1`` the window still covers the
+whole map (OUT_OF_BOUNDS padding marks the edges, so absolute position
+stays recoverable). Reference point: on Mining-v1, PPO with a 64x64
+MLP plateaus near 7/30 on ``superficial_global`` but reaches 30/30 on
+``superficial_local``.
+
 x_ray spatial channels (10):
 
 - ``block_type`` — terrain.

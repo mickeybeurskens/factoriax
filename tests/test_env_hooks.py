@@ -66,6 +66,34 @@ def test_step_hooks_run_after_step(params) -> None:
     assert bool(new_state.achievements_unlocked[0])
 
 
+def test_reset_hooks_transform_initial_state(level8, params) -> None:
+    """Reset hooks run after state construction on every reset path."""
+    from factoriax.engine.constants import ItemType
+
+    def stock_miners(key, state, p):
+        del key, p
+        return state.replace(
+            player_inventory=state.player_inventory.at[
+                :, int(ItemType.MINER)
+            ].set(6)
+        )
+
+    # Procedural path.
+    env = FactoriaxEnv(map_width=8, map_height=8, reset_hooks=(stock_miners,))
+    _, state = env.reset_env(random.PRNGKey(0), params)
+    assert int(state.player_inventory[0, int(ItemType.MINER)]) == 6
+
+    # Level-bound path.
+    env_level = FactoriaxEnv(level=level8, reset_hooks=(stock_miners,))
+    _, state_level = env_level.reset_env(random.PRNGKey(0), params)
+    assert int(state_level.player_inventory[0, int(ItemType.MINER)]) == 6
+
+    # Default: no hooks, inventory stays empty.
+    env_plain = FactoriaxEnv(map_width=8, map_height=8)
+    _, state_plain = env_plain.reset_env(random.PRNGKey(0), params)
+    assert not bool(jnp.any(state_plain.player_inventory))
+
+
 def test_reward_fn_used_else_zero(params) -> None:
     """``step_env`` returns ``reward_fn``'s value, or 0.0 when unset."""
     env_r = FactoriaxEnv(reward_fn=lambda prev, new, p: jnp.float32(7.0))
@@ -77,6 +105,29 @@ def test_reward_fn_used_else_zero(params) -> None:
     _, state0 = env_0.reset_env(random.PRNGKey(0), params)
     _, _, reward0, _, _ = env_0.step_env(random.PRNGKey(1), state0, _NOOP, params)
     assert float(reward0) == 0.0
+
+
+def test_done_fn_ors_with_timestep_limit(params) -> None:
+    """``done_fn`` can end the episode before max_timesteps; default is
+    unchanged."""
+
+    def after_one_step(state, p):
+        del p
+        return state.timestep >= 1
+
+    env = FactoriaxEnv(map_width=8, map_height=8, done_fn=after_one_step)
+    _, state = env.reset_env(random.PRNGKey(0), params)
+    _, state, _, done, _ = env.step_env(random.PRNGKey(1), state, _NOOP, params)
+    assert bool(done)
+    assert bool(env.is_terminal(state, params))
+
+    env_plain = FactoriaxEnv(map_width=8, map_height=8)
+    _, state0 = env_plain.reset_env(random.PRNGKey(0), params)
+    _, state0, _, done0, _ = env_plain.step_env(
+        random.PRNGKey(1), state0, _NOOP, params
+    )
+    assert not bool(done0)
+    assert not bool(env_plain.is_terminal(state0, params))
 
 
 def test_achievement_hook_latches(level8, params) -> None:

@@ -369,8 +369,13 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     h, w = state.map.shape
     active = state.ent_y >= 0
     is_arm = (state.ent_type == Machine.ARM) & active
-    self_is_combiner = (state.ent_type == Machine.ASSEMBLER) | (
-        state.ent_type == Machine.FURNACE
+    # Science labs count as combiners on the *receiving* side: they
+    # share the 2-input-slot shape and ``run_labs`` only consumes from
+    # ``ent_asm_in``, so arm deliveries must land there.
+    self_is_combiner = (
+        (state.ent_type == Machine.ASSEMBLER)
+        | (state.ent_type == Machine.FURNACE)
+        | (state.ent_type == Machine.SCIENCE_LAB)
     )
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
@@ -419,8 +424,10 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
             ey, ex, dy, dx, h, w, state.tile_entity, n
         )
         dst_type = state.ent_type[dst_safe]
-        dst_is_combiner = (dst_type == Machine.ASSEMBLER) | (
-            dst_type == Machine.FURNACE
+        dst_is_combiner = (
+            (dst_type == Machine.ASSEMBLER)
+            | (dst_type == Machine.FURNACE)
+            | (dst_type == Machine.SCIENCE_LAB)
         )
 
         dst_bc = buf_count[dst_safe]

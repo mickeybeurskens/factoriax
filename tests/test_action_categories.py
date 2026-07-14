@@ -54,10 +54,11 @@ def test_action_space_shape() -> None:
 
     DEF2 D1b completes the two families hand-numbering left short (deposit
     gains LIMESTONE, craft gains the five rocket parts), so the action count
-    grows 79 -> 85. ItemType is untouched in D1b, so its shape is unchanged.
+    grows 79 -> 85. The tier-3 science pack (TIER3_SCIENCE_PACK) adds one
+    item and its CRAFT_/DEPOSIT_ actions: 85 -> 87, 33 -> 34.
     """
-    assert NUM_ACTIONS == 85
-    assert NUM_ITEM_TYPES == 33
+    assert NUM_ACTIONS == 87
+    assert NUM_ITEM_TYPES == 34
 
 
 def test_parametric_family_sizes_match_item_categories() -> None:

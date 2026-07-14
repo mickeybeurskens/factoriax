@@ -49,7 +49,7 @@ def test_atlas_json_declares_expected_layout() -> None:
     payload = orjson.loads(_COMMITTED_JSON.read_bytes())
     assert payload["cell_px"] == 32
     assert payload["rows"] == 8
-    assert payload["cols"] == 33
+    assert payload["cols"] == 34
     assert payload["direction_axis"] == ["LEFT", "RIGHT", "UP", "DOWN"]
     assert set(payload["categories"]) == {
         "blocks",
@@ -63,9 +63,9 @@ def test_atlas_json_declares_expected_layout() -> None:
 def test_atlas_png_has_expected_shape() -> None:
     """The committed atlas.png has the dimensions implied by the layout."""
     img = iio.imread(_COMMITTED_PNG)
-    assert img.shape == (256, 1056, 4), (
-        f"Atlas PNG shape {img.shape} doesn't match (256, 1056, 4). "
-        "Layout says 8 rows × 33 cols × 32 px, RGBA."
+    assert img.shape == (256, 1088, 4), (
+        f"Atlas PNG shape {img.shape} doesn't match (256, 1088, 4). "
+        "Layout says 8 rows × 34 cols × 32 px, RGBA."
     )
     assert img.dtype.name == "uint8"
 

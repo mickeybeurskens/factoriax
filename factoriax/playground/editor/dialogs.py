@@ -590,8 +590,9 @@ _ITEM_NAMES: dict[int, str] = {
     int(ItemType.CONVEYOR_BELT): "Belt",
     int(ItemType.ASSEMBLER): "Assembler",
     int(ItemType.ROCKET): "Rocket",
-    int(ItemType.BASIC_SCIENCE_PACK): "Basic Sci",
-    int(ItemType.ADVANCED_SCIENCE_PACK): "Adv Sci",
+    int(ItemType.TIER1_SCIENCE_PACK): "T1 Sci",
+    int(ItemType.TIER2_SCIENCE_PACK): "T2 Sci",
+    int(ItemType.TIER3_SCIENCE_PACK): "T3 Sci",
 }
 
 # Items valid for each slot role. INPUT and STORAGE accept raw materials

@@ -27,8 +27,10 @@ from factoriax.engine.state import EnvParams, EnvState
 
 AchievementFn = Callable[[EnvState], jax.Array]
 StepHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
+ResetHook = Callable[[jax.Array, EnvState, EnvParams], EnvState]
 TerrainFn = Callable[[jax.Array, EnvParams], jax.Array]
 RewardFn = Callable[[EnvState, EnvState, EnvParams], jax.Array]
+DoneFn = Callable[[EnvState, EnvParams], jax.Array]
 
 
 def achievement_hook(condition_fn: AchievementFn) -> StepHook:
@@ -65,8 +67,10 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     means procedural generation from the key, and a supplied
     :class:`~factoriax.engine.levels.Level` is materialized via
     :func:`~factoriax.engine.levels.build_state` (key unused for layout).
-    gymnax conformance — ``reset_env(key, params)`` is the only reset
-    surface.
+    ``reset_hooks`` then transform the constructed state on every reset
+    path (e.g. to pre-stock a player inventory), same signature as
+    ``step_hooks``. gymnax conformance — ``reset_env(key, params)`` is
+    the only reset surface.
 
     Parameters
     ----------
@@ -100,7 +104,9 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         level: Level | None = None,
         terrain_fn: TerrainFn | None = None,
         step_hooks: tuple[StepHook, ...] = (),
+        reset_hooks: tuple[ResetHook, ...] = (),
         reward_fn: RewardFn | None = None,
+        done_fn: DoneFn | None = None,
         obs: str = "x_ray_global",
         obs_radius: int = 7,
         map_width: int = 32,
@@ -122,6 +128,8 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         if achievement_fn is not None:
             hooks = hooks + (achievement_hook(achievement_fn),)
         self._step_hooks = hooks
+        self._reset_hooks = tuple(reset_hooks)
+        self._done_fn = done_fn
         self.obs = obs
         self.obs_radius = int(obs_radius)
         self._obs_profile = "superficial" if obs.startswith("superficial") else "x_ray"
@@ -248,7 +256,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
             if self._reward_fn is not None
             else jnp.float32(0.0)
         )
-        done = is_game_over(new_state, params)
+        done = self.is_terminal(new_state, params)
         obs = self.get_obs(new_state, params)
         info: dict[str, Any] = {}
         return obs, new_state, reward, done, info
@@ -286,12 +294,18 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         """
         if self._terrain_fn is not None:
             world_map = self._terrain_fn(key, params)
+            state = initial_state(
+                world_map, params, self.num_players, self.max_machines
+            )
         elif self._level is None:
             world_map = generate_terrain(key, params, self.map_height, self.map_width)
+            state = initial_state(
+                world_map, params, self.num_players, self.max_machines
+            )
         else:
             state = build_state(self._level, self.num_players, self.max_machines)
-            return self.get_obs(state, params), state
-        state = initial_state(world_map, params, self.num_players, self.max_machines)
+        for hook in self._reset_hooks:
+            state = hook(key, state, params)
         obs = self.get_obs(state, params)
         return obs, state
 
@@ -338,7 +352,10 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
         
         """
-        return is_game_over(state, params)
+        over = is_game_over(state, params)
+        if self._done_fn is not None:
+            over = over | self._done_fn(state, params)
+        return over
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
         """Discrete action space over all actions.

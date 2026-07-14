@@ -471,16 +471,22 @@ BASE_RECIPES: tuple[Recipe, ...] = (
     ),
     # Assembler: science packs.
     Recipe(
-        output=int(ItemType.BASIC_SCIENCE_PACK),
+        output=int(ItemType.TIER1_SCIENCE_PACK),
         inputs=((int(ItemType.MOTOR), 1), (int(ItemType.TIN_PLATE), 1)),
         ticks=8,
-        name="Basic Science Pack",
+        name="Tier 1 Science Pack",
     ),
     Recipe(
-        output=int(ItemType.ADVANCED_SCIENCE_PACK),
+        output=int(ItemType.TIER2_SCIENCE_PACK),
         inputs=((int(ItemType.SENSOR), 1), (int(ItemType.WAFER), 1)),
         ticks=8,
-        name="Advanced Science Pack",
+        name="Tier 2 Science Pack",
+    ),
+    Recipe(
+        output=int(ItemType.TIER3_SCIENCE_PACK),
+        inputs=((int(ItemType.TIER2_SCIENCE_PACK), 1), (int(ItemType.SENSOR), 1)),
+        ticks=8,
+        name="Tier 3 Science Pack",
     ),
     # Assembler: capstone.
     Recipe(
