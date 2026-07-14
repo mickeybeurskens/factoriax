@@ -111,6 +111,14 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     def num_players(self) -> int:
         return self._inner.num_players  # type: ignore[no-any-return]
 
+    @property
+    def obs(self) -> str:
+        return self._inner.obs
+
+    @property
+    def obs_radius(self) -> int:
+        return self._inner.obs_radius
+
     def step_env(
         self,
         key: jax.Array,
