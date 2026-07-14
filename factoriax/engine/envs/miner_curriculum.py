@@ -29,24 +29,33 @@ obs kwargs without surgery.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from functools import partial
 
 import jax
 import jax.numpy as jnp
 
-from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType, Machine
+from factoriax.engine.constants import (
+    MAX_ACHIEVEMENTS,
+    Direction,
+    ItemType,
+    Machine,
+)
 from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
 from factoriax.engine.envs.common import (
     MAP_SIZE,
     ORE_RESOURCES_PER_TILE,
+    PATCH_BLOCKS,
     count_machines,
     producing_miners,
     six_patch_terrain,
 )
 from factoriax.engine.envs.easy_rocket import EASY_ROCKET_RECIPE_TABLE
+from factoriax.engine.placement import place_machine
 from factoriax.engine.rewards import achievement_reward
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY
 
 #: Episode budget. The scripted oracle in
 #: ``tests/scenarios/test_miner_curriculum.py`` pins the actual solve
@@ -55,16 +64,6 @@ _MAX_TIMESTEPS: int = 300
 
 #: Task target: six miners, one per ore patch.
 _N_MINERS: int = 6
-
-#: The six raw ore items, one per patch block, in patch order.
-_ORE_ITEMS: tuple[int, ...] = (
-    int(ItemType.IRON_ORE),
-    int(ItemType.COPPER_ORE),
-    int(ItemType.TIN_ORE),
-    int(ItemType.SILICON),
-    int(ItemType.COAL),
-    int(ItemType.LIMESTONE),
-)
 
 _Condition = Callable[[EnvState], jax.Array]
 
@@ -105,21 +104,6 @@ def _producing_at_least(state: EnvState, count: int) -> jax.Array:
 def _placed_at_least(state: EnvState, count: int) -> jax.Array:
     """At least ``count`` miners are placed on the map."""
     return count_machines(state, int(Machine.MINER)) >= count
-
-
-def _stock_inventory(
-    items: tuple[tuple[int, int], ...],
-) -> Callable[[jax.Array, EnvState, EnvParams], EnvState]:
-    """Reset hook setting ``(item, count)`` pairs on every player."""
-
-    def hook(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
-        del key, params
-        inventory = state.player_inventory
-        for item, count in items:
-            inventory = inventory.at[:, item].set(count)
-        return state.replace(player_inventory=inventory)
-
-    return hook
 
 
 #: 14 latched bits over the full mine -> craft -> place loop. Only the
@@ -182,8 +166,131 @@ def all_miners_producing(state: EnvState, params: EnvParams) -> jax.Array:
     return _producing_at_least(state, _N_MINERS)
 
 
+# ---------------------------------------------------------------------------
+# Backward-curriculum start states
+# ---------------------------------------------------------------------------
+
+
+def _check_k(k: int) -> None:
+    if not 1 <= k <= _N_MINERS:
+        raise ValueError(f"k must be in 1..{_N_MINERS}, got {k}")
+
+
+@dataclasses.dataclass(frozen=True)
+class BootstrapStart:
+    """Start-state spec for one backward-curriculum stage.
+
+    The task decomposes as mine -> craft -> place, so the ladder undoes
+    it in reverse: with k = 1..6 missing miners, ``place(k)`` (A_k)
+    starts one action group from done, ``craft(k)`` (B_k) two, and
+    ``mine(k)`` (C_k) three — ``mine(6)`` is the pristine task. All
+    counts are Python-level statics baked into the env at build time.
+    """
+
+    n_placed: int
+    n_miners: int
+    n_materials: int
+
+    @classmethod
+    def place(cls, k: int) -> BootstrapStart:
+        """A_k: 6-k miners producing, k miners in inventory — walk & place."""
+        _check_k(k)
+        return cls(n_placed=_N_MINERS - k, n_miners=k, n_materials=0)
+
+    @classmethod
+    def craft(cls, k: int) -> BootstrapStart:
+        """B_k: 6-k producing, k limestone + k silicon — craft & place."""
+        _check_k(k)
+        return cls(n_placed=_N_MINERS - k, n_miners=0, n_materials=k)
+
+    @classmethod
+    def mine(cls, k: int) -> BootstrapStart:
+        """C_k: 6-k producing, empty inventory — mine, craft & place."""
+        _check_k(k)
+        return cls(n_placed=_N_MINERS - k, n_miners=0, n_materials=0)
+
+
+def _patch_corners(world: jax.Array) -> jax.Array:
+    """``(6, 2)`` array of ``(y, x)`` patch corners, in PATCH_BLOCKS order.
+
+    Each 2x2 patch is the only occurrence of its block type, so the
+    first set tile in row-major order is its top-left corner. Fixed-size
+    argmax per known block type keeps this jittable and vmappable.
+    """
+    width = world.shape[1]
+    corners = []
+    for block in PATCH_BLOCKS:
+        flat = jnp.argmax((world == int(block)).reshape(-1))
+        corners.append(jnp.stack([flat // width, flat % width]))
+    return jnp.stack(corners)
+
+
+def apply_start(
+    key: jax.Array, state: EnvState, params: EnvParams, start: BootstrapStart
+) -> EnvState:
+    """Transform a pristine reset state into ``start``'s stage state.
+
+    Pure and jittable; wired into :func:`miner_bootstrap` as a reset
+    hook and importable on its own for analysis. Pre-installs
+    ``start.n_placed`` miners — one per ore patch, patches drawn from
+    ``key`` so the free patch's ore type varies per episode — by
+    routing through :func:`~factoriax.engine.placement.place_machine`
+    (transiently teleporting the player above each patch corner), so
+    the installed entity matches action-path placement field for field.
+    Each pre-installed miner's output buffer is seeded with one unit of
+    its tile's ore, so it counts as producing from step 0. Finally the
+    player is restored and the inventory set to the stage's counts.
+    """
+    corners = _patch_corners(state.map)
+    perm = jax.random.permutation(
+        jax.random.fold_in(key, 1), len(PATCH_BLOCKS)
+    )
+
+    orig_positions = state.player_positions
+    orig_directions = state.player_directions
+
+    inventory = state.player_inventory.at[:, int(ItemType.MINER)].set(
+        start.n_placed
+    )
+    state = state.replace(player_inventory=inventory)
+    for i in range(start.n_placed):
+        cy, cx = corners[perm[i], 0], corners[perm[i], 1]
+        state = state.replace(
+            player_positions=state.player_positions.at[0].set(
+                jnp.stack([cx, cy - 1]).astype(state.player_positions.dtype)
+            ),
+            player_directions=state.player_directions.at[0].set(
+                jnp.asarray(
+                    int(Direction.DOWN), dtype=state.player_directions.dtype
+                )
+            ),
+        )
+        state = place_machine(state, params, 0, int(ItemType.MINER))
+        idx = state.tile_entity[cy, cx]
+        ore_item = BLOCK_TO_ITEM_ARRAY[state.map[cy, cx].astype(jnp.int32)]
+        state = state.replace(
+            ent_buf_type=state.ent_buf_type.at[idx].set(
+                ore_item.astype(jnp.int8)
+            ),
+            ent_buf_count=state.ent_buf_count.at[idx].set(jnp.int16(1)),
+        )
+
+    inventory = state.player_inventory
+    inventory = inventory.at[:, int(ItemType.MINER)].set(start.n_miners)
+    inventory = inventory.at[:, int(ItemType.LIMESTONE)].set(
+        start.n_materials
+    )
+    inventory = inventory.at[:, int(ItemType.SILICON)].set(start.n_materials)
+    return state.replace(
+        player_positions=orig_positions,
+        player_directions=orig_directions,
+        player_inventory=inventory,
+    )
+
+
 def miner_bootstrap(
     *,
+    start: BootstrapStart | None = None,
     obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
@@ -195,6 +302,11 @@ def miner_bootstrap(
 
     Parameters
     ----------
+    start :
+        Backward-curriculum stage state to reset into; ``None`` builds
+        the pristine task (identical to ``BootstrapStart.mine(6)``).
+        World, obs, actions, reward, and budget are the same for every
+        stage — only the start state differs.
     obs :
         Observation variant passed to :class:`FactoriaxEnv`.
     obs_radius :
@@ -202,9 +314,13 @@ def miner_bootstrap(
         gives a 15×15 view on the 16×16 map); ignored for ``_global``
         variants.
     """
+    reset_hooks = (
+        () if start is None else (partial(apply_start, start=start),)
+    )
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,
         step_hooks=(achievement_hook(miner_bootstrap_conditions),),
+        reset_hooks=reset_hooks,
         reward_fn=miner_bootstrap_reward,
         done_fn=all_miners_producing,
         obs=obs,
