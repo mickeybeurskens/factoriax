@@ -13,14 +13,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from factoriax.engine.envs.easy_rocket import easy_rocket
-from factoriax.engine.envs.miner_curriculum import (
-    mine_ores,
-    miner_bootstrap,
-    place_miners,
-)
+from factoriax.engine.envs.miner_curriculum import miner_bootstrap
 from factoriax.engine.envs.mining import mining
-from factoriax.engine.envs.science_tiers import science_tiers
 from factoriax.engine.envs.rocket import rocket
+from factoriax.engine.envs.science_tiers import science_tiers
 from factoriax.engine.envs.wrappers import AutoResetWrapper
 from factoriax.engine.state import EnvParams
 
@@ -45,33 +41,13 @@ SCENARIOS: dict[str, ScenarioSpec] = {
         build=mining,
         resample=True,
     ),
-    "MineOres-v1": ScenarioSpec(
-        name="Mine Ores",
-        description=(
-            "Curriculum stage 1: mine 5 of every ore type on the 16x16 "
-            "six-patch map. Graded latched bits, max score 30; "
-            "300-step budget."
-        ),
-        build=mine_ores,
-        resample=True,
-    ),
-    "PlaceMiners-v1": ScenarioSpec(
-        name="Place Miners",
-        description=(
-            "Curriculum stage 2: six miners pre-stocked; get all six "
-            "producing on ore patches. Graded latched bits, max score 6; "
-            "300-step budget, early exit when all six produce."
-        ),
-        build=place_miners,
-        resample=True,
-    ),
     "MinerBootstrap-v1": ScenarioSpec(
         name="Miner Bootstrap",
         description=(
-            "Curriculum capstone: from an empty inventory, mine limestone "
-            "and silicon, craft six miners, and get all six producing. "
-            "14-bit gate ladder, max score 14; 300-step budget, early "
-            "exit when all six produce."
+            "From an empty inventory, mine limestone and silicon, craft "
+            "six miners, and get all six producing. Completion-only "
+            "reward: 1.0 once when all six produce, else 0; max score 1; "
+            "300-step budget, early exit on completion."
         ),
         build=miner_bootstrap,
         resample=True,

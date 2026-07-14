@@ -12,8 +12,8 @@ import pytest
 from jax import random
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
-from factoriax.engine.envs.wrappers import ActionMaskWrapper, AutoResetWrapper
 from factoriax.engine.envs.registry import ScenarioSpec, list_scenarios, make
+from factoriax.engine.envs.wrappers import ActionMaskWrapper, AutoResetWrapper
 
 _NOOP = int(Action.NOOP)
 
@@ -24,8 +24,6 @@ def test_catalog_lists_expected_scenarios() -> None:
         "EasyRocket-v1",
         "Rocket-v1",
         "Mining-v1",
-        "MineOres-v1",
-        "PlaceMiners-v1",
         "MinerBootstrap-v1",
         "ScienceTiers-v1",
     }
@@ -58,3 +56,13 @@ def test_make_auto_reset_wraps() -> None:
 def test_make_unknown_id_raises() -> None:
     with pytest.raises(KeyError):
         make("Nope-v1")
+
+
+@pytest.mark.parametrize(
+    "env_id", ["MineOres-v1", "PlaceMiners-v1", "CraftMiners-v1"]
+)
+def test_removed_curriculum_ids_raise(env_id: str) -> None:
+    """The forward-curriculum stage envs are gone; states, not
+    environments, define the backward curriculum."""
+    with pytest.raises(KeyError):
+        make(env_id)
