@@ -35,23 +35,9 @@ from factoriax.engine.envs.miner_curriculum import (
     miner_bootstrap,
 )
 from factoriax.engine.placement import place_machine
-from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY, DIRECTIONS
+from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY
 from factoriax.make import env_from_name
-from tests.scenarios.oracle_utils import (
-    BLOCK_TO_ITEM as _BLOCK_TO_ITEM,
-)
-from tests.scenarios.oracle_utils import (
-    DIR_TO_FACE as _DIR_TO_FACE,
-)
-from tests.scenarios.oracle_utils import (
-    DIR_TO_MOVE as _DIR_TO_MOVE,
-)
-from tests.scenarios.oracle_utils import (
-    bfs_step_toward as _bfs_step_toward,
-)
-from tests.scenarios.oracle_utils import (
-    face_or_mine_adjacent as _face_or_mine_adjacent,
-)
+from tests.scenarios.oracle_utils import BLOCK_TO_ITEM, goto_and_act
 
 MAX_TIMESTEPS = 300
 
@@ -157,26 +143,9 @@ def _place_miners_oracle(state) -> int:
         return int(Action.NOOP)
     m = np.asarray(state.map)
     machines = np.asarray(state.machine_types)
-    px, py = (int(v) for v in state.player_positions[0])
-    h, w = m.shape
-
-    # Adjacent machine-free ore tile: face it, then place.
-    for d in _DIR_TO_MOVE:
-        off = np.asarray(DIRECTIONS[int(d)])
-        tx, ty = px + int(off[0]), py + int(off[1])
-        if (
-            0 <= tx < w
-            and 0 <= ty < h
-            and int(m[ty, tx]) in _BLOCK_TO_ITEM
-            and int(machines[ty, tx]) == 0
-        ):
-            if int(state.player_directions[0]) == int(d):
-                return int(Action.PLACE_MINER)
-            return int(_DIR_TO_FACE[d])
-
-    free_ore = np.isin(m, list(_BLOCK_TO_ITEM)) & (machines == 0)
+    free_ore = np.isin(m, list(BLOCK_TO_ITEM)) & (machines == 0)
     assert free_ore.any(), "no machine-free ore tile left"
-    return _bfs_step_toward(state, free_ore)
+    return goto_and_act(state, free_ore, int(Action.PLACE_MINER))
 
 
 def _bootstrap_oracle(state) -> int:
@@ -187,17 +156,13 @@ def _bootstrap_oracle(state) -> int:
     in_hand = int(inv[int(ItemType.MINER)])
     crafted_total = in_hand + placed
 
-    limestone_block = int(BlockType.LIMESTONE)
-    silicon_block = int(BlockType.SILICON)
     need_limestone = int(inv[int(ItemType.LIMESTONE)]) < 6 - crafted_total
     need_silicon = int(inv[int(ItemType.SILICON)]) < 6 - crafted_total
 
     if need_limestone or need_silicon:
-        block = limestone_block if need_limestone else silicon_block
-        action = _face_or_mine_adjacent(state, {block})
-        if action is not None:
-            return action
-        return _bfs_step_toward(state, np.asarray(state.map) == block)
+        block = BlockType.LIMESTONE if need_limestone else BlockType.SILICON
+        mask = np.asarray(state.map) == int(block)
+        return goto_and_act(state, mask, int(Action.MINE))
 
     if crafted_total < 6:
         return int(Action.CRAFT_MINER)
