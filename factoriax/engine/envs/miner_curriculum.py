@@ -225,6 +225,38 @@ def _patch_corners(world: jax.Array) -> jax.Array:
     return jnp.stack(corners)
 
 
+def _install_producing_miner(
+    state: EnvState, params: EnvParams, corner: jax.Array
+) -> EnvState:
+    """Install one producing miner on the patch corner at ``corner``.
+
+    Teleports player 0 to the tile above the corner facing down and
+    routes through :func:`~factoriax.engine.placement.place_machine`,
+    so the installed entity matches action-path placement field for
+    field (this consumes one miner from the inventory). The miner's
+    output buffer is then seeded with one unit of its tile's ore, so
+    it counts as producing from step 0.
+    """
+    cy, cx = corner[0], corner[1]
+    state = state.replace(
+        player_positions=state.player_positions.at[0].set(
+            jnp.stack([cx, cy - 1]).astype(state.player_positions.dtype)
+        ),
+        player_directions=state.player_directions.at[0].set(
+            jnp.asarray(
+                int(Direction.DOWN), dtype=state.player_directions.dtype
+            )
+        ),
+    )
+    state = place_machine(state, params, 0, int(ItemType.MINER))
+    idx = state.tile_entity[cy, cx]
+    ore_item = BLOCK_TO_ITEM_ARRAY[state.map[cy, cx].astype(jnp.int32)]
+    return state.replace(
+        ent_buf_type=state.ent_buf_type.at[idx].set(ore_item.astype(jnp.int8)),
+        ent_buf_count=state.ent_buf_count.at[idx].set(jnp.int16(1)),
+    )
+
+
 def apply_start(
     key: jax.Array, state: EnvState, params: EnvParams, start: BootstrapStart
 ) -> EnvState:
@@ -232,14 +264,10 @@ def apply_start(
 
     Pure and jittable; wired into :func:`miner_bootstrap` as a reset
     hook and importable on its own for analysis. Pre-installs
-    ``start.n_placed`` miners — one per ore patch, patches drawn from
-    ``key`` so the free patch's ore type varies per episode — by
-    routing through :func:`~factoriax.engine.placement.place_machine`
-    (transiently teleporting the player above each patch corner), so
-    the installed entity matches action-path placement field for field.
-    Each pre-installed miner's output buffer is seeded with one unit of
-    its tile's ore, so it counts as producing from step 0. Finally the
-    player is restored and the inventory set to the stage's counts.
+    ``start.n_placed`` producing miners — one per ore patch, patches
+    drawn from ``key`` so the free patch's ore type varies per episode
+    (see :func:`_install_producing_miner`). Finally the player is
+    restored and the inventory set to the stage's counts.
     """
     corners = _patch_corners(state.map)
     perm = jax.random.permutation(
@@ -249,31 +277,12 @@ def apply_start(
     orig_positions = state.player_positions
     orig_directions = state.player_directions
 
-    inventory = state.player_inventory.at[:, int(ItemType.MINER)].set(
+    stocked = state.player_inventory.at[:, int(ItemType.MINER)].set(
         start.n_placed
     )
-    state = state.replace(player_inventory=inventory)
+    state = state.replace(player_inventory=stocked)
     for i in range(start.n_placed):
-        cy, cx = corners[perm[i], 0], corners[perm[i], 1]
-        state = state.replace(
-            player_positions=state.player_positions.at[0].set(
-                jnp.stack([cx, cy - 1]).astype(state.player_positions.dtype)
-            ),
-            player_directions=state.player_directions.at[0].set(
-                jnp.asarray(
-                    int(Direction.DOWN), dtype=state.player_directions.dtype
-                )
-            ),
-        )
-        state = place_machine(state, params, 0, int(ItemType.MINER))
-        idx = state.tile_entity[cy, cx]
-        ore_item = BLOCK_TO_ITEM_ARRAY[state.map[cy, cx].astype(jnp.int32)]
-        state = state.replace(
-            ent_buf_type=state.ent_buf_type.at[idx].set(
-                ore_item.astype(jnp.int8)
-            ),
-            ent_buf_count=state.ent_buf_count.at[idx].set(jnp.int16(1)),
-        )
+        state = _install_producing_miner(state, params, corners[perm[i]])
 
     inventory = state.player_inventory
     inventory = inventory.at[:, int(ItemType.MINER)].set(start.n_miners)
