@@ -83,7 +83,7 @@ BORDER_RADIUS: int = _BASE_BORDER_RADIUS
 
 def apply_scale(factor: int) -> None:
     """Set the UI scale factor and recompute all size constants.
-    
+
     Must be called once at startup before any UI rendering occurs.
     Color constants are not affected.
 
@@ -91,12 +91,6 @@ def apply_scale(factor: int) -> None:
     ----------
     factor :
         Integer scale multiplier (1, 2, or 3).
-    factor: int :
-        
-
-    Returns
-    -------
-
     """
     global UI_SCALE
     global BORDER_PX, FONT_HEADER, FONT_BODY, FONT_HINT

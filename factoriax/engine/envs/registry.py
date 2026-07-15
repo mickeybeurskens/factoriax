@@ -116,29 +116,16 @@ def make(
         Auto-reset mode. ``None`` (default) uses the scenario's
         ``resample`` setting; pass ``True``/``False`` to override — e.g.
         ``False`` for the cheap cached restore even on a keyed scenario.
-    env_id: str :
-        
-    * :
-        
-    obs: str | None :
-         (Default value = None)
-    obs_radius: int | None :
-         (Default value = None)
-    auto_reset: bool :
-         (Default value = False)
-    resample: bool | None :
-         (Default value = None)
 
     Returns
     -------
-    
+
         ``(env, params)``.
 
     Raises
     ------
     KeyError
         If ``env_id`` is not registered.
-
     """
     spec = SCENARIOS[env_id]
     overrides: dict[str, Any] = {}

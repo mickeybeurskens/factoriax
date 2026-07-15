@@ -178,7 +178,7 @@ def shade_palette(
     n: int,
 ) -> list[str]:
     """Generate ``n`` shades of a base color from dark to light.
-    
+
     Interpolates lightness between 60% and 130% of the base RGB,
     clamped to [0, 1]. With one member the base color is returned
     unchanged.
@@ -189,19 +189,6 @@ def shade_palette(
         Base color as a hex string (e.g. ``"#2ca02c"``).
     n :
         Number of shades to produce.
-    base_hex : str :
-        
-    n : int :
-        
-    base_hex: str :
-        
-    n: int :
-        
-
-    Returns
-    -------
-
-    
     """
     if n <= 0:
         return []

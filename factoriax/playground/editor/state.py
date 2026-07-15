@@ -54,16 +54,11 @@ def sample_resource(brush: ResourceBrush, rng: np.random.Generator) -> int:
         Active resource brush
     rng :
         Numpy random generator for range mode
-    brush: ResourceBrush :
-        
-    rng: np.random.Generator :
-        
 
     Returns
     -------
     type
         Integer resource amount.
-
     """
     if brush.mode == "range":
         return int(rng.integers(brush.range_min, brush.range_max + 1))
@@ -73,16 +68,9 @@ def sample_resource(brush: ResourceBrush, rng: np.random.Generator) -> int:
 @dataclasses.dataclass
 class EditorState:
     """Mutable editor state representing a level being edited.
-    
+
     All arrays use numpy (never JAX) and are mutated in place for
     responsiveness.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     name: str
@@ -119,18 +107,11 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
         Map height in tiles.
     name :
         Level name.
-    width: int :
-        
-    height: int :
-        
-    name: str :
-         (Default value = "untitled")
 
     Returns
     -------
     Fresh
         class:`EditorState` with all-dirt terrain and no machines.
-
     """
     block_map = np.full((height, width), int(BlockType.DIRT), dtype=np.int32)
     inv_shape = (height, width, MAX_MACHINE_INVENTORY_SLOTS)
@@ -150,21 +131,18 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
 
 def editor_state_from_level(level: Level) -> EditorState:
     """Convert a loaded :class:`Level` into a mutable :class:`EditorState`.
-    
+
     Missing optional arrays are filled with sensible defaults.
 
     Parameters
     ----------
     level :
         Source level.
-    level: Level :
-        
 
     Returns
     -------
-    
-        class:`EditorState` mirroring the level data.
 
+        class:`EditorState` mirroring the level data.
     """
     resources = (
         level.block_resources.copy()
@@ -241,7 +219,7 @@ def editor_state_from_level(level: Level) -> EditorState:
 
 def editor_state_to_level(state: EditorState) -> Level:
     """Convert the editor state back to a :class:`Level` for saving or play.
-    
+
     All-zero optional arrays are stored as ``None`` to keep the JSON
     compact.
 
@@ -249,14 +227,11 @@ def editor_state_to_level(state: EditorState) -> Level:
     ----------
     state :
         Current editor state.
-    state: EditorState :
-        
 
     Returns
     -------
     A
         class:`Level` ready for serialization or ``build_state``.
-
     """
     resources: np.ndarray | None = state.block_resources.copy()
     if np.all(resources == 0):
@@ -328,7 +303,7 @@ def set_tile(
     rng: np.random.Generator,
 ) -> None:
     """Paint a single tile, updating block type and resources.
-    
+
     Non-ore blocks always receive 0 resources.  Ore blocks use the
     active :class:`ResourceBrush` to determine the amount.
 
@@ -346,22 +321,6 @@ def set_tile(
         Active resource brush.
     rng :
         Numpy random generator for range-mode sampling.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-    block: int :
-        
-    brush: ResourceBrush :
-        
-    rng: np.random.Generator :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -390,20 +349,6 @@ def set_machine(
         ``Machine`` integer value.
     direction :
         ``Action`` direction value for the machine facing.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-    machine: int :
-        
-    direction: int :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -426,7 +371,7 @@ def fill_rect_tiles(
     rng: np.random.Generator,
 ) -> None:
     """Fill a rectangular area with a block type using the resource brush.
-    
+
     Coordinates are inclusive and automatically clamped to map bounds.
 
     Parameters
@@ -447,26 +392,6 @@ def fill_rect_tiles(
         Active resource brush.
     rng :
         Numpy random generator for range-mode sampling.
-    state: EditorState :
-        
-    x0: int :
-        
-    y0: int :
-        
-    x1: int :
-        
-    y1: int :
-        
-    block: int :
-        
-    brush: ResourceBrush :
-        
-    rng: np.random.Generator :
-        
-
-    Returns
-    -------
-
     """
     lx = max(0, min(x0, x1))
     ly = max(0, min(y0, y1))
@@ -503,16 +428,6 @@ def erase_block(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -532,16 +447,6 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -555,7 +460,7 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
 
 def erase_tile(state: EditorState, x: int, y: int) -> None:
     """Reset a tile to dirt and remove any machine.
-    
+
     Convenience function that clears both layers.
 
     Parameters
@@ -566,16 +471,6 @@ def erase_tile(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     erase_block(state, x, y)
     erase_machine(state, x, y)
@@ -583,7 +478,7 @@ def erase_tile(state: EditorState, x: int, y: int) -> None:
 
 def add_column(state: EditorState) -> None:
     """Append one dirt column to the right edge of the map.
-    
+
     All four arrays are extended in place and ``map_width`` is
     incremented.
 
@@ -591,12 +486,6 @@ def add_column(state: EditorState) -> None:
     ----------
     state :
         Editor state (mutated in place).
-    state: EditorState :
-        
-
-    Returns
-    -------
-
     """
     h = state.map_height
     s = MAX_MACHINE_INVENTORY_SLOTS
@@ -637,19 +526,13 @@ def add_column(state: EditorState) -> None:
 
 def remove_column(state: EditorState) -> None:
     """Remove the rightmost column from the map.
-    
+
     No-op if the map is 1 tile wide.
 
     Parameters
     ----------
     state :
         Editor state (mutated in place).
-    state: EditorState :
-        
-
-    Returns
-    -------
-
     """
     if state.map_width <= 1:
         return
@@ -667,7 +550,7 @@ def remove_column(state: EditorState) -> None:
 
 def add_row(state: EditorState) -> None:
     """Append one dirt row to the bottom edge of the map.
-    
+
     All four arrays are extended in place and ``map_height`` is
     incremented.
 
@@ -675,12 +558,6 @@ def add_row(state: EditorState) -> None:
     ----------
     state :
         Editor state (mutated in place).
-    state: EditorState :
-        
-
-    Returns
-    -------
-
     """
     w = state.map_width
     s = MAX_MACHINE_INVENTORY_SLOTS
@@ -721,19 +598,13 @@ def add_row(state: EditorState) -> None:
 
 def remove_row(state: EditorState) -> None:
     """Remove the bottom row from the map.
-    
+
     No-op if the map is 1 tile tall.
 
     Parameters
     ----------
     state :
         Editor state (mutated in place).
-    state: EditorState :
-        
-
-    Returns
-    -------
-
     """
     if state.map_height <= 1:
         return
@@ -755,17 +626,7 @@ def remove_row(state: EditorState) -> None:
 
 
 def _clip_entities(state: EditorState) -> None:
-    """Remove entities that fall outside the current map bounds.
-
-    Parameters
-    ----------
-    state: EditorState :
-        
-
-    Returns
-    -------
-
-    """
+    """Remove entities that fall outside the current map bounds."""
     state.player_positions = {
         k: v
         for k, v in state.player_positions.items()
@@ -780,7 +641,7 @@ def _clip_entities(state: EditorState) -> None:
 
 def set_player_position(state: EditorState, player_idx: int, x: int, y: int) -> None:
     """Place or move a player start position.
-    
+
     If player *player_idx* already has a position it is moved.
 
     Parameters
@@ -793,18 +654,6 @@ def set_player_position(state: EditorState, player_idx: int, x: int, y: int) -> 
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    player_idx: int :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -823,16 +672,6 @@ def remove_player_at(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     to_remove = [k for k, v in state.player_positions.items() if v == (x, y)]
     for k in to_remove:
@@ -852,16 +691,6 @@ def add_biter(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -880,16 +709,6 @@ def remove_biters_at(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     before = len(state.biter_positions)
     state.biter_positions = [
@@ -910,16 +729,6 @@ def erase_entity(state: EditorState, x: int, y: int) -> None:
         Tile column.
     y :
         Tile row.
-    state: EditorState :
-        
-    x: int :
-        
-    y: int :
-        
-
-    Returns
-    -------
-
     """
     remove_player_at(state, x, y)
     remove_biters_at(state, x, y)
@@ -936,22 +745,15 @@ def get_inventory_slots(state: EditorState, target: InvTarget) -> list[tuple[int
     Parameters
     ----------
     state :
-        Editor state
+        Editor state.
     target :
-        player
-    machine :
-        tile_x
-    state: EditorState :
-        
-    target: InvTarget :
-        
+        ``("player", player_idx, 0)`` or
+        ``("machine", tile_x, tile_y)``.
 
     Returns
     -------
-    type
-        List of ``(item_type, count)`` per slot, padded to the
-        slot count with ``(EMPTY, 0)``.
-
+    List of ``(item_type, count)`` per slot, padded to the
+    slot count with ``(EMPTY, 0)``.
     """
     kind = target[0]
     if kind == "player":
@@ -976,16 +778,11 @@ def get_num_slots(state: EditorState, target: InvTarget) -> int:
         Editor state
     target :
         Inventory target
-    state: EditorState :
-        
-    target: InvTarget :
-        
 
     Returns
     -------
     type
         Slot count (10 for players, machine-type-dependent for machines).
-
     """
     from factoriax.engine.machine_spec import MACHINE_NUM_SLOTS
 
@@ -1016,20 +813,6 @@ def set_inventory_slot(
         ``ItemType`` integer.
     count :
         Stack count.
-    state: EditorState :
-        
-    target: InvTarget :
-        
-    slot: int :
-        
-    item_type: int :
-        
-    count: int :
-        
-
-    Returns
-    -------
-
     """
     kind = target[0]
     if kind == "player":
@@ -1057,16 +840,6 @@ def clear_inventory_slot(state: EditorState, target: InvTarget, slot: int) -> No
         Inventory target.
     slot :
         Slot index.
-    state: EditorState :
-        
-    target: InvTarget :
-        
-    slot: int :
-        
-
-    Returns
-    -------
-
     """
     set_inventory_slot(state, target, slot, int(ItemType.EMPTY), 0)
 
@@ -1086,18 +859,6 @@ def swap_inventory_slots(
         First slot index.
     slot_b :
         Second slot index.
-    state: EditorState :
-        
-    target: InvTarget :
-        
-    slot_a: int :
-        
-    slot_b: int :
-        
-
-    Returns
-    -------
-
     """
     slots = get_inventory_slots(state, target)
     a_item, a_count = slots[slot_a]

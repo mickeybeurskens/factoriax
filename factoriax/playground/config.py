@@ -46,18 +46,10 @@ _MOD_MASK = _MOD_SHIFT | _MOD_CTRL
 
 class PlayerAction(StrEnum):
     """Every player intention, decoupled from pygame keys and JAX actions.
-    
+
     Gameplay actions matter in the world. Navigation actions matter in
     menus and as toggle keys. Both groups share the same binding map
     so a physical key can map to one action from each group.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
-    
     """
 
     # -- Gameplay (world context) -------------------------------------------
@@ -192,22 +184,14 @@ def default_keyboard() -> Bindings:
 
 def default_controller() -> Bindings:
     """Return default controller bindings for a standard gamepad.
-    
+
     Button numbering follows SDL2 game controller layout:
     0=A/Cross, 1=B/Circle, 2=X/Square, 3=Y/Triangle,
     4=LB, 5=RB, 6=Back/Select, 7=Start, 8=L3, 9=R3.
-    
+
     Axis convention: AXIS_{n}_POS for positive deflection,
     AXIS_{n}_NEG for negative. Left stick = axes 0 (X) and 1 (Y).
     D-pad = HAT_0_{UP,DOWN,LEFT,RIGHT}.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
-    
     """
     return {
         # Movement via left stick
@@ -250,15 +234,6 @@ def _parse_key_name(name: str) -> tuple[int, int]:
     ----------
     name :
         Key name string from the binding config.
-    name : str :
-        
-    name: str :
-        
-
-    Returns
-    -------
-
-    
     """
     parts = name.split("+")
     mods = _MOD_NONE
@@ -287,7 +262,7 @@ def _parse_key_name(name: str) -> tuple[int, int]:
 
 def build_key_lookup(bindings: Bindings) -> KeyLookup:
     """Build a reverse lookup dict from bindings.
-    
+
     Maps ``(modifier_flags, pygame_key_int)`` to the frozenset of
     :class:`PlayerAction` names bound to that key combination.
 
@@ -295,15 +270,6 @@ def build_key_lookup(bindings: Bindings) -> KeyLookup:
     ----------
     bindings :
         Action name to key name list mapping.
-    bindings : Bindings :
-        
-    bindings: Bindings :
-        
-
-    Returns
-    -------
-
-    
     """
     tmp: dict[tuple[int, int], set[str]] = {}
     for action, keys in bindings.items():
@@ -319,7 +285,7 @@ def build_key_lookup(bindings: Bindings) -> KeyLookup:
 
 def resolve_key(lookup: KeyLookup, key: int, mods: int = 0) -> frozenset[str]:
     """Look up a key press and return all matching player actions.
-    
+
     Tries the exact modifier combination first. If no match is found
     and modifiers were held, falls back to the bare (unmodified) key.
 
@@ -331,23 +297,6 @@ def resolve_key(lookup: KeyLookup, key: int, mods: int = 0) -> frozenset[str]:
         Pygame key constant (e.g. ``pygame.K_w``).
     mods :
         Pygame modifier bitmask from ``pygame.key.get_mods()``.
-    lookup : KeyLookup :
-        
-    key : int :
-        
-    mods : int :
-        (Default value = 0)
-    lookup: KeyLookup :
-        
-    key: int :
-        
-    mods: int :
-         (Default value = 0)
-
-    Returns
-    -------
-
-    
     """
     normalized = mods & _MOD_MASK
     if normalized:
@@ -370,7 +319,7 @@ ControllerLookup = dict[str, frozenset[str]]
 
 def build_controller_lookup(bindings: Bindings) -> ControllerLookup:
     """Build a reverse lookup dict from controller bindings.
-    
+
     Maps input name strings (``"BUTTON_0"``, ``"HAT_0_UP"``,
     ``"AXIS_1_NEG"``) to the frozenset of action names bound to
     that input.
@@ -379,15 +328,6 @@ def build_controller_lookup(bindings: Bindings) -> ControllerLookup:
     ----------
     bindings :
         Action name to input name list mapping.
-    bindings : Bindings :
-        
-    bindings: Bindings :
-        
-
-    Returns
-    -------
-
-    
     """
     tmp: dict[str, set[str]] = {}
     for action, inputs in bindings.items():
@@ -408,19 +348,6 @@ def resolve_controller_button(
         Controller lookup from :func:`build_controller_lookup`.
     button :
         Button index from the pygame event.
-    lookup : ControllerLookup :
-        
-    button : int :
-        
-    lookup: ControllerLookup :
-        
-    button: int :
-        
-
-    Returns
-    -------
-
-    
     """
     return lookup.get(f"BUTTON_{button}", frozenset())
 
@@ -431,7 +358,7 @@ def resolve_controller_hat(
     value: tuple[int, int],
 ) -> frozenset[str]:
     """Resolve a controller hat/d-pad event to player actions.
-    
+
     A hat value of ``(0, 0)`` (centered) produces no actions. Non-zero
     components are mapped to direction names and unioned.
 
@@ -443,25 +370,8 @@ def resolve_controller_hat(
         Hat index from the pygame event.
     value :
         ``(x, y)`` hat position from the pygame event.
-    lookup : ControllerLookup :
-        
-    hat : int :
-        
-    value : tuple[int :
-        
+
     int] :
-        
-    lookup: ControllerLookup :
-        
-    hat: int :
-        
-    value: tuple[int :
-        
-
-    Returns
-    -------
-
-    
     """
     x, y = value
     result: frozenset[str] = frozenset()
@@ -482,7 +392,7 @@ def resolve_controller_axis(
     value: float,
 ) -> frozenset[str]:
     """Resolve a controller axis value to player actions.
-    
+
     Values within the deadzone (``+/-_AXIS_DEADZONE``) produce no
     actions. Beyond the deadzone, the positive or negative direction
     name is looked up.
@@ -495,23 +405,6 @@ def resolve_controller_axis(
         Axis index.
     value :
         Current axis value (``-1.0`` to ``1.0``).
-    lookup : ControllerLookup :
-        
-    axis : int :
-        
-    value : float :
-        
-    lookup: ControllerLookup :
-        
-    axis: int :
-        
-    value: float :
-        
-
-    Returns
-    -------
-
-    
     """
     if value > _AXIS_DEADZONE:
         return lookup.get(f"AXIS_{axis}_POS", frozenset())
@@ -526,7 +419,7 @@ def resolve_event(
     ctrl_lookup: ControllerLookup | None = None,
 ) -> frozenset[str]:
     """Resolve any input event to player actions.
-    
+
     Handles KEYDOWN, JOYBUTTONDOWN, and JOYHATMOTION events through
     the appropriate lookup. Returns an empty frozenset for unrecognised
     event types. Useful in menus that need the same navigation as the
@@ -540,23 +433,6 @@ def resolve_event(
         Keyboard reverse lookup.
     ctrl_lookup :
         Controller reverse lookup (may be ``None``).
-    event : pygame.event.Event :
-        
-    kb_lookup : KeyLookup :
-        
-    ctrl_lookup : ControllerLookup | None :
-        (Default value = None)
-    event: pygame.event.Event :
-        
-    kb_lookup: KeyLookup :
-        
-    ctrl_lookup: ControllerLookup | None :
-         (Default value = None)
-
-    Returns
-    -------
-
-    
     """
     if event.type == pygame.KEYDOWN:
         mods = pygame.key.get_mods()
@@ -586,7 +462,7 @@ _KEY_INT_TO_NAME: dict[int, str] = {
 
 def event_to_key_name(key: int, mods: int) -> str:
     """Format a key press as a binding name string.
-    
+
     Inverse of :func:`_parse_key_name`. Converts a pygame key constant
     and modifier bitmask into the ``"K_w"`` / ``"SHIFT+K_1"`` format
     used in the bindings config.
@@ -597,19 +473,6 @@ def event_to_key_name(key: int, mods: int) -> str:
         Pygame key constant (e.g. ``pygame.K_w``).
     mods :
         Pygame modifier bitmask from ``pygame.key.get_mods()``.
-    key : int :
-        
-    mods : int :
-        
-    key: int :
-        
-    mods: int :
-        
-
-    Returns
-    -------
-
-    
     """
     key_part = _KEY_INT_TO_NAME.get(key, f"K_{key}")
     parts: list[str] = []
@@ -624,7 +487,7 @@ def event_to_key_name(key: int, mods: int) -> str:
 
 def controller_event_to_name(event: pygame.event.Event) -> str | None:
     """Format a controller event as a binding name string.
-    
+
     Handles ``JOYBUTTONDOWN``, ``JOYHATMOTION``, and
     ``JOYAXISMOTION`` events. Returns ``None`` for hat center
     position or axis values within the deadzone.
@@ -633,15 +496,6 @@ def controller_event_to_name(event: pygame.event.Event) -> str | None:
     ----------
     event :
         Pygame joystick event.
-    event : pygame.event.Event :
-        
-    event: pygame.event.Event :
-        
-
-    Returns
-    -------
-
-    
     """
     if event.type == pygame.JOYBUTTONDOWN:
         return f"BUTTON_{event.button}"
@@ -685,44 +539,19 @@ _ENV_PARAM_FIELDS: tuple[str, ...] = (
 
 
 def env_params_to_dict(params: EnvParams) -> dict[str, int | float]:
-    """Convert an EnvParams instance to a plain dict.
-    
-    Parameters
-    ----------
-
-    Parameters
-    ----------
-    params : EnvParams :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
-    """
+    """Convert an EnvParams instance to a plain dict."""
     return {name: getattr(params, name) for name in _ENV_PARAM_FIELDS}
 
 
 def config_to_env_params(config: PlayerConfig) -> EnvParams:
     """Build an EnvParams from the config's env_params dict.
-    
+
     Missing or invalid fields fall back to EnvParams defaults.
 
     Parameters
     ----------
     config :
         Player configuration.
-    config : PlayerConfig :
-        
-    config: PlayerConfig :
-        
-
-    Returns
-    -------
-
-    
     """
     defaults = EnvParams()
     kwargs: dict[str, int | float] = {}
@@ -742,7 +571,7 @@ def config_to_env_params(config: PlayerConfig) -> EnvParams:
 
 def _merge_bindings(saved: Bindings, defaults: Bindings) -> Bindings:
     """Merge saved bindings with defaults, adding missing actions.
-    
+
     Saved bindings take priority. Actions present in defaults but
     absent from saved are added with their default keys.
 
@@ -752,19 +581,6 @@ def _merge_bindings(saved: Bindings, defaults: Bindings) -> Bindings:
         Bindings loaded from disk.
     defaults :
         Default bindings.
-    saved : Bindings :
-        
-    defaults : Bindings :
-        
-    saved: Bindings :
-        
-    defaults: Bindings :
-        
-
-    Returns
-    -------
-
-    
     """
     merged = dict(defaults)
     merged.update(saved)
@@ -773,7 +589,7 @@ def _merge_bindings(saved: Bindings, defaults: Bindings) -> Bindings:
 
 def load_config(path: Path = CONFIG_PATH) -> PlayerConfig:
     """Load player config from disk, falling back to defaults.
-    
+
     If the file does not exist or is malformed, returns a config with
     all default values. Missing fields are filled from defaults.
 
@@ -781,15 +597,6 @@ def load_config(path: Path = CONFIG_PATH) -> PlayerConfig:
     ----------
     path :
         Path to the JSON config file.
-    path : Path :
-        (Default value = CONFIG_PATH)
-    path: Path :
-         (Default value = CONFIG_PATH)
-
-    Returns
-    -------
-
-    
     """
     defaults_kb = default_keyboard()
     defaults_ctrl = default_controller()
@@ -844,15 +651,6 @@ def _stringify_bindings(bindings: Bindings) -> dict[str, list[str]]:
     ----------
     bindings :
         Binding map (keys may be StrEnum members).
-    bindings : Bindings :
-        
-    bindings: Bindings :
-        
-
-    Returns
-    -------
-
-    
     """
     return {str(k): v for k, v in bindings.items()}
 
@@ -866,19 +664,6 @@ def save_config(config: PlayerConfig, path: Path = CONFIG_PATH) -> None:
         Player configuration to persist.
     path :
         Destination file path.
-    config : PlayerConfig :
-        
-    path : Path :
-        (Default value = CONFIG_PATH)
-    config: PlayerConfig :
-        
-    path: Path :
-         (Default value = CONFIG_PATH)
-
-    Returns
-    -------
-
-    
     """
     data = {
         "env_params": config.env_params,

@@ -45,34 +45,12 @@ NO_ACTION: int = -1
 
 
 def _forward(items: Iterable[IntEnum]) -> list[int]:
-    """Family offset -> item id, one row per action (family order).
-
-    Parameters
-    ----------
-    items: Iterable[IntEnum] :
-        
-
-    Returns
-    -------
-
-    """
+    """Family offset -> item id, one row per action (family order)."""
     return [int(ItemType[m.name]) for m in items]
 
 
 def _inverse(items: Iterable[IntEnum], prefix: str) -> list[int]:
-    """Item id -> absolute ``Action`` id, ``NO_ACTION`` where none exists.
-
-    Parameters
-    ----------
-    items: Iterable[IntEnum] :
-        
-    prefix: str :
-        
-
-    Returns
-    -------
-
-    """
+    """Item id -> absolute ``Action`` id, ``NO_ACTION`` where none exists."""
     table = [NO_ACTION] * NUM_ITEM_TYPES
     for m in items:
         table[int(ItemType[m.name])] = int(Action[f"{prefix}_{m.name}"])

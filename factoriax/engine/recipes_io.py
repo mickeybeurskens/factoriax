@@ -56,12 +56,8 @@ def _parse_override(name: str, raw: dict[str, Any]) -> RecipeOverride:
         Recipe key (used in error messages).
     raw :
         Decoded TOML table.
-    name: str :
-        
-    raw: dict[str :
-        
+
     Any] :
-        
 
     Returns
     -------
@@ -73,7 +69,6 @@ def _parse_override(name: str, raw: dict[str, Any]) -> RecipeOverride:
     ValueError
         If ``raw`` contains an unknown field, the wrong
         type for a known field, or an empty ``input_counts`` list.
-
     """
     unknown = set(raw) - set(_OVERRIDE_FIELDS)
     if unknown:
@@ -124,8 +119,6 @@ def _resolve_item(name: str) -> int:
     ----------
     name :
         TOML table key (e.g. ``"iron_plate"``).
-    name: str :
-        
 
     Returns
     -------
@@ -136,7 +129,6 @@ def _resolve_item(name: str) -> int:
     ------
     ValueError
         If ``name`` does not match any ``ItemType``.
-
     """
     target = name.upper()
     for member in ItemType:
@@ -151,7 +143,7 @@ def _resolve_item(name: str) -> int:
 
 def load_balance_from_toml(path: str | Path) -> RecipeBalance:
     """Load a :class:`RecipeBalance` from a TOML file.
-    
+
     The file's top-level tables are recipe keys (matched against
     :class:`ItemType` member names, case-insensitive). Each table's
     fields populate a :class:`RecipeOverride`.
@@ -160,8 +152,6 @@ def load_balance_from_toml(path: str | Path) -> RecipeBalance:
     ----------
     path :
         Path to the TOML file.
-    path: str | Path :
-        
 
     Returns
     -------
@@ -177,7 +167,6 @@ def load_balance_from_toml(path: str | Path) -> RecipeBalance:
         unknown override field, or a value of the wrong type.
     tomllib.TOMLDecodeError
         If the TOML is malformed.
-
     """
     path = Path(path)
     with path.open("rb") as fh:

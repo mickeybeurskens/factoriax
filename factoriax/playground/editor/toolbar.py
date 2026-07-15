@@ -80,22 +80,12 @@ def _render_text(
         Pygame font.
     color :
         RGB text colour.
-    text: str :
-        
-    font: pygame.font.Font :
-        
-    color: tuple[int :
-        
-    int :
-        
     int] :
-        
 
     Returns
     -------
-    
-        RGB uint8 array of shape ``(H, W, 3)``.
 
+        RGB uint8 array of shape ``(H, W, 3)``.
     """
     surface = font.render(text, False, color)
     return pygame.surfarray.array3d(surface).transpose(1, 0, 2)
@@ -110,16 +100,13 @@ def render_menu_bar(
     ----------
     width :
         Full window width in pixels.
-    width: int :
-        
 
     Returns
     -------
-    
+
         ``(image, regions)`` where *image* is RGB shape
         ``(MENU_BAR_HEIGHT, width, 3)`` and *regions* contains
         click regions for each button.
-
     """
     bar = np.full((MENU_BAR_HEIGHT, width, 3), _MENU_BG, dtype=np.uint8)
     font = get_pixel_font(14)
@@ -185,31 +172,15 @@ def render_toolbar(
     selected_entity :
         Active entity selection as ``(kind, index)``
         where *kind* is ``"player"`` or ``"biter"``, or ``None``.
-    selected_tool: str :
-        
-    selected_block: int :
-        
-    selected_machine: int :
-        
-    direction: int :
-        
-    resource_brush: object :
-        
-    height: int :
-        
-    show_resources: bool :
-         (Default value = False)
-    selected_entity: tuple[str :
-        
+
     int] | None :
          (Default value = None)
 
     Returns
     -------
-    
+
         ``(image, regions)`` where *image* is RGB shape
         ``(height, TOOLBAR_WIDTH, 3)``.
-
     """
     from factoriax.playground.editor.state import ResourceBrush
 
@@ -453,30 +424,13 @@ def render_status_bar(
     layer :
         Active editing layer (``"terrain"``, ``"machine"``,
         or ``"entity"``).
-    tool: str :
-        
-    brush_name: str :
-        
-    cursor_tile: tuple[int :
-        
+
     int] | None :
-        
-    level_name: str :
-        
-    dirty: bool :
-        
-    resource_info: str :
-        
-    width: int :
-        
-    layer: str :
-         (Default value = "terrain")
 
     Returns
     -------
-    
-        RGB uint8 array of shape ``(STATUS_BAR_HEIGHT, width, 3)``.
 
+        RGB uint8 array of shape ``(STATUS_BAR_HEIGHT, width, 3)``.
     """
     bar = np.full((STATUS_BAR_HEIGHT, width, 3), _STATUS_BG, dtype=np.uint8)
     font = get_pixel_font(12)
@@ -545,26 +499,7 @@ def _draw_border(
         Height.
     color :
         RGB border colour.
-    img: np.ndarray :
-        
-    x: int :
-        
-    y: int :
-        
-    w: int :
-        
-    h: int :
-        
-    color: tuple[int :
-        
-    int :
-        
     int] :
-        
-
-    Returns
-    -------
-
     """
     ih, iw = img.shape[:2]
     x0 = max(0, x)
@@ -592,18 +527,6 @@ def _blit_rgb(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
         Top row.
     x :
         Left column.
-    dst: np.ndarray :
-        
-    src: np.ndarray :
-        
-    y: int :
-        
-    x: int :
-        
-
-    Returns
-    -------
-
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -622,7 +545,7 @@ def _blit_rgb(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
 
 def _blit_rgba(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     """Composite an RGBA patch onto an RGB *dst* using alpha blending.
-    
+
     Pixels with zero alpha leave the destination unchanged. Fully opaque
     pixels overwrite directly.
 
@@ -636,18 +559,6 @@ def _blit_rgba(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
         Top row.
     x :
         Left column.
-    dst: np.ndarray :
-        
-    src: np.ndarray :
-        
-    y: int :
-        
-    x: int :
-        
-
-    Returns
-    -------
-
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -685,15 +596,11 @@ _PALETTE_BG = (35, 35, 40)
 def get_palette_items_for_player() -> list[tuple[int, str]]:
     """Return all non-empty items for the player inventory palette.
 
-    Parameters
-    ----------
-
     Returns
     -------
     type
         List of ``(item_type_int, display_name)`` pairs, one per
         ``ItemType`` member excluding ``EMPTY``.
-
     """
     return [
         (int(it), _ITEM_DISPLAY_NAMES[int(it)])
@@ -707,7 +614,7 @@ def get_palette_items_for_machine_slot(
     slot_idx: int,
 ) -> list[tuple[int, str]]:
     """Return items valid for a specific machine slot role.
-    
+
     If the slot has role ``NONE`` the list is empty, meaning no items
     can be placed there.  All other roles (INPUT, OUTPUT, STORAGE)
     allow every non-empty item type so the editor can pre-fill any
@@ -716,20 +623,14 @@ def get_palette_items_for_machine_slot(
     Parameters
     ----------
     machine_type :
-        Machine
+        ``Machine`` integer value.
     slot_idx :
-        Zero
-    machine_type: int :
-        
-    slot_idx: int :
-        
+        Zero-based slot index within the machine.
 
     Returns
     -------
-    type
-        List of ``(item_type_int, display_name)`` pairs.  Empty list
-        when the slot role is ``NONE``.
-
+    List of ``(item_type_int, display_name)`` pairs.  Empty list
+    when the slot role is ``NONE``.
     """
     role = int(MACHINE_SLOT_ROLES[machine_type, slot_idx])
     if role == int(SlotRole.NONE):
@@ -749,7 +650,7 @@ def render_item_palette(
     scroll_offset: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render an item palette sidebar for the inventory view mode.
-    
+
     Each item is drawn as a 22px-tall row with an 18x18 icon on the
     left and a text label beside it.  A small "Items" header in the
     accent colour appears above the list.  Rows that fall outside the
@@ -765,23 +666,16 @@ def render_item_palette(
     scroll_offset :
         Pixel offset for vertical scrolling when the
         item list is taller than *height*.
-    items: list[tuple[int :
-        
+
     str]] :
-        
-    height: int :
-        
-    scroll_offset: int :
-         (Default value = 0)
 
     Returns
     -------
-    
+
         class:`ClickRegion` per visible item row with
-    
+
         class:`ClickRegion` per visible item row with
         ``action="inv_item"`` and ``param=item_type_int``.
-
     """
     content_h = max(height, _estimate_content_height(len(items)))
     bar = np.full((content_h, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
@@ -847,14 +741,11 @@ def _estimate_content_height(num_items: int) -> int:
     ----------
     num_items :
         Number of items in the list.
-    num_items: int :
-        
 
     Returns
     -------
-    
-        Pixel height needed to render the header plus all rows.
 
+        Pixel height needed to render the header plus all rows.
     """
     # header (~12px text + 4+4 padding) + rows
     return 20 + num_items * _PALETTE_ROW_H

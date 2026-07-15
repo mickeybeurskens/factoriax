@@ -29,19 +29,7 @@ _ICON_CACHE: dict[tuple[int, int], np.ndarray] = {}
 
 
 def _icon_rgba(item_type: int, size: int) -> np.ndarray:
-    """Cached :func:`render_item_icon` for fixed (item, size) pairs.
-
-    Parameters
-    ----------
-    item_type: int :
-        
-    size: int :
-        
-
-    Returns
-    -------
-
-    """
+    """Cached :func:`render_item_icon` for fixed (item, size) pairs."""
     key = (item_type, size)
     cached = _ICON_CACHE.get(key)
     if cached is None:
@@ -58,17 +46,7 @@ INVENTORY_ITEMS: tuple[ItemType, ...] = tuple(
 
 
 def _item_label(item: ItemType) -> str:
-    """Human-readable label for an ``ItemType`` (title-cased, 14 char cap).
-
-    Parameters
-    ----------
-    item: ItemType :
-        
-
-    Returns
-    -------
-
-    """
+    """Human-readable label for an ``ItemType`` (title-cased, 14 char cap)."""
     name = item.name.replace("_", " ").title()
     return name if len(name) <= 14 else name[:13] + "."
 
@@ -84,7 +62,7 @@ def _inventory_slot_positions(
     pad_x: int = 6,
 ) -> list[tuple[int, int, int, int]]:
     """Compute ``(x, y, col_w, row_h)`` for each inventory item.
-    
+
     Lays items out column-major, picking the *minimum* column count
     that lets every row fit at ``min_row_h``. That's what makes the
     "always show all items" invariant robust under small panels —
@@ -111,22 +89,6 @@ def _inventory_slot_positions(
         readable when the quadrant is oversized).
     pad_x :
         Left/right padding in pixels.
-    width: int :
-        
-    height: int :
-        
-    num_items: int :
-        
-    * :
-        
-    row_top: int :
-        
-    min_row_h: int :
-         (Default value = 10)
-    max_row_h: int :
-         (Default value = 16)
-    pad_x: int :
-         (Default value = 6)
 
     Returns
     -------
@@ -135,7 +97,6 @@ def _inventory_slot_positions(
     are packed column-major
         the first ``ceil(num_items / num_cols)``
         items fill column 0, the next batch fills column 1, and so on.
-
     """
     if num_items <= 0:
         return []
@@ -168,7 +129,7 @@ def render_inventory_panel(
     title: str = "Inventory",
 ) -> np.ndarray:
     """Render the player inventory as an RGB panel.
-    
+
     Every non-EMPTY ``ItemType`` gets a slot — this is a hard invariant:
     at any ``(width, height)`` the returned image contains one row per
     item in :data:`INVENTORY_ITEMS`. Counts of zero are shown dimmed
@@ -184,22 +145,11 @@ def render_inventory_panel(
         Output height in pixels.
     title :
         Panel heading.
-    inventory: np.ndarray :
-        
-    width: int :
-        
-    height: int :
-        
-    * :
-        
-    title: str :
-         (Default value = "Inventory")
 
     Returns
     -------
-    
-        RGB uint8 array of shape ``(height, width, 3)``.
 
+        RGB uint8 array of shape ``(height, width, 3)``.
     """
     img = np.full((height, width, 3), (30, 30, 35), dtype=np.uint8)
     font = get_pixel_font(11)

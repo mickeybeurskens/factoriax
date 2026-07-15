@@ -95,17 +95,10 @@ class HalfFabricate(IntEnum):
 class Machine(IntEnum):
     """Placeable machine kinds and the entity tag in ``ent_type`` /
     ``machine_types``.
-    
+
     Its names compose ItemType and the action families; its values are the
     tile/entity tag. ``NONE = 0`` is the empty cell, the analog of
     ``ItemType.EMPTY = 0``.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     NONE = 0

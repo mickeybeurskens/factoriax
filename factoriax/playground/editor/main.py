@@ -128,16 +128,9 @@ _MACHINE_KEYS = {
 @dataclasses.dataclass
 class ToolState:
     """All mutable tool / brush / interaction state for the editor.
-    
+
     Grouping these in one object keeps the main loop's local namespace
     small and makes it easy to pass the full context to helper functions.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     tool: str = TOOL_PAINT
@@ -172,15 +165,11 @@ class ToolState:
     def layer(self) -> str:
         """Return the active editing layer name.
 
-        Parameters
-        ----------
-
         Returns
         -------
         type
             ``"inventory"``, ``"entity"``, ``"machine"``, or
             ``"terrain"``.
-
         """
         if self.inventory_mode:
             return "inventory"
@@ -239,7 +228,7 @@ class ToolState:
 
 def _get_palette_items(ts: ToolState, editor: EditorState) -> list[tuple[int, str]]:
     """Return the item palette list appropriate for the current target.
-    
+
     For player targets every non-empty item is offered. For machine
     targets the list is filtered by slot role. When no target is
     selected an empty list is returned.
@@ -247,19 +236,13 @@ def _get_palette_items(ts: ToolState, editor: EditorState) -> list[tuple[int, st
     Parameters
     ----------
     ts :
-        Tool state
+        Tool state (read for target and focused slot).
     editor :
-        Editor state
-    ts: ToolState :
-        
-    editor: EditorState :
-        
+        Editor state (read for machine types).
 
     Returns
     -------
-    type
-        ``(ItemType_int, display_name)`` pairs for the palette.
-
+    ``(ItemType_int, display_name)`` pairs for the palette.
     """
     target = ts.inv_target
     if target is None:
@@ -277,14 +260,11 @@ def _next_direction(current: int) -> int:
     ----------
     current :
         Current direction as an ``Action`` integer.
-    current: int :
-        
 
     Returns
     -------
-    
-        Next direction value.
 
+        Next direction value.
     """
     idx = _DIR_CYCLE.index(current) if current in _DIR_CYCLE else 0
     return _DIR_CYCLE[(idx + 1) % 4]
@@ -292,7 +272,7 @@ def _next_direction(current: int) -> int:
 
 def _direction_from_delta(dx: int, dy: int) -> int | None:
     """Infer a cardinal direction from a tile-space delta.
-    
+
     Returns ``None`` when the delta is zero (no movement).
 
     Parameters
@@ -301,16 +281,11 @@ def _direction_from_delta(dx: int, dy: int) -> int | None:
         Horizontal tile offset (positive = right).
     dy :
         Vertical tile offset (positive = down).
-    dx: int :
-        
-    dy: int :
-        
 
     Returns
     -------
-    
-        ``Action`` direction integer, or ``None``.
 
+        ``Action`` direction integer, or ``None``.
     """
     if dx == 0 and dy == 0:
         return None
@@ -334,18 +309,11 @@ def _recalc_layout(
         Pygame window width.
     window_h :
         Pygame window height.
-    vp: Viewport :
-        
-    window_w: int :
-        
-    window_h: int :
-        
 
     Returns
     -------
-    
-        ``(base_width, base_height, scale)`` tuple.
 
+        ``(base_width, base_height, scale)`` tuple.
     """
     bw = TOOLBAR_WIDTH + vp.canvas_w
     bh = MENU_BAR_HEIGHT + vp.canvas_h + STATUS_BAR_HEIGHT
@@ -359,7 +327,7 @@ def _update_viewport(
     reset_camera: bool = False,
 ) -> None:
     """Recalculate tile size so the map fits inside the fixed canvas area.
-    
+
     The canvas dimensions stay constant (set once at startup from the
     window size). Only ``tile_size`` changes so that the full map is
     visible without scrolling. The zoom can still be adjusted manually
@@ -373,16 +341,6 @@ def _update_viewport(
         Viewport to update in place.
     reset_camera :
         If ``True`` the camera is moved to (0, 0).
-    editor: EditorState :
-        
-    vp: Viewport :
-        
-    reset_camera: bool :
-         (Default value = False)
-
-    Returns
-    -------
-
     """
     # Pick the largest tile size from the allowed set that fits the map
     # inside the current canvas.
@@ -405,7 +363,7 @@ def _update_viewport(
 
 def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
     """Launch a full play-test session from the editor.
-    
+
     Converts the editor state to a Level and delegates to
     :func:`~factoriax.playground.play.main.play_level`, which provides the
     complete game UI.  Returns to the editor when the user quits.
@@ -416,14 +374,6 @@ def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
         Current editor state.
     screen :
         Pygame display surface (reused by the play session).
-    state: EditorState :
-        
-    screen: pygame.Surface :
-        
-
-    Returns
-    -------
-
     """
     level = editor_state_to_level(state)
     num_players = len(level.player_positions) if level.player_positions else 1
@@ -460,22 +410,6 @@ def _handle_motion(
         Current integer display scale.
     rng :
         Numpy RNG for resource brush sampling.
-    event: pygame.event.Event :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-    vp: Viewport :
-        
-    scale: int :
-        
-    rng: np.random.Generator :
-        
-
-    Returns
-    -------
-
     """
     mx = event.pos[0] // scale
     my = event.pos[1] // scale
@@ -552,16 +486,11 @@ def _handle_toolbar_click(
         The matched click region.
     ts :
         Tool state (mutated in place).
-    hit: ClickRegion :
-        
-    ts: ToolState :
-        
 
     Returns
     -------
     A
         class:`NumberInputDialog` if one should be opened, else ``None``.
-
     """
     if hit.action == "tool":
         ts.tool = _TOOL_LIST[hit.param]
@@ -616,7 +545,7 @@ def _handle_inv_canvas_click(
     editor: EditorState,
 ) -> None:
     """Select a player or machine on the canvas during inventory mode.
-    
+
     If the clicked tile contains a player start, the player becomes
     the inventory target. If it contains a machine, the machine
     becomes the target. Otherwise the target is cleared.
@@ -631,18 +560,6 @@ def _handle_inv_canvas_click(
         Tool state (mutated in place).
     editor :
         Editor state (read only).
-    tx: int :
-        
-    ty: int :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-
-    Returns
-    -------
-
     """
     if not (0 <= tx < editor.map_width and 0 <= ty < editor.map_height):
         ts.inv_target = None
@@ -667,7 +584,7 @@ def _handle_inv_panel_click(
     shift: bool,
 ) -> None:
     """Handle a click on a slot inside the inventory panel.
-    
+
     Focusing the clicked slot is the default. Shift-click clears
     the slot instead.
 
@@ -681,18 +598,6 @@ def _handle_inv_panel_click(
         Editor state (mutated in place on shift-clear).
     shift :
         Whether the shift modifier is held.
-    hit: ClickRegion :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-    shift: bool :
-        
-
-    Returns
-    -------
-
     """
     if hit.action != "inv_slot" or ts.inv_target is None:
         return
@@ -709,7 +614,7 @@ def _handle_inv_palette_click(
     editor: EditorState,
 ) -> None:
     """Handle a click on an item in the sidebar palette.
-    
+
     Places the item in the focused slot with count 1, or increments
     the count if the slot already contains the same item type.
 
@@ -721,16 +626,6 @@ def _handle_inv_palette_click(
         Tool state (read for target and focused slot).
     editor :
         Editor state (mutated in place).
-    hit: ClickRegion :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-
-    Returns
-    -------
-
     """
     if hit.action != "inv_item" or ts.inv_target is None:
         return
@@ -766,20 +661,6 @@ def _handle_canvas_click(
         Editor state (mutated in place).
     rng :
         Numpy RNG for resource brush sampling.
-    tx: int :
-        
-    ty: int :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-    rng: np.random.Generator :
-        
-
-    Returns
-    -------
-
     """
     if ts.tool == TOOL_FILL:
         ts.fill_start = (tx, ty)
@@ -820,18 +701,6 @@ def _handle_right_click(
         Tool state (mutated in place).
     editor :
         Editor state (mutated in place).
-    tx: int :
-        
-    ty: int :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-
-    Returns
-    -------
-
     """
     ts.right_erasing = True
     ts.tool_before_erase = ts.tool
@@ -862,16 +731,6 @@ def _handle_fill_release(
         Editor state (mutated in place).
     rng :
         Numpy RNG for resource brush sampling.
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-    rng: np.random.Generator :
-        
-
-    Returns
-    -------
-
     """
     if ts.fill_start is None or ts.cursor_tile is None:
         return
@@ -926,7 +785,7 @@ def _handle_inv_keydown(
     editor: EditorState,
 ) -> None:
     """Handle keyboard input while inventory mode has a target selected.
-    
+
     Arrow keys navigate the focused slot. Delete/Backspace clears
     the focused slot. Plus/Minus adjust the stack count.
 
@@ -938,16 +797,6 @@ def _handle_inv_keydown(
         Tool state (mutated in place).
     editor :
         Editor state (mutated in place for count changes).
-    key: int :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-
-    Returns
-    -------
-
     """
     target = ts.inv_target
     if target is None:
@@ -997,7 +846,7 @@ def _handle_keydown(
     NewLevelDialog | FileDialog | MachineInspectorDialog | None,
 ]:
     """Process a KEYDOWN event.
-    
+
     Returns the potentially-replaced editor, updated layout values,
     the running flag, and an optional dialog (new-level, file, or
     machine inspector).
@@ -1018,26 +867,11 @@ def _handle_keydown(
         Current window width.
     window_h :
         Current window height.
-    event: pygame.event.Event :
-        
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-    vp: Viewport :
-        
-    screen: pygame.Surface :
-        
-    window_w: int :
-        
-    window_h: int :
-        
 
     Returns
     -------
-    
-        ``(editor, base_w, base_h, scale, running, dialog)`` tuple.
 
+        ``(editor, base_w, base_h, scale, running, dialog)`` tuple.
     """
     mods = pygame.key.get_mods()
     ctrl = bool(mods & pygame.KMOD_CTRL)
@@ -1135,14 +969,6 @@ def _handle_rotate(ts: ToolState, editor: EditorState) -> None:
         Tool state (mutated in place).
     editor :
         Editor state (mutated in place if rotating in-place).
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-
-    Returns
-    -------
-
     """
     ct = ts.cursor_tile
     if (
@@ -1171,10 +997,6 @@ def _open_inspector(
         Tool state (read for cursor position).
     editor :
         Editor state (read for machine type).
-    ts: ToolState :
-        
-    editor: EditorState :
-        
 
     Returns
     -------
@@ -1183,7 +1005,6 @@ def _open_inspector(
     A
         class:`MachineInspectorDialog` if a machine is under the
         cursor, else ``None``.
-
     """
     ct = ts.cursor_tile
     if ct is None:
@@ -1216,16 +1037,6 @@ def _adjust_resource(brush: ResourceBrush, delta: int, shift: bool) -> None:
         Positive to increase, negative to decrease.
     shift :
         When ``True`` in range mode, adjusts ``range_min``.
-    brush: ResourceBrush :
-        
-    delta: int :
-        
-    shift: bool :
-        
-
-    Returns
-    -------
-
     """
     if shift and brush.mode == "range":
         brush.range_min = max(
@@ -1259,16 +1070,6 @@ def _handle_resize(
         Editor state (mutated in place).
     vp :
         Viewport (updated via :func:`_update_viewport`).
-    key: int :
-        
-    editor: EditorState :
-        
-    vp: Viewport :
-        
-
-    Returns
-    -------
-
     """
     if key == pygame.K_RIGHT:
         add_column(editor)
@@ -1295,14 +1096,6 @@ def _validate_inv_target(ts: ToolState, editor: EditorState) -> None:
         Tool state (mutated in place).
     editor :
         Editor state (read only).
-    ts: ToolState :
-        
-    editor: EditorState :
-        
-
-    Returns
-    -------
-
     """
     target = ts.inv_target
     if target is None:
@@ -1348,22 +1141,6 @@ def _blit_canvas_rgba(
         Maximum height to composite.
     w :
         Maximum width to composite.
-    frame: np.ndarray :
-        
-    canvas_img: np.ndarray :
-        
-    frame_y: int :
-        
-    frame_x: int :
-        
-    h: int :
-        
-    w: int :
-        
-
-    Returns
-    -------
-
     """
     canvas_rgb = canvas_img[:, :, :3]
     alpha = canvas_img[:, :, 3:4].astype(np.float32) / 255.0
@@ -1388,7 +1165,7 @@ def _render_frame(
     inspector_dialog: MachineInspectorDialog | None = None,
 ) -> np.ndarray:
     """Compose the full editor frame from all UI layers.
-    
+
     When inventory mode is active the canvas area is split: the left
     half shows the map, the right half shows the inventory panel for
     the selected target.  The toolbar is replaced with an item palette.
@@ -1413,30 +1190,11 @@ def _render_frame(
         Active number-input dialog, or ``None``.
     inspector_dialog :
         Active machine inspector dialog, or ``None``.
-    editor: EditorState :
-        
-    vp: Viewport :
-        
-    ts: ToolState :
-        
-    base_w: int :
-        
-    base_h: int :
-        
-    file_dialog: FileDialog | None :
-        
-    dialog: NewLevelDialog | None :
-        
-    number_dialog: NumberInputDialog | None :
-        
-    inspector_dialog: MachineInspectorDialog | None :
-         (Default value = None)
 
     Returns
     -------
-    
-        RGB uint8 array of shape ``(base_h, base_w, 3)``.
 
+        RGB uint8 array of shape ``(base_h, base_w, 3)``.
     """
     if ts.inventory_mode:
         _validate_inv_target(ts, editor)
@@ -1561,12 +1319,6 @@ def main(screen: pygame.Surface | None = None) -> None:
         Existing pygame display surface to reuse.  When
         ``None`` (the default) a new window is created.
         Press ``?`` for a full list of controls.
-    screen: pygame.Surface | None :
-         (Default value = None)
-
-    Returns
-    -------
-
     """
     owns_pygame = screen is None
     if owns_pygame:

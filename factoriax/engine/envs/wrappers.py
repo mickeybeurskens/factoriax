@@ -26,27 +26,20 @@ __all__ = [
 # Auto-reset wrapper
 # ---------------------------------------------------------------------------
 
+
 class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """State that caches the initial configuration for cheap auto-reset.
-    
+
     Stores a frozen copy of the initial state alongside the live state.
     On episode termination, ``lax.select`` swaps in the cached copy
     instead of calling ``reset_env`` (which runs full procedural
     terrain generation).
-    
+
     The memory cost is one extra copy of ``EnvState`` per batch
     element. At 32x32 that is roughly 12 KB per element. At 128x128
     with ``max_machines=4096`` it grows to roughly 185 KB per element,
     which doubles total state memory. For large maps, reduce
     ``batch_size`` or ``max_machines`` accordingly.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
-    
     """
 
     env_state: EnvState
@@ -64,13 +57,10 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     ----------
     inner :
         Core FactoriaX environment to wrap.
-        Examples
-        --------
 
     Returns
     -------
 
-    
     >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1", auto_reset=True)
         >>> # ``env.step_env`` now returns the next-episode reset state
@@ -127,40 +117,16 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         params: EnvParams,
     ) -> tuple[jax.Array, AutoResetState, jax.Array, jax.Array, dict[str, Any]]:
         """Step the environment with cached auto-reset on termination.
-        
+
         When ``done`` is True, the live state is replaced with the
         cached reset state via ``lax.select``. No terrain generation
         occurs.
-        
+
         Parameters
         ----------
             key: JAX random key.
             state: Current wrapped state with cached reset.
             action: Action to take.
-
-        Parameters
-        ----------
-        key : jax.Array :
-            
-        state : AutoResetState :
-            
-        action : int | jax.Array :
-            
-        params : EnvParams :
-            
-        key: jax.Array :
-            
-        state: AutoResetState :
-            
-        action: int | jax.Array :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
         """
         step_key, reset_key = jax.random.split(key)
         obs_step, new_env, reward, done, info = self._inner.step_env(
@@ -187,26 +153,10 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, AutoResetState]:
         """Reset and cache the initial state for future auto-resets.
-        
+
         Parameters
         ----------
             key: JAX random key for world generation.
-
-        Parameters
-        ----------
-        key : jax.Array :
-            
-        params : EnvParams :
-            
-        key: jax.Array :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
         """
         obs, env_state = self._inner.reset_env(key, params)
         state = AutoResetState(
@@ -216,85 +166,26 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         return obs, state
 
     def get_obs(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Pass-through observation from the inner env.
-
-        Parameters
-        ----------
-        state : AutoResetState :
-            
-        params : EnvParams :
-            
-        state: AutoResetState :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Pass-through observation from the inner env."""
         return self._inner.get_obs(state.env_state, params)
 
     def is_terminal(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Delegate termination to the inner env.
-
-        Parameters
-        ----------
-        state : AutoResetState :
-            
-        params : EnvParams :
-            
-        state: AutoResetState :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Delegate termination to the inner env."""
         return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Action space is unchanged.
-
-        Parameters
-        ----------
-        params : EnvParams :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Action space is unchanged."""
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Observation space is unchanged.
-
-        Parameters
-        ----------
-        params : EnvParams :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Observation space is unchanged."""
         return self._inner.observation_space(params)
 
 
 # ---------------------------------------------------------------------------
 # Action-mask wrapper
 # ---------------------------------------------------------------------------
+
 
 class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """Replace blocked actions with :data:`Action.NOOP`.
@@ -308,13 +199,10 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         Iterable of ``Action`` integers to block. The
         mask is captured at construction time and baked into the
         JIT graph of :meth:`step_env`.
-        Examples
-        --------
 
     Returns
     -------
 
-    
     >>> from factoriax import ActionMaskWrapper, FactoriaxEnv, Action
         >>> env = ActionMaskWrapper(FactoriaxEnv(), blocked_actions=(int(Action.MINE),))
         >>> # MINE actions become NOOPs inside ``env.step_env``.
@@ -365,32 +253,7 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]]:
-        """Step the inner env after rewriting blocked actions to NOOP.
-
-        Parameters
-        ----------
-        key : jax.Array :
-            
-        state : Any :
-            
-        action : int | jax.Array :
-            
-        params : EnvParams :
-            
-        key: jax.Array :
-            
-        state: Any :
-            
-        action: int | jax.Array :
-            
-        params: EnvParams :
-            
-
-        Returns
-        -------
-
-        
-        """
+        """Step the inner env after rewriting blocked actions to NOOP."""
         result: tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]] = (
             self._inner.step_env(key, state, self._rewrite(action), params)
         )

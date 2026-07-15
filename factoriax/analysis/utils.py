@@ -18,18 +18,12 @@ def resolve_ax(
 
     Parameters
     ----------
-    ax: Axes | None :
-        
-    figsize: tuple[float :
-        
+
     float] :
-        
 
     Returns
     -------
     type
-        
-
     """
     if ax is None:
         return plt.subplots(figsize=figsize)
@@ -37,19 +31,7 @@ def resolve_ax(
 
 
 def resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:
-    """Extract a (B, T) action array, selecting a player if multi-player.
-
-    Parameters
-    ----------
-    traj: Trajectory :
-        
-    player: int | None :
-        
-
-    Returns
-    -------
-
-    """
+    """Extract a (B, T) action array, selecting a player if multi-player."""
     if traj.is_multi_player:
         if player is None:
             player = 0

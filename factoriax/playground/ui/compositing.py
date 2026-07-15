@@ -9,7 +9,7 @@ from factoriax.playground.ui import theme as _theme
 
 def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> None:
     """Composite an RGBA overlay onto an RGB background in-place.
-    
+
     Only blends pixels within the bounding box of non-transparent
     overlay content, skipping the float arithmetic for the large
     fully-transparent regions that surround a centered menu panel.
@@ -21,14 +21,6 @@ def composite_rgba_over_rgb(background: np.ndarray, overlay: np.ndarray) -> None
         in place.
     overlay :
         RGBA image array of shape (H, W, 4).
-    background: np.ndarray :
-        
-    overlay: np.ndarray :
-        
-
-    Returns
-    -------
-
     """
     alpha_chan = overlay[:, :, 3]
     row_has_alpha = np.any(alpha_chan > 0, axis=1)
@@ -65,18 +57,6 @@ def blit_rgba(
         Top row in *overlay*.
     x :
         Left column in *overlay*.
-    overlay: np.ndarray :
-        
-    src: np.ndarray :
-        
-    y: int :
-        
-    x: int :
-        
-
-    Returns
-    -------
-
     """
     oh, ow = overlay.shape[:2]
     sh, sw = src.shape[:2]
@@ -114,18 +94,11 @@ def clip_scroll_offset(offset: int, content_h: int, viewport_h: int) -> int:
         Total height of the scrollable content in pixels.
     viewport_h :
         Height of the visible viewport in pixels.
-    offset: int :
-        
-    content_h: int :
-        
-    viewport_h: int :
-        
 
     Returns
     -------
-    
-        Clamped offset in ``[0, max(0, content_h - viewport_h)]``.
 
+        Clamped offset in ``[0, max(0, content_h - viewport_h)]``.
     """
     return max(0, min(offset, max(0, content_h - viewport_h)))
 
@@ -140,7 +113,7 @@ def blit_scroll_view(
     scroll_offset: int,
 ) -> None:
     """Composite a scrollable content canvas into a viewport on *overlay*.
-    
+
     When the content is taller than the viewport a scrollbar is drawn
     along the right edge.
 
@@ -160,24 +133,6 @@ def blit_scroll_view(
         Viewport height in pixels.
     scroll_offset :
         Number of content pixels scrolled off the top.
-    overlay: np.ndarray :
-        
-    content: np.ndarray :
-        
-    vp_x: int :
-        
-    vp_y: int :
-        
-    vp_w: int :
-        
-    vp_h: int :
-        
-    scroll_offset: int :
-        
-
-    Returns
-    -------
-
     """
     content_h = content.shape[0]
     needs_bar = content_h > vp_h

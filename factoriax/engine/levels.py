@@ -62,20 +62,16 @@ from factoriax.engine.tables import MINEABLE_BLOCKS
 @dataclasses.dataclass
 class Level:
     """Serializable description of an initial world state.
-    
+
     A Level captures only the static world geometry — block layout and
     optional pre-set resource amounts or machines.  Player placement is
     not part of the level; use :func:`build_state` with an
     :class:`~factoriax.engine.state.EnvParams` to materialise the full
     :class:`~factoriax.engine.state.EnvState`.
 
-    Parameters
-    ----------
-
     Returns
     -------
 
-    
     >>> from factoriax import FactoriaxEnv, get_level
         >>> env = FactoriaxEnv(level=get_level("15x15_resources"))
         >>> # ``env`` is bound to the registered Level for the lifetime
@@ -129,26 +125,18 @@ class Level:
 
 class LevelBuilder:
     """Fluent builder for constructing :class:`Level` objects programmatically.
-    
+
     All mutating methods return ``self`` to support method chaining.  Call
     :meth:`build` to produce the final :class:`Level`.
-    
+
     Example::
-    
+
         level = (
             LevelBuilder(15, 15)
             .fill_rect(0, 0, 4, 4, BlockType.COAL)
             .fill_rect(11, 0, 4, 4, BlockType.COPPER)
             .build("my_level")
         )
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
-    
     """
 
     def __init__(
@@ -186,7 +174,7 @@ class LevelBuilder:
         resources: int | None = None,
     ) -> LevelBuilder:
         """Fill a rectangular region with *block*, optionally overriding resources.
-        
+
         The rectangle is clipped to the map boundary so callers do not
         need to guard against out-of-bounds coordinates.
 
@@ -206,35 +194,6 @@ class LevelBuilder:
             If given, set every tile in the region to this resource
             count instead of the default (``BLOCK_MAX_RESOURCES`` for ore,
             0 for non-ore).
-        x : int :
-            
-        y : int :
-            
-        w : int :
-            
-        h : int :
-            
-        block : BlockType :
-            
-        resources : int | None :
-            (Default value = None)
-        x: int :
-            
-        y: int :
-            
-        w: int :
-            
-        h: int :
-            
-        block: BlockType :
-            
-        resources: int | None :
-             (Default value = None)
-
-        Returns
-        -------
-
-        
         """
         x0 = max(0, x)
         y0 = max(0, y)
@@ -249,7 +208,7 @@ class LevelBuilder:
 
     def set_resources(self, x: int, y: int, amount: int) -> LevelBuilder:
         """Override the resource amount at a single tile.
-        
+
         If no resource array has been set yet, one is created with the
         auto-fill defaults (ore tiles → ``BLOCK_MAX_RESOURCES``, others → 0)
         before applying the override.
@@ -262,23 +221,6 @@ class LevelBuilder:
             Row (0-indexed).
         amount :
             Resource amount to place.
-        x : int :
-            
-        y : int :
-            
-        amount : int :
-            
-        x: int :
-            
-        y: int :
-            
-        amount: int :
-            
-
-        Returns
-        -------
-
-        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -308,27 +250,6 @@ class LevelBuilder:
             ``ItemType`` integer value (1-14).
         count :
             Stack count.
-        x : int :
-            
-        y : int :
-            
-        item_type : int :
-            
-        count : int :
-            
-        x: int :
-            
-        y: int :
-            
-        item_type: int :
-            
-        count: int :
-            
-
-        Returns
-        -------
-
-        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -351,23 +272,6 @@ class LevelBuilder:
             Row (0-indexed).
         recipe_idx :
             Assembler recipe index.
-        x : int :
-            
-        y : int :
-            
-        recipe_idx : int :
-            
-        x: int :
-            
-        y: int :
-            
-        recipe_idx: int :
-            
-
-        Returns
-        -------
-
-        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -400,27 +304,6 @@ class LevelBuilder:
         direction :
             Facing direction as an ``Action`` integer value
             (e.g. ``Direction.RIGHT``).  Defaults to 0 (no direction).
-        x : int :
-            
-        y : int :
-            
-        machine_type : int :
-            
-        direction : int :
-            (Default value = 0)
-        x: int :
-            
-        y: int :
-            
-        machine_type: int :
-            
-        direction: int :
-             (Default value = 0)
-
-        Returns
-        -------
-
-        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -442,7 +325,7 @@ class LevelBuilder:
 
     def set_player_position(self, x: int, y: int) -> LevelBuilder:
         """Set the spawn position for the first player.
-        
+
         For multi-player levels, call this method once per player in
         order.  Each call appends a position to the list.
 
@@ -452,19 +335,6 @@ class LevelBuilder:
             Column (0-indexed).
         y :
             Row (0-indexed).
-        x : int :
-            
-        y : int :
-            
-        x: int :
-            
-        y: int :
-            
-
-        Returns
-        -------
-
-        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -484,19 +354,6 @@ class LevelBuilder:
             Column (0-indexed).
         y :
             Row (0-indexed).
-        x : int :
-            
-        y : int :
-            
-        x: int :
-            
-        y: int :
-            
-
-        Returns
-        -------
-
-        
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -514,17 +371,8 @@ class LevelBuilder:
         ----------
         items :
             List of ``(ItemType, count)`` tuples.
-        items : list[tuple[int :
-            
+
         int]] :
-            
-        items: list[tuple[int :
-            
-
-        Returns
-        -------
-
-        
         """
         self._player_inventory = list(items)
         return self
@@ -536,15 +384,6 @@ class LevelBuilder:
         ----------
         name :
             Human-readable identifier for the level.
-        name : str :
-            
-        name: str :
-            
-
-        Returns
-        -------
-
-        
         """
         return Level(
             name=name,
@@ -593,7 +432,7 @@ class LevelBuilder:
 
 def default_resources(block_map: np.ndarray) -> np.ndarray:
     """Build a resource array from a block map using natural defaults.
-    
+
     Ore tiles (COAL, IRON, COPPER) receive ``BLOCK_MAX_RESOURCES``; all
     other tiles receive 0.
 
@@ -601,15 +440,6 @@ def default_resources(block_map: np.ndarray) -> np.ndarray:
     ----------
     block_map :
         Integer block-type grid of shape ``(H, W)``.
-    block_map : np.ndarray :
-        
-    block_map: np.ndarray :
-        
-
-    Returns
-    -------
-
-    
     """
     mineable = np.isin(
         block_map, [int(BlockType.COAL), int(BlockType.IRON), int(BlockType.COPPER)]
@@ -621,7 +451,7 @@ def _place_players(
     block_map: np.ndarray, num_players: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Place *num_players* players near the centre of the map on dirt tiles.
-    
+
     Players are spread horizontally around the centre column.  Each spawn
     tile is forced to DIRT so players never appear inside a wall or ore
     body (the block_map is not modified in place; a copy is returned).
@@ -632,19 +462,6 @@ def _place_players(
         Integer block-type grid of shape ``(H, W)``.
     num_players :
         Number of players to place.
-    block_map : np.ndarray :
-        
-    num_players : int :
-        
-    block_map: np.ndarray :
-        
-    num_players: int :
-        
-
-    Returns
-    -------
-
-    
     """
     h, w = block_map.shape
     block_map = block_map.copy()
@@ -677,7 +494,6 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
     EnvState
         A fully initialised :class:`~factoriax.engine.state.EnvState`.
 
-    
     >>> import factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
         >>> _, params = factoriax.make("EasyRocket-v1")
@@ -693,9 +509,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
         for px, py in level.player_positions:
             block_map[py, px] = int(BlockType.DIRT)
     else:
-        block_map, player_positions_np = _place_players(
-            level.block_map, num_players
-        )
+        block_map, player_positions_np = _place_players(level.block_map, num_players)
 
     resources_np = (
         level.block_resources
@@ -859,9 +673,7 @@ def initial_state(
         world_map = world_map.at[py, px].set(jnp.int8(BlockType.DIRT))
 
     player_positions_arr = jnp.array(player_positions, dtype=jnp.int32)
-    player_directions = jnp.full(
-        num_players, int(Direction.DOWN), dtype=jnp.int32
-    )
+    player_directions = jnp.full(num_players, int(Direction.DOWN), dtype=jnp.int32)
 
     is_mineable = jnp.isin(world_map, MINEABLE_BLOCKS)
     block_resources = jnp.where(
@@ -900,9 +712,6 @@ def initial_state(
         science_consumed_step=jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32),
         achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -974,7 +783,7 @@ def _smooth_noise(
     scale: int = 4,
 ) -> jax.Array:
     """Generate a smooth 2D noise field via low-res sampling and upscale.
-    
+
     A small random grid is bilinearly upscaled to the full map size,
     producing natural-looking blobs suitable for patch-based terrain.
 
@@ -989,27 +798,6 @@ def _smooth_noise(
     scale :
         Downscale factor.  Larger values produce bigger, smoother
         patches.  The low-res grid is ``ceil(dim / scale) + 1``.
-    rng : jax.Array :
-        
-    height : int :
-        
-    width : int :
-        
-    scale : int :
-        (Default value = 4)
-    rng: jax.Array :
-        
-    height: int :
-        
-    width: int :
-        
-    scale: int :
-         (Default value = 4)
-
-    Returns
-    -------
-
-    
     """
     lo_h = height // scale + 2
     lo_w = width // scale + 2
@@ -1107,7 +895,7 @@ def generate_state(
 
 def save_level(level: Level, path: Path) -> None:
     """Serialize a :class:`Level` to a JSON file using orjson.
-    
+
     Arrays are stored as nested integer lists.  The file is
     human-readable and can be edited in any text editor.
 
@@ -1118,21 +906,10 @@ def save_level(level: Level, path: Path) -> None:
         they do not exist.
     level :
         Level to serialize.
-        Examples
-        --------
-    level : Level :
-        
-    path : Path :
-        
-    level: Level :
-        
-    path: Path :
-        
 
     Returns
     -------
 
-    
     >>> from pathlib import Path
         >>> import tempfile, factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
@@ -1188,17 +965,12 @@ def load_level(path: Path) -> Level:
     ----------
     path :
         Path to the JSON file.
-    path : Path :
-        
-    path: Path :
-        
 
     Returns
     -------
     The reconstructed
         class:`Level`.
 
-    
     >>> from pathlib import Path
         >>> import tempfile, factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
@@ -1282,17 +1054,12 @@ def get_level(name: str) -> Level:
     ----------
     name :
         Level name as registered in :data:`LEVELS`.
-    name : str :
-        
-    name: str :
-        
 
     Returns
     -------
     The corresponding
         class:`Level`.
 
-    
     >>> import factoriax
         >>> factoriax.get_level("15x15_resources").name
         '15x15_resources'

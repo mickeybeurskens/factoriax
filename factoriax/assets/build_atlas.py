@@ -133,34 +133,12 @@ _DIRECTIONAL_MACHINES: frozenset[Machine] = frozenset(
 
 
 def _drop_alpha(rgba: np.ndarray) -> np.ndarray:
-    """Strip alpha from an RGBA cell, returning RGB.
-
-    Parameters
-    ----------
-    rgba: np.ndarray :
-        
-
-    Returns
-    -------
-
-    """
+    """Strip alpha from an RGBA cell, returning RGB."""
     return rgba[..., :3].astype(np.uint8)
 
 
 def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
-    """Append a constant alpha channel to an RGB cell.
-
-    Parameters
-    ----------
-    rgb: np.ndarray :
-        
-    alpha: int :
-         (Default value = 255)
-
-    Returns
-    -------
-
-    """
+    """Append a constant alpha channel to an RGB cell."""
     h, w = rgb.shape[:2]
     out = np.empty((h, w, 4), dtype=np.uint8)
     out[..., :3] = rgb[..., :3]
@@ -170,21 +148,10 @@ def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
 
 def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
     """Render a single digit at the cell's top-left.
-    
+
     The procedural digit atlas is 3 wide × 5 tall bool mask. We blit
     it as white-on-black at the top-left of a 32x32 cell so the rest
     of the cell is unused space. Returned cell is fully opaque.
-
-    Parameters
-    ----------
-    digit: int :
-        
-    digit_atlas: np.ndarray :
-        
-
-    Returns
-    -------
-
     """
     cell = np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
     cell[..., 3] = 255
@@ -198,16 +165,9 @@ def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
 def _ordered_enum_names(enum_cls: type) -> list[str]:
     """
 
-    Parameters
-    ----------
-    enum_cls: type :
-        
-
     Returns
     -------
     type
-        
-
     """
     return [m.name for m in sorted(enum_cls, key=int)]
 
@@ -217,18 +177,12 @@ def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray
 
     Parameters
     ----------
-    block: BlockType :
-        
-    textures: dict[int :
-        
+
     np.ndarray] :
-        
 
     Returns
     -------
     type
-        
-
     """
     tex = textures.get(int(block))
     if tex is None:
@@ -244,13 +198,6 @@ def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray
 def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
     """
 
-    Parameters
-    ----------
-    machine: Machine :
-        
-    direction: Direction :
-        
-
     Returns
     -------
     type
@@ -258,7 +205,6 @@ def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
         leave the cell magenta when no item maps to this machine
         (e.g. ``Machine.NONE``); the renderer's NONE row is fully
         transparent so the sentinel never paints in practice.
-
     """
     if machine == Machine.NONE:
         # Fully transparent — alpha compositing turns this into a no-op.
@@ -275,17 +221,11 @@ def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
 def _item_cell(item: ItemType) -> np.ndarray | None:
     """
 
-    Parameters
-    ----------
-    item: ItemType :
-        
-
     Returns
     -------
     type
         Items aren't currently drawn by the world renderer, so the cells
         are reserved for future HUD work.
-
     """
     if item == ItemType.EMPTY:
         return np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
@@ -298,19 +238,11 @@ def _item_cell(item: ItemType) -> np.ndarray | None:
 def _player_cell(player_idx: int, direction: Direction) -> np.ndarray:
     """
 
-    Parameters
-    ----------
-    player_idx: int :
-        
-    direction: Direction :
-        
-
     Returns
     -------
     type
         Player colors come from :data:`factoriax.playground.ui.icons.PLAYER_COLORS`,
         which provides a distinct palette per slot.
-
     """
     sprite = create_player_texture(
         direction=int(direction),
@@ -333,17 +265,10 @@ def _biter_cell() -> np.ndarray:
 
 def _build_atlas_array() -> np.ndarray:
     """Construct the (NUM_ROWS * 32, NUM_COLS * 32, 4) uint8 atlas image.
-    
+
     Cells beyond a category's defined enum values are filled with
     MISSING_RGBA so future enum extensions produce a visible artifact
     rather than silent zeros.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
     height = NUM_ROWS * CELL_PX
     width = NUM_COLS * CELL_PX
@@ -351,21 +276,7 @@ def _build_atlas_array() -> np.ndarray:
     atlas[:, :] = MISSING_RGBA
 
     def _put(row: int, col: int, cell: np.ndarray) -> None:
-        """
-
-        Parameters
-        ----------
-        row: int :
-            
-        col: int :
-            
-        cell: np.ndarray :
-            
-
-        Returns
-        -------
-
-        """
+        """ """
         y0, x0 = row * CELL_PX, col * CELL_PX
         atlas[y0 : y0 + CELL_PX, x0 : x0 + CELL_PX] = cell
 
@@ -466,7 +377,7 @@ def _build_atlas_json() -> dict:
 
 def build_atlas(out_png: Path, out_json: Path) -> None:
     """Build atlas.png and atlas.json into the given paths.
-    
+
     The function is deterministic: running it twice into the same
     directory produces byte-identical files. CI verifies this via
     ``tests/test_atlas_fresh.py``.
@@ -477,14 +388,6 @@ def build_atlas(out_png: Path, out_json: Path) -> None:
         Path to write the atlas PNG.
     out_json :
         Path to write the sidecar JSON.
-    out_png: Path :
-        
-    out_json: Path :
-        
-
-    Returns
-    -------
-
     """
     out_png.parent.mkdir(parents=True, exist_ok=True)
     out_json.parent.mkdir(parents=True, exist_ok=True)

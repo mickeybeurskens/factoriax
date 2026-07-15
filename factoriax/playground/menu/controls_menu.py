@@ -42,6 +42,7 @@ _UI_SCALE_LABELS: tuple[str, ...] = ("Auto", "1x", "2x", "3x")
 @dataclass(frozen=True)
 class _PageOption:
     """ """
+
     action: str
     label: str
     description: str
@@ -87,6 +88,7 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
 @dataclass(frozen=True)
 class _BindingRow:
     """ """
+
     action: PlayerAction
     label: str
 
@@ -94,6 +96,7 @@ class _BindingRow:
 @dataclass(frozen=True)
 class _BindingCategory:
     """ """
+
     title: str
     rows: tuple[_BindingRow, ...]
 
@@ -144,16 +147,12 @@ _BINDING_SECTIONS: tuple[LabelValueSection, ...] = tuple(
 def _init_rebind_actions() -> list[tuple[str | None, list[tuple[str, str]]]]:
     """
 
-    Parameters
-    ----------
-
     Returns
     -------
     type
         Provided for :mod:`tests.play.test_rebinding`, which validates that every
         listed action is a real :class:`PlayerAction` with a default keyboard +
         controller binding.
-
     """
     return [
         (cat.title, [(row.action, row.label) for row in cat.rows])
@@ -189,17 +188,7 @@ _CONTROLLER_DISPLAY: dict[str, str] = {
 
 
 def _format_key_display(names: list[str]) -> str:
-    """
-
-    Parameters
-    ----------
-    names: list[str] :
-        
-
-    Returns
-    -------
-
-    """
+    """ """
     if not names:
         return "-"
     parts: list[str] = []
@@ -216,36 +205,14 @@ def _format_key_display(names: list[str]) -> str:
 
 
 def _format_controller_display(names: list[str]) -> str:
-    """
-
-    Parameters
-    ----------
-    names: list[str] :
-        
-
-    Returns
-    -------
-
-    """
+    """ """
     if not names:
         return "-"
     return ", ".join(_CONTROLLER_DISPLAY.get(n, n) for n in names)
 
 
 def _format_binding(names: list[str], device: str) -> str:
-    """
-
-    Parameters
-    ----------
-    names: list[str] :
-        
-    device: str :
-        
-
-    Returns
-    -------
-
-    """
+    """ """
     if device == "keyboard":
         return _format_key_display(names)
     return _format_controller_display(names)
@@ -262,19 +229,7 @@ _DISPLAY_SECTIONS: tuple[LabelValueSection, ...] = (
 
 
 def _format_display_values(fullscreen: bool, ui_scale: int) -> list[str]:
-    """
-
-    Parameters
-    ----------
-    fullscreen: bool :
-        
-    ui_scale: int :
-        
-
-    Returns
-    -------
-
-    """
+    """ """
     return [
         "On" if fullscreen else "Off",
         _UI_SCALE_LABELS[ui_scale] if 0 <= ui_scale < len(_UI_SCALE_LABELS) else "?",
@@ -291,20 +246,9 @@ def run_controls_menu(
     config: PlayerConfig,
 ) -> tuple[bool, int]:
     """Run the settings menu and return ``(fullscreen, ui_scale)``.
-    
+
     Binding edits are written into ``config.keyboard`` / ``config.controller``
     in place; the caller is responsible for persistence.
-
-    Parameters
-    ----------
-    screen: pygame.Surface :
-        
-    config: PlayerConfig :
-        
-
-    Returns
-    -------
-
     """
     from factoriax.playground.config import controller_event_to_name, event_to_key_name
 
@@ -337,31 +281,11 @@ def run_controls_menu(
     input_source = panels.InputSourceTracker()
 
     def _bindings_for(device: str) -> dict[str, list[str]]:
-        """
-
-        Parameters
-        ----------
-        device: str :
-            
-
-        Returns
-        -------
-
-        """
+        """ """
         return config.keyboard if device == "keyboard" else config.controller
 
     def _binding_values(device: str) -> list[str]:
-        """
-
-        Parameters
-        ----------
-        device: str :
-            
-
-        Returns
-        -------
-
-        """
+        """ """
         bindings = _bindings_for(device)
         out: list[str] = []
         for i, row in enumerate(_FLAT_BINDING_ROWS):
@@ -378,17 +302,7 @@ def run_controls_menu(
         config.controller = default_controller()
 
     def _cycle_ui_scale(direction: int) -> int:
-        """
-
-        Parameters
-        ----------
-        direction: int :
-            
-
-        Returns
-        -------
-
-        """
+        """ """
         return (ui_scale + direction) % len(_UI_SCALE_LABELS)
 
     while True:

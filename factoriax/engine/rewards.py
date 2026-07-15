@@ -26,50 +26,21 @@ def achievement_reward(
     weights: jax.Array = CORE_ACHIEVEMENT_WEIGHTS,
 ) -> jax.Array:
     """Sparse reward for newly unlocked achievements.
-    
+
     Compares ``achievements_unlocked`` between the two ``EnvState``
     instances and returns the weighted sum of newly satisfied slots.
     The ``weights`` vector controls the magnitude per slot — slots with
     zero weight contribute nothing. Achievements live on
     :class:`~factoriax.engine.state.EnvState` directly; the env's
     ``achievement_fn`` constructor argument latches them each step.
-    
+
     Parameters
     ----------
         prev_state: EnvState immediately before the step.
         new_state: EnvState immediately after the step.
-
-    Parameters
-    ----------
-    uniformity :
-        
-    weights :
-        Per
-    MAX_ACHIEVEMENTS :
-        Defaults to the core game weights
-    1 :
-        0 for each core tutorial milestone
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    weights : jax.Array :
-        (Default value = CORE_ACHIEVEMENT_WEIGHTS)
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-    weights: jax.Array :
-         (Default value = CORE_ACHIEVEMENT_WEIGHTS)
-
-    Returns
-    -------
-
-    
+        weights: Per-slot reward magnitudes, length MAX_ACHIEVEMENTS.
+            Defaults to the core game weights (1.0 for each core
+            tutorial milestone).
     """
     newly_unlocked = new_state.achievements_unlocked & ~prev_state.achievements_unlocked
     reward: jax.Array = jnp.sum(weights * newly_unlocked)
@@ -80,9 +51,9 @@ def mining_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Dense reward combining proximity to ore and a bonus for each ore mined.
-    
+
     Two components are summed:
-    
+
     - **Proximity**: ``0.05 / (1 + d)`` where ``d`` is the Manhattan distance
       from the selected player to the nearest ore tile (coal, iron, or copper).
       This is a small shaping signal (max 0.05) that guides the agent toward
@@ -90,41 +61,24 @@ def mining_reward(
     - **Mining bonus**: 20.0 per ore item extracted during this step, computed
       as the delta in ``items_mined`` between ``prev_state`` and ``new_state``
       summed over the three mineable item types.
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
 
-    Parameters
-    ----------
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
+    Examples
+    --------
     >>> import jax
-        >>> import factoriax
-        >>> env, params = factoriax.make("EasyRocket-v1")
-        >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
-        >>> _, next_state, _, _, _ = env.step_env(
-        ...     jax.random.PRNGKey(1), state, 0, params
-        ... )
-        >>> reward = factoriax.mining_reward(state, next_state, params)
-        >>> float(reward) >= 0.0
-        True
+    >>> import factoriax
+    >>> env, params = factoriax.make("EasyRocket-v1")
+    >>> _, state = env.reset_env(jax.random.PRNGKey(0), params)
+    >>> _, next_state, _, _, _ = env.step_env(
+    ...     jax.random.PRNGKey(1), state, 0, params
+    ... )
+    >>> reward = factoriax.mining_reward(state, next_state, params)
+    >>> float(reward) >= 0.0
+    True
     """
     player_pos = new_state.player_positions[new_state.selected_player]
     px, py = player_pos[0], player_pos[1]
@@ -157,36 +111,16 @@ def sparse_mining_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward of 1.0 for each ore item mined during this step.
-    
+
     Counts the total delta across coal, iron, and copper in ``items_mined``
     between the two states.  This signal is zero on every step where nothing
     is extracted, which makes it harder to shape behaviour but trivial to
     interpret: one unit of reward per one unit of ore.
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-
-    Parameters
-    ----------
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
     """
     ore_items = jnp.array(
         [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE], dtype=jnp.int32
@@ -202,36 +136,16 @@ def sparse_pallet_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward of 1.0 for each pallet gained via crafting.
-    
+
     Detects crafting by requiring that the player's inventory gained
     pallets *and* lost iron in the same step. Moving pallets between
     inventory and machines changes pallet count without consuming iron,
     so place/pickup/deposit/withdraw exploits yield zero reward.
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-
-    Parameters
-    ----------
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
     """
 
     p = new_state.selected_player
@@ -254,38 +168,16 @@ def sparse_miner_crafting_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward of 1.0 for each miner gained via crafting.
-    
+
     Detects crafting by requiring that the player's inventory gained
     miners *and* lost both iron and copper in the same step. Moving
     miners between inventory and the map via place/pickup does not
     consume resources, so those actions yield zero reward.
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-
-    Parameters
-    ----------
-    uniformity :
-        
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
     """
 
     p = new_state.selected_player
@@ -311,37 +203,15 @@ def miner_output_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward for each ore item produced by placed miners.
-    
+
     Counts the total increase in buffer item counts across all
     miner-type entities. This gives a dense signal that fires every
     tick a miner extracts ore.
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-
-    Parameters
-    ----------
-    uniformity :
-        
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
     """
     is_miner = (new_state.ent_type == Machine.MINER) & (new_state.ent_y >= 0)
     prev_output = jnp.where(is_miner, prev_state.ent_buf_count, 0)
@@ -355,37 +225,15 @@ def pallet_filling_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward of 1.0 for each item deposited into a pallet machine.
-    
+
     Counts the total increase in buffer item counts across all
     pallet-type entities. This gives a dense signal for every
     successful deposit action rather than waiting for a full stack.
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-
-    Parameters
-    ----------
-    uniformity :
-        
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
     """
     is_pallet = (new_state.ent_type == Machine.PALLET) & (new_state.ent_y >= 0)
     prev_counts = jnp.where(is_pallet, prev_state.ent_buf_count, 0)
@@ -399,37 +247,15 @@ def player_inventory_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Reward for each item gained in the selected player's inventory.
-    
+
     Counts the total increase in item counts across all inventory slots.
     Positive when items are added (withdraw, mine), zero or negative when
     items are consumed (craft, deposit, place).
-    
+
     Parameters
     ----------
         prev_state: State immediately before the step.
         new_state: State immediately after the step.
-
-    Parameters
-    ----------
-    uniformity :
-        
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-
-    Returns
-    -------
-
-    
     """
     p = new_state.selected_player
     prev_total = jnp.sum(prev_state.player_inventory[p])

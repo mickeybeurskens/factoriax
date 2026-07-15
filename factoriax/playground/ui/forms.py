@@ -69,20 +69,6 @@ def draw_button(
         Font for the label.
     hovered :
         Whether the mouse is over the button.
-    surface: pygame.Surface :
-        
-    rect: pygame.Rect :
-        
-    text: str :
-        
-    font: pygame.font.Font :
-        
-    hovered: bool :
-        
-
-    Returns
-    -------
-
     """
     bg = BTN_HOVER if hovered else BTN_BG
     pygame.draw.rect(surface, bg, rect)
@@ -117,24 +103,11 @@ def draw_checkbox(
         Whether the box is checked.
     hovered :
         Whether the mouse is over the checkbox area.
-    surface: pygame.Surface :
-        
-    x: int :
-        
-    y: int :
-        
-    size: int :
-        
-    checked: bool :
-        
-    hovered: bool :
-        
 
     Returns
     -------
-    
-        The bounding rectangle of the checkbox.
 
+        The bounding rectangle of the checkbox.
     """
     rect = pygame.Rect(x, y, size, size)
     bg = BTN_HOVER if hovered else INPUT_BG
@@ -170,20 +143,6 @@ def draw_scrollbar(
         Total content height.
     top_bar_h :
         Height of the top bar (scrollbar starts below it).
-    surface: pygame.Surface :
-        
-    scroll_offset: int :
-        
-    max_scroll: int :
-        
-    content_h: int :
-        
-    top_bar_h: int :
-        
-
-    Returns
-    -------
-
     """
     if max_scroll <= 0:
         return

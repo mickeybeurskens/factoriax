@@ -6,7 +6,6 @@ struct and env states that are *already returned* by your collection
 function.  Accumulates across iterations and produces a
 :class:`~factoriax.analysis.trajectory.Trajectory` via :meth:`finish`.
 
-
 Typical usage
 -------------------------------------------------------
 >>> from factoriax.analysis.recorder import RolloutRecorder
@@ -36,12 +35,12 @@ from .trajectory import _STATE_TO_TRAJ, Trajectory
 @dataclass
 class RolloutRecorder:
     """Accumulates rollout data across training iterations.
-    
+
     This recorder is designed to slot into an existing training loop
     with **zero changes** to your ``collect_fn`` or JIT'd code.  It
     works by extracting numpy arrays from the trajectory struct and
     env states that your collection function already returns.
-    
+
     The recorder segments the continuous stream of ``(T, N)`` rollout
     chunks into complete episodes using the ``done`` flags.
 
@@ -58,8 +57,6 @@ class RolloutRecorder:
         Which ``EnvState`` fields to record when ``record_states=True``.
         Defaults to ``["player_positions", "player_inventory"]``.
 
-    Returns
-    -------
     Examples
     --------
     Minimal integration : actions + rewards only
@@ -72,7 +69,7 @@ class RolloutRecorder:
     ...     if recorder.is_full:
     ...         break
     >>> traj = recorder.finish()
-    
+
     >>> recorder = RolloutRecorder(max_episodes=32, record_states=True)
     >>> for it in range(total_iters):
     ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
@@ -109,14 +106,6 @@ class RolloutRecorder:
             Any:
         env_states :
             Any:  (Default value = None)
-        trajectories: Any :
-            
-        env_states: Any :
-             (Default value = None)
-
-        Returns
-        -------
-
         """
         if self.is_full:
             return
@@ -161,7 +150,7 @@ class RolloutRecorder:
 
     def finish(self, pad_incomplete: bool = True) -> Trajectory:
         """Segment recorded chunks into complete episodes and build a Trajectory.
-        
+
         This method concatenates all recorded chunks along the time axis,
         then splits them into individual episodes using the ``done`` flags.
         When ``record_states=True`` was set, state fields are segmented
@@ -176,12 +165,6 @@ class RolloutRecorder:
             If *False*, only include fully completed episodes.
         pad_incomplete :
             bool:  (Default value = True)
-        pad_incomplete: bool :
-             (Default value = True)
-
-        Returns
-        -------
-
         """
         if not self._action_chunks:
             raise ValueError("No data recorded. Call record() first.")

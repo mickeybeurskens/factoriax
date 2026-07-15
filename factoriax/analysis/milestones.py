@@ -27,12 +27,6 @@ def achievement_timing(
         Must have ``achievements`` field, shape ``(B, T, num_achievements)``.
     traj :
         Trajectory:
-    traj: Trajectory :
-        
-
-    Returns
-    -------
-
     """
     if traj.achievements is None:
         raise ValueError("achievement_timing requires achievements data")
@@ -62,11 +56,11 @@ def plot_achievement_timing(
     Parameters
     ----------
     traj : Trajectory
-        
+
     achievement_labels : list[str]
-        
+
     ax, figsize, title :
-        
+
     traj :
         Trajectory:
     achievement_labels :
@@ -78,23 +72,9 @@ def plot_achievement_timing(
     float] :
         (Default value = (10)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
-    traj: Trajectory :
-        
-    achievement_labels: list[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-        
-    title: str | None :
-         (Default value = None)
-
-    Returns
-    -------
-
     """
     timing = achievement_timing(traj)  # (B, A)
     B, A = timing.shape
@@ -142,16 +122,16 @@ def plot_achievement_progress(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot cumulative achievement unlock rate over time.
-    
+
     Shows what fraction of episodes have unlocked each achievement by
     each timestep — essentially a CDF of unlock times.
 
     Parameters
     ----------
     traj : Trajectory
-        
+
     achievement_labels : list[str]
-        
+
     traj :
         Trajectory:
     achievement_labels :
@@ -163,23 +143,9 @@ def plot_achievement_progress(
     float] :
         (Default value = (12)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
-    traj: Trajectory :
-        
-    achievement_labels: list[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-        
-    title: str | None :
-         (Default value = None)
-
-    Returns
-    -------
-
     """
     timing = achievement_timing(traj)  # (B, A)
     B, A = timing.shape
@@ -232,27 +198,17 @@ def first_action_timestep(
     Parameters
     ----------
     traj : Trajectory
-        
+
     action_id : int
-        
+
     player : int
-        
+
     traj :
         Trajectory:
     action_id :
         int:
     player :
         int | None:  (Default value = None)
-    traj: Trajectory :
-        
-    action_id: int :
-        
-    player: int | None :
-         (Default value = None)
-
-    Returns
-    -------
-
     """
     actions = resolve_player_actions(traj, player)
     B, T = actions.shape
@@ -274,18 +230,18 @@ def plot_first_action_timing(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot the distribution of when each action is first taken.
-    
+
     Useful for seeing when agents first mine, first craft, first place
     a machine, etc.
 
     Parameters
     ----------
     traj : Trajectory
-        
+
     action_ids : list[int]
         Action IDs to analyze.
     action_labels : list[str]
-        
+
     traj :
         Trajectory:
     action_ids :
@@ -301,27 +257,9 @@ def plot_first_action_timing(
     float] :
         (Default value = (10)
     4) :
-        
+
     title :
         str | None:  (Default value = None)
-    traj: Trajectory :
-        
-    action_ids: list[int] :
-        
-    action_labels: list[str] | None :
-         (Default value = None)
-    player: int | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-        
-    title: str | None :
-         (Default value = None)
-
-    Returns
-    -------
-
     """
     if action_labels is None:
         from .actions import DEFAULT_ACTION_LABELS

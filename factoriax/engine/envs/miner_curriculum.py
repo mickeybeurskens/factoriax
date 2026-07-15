@@ -124,10 +124,7 @@ _MINER_BOOTSTRAP_CONDITIONS: tuple[_Condition, ...] = (
     partial(_placed_at_least, count=1),
     partial(_placed_at_least, count=3),
     partial(_placed_at_least, count=_N_MINERS),
-    *(
-        partial(_producing_at_least, count=count)
-        for count in range(1, _N_MINERS + 1)
-    ),
+    *(partial(_producing_at_least, count=count) for count in range(1, _N_MINERS + 1)),
 )
 
 NUM_MINER_BOOTSTRAP_ACHIEVEMENTS: int = len(_MINER_BOOTSTRAP_CONDITIONS)
@@ -135,9 +132,7 @@ NUM_MINER_BOOTSTRAP_ACHIEVEMENTS: int = len(_MINER_BOOTSTRAP_CONDITIONS)
 #: Completion-only: one episode pays at most 1.0.
 MINER_BOOTSTRAP_MAX_SCORE: float = 1.0
 
-miner_bootstrap_conditions = _conditions_to_achievement_fn(
-    _MINER_BOOTSTRAP_CONDITIONS
-)
+miner_bootstrap_conditions = _conditions_to_achievement_fn(_MINER_BOOTSTRAP_CONDITIONS)
 
 #: Only the final gate pays: reward 1.0 when six miners produce, once.
 #: The other 13 conditions stay latched as free diagnostics.
@@ -243,9 +238,7 @@ def _install_producing_miner(
             jnp.stack([cx, cy - 1]).astype(state.player_positions.dtype)
         ),
         player_directions=state.player_directions.at[0].set(
-            jnp.asarray(
-                int(Direction.DOWN), dtype=state.player_directions.dtype
-            )
+            jnp.asarray(int(Direction.DOWN), dtype=state.player_directions.dtype)
         ),
     )
     state = place_machine(state, params, 0, int(ItemType.MINER))
@@ -270,25 +263,19 @@ def apply_start(
     restored and the inventory set to the stage's counts.
     """
     corners = _patch_corners(state.map)
-    perm = jax.random.permutation(
-        jax.random.fold_in(key, 1), len(PATCH_BLOCKS)
-    )
+    perm = jax.random.permutation(jax.random.fold_in(key, 1), len(PATCH_BLOCKS))
 
     orig_positions = state.player_positions
     orig_directions = state.player_directions
 
-    stocked = state.player_inventory.at[:, int(ItemType.MINER)].set(
-        start.n_placed
-    )
+    stocked = state.player_inventory.at[:, int(ItemType.MINER)].set(start.n_placed)
     state = state.replace(player_inventory=stocked)
     for i in range(start.n_placed):
         state = _install_producing_miner(state, params, corners[perm[i]])
 
     inventory = state.player_inventory
     inventory = inventory.at[:, int(ItemType.MINER)].set(start.n_miners)
-    inventory = inventory.at[:, int(ItemType.LIMESTONE)].set(
-        start.n_materials
-    )
+    inventory = inventory.at[:, int(ItemType.LIMESTONE)].set(start.n_materials)
     inventory = inventory.at[:, int(ItemType.SILICON)].set(start.n_materials)
     return state.replace(
         player_positions=orig_positions,
@@ -323,9 +310,7 @@ def miner_bootstrap(
         gives a 15×15 view on the 16×16 map); ignored for ``_global``
         variants.
     """
-    reset_hooks = (
-        () if start is None else (partial(apply_start, start=start),)
-    )
+    reset_hooks = () if start is None else (partial(apply_start, start=start),)
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,
         step_hooks=(achievement_hook(miner_bootstrap_conditions),),

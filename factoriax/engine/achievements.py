@@ -145,16 +145,11 @@ def count_total_items(state: EnvState, item_type: int) -> jax.Array:
         Current environment state
     item_type :
         ItemType to count
-    state: EnvState :
-        
-    item_type: int :
-        
 
     Returns
     -------
-    
-        Total count of the specified item across all inventories
 
+        Total count of the specified item across all inventories
     """
     total: jax.Array = jnp.sum(state.player_inventory[:, item_type])
     return total
@@ -169,16 +164,11 @@ def count_machines(state: EnvState, machine_type: int) -> jax.Array:
         Current environment state
     machine_type :
         Machine to count
-    state: EnvState :
-        
-    machine_type: int :
-        
 
     Returns
     -------
-    
-        Count of machines of the specified type on the map
 
+        Count of machines of the specified type on the map
     """
     count: jax.Array = jnp.sum(state.machine_types == machine_type)
     return count
@@ -191,14 +181,11 @@ def _any_miner_has_output(state: EnvState) -> jax.Array:
     ----------
     state :
         Current environment state
-    state: EnvState :
-        
 
     Returns
     -------
-    
-        Scalar boolean — True if at least one miner output is non-empty.
 
+        Scalar boolean — True if at least one miner output is non-empty.
     """
     is_miner = state.ent_type == Machine.MINER
     is_active = state.ent_y >= 0
@@ -213,14 +200,11 @@ def _any_pallet_has_items(state: EnvState) -> jax.Array:
     ----------
     state :
         Current environment state
-    state: EnvState :
-        
 
     Returns
     -------
-    
-        Scalar boolean — True if at least one pallet slot is non-empty.
 
+        Scalar boolean — True if at least one pallet slot is non-empty.
     """
     is_pallet = state.ent_type == Machine.PALLET
     is_active = state.ent_y >= 0
@@ -235,14 +219,11 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
     ----------
     state :
         Current environment state.
-    state: EnvState :
-        
 
     Returns
     -------
-    
-        Scalar boolean — True if at least one assembler output is non-empty.
 
+        Scalar boolean — True if at least one assembler output is non-empty.
     """
     is_asm = state.ent_type == Machine.ASSEMBLER
     is_active = state.ent_y >= 0
@@ -252,11 +233,11 @@ def _any_assembler_has_output(state: EnvState) -> jax.Array:
 
 def core_game_conditions(state: EnvState) -> jax.Array:
     """Compute the core game achievement conditions.
-    
+
     Returns a boolean array of shape ``(MAX_ACHIEVEMENTS,)``. The
     first ``NUM_ACHIEVEMENTS`` slots correspond to the core tutorial
     milestones. Remaining slots are False.
-    
+
     This is the default condition function used when constructing a
     :class:`~factoriax.engine.envs.base.FactoriaxEnv` via
     :func:`factoriax.make`. Benchmarks can provide their own
@@ -266,14 +247,11 @@ def core_game_conditions(state: EnvState) -> jax.Array:
     ----------
     state :
         Current environment state.
-    state: EnvState :
-        
 
     Returns
     -------
-    
-        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
 
+        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
     """
     total_mined = (
         state.items_mined[ItemType.COAL]

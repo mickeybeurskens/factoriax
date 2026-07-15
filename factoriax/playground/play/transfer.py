@@ -19,7 +19,7 @@ def swap_inventory_slots(
     type_b: int,
 ) -> EnvState:
     """Swap the counts of two item types in a player's inventory pouch.
-    
+
     When *type_a* and *type_b* are different, their counts are exchanged.
     Same-type calls are a no-op.
 
@@ -33,20 +33,11 @@ def swap_inventory_slots(
         First item type index.
     type_b :
         Second item type index.
-    state: EnvState :
-        
-    player_idx: int :
-        
-    type_a: int :
-        
-    type_b: int :
-        
 
     Returns
     -------
-    
-        Updated state with counts exchanged between the two types.
 
+        Updated state with counts exchanged between the two types.
     """
     if type_a == type_b:
         return state

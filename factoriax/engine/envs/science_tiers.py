@@ -156,18 +156,14 @@ SCIENCE_TIERS_RECIPES: tuple[Recipe, ...] = (
     ),
 )
 
-SCIENCE_TIERS_RECIPE_BOOK: RecipeBook = RecipeBook(
-    recipes=SCIENCE_TIERS_RECIPES
-)
+SCIENCE_TIERS_RECIPE_BOOK: RecipeBook = RecipeBook(recipes=SCIENCE_TIERS_RECIPES)
 
 SCIENCE_TIERS_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(
     SCIENCE_TIERS_RECIPE_BOOK
 )
 
 
-def _place_lab_at_spawn(
-    key: jax.Array, state: EnvState, params: EnvParams
-) -> EnvState:
+def _place_lab_at_spawn(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
     """Reset hook: pre-place one lab on the tile the player faces.
 
     Routes through :func:`place_machine` so entity allocation matches

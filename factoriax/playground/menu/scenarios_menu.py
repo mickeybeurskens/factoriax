@@ -25,6 +25,7 @@ _FPS: int = 30
 @dataclass(frozen=True)
 class _ScenarioEntry:
     """ """
+
     scenario_id: str
     display_name: str
     docstring: str
@@ -32,17 +33,10 @@ class _ScenarioEntry:
 
 def discover_scenarios() -> list[_ScenarioEntry]:
     """List registered scenarios for the picker, sorted by display name.
-    
+
     Reads the scenario registry
     (:func:`factoriax.engine.envs.list_scenarios`); each entry's
     ``scenario_id`` is the id passed to :func:`factoriax.make`.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
     out = [
         _ScenarioEntry(
@@ -61,21 +55,7 @@ def run_scenarios_menu(
     kb_lookup: KeyLookup | None = None,
     ctrl_lookup: ControllerLookup | None = None,
 ) -> str | None:
-    """Show the scenario picker. Returns the chosen scenario's id, or None.
-
-    Parameters
-    ----------
-    screen: pygame.Surface :
-        
-    kb_lookup: KeyLookup | None :
-         (Default value = None)
-    ctrl_lookup: ControllerLookup | None :
-         (Default value = None)
-
-    Returns
-    -------
-
-    """
+    """Show the scenario picker. Returns the chosen scenario's id, or None."""
     from factoriax.playground.config import (
         build_controller_lookup,
         build_key_lookup,

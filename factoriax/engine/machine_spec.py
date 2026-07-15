@@ -84,13 +84,8 @@ def _validate(specs: tuple[MachineSpec, ...]) -> None:
     ----------
     specs :
         The full machine spec table.
-    specs: tuple[MachineSpec :
-        
-    ...] :
-        
 
-    Returns
-    -------
+    ...] :
 
     Raises
     ------
@@ -98,7 +93,6 @@ def _validate(specs: tuple[MachineSpec, ...]) -> None:
         If the table does not hold exactly one record per
         ``Machine`` in value order, or a record has a negative
         capacity.
-
     """
     if len(specs) != len(Machine):
         raise ValueError(

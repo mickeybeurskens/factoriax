@@ -30,6 +30,7 @@ _FPS: int = 30
 @dataclass(frozen=True)
 class _MenuOption:
     """ """
+
     action: str
     label: str
     description: str
@@ -91,21 +92,11 @@ def run_main_menu(
 ) -> str | None:
     """Show the main menu and return the user's choice.
 
-    Parameters
-    ----------
-    screen: pygame.Surface :
-        
-    kb_lookup: KeyLookup | None :
-         (Default value = None)
-    ctrl_lookup: ControllerLookup | None :
-         (Default value = None)
-
     Returns
     -------
-    
+
         ``"play"``, ``"scenarios"``, ``"editor"``, ``"settings"``, or
         ``None`` (quit / window closed).
-
     """
     from factoriax.playground.config import (
         build_controller_lookup,
@@ -140,17 +131,7 @@ def run_main_menu(
     input_source = panels.InputSourceTracker()
 
     def _resolve(action: str) -> str | None:
-        """
-
-        Parameters
-        ----------
-        action: str :
-            
-
-        Returns
-        -------
-
-        """
+        """ """
         return None if action == "quit" else action
 
     while True:
