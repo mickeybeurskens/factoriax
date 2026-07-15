@@ -13,13 +13,11 @@ import pygame
 import pytest
 
 from factoriax.engine.constants import (
-    NUM_ITEM_TYPES,
     Action,
     ItemType,
     Machine,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
 from factoriax.playground.config import build_key_lookup, default_keyboard
 from factoriax.playground.play.game_ui import GameUI
 
@@ -136,11 +134,10 @@ class TestWithdrawAction:
         state_factory,
     ) -> None:
         """Machines have one output slot; CONFIRM emits WITHDRAW regardless of focus."""
-        machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+        buffer_type = jnp.zeros((4, 4), dtype=jnp.int8).at[0, 0].set(
+            int(ItemType.COAL)
         )
-        machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(10)
+        buffer_count = jnp.zeros((4, 4), dtype=jnp.int16).at[0, 0].set(10)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -148,7 +145,8 @@ class TestWithdrawAction:
                 int(Machine.MINER),
                 dtype=jnp.int32,
             ),
-            machine_inventory=machine_inv,
+            buffer_type=buffer_type,
+            buffer_count=buffer_count,
         )
         ps = game_ui.play_state
         ps.machine_open = True

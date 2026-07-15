@@ -90,17 +90,6 @@ class TestRenderInventoryMenu:
         result, _ = render_inventory_menu(state, _PARAMS, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
-    def test_craft_in_progress(self, state_factory) -> None:
-        """Should not crash when a craft is in progress."""
-        state = state_factory(
-            world_map=jnp.zeros((8, 8), dtype=jnp.int32),
-            craft_progress=jnp.array([2], dtype=jnp.int32),
-        )
-        result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH, menu_focus="crafting"
-        )
-        assert result.shape == (_SH, _SW, 4)
-
 
 class TestRenderWelcomeScreen:
     """Output-contract tests for render_welcome_screen."""

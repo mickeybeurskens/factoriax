@@ -21,7 +21,6 @@ from factoriax.engine.constants import (
 )
 
 # State-array dtypes.
-MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
 BLOCK_RESOURCE_DTYPE = jnp.int16
 
 # (dx, dy) offset per Direction value; index 0 is the unused NONE slot.
