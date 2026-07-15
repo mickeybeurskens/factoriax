@@ -173,6 +173,28 @@ def _bootstrap_oracle(state) -> int:
     return int(Action.NOOP)
 
 
+def _run_oracle_to_completion(env, step, params, key):
+    """Drive ``_bootstrap_oracle`` until done; return (steps, final state).
+
+    Asserts the completion-only reward contract along the way: every
+    intermediate step pays 0, the completing step pays exactly 1.0 and
+    arrives inside the episode budget.
+    """
+    _, state = env.reset_env(key, params)
+    steps = 0
+    for _ in range(MAX_TIMESTEPS):
+        action = _bootstrap_oracle(state)
+        key, ks = random.split(key)
+        _, state, reward, done, _ = step(ks, state, action, params)
+        steps += 1
+        if done:
+            assert float(reward) == 1.0, "completion must pay exactly 1.0"
+            assert steps < MAX_TIMESTEPS
+            return steps, state
+        assert float(reward) == 0.0, f"intermediate step {steps} paid {reward}"
+    pytest.fail(f"oracle did not finish within the {MAX_TIMESTEPS}-step budget")
+
+
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_bootstrap_oracle_pays_one_on_completing_step_only(
     bootstrap_env, bootstrap_step, seed
@@ -183,22 +205,9 @@ def test_bootstrap_oracle_pays_one_on_completing_step_only(
     exactly 1.0 and ends the episode inside the budget, with the full
     diagnostic ladder latched."""
     env, params = bootstrap_env
-    key = random.PRNGKey(seed)
-    _, state = env.reset_env(key, params)
-
-    steps = 0
-    done = False
-    for _ in range(MAX_TIMESTEPS):
-        action = _bootstrap_oracle(state)
-        key, ks = random.split(key)
-        _, state, reward, done, _ = bootstrap_step(ks, state, action, params)
-        steps += 1
-        if done:
-            assert float(reward) == 1.0, "completion must pay exactly 1.0"
-            break
-        assert float(reward) == 0.0, f"intermediate step {steps} paid {reward}"
-
-    assert done and steps < MAX_TIMESTEPS
+    steps, state = _run_oracle_to_completion(
+        env, bootstrap_step, params, random.PRNGKey(seed)
+    )
     unlocked = int(np.asarray(state.achievements_unlocked).sum())
     assert unlocked == NUM_MINER_BOOTSTRAP_ACHIEVEMENTS
     print(f"\nMinerBootstrap-v1 oracle seed {seed}: solved in {steps} steps")
@@ -360,33 +369,17 @@ def test_pre_placed_patches_vary_with_the_reset_key() -> None:
 
 
 @pytest.mark.parametrize(
-    "stage",
-    ["place_1", "craft_1", "mine_1", "mine_6"],
+    ("group", "k"),
+    [("place", 1), ("craft", 1), ("mine", 1), ("mine", 6)],
 )
-def test_stage_oracle_completes_within_budget(stage) -> None:
+def test_stage_oracle_completes_within_budget(group, k) -> None:
     """The scripted oracle earns the completion reward from the easiest
     stage of each group and from the pristine task, 3 seeds each."""
-    group, k = stage.rsplit("_", 1)
-    env, params = miner_bootstrap(start=getattr(BootstrapStart, group)(int(k)))
+    env, params = miner_bootstrap(start=getattr(BootstrapStart, group)(k))
     step = jax.jit(env.step_env)
 
     for seed in range(3):
-        key = random.PRNGKey(seed)
-        _, state = env.reset_env(key, params)
-
-        steps = 0
-        done = False
-        for _ in range(MAX_TIMESTEPS):
-            action = _bootstrap_oracle(state)
-            key, ks = random.split(key)
-            _, state, reward, done, _ = step(ks, state, action, params)
-            steps += 1
-            if done:
-                assert float(reward) == 1.0
-                break
-            assert float(reward) == 0.0
-
-        assert done and steps < MAX_TIMESTEPS, (
-            f"{stage} seed {seed}: oracle did not finish (steps={steps})"
+        steps, _ = _run_oracle_to_completion(
+            env, step, params, random.PRNGKey(seed)
         )
-        print(f"\n{stage} oracle seed {seed}: solved in {steps} steps")
+        print(f"\n{group}({k}) oracle seed {seed}: solved in {steps} steps")
