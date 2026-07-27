@@ -1,9 +1,13 @@
-"""Achievement system for tracking player progress and awarding rewards.
+"""Achievement system for tracking player progress. 
 
-Achievements form a tutorial progression that guides the player from
-hand-mining raw ore to launching a rocket, each one teaching a new
-mechanic. :data:`ACHIEVEMENT_INFO` holds the display names and hints;
-:func:`core_game_conditions` defines what unlocks each slot.
+Achievements allow persistent logging of reached world states in an episode.
+Once an achievement is unlocked it is tracked as part of the environment state.
+It can be used to create a curriculum based on unlocks as done with Craftax,
+or can serve to track progress towards a goal regardless of reward structure.
+
+Achievement "bits" are tracked in the environment state. 
+Each bit can be assigned to a different achievement in different scenarios.  
+:func:`core_game_conditions` define what unlocks each bit.
 """
 
 from dataclasses import dataclass

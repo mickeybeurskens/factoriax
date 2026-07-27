@@ -1,4 +1,4 @@
-"""Factoriax analysis and visualization toolkit.
+"""Analysis and visualization toolkit.
 """
 
 from . import actions, eval, milestones, multiagent, state, video
