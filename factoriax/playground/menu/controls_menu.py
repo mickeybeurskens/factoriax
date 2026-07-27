@@ -1,6 +1,6 @@
 """Settings menu — keyboard, controller, display, and reset bindings.
 
-Tv-style two-panel layout mirroring :mod:`factoriax.playground.menu.scenarios_menu`:
+Tv-style two-panel layout mirroring :mod:`factoriax.playground.menu.main_menu`:
 left panel lists the page (Keyboard, Controller, Display, Reset Bindings);
 right panel shows the content of the selected page. Bindings are
 group-headed (Movement / Actions / Menus); Display has fullscreen and UI

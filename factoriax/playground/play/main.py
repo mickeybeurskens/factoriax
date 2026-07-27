@@ -16,7 +16,7 @@ import numpy as np
 import pygame
 from jax import random
 
-from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
+from factoriax.engine.achievements import index_of
 from factoriax.engine.constants import Action, Direction
 from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.levels import Level
@@ -30,6 +30,10 @@ from factoriax.playground.config import (
     default_keyboard,
     resolve_controller_axis,
 )
+from factoriax.playground.play.achievements import (
+    FREE_PLAY_ACHIEVEMENTS,
+    free_play_conditions,
+)
 from factoriax.playground.play.game_ui import GameUI
 from factoriax.playground.play.play_state import PlayState
 from factoriax.playground.play.ui import _hotbar_h, render_welcome_screen
@@ -37,8 +41,8 @@ from factoriax.playground.ui import theme as _play_theme
 from factoriax.playground.ui.compositing import composite_rgba_over_rgb
 from factoriax.playground.ui.window import calculate_window_size
 
-_ROCKET_ACHIEVEMENT_IDX: int = next(
-    i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == "rocket_complete"
+_ROCKET_ACHIEVEMENT_IDX: int = index_of(
+    FREE_PLAY_ACHIEVEMENTS, "rocket_complete"
 )
 
 
@@ -170,7 +174,11 @@ def play_level(
 
         seed = int(load_config().seed)
 
-    env = FactoriaxEnv(achievement_fn=core_game_conditions, level=level, num_players=num_players)
+    env = FactoriaxEnv(
+        achievement_fn=free_play_conditions,
+        level=level,
+        num_players=num_players,
+    )
     params = EnvParams()
 
     if screen is None:
@@ -743,9 +751,13 @@ def _save_recorded_trajectory(
     print(f"Saved trajectory: {path} ({len(states)} steps)")
 
 
-def main() -> None:
-    """Run the interactive FactoriaX game.
-    
+def main(screen: pygame.Surface | None = None) -> None:
+    """Run free play: a procedurally generated world, no fixed level.
+
+    When *screen* is supplied the caller owns the window and pygame
+    outlives this call — that is how the launcher re-enters its menu on
+    exit. Standalone, a window is created and torn down here.
+
     Controls:
         WASD: Move player (world), navigate menus (context-dependent)
         Space: Mine ore at current tile
@@ -768,18 +780,19 @@ def main() -> None:
 
     
     """
-    pygame.init()
-
-    window_width, window_height = calculate_window_size(
-        _BASE_UI_SIZE * _play_theme.UI_SCALE,
-        _BASE_UI_SIZE * _play_theme.UI_SCALE,
-    )
-    screen = pygame.display.set_mode((window_width, window_height))
+    owns_pygame = screen is None
+    if owns_pygame:
+        pygame.init()
+        window_width, window_height = calculate_window_size(
+            _BASE_UI_SIZE * _play_theme.UI_SCALE,
+            _BASE_UI_SIZE * _play_theme.UI_SCALE,
+        )
+        screen = pygame.display.set_mode((window_width, window_height))
     pygame.display.set_caption("FactoriaX")
 
     def _make_env() -> tuple[FactoriaxEnv, EnvParams]:
         """ """
-        e = FactoriaxEnv(achievement_fn=core_game_conditions)
+        e = FactoriaxEnv(achievement_fn=free_play_conditions)
         return e, e.default_params
 
     env_result = _run_with_loading_screen(
@@ -804,4 +817,5 @@ def main() -> None:
     _, state = reset_result
 
     _play_loop(env, state, params, screen, rng)
-    pygame.quit()
+    if owns_pygame:
+        pygame.quit()

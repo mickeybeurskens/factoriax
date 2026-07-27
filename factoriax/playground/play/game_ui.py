@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pygame
 
-from factoriax.engine.achievements import NUM_ACHIEVEMENTS
+from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
 from factoriax.engine.actions import (
     ITEM_TO_CRAFT_ACTION,
     ITEM_TO_DEPOSIT_ACTION,
@@ -1008,7 +1008,7 @@ class GameUI:
             ps.achievement_selection = max(0, ps.achievement_selection - 1)
         elif PlayerAction.NAV_DOWN in actions:
             ps.achievement_selection = min(
-                NUM_ACHIEVEMENTS - 1,
+                len(FREE_PLAY_ACHIEVEMENTS) - 1,
                 ps.achievement_selection + 1,
             )
         sel_top = ps.achievement_selection * row_h

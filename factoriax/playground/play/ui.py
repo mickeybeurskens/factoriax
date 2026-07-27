@@ -13,7 +13,7 @@ import functools
 import numpy as np
 import pygame
 
-from factoriax.engine.achievements import ACHIEVEMENT_INFO, NUM_ACHIEVEMENTS
+from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
 from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
     BLOCK_TO_ITEM,
@@ -454,12 +454,12 @@ def render_achievement_menu(
     vp_w = menu_w - 2 * _theme.BORDER_PX
     vp_h = menu_y + menu_h - footer_reserve - vp_y
 
-    content_h = NUM_ACHIEVEMENTS * row_h
+    content_h = len(FREE_PLAY_ACHIEVEMENTS) * row_h
     scroll_offset = clip_scroll_offset(scroll_offset, content_h, vp_h)
 
     icon_size = 20
     content = np.zeros((content_h, vp_w, 4), dtype=np.uint8)
-    for i, info in enumerate(ACHIEVEMENT_INFO):
+    for i, info in enumerate(FREE_PLAY_ACHIEVEMENTS):
         is_unlocked = bool(unlocked[i])
         row_y = i * row_h
 
@@ -493,14 +493,14 @@ def render_achievement_menu(
     blit_scroll_view(overlay, content, vp_x, vp_y, vp_w, vp_h, scroll_offset)
 
     # Achievement hint for the selected row.
-    sel_hint = ACHIEVEMENT_INFO[selected_index].hint
+    sel_hint = FREE_PLAY_ACHIEVEMENTS[selected_index].hint
     hint_arr = _render_text_rgba(sel_hint, hint_font, _theme.HINT_COLOR)
     hx = menu_x + (menu_w - hint_arr.shape[1]) // 2
     hy = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX - 40 - hint_text_h + 4
     _blit_rgba(overlay, hint_arr, hy, hx)
 
     footer_arr = _render_text_rgba(
-        f"{n_unlocked} / {NUM_ACHIEVEMENTS} unlocked",
+        f"{n_unlocked} / {len(FREE_PLAY_ACHIEVEMENTS)} unlocked",
         body_font,
         (180, 172, 130),
     )

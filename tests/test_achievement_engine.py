@@ -19,7 +19,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax.engine.achievements import ACHIEVEMENT_INFO, core_game_conditions
+from factoriax.engine.achievements import index_of
 from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
@@ -27,12 +27,16 @@ from factoriax.engine.constants import (
     ItemType,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.playground.play.achievements import (
+    FREE_PLAY_ACHIEVEMENTS,
+    free_play_conditions,
+)
 from factoriax.engine.state import EnvParams, EnvState
 
 
 def _achievement_index(achievement_id: str) -> int:
     """Look up the index of an achievement by its string id."""
-    return next(i for i, a in enumerate(ACHIEVEMENT_INFO) if a.id == achievement_id)
+    return index_of(FREE_PLAY_ACHIEVEMENTS, achievement_id)
 
 
 def _all_true(state: EnvState) -> jnp.ndarray:
@@ -120,11 +124,11 @@ def test_unlocks_are_latched_across_steps(make_env) -> None:
     assert bool(state.achievements_unlocked.all())
 
 
-def test_core_game_conditions_unlock_through_engine(make_env, state_factory) -> None:
-    """End-to-end: core_game_conditions wired into the env latches first_ore.
+def test_free_play_conditions_unlock_through_engine(make_env, state_factory) -> None:
+    """End-to-end: free_play_conditions wired into the env latches first_ore.
 
     Uses a custom 1x1 state for this assertion; only the env is shared
-    via ``make_env(core_game_conditions)`` so tests 5 and 6 in this file
+    via ``make_env(free_play_conditions)`` so tests 5 and 6 in this file
     pick up the same env instance.
     """
     items_mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
@@ -134,19 +138,19 @@ def test_core_game_conditions_unlock_through_engine(make_env, state_factory) -> 
         items_mined=items_mined,
     )
 
-    env, _, _ = make_env(core_game_conditions)
+    env, _, _ = make_env(free_play_conditions)
     params = EnvParams()
     _, state, _, _, _ = env.step_env(random.PRNGKey(0), state, 0, params)
 
     assert bool(state.achievements_unlocked[_achievement_index("first_ore")])
 
 
-def test_core_game_conditions_vmaps(canonical_env_8x8_1p) -> None:
-    """``core_game_conditions`` must vmap across batched states.
+def test_free_play_conditions_vmaps(canonical_env_8x8_1p) -> None:
+    """``free_play_conditions`` must vmap across batched states.
 
     Tests the achievement function directly under ``jax.vmap``, not
     the full ``env.step_env`` path. The original test built a fresh
-    ``FactoriaxEnv(achievement_fn=core_game_conditions)`` and vmapped
+    ``FactoriaxEnv(achievement_fn=free_play_conditions)`` and vmapped
     reset+step over 4 envs to verify ``achievements_unlocked.shape ==
     (4, MAX_ACHIEVEMENTS)`` — a ~14s XLA compile of the vmapped step.
     The shape assertion only depends on ``MAX_ACHIEVEMENTS`` and the
@@ -159,6 +163,6 @@ def test_core_game_conditions_vmaps(canonical_env_8x8_1p) -> None:
     _, _, _, state = canonical_env_8x8_1p
     # Stack four copies of the canonical state along a leading axis.
     batched_state = jax.tree.map(lambda x: jnp.stack([x] * 4), state)
-    masks = jax.vmap(core_game_conditions)(batched_state)
+    masks = jax.vmap(free_play_conditions)(batched_state)
     assert masks.shape == (4, MAX_ACHIEVEMENTS)
     assert masks.dtype == jnp.bool_

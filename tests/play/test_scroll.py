@@ -5,7 +5,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.engine.achievements import NUM_ACHIEVEMENTS
+from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
 from factoriax.engine.state import EnvParams
 from factoriax.playground.play.ui import (
     SCROLL_STEP,
@@ -235,19 +235,19 @@ class TestScrollAdjustRegions:
 class TestRenderAchievementMenuScroll:
     def test_renders_without_error_at_zero_offset(self) -> None:
         """Default zero offset renders successfully."""
-        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        achievements = np.zeros(len(FREE_PLAY_ACHIEVEMENTS), dtype=bool)
         result = render_achievement_menu(achievements, 480, 480, scroll_offset=0)
         assert result.shape == (480, 480, 4)
 
     def test_renders_with_nonzero_offset(self) -> None:
         """Non-zero scroll offset renders without error."""
-        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        achievements = np.zeros(len(FREE_PLAY_ACHIEVEMENTS), dtype=bool)
         result = render_achievement_menu(achievements, 480, 480, scroll_offset=50)
         assert result.shape == (480, 480, 4)
 
     def test_scroll_changes_pixels(self) -> None:
         """Scrolling the list produces a visually different frame."""
-        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        achievements = np.zeros(len(FREE_PLAY_ACHIEVEMENTS), dtype=bool)
         frame0 = render_achievement_menu(achievements, 480, 480, scroll_offset=0)
         frame1 = render_achievement_menu(
             achievements,
@@ -259,7 +259,7 @@ class TestRenderAchievementMenuScroll:
 
     def test_excessive_offset_clamped(self) -> None:
         """An offset far beyond the content end is clamped; result is stable."""
-        achievements = np.zeros(NUM_ACHIEVEMENTS, dtype=bool)
+        achievements = np.zeros(len(FREE_PLAY_ACHIEVEMENTS), dtype=bool)
         frame_huge = render_achievement_menu(
             achievements,
             480,

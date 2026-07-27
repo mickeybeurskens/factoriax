@@ -1,6 +1,6 @@
 """Pre-game launch screen — Play / Settings / Reset to defaults.
 
-The screen mirrors :mod:`factoriax.playground.menu.scenarios_menu`: a list of options on
+The screen mirrors :mod:`factoriax.playground.menu.main_menu`: a list of options on
 the left, content on the right. Selecting *Settings* on the left turns the
 right panel into an editable list of :class:`~factoriax.engine.state.EnvParams`
 fields; selecting *Play* commits the current values and returns control to

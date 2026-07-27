@@ -1,7 +1,7 @@
 """Title screen for FactoriaX.
 
-Two-panel layout mirroring :mod:`factoriax.playground.menu.scenarios_menu`: a list of
-menu options on the left, an explanation panel on the right.
+Two-panel layout: a list of menu options on the left, an explanation
+panel on the right.
 """
 
 from __future__ import annotations
@@ -45,16 +45,6 @@ _OPTIONS: tuple[_MenuOption, ...] = (
             "from the engine's general terrain sampler — no pre-built "
             "level, no achievement scoring. Use this for free-form "
             "experimentation."
-        ),
-    ),
-    _MenuOption(
-        action="scenarios",
-        label="Scenarios",
-        description=(
-            "Pick a research scenario with pre-configured rules, "
-            "achievements, and reward signals. Each scenario fixes the "
-            "map, the recipe book, and the per-step budget, so runs are "
-            "comparable across agents and seeds."
         ),
     ),
     _MenuOption(
@@ -103,8 +93,8 @@ def run_main_menu(
     Returns
     -------
     
-        ``"play"``, ``"scenarios"``, ``"editor"``, ``"settings"``, or
-        ``None`` (quit / window closed).
+        ``"play"``, ``"editor"``, ``"settings"``, or ``None``
+        (quit / window closed).
 
     """
     from factoriax.playground.config import (
