@@ -18,9 +18,10 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.achievements import index_of
 from factoriax.engine.envs.rocket import (
     MAX_ROCKET_SCORE,
-    ROCKET_ACHIEVEMENT_INFO,
+    ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_WEIGHTS,
     ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,
@@ -36,7 +37,7 @@ from factoriax.engine.state import EnvParams, EnvState
 
 def test_catalogue_size_and_weights() -> None:
     """The catalogue has 38 entries and tiered weights summing to 140."""
-    assert len(ROCKET_ACHIEVEMENT_INFO) == 38
+    assert len(ROCKET_ACHIEVEMENTS) == 38
     assert ROCKET_ACHIEVEMENT_WEIGHTS.shape == (MAX_ACHIEVEMENTS,)
     weights_np = np.asarray(ROCKET_ACHIEVEMENT_WEIGHTS)
     assert float(weights_np.sum()) == pytest.approx(MAX_ROCKET_SCORE)
@@ -51,7 +52,7 @@ def test_catalogue_size_and_weights() -> None:
 
 def test_all_ids_unique() -> None:
     """No duplicate achievement ids."""
-    ids = [info.id for info in ROCKET_ACHIEVEMENT_INFO]
+    ids = [a.id for a in ROCKET_ACHIEVEMENTS]
     assert len(set(ids)) == len(ids)
 
 
@@ -128,7 +129,7 @@ def test_rocket_blocks_all_craft_actions() -> None:
 
 
 def _index_of(achievement_id: str) -> int:
-    for i, info in enumerate(ROCKET_ACHIEVEMENT_INFO):
+    for i, info in enumerate(ROCKET_ACHIEVEMENTS):
         if info.id == achievement_id:
             return i
     raise AssertionError(f"Unknown achievement id: {achievement_id}")

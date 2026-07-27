@@ -23,14 +23,24 @@ Setup:
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 
-from factoriax.engine.achievements import AchievementInfo
+from factoriax.engine.achievements import (
+    Achievement,
+    achievement_fn,
+    achievement_weights,
+    any_assembler_has_output,
+    any_buffer_nonempty,
+    has_machines,
+    holds_item,
+    max_score,
+    total_machines,
+)
 from factoriax.engine.constants import (
-    MAX_ACHIEVEMENTS,
     Action,
     BlockType,
     Direction,
@@ -55,353 +65,294 @@ from factoriax.engine.state import EnvParams, EnvState
 # Achievement catalogue
 # ---------------------------------------------------------------------------
 
-ROCKET_ACHIEVEMENT_INFO: list[AchievementInfo] = [
-    # Basic (1 pt) — raw gathering + simplest handcrafts.
-    AchievementInfo("collect_iron", "Collect Iron", "Mine iron ore."),
-    AchievementInfo("collect_copper", "Collect Copper", "Mine copper ore."),
-    AchievementInfo("collect_tin", "Collect Tin", "Mine tin ore."),
-    AchievementInfo(
+
+def _ten_machines_placed(state: EnvState) -> jax.Array:
+    """Ten machines of any type are on the map."""
+    return total_machines(state) >= 10
+
+
+#: The 38 bits, tiered Craftax-style: 10 Basic (1 pt), 11 Intermediate
+#: (3 pt), 13 Advanced (5 pt), 4 Very Advanced (8 pt) — max score 140.
+#: Ordered to teach the game's natural learning path.
+ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
+    # ---- Basic (1 pt) — raw gathering + simplest handcrafts.
+    Achievement(
+        "collect_iron",
+        partial(holds_item, item=int(ItemType.IRON_ORE)),
+        name="Collect Iron",
+        hint="Mine iron ore.",
+        weight=1.0,
+    ),
+    Achievement(
+        "collect_copper",
+        partial(holds_item, item=int(ItemType.COPPER_ORE)),
+        name="Collect Copper",
+        hint="Mine copper ore.",
+        weight=1.0,
+    ),
+    Achievement(
+        "collect_tin",
+        partial(holds_item, item=int(ItemType.TIN_ORE)),
+        name="Collect Tin",
+        hint="Mine tin ore.",
+        weight=1.0,
+    ),
+    Achievement(
         "collect_coal",
-        "Collect Coal",
-        "Mine coal — needed by every smelt.",
+        partial(holds_item, item=int(ItemType.COAL)),
+        name="Collect Coal",
+        hint="Mine coal — needed by every smelt.",
+        weight=1.0,
     ),
-    AchievementInfo("collect_silicon", "Collect Silicon", "Mine silicon."),
-    AchievementInfo("smelt_iron", "Smelt Iron", "Hold an iron plate."),
-    AchievementInfo("smelt_copper", "Smelt Copper", "Hold a copper plate."),
-    AchievementInfo("smelt_tin", "Smelt Tin", "Hold a tin plate."),
-    AchievementInfo("smelt_wafer", "Smelt Wafer", "Hold a wafer."),
-    AchievementInfo(
+    Achievement(
+        "collect_silicon",
+        partial(holds_item, item=int(ItemType.SILICON)),
+        name="Collect Silicon",
+        hint="Mine silicon.",
+        weight=1.0,
+    ),
+    Achievement(
+        "smelt_iron",
+        partial(holds_item, item=int(ItemType.IRON_PLATE)),
+        name="Smelt Iron",
+        hint="Hold an iron plate.",
+        weight=1.0,
+    ),
+    Achievement(
+        "smelt_copper",
+        partial(holds_item, item=int(ItemType.COPPER_PLATE)),
+        name="Smelt Copper",
+        hint="Hold a copper plate.",
+        weight=1.0,
+    ),
+    Achievement(
+        "smelt_tin",
+        partial(holds_item, item=int(ItemType.TIN_PLATE)),
+        name="Smelt Tin",
+        hint="Hold a tin plate.",
+        weight=1.0,
+    ),
+    Achievement(
+        "smelt_wafer",
+        partial(holds_item, item=int(ItemType.WAFER)),
+        name="Smelt Wafer",
+        hint="Hold a wafer.",
+        weight=1.0,
+    ),
+    Achievement(
         "craft_wire",
-        "Craft Wire",
-        "Combine iron and copper into wire.",
+        partial(holds_item, item=int(ItemType.WIRE)),
+        name="Craft Wire",
+        hint="Combine iron and copper into wire.",
+        weight=1.0,
     ),
-    # Intermediate (3 pt) — deeper handcrafts + first machines.
-    AchievementInfo(
+    # ---- Intermediate (3 pt) — deeper handcrafts + first machines.
+    Achievement(
         "craft_circuit",
-        "Craft Circuit",
-        "Combine copper and wafer.",
+        partial(holds_item, item=int(ItemType.CIRCUIT)),
+        name="Craft Circuit",
+        hint="Combine copper and wafer.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_frame",
-        "Craft Frame",
-        "Combine iron and tin plates.",
+        partial(holds_item, item=int(ItemType.FRAME)),
+        name="Craft Frame",
+        hint="Combine iron and tin plates.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_motor",
-        "Craft Motor",
-        "Combine frame and wire.",
+        partial(holds_item, item=int(ItemType.MOTOR)),
+        name="Craft Motor",
+        hint="Combine frame and wire.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_sensor",
-        "Craft Sensor",
-        "Combine circuit and wire.",
+        partial(holds_item, item=int(ItemType.SENSOR)),
+        name="Craft Sensor",
+        hint="Combine circuit and wire.",
+        weight=3.0,
     ),
-    AchievementInfo("craft_miner", "Craft Miner", "Hold a miner in inventory."),
-    AchievementInfo("place_miner", "Place Miner", "Place a miner on the map."),
-    AchievementInfo(
+    Achievement(
+        "craft_miner",
+        partial(holds_item, item=int(ItemType.MINER)),
+        name="Craft Miner",
+        hint="Hold a miner in inventory.",
+        weight=3.0,
+    ),
+    Achievement(
+        "place_miner",
+        partial(has_machines, machine=int(Machine.MINER)),
+        name="Place Miner",
+        hint="Place a miner on the map.",
+        weight=3.0,
+    ),
+    Achievement(
         "craft_furnace",
-        "Craft Furnace",
-        "Hold a furnace in inventory.",
+        partial(holds_item, item=int(ItemType.FURNACE)),
+        name="Craft Furnace",
+        hint="Hold a furnace in inventory.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "place_furnace",
-        "Place Furnace",
-        "Place a furnace on the map.",
+        partial(has_machines, machine=int(Machine.FURNACE)),
+        name="Place Furnace",
+        hint="Place a furnace on the map.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "automated_mining",
-        "Automated Mining",
-        "Have a placed miner produce ore.",
+        partial(any_buffer_nonempty, machine=int(Machine.MINER)),
+        name="Automated Mining",
+        hint="Have a placed miner produce ore.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_belt",
-        "Craft Belt",
-        "Hold a conveyor belt in inventory.",
+        partial(holds_item, item=int(ItemType.CONVEYOR_BELT)),
+        name="Craft Belt",
+        hint="Hold a conveyor belt in inventory.",
+        weight=3.0,
     ),
-    AchievementInfo(
+    Achievement(
         "place_belt",
-        "Place Belt",
-        "Place a conveyor belt on the map.",
+        partial(has_machines, machine=int(Machine.CONVEYOR_BELT)),
+        name="Place Belt",
+        hint="Place a conveyor belt on the map.",
+        weight=3.0,
     ),
-    # Advanced (5 pt) — logistics composition + assembler.
-    AchievementInfo(
+    # ---- Advanced (5 pt) — logistics + rocket sub-components.
+    Achievement(
         "craft_pallet",
-        "Craft Pallet",
-        "Hold a pallet in inventory.",
+        partial(holds_item, item=int(ItemType.PALLET)),
+        name="Craft Pallet",
+        hint="Hold a pallet in inventory.",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "place_pallet",
-        "Place Pallet",
-        "Place a pallet on the map.",
+        partial(has_machines, machine=int(Machine.PALLET)),
+        name="Place Pallet",
+        hint="Place a pallet on the map.",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "pallet_filled",
-        "Pallet Filled",
-        "Put an item in a pallet.",
+        partial(any_buffer_nonempty, machine=int(Machine.PALLET)),
+        name="Pallet Filled",
+        hint="Put an item in a pallet.",
+        weight=5.0,
     ),
-    AchievementInfo("craft_arm", "Craft Arm", "Hold an arm in inventory."),
-    AchievementInfo("place_arm", "Place Arm", "Place an arm on the map."),
-    AchievementInfo(
+    Achievement(
+        "craft_arm",
+        partial(holds_item, item=int(ItemType.ARM)),
+        name="Craft Arm",
+        hint="Hold an arm in inventory.",
+        weight=5.0,
+    ),
+    Achievement(
+        "place_arm",
+        partial(has_machines, machine=int(Machine.ARM)),
+        name="Place Arm",
+        hint="Place an arm on the map.",
+        weight=5.0,
+    ),
+    Achievement(
         "craft_assembler",
-        "Craft Assembler",
-        "Hold an assembler in inventory.",
+        partial(holds_item, item=int(ItemType.ASSEMBLER)),
+        name="Craft Assembler",
+        hint="Hold an assembler in inventory.",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "place_assembler",
-        "Place Assembler",
-        "Place an assembler on the map.",
+        partial(has_machines, machine=int(Machine.ASSEMBLER)),
+        name="Place Assembler",
+        hint="Place an assembler on the map.",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "first_assembly",
-        "First Assembly",
-        "Have a placed assembler produce output.",
+        any_assembler_has_output,
+        name="First Assembly",
+        hint="Have a placed assembler produce output.",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "belt_network",
-        "Belt Network",
-        "Place five conveyor belts.",
+        partial(has_machines, machine=int(Machine.CONVEYOR_BELT), count=5),
+        name="Belt Network",
+        hint="Place five conveyor belts.",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_hull",
-        "Craft Hull",
-        "Assemble a rocket hull (2 frame + 2 iron plate).",
+        partial(holds_item, item=int(ItemType.HULL)),
+        name="Craft Hull",
+        hint="Assemble a rocket hull (2 frame + 2 iron plate).",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_engine_unit",
-        "Craft Engine Unit",
-        "Assemble a rocket engine (2 motor + 1 wire).",
+        partial(holds_item, item=int(ItemType.ENGINE_UNIT)),
+        name="Craft Engine Unit",
+        hint="Assemble a rocket engine (2 motor + 1 wire).",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_avionics",
-        "Craft Avionics",
-        "Assemble an avionics package (2 circuit + 2 sensor).",
+        partial(holds_item, item=int(ItemType.AVIONICS)),
+        name="Craft Avionics",
+        hint="Assemble an avionics package (2 circuit + 2 sensor).",
+        weight=5.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_rocket_core",
-        "Craft Rocket Core",
-        "Assemble a rocket core (engine + avionics).",
+        partial(holds_item, item=int(ItemType.ROCKET_CORE)),
+        name="Craft Rocket Core",
+        hint="Assemble a rocket core (engine + avionics).",
+        weight=5.0,
     ),
-    # Very Advanced (8 pt) — scale + capstone.
-    AchievementInfo(
+    # ---- Very Advanced (8 pt) — scale-up and the rocket itself.
+    Achievement(
         "scaling_up",
-        "Scaling Up",
-        "Place three miners at once.",
+        partial(has_machines, machine=int(Machine.MINER), count=3),
+        name="Scaling Up",
+        hint="Place three miners at once.",
+        weight=8.0,
     ),
-    AchievementInfo(
+    Achievement(
         "industrialist",
-        "Industrialist",
-        "Place ten machines in total.",
+        _ten_machines_placed,
+        name="Industrialist",
+        hint="Place ten machines in total.",
+        weight=8.0,
     ),
-    AchievementInfo(
+    Achievement(
         "craft_rocket",
-        "Craft Rocket",
-        "Assemble a rocket into inventory.",
+        partial(holds_item, item=int(ItemType.ROCKET)),
+        name="Craft Rocket",
+        hint="Assemble a rocket into inventory.",
+        weight=8.0,
     ),
-    AchievementInfo(
+    Achievement(
         "place_rocket",
-        "Place Rocket",
-        "Place the rocket — goal reached.",
+        partial(has_machines, machine=int(Machine.ROCKET)),
+        name="Place Rocket",
+        hint="Place the rocket — goal reached.",
+        weight=8.0,
     ),
-]
-
-NUM_ROCKET_ACHIEVEMENTS: int = len(ROCKET_ACHIEVEMENT_INFO)
-
-# Tier layout: 10 Basic (1pt) + 11 Intermediate (3pt)
-# + 13 Advanced (5pt) + 4 Very Advanced (8pt).
-_TIER_WEIGHTS: list[int] = [1] * 10 + [3] * 11 + [5] * 13 + [8] * 4
-assert len(_TIER_WEIGHTS) == NUM_ROCKET_ACHIEVEMENTS
-
-ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = (
-    jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
-    .at[:NUM_ROCKET_ACHIEVEMENTS]
-    .set(jnp.array(_TIER_WEIGHTS, dtype=jnp.float32))
 )
+NUM_ROCKET_ACHIEVEMENTS: int = len(ROCKET_ACHIEVEMENTS)
 
-MAX_ROCKET_SCORE: int = int(sum(_TIER_WEIGHTS))  # 140
+rocket_conditions = achievement_fn(ROCKET_ACHIEVEMENTS)
 
+ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = achievement_weights(ROCKET_ACHIEVEMENTS)
 
-# ---------------------------------------------------------------------------
-# Condition helpers
-# ---------------------------------------------------------------------------
-
-
-def _holds_item(state: EnvState, item: int) -> jax.Array:
-    """True when any player inventory contains at least one of *item*.
-
-    Parameters
-    ----------
-    state : EnvState :
-        
-    item : int :
-        
-    state: EnvState :
-        
-    item: int :
-        
-
-    Returns
-    -------
-
-    
-    """
-    return jnp.sum(state.player_inventory[:, item]) >= 1
-
-
-def _count_machines(state: EnvState, mt: int) -> jax.Array:
-    """Count placed machines of a given type.
-
-    Parameters
-    ----------
-    state : EnvState :
-        
-    mt : int :
-        
-    state: EnvState :
-        
-    mt: int :
-        
-
-    Returns
-    -------
-
-    
-    """
-    return jnp.sum(state.machine_types == mt)
-
-
-def _any_entity_buf_nonempty(state: EnvState, mt: int) -> jax.Array:
-    """True when any active entity of type *mt* has items in its buffer.
-    
-    Used for ``automated_mining`` (miner output) and ``pallet_filled``.
-
-    Parameters
-    ----------
-    state : EnvState :
-        
-    mt : int :
-        
-    state: EnvState :
-        
-    mt: int :
-        
-
-    Returns
-    -------
-
-    
-    """
-    matches = (state.ent_type == mt) & (state.ent_y >= 0) & (state.ent_buf_count > 0)
-    return jnp.any(matches)
-
-
-def _any_assembler_has_output(state: EnvState) -> jax.Array:
-    """True when any active assembler holds a recipe output.
-    
-    The engine parks completed output in ``ent_asm_out`` until a
-    withdraw pulls it out (no buffer drain), so that's where we check.
-
-    Parameters
-    ----------
-    state : EnvState :
-        
-    state: EnvState :
-        
-
-    Returns
-    -------
-
-    
-    """
-    matches = (
-        (state.ent_type == Machine.ASSEMBLER)
-        & (state.ent_y >= 0)
-        & (state.ent_asm_out_count > 0)
-    )
-    return jnp.any(matches)
-
-
-# ---------------------------------------------------------------------------
-# Condition function (JIT-pure)
-# ---------------------------------------------------------------------------
-
-
-def rocket_conditions(state: EnvState) -> jax.Array:
-    """Compute the 38 rocket-scenario achievement conditions.
-    
-    Every condition is a pure function of ``state``. The returned array
-    is zero-padded to ``MAX_ACHIEVEMENTS`` so it plugs into
-    :class:`~factoriax.engine.envs.base.FactoriaxEnv`'s
-    ``achievement_fn`` constructor argument directly.
-
-    Parameters
-    ----------
-    state :
-        Current environment state.
-    state : EnvState :
-        
-    state: EnvState :
-        
-
-    Returns
-    -------
-
-    
-    """
-    total_machines = jnp.sum(state.machine_types != Machine.NONE)
-
-    conditions = jnp.array(
-        [
-            # Basic (1 pt).
-            _holds_item(state, ItemType.IRON_ORE),
-            _holds_item(state, ItemType.COPPER_ORE),
-            _holds_item(state, ItemType.TIN_ORE),
-            _holds_item(state, ItemType.COAL),
-            _holds_item(state, ItemType.SILICON),
-            _holds_item(state, ItemType.IRON_PLATE),
-            _holds_item(state, ItemType.COPPER_PLATE),
-            _holds_item(state, ItemType.TIN_PLATE),
-            _holds_item(state, ItemType.WAFER),
-            _holds_item(state, ItemType.WIRE),
-            # Intermediate (3 pt).
-            _holds_item(state, ItemType.CIRCUIT),
-            _holds_item(state, ItemType.FRAME),
-            _holds_item(state, ItemType.MOTOR),
-            _holds_item(state, ItemType.SENSOR),
-            _holds_item(state, ItemType.MINER),
-            _count_machines(state, Machine.MINER) >= 1,
-            _holds_item(state, ItemType.FURNACE),
-            _count_machines(state, Machine.FURNACE) >= 1,
-            _any_entity_buf_nonempty(state, Machine.MINER),
-            _holds_item(state, ItemType.CONVEYOR_BELT),
-            _count_machines(state, Machine.CONVEYOR_BELT) >= 1,
-            # Advanced (5 pt).
-            _holds_item(state, ItemType.PALLET),
-            _count_machines(state, Machine.PALLET) >= 1,
-            _any_entity_buf_nonempty(state, Machine.PALLET),
-            _holds_item(state, ItemType.ARM),
-            _count_machines(state, Machine.ARM) >= 1,
-            _holds_item(state, ItemType.ASSEMBLER),
-            _count_machines(state, Machine.ASSEMBLER) >= 1,
-            _any_assembler_has_output(state),
-            _count_machines(state, Machine.CONVEYOR_BELT) >= 5,
-            _holds_item(state, ItemType.HULL),
-            _holds_item(state, ItemType.ENGINE_UNIT),
-            _holds_item(state, ItemType.AVIONICS),
-            _holds_item(state, ItemType.ROCKET_CORE),
-            # Very Advanced (8 pt).
-            _count_machines(state, Machine.MINER) >= 3,
-            total_machines >= 10,
-            _holds_item(state, ItemType.ROCKET),
-            _count_machines(state, Machine.ROCKET) >= 1,
-        ],
-        dtype=jnp.bool_,
-    )
-    return jnp.concatenate(
-        [
-            conditions,
-            jnp.zeros(MAX_ACHIEVEMENTS - NUM_ROCKET_ACHIEVEMENTS, dtype=jnp.bool_),
-        ]
-    )
+MAX_ROCKET_SCORE: float = max_score(ROCKET_ACHIEVEMENTS)
 
 
 # ---------------------------------------------------------------------------

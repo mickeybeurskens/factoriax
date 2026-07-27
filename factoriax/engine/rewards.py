@@ -10,7 +10,6 @@ to :func:`jax.jit`.
 import jax
 import jax.numpy as jnp
 
-from factoriax.engine.achievements import CORE_ACHIEVEMENT_WEIGHTS
 from factoriax.engine.constants import (
     ItemType,
     Machine,
@@ -65,53 +64,32 @@ def achievement_reward(
     prev_state: EnvState,
     new_state: EnvState,
     params: EnvParams,
-    weights: jax.Array = CORE_ACHIEVEMENT_WEIGHTS,
+    weights: jax.Array,
 ) -> jax.Array:
     """Sparse reward for newly unlocked achievements.
-    
+
     Compares ``achievements_unlocked`` between the two ``EnvState``
     instances and returns the weighted sum of newly satisfied slots.
-    The ``weights`` vector controls the magnitude per slot — slots with
-    zero weight contribute nothing. Achievements live on
-    :class:`~factoriax.engine.state.EnvState` directly; the env's
-    ``achievement_fn`` constructor argument latches them each step.
-    
-    Parameters
-    ----------
-        prev_state: EnvState immediately before the step.
-        new_state: EnvState immediately after the step.
+    Achievements live on :class:`~factoriax.engine.state.EnvState`
+    directly; the env's ``achievement_fn`` constructor argument latches
+    them each step.
 
     Parameters
     ----------
-    uniformity :
-        
+    prev_state :
+        State immediately before the step.
+    new_state :
+        State immediately after the step.
     weights :
-        Per
-    MAX_ACHIEVEMENTS :
-        Defaults to the core game weights
-    1 :
-        0 for each core tutorial milestone
-    prev_state : EnvState :
-        
-    new_state : EnvState :
-        
-    params : EnvParams :
-        
-    weights : jax.Array :
-        (Default value = CORE_ACHIEVEMENT_WEIGHTS)
-    prev_state: EnvState :
-        
-    new_state: EnvState :
-        
-    params: EnvParams :
-        
-    weights: jax.Array :
-         (Default value = CORE_ACHIEVEMENT_WEIGHTS)
+        Per-slot reward magnitudes, shape ``(MAX_ACHIEVEMENTS,)`` — build
+        it with :func:`factoriax.engine.achievements.achievement_weights`.
+        Required: bit indices mean different things in different
+        scenarios, so there is no meaningful default.
 
     Returns
     -------
 
-    
+        Scalar reward for this step.
     """
     newly_unlocked = new_state.achievements_unlocked & ~prev_state.achievements_unlocked
     reward: jax.Array = jnp.sum(weights * newly_unlocked)

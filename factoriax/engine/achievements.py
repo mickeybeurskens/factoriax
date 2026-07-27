@@ -1,15 +1,27 @@
-"""Achievement system for tracking player progress. 
+"""Achievement system for tracking player progress.
 
 Achievements allow persistent logging of reached world states in an episode.
 Once an achievement is unlocked it is tracked as part of the environment state.
 It can be used to create a curriculum based on unlocks as done with Craftax,
 or can serve to track progress towards a goal regardless of reward structure.
 
-Achievement "bits" are tracked in the environment state. 
-Each bit can be assigned to a different achievement in different scenarios.  
-:func:`core_game_conditions` define what unlocks each bit.
+Achievement "bits" are tracked in the environment state. Each bit can be
+assigned to a different achievement in different scenarios, so this module
+holds no achievements of its own — only the pieces to declare a set:
+:class:`Achievement` for one bit, :func:`achievement_fn` and
+:func:`achievement_weights` to turn an ordered tuple of them into what the
+env and the reward function need, plus the shared condition helpers.
+
+Bit order is a wire format. ``achievements_unlocked`` is persisted into
+recorded trajectories as a bare bool vector, and the index is the only
+identifier that survives — :mod:`factoriax.analysis` reads bits positionally.
+Appending to a set is safe; reordering or removing a bit silently
+reinterprets every rollout recorded before the change.
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import jax
@@ -18,330 +30,177 @@ import jax.numpy as jnp
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType, Machine
 from factoriax.engine.state import EnvState
 
+#: A single bit's predicate: pure, jittable, returns a scalar bool.
+Condition = Callable[[EnvState], jax.Array]
+
 
 @dataclass(frozen=True)
-class AchievementInfo:
-    """Metadata for achievements (used for display, not JAX tracing)."""
+class Achievement:
+    """One latched bit: what unlocks it, what to call it, what it pays.
+
+    Keeping the condition next to its metadata is the point — a scenario
+    declares one ordered tuple, so a bit's name cannot drift from what
+    actually unlocks it, and its reward weight cannot land on the wrong
+    index.
+
+    ``name`` defaults to ``id``, which is what agent-facing scenarios
+    want: the string doubles as the metric key in training logs. Set it
+    when a human reads it. ``hint`` is for the interactive UI only.
+    """
 
     id: str
-    name: str
-    hint: str
+    condition: Condition
+    name: str = ""
+    hint: str = ""
+    weight: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            object.__setattr__(self, "name", self.id)
 
 
-ACHIEVEMENT_INFO = [
-    AchievementInfo(
-        id="first_ore",
-        name="First Ore",
-        hint="Walk onto an ore tile and press SPACE to mine.",
-    ),
-    AchievementInfo(
-        id="stockpile",
-        name="Stockpile",
-        hint="Keep mining until you have 10 ore total.",
-    ),
-    AchievementInfo(
-        id="apprentice_engineer",
-        name="Apprentice Engineer",
-        hint="Open inventory (I), select a recipe, and craft it (E).",
-    ),
-    AchievementInfo(
-        id="breaking_ground",
-        name="Breaking Ground",
-        hint="Select a machine in your hotbar and press E to place it.",
-    ),
-    AchievementInfo(
-        id="coal_gathered",
-        name="Coal Gathered",
-        hint="Walk onto a coal tile and press SPACE to mine a piece of coal.",
-    ),
-    AchievementInfo(
-        id="automated_mining",
-        name="Automated Mining",
-        hint="Place a miner on an ore tile and wait for it to produce.",
-    ),
-    AchievementInfo(
-        id="moving_parts",
-        name="Moving Parts",
-        hint="Craft and place both an arm and a pallet.",
-    ),
-    AchievementInfo(
-        id="first_pipeline",
-        name="First Pipeline",
-        hint="Use an arm to move miner output into a pallet.",
-    ),
-    AchievementInfo(
-        id="belt_network",
-        name="Belt Network",
-        hint="Craft and place at least 5 conveyor belts.",
-    ),
-    AchievementInfo(
-        id="scaling_up",
-        name="Scaling Up",
-        hint="Have 3 miners placed on the map at the same time.",
-    ),
-    AchievementInfo(
-        id="industrialist",
-        name="Industrialist",
-        hint="Place 10 machines of any type on the map.",
-    ),
-    AchievementInfo(
-        id="assembler_crafted",
-        name="Assembler Crafted",
-        hint="Open inventory (I), select the Assembler recipe, and craft it.",
-    ),
-    AchievementInfo(
-        id="assembly_line",
-        name="Assembly Line",
-        hint="Place an assembler on the map.",
-    ),
-    AchievementInfo(
-        id="first_assembly",
-        name="First Assembly",
-        hint="Set a recipe on your assembler (Q) and feed it inputs.",
-    ),
-    AchievementInfo(
-        id="hull_production",
-        name="Hull Production",
-        hint="Produce and collect at least 10 hulls.",
-    ),
-    AchievementInfo(
-        id="fuel_production",
-        name="Fuel Production",
-        hint="Produce and collect at least 10 fuel packs.",
-    ),
-    AchievementInfo(
-        id="rocket_complete",
-        name="Rocket Complete",
-        hint="Craft a rocket in an assembler and place it on the map.",
-    ),
-    AchievementInfo(
-        id="first_science",
-        name="First Science",
-        hint="Produce a science pack in an assembler.",
-    ),
-    AchievementInfo(
-        id="advanced_science",
-        name="Advanced Science",
-        hint="Produce an advanced science pack.",
-    ),
-]
+def achievement_fn(
+    achievements: Sequence[Achievement],
+) -> Callable[[EnvState], jax.Array]:
+    """Build the ``(EnvState) -> bool[MAX_ACHIEVEMENTS]`` evaluator.
 
-NUM_ACHIEVEMENTS = len(ACHIEVEMENT_INFO)
+    Suitable for :class:`~factoriax.engine.envs.base.FactoriaxEnv`'s
+    ``achievement_fn`` argument. Conditions are stacked at trace time and
+    zero-padded to the full slot budget, so every scenario shares one
+    state shape no matter how many bits it declares.
 
-#: Per-achievement reward magnitudes for the core game, used by
-#: :func:`factoriax.engine.rewards.achievement_reward` as the default weights.
-#: Shape ``(MAX_ACHIEVEMENTS,)`` — slots beyond the ``NUM_ACHIEVEMENTS`` core
-#: achievements are zero so they contribute no reward.
-CORE_ACHIEVEMENT_WEIGHTS = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
-CORE_ACHIEVEMENT_WEIGHTS = CORE_ACHIEVEMENT_WEIGHTS.at[:NUM_ACHIEVEMENTS].set(1.0)
+    Raises
+    ------
+    ValueError
+        If the set is empty, exceeds ``MAX_ACHIEVEMENTS``, or repeats an id.
+    """
+    conditions = tuple(a.condition for a in _validated(achievements))
+    n_padding = MAX_ACHIEVEMENTS - len(conditions)
 
-# Miner machine inventory layout (mirrors machines.py constants).
-_MINER_FUEL_SLOT: int = 0
-_MINER_OUTPUT_SLOT: int = 1
+    def evaluate(state: EnvState) -> jax.Array:
+        bits = jnp.stack([condition(state) for condition in conditions])
+        return jnp.concatenate([bits, jnp.zeros(n_padding, dtype=jnp.bool_)])
+
+    return evaluate
+
+
+def achievement_weights(achievements: Sequence[Achievement]) -> jax.Array:
+    """Per-bit reward weights, zero-padded to ``(MAX_ACHIEVEMENTS,)``.
+
+    Feeds :func:`factoriax.engine.rewards.achievement_reward`. Padding
+    slots are zero so they can never contribute reward.
+    """
+    items = _validated(achievements)
+    declared = jnp.array([a.weight for a in items], dtype=jnp.float32)
+    return (
+        jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
+        .at[: len(items)]
+        .set(declared)
+    )
+
+
+def max_score(achievements: Sequence[Achievement]) -> float:
+    """Total reward from unlocking every bit in the set exactly once."""
+    return float(sum(a.weight for a in achievements))
+
+
+def index_of(achievements: Sequence[Achievement], achievement_id: str) -> int:
+    """Bit index of ``achievement_id``.
+
+    Raises
+    ------
+    KeyError
+        If no achievement in the set carries that id.
+    """
+    for i, item in enumerate(achievements):
+        if item.id == achievement_id:
+            return i
+    raise KeyError(achievement_id)
+
+
+def _validated(achievements: Sequence[Achievement]) -> tuple[Achievement, ...]:
+    """Return the set as a tuple, rejecting the ways it can be malformed."""
+    items = tuple(achievements)
+    if not items:
+        raise ValueError("achievement set is empty")
+    if len(items) > MAX_ACHIEVEMENTS:
+        raise ValueError(
+            f"{len(items)} achievements exceeds MAX_ACHIEVEMENTS "
+            f"({MAX_ACHIEVEMENTS})"
+        )
+    ids = [a.id for a in items]
+    duplicates = sorted({id_ for id_ in ids if ids.count(id_) > 1})
+    if duplicates:
+        raise ValueError(f"duplicate achievement ids: {duplicates}")
+    return items
+
+
+# ---------------------------------------------------------------------------
+# Shared condition helpers
+# ---------------------------------------------------------------------------
 
 
 def count_total_items(state: EnvState, item_type: int) -> jax.Array:
-    """Count total quantity of an item type across all players' inventories.
-
-    Parameters
-    ----------
-    state :
-        Current environment state
-    item_type :
-        ItemType to count
-    state: EnvState :
-        
-    item_type: int :
-        
-
-    Returns
-    -------
-    
-        Total count of the specified item across all inventories
-
-    """
+    """Total quantity of ``item_type`` across all player inventories."""
     total: jax.Array = jnp.sum(state.player_inventory[:, item_type])
     return total
 
 
 def count_machines(state: EnvState, machine_type: int) -> jax.Array:
-    """Count the number of placed machines of a specific type.
-
-    Parameters
-    ----------
-    state :
-        Current environment state
-    machine_type :
-        Machine to count
-    state: EnvState :
-        
-    machine_type: int :
-        
-
-    Returns
-    -------
-    
-        Count of machines of the specified type on the map
-
-    """
+    """Number of placed machines of ``machine_type`` on the map."""
     count: jax.Array = jnp.sum(state.machine_types == machine_type)
     return count
 
 
-def _any_miner_has_output(state: EnvState) -> jax.Array:
-    """Check whether any placed miner has produced ore in its output slot.
+def holds_item(state: EnvState, item: int, count: int = 1) -> jax.Array:
+    """Players hold at least ``count`` of ``item`` between them."""
+    return count_total_items(state, item) >= count
 
-    Parameters
-    ----------
-    state :
-        Current environment state
-    state: EnvState :
-        
 
-    Returns
-    -------
-    
-        Scalar boolean — True if at least one miner output is non-empty.
+def has_machines(state: EnvState, machine: int, count: int = 1) -> jax.Array:
+    """At least ``count`` machines of type ``machine`` are placed."""
+    return count_machines(state, machine) >= count
 
+
+def total_machines(state: EnvState) -> jax.Array:
+    """Number of placed machines of any type."""
+    return jnp.sum(state.machine_types != Machine.NONE)
+
+
+def mined_at_least(state: EnvState, item: int, count: int) -> jax.Array:
+    """Cumulative mining counter for ``item`` has reached ``count``.
+
+    Reads the monotone ``items_mined`` counter, so this latches on what
+    was ever mined rather than what is currently held.
     """
-    is_miner = state.ent_type == Machine.MINER
-    is_active = state.ent_y >= 0
-    has_output = state.ent_buf_count > 0
-    return jnp.any(is_miner & is_active & has_output)
+    return state.items_mined[item] >= count
 
 
-def _any_pallet_has_items(state: EnvState) -> jax.Array:
-    """Check whether any placed pallet contains items.
+def any_buffer_nonempty(state: EnvState, machine: int) -> jax.Array:
+    """Any placed machine of type ``machine`` has items in its buffer.
 
-    Parameters
-    ----------
-    state :
-        Current environment state
-    state: EnvState :
-        
-
-    Returns
-    -------
-    
-        Scalar boolean — True if at least one pallet slot is non-empty.
-
+    Reads the machine-internal buffer, which only the simulation fills —
+    hand actions deposit into the player inventory instead, so conditions
+    built on this cannot be satisfied by hand-crafting.
     """
-    is_pallet = state.ent_type == Machine.PALLET
+    is_type = state.ent_type == machine
     is_active = state.ent_y >= 0
     has_items = state.ent_buf_count > 0
-    return jnp.any(is_pallet & is_active & has_items)
+    return jnp.any(is_type & is_active & has_items)
 
 
-def _any_assembler_has_output(state: EnvState) -> jax.Array:
-    """Check whether any placed assembler has items in its output slot.
-
-    Parameters
-    ----------
-    state :
-        Current environment state.
-    state: EnvState :
-        
-
-    Returns
-    -------
-    
-        Scalar boolean — True if at least one assembler output is non-empty.
-
-    """
+def any_assembler_has_output(state: EnvState) -> jax.Array:
+    """Any placed assembler has items in its output slot."""
     is_asm = state.ent_type == Machine.ASSEMBLER
     is_active = state.ent_y >= 0
     has_output = state.ent_asm_out_count > 0
     return jnp.any(is_asm & is_active & has_output)
 
 
-def core_game_conditions(state: EnvState) -> jax.Array:
-    """Compute the core game achievement conditions.
-    
-    Returns a boolean array of shape ``(MAX_ACHIEVEMENTS,)``. The
-    first ``NUM_ACHIEVEMENTS`` slots correspond to the core tutorial
-    milestones. Remaining slots are False.
-    
-    This is the default condition function used when constructing a
-    :class:`~factoriax.engine.envs.base.FactoriaxEnv` via
-    :func:`factoriax.make`. Benchmarks can provide their own
-    function with the same signature.
-
-    Parameters
-    ----------
-    state :
-        Current environment state.
-    state: EnvState :
-        
-
-    Returns
-    -------
-    
-        Boolean array of shape ``(MAX_ACHIEVEMENTS,)``.
-
-    """
-    total_mined = (
+def total_ore_mined(state: EnvState) -> jax.Array:
+    """Cumulative count of coal, iron ore and copper ore ever mined."""
+    return (
         state.items_mined[ItemType.COAL]
         + state.items_mined[ItemType.IRON_ORE]
         + state.items_mined[ItemType.COPPER_ORE]
-    )
-
-    total_machines = jnp.sum(state.machine_types != Machine.NONE)
-
-    # Count machine items across all player inventories.
-    machine_items_held = (
-        count_total_items(state, ItemType.MINER)
-        + count_total_items(state, ItemType.PALLET)
-        + count_total_items(state, ItemType.CONVEYOR_BELT)
-    )
-
-    conditions = jnp.array(
-        [
-            # 0  First Ore
-            total_mined >= 1,
-            # 1  Stockpile
-            total_mined >= 10,
-            # 2  Apprentice Engineer
-            machine_items_held >= 1,
-            # 3  Breaking Ground
-            total_machines >= 1,
-            # 4  Coal Gathered
-            count_total_items(state, ItemType.COAL) >= 1,
-            # 5  Automated Mining
-            _any_miner_has_output(state),
-            # 6  Moving Parts — checks the pallet only; name/hint also mention an arm
-            count_machines(state, Machine.PALLET) >= 1,
-            # 7  First Pipeline
-            _any_pallet_has_items(state),
-            # 8  Belt Network
-            count_machines(state, Machine.CONVEYOR_BELT) >= 5,
-            # 9  Scaling Up
-            count_machines(state, Machine.MINER) >= 3,
-            # 10 Industrialist
-            total_machines >= 10,
-            # 11 Assembler Crafted
-            count_total_items(state, ItemType.ASSEMBLER) >= 1,
-            # 12 Assembly Line
-            count_machines(state, Machine.ASSEMBLER) >= 1,
-            # 13 First Assembly
-            _any_assembler_has_output(state),
-            # 14 Hull Production — placeholder (item removed, always False)
-            jnp.bool_(False),
-            # 15 Fuel Production — placeholder (item removed, always False)
-            jnp.bool_(False),
-            # 16 Rocket Complete
-            count_machines(state, Machine.ROCKET) >= 1,
-            # 17 First Science
-            (
-                count_total_items(state, ItemType.TIER1_SCIENCE_PACK)
-                + count_total_items(state, ItemType.TIER2_SCIENCE_PACK)
-            )
-            >= 1,
-            # 18 Advanced Science
-            count_total_items(state, ItemType.TIER2_SCIENCE_PACK) >= 1,
-        ],
-        dtype=jnp.bool_,
-    )
-    # Pad to MAX_ACHIEVEMENTS.
-    return jnp.concatenate(
-        [conditions, jnp.zeros(MAX_ACHIEVEMENTS - NUM_ACHIEVEMENTS, dtype=jnp.bool_)]
     )

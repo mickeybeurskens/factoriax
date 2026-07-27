@@ -36,8 +36,16 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
+from factoriax.engine.achievements import (
+    Achievement,
+    achievement_fn,
+    achievement_weights,
+    count_machines,
+    holds_item,
+    max_score,
+    mined_at_least,
+)
 from factoriax.engine.constants import (
-    MAX_ACHIEVEMENTS,
     Direction,
     ItemType,
     Machine,
@@ -47,7 +55,6 @@ from factoriax.engine.envs.common import (
     MAP_SIZE,
     ORE_RESOURCES_PER_TILE,
     PATCH_BLOCKS,
-    count_machines,
     producing_miners,
     six_patch_terrain,
 )
@@ -65,32 +72,6 @@ _MAX_TIMESTEPS: int = 300
 #: Task target: six miners, one per ore patch.
 _N_MINERS: int = 6
 
-_Condition = Callable[[EnvState], jax.Array]
-
-
-def _conditions_to_achievement_fn(
-    conditions: tuple[_Condition, ...],
-) -> Callable[[EnvState], jax.Array]:
-    """Stack per-bit conditions and zero-pad to ``MAX_ACHIEVEMENTS``."""
-
-    def achievement_fn(state: EnvState) -> jax.Array:
-        bits = jnp.stack([condition(state) for condition in conditions])
-        padding = jnp.zeros(MAX_ACHIEVEMENTS - bits.shape[0], dtype=jnp.bool_)
-        return jnp.concatenate([bits, padding])
-
-    return achievement_fn
-
-
-def _mined_at_least(state: EnvState, item: int, count: int) -> jax.Array:
-    """Cumulative mining counter for ``item`` has reached ``count``."""
-    return state.items_mined[item] >= count
-
-
-def _holds_at_least(state: EnvState, item: int, count: int) -> jax.Array:
-    """Player inventories hold at least ``count`` of ``item``."""
-    return jnp.sum(state.player_inventory[:, item]) >= count
-
-
 def _producing_at_least(state: EnvState, count: int) -> jax.Array:
     """At least ``count`` placed miners have ore in their output buffer.
 
@@ -107,44 +88,75 @@ def _placed_at_least(state: EnvState, count: int) -> jax.Array:
 
 
 #: 14 latched bits over the full mine -> craft -> place loop. Only the
-#: last one pays (see the weights below); the rest are free diagnostics
-#: for analysis — how far did an episode get before stalling:
+#: last one pays; the rest carry weight 0 and ride along as free
+#: diagnostics for analysis — how far did an episode get before stalling:
 #:
 #: - mining (4): 1 and 6 of each miner ingredient, on the monotone
 #:   ``items_mined`` counter (6 of each = materials for six miners);
 #: - craft (1): hold a miner;
 #: - placement (3): 1 / 3 / 6 miners placed;
-#: - production (6): 1..6 producing miners.
-_MINER_BOOTSTRAP_CONDITIONS: tuple[_Condition, ...] = (
-    partial(_mined_at_least, item=int(ItemType.LIMESTONE), count=1),
-    partial(_mined_at_least, item=int(ItemType.LIMESTONE), count=_N_MINERS),
-    partial(_mined_at_least, item=int(ItemType.SILICON), count=1),
-    partial(_mined_at_least, item=int(ItemType.SILICON), count=_N_MINERS),
-    partial(_holds_at_least, item=int(ItemType.MINER), count=1),
-    partial(_placed_at_least, count=1),
-    partial(_placed_at_least, count=3),
-    partial(_placed_at_least, count=_N_MINERS),
+#: - production (6): 1..6 producing miners. The last one is the task.
+MINER_BOOTSTRAP_ACHIEVEMENTS: tuple[Achievement, ...] = (
+    Achievement(
+        "mine_limestone",
+        partial(mined_at_least, item=int(ItemType.LIMESTONE), count=1),
+        name="Mine Limestone",
+        weight=0.0,
+    ),
+    Achievement(
+        "limestone_stocked",
+        partial(mined_at_least, item=int(ItemType.LIMESTONE), count=_N_MINERS),
+        name="Limestone Stocked",
+        weight=0.0,
+    ),
+    Achievement(
+        "mine_silicon",
+        partial(mined_at_least, item=int(ItemType.SILICON), count=1),
+        name="Mine Silicon",
+        weight=0.0,
+    ),
+    Achievement(
+        "silicon_stocked",
+        partial(mined_at_least, item=int(ItemType.SILICON), count=_N_MINERS),
+        name="Silicon Stocked",
+        weight=0.0,
+    ),
+    Achievement(
+        "craft_miner",
+        partial(holds_item, item=int(ItemType.MINER)),
+        name="Craft Miner",
+        weight=0.0,
+    ),
     *(
-        partial(_producing_at_least, count=count)
+        Achievement(
+            f"place_{count}_miners",
+            partial(_placed_at_least, count=count),
+            name=f"Place {count} Miners",
+            weight=0.0,
+        )
+        for count in (1, 3, _N_MINERS)
+    ),
+    *(
+        Achievement(
+            f"producing_{count}_miners",
+            partial(_producing_at_least, count=count),
+            name=f"{count} Miners Producing",
+            #: Only the final gate pays: 1.0 when six miners produce, once.
+            weight=1.0 if count == _N_MINERS else 0.0,
+        )
         for count in range(1, _N_MINERS + 1)
     ),
 )
 
-NUM_MINER_BOOTSTRAP_ACHIEVEMENTS: int = len(_MINER_BOOTSTRAP_CONDITIONS)
+NUM_MINER_BOOTSTRAP_ACHIEVEMENTS: int = len(MINER_BOOTSTRAP_ACHIEVEMENTS)
 
 #: Completion-only: one episode pays at most 1.0.
-MINER_BOOTSTRAP_MAX_SCORE: float = 1.0
+MINER_BOOTSTRAP_MAX_SCORE: float = max_score(MINER_BOOTSTRAP_ACHIEVEMENTS)
 
-miner_bootstrap_conditions = _conditions_to_achievement_fn(
-    _MINER_BOOTSTRAP_CONDITIONS
-)
+miner_bootstrap_conditions = achievement_fn(MINER_BOOTSTRAP_ACHIEVEMENTS)
 
-#: Only the final gate pays: reward 1.0 when six miners produce, once.
-#: The other 13 conditions stay latched as free diagnostics.
-MINER_BOOTSTRAP_ACHIEVEMENT_WEIGHTS: jax.Array = (
-    jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
-    .at[NUM_MINER_BOOTSTRAP_ACHIEVEMENTS - 1]
-    .set(1.0)
+MINER_BOOTSTRAP_ACHIEVEMENT_WEIGHTS: jax.Array = achievement_weights(
+    MINER_BOOTSTRAP_ACHIEVEMENTS
 )
 
 

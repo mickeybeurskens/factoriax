@@ -8,8 +8,15 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
+from factoriax.engine.achievements import (
+    Achievement,
+    achievement_fn,
+    achievement_weights,
+    count_machines,
+    holds_item,
+    max_score,
+)
 from factoriax.engine.constants import (
-    MAX_ACHIEVEMENTS,
     BlockType,
     ItemType,
     Machine,
@@ -22,8 +29,6 @@ from factoriax.engine.envs.common import (
     PATCH_BLOCKS,
     PATCH_SIZE,
     SPAWN,
-    count_machines,
-    holds_item,
     producing_miners,
     sample_patch_corner,
     six_patch_terrain,
@@ -395,31 +400,31 @@ def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
 #: it. Hand-skill bits read the player inventory; production bits read machine
 #: buffers, so hand crafting cannot unlock them. The four sections are raw ore,
 #: hulls, engines, and final assembly.
-_EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
+EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
     # ---- Bootstrap ----
-    ("mine_1_ore", _has_any_raw_ore),
-    ("mine_3_ore", partial(_has_n_raw_ore_types, n=3)),
-    ("prospector", _has_each_raw_ore),
-    ("place_miner", partial(_has_machine, machine=int(Machine.MINER))),
-    (
+    Achievement("mine_1_ore", _has_any_raw_ore),
+    Achievement("mine_3_ore", partial(_has_n_raw_ore_types, n=3)),
+    Achievement("prospector", _has_each_raw_ore),
+    Achievement("place_miner", partial(_has_machine, machine=int(Machine.MINER))),
+    Achievement(
         "place_3_miners",
         partial(_has_n_machines, machine=int(Machine.MINER), n=3),
     ),
-    (
+    Achievement(
         "metal_in_motion",
         partial(_has_n_machines, machine=int(Machine.MINER), n=6),
     ),
     # ---- Miners up ----
-    ("automated_mining", _any_producing_miner),
-    ("ore_fields", _distinct_producing_ore_types),
-    ("mining_master", _all_ore_types_covered),
+    Achievement("automated_mining", _any_producing_miner),
+    Achievement("ore_fields", _distinct_producing_ore_types),
+    Achievement("mining_master", _all_ore_types_covered),
     # ---- Storage ----
-    ("one_pallet", partial(_has_n_machines, machine=int(Machine.PALLET), n=1)),
-    ("three_pallets", partial(_has_n_machines, machine=int(Machine.PALLET), n=3)),
-    ("stacked", partial(_has_n_machines, machine=int(Machine.PALLET), n=6)),
+    Achievement("one_pallet", partial(_has_n_machines, machine=int(Machine.PALLET), n=1)),
+    Achievement("three_pallets", partial(_has_n_machines, machine=int(Machine.PALLET), n=3)),
+    Achievement("stacked", partial(_has_n_machines, machine=int(Machine.PALLET), n=6)),
     # ---- Hull ----
-    ("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
-    (
+    Achievement("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
+    Achievement(
         "assembler_and_arm",
         partial(
             _has_n_machines_pair,
@@ -428,21 +433,21 @@ _EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
             n=1,
         ),
     ),
-    (
+    Achievement(
         "one_belt",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=1),
     ),
-    (
+    Achievement(
         "three_belts",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=3),
     ),
-    ("hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))),
+    Achievement("hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))),
     # ---- Engine ----
-    (
+    Achievement(
         "two_assemblers",
         partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=2),
     ),
-    (
+    Achievement(
         "an_arm_and_a_leg",
         partial(
             _has_n_machines_pair,
@@ -451,66 +456,44 @@ _EASY_ROCKET_ACHIEVEMENTS: tuple[tuple[str, Callable[..., jax.Array]], ...] = (
             n=2,
         ),
     ),
-    (
+    Achievement(
         "six_belts",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=6),
     ),
-    (
+    Achievement(
         "engine_production",
         partial(_assembler_outputs_item, item=int(ItemType.ENGINE_UNIT)),
     ),
     # ---- Rocket production ----
-    ("auto_bots", partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3)),
-    (
+    Achievement("auto_bots", partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3)),
+    Achievement(
         "belt_spaghetti",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=10),
     ),
-    ("rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))),
-    ("liftoff", partial(_has_machine, machine=int(Machine.ROCKET))),
+    Achievement("rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))),
+    Achievement("liftoff", partial(_has_machine, machine=int(Machine.ROCKET))),
 )
 
 #: Stable per-bit names in curriculum order, for display and logging.
+#: These double as W&B metric keys in ``baselines/easy_rocket`` — treat
+#: them as a wire format, same as the bit order itself.
 EASY_ROCKET_ACHIEVEMENT_NAMES: tuple[str, ...] = tuple(
-    name for name, _ in _EASY_ROCKET_ACHIEVEMENTS
+    a.name for a in EASY_ROCKET_ACHIEVEMENTS
 )
 
-_EASY_ROCKET_CONDITIONS: tuple[Callable[..., jax.Array], ...] = tuple(
-    condition for _, condition in _EASY_ROCKET_ACHIEVEMENTS
+NUM_EASY_ROCKET_ACHIEVEMENTS: int = len(EASY_ROCKET_ACHIEVEMENTS)
+
+#: Bits walk a four-section production curriculum: raw ore, hulls, engines,
+#: and final assembly. Automated-production bits read machine-internal
+#: buffers, which only the simulation fills; hand actions deposit into the
+#: player inventory, so those bits cannot be unlocked by hand crafting.
+easy_rocket_conditions = achievement_fn(EASY_ROCKET_ACHIEVEMENTS)
+
+EASY_ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = achievement_weights(
+    EASY_ROCKET_ACHIEVEMENTS
 )
 
-NUM_EASY_ROCKET_ACHIEVEMENTS: int = len(_EASY_ROCKET_ACHIEVEMENTS)
-
-
-def easy_rocket_conditions(state: EnvState) -> jax.Array:
-    """Compute the easy-rocket achievement bits, zero-padded to MAX_ACHIEVEMENTS.
-    
-    The bits walk a four-section production curriculum: raw ore, hulls,
-    engines, and final assembly. Automated-production bits read
-    machine-internal buffers, which only the simulation fills; hand actions
-    deposit into the player inventory, so those bits cannot be unlocked by
-    hand crafting.
-
-    Parameters
-    ----------
-    state: EnvState :
-        
-
-    Returns
-    -------
-
-    """
-    conditions = jnp.stack([condition(state) for condition in _EASY_ROCKET_CONDITIONS])
-    padding = jnp.zeros(MAX_ACHIEVEMENTS - conditions.shape[0], dtype=jnp.bool_)
-    return jnp.concatenate([conditions, padding])
-
-
-EASY_ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = (
-    jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
-    .at[:NUM_EASY_ROCKET_ACHIEVEMENTS]
-    .set(1.0)
-)
-
-MAX_EASY_ROCKET_SCORE: float = float(NUM_EASY_ROCKET_ACHIEVEMENTS)
+MAX_EASY_ROCKET_SCORE: float = max_score(EASY_ROCKET_ACHIEVEMENTS)
 
 
 def easy_rocket_reward(

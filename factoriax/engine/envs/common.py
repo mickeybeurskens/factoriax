@@ -178,16 +178,6 @@ def six_patch_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
 # ---------------------------------------------------------------------------
 
 
-def holds_item(state: EnvState, item: int) -> jax.Array:
-    """True when any player inventory holds at least one of ``item``."""
-    return jnp.sum(state.player_inventory[:, item]) >= 1
-
-
-def count_machines(state: EnvState, machine_type: int) -> jax.Array:
-    """Count placed machines of ``machine_type`` on the map."""
-    return jnp.sum(state.machine_types == machine_type)
-
-
 def blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
     """Active-miner mask and the block type under each entity slot.
 

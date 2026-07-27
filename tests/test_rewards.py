@@ -5,7 +5,11 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax.engine.constants import BlockType, ItemType
-from factoriax.engine.achievements import core_game_conditions
+from factoriax.engine.achievements import achievement_weights
+from factoriax.playground.play.achievements import (
+    FREE_PLAY_ACHIEVEMENTS,
+    free_play_conditions,
+)
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
 from factoriax.engine.rewards import (
     achievement_reward,
@@ -27,9 +31,15 @@ def _wrap_with(state: EnvState, unlocked: jnp.ndarray) -> EnvState:
     return state.replace(achievements_unlocked=unlocked)
 
 
+#: A concrete ladder to exercise the reward against. achievement_reward
+#: takes weights explicitly — bit indices mean different things per
+#: scenario, so there is no default to fall back on.
+_WEIGHTS = achievement_weights(FREE_PLAY_ACHIEVEMENTS)
+
+
 def _apply_conds(state: EnvState) -> EnvState:
-    """OR core-game conditions into the state's ``achievements_unlocked``."""
-    conds = core_game_conditions(state)
+    """OR free-play conditions into the state's ``achievements_unlocked``."""
+    conds = free_play_conditions(state)
     return state.replace(
         achievements_unlocked=state.achievements_unlocked | conds,
     )
@@ -55,7 +65,7 @@ class TestAchievementReward:
                 world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
             )
         )
-        reward = achievement_reward(state, state, params)
+        reward = achievement_reward(state, state, params, _WEIGHTS)
         assert float(reward) == 0.0
 
     def test_reward_for_newly_unlocked_achievement(
@@ -80,7 +90,7 @@ class TestAchievementReward:
                 )
             )
         )
-        reward = achievement_reward(prev_state, new_state, params)
+        reward = achievement_reward(prev_state, new_state, params, _WEIGHTS)
         assert float(reward) == 1.0
 
     def test_no_duplicate_reward_for_already_unlocked(
@@ -108,7 +118,7 @@ class TestAchievementReward:
             ),
             already,
         )
-        reward = achievement_reward(prev_state, new_state, params)
+        reward = achievement_reward(prev_state, new_state, params, _WEIGHTS)
         assert float(reward) == 0.0
 
     def test_multiple_achievements_reward(
@@ -133,7 +143,7 @@ class TestAchievementReward:
                 )
             )
         )
-        reward = achievement_reward(prev_state, new_state, params)
+        reward = achievement_reward(prev_state, new_state, params, _WEIGHTS)
         assert float(reward) == 2.0
 
     def test_jit_compatible(self, state_factory, params) -> None:
@@ -144,7 +154,7 @@ class TestAchievementReward:
             )
         )
         jit_fn = jax.jit(achievement_reward)
-        reward = jit_fn(state, state, params)
+        reward = jit_fn(state, state, params, _WEIGHTS)
         assert float(reward) == 0.0
 
     def test_vmap_compatible(self, state_factory, params) -> None:
@@ -173,10 +183,11 @@ class TestAchievementReward:
             lambda x: jnp.stack([x, x]),
             new,
         )
-        rewards = jax.vmap(achievement_reward, in_axes=(0, 0, None))(
+        rewards = jax.vmap(achievement_reward, in_axes=(0, 0, None, None))(
             batch_prev,
             batch_new,
             params,
+            _WEIGHTS,
         )
         assert rewards.shape == (2,)
         assert jnp.all(rewards == 1.0)
