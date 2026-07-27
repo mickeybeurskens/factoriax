@@ -190,6 +190,7 @@ class BootstrapStart:
     n_placed: int
     n_miners: int
     n_materials: int
+    partial_mine: bool = False
 
     @classmethod
     def place(cls, k: int) -> BootstrapStart:
@@ -202,6 +203,19 @@ class BootstrapStart:
         """B_k: 6-k producing, k limestone + k silicon — craft & place."""
         _check_k(k)
         return cls(n_placed=_N_MINERS - k, n_miners=0, n_materials=k)
+
+    @classmethod
+    def mine_partial(cls, k: int) -> BootstrapStart:
+        """B'_k: 6-k producing, k of one ore only — mine the other, craft & place.
+
+        Which ore is held (limestone or silicon) is a fair coin flip per
+        episode, so the policy must learn to mine either.
+        """
+        _check_k(k)
+        return cls(
+            n_placed=_N_MINERS - k, n_miners=0, n_materials=k,
+            partial_mine=True,
+        )
 
     @classmethod
     def mine(cls, k: int) -> BootstrapStart:
@@ -277,10 +291,14 @@ def apply_start(
 
     inventory = state.player_inventory
     inventory = inventory.at[:, int(ItemType.MINER)].set(start.n_miners)
-    inventory = inventory.at[:, int(ItemType.LIMESTONE)].set(
-        start.n_materials
-    )
-    inventory = inventory.at[:, int(ItemType.SILICON)].set(start.n_materials)
+    n_limestone = jnp.asarray(start.n_materials, dtype=inventory.dtype)
+    n_silicon = jnp.asarray(start.n_materials, dtype=inventory.dtype)
+    if start.partial_mine:
+        hold_limestone = jax.random.bernoulli(jax.random.fold_in(key, 2))
+        n_limestone = jnp.where(hold_limestone, n_limestone, 0)
+        n_silicon = jnp.where(hold_limestone, 0, n_silicon)
+    inventory = inventory.at[:, int(ItemType.LIMESTONE)].set(n_limestone)
+    inventory = inventory.at[:, int(ItemType.SILICON)].set(n_silicon)
     return state.replace(
         player_positions=orig_positions,
         player_directions=orig_directions,
