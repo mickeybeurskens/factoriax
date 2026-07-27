@@ -1,4 +1,4 @@
-"""Public entry point for building registered FactoriaX environments."""
+"""Public entry point for building registered Factoriax environments."""
 
 from typing import Any
 
