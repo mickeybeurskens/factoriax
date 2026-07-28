@@ -18,15 +18,30 @@ the module list and the one-time tasks.
 
 ## Tooling
 
-`ruff` enforces the format via pydocstyle (`select = ["D", ...]`,
-`convention = "numpy"`). Check a module before handing it over:
+NumPy is the only docstring standard in this repository. `ruff` enforces it via
+pydocstyle (`convention = "numpy"`). The numpy convention switches two checks
+off, so `pyproject.toml` lists them in `select` to turn them back on: `D417`,
+which requires a description for every parameter, and `D212`, which pins the
+summary to the opening-quote line (rubric item 6). Check a module before handing
+it over:
 
 ```sh
 uv run ruff check factoriax/<path>.py
 ```
 
-Sphinx has `napoleon_google_docstring = False`, so a Google-style block fails
-visibly instead of rendering silently.
+Sphinx sets `napoleon_google_docstring = False` and
+`napoleon_numpy_docstring = True`, so napoleon does not parse a Google-style
+block: it renders as raw indented text instead of a parameter table. Nothing
+fails. There is no error and no non-zero exit, and with no CI nothing reads the
+build output. Ruff catches part of it (a `Returns:` header trips `D406` and
+`D407`) but a docstring with only an `Args:` section passes clean. Google style
+is caught by reading, not by tooling.
+
+The linter checks structure, not content. It verifies that sections are
+well-formed, that every parameter is listed, and that summaries sit in the same
+place. It cannot tell whether a description is correct, or whether the boundary
+cases and units in rubric items 11 to 15 are covered. A green `ruff check` means
+a module is ready to read, not that it is done.
 
 There is no CI in this repository and none is planned. The linter is run by
 hand, per module, as part of step 2 above.
@@ -44,10 +59,13 @@ parameter is repeated with the type appended and no description, and most
 
 | Check | Count |
 |---|---|
-| `D` violations | 669 |
+| `D` violations | 959 |
 | `W293` (blank line with whitespace, mostly inside the broken docstrings) | 2470 |
-| Files with duplicated `name : type :` stubs | 56 |
+| Files with duplicated `name: type :` stubs | 56 |
 | Modules to cover | 84 |
+
+Two rules account for most of the `D` total: 460 `D414` (empty section) and 243
+`D417` (parameter with no description).
 
 Pre-existing non-docstring violations to leave alone unless a module under
 edit owns them: 16 `F821`, 7 `E501`, 6 `F401`, 5 `I001`, 1 `F841`.
@@ -131,7 +149,11 @@ Applies to every module. Not a tick list.
 
 27. Use one term per concept. Do not vary vocabulary for readability
 28. Prefer plain language. Use jargon only when it carries meaning the plain
-    word cannot
+    word cannot. Cut abstract collective nouns that sound precise but carry no
+    information: "family", "interdependency", "mechanism", "layer", "concern".
+    A term can be technically correct and still tell the reader nothing. Name
+    the thing instead: "the `PLACE_` actions", not "the placement action
+    family"
 29. Keep sentences short. Read the docstring aloud to surface awkward
     constructions
 30. Remove "simply", "just", "obviously", and "trivially"
@@ -139,6 +161,9 @@ Applies to every module. Not a tick list.
     reader hours
 32. Remove all em dashes and LLM language in favor of clear technical language.
     Do not convolute.
+33. Use plain and understandable language. Write for a reader who knows the
+    language but not this codebase. If a sentence needs a second pass to parse,
+    rewrite it as shorter sentences with concrete subjects.
 
 ## One-time tasks
 
@@ -160,15 +185,24 @@ tests, flag stale docs in review, and treat docstrings as part of done.
 
 ## Modules
 
-Ordered by import dependency, computed from the AST: a module appears only
-after everything it imports from its own package. Within a dependency layer the
-order is alphabetical. `__init__.py` comes last in each package because a
-package docstring summarises modules that should already be documented.
+Ordered by import dependency, computed from the AST: a module appears only after
+every module in its own directory that it imports. Within a dependency layer the
+order is alphabetical. `__main__.py` and `__init__.py` come last in each package,
+because both summarise or drive modules that should already be documented. This
+holds even where siblings import through the package, as four modules in
+`playground/ui/` do.
+
+Directory sections are not dependency-ordered, and cannot be. The directory graph
+has cycles: `engine` imports `engine/envs` and `engine/envs` imports `engine`;
+`playground/play` imports `analysis`, which imports `playground/ui` and
+`playground/config`. A few cross-directory edges therefore point backwards, for
+example `engine/levels.py` importing `engine/envs/base.py`. Read the section
+order as a reading order, not a dependency order.
 
 ### `factoriax/engine/`
 
-- [ ] `factoriax/engine/constants.py`
-- [ ] `factoriax/engine/actions.py`
+- [x] `factoriax/engine/constants.py`
+- [x] `factoriax/engine/actions.py`
 - [ ] `factoriax/engine/belts.py`
 - [ ] `factoriax/engine/machine_spec.py`
 - [ ] `factoriax/engine/recipes.py`
@@ -201,21 +235,21 @@ package docstring summarises modules that should already be documented.
 
 ### `factoriax/analysis/`
 
-- [ ] `factoriax/analysis/actions.py`
 - [ ] `factoriax/analysis/build_progression.py`
 - [ ] `factoriax/analysis/categories.py`
 - [ ] `factoriax/analysis/curriculum_strip.py`
 - [ ] `factoriax/analysis/graph_layout.py`
 - [ ] `factoriax/analysis/inventory.py`
+- [ ] `factoriax/analysis/trajectory.py`
+- [ ] `factoriax/analysis/recipe_graph.py`
+- [ ] `factoriax/analysis/recorder.py`
+- [ ] `factoriax/analysis/utils.py`
+- [ ] `factoriax/analysis/video.py`
+- [ ] `factoriax/analysis/actions.py`
+- [ ] `factoriax/analysis/state.py`
 - [ ] `factoriax/analysis/milestones.py`
 - [ ] `factoriax/analysis/multiagent.py`
-- [ ] `factoriax/analysis/recorder.py`
-- [ ] `factoriax/analysis/state.py`
-- [ ] `factoriax/analysis/trajectory.py`
-- [ ] `factoriax/analysis/utils.py`
 - [ ] `factoriax/analysis/eval.py`
-- [ ] `factoriax/analysis/recipe_graph.py`
-- [ ] `factoriax/analysis/video.py`
 - [ ] `factoriax/analysis/__init__.py`
 
 ### `factoriax/assets/`

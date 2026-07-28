@@ -51,7 +51,8 @@ line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["D", "E", "F", "I", "N", "W", "UP"]
+# D212 and D417 are off under the numpy convention; listed to turn them back on.
+select = ["D", "D212", "D417", "E", "F", "I", "N", "W", "UP"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
