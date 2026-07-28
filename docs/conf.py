@@ -23,7 +23,7 @@ source_suffix = {
 nb_execution_mode = "off"
 
 autosummary_generate = True
-napoleon_google_docstring = True
+napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 
 intersphinx_mapping = {
