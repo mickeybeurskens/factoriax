@@ -206,7 +206,6 @@ order as a reading order, not a dependency order.
 - [ ] `factoriax/engine/machine_spec.py`
 - [ ] `factoriax/engine/recipes.py`
 - [ ] `factoriax/engine/tables.py`
-- [ ] `factoriax/engine/recipes_io.py`
 - [ ] `factoriax/engine/state.py`
 - [ ] `factoriax/engine/achievements.py`
 - [ ] `factoriax/engine/crafting.py`
