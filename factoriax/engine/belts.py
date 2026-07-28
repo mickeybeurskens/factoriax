@@ -1,39 +1,43 @@
-"""Lookup tables for SPLITTER and CROSSING flow decoding.
+"""Decode tables for the direction byte of a ``SPLITTER`` or ``CROSSING`` tile.
 
-The two tile types added on top of the base ``CONVEYOR_BELT`` have
-direction encodings that need to be unpacked into per-axis (or per-output)
-direction values inside the JIT'd machines pass. Doing the unpacking via
-small constant ``jnp`` lookup arrays keeps the per-tick math branchless
-and indexable in vectorised code paths.
+``EnvState.ent_direction`` holds one int8 per entity. A conveyor belt reads it
+as a plain facing, but a splitter pushes to two sides at once and a crossing
+carries two independent flows, so both need the byte unpacked into a pair of
+:class:`~factoriax.engine.constants.Direction` values. The tables here do that
+unpacking as a constant array indexed by the byte, which keeps the belt tick in
+:func:`~factoriax.engine.machines.run_conveyor_belts` branchless and traceable
+under :func:`jax.jit`.
 
-Both tables are indexed by ``ent_direction`` (an ``int8`` in ``EnvState``).
-Index ``0`` is the inactive/NONE direction — both tables return zeros so
-inactive entities contribute nothing to neighbour pushes.
+Every table reserves index 0 for the value :class:`Direction` leaves unnumbered,
+which stored state uses to mean "no direction". Row 0 holds zeros, so an entity
+with an unset direction decodes to a pair that matches no side and pushes
+nothing.
 
-SPLITTER conventions
---------------------
+Splitter encoding
+-----------------
 
-A splitter facing direction ``d`` matches the conveyor-belt convention:
-items flow *out* in direction ``d`` from a regular belt at the splitter's
-``-d`` neighbour. Outputs are the two perpendicular directions:
+A splitter stores the direction items travel through it, the same convention a
+conveyor belt uses: a splitter facing ``d`` takes items from the neighbour on
+its ``-d`` side. It pushes to the two sides perpendicular to that facing.
 
-* facing ``UP`` / ``DOWN``  → outputs ``LEFT`` and ``RIGHT``
-* facing ``LEFT`` / ``RIGHT`` → outputs ``UP`` and ``DOWN``
+* facing ``UP`` or ``DOWN`` pushes to ``LEFT`` and ``RIGHT``
+* facing ``LEFT`` or ``RIGHT`` pushes to ``UP`` and ``DOWN``
 
-CROSSING conventions
---------------------
+Crossing encoding
+-----------------
 
-A crossing has *two* independent axis flows packed into one ``ent_direction``
-byte. Values 1..4 enumerate the four (vertical, horizontal) flow pairs:
+A crossing runs a vertical flow and a horizontal flow at the same time and packs
+both into the one direction byte. Values 1 to 4 enumerate the four combinations,
+written here as the output direction of each axis:
 
-* 1 → vertical N→S, horizontal W→E (diagonal ``\\``)
-* 2 → vertical N→S, horizontal E→W (diagonal ``/``)
-* 3 → vertical S→N, horizontal W→E (diagonal ``/``)
-* 4 → vertical S→N, horizontal E→W (diagonal ``\\``)
+* 1: vertical pushes ``DOWN``, horizontal pushes ``RIGHT``
+* 2: vertical pushes ``DOWN``, horizontal pushes ``LEFT``
+* 3: vertical pushes ``UP``, horizontal pushes ``RIGHT``
+* 4: vertical pushes ``UP``, horizontal pushes ``LEFT``
 
-The diagonal direction is implied by the input-side pairing — the renderer
-recovers it from ``CROSSING_DIAGONAL`` rather than reading it back from
-the per-axis output directions.
+An axis takes items from the neighbour opposite its output direction, so the two
+input sides of a crossing always meet at a corner. That corner and the one
+across from it are the ends of the diagonal drawn on the tile.
 """
 
 from __future__ import annotations
@@ -43,12 +47,16 @@ import jax.numpy as jnp
 from factoriax.engine.constants import Direction
 
 # ---------------------------------------------------------------------------
-# Splitter — perpendicular output directions per facing
+# Splitter
 # ---------------------------------------------------------------------------
 
-# Indexed by ``ent_direction``. Each row is the two output Direction values
-# the splitter pushes to (perpendicular to its facing). Inactive direction
-# (index 0) returns (0, 0) so an unset entry never aliases a real direction.
+#: Output sides of a splitter, indexed by ``ent_direction``. Row ``d`` holds the
+#: two :class:`~factoriax.engine.constants.Direction` values perpendicular to
+#: facing ``d``, which are the sides a splitter facing ``d`` pushes to. Shape
+#: ``(5, 2)``, dtype int8. The two entries sit in ascending ``Direction`` order
+#: and the order carries no meaning: a splitter treats both sides alike. Row 0
+#: is ``(0, 0)``, a pair that matches no direction, so an unset entity never
+#: reads as pushing to a real side.
 SPLITTER_PERP_OUTPUTS: jnp.ndarray = jnp.array(
     [
         [0, 0],  # NONE
@@ -62,14 +70,16 @@ SPLITTER_PERP_OUTPUTS: jnp.ndarray = jnp.array(
 
 
 # ---------------------------------------------------------------------------
-# Crossing — per-axis output directions
+# Crossing
 # ---------------------------------------------------------------------------
 
-# Indexed by the crossing's packed ``ent_direction`` (1..4). Returns
-# (vertical_output_dir, horizontal_output_dir). The vertical axis pulls
-# from the opposite of its output direction (so vert_out=DOWN means the
-# axis reads from the N neighbour and writes to the S neighbour); same
-# for the horizontal axis.
+#: Output direction of each crossing axis, indexed by the packed
+#: ``ent_direction``. Row ``e`` is ``(vertical_output, horizontal_output)`` for
+#: encoding ``e`` in 1..4. Shape ``(5, 2)``, dtype int8. An axis takes items
+#: from the neighbour opposite its output direction, so ``vertical_output ==
+#: DOWN`` means the vertical flow reads the tile above and writes the tile
+#: below. Row 0 is ``(0, 0)``: a crossing with an unset direction moves nothing
+#: on either axis.
 CROSSING_AXIS_DIRS: jnp.ndarray = jnp.array(
     [
         [0, 0],  # NONE / unset
@@ -82,8 +92,11 @@ CROSSING_AXIS_DIRS: jnp.ndarray = jnp.array(
 )
 
 
-# Visual-only: ``\`` for diagonals NW-SE, ``/`` for NE-SW. The renderer
-# uses this to draw the single diagonal line on each crossing tile.
+#: Diagonal glyph per crossing encoding, for drawing only. A backslash marks a
+#: NW-SE diagonal, a forward slash a NE-SW one. The diagonal runs from the corner
+#: where the encoding's two input sides meet to the corner across from it. Index
+#: 0 is the empty string, because an unset crossing has no input sides. The
+#: simulation never reads this value.
 CROSSING_DIAGONAL: tuple[str, ...] = (
     "",  # NONE
     "\\",  # 1: input pair (N, W) — the two inputs are NW corners
@@ -93,6 +106,11 @@ CROSSING_DIAGONAL: tuple[str, ...] = (
 )
 
 
-# Slot indices in ``ent_asm_in[idx, *]`` for crossing axes.
+#: Slot index of the vertical flow buffer in ``EnvState.ent_asm_in_type`` and
+#: ``EnvState.ent_asm_in_count``. A crossing reuses the two assembler input
+#: slots as one buffer per axis, which is why the two flows cannot mix: each
+#: axis only ever reads and writes its own slot.
 CROSSING_VERT_SLOT: int = 0
+#: Slot index of the horizontal flow buffer, in the same two arrays as
+#: :data:`CROSSING_VERT_SLOT`.
 CROSSING_HORIZ_SLOT: int = 1
