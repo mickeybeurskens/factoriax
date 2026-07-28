@@ -24,7 +24,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.game_logic import run_labs
+from factoriax.engine.step import run_labs
 
 # ---------------------------------------------------------------------------
 # Low-level run_labs tests — exercise the reduction directly without an env.

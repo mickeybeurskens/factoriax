@@ -19,9 +19,9 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.game_logic import factoriax_step, mine_block
 from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.step import factoriax_step, mine_block
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
 # ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ class TestItemConservation:
     def test_deposit_withdraw_round_trip(self, state_factory) -> None:
         """Depositing then withdrawing preserves total item count."""
         from factoriax.engine.constants import Direction
-        from factoriax.engine.game_logic import (
+        from factoriax.engine.step import (
             deposit_to_adjacent,
             withdraw_from_adjacent,
         )

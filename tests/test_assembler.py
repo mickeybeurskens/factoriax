@@ -12,9 +12,9 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.game_logic import deposit_to_adjacent
 from factoriax.engine.machines import run_assemblers
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.step import deposit_to_adjacent
 
 _PARAMS = EnvParams()
 

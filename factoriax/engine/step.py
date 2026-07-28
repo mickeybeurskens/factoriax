@@ -1,4 +1,4 @@
-"""Game logic for player movement and environment stepping.
+"""Advance the environment one step and apply the action the player issued.
 
 Uses compound actions: placement, deposit, withdraw, and craft actions
 name the specific item type. No slot cursors or recipe selection needed.

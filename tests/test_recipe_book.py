@@ -14,7 +14,6 @@ import jax.numpy as jnp
 import pytest
 
 from factoriax.engine.constants import ItemType, Machine
-from factoriax.engine.game_logic import CRAFT_ACTION_TO_ITEM
 from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
     BASE_RECIPES,
@@ -24,6 +23,7 @@ from factoriax.engine.recipes import (
     RecipeBook,
     RecipeTable,
 )
+from factoriax.engine.step import CRAFT_ACTION_TO_ITEM
 
 
 def _plate_recipe(output: int = int(ItemType.IRON_PLATE)) -> Recipe:

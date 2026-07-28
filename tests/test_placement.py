@@ -17,7 +17,7 @@ from factoriax.engine.constants import (
     MoveAction,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.game_logic import factoriax_step
+from factoriax.engine.step import factoriax_step
 from factoriax.engine.machine_spec import MAX_HEALTH, MACHINE_MAX_HEALTH
 from factoriax.engine.placement import (
     apply_repair,
@@ -52,7 +52,7 @@ def test_placeable_items_are_exactly_the_non_none_machines() -> None:
 def test_place_dispatch_covers_exactly_the_placeable_items() -> None:
     """The PLACE_* dispatch table holds exactly the placeable items.
 
-    ``game_logic.PLACE_ACTION_TO_ITEM`` (the PLACE_* action-offset -> item
+    ``step.PLACE_ACTION_TO_ITEM`` (the PLACE_* action-offset -> item
     dispatch order) and ``constants.PLACEABLE_ITEM_LIST`` (the placeable
     definition) are maintained in separate modules. They carry the same
     items for different reasons -- one is interface ordering, one is the
@@ -60,7 +60,7 @@ def test_place_dispatch_covers_exactly_the_placeable_items() -> None:
     interface concern free to differ, but neither side may gain or drop a
     placeable item without the other.
     """
-    from factoriax.engine.game_logic import PLACE_ACTION_TO_ITEM
+    from factoriax.engine.step import PLACE_ACTION_TO_ITEM
 
     dispatch_items = {int(i) for i in PLACE_ACTION_TO_ITEM.tolist()}
     assert dispatch_items == set(PLACEABLE_ITEM_LIST)

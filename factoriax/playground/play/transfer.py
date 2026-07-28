@@ -3,7 +3,7 @@
 Pure Python, no pygame dependency, so it can be unit-tested headlessly.
 This is a UI-only convenience for rearranging inventory layout and is
 intentionally outside the JAX action pipeline. Game-affecting transfers
-(deposit, withdraw, rotate) are handled by :mod:`factoriax.engine.game_logic`
+(deposit, withdraw, rotate) are handled by :mod:`factoriax.engine.step`
 so that RL agents and the interactive player share the same mechanics.
 """
 

@@ -13,7 +13,7 @@ from factoriax.engine.constants import (
     NUM_ACTIONS,
     Machine,
 )
-from factoriax.engine.game_logic import (
+from factoriax.engine.step import (
     get_block_at,
     is_game_over,
     is_position_in_bounds,

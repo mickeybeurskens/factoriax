@@ -178,7 +178,7 @@ def walkable_grid(state: EnvState) -> np.ndarray:
 def tile_walkable_for_player(state: EnvState, x: int, y: int) -> bool:
     """Return True if the player can step onto ``(x, y)``.
 
-    Mirrors :func:`factoriax.engine.game_logic.is_position_walkable`: in
+    Mirrors :func:`factoriax.engine.step.is_position_walkable`: in
     bounds, not water, and either no machine or a CONVEYOR_BELT
     (which the player can walk over). Ore tiles are walkable —
     they're solid block types but not water.

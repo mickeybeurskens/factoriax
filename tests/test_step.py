@@ -17,7 +17,7 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.engine.game_logic import (
+from factoriax.engine.step import (
     _handle_player_action,
     deposit_to_adjacent,
     factoriax_step,

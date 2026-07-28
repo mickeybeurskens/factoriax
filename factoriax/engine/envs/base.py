@@ -12,7 +12,7 @@ from flax import struct
 from gymnax.environments import environment, spaces  # type: ignore[import-untyped]
 
 from factoriax.engine.constants import Action, NUM_ACTIONS
-from factoriax.engine.game_logic import factoriax_step, is_game_over
+from factoriax.engine.step import factoriax_step, is_game_over
 from factoriax.engine.levels import Level, build_state, generate_terrain, initial_state
 from factoriax.engine.observations import (
     NUM_PLAYER_SCALARS,

@@ -215,7 +215,7 @@ order as a reading order, not a dependency order.
 - [ ] `factoriax/engine/machines.py`
 - [ ] `factoriax/engine/placement.py`
 - [ ] `factoriax/engine/rewards.py`
-- [ ] `factoriax/engine/game_logic.py`
+- [ ] `factoriax/engine/step.py`
 - [ ] `factoriax/engine/observations.py`
 - [ ] `factoriax/engine/__init__.py`
 
