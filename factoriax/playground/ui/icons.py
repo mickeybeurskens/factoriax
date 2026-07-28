@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
+from factoriax.engine.belts import CROSSING_DIAGONAL
 from factoriax.engine.constants import (
     ITEM_TO_MACHINE,
     BlockType,
@@ -1675,7 +1676,7 @@ def _draw_crossing_body(icon: np.ndarray, direction: int) -> None:
 
     """
     s = icon.shape[0]
-    if s < 6 or direction == 0:
+    if s < 6 or not 0 < direction < len(CROSSING_DIAGONAL):
         return
     base = tuple(int(c) for c in icon[s // 2, s // 2, :3])
     dark = _shade(base, -65)  # type: ignore[arg-type]
@@ -1683,7 +1684,7 @@ def _draw_crossing_body(icon: np.ndarray, direction: int) -> None:
     band = max(1, s // 10)
 
     # Use the diagonal glyph implied by the encoding.
-    backslash = direction in (1, 4)
+    backslash = CROSSING_DIAGONAL[direction] == "\\"
     coords = np.arange(s)
     for offset in range(-band, band + 1):
         if backslash:

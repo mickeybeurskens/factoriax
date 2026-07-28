@@ -14,6 +14,7 @@ from factoriax.engine.belts import (
     CROSSING_AXIS_DIRS,
     CROSSING_HORIZ_SLOT,
     CROSSING_VERT_SLOT,
+    SPLITTER_PERP_OUTPUTS,
 )
 from factoriax.engine.constants import (
     BlockType,
@@ -732,40 +733,23 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     asm_in_type = state.ent_asm_in_type
     asm_in_count = state.ent_asm_in_count
 
-    # Splitter group masks: vertical-facing (UP/DOWN) splitters output
-    # LEFT/RIGHT; horizontal-facing (LEFT/RIGHT) output UP/DOWN.
-    # Direction values: LEFT=1, RIGHT=2, UP=3, DOWN=4 (Direction enum).
-    is_vert_split = is_splitter & (
-        (state.ent_direction == 3) | (state.ent_direction == 4)
-    )
-    is_horiz_split = is_splitter & (
-        (state.ent_direction == 1) | (state.ent_direction == 2)
-    )
+    dir_index = state.ent_direction.astype(jnp.int32)
+
+    # Splitter output sides, decoded from its facing. Indexing the (5, 2)
+    # lookup yields a (N, 2) per-entity table of the two perpendicular
+    # directions this splitter pushes to.
+    splitter_outputs = SPLITTER_PERP_OUTPUTS[dir_index]
 
     # Crossing per-axis output directions — decoded from the packed
     # ent_direction (1..4 maps the four flow combinations). Indexing
     # the (5, 2) lookup yields a (N, 2) per-entity table.
-    crossing_axes = CROSSING_AXIS_DIRS[state.ent_direction.astype(jnp.int32)]
+    crossing_axes = CROSSING_AXIS_DIRS[dir_index]
     crossing_vert_dir = crossing_axes[:, 0]  # output direction of vertical axis
     crossing_horiz_dir = crossing_axes[:, 1]  # output direction of horizontal axis
 
-    has_pair = buf_count >= 2
     # A splitter fires both perpendicular outputs when it holds a pair;
     # each side commits independently in the d-loop below (see docstring).
-    splitter_pushers_vert = is_vert_split & has_pair
-    splitter_pushers_horiz = is_horiz_split & has_pair
-
-    # Index 0 (direction NONE) is never read — the d-loop below ranges
-    # 1..4 — but a zeros placeholder keeps the tuple typed as Array
-    # rather than ``Array | None`` so downstream ``|`` ops type-check.
-    _no_pusher = jnp.zeros_like(splitter_pushers_vert)
-    splitter_pushers_by_dir: tuple[jnp.ndarray, ...] = (
-        _no_pusher,  # 0 — unused
-        splitter_pushers_vert,  # LEFT  — vert-facing splitters output here
-        splitter_pushers_vert,  # RIGHT
-        splitter_pushers_horiz,  # UP   — horiz-facing splitters output here
-        splitter_pushers_horiz,  # Down
-    )
+    splitter_ready = is_splitter & (buf_count >= 2)
 
     n = buf_type.shape[0] - 1
     for d in range(1, 5):
@@ -787,7 +771,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
             crossing_dst_axis_dir = crossing_horiz_dir
 
         belt_pusher_d = (state.ent_direction == d) & is_belt
-        splitter_pusher_d = splitter_pushers_by_dir[d]
+        splitter_pusher_d = splitter_ready & (
+            (splitter_outputs[:, 0] == d) | (splitter_outputs[:, 1] == d)
+        )
 
         # Combined pusher mask. The three sub-masks are pairwise disjoint
         # because their underlying machine types are disjoint.
