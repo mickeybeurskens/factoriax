@@ -7,13 +7,13 @@ from pathlib import Path
 
 import numpy as np
 
-from factoriax.engine.belts import CROSSING_DIAGONAL
 from factoriax.engine.constants import (
     ITEM_TO_MACHINE,
     BlockType,
     Direction,
     ItemType,
 )
+from factoriax.engine.tables import CROSSING_DIAGONAL
 from factoriax.playground.ui.theme import BLOCK_PIXEL_SIZE
 
 ASSETS_PATH = Path(__file__).parent.parent / "assets"

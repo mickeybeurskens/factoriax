@@ -166,7 +166,7 @@ class CrossingPlan:
     """One crossing tile carrying two perpendicular flows.
 
     ``ent_direction`` follows the convention in
-    ``factoriax/belts.py::CROSSING_AXIS_DIRS``:
+    ``factoriax/engine/tables.py::CROSSING_AXIS_DIRS``:
 
     - 1: vertical N→S + horizontal W→E
     - 2: vertical N→S + horizontal E→W
@@ -215,7 +215,7 @@ class FactoryLayout:
 
 
 # Map (vertical_flow_dir, horizontal_flow_dir) -> CROSSING ent_direction.
-# Matches CROSSING_AXIS_DIRS in factoriax/belts.py.
+# Matches CROSSING_AXIS_DIRS in factoriax/engine/tables.py.
 _CROSSING_DIR_BY_FLOWS: dict[tuple[int, int], int] = {
     (int(Direction.DOWN), int(Direction.RIGHT)): 1,
     (int(Direction.DOWN), int(Direction.LEFT)): 2,

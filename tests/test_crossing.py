@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from factoriax.engine.belts import CROSSING_HORIZ_SLOT, CROSSING_VERT_SLOT
 from factoriax.engine.constants import (
     BlockType,
     Direction,
@@ -31,6 +30,7 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.machines import run_conveyor_belts
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import CROSSING_HORIZ_SLOT, CROSSING_VERT_SLOT
 
 # Default params for run_conveyor_belts calls.
 _PARAMS = EnvParams()
@@ -55,7 +55,7 @@ def _make_crossing_world(
     """Build a 3x3 world with a crossing at (1, 1).
 
     ``encoding`` is the packed ``ent_direction`` (1..4 — see
-    :data:`factoriax.engine.belts.CROSSING_AXIS_DIRS`).
+    :data:`factoriax.engine.tables.CROSSING_AXIS_DIRS`).
 
     ``pallets`` selects which of the four sides has a receptive pallet:
     ``(up, down, left, right)``. Sides without a pallet are DIRT and so

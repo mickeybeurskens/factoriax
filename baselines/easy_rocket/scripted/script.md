@@ -528,7 +528,7 @@ failure trace points to which intermediate dried up.
 - **D — Assembler input wiring.** Assemblers have two input slots.
   A belt arriving on an input side deposits items into the slot
   matching that side's role. The planner must know which side is
-  which (helper in `factoriax/belts.py`). Get this wrong and the
+  which (helper in `factoriax/engine/tables.py`). Get this wrong and the
   assembler never starts producing.
 - **E — Single-seed overfit.** The agent must work on more than
   seed 0. Easy to accidentally encode "the LIMESTONE patch is at

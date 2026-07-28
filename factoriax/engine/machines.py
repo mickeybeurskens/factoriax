@@ -10,12 +10,6 @@ a grid position, then gather that entity's state.
 
 import jax.numpy as jnp
 
-from factoriax.engine.belts import (
-    CROSSING_AXIS_DIRS,
-    CROSSING_HORIZ_SLOT,
-    CROSSING_VERT_SLOT,
-    SPLITTER_PERP_OUTPUTS,
-)
 from factoriax.engine.constants import (
     BlockType,
     ItemType,
@@ -24,7 +18,13 @@ from factoriax.engine.constants import (
 from factoriax.engine.machine_spec import MACHINE_MAX_STACK
 from factoriax.engine.recipes import NUM_RECIPES
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY
+from factoriax.engine.tables import (
+    BLOCK_TO_ITEM_ARRAY,
+    CROSSING_AXIS_DIRS,
+    CROSSING_HORIZ_SLOT,
+    CROSSING_VERT_SLOT,
+    SPLITTER_PERP_OUTPUTS,
+)
 
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
 _DX: tuple[int, ...] = (0, -1, 1, 0, 0)

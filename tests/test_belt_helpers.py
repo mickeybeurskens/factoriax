@@ -1,22 +1,21 @@
-"""Tests for splitter / crossing decode tables in :mod:`factoriax.engine.belts`.
+"""Tests for splitter / crossing decode tables in :mod:`factoriax.engine.tables`.
 
-The lookup tables drive the per-tick math in the upcoming
-``run_splitters`` / ``run_crossings`` passes — and any miswiring of the
-direction encoding cascades into silent stream-mixing bugs that are
-hard to debug at rollout time. These structural tests catch the table
-errors at import time instead.
+The lookup tables drive the per-tick math in
+:func:`~factoriax.engine.machines.run_conveyor_belts`, where miswiring the
+direction encoding mixes two item streams without raising anything. These
+structural tests catch the table errors at import time instead.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from factoriax.engine.belts import (
+from factoriax.engine.constants import Direction
+from factoriax.engine.tables import (
     CROSSING_AXIS_DIRS,
     CROSSING_DIAGONAL,
     SPLITTER_PERP_OUTPUTS,
 )
-from factoriax.engine.constants import Direction
 
 # ---------------------------------------------------------------------------
 # Splitter

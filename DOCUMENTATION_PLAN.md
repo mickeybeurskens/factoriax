@@ -203,7 +203,6 @@ order as a reading order, not a dependency order.
 
 - [x] `factoriax/engine/constants.py`
 - [x] `factoriax/engine/actions.py`
-- [ ] `factoriax/engine/belts.py`
 - [ ] `factoriax/engine/machine_spec.py`
 - [ ] `factoriax/engine/recipes.py`
 - [ ] `factoriax/engine/tables.py`

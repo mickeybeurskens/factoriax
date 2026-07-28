@@ -1,4 +1,4 @@
-"""Derived JAX arrays for the FactoriaX engine.
+"""Derived JAX arrays and lookup tables for the FactoriaX engine.
 
 :mod:`factoriax.engine.constants` holds pure-Python definitions; this is the JAX layer
 that projects them into the jnp gather tables and state-array dtypes the engine
@@ -16,6 +16,7 @@ from factoriax.engine.constants import (
     PLACEABLE_ITEM_LIST,
     SCIENCE_PACK_TYPES,
     BlockType,
+    Direction,
     ItemType,
     Machine,
 )
@@ -35,6 +36,82 @@ DIRECTIONS = jnp.array(
     ],
     dtype=jnp.int32,
 )
+
+# ---------------------------------------------------------------------------
+# Splitter and crossing direction decoding
+# ---------------------------------------------------------------------------
+#
+# ``EnvState.ent_direction`` holds one int8 per entity. A conveyor belt reads it
+# as a plain facing, but a splitter pushes to two sides at once and a crossing
+# carries two independent flows, so both need the byte unpacked into a pair of
+# Direction values. The tables below do that unpacking as a constant array
+# indexed by the byte, which keeps the belt tick in
+# ``factoriax.engine.machines.run_conveyor_belts`` branchless and traceable
+# under jax.jit. Each reserves row 0 for the value Direction leaves unnumbered,
+# which stored state uses to mean "no direction".
+
+#: Output sides of a splitter, indexed by ``ent_direction``. Row ``d`` holds the
+#: two :class:`~factoriax.engine.constants.Direction` values perpendicular to
+#: facing ``d``, which are the sides a splitter facing ``d`` pushes to. Shape
+#: ``(5, 2)``, dtype int8. A splitter stores the direction items travel through
+#: it, the same convention a conveyor belt uses: a splitter facing ``d`` takes
+#: items from the neighbour on its ``-d`` side. The two entries sit in ascending
+#: ``Direction`` order and the order carries no meaning, since a splitter treats
+#: both sides alike. Row 0 is ``(0, 0)``, a pair that matches no direction, so an
+#: unset entity never reads as pushing to a real side.
+SPLITTER_PERP_OUTPUTS = jnp.array(
+    [
+        [0, 0],  # NONE
+        [int(Direction.UP), int(Direction.DOWN)],  # facing LEFT  -> outputs N + S
+        [int(Direction.UP), int(Direction.DOWN)],  # facing RIGHT -> outputs N + S
+        [int(Direction.LEFT), int(Direction.RIGHT)],  # facing UP   -> outputs W + E
+        [int(Direction.LEFT), int(Direction.RIGHT)],  # facing DOWN -> outputs W + E
+    ],
+    dtype=jnp.int8,
+)
+
+#: Output direction of each crossing axis, indexed by the packed
+#: ``ent_direction``. Row ``e`` is ``(vertical_output, horizontal_output)`` for
+#: encoding ``e`` in 1..4. Shape ``(5, 2)``, dtype int8. A crossing runs a
+#: vertical flow and a horizontal flow at the same time and packs both into the
+#: one direction byte. An axis takes items from the neighbour opposite its
+#: output direction, so ``vertical_output == DOWN`` means the vertical flow
+#: reads the tile above and writes the tile below. The two input sides therefore
+#: always meet at a corner. Row 0 is ``(0, 0)``: a crossing with an unset
+#: direction moves nothing on either axis.
+CROSSING_AXIS_DIRS = jnp.array(
+    [
+        [0, 0],  # NONE / unset
+        [int(Direction.DOWN), int(Direction.RIGHT)],  # 1: N->S + W->E
+        [int(Direction.DOWN), int(Direction.LEFT)],  # 2: N->S + E->W
+        [int(Direction.UP), int(Direction.RIGHT)],  # 3: S->N + W->E
+        [int(Direction.UP), int(Direction.LEFT)],  # 4: S->N + E->W
+    ],
+    dtype=jnp.int8,
+)
+
+#: Diagonal glyph per crossing encoding, for drawing only. A backslash marks a
+#: NW-SE diagonal, a forward slash a NE-SW one. The diagonal runs from the corner
+#: where the encoding's two input sides meet to the corner across from it. Index
+#: 0 is the empty string, because an unset crossing has no input sides. The
+#: simulation never reads this value; only the crossing icon does.
+CROSSING_DIAGONAL: tuple[str, ...] = (
+    "",  # NONE
+    "\\",  # 1: input pair (N, W)
+    "/",  # 2: input pair (N, E)
+    "/",  # 3: input pair (S, W)
+    "\\",  # 4: input pair (S, E)
+)
+
+#: Slot index of the vertical flow buffer in ``EnvState.ent_asm_in_type`` and
+#: ``EnvState.ent_asm_in_count``. A crossing reuses the two assembler input
+#: slots as one buffer per axis, which is why the two flows cannot mix: each
+#: axis only ever reads and writes its own slot.
+CROSSING_VERT_SLOT: int = 0
+#: Slot index of the horizontal flow buffer, in the same two arrays as
+#: :data:`CROSSING_VERT_SLOT`.
+CROSSING_HORIZ_SLOT: int = 1
+
 
 # Mineable ore blocks (the BLOCK_TO_ITEM keys) and impassable blocks.
 MINEABLE_BLOCKS = jnp.array([int(b) for b in BLOCK_TO_ITEM], dtype=jnp.int32)
