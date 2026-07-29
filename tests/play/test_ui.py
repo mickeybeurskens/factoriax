@@ -178,3 +178,57 @@ class TestRenderPauseMenu:
         """Should render correctly with second option selected."""
         result, _ = render_pause_menu(self._PAUSE_W, self._PAUSE_H, selected_option=1)
         assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)
+
+
+class TestCraftPanelFollowsScenarioBook:
+    """The craft panel lists the scenario's recipes, not BASE_RECIPES.
+
+    Scenarios ship their own :class:`RecipeBook`. Reading the panel from
+    ``BASE_RECIPES`` showed 27 rows with base-book labels regardless, so a
+    10-recipe scenario rendered 17 rows the player could select but not craft.
+    """
+
+    # Tall enough that no row is clipped out of the scroll viewport, so the
+    # select_recipe regions count every recipe rather than the visible ones.
+    _TALL_H = 2000
+    _TALL_W = 600
+
+    def _rows(self, state, params) -> list[ClickRegion]:
+        """Return the panel's per-recipe click regions."""
+        _, regions = render_inventory_menu(state, params, self._TALL_W, self._TALL_H)
+        return [r for r in regions if r.action == "select_recipe"]
+
+    def test_row_count_tracks_scenario_recipe_count(self, state_factory) -> None:
+        """One select_recipe region per recipe in the scenario's own book."""
+        from factoriax.engine.envs.easy_rocket import easy_rocket
+        from factoriax.engine.recipes import NUM_RECIPES
+
+        _, params = easy_rocket()
+        num_recipes = int(params.recipe_table.outputs.shape[0])
+        assert num_recipes != NUM_RECIPES, "scenario must differ from the base book"
+
+        state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
+        assert len(self._rows(state, params)) == num_recipes
+
+    def test_rows_are_indexed_over_the_scenario_table(self, state_factory) -> None:
+        """Row params are 0..n-1 of the scenario table, and names line up."""
+        from factoriax.engine.envs.science_tiers import science_tiers
+
+        _, params = science_tiers()
+        table = params.recipe_table
+        assert len(table.names) == int(table.outputs.shape[0])
+
+        state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
+        rows = self._rows(state, params)
+        assert [r.param for r in rows] == list(range(len(table.names)))
+
+    def test_two_scenarios_render_different_row_counts(self, state_factory) -> None:
+        """Same renderer, different books, different panels."""
+        from factoriax.engine.envs.easy_rocket import easy_rocket
+        from factoriax.engine.envs.science_tiers import science_tiers
+
+        _, er_params = easy_rocket()
+        _, st_params = science_tiers()
+        state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
+
+        assert len(self._rows(state, er_params)) != len(self._rows(state, st_params))

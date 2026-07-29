@@ -11,7 +11,6 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.engine.constants import ItemType
-from factoriax.engine.recipes import MAX_RECIPE_INPUTS
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
@@ -98,7 +97,7 @@ def can_afford_recipe(
     inv = state.player_inventory[player_idx]
 
     result = jnp.bool_(True)
-    for i in range(MAX_RECIPE_INPUTS):
+    for i in range(input_items.shape[0]):
         item_type = input_items[i]
         required = input_counts[i]
         have = inv[item_type]
@@ -168,7 +167,7 @@ def craft_recipe(
 
     # Consume inputs.
     inv = state.player_inventory[player_idx]
-    for i in range(MAX_RECIPE_INPUTS):
+    for i in range(table.input_items.shape[1]):
         item_type = table.input_items[recipe_idx, i]
         amount = table.input_counts[recipe_idx, i]
         is_valid = item_type != int(ItemType.EMPTY)

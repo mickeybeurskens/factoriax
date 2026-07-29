@@ -49,6 +49,11 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
     }
 )
 
+#: Most input types one recipe may consume. A fixed engine limit, not a
+#: property of :data:`BASE_RECIPES`: ``EnvState.ent_asm_in_type`` gives a
+#: combiner two input slots. :class:`RecipeBook` rejects anything wider.
+MAX_RECIPE_INPUTS: int = 2
+
 
 @dataclass(frozen=True)
 class Recipe:
@@ -225,6 +230,17 @@ class RecipeBook:
     recipes: tuple[Recipe, ...]
 
     def __post_init__(self) -> None:
+        for idx, recipe in enumerate(self.recipes):
+            arity = len(recipe.inputs)
+            if not 1 <= arity <= MAX_RECIPE_INPUTS:
+                raise ValueError(
+                    f"Recipe {idx} ({ItemType(recipe.output).name}, "
+                    f"{recipe.name!r}) has {arity} input types; a recipe must "
+                    f"have 1 to {MAX_RECIPE_INPUTS}. A combiner holds "
+                    f"{MAX_RECIPE_INPUTS} input slots in EnvState, so the "
+                    f"engine cannot feed a wider recipe."
+                )
+
         seen_outputs: dict[int, int] = {}
         for idx, recipe in enumerate(self.recipes):
             if recipe.output in seen_outputs:
@@ -554,9 +570,12 @@ BASE_RECIPES: tuple[Recipe, ...] = (
 )
 
 
+#: Number of recipes in :data:`BASE_RECIPES`. Scenarios ship their own books,
+#: so engine code sizes loops from ``table.outputs.shape[0]`` instead.
 NUM_RECIPES: int = len(BASE_RECIPES)
-MAX_RECIPE_INPUTS: int = max(len(r.inputs) for r in BASE_RECIPES)
 
+#: Names of :data:`BASE_RECIPES`. A scenario table carries its own in
+#: :attr:`RecipeTable.names`.
 RECIPE_NAMES: list[str] = [r.name for r in BASE_RECIPES]
 
 
@@ -593,6 +612,9 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     machine_type: jnp.ndarray
     output_to_recipe: jnp.ndarray
     craft_action_to_recipe: jnp.ndarray
+    #: Name per recipe id, parallel to :attr:`outputs`. Static, so it is not a
+    #: traced leaf and the UI can label a scenario's own recipes.
+    names: tuple[str, ...] = struct.field(pytree_node=False, default=())
 
     @classmethod
     def from_book(cls, book: RecipeBook) -> RecipeTable:
@@ -618,7 +640,9 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         """
         recipes = book.recipes
         n = len(recipes)
-        max_inputs = max(len(r.inputs) for r in recipes)
+        # The engine limit, not max(len(r.inputs)): run_assemblers always
+        # reads slot 1, and an out-of-bounds read would clamp onto slot 0.
+        max_inputs = MAX_RECIPE_INPUTS
 
         outputs = jnp.array([r.output for r in recipes], dtype=jnp.int32)
         output_counts = jnp.array([r.output_count for r in recipes], dtype=jnp.int32)
@@ -652,6 +676,7 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
             machine_type=machine_type,
             output_to_recipe=output_to_recipe,
             craft_action_to_recipe=craft_action_to_recipe,
+            names=tuple(r.name for r in recipes),
         )
 
 

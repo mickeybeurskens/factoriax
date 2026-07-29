@@ -696,3 +696,63 @@ class TestMachineDirectionChannel:
         # Normalised by 4 (max direction value). RIGHT = 2.
         assert d[4, 4] == pytest.approx(2 / 4)
         assert d[0, 0] == 0  # no machine
+
+
+# ---------------------------------------------------------------------------
+# Affordability block indexing
+# ---------------------------------------------------------------------------
+
+
+class TestAffordIsItemIndexed:
+    """The afford block is indexed by item type, not by recipe id.
+
+    Scenarios ship their own :class:`RecipeBook`, so recipe id ``3`` names a
+    different item in each one. Indexing by item type keeps the block
+    comparable across the curriculum, and keeps its width independent of how
+    many recipes a scenario defines.
+    """
+
+    def test_width_is_item_count_not_recipe_count(self) -> None:
+        """Scalar width tracks NUM_ITEM_TYPES, so a scenario's book cannot move it."""
+        from factoriax.engine.constants import NUM_ITEM_TYPES
+
+        # 4 pose scalars, then one afford and one inventory entry per item.
+        assert NUM_PLAYER_SCALARS["superficial"] == 4 + 2 * NUM_ITEM_TYPES
+
+    def test_books_of_different_size_give_equal_obs_width(self) -> None:
+        """Two scenarios with different recipe counts observe the same width.
+
+        easy_rocket ships 10 recipes and science_tiers 12. Before the afford
+        block was item-indexed both were padded to the base book's 27, so the
+        widths matched only by accident and the surplus entries repeated the
+        last recipe.
+        """
+        from jax import random
+
+        from factoriax.engine.envs.easy_rocket import easy_rocket
+        from factoriax.engine.envs.science_tiers import science_tiers
+
+        st_env, st_params = science_tiers()
+        er_env, er_params = easy_rocket(obs=st_env.obs, obs_radius=st_env.obs_radius)
+        assert (
+            er_params.recipe_table.outputs.shape[0]
+            != st_params.recipe_table.outputs.shape[0]
+        )
+
+        er_obs, _ = er_env.reset_env(random.PRNGKey(0), er_params)
+        st_obs, _ = st_env.reset_env(random.PRNGKey(0), st_params)
+        assert er_obs.shape == st_obs.shape
+        assert er_obs.shape == er_env.observation_space(er_params).shape
+        assert st_obs.shape == st_env.observation_space(st_params).shape
+
+    def test_uncraftable_items_read_zero(self, state_factory) -> None:
+        """Raw ore has no recipe, so its afford entry is always 0."""
+        from factoriax.engine.constants import NUM_ITEM_TYPES, ItemType
+
+        world_map = jnp.full((_MAP_H, _MAP_W), int(BlockType.DIRT), dtype=jnp.int32)
+        state = state_factory(world_map=world_map)
+        scalars = _x_ray_scalars(state, _DEFAULT_PARAMS, 0)
+        afford = scalars[4 : 4 + NUM_ITEM_TYPES]
+
+        assert afford[int(ItemType.IRON_ORE)] == 0.0
+        assert afford[int(ItemType.EMPTY)] == 0.0

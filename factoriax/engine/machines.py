@@ -16,7 +16,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.machine_spec import MACHINE_MAX_STACK
-from factoriax.engine.recipes import NUM_RECIPES
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import (
     BLOCK_TO_ITEM_ARRAY,
@@ -598,8 +597,12 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     # index. ``can_complete`` already requires ``ent_asm_out_type != 0``
     # so when the where-mask fires the recipe index is guaranteed valid;
     # the clip is defensive for the lanes that mask out.
+    # Sized from the table this call was handed, not the base book: scenarios
+    # ship their own. Shapes are static, so a new count just recompiles.
+    num_recipes = table.outputs.shape[0]
+
     completing_ridx = table.output_to_recipe[state.ent_asm_out_type.astype(jnp.int32)]
-    safe_completing_ridx = jnp.clip(completing_ridx, 0, NUM_RECIPES - 1)
+    safe_completing_ridx = jnp.clip(completing_ridx, 0, num_recipes - 1)
     yield_count = table.output_counts[safe_completing_ridx].astype(jnp.int16)
 
     new_out_count = jnp.where(
@@ -624,7 +627,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     # must be withdrawn before the machine can start a new cycle.
     idle = is_combiner & (new_power == 0) & (new_out_count == 0)
     matched = jnp.int32(-1)
-    for r in range(NUM_RECIPES):
+    for r in range(num_recipes):
         # 1-input recipes pad the unused slot with (EMPTY, 0) in the
         # table, so the match naturally requires the corresponding
         # slot on the machine to also be empty.
@@ -639,7 +642,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
         matched = jnp.where((o1 | o2) & idle & type_ok, jnp.int32(r), matched)
 
     can_start = matched >= 0
-    ridx = jnp.clip(matched, 0, NUM_RECIPES - 1)
+    ridx = jnp.clip(matched, 0, num_recipes - 1)
     craft_t = table.ticks[ridx].astype(jnp.int16)
     out_item = table.outputs[ridx].astype(jnp.int8)
 

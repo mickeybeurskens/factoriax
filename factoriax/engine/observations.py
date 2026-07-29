@@ -7,10 +7,10 @@ NumPy RGB image via the pixel renderer and cannot be JIT'd.
 Two profiles compose four top-level builders:
 
 - **x_ray** sees through every machine to its slot contents and the ore
-  remaining under each terrain tile (10 spatial channels + 72 player
+  remaining under each terrain tile (10 spatial channels + 81 player
   scalars).
 - **superficial** sees only what's outwardly visible (3 spatial channels
-  + 63 player scalars; no slot peek, no facing-tile peek).
+  + 72 player scalars; no slot peek, no facing-tile peek).
 
 Each profile pairs with a view extent: ``global_*`` flattens the whole
 map; ``local_*`` extracts a ``(2r+1) x (2r+1)`` window centred on the
@@ -44,10 +44,10 @@ x_ray spatial channels (10):
 superficial spatial channels (3): ``block_type``, ``machine_type``,
 ``machine_direction``.
 
-x_ray scalars: pose + recipe affordability + player inventory +
-facing-machine readouts (72 floats).
-superficial scalars: pose + recipe affordability + player inventory
-(63 floats; the 9 facing readouts are dropped).
+x_ray scalars: pose + per-item affordability + player inventory +
+facing-machine readouts (81 floats).
+superficial scalars: pose + per-item affordability + player inventory
+(72 floats; the 9 facing readouts are dropped).
 """
 
 from __future__ import annotations
@@ -65,7 +65,6 @@ from factoriax.engine.constants import (
 from factoriax.engine.crafting import can_afford_recipe
 from factoriax.engine.jax_renderer import JaxRenderer
 from factoriax.engine.placement import get_tile_in_front
-from factoriax.engine.recipes import NUM_RECIPES
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
 
@@ -233,7 +232,7 @@ _COMMON_SCALAR_FIELDS: tuple[str, ...] = (
     "pos_y",
     "direction",
     "timestep",
-    *(f"afford_{i}" for i in range(NUM_RECIPES)),
+    *(f"afford_{i}" for i in range(NUM_ITEM_TYPES)),
     *(f"player_inv_{i}" for i in range(NUM_ITEM_TYPES)),
 )
 _FACING_SCALAR_FIELDS: tuple[str, ...] = (
@@ -247,7 +246,9 @@ _FACING_SCALAR_FIELDS: tuple[str, ...] = (
     "facing_asm_out_type",
     "facing_asm_out_count",
 )
-# x_ray = common ++ facing (72); superficial = common (63).
+#: Scalar count per profile. Independent of how many recipes a scenario's
+#: :class:`~factoriax.engine.recipes.RecipeTable` holds, because the ``afford``
+#: block is indexed by item type rather than by recipe id.
 NUM_PLAYER_SCALARS: dict[str, int] = {
     "x_ray": len(_COMMON_SCALAR_FIELDS) + len(_FACING_SCALAR_FIELDS),
     "superficial": len(_COMMON_SCALAR_FIELDS),
@@ -305,11 +306,14 @@ def _common_scalars(
         ],
         dtype=jnp.float32,
     )
+    # Item-indexed, not recipe-indexed: recipe ids shift per scenario book.
+    recipe_for_item = params.recipe_table.output_to_recipe
     afford = jax.vmap(
         lambda r: can_afford_recipe(state, params, player_idx, r).astype(
             jnp.float32,
         ),
-    )(jnp.arange(NUM_RECIPES))
+    )(jnp.maximum(recipe_for_item, 0))
+    afford = jnp.where(recipe_for_item >= 0, afford, 0.0)
     inv = state.player_inventory[player_idx].astype(jnp.float32) / _PLAYER_MAX_STACK_F
     return jnp.concatenate([pose_time, afford, inv])
 

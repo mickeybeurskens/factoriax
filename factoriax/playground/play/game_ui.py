@@ -34,7 +34,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.jax_renderer import JaxRenderer
-from factoriax.engine.recipes import BASE_RECIPES, NUM_RECIPES
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.playground.config import (
     ControllerLookup,
@@ -471,6 +470,7 @@ class GameUI:
         if ps.machine_open:
             machine_overlay, machine_regions = render_machine_menu(
                 state,
+                self._params,
                 ui_w,
                 ui_h,
                 ps.machine_tx,
@@ -1037,13 +1037,15 @@ class GameUI:
 
         """
         ps = self._ps
+        table = self._params.recipe_table
+        num_recipes = int(table.outputs.shape[0])
         if PlayerAction.NAV_UP in actions:
-            ps.selected_recipe = (ps.selected_recipe - 1) % NUM_RECIPES
+            ps.selected_recipe = (ps.selected_recipe - 1) % num_recipes
         elif PlayerAction.NAV_DOWN in actions:
-            ps.selected_recipe = (ps.selected_recipe + 1) % NUM_RECIPES
+            ps.selected_recipe = (ps.selected_recipe + 1) % num_recipes
         elif PlayerAction.CONFIRM in actions:
-            # Craft the selected recipe's output (the panel lists BASE_RECIPES).
-            output = BASE_RECIPES[ps.selected_recipe].output
+            # Same order the craft panel lists.
+            output = int(table.outputs[ps.selected_recipe])
             return int(ITEM_TO_CRAFT_ACTION[output])
         return None
 

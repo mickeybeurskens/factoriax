@@ -25,12 +25,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.crafting import can_afford_recipe, count_item_in_inventory
-from factoriax.engine.recipes import (
-    BASE_RECIPES,
-    NUM_RECIPES,
-    OUTPUT_TO_RECIPE,
-    RECIPE_NAMES,
-)
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK
 from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
@@ -841,6 +835,7 @@ def render_victory_screen(
 
 def render_machine_menu(
     state: EnvState,
+    params: EnvParams,
     screen_width: int,
     screen_height: int,
     tx: int,
@@ -863,6 +858,8 @@ def render_machine_menu(
     ----------
     state :
         Current environment state.
+    params :
+        Environment parameters, read for this scenario's recipe table.
     screen_width :
         Total render width in pixels.
     screen_height :
@@ -994,8 +991,9 @@ def render_machine_menu(
             out_type = int(state.ent_asm_out_type[eidx])
             asm_power = int(state.ent_power[eidx])
             if out_type > 0:
-                recipe_idx = int(OUTPUT_TO_RECIPE[out_type])
-                recipe_name = RECIPE_NAMES[recipe_idx] if recipe_idx >= 0 else "Unknown"
+                table = params.recipe_table
+                recipe_idx = int(table.output_to_recipe[out_type])
+                recipe_name = table.names[recipe_idx] if recipe_idx >= 0 else "Unknown"
             else:
                 recipe_name = "Auto"
             status = "Idle" if asm_power == 0 else f"{asm_power} ticks left"
@@ -2565,7 +2563,11 @@ def render_inventory_menu(
     out_icon = 32
     inp_icon = 20
 
-    content_h_craft = NUM_RECIPES * recipe_h
+    # This scenario's book, not BASE_RECIPES.
+    table = params.recipe_table
+    num_recipes = int(table.outputs.shape[0])
+
+    content_h_craft = num_recipes * recipe_h
     craft_scroll = clip_scroll_offset(
         selected_recipe * recipe_h - (vp_h_craft - recipe_h) // 2,
         content_h_craft,
@@ -2575,8 +2577,7 @@ def render_inventory_menu(
     recipe_content = np.zeros((max(content_h_craft, 1), vp_w_craft, 4), dtype=np.uint8)
     recipe_regions: list[ClickRegion] = []
 
-    for recipe_idx in range(NUM_RECIPES):
-        recipe = BASE_RECIPES[recipe_idx]
+    for recipe_idx in range(num_recipes):
         is_selected_recipe = recipe_idx == selected_recipe
         can_afford = bool(can_afford_recipe(state, params, selected_player, recipe_idx))
         ry = recipe_idx * recipe_h
@@ -2600,7 +2601,7 @@ def render_inventory_menu(
             recipe_content[ry : ry + recipe_h - 4, 0] = white
             recipe_content[ry : ry + recipe_h - 4, vp_w_craft - 1] = white
 
-        out_item = recipe.output
+        out_item = int(table.outputs[recipe_idx])
         out_s = min(out_icon, vp_w_craft - craft_pad)
         if out_s > 0:
             out_icon_arr = render_item_icon(out_item, out_s)
@@ -2610,14 +2611,18 @@ def render_inventory_menu(
             ] = out_icon_arr
 
         name_color = (230, 225, 180) if can_afford else (150, 145, 120)
-        name_arr = _render_text_rgba(RECIPE_NAMES[recipe_idx], body_font, name_color)
+        name_arr = _render_text_rgba(table.names[recipe_idx], body_font, name_color)
         name_y = ry + craft_pad + (out_icon - name_arr.shape[0]) // 2
         _blit_rgba(recipe_content, name_arr, name_y, craft_pad + out_icon + 12)
 
         inp_y = ry + craft_pad + out_icon + craft_pad
         inp_x = craft_pad
 
-        for item_type, required in recipe.inputs:
+        for slot in range(int(table.input_items.shape[1])):
+            item_type = int(table.input_items[recipe_idx, slot])
+            required = int(table.input_counts[recipe_idx, slot])
+            if item_type == int(ItemType.EMPTY):  # padded slot
+                continue
             have = int(count_item_in_inventory(state, selected_player, item_type))
             inp_s = min(inp_icon, vp_w_craft - inp_x)
             if inp_s > 0:
@@ -2632,10 +2637,11 @@ def render_inventory_menu(
             _blit_rgba(recipe_content, ratio_arr, inp_y, inp_x + inp_icon + 6)
             inp_x += inp_icon + 6 + ratio_arr.shape[1] + 12
 
-        if craft_progress > 0 and is_selected_recipe and recipe.ticks > 0:
+        recipe_ticks = int(table.ticks[recipe_idx])
+        if craft_progress > 0 and is_selected_recipe and recipe_ticks > 0:
             bar_y = ry + recipe_h - 20
             bar_w = vp_w_craft - 16
-            filled = int(bar_w * (1 - craft_progress / recipe.ticks))
+            filled = int(bar_w * (1 - craft_progress / recipe_ticks))
             recipe_content[bar_y : bar_y + 8, craft_pad : craft_pad + bar_w] = (
                 35,
                 35,

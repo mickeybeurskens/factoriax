@@ -36,6 +36,37 @@ def _plate_recipe(output: int = int(ItemType.IRON_PLATE)) -> Recipe:
     )
 
 
+@pytest.mark.parametrize(
+    "inputs",
+    [
+        pytest.param((), id="zero-inputs"),
+        pytest.param(
+            (
+                (int(ItemType.IRON_ORE), 1),
+                (int(ItemType.COAL), 1),
+                (int(ItemType.TIN_ORE), 1),
+            ),
+            id="three-inputs",
+        ),
+    ],
+)
+def test_arity_outside_engine_limit_raises(
+    inputs: tuple[tuple[int, int], ...],
+) -> None:
+    """A recipe must consume 1 or 2 input types.
+
+    A combiner has exactly two input slots in ``EnvState``, so a wider recipe
+    has nowhere to put its third input. Without this check the projection pads
+    to the widest recipe and the engine reads only the first two slots, which
+    drops the extra ingredient without reporting anything.
+    """
+    wide = Recipe(
+        output=int(ItemType.IRON_PLATE), inputs=inputs, ticks=2, name="bad-arity"
+    )
+    with pytest.raises(ValueError, match="input types; a recipe must have"):
+        RecipeBook(recipes=(wide,))
+
+
 def test_unique_output_constraint_raises() -> None:
     """Two recipes producing the same ItemType must be rejected.
 
