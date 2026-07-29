@@ -58,9 +58,7 @@ def test_make_unknown_id_raises() -> None:
         make("Nope-v1")
 
 
-@pytest.mark.parametrize(
-    "env_id", ["MineOres-v1", "PlaceMiners-v1", "CraftMiners-v1"]
-)
+@pytest.mark.parametrize("env_id", ["MineOres-v1", "PlaceMiners-v1", "CraftMiners-v1"])
 def test_removed_curriculum_ids_raise(env_id: str) -> None:
     """The forward-curriculum stage envs are gone; states, not
     environments, define the backward curriculum."""

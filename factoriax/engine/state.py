@@ -11,15 +11,15 @@ from factoriax.engine.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
 
 class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Immutable environment state.
-    
+
     Machine state uses entity lists: fixed-size arrays indexed by entity
     ID, not tile position. The ``tile_entity`` grid maps tile positions
     to entity indices for neighbor lookups. Inactive entities have
     ``ent_y < 0``.
-    
+
     Terrain (``map``, ``block_resources``) and spatial lookup
     (``machine_types``, ``tile_entity``) remain on the grid.
-    
+
     Examples
     --------
 
@@ -29,7 +29,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     Returns
     -------
 
-    
+
     >>> import jax
         >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1")

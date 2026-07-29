@@ -76,7 +76,7 @@ def _get_action_cmap(
     colors :
         Sequence[str] | None:  (Default value = None)
     num_actions: int :
-        
+
     colors: Sequence[str] | None :
          (Default value = None)
 
@@ -106,7 +106,7 @@ def action_raster(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot a raster of action sequences across episodes.
-    
+
     Each row is an episode, each column is a timestep, and color encodes the
     action taken.  This is the single most informative view for spotting
     temporal structure: phase transitions, loops, stereotyped sub-behaviors.
@@ -150,11 +150,11 @@ def action_raster(
     float] :
         (Default value = (14)
     6) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -168,7 +168,7 @@ def action_raster(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -241,11 +241,11 @@ def transition_matrix(
     Parameters
     ----------
     traj : Trajectory
-        
+
     player : int
-        
+
     num_actions : int
-        
+
     normalize : bool
         If *True*, rows sum to 1 (transition probabilities).
         If *False*, raw counts.
@@ -264,7 +264,7 @@ def transition_matrix(
     int] | None :
         (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -272,7 +272,7 @@ def transition_matrix(
     normalize: bool :
          (Default value = True)
     time_range: tuple[int :
-        
+
 
     Returns
     -------
@@ -336,13 +336,13 @@ def plot_transition_matrix(
     float] :
         (Default value = (8)
     7) :
-        
+
     cmap :
         str:  (Default value = "Blues")
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -350,13 +350,13 @@ def plot_transition_matrix(
     action_labels: list[str] | None :
          (Default value = None)
     time_range: tuple[int :
-        
+
     normalize: bool :
          (Default value = True)
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     cmap: str :
          (Default value = "Blues")
     title: str | None :
@@ -420,14 +420,14 @@ def plot_phase_transitions(
     phase_labels: list[str] | None = None,
 ) -> tuple[Figure, np.ndarray]:
     """Plot transition matrices for multiple episode phases side-by-side.
-    
+
     This reveals how the policy's sequential behavior changes over the
     course of an episode (e.g., exploring early, exploiting late).
 
     Parameters
     ----------
     traj : Trajectory
-        
+
     phases : list of (start
         Timestep ranges for each phase.
     phase_labels : list[str]
@@ -437,7 +437,7 @@ def plot_phase_transitions(
     phases :
         list[tuple[int:
     int]] :
-        
+
     player :
         int | None:  (Default value = None)
     num_actions :
@@ -449,15 +449,15 @@ def plot_phase_transitions(
     float] :
         (Default value = (5)
     4.5) :
-        
+
     cmap :
         str:  (Default value = "Blues")
     phase_labels :
         list[str] | None:  (Default value = None)
     traj: Trajectory :
-        
+
     phases: list[tuple[int :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -465,7 +465,7 @@ def plot_phase_transitions(
     action_labels: list[str] | None :
          (Default value = None)
     figsize_per_phase: tuple[float :
-        
+
     cmap: str :
          (Default value = "Blues")
     phase_labels: list[str] | None :
@@ -519,11 +519,11 @@ def action_ngrams(
     Parameters
     ----------
     traj : Trajectory
-        
+
     n : int
         Length of the subsequences (2 = bigrams, 3 = trigrams, etc.).
     player : int
-        
+
     top_k : int
         Number of top n-grams to return.
     action_labels : list[str]
@@ -540,7 +540,7 @@ def action_ngrams(
     action_labels :
         list[str] | None:  (Default value = None)
     traj: Trajectory :
-        
+
     n: int :
          (Default value = 2)
     player: int | None :
@@ -582,13 +582,13 @@ def _blend_ngram_color(
     action_indices :
         tuple[int:
     ...] :
-        
+
     colors :
         Sequence[str]:
     action_indices: tuple[int :
-        
+
     colors: Sequence[str] :
-        
+
 
     Returns
     -------
@@ -610,7 +610,7 @@ def plot_ngram_sweep(
     title: str | None = None,
 ) -> tuple[Figure, np.ndarray]:
     """Plot top-k n-grams for each n in a range, one row per n.
-    
+
     Produces a vertically stacked set of horizontal bar charts. Each
     row shows the *top_k* most frequent n-grams for one value of *n*,
     making it easy to spot dominant action sequences at every scale
@@ -644,7 +644,7 @@ def plot_ngram_sweep(
     int] :
         (Default value = (2)
     10) :
-        
+
     player :
         int | None:  (Default value = None)
     top_k :
@@ -660,9 +660,9 @@ def plot_ngram_sweep(
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     n_range: tuple[int :
-        
+
     player: int | None :
          (Default value = None)
     top_k: int :
@@ -672,15 +672,15 @@ def plot_ngram_sweep(
     colors: Sequence[str] | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
     Returns
     -------
-    
+
         Tuple of ``(fig, axes)`` where *axes* is a 1-D array of
-    
+
         Tuple of ``(fig, axes)`` where *axes* is a 1-D array of
         ``Axes``, one per n value.
 
@@ -837,11 +837,11 @@ def plot_ngrams(
     float] :
         (Default value = (10)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     n: int :
          (Default value = 2)
     player: int | None :
@@ -853,7 +853,7 @@ def plot_ngrams(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -893,7 +893,7 @@ def action_entropy(
     window: int = 1,
 ) -> np.ndarray:
     """Compute per-timestep action entropy across episodes.
-    
+
     At each timestep, we compute the empirical distribution of actions
     across all episodes and return its entropy.  Higher entropy means the
     agent is less predictable at that point in the episode.
@@ -901,11 +901,11 @@ def action_entropy(
     Parameters
     ----------
     traj : Trajectory
-        
+
     player : int
-        
+
     num_actions : int
-        
+
     window : int
         Smoothing window.  If > 1, a rolling average is applied.
     traj :
@@ -917,7 +917,7 @@ def action_entropy(
     window :
         int:  (Default value = 1)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -978,11 +978,11 @@ def plot_entropy(
     float] :
         (Default value = (12)
     4) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -992,7 +992,7 @@ def plot_entropy(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -1035,15 +1035,15 @@ def run_lengths(
     Parameters
     ----------
     traj : Trajectory
-        
+
     player : int
-        
+
     traj :
         Trajectory:
     player :
         int | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
 
@@ -1082,7 +1082,7 @@ def plot_run_lengths(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot run-length distributions as box plots per action.
-    
+
     Reveals which actions tend to be repeated in long streaks (e.g., an
     agent walking in one direction for many steps) versus actions that
     rarely repeat (one-shot interactions).
@@ -1110,11 +1110,11 @@ def plot_run_lengths(
     float] :
         (Default value = (10)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     action_labels: list[str] | None :
@@ -1126,7 +1126,7 @@ def plot_run_lengths(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -1184,7 +1184,7 @@ def plot_action_distribution(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Stacked area chart showing how the action distribution evolves.
-    
+
     At each timestep, the distribution of actions across episodes is
     computed and plotted as stacked areas.  A smoothing window makes
     the trends readable.
@@ -1216,11 +1216,11 @@ def plot_action_distribution(
     float] :
         (Default value = (14)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int | None :
          (Default value = None)
     num_actions: int :
@@ -1234,7 +1234,7 @@ def plot_action_distribution(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 

@@ -138,7 +138,7 @@ def _drop_alpha(rgba: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     rgba: np.ndarray :
-        
+
 
     Returns
     -------
@@ -153,7 +153,7 @@ def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
     Parameters
     ----------
     rgb: np.ndarray :
-        
+
     alpha: int :
          (Default value = 255)
 
@@ -170,7 +170,7 @@ def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
 
 def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
     """Render a single digit at the cell's top-left.
-    
+
     The procedural digit atlas is 3 wide × 5 tall bool mask. We blit
     it as white-on-black at the top-left of a 32x32 cell so the rest
     of the cell is unused space. Returned cell is fully opaque.
@@ -178,9 +178,9 @@ def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     digit: int :
-        
+
     digit_atlas: np.ndarray :
-        
+
 
     Returns
     -------
@@ -201,12 +201,12 @@ def _ordered_enum_names(enum_cls: type) -> list[str]:
     Parameters
     ----------
     enum_cls: type :
-        
+
 
     Returns
     -------
     type
-        
+
 
     """
     return [m.name for m in sorted(enum_cls, key=int)]
@@ -218,16 +218,16 @@ def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray
     Parameters
     ----------
     block: BlockType :
-        
+
     textures: dict[int :
-        
+
     np.ndarray] :
-        
+
 
     Returns
     -------
     type
-        
+
 
     """
     tex = textures.get(int(block))
@@ -247,9 +247,9 @@ def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
     Parameters
     ----------
     machine: Machine :
-        
+
     direction: Direction :
-        
+
 
     Returns
     -------
@@ -278,7 +278,7 @@ def _item_cell(item: ItemType) -> np.ndarray | None:
     Parameters
     ----------
     item: ItemType :
-        
+
 
     Returns
     -------
@@ -301,9 +301,9 @@ def _player_cell(player_idx: int, direction: Direction) -> np.ndarray:
     Parameters
     ----------
     player_idx: int :
-        
+
     direction: Direction :
-        
+
 
     Returns
     -------
@@ -333,7 +333,7 @@ def _biter_cell() -> np.ndarray:
 
 def _build_atlas_array() -> np.ndarray:
     """Construct the (NUM_ROWS * 32, NUM_COLS * 32, 4) uint8 atlas image.
-    
+
     Cells beyond a category's defined enum values are filled with
     MISSING_RGBA so future enum extensions produce a visible artifact
     rather than silent zeros.
@@ -356,11 +356,11 @@ def _build_atlas_array() -> np.ndarray:
         Parameters
         ----------
         row: int :
-            
+
         col: int :
-            
+
         cell: np.ndarray :
-            
+
 
         Returns
         -------
@@ -466,7 +466,7 @@ def _build_atlas_json() -> dict:
 
 def build_atlas(out_png: Path, out_json: Path) -> None:
     """Build atlas.png and atlas.json into the given paths.
-    
+
     The function is deterministic: running it twice into the same
     directory produces byte-identical files. CI verifies this via
     ``tests/test_atlas_fresh.py``.
@@ -478,9 +478,9 @@ def build_atlas(out_png: Path, out_json: Path) -> None:
     out_json :
         Path to write the sidecar JSON.
     out_png: Path :
-        
+
     out_json: Path :
-        
+
 
     Returns
     -------

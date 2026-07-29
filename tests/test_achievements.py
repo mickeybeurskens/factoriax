@@ -211,9 +211,7 @@ class TestConditionHelpers:
     def test_has_machines_respects_count(self, state_factory) -> None:
         state = _dirt(
             state_factory,
-            machine_types=jnp.array(
-                [[Machine.MINER, Machine.MINER]], dtype=jnp.int32
-            ),
+            machine_types=jnp.array([[Machine.MINER, Machine.MINER]], dtype=jnp.int32),
         )
         assert bool(has_machines(state, int(Machine.MINER), count=2))
         assert not bool(has_machines(state, int(Machine.MINER), count=3))
@@ -221,15 +219,11 @@ class TestConditionHelpers:
     def test_total_machines_counts_every_type(self, state_factory) -> None:
         state = _dirt(
             state_factory,
-            machine_types=jnp.array(
-                [[Machine.MINER, Machine.PALLET]], dtype=jnp.int32
-            ),
+            machine_types=jnp.array([[Machine.MINER, Machine.PALLET]], dtype=jnp.int32),
         )
         assert total_machines(state) == 2
 
-    def test_mined_at_least_reads_the_monotone_counter(
-        self, state_factory
-    ) -> None:
+    def test_mined_at_least_reads_the_monotone_counter(self, state_factory) -> None:
         """Latches on what was ever mined, not what is still held."""
         mined = jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
         mined = mined.at[ItemType.IRON_ORE].set(4)
@@ -255,9 +249,7 @@ class TestConditionHelpers:
         assert bool(any_buffer_nonempty(state, int(Machine.MINER)))
         assert not bool(any_buffer_nonempty(state, int(Machine.PALLET)))
 
-    def test_any_buffer_nonempty_ignores_empty_buffers(
-        self, state_factory
-    ) -> None:
+    def test_any_buffer_nonempty_ignores_empty_buffers(self, state_factory) -> None:
         """A placed machine that has produced nothing must not count."""
         state = _dirt(
             state_factory,

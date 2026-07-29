@@ -33,9 +33,7 @@ ALL_SETS: dict[str, tuple[Achievement, ...]] = {
     "free-play": FREE_PLAY_ACHIEVEMENTS,
 }
 
-_CASES = pytest.mark.parametrize(
-    "achievements", ALL_SETS.values(), ids=ALL_SETS.keys()
-)
+_CASES = pytest.mark.parametrize("achievements", ALL_SETS.values(), ids=ALL_SETS.keys())
 
 
 @_CASES
@@ -95,9 +93,7 @@ def test_conditions_evaluate_to_a_padded_bool_vector(
     """Every set plugs into FactoriaxEnv with one uniform output shape."""
     from factoriax.engine.constants import BlockType
 
-    state = state_factory(
-        world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
-    )
+    state = state_factory(world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32))
     bits = achievement_fn(achievements)(state)
     assert bits.shape == (MAX_ACHIEVEMENTS,)
     assert bits.dtype == jnp.bool_

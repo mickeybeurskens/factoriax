@@ -15,10 +15,20 @@ from jax import random
 from factoriax.engine.constants import BlockType
 from factoriax.engine.envs.common import (
     INNER_ZONE_MAX as _INNER_ZONE_MAX,
+)
+from factoriax.engine.envs.common import (
     INNER_ZONE_MIN as _INNER_ZONE_MIN,
+)
+from factoriax.engine.envs.common import (
     MAP_SIZE as _MAP_SIZE,
+)
+from factoriax.engine.envs.common import (
     PATCH_BLOCKS as _PATCH_BLOCKS,
+)
+from factoriax.engine.envs.common import (
     SPAWN as _SPAWN,
+)
+from factoriax.engine.envs.common import (
     six_patch_terrain as _easy_rocket_terrain,
 )
 from factoriax.engine.envs.easy_rocket import easy_rocket
@@ -31,6 +41,8 @@ _ENV, _ = easy_rocket()
 def _gen_state(key):
     _, state = _ENV.reset_env(key, _PARAMS)
     return state
+
+
 _ORE_VALUES: tuple[int, ...] = tuple(int(b) for b in _PATCH_BLOCKS)
 _TILES_PER_PATCH = 4
 
@@ -96,9 +108,7 @@ def test_generator_deterministic() -> None:
 def test_generator_varies_with_key() -> None:
     base = np.asarray(_gen_state(random.PRNGKey(0)).map)
     assert any(
-        not np.array_equal(
-            base, np.asarray(_gen_state(random.PRNGKey(s)).map)
-        )
+        not np.array_equal(base, np.asarray(_gen_state(random.PRNGKey(s)).map))
         for s in (1, 2, 3, 4, 5)
     )
 

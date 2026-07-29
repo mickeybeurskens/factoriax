@@ -4,19 +4,23 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from factoriax.engine.constants import BlockType, ItemType
 from factoriax.engine.achievements import achievement_weights
-from factoriax.playground.play.achievements import (
-    FREE_PLAY_ACHIEVEMENTS,
-    free_play_conditions,
+from factoriax.engine.constants import (
+    MAX_ACHIEVEMENTS,
+    NUM_ITEM_TYPES,
+    BlockType,
+    ItemType,
 )
-from factoriax.engine.constants import MAX_ACHIEVEMENTS, NUM_ITEM_TYPES
 from factoriax.engine.rewards import (
     achievement_reward,
     mining_reward,
     sparse_mining_reward,
 )
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.playground.play.achievements import (
+    FREE_PLAY_ACHIEVEMENTS,
+    free_play_conditions,
+)
 
 
 def _wrap(state: EnvState) -> EnvState:

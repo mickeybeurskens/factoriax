@@ -5,8 +5,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
 from factoriax.engine.state import EnvParams
+from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
 from factoriax.playground.play.ui import (
     SCROLL_STEP,
     ClickRegion,

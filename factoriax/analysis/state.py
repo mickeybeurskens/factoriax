@@ -45,9 +45,9 @@ def inventory_over_time(
         count vector per state, so the slot-aggregation step the
         old slot-model required is gone.
     player : int
-        
+
     num_item_types : int
-        
+
     traj :
         Trajectory:
     player :
@@ -55,7 +55,7 @@ def inventory_over_time(
     num_item_types :
         int:  (Default value = 5)
     traj: Trajectory :
-        
+
     player: int :
          (Default value = 0)
     num_item_types: int :
@@ -92,13 +92,13 @@ def plot_inventory(
     Parameters
     ----------
     traj : Trajectory
-        
+
     player : int
-        
+
     num_item_types : int
-        
+
     item_labels, item_colors :
-        
+
     exclude_empty : bool
         If *True*, skip the EMPTY item type.
     traj :
@@ -120,11 +120,11 @@ def plot_inventory(
     float] :
         (Default value = (12)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int :
          (Default value = 0)
     num_item_types: int :
@@ -138,7 +138,7 @@ def plot_inventory(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -188,11 +188,11 @@ def position_heatmap(
     traj : Trajectory
         Must have ``positions``.
     player : int
-        
+
     map_width, map_height :
-        
+
     time_range : tuple[int
-        
+
     traj :
         Trajectory:
     player :
@@ -206,7 +206,7 @@ def position_heatmap(
     int] | None :
         (Default value = None)
     traj: Trajectory :
-        
+
     player: int :
          (Default value = 0)
     map_width: int :
@@ -214,7 +214,7 @@ def position_heatmap(
     map_height: int :
          (Default value = 32)
     time_range: tuple[int :
-        
+
 
     Returns
     -------
@@ -283,13 +283,13 @@ def plot_position_heatmap(
     float] :
         (Default value = (7)
     7) :
-        
+
     cmap :
         str:  (Default value = "hot")
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player: int :
          (Default value = 0)
     map_width: int :
@@ -297,11 +297,11 @@ def plot_position_heatmap(
     map_height: int :
          (Default value = 32)
     time_range: tuple[int :
-        
+
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     cmap: str :
          (Default value = "hot")
     title: str | None :
@@ -342,7 +342,7 @@ def plot_trajectory_trace(
     cmap: str = "viridis",
 ) -> tuple[Figure, Axes]:
     """Plot the movement path of a player for a single episode.
-    
+
     Color intensity encodes time progression (dark = early, bright = late).
 
     Parameters
@@ -350,9 +350,9 @@ def plot_trajectory_trace(
     traj : Trajectory
         Must have ``positions``.
     episode, player :
-        
+
     map_width, map_height :
-        
+
     traj :
         Trajectory:
     episode :
@@ -370,13 +370,13 @@ def plot_trajectory_trace(
     float] :
         (Default value = (7)
     7) :
-        
+
     title :
         str | None:  (Default value = None)
     cmap :
         str:  (Default value = "viridis")
     traj: Trajectory :
-        
+
     episode: int :
          (Default value = 0)
     player: int :
@@ -388,7 +388,7 @@ def plot_trajectory_trace(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
     cmap: str :
@@ -460,7 +460,7 @@ def plot_resource_depletion(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot total remaining block resources over time.
-    
+
     Requires the ``block_resources`` field on the trajectory,
     shaped ``(B, T, H, W)``.  This is not stored by default; researchers
     need to snapshot ``env_state.block_resources`` during rollouts.
@@ -476,15 +476,15 @@ def plot_resource_depletion(
     float] :
         (Default value = (12)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -529,7 +529,7 @@ def plot_episode_rewards(
     title: str | None = None,
 ) -> tuple[Figure, np.ndarray]:
     """Plot per-step and cumulative rewards for a single episode.
-    
+
     The top panel shows a bar chart of per-step rewards and the bottom
     panel shows the cumulative reward curve with shaded area.
 
@@ -552,23 +552,23 @@ def plot_episode_rewards(
     float] :
         (Default value = (10)
     6) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     episode: int :
          (Default value = 0)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
     Returns
     -------
-    
+
         Tuple of ``(fig, axes)`` where *axes* is a length-2 array
-    
+
         Tuple of ``(fig, axes)`` where *axes* is a length-2 array
         of the step-reward and cumulative-reward axes.
 

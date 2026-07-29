@@ -21,8 +21,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.envs.base import achievement_hook
+from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
 from factoriax.engine.envs.common import (
     MAP_SIZE,
     ORE_RESOURCES_PER_TILE,
@@ -168,7 +167,7 @@ def _producing_ore_presence(state: EnvState) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
 
     Returns
     -------
@@ -186,7 +185,7 @@ def _distinct_producing_ore_types(state: EnvState) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
 
     Returns
     -------
@@ -202,7 +201,7 @@ def _all_ore_types_covered(state: EnvState) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
 
     Returns
     -------
@@ -214,7 +213,7 @@ def _all_ore_types_covered(state: EnvState) -> jax.Array:
 
 def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Array:
     """An active assembler holds both ``item_a`` and ``item_b`` in its inputs.
-    
+
     Each input item must occupy one of the two input slots with a
     non-empty count. Requiring both inputs in the same assembler keeps
     the hull, engine, and rocket feeds distinct despite their shared
@@ -223,11 +222,11 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
     Parameters
     ----------
     state: EnvState :
-        
+
     item_a: int :
-        
+
     item_b: int :
-        
+
 
     Returns
     -------
@@ -243,7 +242,7 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
 
 def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
     """An active assembler carries ``item`` in its output or buffer slot.
-    
+
     Reads both ``ent_asm_out`` and ``ent_buf`` because the engine drains
     a finished output into the buffer on the next tick; checking only the
     output slot would blink off for that tick.
@@ -251,9 +250,9 @@ def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
     item: int :
-        
+
 
     Returns
     -------
@@ -271,7 +270,7 @@ def _has_any_raw_ore(state: EnvState) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
 
     Returns
     -------
@@ -286,7 +285,7 @@ def _has_each_raw_ore(state: EnvState) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
 
     Returns
     -------
@@ -301,7 +300,7 @@ def _any_producing_miner(state: EnvState) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
 
     Returns
     -------
@@ -316,9 +315,9 @@ def _has_machine(state: EnvState, machine: int) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
     machine: int :
-        
+
 
     Returns
     -------
@@ -333,11 +332,11 @@ def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
     machine: int :
-        
+
     n: int :
-        
+
 
     Returns
     -------
@@ -354,13 +353,13 @@ def _has_n_machines_pair(
     Parameters
     ----------
     state: EnvState :
-        
+
     machine_a: int :
-        
+
     machine_b: int :
-        
+
     n: int :
-        
+
 
     Returns
     -------
@@ -373,7 +372,7 @@ def _has_n_machines_pair(
 
 def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
     """Player inventory holds at least one of ``n`` distinct raw ore types.
-    
+
     Sibling of :func:`_has_any_raw_ore` (n=1) and
     :func:`_has_each_raw_ore` (n=len(_RAW_ORE_ITEMS)); use this when
     you want a mid-curriculum variety milestone such as "half the ore
@@ -382,9 +381,9 @@ def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
     Parameters
     ----------
     state: EnvState :
-        
+
     n: int :
-        
+
 
     Returns
     -------
@@ -419,11 +418,17 @@ EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
     Achievement("ore_fields", _distinct_producing_ore_types),
     Achievement("mining_master", _all_ore_types_covered),
     # ---- Storage ----
-    Achievement("one_pallet", partial(_has_n_machines, machine=int(Machine.PALLET), n=1)),
-    Achievement("three_pallets", partial(_has_n_machines, machine=int(Machine.PALLET), n=3)),
+    Achievement(
+        "one_pallet", partial(_has_n_machines, machine=int(Machine.PALLET), n=1)
+    ),
+    Achievement(
+        "three_pallets", partial(_has_n_machines, machine=int(Machine.PALLET), n=3)
+    ),
     Achievement("stacked", partial(_has_n_machines, machine=int(Machine.PALLET), n=6)),
     # ---- Hull ----
-    Achievement("assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))),
+    Achievement(
+        "assembler_online", partial(_has_machine, machine=int(Machine.ASSEMBLER))
+    ),
     Achievement(
         "assembler_and_arm",
         partial(
@@ -441,7 +446,9 @@ EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         "three_belts",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=3),
     ),
-    Achievement("hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))),
+    Achievement(
+        "hull_production", partial(_assembler_outputs_item, item=int(ItemType.HULL))
+    ),
     # ---- Engine ----
     Achievement(
         "two_assemblers",
@@ -465,12 +472,16 @@ EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         partial(_assembler_outputs_item, item=int(ItemType.ENGINE_UNIT)),
     ),
     # ---- Rocket production ----
-    Achievement("auto_bots", partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3)),
+    Achievement(
+        "auto_bots", partial(_has_n_machines, machine=int(Machine.ASSEMBLER), n=3)
+    ),
     Achievement(
         "belt_spaghetti",
         partial(_has_n_machines, machine=int(Machine.CONVEYOR_BELT), n=10),
     ),
-    Achievement("rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))),
+    Achievement(
+        "rocket_assembled", partial(_assembler_outputs_item, item=int(ItemType.ROCKET))
+    ),
     Achievement("liftoff", partial(_has_machine, machine=int(Machine.ROCKET))),
 )
 
@@ -504,11 +515,11 @@ def easy_rocket_reward(
     Parameters
     ----------
     prev_state: EnvState :
-        
+
     new_state: EnvState :
-        
+
     params: EnvParams :
-        
+
 
     Returns
     -------

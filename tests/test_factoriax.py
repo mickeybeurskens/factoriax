@@ -6,13 +6,17 @@ import numpy as np
 import pytest
 from jax import random
 
-from factoriax.engine.constants import Action, BlockType, Direction
-from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.constants import (
     NUM_ACTIONS,
+    Action,
+    BlockType,
+    Direction,
     Machine,
 )
+from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.levels import generate_state
+from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.step import (
     get_block_at,
     is_game_over,
@@ -20,8 +24,6 @@ from factoriax.engine.step import (
     is_position_walkable,
     move_player,
 )
-from factoriax.engine.levels import generate_state
-from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.tables import SOLID_BLOCKS
 from factoriax.playground.ui.icons import BLOCK_COLORS, create_default_textures
 

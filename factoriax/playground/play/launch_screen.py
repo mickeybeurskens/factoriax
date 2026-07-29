@@ -50,9 +50,7 @@ _SEED_MAX: int = 2**32 - 1
 _SECTIONS: tuple[SettingSection, ...] = (
     SettingSection(
         "World",
-        (
-            SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),
-        ),
+        (SettingField("max_timesteps", "Max steps", False, 100, 100, 10_000),),
     ),
     SettingSection(
         "Resources",
@@ -87,6 +85,7 @@ _SETTING_FIELDS: tuple[SettingField, ...] = tuple(
 @dataclass(frozen=True)
 class _PageOption:
     """ """
+
     action: str
     label: str
     description: str
@@ -132,9 +131,9 @@ def _get_value(config: PlayerConfig, field: SettingField) -> float:
     Parameters
     ----------
     config: PlayerConfig :
-        
+
     field: SettingField :
-        
+
 
     Returns
     -------
@@ -154,11 +153,11 @@ def _set_value(config: PlayerConfig, field: SettingField, value: float) -> None:
     Parameters
     ----------
     config: PlayerConfig :
-        
+
     field: SettingField :
-        
+
     value: float :
-        
+
 
     Returns
     -------
@@ -176,7 +175,7 @@ def _reset_to_defaults(config: PlayerConfig) -> None:
     Parameters
     ----------
     config: PlayerConfig :
-        
+
 
     Returns
     -------
@@ -192,11 +191,11 @@ def _randomize_button_rect(rect: pygame.Rect, scale: int, bottom_y: int) -> pyga
     Parameters
     ----------
     rect: pygame.Rect :
-        
+
     scale: int :
-        
+
     bottom_y: int :
-        
+
 
     Returns
     -------
@@ -226,7 +225,7 @@ def run_settings_menu(
     Parameters
     ----------
     screen: pygame.Surface :
-        
+
     initial_config: PlayerConfig | None :
          (Default value = None)
 
@@ -308,9 +307,9 @@ def run_settings_menu(
         Parameters
         ----------
         field: SettingField :
-            
+
         direction: int :
-            
+
 
         Returns
         -------
@@ -525,9 +524,9 @@ def _apply_display_state(fullscreen: bool, ui_scale: int) -> pygame.Surface:
     Parameters
     ----------
     fullscreen: bool :
-        
+
     ui_scale: int :
-        
+
 
     Returns
     -------
@@ -549,7 +548,7 @@ def _confirm_display_change(
     new_ui_scale: int,
 ) -> bool:
     """Apply the new (fullscreen, ui_scale) state and prompt to keep or revert.
-    
+
     Shows a centered Keep / Revert dialog with a countdown. On revert (or
     timeout, Escape, or Backspace), restores the previous display state and
     returns ``False``. On confirm (Enter / Keep), returns ``True`` and leaves
@@ -558,13 +557,13 @@ def _confirm_display_change(
     Parameters
     ----------
     old_fullscreen: bool :
-        
+
     old_ui_scale: int :
-        
+
     new_fullscreen: bool :
-        
+
     new_ui_scale: int :
-        
+
 
     Returns
     -------
@@ -595,7 +594,7 @@ def _confirm_display_change(
         Parameters
         ----------
         confirmed: bool :
-            
+
 
         Returns
         -------

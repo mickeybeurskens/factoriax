@@ -33,7 +33,7 @@ from matplotlib.patches import FancyBboxPatch
 @dataclass(frozen=True)
 class AchievementSpec:
     """One bit in the curriculum.
-    
+
     Mirrors the engine's per-bit metadata but lives outside the JAX
     module so callers can render the strip from a JSON dump.
 
@@ -70,9 +70,9 @@ def _darken(hex_color: str, factor: float) -> str:
     Parameters
     ----------
     hex_color: str :
-        
+
     factor: float :
-        
+
 
     Returns
     -------
@@ -90,7 +90,7 @@ def _text_color(fill_hex: str) -> str:
     Parameters
     ----------
     fill_hex: str :
-        
+
 
     Returns
     -------
@@ -111,14 +111,14 @@ def _cell_x_positions(
     Parameters
     ----------
     achievements: Sequence[AchievementSpec] :
-        
+
     layout: StripLayout :
-        
+
 
     Returns
     -------
     type
-        
+
 
     """
     xs: list[float] = []
@@ -146,17 +146,17 @@ def _draw_cell(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     spec: AchievementSpec :
-        
+
     x: float :
-        
+
     fill: str :
-        
+
     stroke: str :
-        
+
     layout: StripLayout :
-        
+
 
     Returns
     -------
@@ -207,13 +207,13 @@ def _draw_phase_labels(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     achievements: Sequence[AchievementSpec] :
-        
+
     xs: Sequence[float] :
-        
+
     layout: StripLayout :
-        
+
 
     Returns
     -------
@@ -245,7 +245,7 @@ def _draw_boundary(
     layout: StripLayout,
 ) -> None:
     """Draw the dashed line marking the hand-craftable → automation transition.
-    
+
     The line sits in the gap between the last hand-craftable cell and
     the first automation cell. Two short labels above and below name
     the regimes on either side.
@@ -253,13 +253,13 @@ def _draw_boundary(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     achievements: Sequence[AchievementSpec] :
-        
+
     xs: Sequence[float] :
-        
+
     layout: StripLayout :
-        
+
 
     Returns
     -------
@@ -334,15 +334,15 @@ def render(
     layout :
         Optional geometry override.
     achievements: Sequence[AchievementSpec] :
-        
+
     out_path: Path | str :
-        
+
     * :
-        
+
     phase_palette: Mapping[str :
-        
+
     str] :
-        
+
     layout: StripLayout | None :
          (Default value = None)
 

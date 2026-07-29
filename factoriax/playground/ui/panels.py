@@ -17,7 +17,7 @@ from factoriax.playground.ui import theme as _theme
 
 class InputSourceTracker:
     """Tracks whether mouse motion or keyboard nav last moved the selection.
-    
+
     Menus use this to decide when mouse hover should commit to the selection:
     only while :attr:`mouse_active` is ``True``. The flag flips to ``True``
     when the cursor position changes between :meth:`tick` calls; the caller
@@ -55,7 +55,7 @@ def rgba_to_surface(rgba: np.ndarray) -> pygame.Surface:
     Parameters
     ----------
     rgba: np.ndarray :
-        
+
 
     Returns
     -------
@@ -74,7 +74,7 @@ def _border_color(focused: bool) -> tuple[int, int, int]:
     Parameters
     ----------
     focused: bool :
-        
+
 
     Returns
     -------
@@ -96,15 +96,15 @@ def draw_panel(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     title: str | None :
          (Default value = None)
     title_font: pygame.font.Font | None :
          (Default value = None)
     * :
-        
+
     focused: bool :
          (Default value = True)
 
@@ -143,15 +143,15 @@ def draw_button(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     label: str :
-        
+
     font: pygame.font.Font :
-        
+
     * :
-        
+
     focused: bool :
          (Default value = False)
     hovered: bool :
@@ -188,15 +188,15 @@ def draw_hint_bar(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     sw: int :
-        
+
     y: int :
-        
+
     text: str :
-        
+
     font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -208,7 +208,7 @@ def draw_hint_bar(
 
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     """Word-wrap ``text`` to fit ``max_width`` using ``font``.
-    
+
     Newlines become explicit breaks; empty paragraphs become empty lines so
     the source's vertical rhythm is preserved. Words longer than ``max_width``
     are kept on their own line (no character-level splitting).
@@ -216,11 +216,11 @@ def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     Parameters
     ----------
     text: str :
-        
+
     font: pygame.font.Font :
-        
+
     max_width: int :
-        
+
 
     Returns
     -------
@@ -262,7 +262,7 @@ class SettingField:
         Parameters
         ----------
         value: float :
-            
+
 
         Returns
         -------
@@ -279,7 +279,7 @@ class SettingField:
         Parameters
         ----------
         value: float :
-            
+
 
         Returns
         -------
@@ -296,9 +296,9 @@ def list_row_rects(rect: pygame.Rect, n_rows: int) -> list[pygame.Rect]:
     Parameters
     ----------
     rect: pygame.Rect :
-        
+
     n_rows: int :
-        
+
 
     Returns
     -------
@@ -320,7 +320,7 @@ def list_row_rects(rect: pygame.Rect, n_rows: int) -> list[pygame.Rect]:
 @dataclass(frozen=True)
 class SettingSection:
     """A titled group of related :class:`SettingField` rows.
-    
+
     Used by :func:`draw_setting_sections` to render an editable settings list
     with elegant headings and dividers between groups.
 
@@ -339,7 +339,7 @@ class SettingSection:
 @dataclass(frozen=True)
 class LabelValueSection:
     """A titled group of ``(label, value)`` rows for read-only / non-numeric display.
-    
+
     Companion to :class:`SettingSection`: same visual layout, but values are
     arbitrary strings the caller pre-formats (key bindings, toggle state,
     enum-style choices). The active row gets the gold-fill highlight but no
@@ -368,7 +368,7 @@ def setting_section_layout(
     heading_h: int,
 ) -> tuple[list[pygame.Rect], list[tuple[int, int]], int]:
     """Compute per-field row rects, per-section heading positions, and bottom y.
-    
+
     Single source of truth for the sectioned-settings layout; the drawer and
     callers that need to position a button below the block (or hit-test the
     rows) share these coordinates.
@@ -376,13 +376,13 @@ def setting_section_layout(
     Parameters
     ----------
     rect: pygame.Rect :
-        
+
     sections: tuple[SettingSection :
-        
+
     ...] | list[SettingSection] :
-        
+
     heading_h: int :
-        
+
 
     Returns
     -------
@@ -420,34 +420,34 @@ def draw_setting_sections(
     heading_font: pygame.font.Font,
 ) -> tuple[list[pygame.Rect], int]:
     """Render sectioned setting rows with headings and dividers.
-    
+
     ``values`` is a flat list aligned with the concatenation of every
     section's ``fields``; ``selected_idx`` indexes into that same flat list.
 
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     sections: tuple[SettingSection :
-        
+
     ...] | list[SettingSection] :
-        
+
     values: list[float] :
-        
+
     selected_idx: int :
-        
+
     focused: bool :
-        
+
     font: pygame.font.Font :
-        
+
     heading_font: pygame.font.Font :
-        
+
 
     Returns
     -------
-    
+
         ``(row_rects, bottom_y)`` — for hit-testing and positioning content
         below the rendered block.
 
@@ -513,13 +513,13 @@ def label_value_section_layout(
     Parameters
     ----------
     rect: pygame.Rect :
-        
+
     sections: tuple[LabelValueSection :
-        
+
     ...] | list[LabelValueSection] :
-        
+
     heading_h: int :
-        
+
 
     Returns
     -------
@@ -557,7 +557,7 @@ def draw_label_value_sections(
     heading_font: pygame.font.Font,
 ) -> tuple[list[pygame.Rect], int]:
     """Render sectioned label/value rows for bindings, toggles, choices.
-    
+
     Same visual treatment as :func:`draw_setting_sections` but values are
     arbitrary strings supplied by the caller; the active row gets the gold
     highlight without chevron decoration. ``values`` is a flat list aligned
@@ -566,23 +566,23 @@ def draw_label_value_sections(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     sections: tuple[LabelValueSection :
-        
+
     ...] | list[LabelValueSection] :
-        
+
     values: list[str] :
-        
+
     selected_idx: int :
-        
+
     focused: bool :
-        
+
     font: pygame.font.Font :
-        
+
     heading_font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -647,7 +647,7 @@ def draw_setting_rows(
     font: pygame.font.Font,
 ) -> list[pygame.Rect]:
     """Render ``label … value`` rows for an editable settings list.
-    
+
     When ``focused`` and ``i == selected_idx``, the row gets a gold fill and
     the value is wrapped with ``<  value  >`` chevrons to signal that
     Left/Right adjusts it. Returns the row rects so the caller can hit-test
@@ -656,21 +656,21 @@ def draw_setting_rows(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     fields: tuple[SettingField :
-        
+
     ...] | list[SettingField] :
-        
+
     values: list[float] :
-        
+
     selected_idx: int :
-        
+
     focused: bool :
-        
+
     font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -724,15 +724,15 @@ def draw_list_rows(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     rows: list[str] :
-        
+
     selected_idx: int :
-        
+
     font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -776,15 +776,15 @@ def draw_description(
     Parameters
     ----------
     surf: pygame.Surface :
-        
+
     rect: pygame.Rect :
-        
+
     text: str :
-        
+
     scroll: int :
-        
+
     font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -832,7 +832,7 @@ def draw_description(
 @dataclass(frozen=True)
 class DecorationStrip:
     """Horizontal row of game icons with a periodic "ore on belt" animation.
-    
+
     Stateless: ``draw`` derives the animation phase from ``time_ms`` (typically
     ``pygame.time.get_ticks()``). Build one with the
     :meth:`factoriax_default` factory or by populating the fields manually.
@@ -856,14 +856,14 @@ class DecorationStrip:
     @classmethod
     def factoriax_default(cls, icon_size: int, icon_gap: int = 10) -> DecorationStrip:
         """Build the standard 8-slot strip: player, miner, 4×belt, arm, pallet.
-        
+
         Ore travels across the four belt slots (indices 2-5) and onto the arm
         (index 6); the player and miner slots stay clear.
 
         Parameters
         ----------
         icon_size: int :
-            
+
         icon_gap: int :
              (Default value = 10)
 
@@ -924,13 +924,13 @@ class DecorationStrip:
         Parameters
         ----------
         surf: pygame.Surface :
-            
+
         x: int :
-            
+
         y: int :
-            
+
         time_ms: int :
-            
+
 
         Returns
         -------

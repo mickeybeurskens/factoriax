@@ -85,9 +85,9 @@ def _validate(specs: tuple[MachineSpec, ...]) -> None:
     specs :
         The full machine spec table.
     specs: tuple[MachineSpec :
-        
+
     ...] :
-        
+
 
     Returns
     -------

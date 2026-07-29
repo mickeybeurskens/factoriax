@@ -57,15 +57,15 @@ def screen_to_tile(vp: Viewport, sx: int, sy: int) -> tuple[int, int]:
     sy :
         Y pixel offset from the canvas top edge.
     vp: Viewport :
-        
+
     sx: int :
-        
+
     sy: int :
-        
+
 
     Returns
     -------
-    
+
         ``(tile_x, tile_y)`` integer tile coordinates.
 
     """
@@ -86,15 +86,15 @@ def tile_to_screen(vp: Viewport, tx: int, ty: int) -> tuple[int, int]:
     ty :
         Tile row.
     vp: Viewport :
-        
+
     tx: int :
-        
+
     ty: int :
-        
+
 
     Returns
     -------
-    
+
         ``(px, py)`` pixel offset from the canvas top-left.
 
     """
@@ -115,11 +115,11 @@ def clamp_camera(vp: Viewport, map_w: int, map_h: int) -> None:
     map_h :
         Map height in tiles.
     vp: Viewport :
-        
+
     map_w: int :
-        
+
     map_h: int :
-        
+
 
     Returns
     -------
@@ -147,15 +147,15 @@ def pan(vp: Viewport, dx: float, dy: float, map_w: int, map_h: int) -> None:
     map_h :
         Map height in tiles.
     vp: Viewport :
-        
+
     dx: float :
-        
+
     dy: float :
-        
+
     map_w: int :
-        
+
     map_h: int :
-        
+
 
     Returns
     -------
@@ -175,7 +175,7 @@ def zoom(
     map_h: int,
 ) -> None:
     """Zoom in or out, keeping the tile under the mouse fixed.
-    
+
     Cycles through :data:`TILE_SIZES` in the given direction.
 
     Parameters
@@ -193,17 +193,17 @@ def zoom(
     map_h :
         Map height in tiles.
     vp: Viewport :
-        
+
     direction: int :
-        
+
     mouse_sx: int :
-        
+
     mouse_sy: int :
-        
+
     map_w: int :
-        
+
     map_h: int :
-        
+
 
     Returns
     -------
@@ -232,7 +232,7 @@ def render_canvas(
     show_resources: bool = False,
 ) -> np.ndarray:
     """Render the visible canvas area as an RGBA image.
-    
+
     Draws terrain tiles via the vectorized texture lookup, overlays
     machines, grid lines, and cursor / selection highlights.  When
     *show_resources* is ``True``, the resource count is drawn on each
@@ -252,23 +252,23 @@ def render_canvas(
     show_resources :
         Whether to draw resource amounts on tiles.
     state: object :
-        
+
     vp: Viewport :
-        
+
     cursor_tile: tuple[int :
-        
+
     int] | None :
          (Default value = None)
     selection_rect: tuple[int :
-        
+
     int :
-        
+
     show_resources: bool :
          (Default value = False)
 
     Returns
     -------
-    
+
         RGBA uint8 array of shape ``(canvas_h, canvas_w, 4)``.
 
     """
@@ -387,9 +387,9 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
     Parameters
     ----------
     player_idx: int :
-        
+
     size: int :
-        
+
 
     Returns
     -------
@@ -402,7 +402,7 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
 
 def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
     """Draw player start markers and biters on the canvas.
-    
+
     Biters are drawn first so player markers appear on top when
     they overlap. Biter sprites come from the atlas (same source the
     play renderer uses); player start markers stay procedural since
@@ -418,11 +418,11 @@ def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
     vp :
         Current viewport.
     canvas: np.ndarray :
-        
+
     es: EditorState :
-        
+
     vp: Viewport :
-        
+
 
     Returns
     -------
@@ -460,19 +460,19 @@ def _highlight_tile(
     color :
         RGBA highlight colour.
     canvas: np.ndarray :
-        
+
     vp: Viewport :
-        
+
     tx: int :
-        
+
     ty: int :
-        
+
     color: tuple[int :
-        
+
     int :
-        
+
     int] :
-        
+
 
     Returns
     -------
@@ -510,13 +510,13 @@ def _blit_clipped(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     x :
         Left column in destination.
     dst: np.ndarray :
-        
+
     src: np.ndarray :
-        
+
     y: int :
-        
+
     x: int :
-        
+
 
     Returns
     -------
@@ -548,7 +548,7 @@ def _get_resource_font(tile_size: int) -> pygame.font.Font:
     tile_size :
         Current tile pixel size
     tile_size: int :
-        
+
 
     Returns
     -------
@@ -565,7 +565,7 @@ def _get_resource_font(tile_size: int) -> pygame.font.Font:
 @functools.lru_cache(maxsize=256)
 def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
     """Render a resource amount as a small RGBA text label.
-    
+
     Results are cached per ``(font, amount)`` pair so repeated
     amounts on the same zoom level don't re-render.
 
@@ -576,13 +576,13 @@ def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
     amount :
         Resource count to display.
     font: pygame.font.Font :
-        
+
     amount: int :
-        
+
 
     Returns
     -------
-    
+
         RGBA uint8 array of shape ``(H, W, 4)``.
 
     """
@@ -610,13 +610,13 @@ def _blit_alpha(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     x :
         Left column in destination.
     dst: np.ndarray :
-        
+
     src: np.ndarray :
-        
+
     y: int :
-        
+
     x: int :
-        
+
 
     Returns
     -------

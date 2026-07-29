@@ -42,7 +42,7 @@ from factoriax.analysis.graph_layout import assign_tiers, order_within_tiers
 @dataclass(frozen=True)
 class RecipeSpec:
     """Plain-Python recipe used by the renderer.
-    
+
     Mirrors :class:`factoriax.engine.recipes.Recipe` but stores item
     names as strings so callers can render diagrams from a JSON dump
     without importing the JAX-backed engine module directly.
@@ -65,7 +65,7 @@ class RecipeSpec:
 @dataclass(frozen=True)
 class Layout:
     """Geometry constants for the recipe DAG render.
-    
+
     Tuned against the easy-rocket recipe set. Override fields when the
     figure needs different proportions; the renderer accepts any
     instance through the ``layout=`` argument.
@@ -109,7 +109,7 @@ def _adjacency(recipes: Iterable[RecipeSpec]) -> dict[str, list[str]]:
     Parameters
     ----------
     recipes: Iterable[RecipeSpec] :
-        
+
 
     Returns
     -------
@@ -128,18 +128,18 @@ def _positions(
     Parameters
     ----------
     tiers: Mapping[str :
-        
+
     int] :
-        
+
     rows: Mapping[str :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
     type
-        
+
 
     """
     by_tier: dict[int, list[str]] = defaultdict(list)
@@ -162,9 +162,9 @@ def _darken(hex_color: str, factor: float) -> str:
     Parameters
     ----------
     hex_color: str :
-        
+
     factor: float :
-        
+
 
     Returns
     -------
@@ -189,9 +189,9 @@ def _node_colors(
     Parameters
     ----------
     items: Iterable[str] :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
@@ -218,7 +218,7 @@ def _text_palette(fill_hex: str) -> tuple[str, str, str]:
     Parameters
     ----------
     fill_hex: str :
-        
+
 
     Returns
     -------
@@ -247,7 +247,7 @@ def _pretty(name: str) -> str:
     Parameters
     ----------
     name: str :
-        
+
 
     Returns
     -------
@@ -265,7 +265,7 @@ def _assign_ports(
     dict[str, dict[str, tuple[str, int]]],
 ]:
     """Assign each recipe input a top, middle, or bottom port.
-    
+
     For two-input recipes the input whose source row is visually higher
     enters the top port; the other enters the bottom. This minimises
     arrow crossings near the target. Single-input recipes use a middle
@@ -274,15 +274,15 @@ def _assign_ports(
     Parameters
     ----------
     recipes: Iterable[RecipeSpec] :
-        
+
     positions: Mapping[str :
-        
+
     tuple[float :
-        
+
     float]] :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
@@ -320,9 +320,9 @@ def _gaps_for_edge(source_tier: int, target_tier: int) -> tuple[int, ...]:
     Parameters
     ----------
     source_tier: int :
-        
+
     target_tier: int :
-        
+
 
     Returns
     -------
@@ -345,7 +345,7 @@ def _allocate_edge_channels(
     layout: Layout,
 ) -> dict[tuple[str, str, int], float]:
     """Give every edge a unique vertical x in every gap it traverses.
-    
+
     Edges within a gap are sorted by ``(source_row, target_row)`` so
     edges that fan out from the same source land in adjacent channels,
     keeping crossings rare.
@@ -353,15 +353,15 @@ def _allocate_edge_channels(
     Parameters
     ----------
     recipes: Iterable[RecipeSpec] :
-        
+
     tiers: Mapping[str :
-        
+
     int] :
-        
+
     rows: Mapping[str :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
@@ -405,33 +405,33 @@ def _route_edge(
     Parameters
     ----------
     source_pos: tuple[float :
-        
+
     float] :
-        
+
     target_pos: tuple[float :
-        
+
     port_y: float :
-        
+
     source_tier: int :
-        
+
     target_tier: int :
-        
+
     src_channel: float :
-        
+
     tgt_channel: float | None :
-        
+
     inter_row_ys: Sequence[float] :
-        
+
     skyway_lane: float :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
     type
         Three routing regimes:
-        
+
         * Adjacent tiers: classic L-bend through the source-side gap to the
         target's port.
         * Single-tier skip: source-gap drop, inter-row lane traverse,
@@ -491,15 +491,15 @@ def _draw_tier_headers(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     max_tier: int :
-        
+
     max_rows: int :
-        
+
     skyway_headroom: float :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
@@ -538,9 +538,9 @@ def _truncate(name: str, limit: int) -> str:
     Parameters
     ----------
     name: str :
-        
+
     limit: int :
-        
+
 
     Returns
     -------
@@ -560,7 +560,7 @@ def _draw_box(
     layout: Layout,
 ) -> None:
     """Draw one node box.
-    
+
     Raw materials get a single centred label. Recipe outputs get a
     recipe card: result name and ``×N · Tt`` subtitle on the right;
     ``×N InputName`` rows on the left at each used port.
@@ -568,27 +568,27 @@ def _draw_box(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     item: str :
-        
+
     position: tuple[float :
-        
+
     float] :
-        
+
     recipe: RecipeSpec | None :
-        
+
     port_info: Mapping[str :
-        
+
     tuple[str :
-        
+
     int]] | None :
-        
+
     fill: str :
-        
+
     stroke: str :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
@@ -652,11 +652,11 @@ def _draw_box(
         Parameters
         ----------
         port_y: float :
-            
+
         data: tuple[str :
-            
+
         int] :
-            
+
 
         Returns
         -------
@@ -688,7 +688,7 @@ def _draw_legend(
     layout: Layout,
 ) -> None:
     """Attach a horizontal category legend below the axes.
-    
+
     ``entries`` is an ordered ``[(category_name, hex_color), ...]`` list.
     The legend renders one swatch per entry, in the order given, so
     callers control the visual ordering by sorting the list.
@@ -696,13 +696,13 @@ def _draw_legend(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     entries: Sequence[tuple[str :
-        
+
     str]] :
-        
+
     layout: Layout :
-        
+
 
     Returns
     -------
@@ -743,15 +743,15 @@ def _draw_edge(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     vertices: Sequence[tuple[float :
-        
+
     float]] :
-        
+
     color: str :
-        
+
     alpha: float :
-        
+
 
     Returns
     -------
@@ -804,11 +804,11 @@ def render(
     Parameters
     ----------
     recipes: Sequence[RecipeSpec] :
-        
+
     out_path: Path | str :
-        
+
     * :
-        
+
     title: str :
          (Default value = "")
     layout: Layout | None :
@@ -854,7 +854,7 @@ def render(
         Parameters
         ----------
         source: str :
-            
+
 
         Returns
         -------

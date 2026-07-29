@@ -61,18 +61,18 @@ class ScaledCanvas:
         window_h :
             New window height in pixels.
         window_w : int :
-            
+
         window_h : int :
-            
+
         window_w: int :
-            
+
         window_h: int :
-            
+
 
         Returns
         -------
 
-        
+
         """
         self._scale = max(
             1,
@@ -91,18 +91,18 @@ class ScaledCanvas:
         window_y :
             Y position in window pixels.
         window_x : int :
-            
+
         window_y : int :
-            
+
         window_x: int :
-            
+
         window_y: int :
-            
+
 
         Returns
         -------
 
-        
+
         """
         return (
             (window_x - self._ox) // self._scale,
@@ -111,7 +111,7 @@ class ScaledCanvas:
 
     def present(self, screen: pygame.Surface) -> None:
         """Scale the canvas and blit it centered onto the display surface.
-        
+
         Fills the screen with black for letterboxing, integer-scales the
         canvas, and blits it centered.
 
@@ -120,14 +120,14 @@ class ScaledCanvas:
         screen :
             The pygame display surface.
         screen : pygame.Surface :
-            
+
         screen: pygame.Surface :
-            
+
 
         Returns
         -------
 
-        
+
         """
         scaled = pygame.transform.scale(
             self._surface,

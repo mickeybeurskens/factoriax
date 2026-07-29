@@ -34,9 +34,9 @@ def _icon_rgba(item_type: int, size: int) -> np.ndarray:
     Parameters
     ----------
     item_type: int :
-        
+
     size: int :
-        
+
 
     Returns
     -------
@@ -63,7 +63,7 @@ def _item_label(item: ItemType) -> str:
     Parameters
     ----------
     item: ItemType :
-        
+
 
     Returns
     -------
@@ -84,7 +84,7 @@ def _inventory_slot_positions(
     pad_x: int = 6,
 ) -> list[tuple[int, int, int, int]]:
     """Compute ``(x, y, col_w, row_h)`` for each inventory item.
-    
+
     Lays items out column-major, picking the *minimum* column count
     that lets every row fit at ``min_row_h``. That's what makes the
     "always show all items" invariant robust under small panels —
@@ -112,15 +112,15 @@ def _inventory_slot_positions(
     pad_x :
         Left/right padding in pixels.
     width: int :
-        
+
     height: int :
-        
+
     num_items: int :
-        
+
     * :
-        
+
     row_top: int :
-        
+
     min_row_h: int :
          (Default value = 10)
     max_row_h: int :
@@ -168,7 +168,7 @@ def render_inventory_panel(
     title: str = "Inventory",
 ) -> np.ndarray:
     """Render the player inventory as an RGB panel.
-    
+
     Every non-EMPTY ``ItemType`` gets a slot — this is a hard invariant:
     at any ``(width, height)`` the returned image contains one row per
     item in :data:`INVENTORY_ITEMS`. Counts of zero are shown dimmed
@@ -185,19 +185,19 @@ def render_inventory_panel(
     title :
         Panel heading.
     inventory: np.ndarray :
-        
+
     width: int :
-        
+
     height: int :
-        
+
     * :
-        
+
     title: str :
          (Default value = "Inventory")
 
     Returns
     -------
-    
+
         RGB uint8 array of shape ``(height, width, 3)``.
 
     """

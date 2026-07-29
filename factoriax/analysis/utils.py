@@ -19,16 +19,16 @@ def resolve_ax(
     Parameters
     ----------
     ax: Axes | None :
-        
+
     figsize: tuple[float :
-        
+
     float] :
-        
+
 
     Returns
     -------
     type
-        
+
 
     """
     if ax is None:
@@ -42,9 +42,9 @@ def resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:
     Parameters
     ----------
     traj: Trajectory :
-        
+
     player: int | None :
-        
+
 
     Returns
     -------

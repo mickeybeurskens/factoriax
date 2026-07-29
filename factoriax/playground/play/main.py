@@ -41,9 +41,7 @@ from factoriax.playground.ui import theme as _play_theme
 from factoriax.playground.ui.compositing import composite_rgba_over_rgb
 from factoriax.playground.ui.window import calculate_window_size
 
-_ROCKET_ACHIEVEMENT_IDX: int = index_of(
-    FREE_PLAY_ACHIEVEMENTS, "rocket_complete"
-)
+_ROCKET_ACHIEVEMENT_IDX: int = index_of(FREE_PLAY_ACHIEVEMENTS, "rocket_complete")
 
 
 def _run_with_loading_screen(
@@ -52,7 +50,7 @@ def _run_with_loading_screen(
     fn: Callable[[], object],
 ) -> object:
     """Run *fn* on a background thread while showing a loading message.
-    
+
     Keeps the pygame event loop alive so the OS does not flag the
     window as unresponsive during long JAX compilations.
 
@@ -65,24 +63,24 @@ def _run_with_loading_screen(
     fn :
         Blocking callable to run in the background.
     screen : pygame.Surface :
-        
+
     message : str :
-        
+
     fn : Callable[[] :
-        
+
     object] :
-        
+
     screen: pygame.Surface :
-        
+
     message: str :
-        
+
     fn: Callable[[] :
-        
+
 
     Returns
     -------
 
-    
+
     """
     import threading
 
@@ -125,7 +123,7 @@ def play_level(
     seed: int | None = None,
 ) -> None:
     """Play a level with the full game UI.
-    
+
     Provides the complete play experience including inventory, crafting,
     machine inspection, achievements, and pause menus.  When called from
     the editor the existing *screen* surface is reused and the function
@@ -144,7 +142,7 @@ def play_level(
         PRNG seed for world generation. When ``None`` the player's
         stored :attr:`PlayerConfig.seed` is loaded from disk.
     level : Level :
-        
+
     num_players : int :
         (Default value = 1)
     screen : pygame.Surface | None :
@@ -152,7 +150,7 @@ def play_level(
     seed : int | None :
         (Default value = None)
     level: Level :
-        
+
     num_players: int :
          (Default value = 1)
     screen: pygame.Surface | None :
@@ -163,7 +161,7 @@ def play_level(
     Returns
     -------
 
-    
+
     """
     owns_pygame = screen is None
     if owns_pygame:
@@ -218,7 +216,7 @@ _MOUSE_DIR_TO_FACE: dict[int, int] = {
 
 def _init_joystick() -> pygame.joystick.JoystickType | None:
     """Initialize the first available joystick, if any.
-    
+
     Safe to call multiple times; pygame's joystick subsystem is
     initialized idempotently.
 
@@ -228,7 +226,7 @@ def _init_joystick() -> pygame.joystick.JoystickType | None:
     Returns
     -------
 
-    
+
     """
     pygame.joystick.init()
     if pygame.joystick.get_count() == 0:
@@ -243,7 +241,7 @@ def _poll_stick_actions(
     ctrl_lookup: ControllerLookup,
 ) -> frozenset[str]:
     """Read all joystick axes and return matching player actions.
-    
+
     Called once per frame to convert continuous stick deflection into
     discrete actions. Values within the deadzone produce nothing.
 
@@ -254,18 +252,18 @@ def _poll_stick_actions(
     ctrl_lookup :
         Controller lookup from config.
     joystick : pygame.joystick.JoystickType :
-        
+
     ctrl_lookup : ControllerLookup :
-        
+
     joystick: pygame.joystick.JoystickType :
-        
+
     ctrl_lookup: ControllerLookup :
-        
+
 
     Returns
     -------
 
-    
+
     """
     result: frozenset[str] = frozenset()
     for axis in range(joystick.get_numaxes()):
@@ -288,18 +286,18 @@ def _tile_pixel_size(map_w: int, map_h: int) -> int:
     map_h :
         Map height in tiles.
     map_w : int :
-        
+
     map_h : int :
-        
+
     map_w: int :
-        
+
     map_h: int :
-        
+
 
     Returns
     -------
 
-    
+
     """
     world_h = _BASE_UI_SIZE * _play_theme.UI_SCALE - _hotbar_h()
     return max(8, min(_BASE_UI_SIZE * _play_theme.UI_SCALE // map_w, world_h // map_h))
@@ -324,26 +322,26 @@ def _mouse_facing_direction(
     player_screen_y :
         Player center y in UI coordinates.
     mx : int :
-        
+
     my : int :
-        
+
     player_screen_x : int :
-        
+
     player_screen_y : int :
-        
+
     mx: int :
-        
+
     my: int :
-        
+
     player_screen_x: int :
-        
+
     player_screen_y: int :
-        
+
 
     Returns
     -------
 
-    
+
     """
     dx = mx - player_screen_x
     dy = my - player_screen_y
@@ -385,42 +383,42 @@ def _handle_welcome_event(
     ui_h :
         UI canvas height.
     event : pygame.event.Event :
-        
+
     ps : PlayState :
-        
+
     state : EnvState :
-        
+
     win_ox : int :
-        
+
     win_oy : int :
-        
+
     win_scale : int :
-        
+
     ui_w : int :
-        
+
     ui_h : int :
-        
+
     event: pygame.event.Event :
-        
+
     ps: PlayState :
-        
+
     state: EnvState :
-        
+
     win_ox: int :
-        
+
     win_oy: int :
-        
+
     win_scale: int :
-        
+
     ui_w: int :
-        
+
     ui_h: int :
-        
+
 
     Returns
     -------
 
-    
+
     """
     if event.type == pygame.KEYDOWN:
         if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
@@ -442,7 +440,7 @@ def _play_loop(
     ctrl_lookup: ControllerLookup | None = None,
 ) -> None:
     """Run the full interactive game loop with all menus and controls.
-    
+
     Parameters
     ----------
         env: FactoriaX environment instance with achievement_fn bound.
@@ -467,29 +465,29 @@ def _play_loop(
     bindings :
         when
     env : FactoriaxEnv :
-        
+
     state : EnvState :
-        
+
     params : EnvParams :
-        
+
     screen : pygame.Surface :
-        
+
     rng : jax.Array :
-        
+
     kb_lookup : KeyLookup | None :
         (Default value = None)
     ctrl_lookup : ControllerLookup | None :
         (Default value = None)
     env: FactoriaxEnv :
-        
+
     state: EnvState :
-        
+
     params: EnvParams :
-        
+
     screen: pygame.Surface :
-        
+
     rng: jax.Array :
-        
+
     kb_lookup: KeyLookup | None :
          (Default value = None)
     ctrl_lookup: ControllerLookup | None :
@@ -498,7 +496,7 @@ def _play_loop(
     Returns
     -------
 
-    
+
     """
     if kb_lookup is None:
         kb_lookup = build_key_lookup(default_keyboard())
@@ -699,7 +697,7 @@ def _save_recorded_trajectory(
     params: EnvParams,
 ) -> None:
     """Save a recorded play session as a timestamped .npz trajectory.
-    
+
     Parameters
     ----------
         states: List of EnvState snapshots.
@@ -713,26 +711,26 @@ def _save_recorded_trajectory(
     items_mined :
         under non
     states : list[EnvState] :
-        
+
     actions : list[int] :
-        
+
     rewards : list[float] :
-        
+
     params : EnvParams :
-        
+
     states: list[EnvState] :
-        
+
     actions: list[int] :
-        
+
     rewards: list[float] :
-        
+
     params: EnvParams :
-        
+
 
     Returns
     -------
 
-    
+
     """
     from datetime import datetime
 
@@ -778,7 +776,7 @@ def main(screen: pygame.Surface | None = None) -> None:
     Returns
     -------
 
-    
+
     """
     owns_pygame = screen is None
     if owns_pygame:

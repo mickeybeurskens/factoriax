@@ -12,7 +12,7 @@ from factoriax.playground.ui import theme as _theme
 @dataclass(frozen=True, slots=True)
 class ClickRegion:
     """Represents a clickable rectangular area in the UI.
-    
+
     Coordinates are in base render resolution (before window scaling).
 
     Parameters
@@ -43,15 +43,15 @@ def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion 
     y :
         Y coordinate in base resolution.
     regions: list[ClickRegion] :
-        
+
     x: int :
-        
+
     y: int :
-        
+
 
     Returns
     -------
-    
+
         The first matching ClickRegion, or None if no hit.
 
     """
@@ -73,7 +73,7 @@ def draw_panel(
     border_px: int | None = None,
 ) -> None:
     """Draw a rectangular panel: solid background with a uniform border.
-    
+
     Modifies *overlay* in place.
 
     Parameters
@@ -95,25 +95,25 @@ def draw_panel(
     border_px :
         Border thickness in pixels.
     overlay: np.ndarray :
-        
+
     x: int :
-        
+
     y: int :
-        
+
     w: int :
-        
+
     h: int :
-        
+
     * :
-        
+
     bg: tuple[int :
-        
+
     int :
-        
+
     int] | None :
          (Default value = None)
     border: tuple[int :
-        
+
     border_px: int | None :
          (Default value = None)
 

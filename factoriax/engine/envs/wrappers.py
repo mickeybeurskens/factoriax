@@ -26,14 +26,15 @@ __all__ = [
 # Auto-reset wrapper
 # ---------------------------------------------------------------------------
 
+
 class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """State that caches the initial configuration for cheap auto-reset.
-    
+
     Stores a frozen copy of the initial state alongside the live state.
     On episode termination, ``lax.select`` swaps in the cached copy
     instead of calling ``reset_env`` (which runs full procedural
     terrain generation).
-    
+
     The memory cost is one extra copy of ``EnvState`` per batch
     element. At 32x32 that is roughly 12 KB per element. At 128x128
     with ``max_machines=4096`` it grows to roughly 185 KB per element,
@@ -46,7 +47,7 @@ class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     Returns
     -------
 
-    
+
     """
 
     env_state: EnvState
@@ -70,7 +71,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     Returns
     -------
 
-    
+
     >>> import factoriax
         >>> env, params = factoriax.make("EasyRocket-v1", auto_reset=True)
         >>> # ``env.step_env`` now returns the next-episode reset state
@@ -127,11 +128,11 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         params: EnvParams,
     ) -> tuple[jax.Array, AutoResetState, jax.Array, jax.Array, dict[str, Any]]:
         """Step the environment with cached auto-reset on termination.
-        
+
         When ``done`` is True, the live state is replaced with the
         cached reset state via ``lax.select``. No terrain generation
         occurs.
-        
+
         Parameters
         ----------
             key: JAX random key.
@@ -141,26 +142,26 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Parameters
         ----------
         key : jax.Array :
-            
+
         state : AutoResetState :
-            
+
         action : int | jax.Array :
-            
+
         params : EnvParams :
-            
+
         key: jax.Array :
-            
+
         state: AutoResetState :
-            
+
         action: int | jax.Array :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         step_key, reset_key = jax.random.split(key)
         obs_step, new_env, reward, done, info = self._inner.step_env(
@@ -187,7 +188,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, AutoResetState]:
         """Reset and cache the initial state for future auto-resets.
-        
+
         Parameters
         ----------
             key: JAX random key for world generation.
@@ -195,18 +196,18 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Parameters
         ----------
         key : jax.Array :
-            
+
         params : EnvParams :
-            
+
         key: jax.Array :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         obs, env_state = self._inner.reset_env(key, params)
         state = AutoResetState(
@@ -221,18 +222,18 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Parameters
         ----------
         state : AutoResetState :
-            
+
         params : EnvParams :
-            
+
         state: AutoResetState :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         return self._inner.get_obs(state.env_state, params)
 
@@ -242,18 +243,18 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Parameters
         ----------
         state : AutoResetState :
-            
+
         params : EnvParams :
-            
+
         state: AutoResetState :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         return self._inner.is_terminal(state.env_state, params)
 
@@ -263,14 +264,14 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Parameters
         ----------
         params : EnvParams :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         return self._inner.action_space(params)
 
@@ -280,14 +281,14 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Parameters
         ----------
         params : EnvParams :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         return self._inner.observation_space(params)
 
@@ -295,6 +296,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 # ---------------------------------------------------------------------------
 # Action-mask wrapper
 # ---------------------------------------------------------------------------
+
 
 class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
     """Replace blocked actions with :data:`Action.NOOP`.
@@ -314,7 +316,7 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
     Returns
     -------
 
-    
+
     >>> from factoriax import ActionMaskWrapper, FactoriaxEnv, Action
         >>> env = ActionMaskWrapper(FactoriaxEnv(), blocked_actions=(int(Action.MINE),))
         >>> # MINE actions become NOOPs inside ``env.step_env``.
@@ -370,26 +372,26 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         Parameters
         ----------
         key : jax.Array :
-            
+
         state : Any :
-            
+
         action : int | jax.Array :
-            
+
         params : EnvParams :
-            
+
         key: jax.Array :
-            
+
         state: Any :
-            
+
         action: int | jax.Array :
-            
+
         params: EnvParams :
-            
+
 
         Returns
         -------
 
-        
+
         """
         result: tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]] = (
             self._inner.step_env(key, state, self._rewrite(action), params)

@@ -40,8 +40,10 @@ def get_pixel_font(size: int) -> pygame.font.Font:
         _text_rgba_cache.clear()
     if size not in _font_cache:
         font = pygame.font.SysFont(_PIXEL_FONT_PREFERENCE, size)
-        _font_cache[size] = font if font is not None else pygame.font.Font(
-            pygame.font.get_default_font(), size
+        _font_cache[size] = (
+            font
+            if font is not None
+            else pygame.font.Font(pygame.font.get_default_font(), size)
         )
     return _font_cache[size]
 
@@ -52,7 +54,7 @@ def render_text_rgba(
     color: tuple[int, int, int],
 ) -> np.ndarray:
     """Render text to an RGBA array with a fully transparent background.
-    
+
     Results are cached by ``(id(font), text, color)`` so that identical
     text drawn on consecutive frames is rasterised at most once.
 
@@ -65,19 +67,19 @@ def render_text_rgba(
     color :
         RGB glyph colour.
     text: str :
-        
+
     font: pygame.font.Font :
-        
+
     color: tuple[int :
-        
+
     int :
-        
+
     int] :
-        
+
 
     Returns
     -------
-    
+
         RGBA uint8 array of shape ``(h, w, 4)``.
 
     """

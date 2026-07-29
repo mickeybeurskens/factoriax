@@ -15,9 +15,8 @@ import pytest
 from jax import random
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
-from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.envs.wrappers import AutoResetWrapper, AutoResetState
-from factoriax.engine.envs.base import achievement_hook
+from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
+from factoriax.engine.envs.wrappers import AutoResetState, AutoResetWrapper
 from factoriax.engine.levels import LevelBuilder, build_state
 
 _NOOP = int(Action.NOOP)
@@ -73,9 +72,7 @@ def test_reset_hooks_transform_initial_state(level8, params) -> None:
     def stock_miners(key, state, p):
         del key, p
         return state.replace(
-            player_inventory=state.player_inventory.at[
-                :, int(ItemType.MINER)
-            ].set(6)
+            player_inventory=state.player_inventory.at[:, int(ItemType.MINER)].set(6)
         )
 
     # Procedural path.
@@ -169,9 +166,7 @@ def test_autoreset_resample_regenerates_on_done(level8, params) -> None:
     _, st3, _, done2, _ = cached.step_env(step_key, st2, _NOOP, p1)
     assert bool(done2)
     # Cached reset restores the original map tile value.
-    assert bool(jnp.array_equal(
-        st3.env_state.map[0, 0], st2.reset_state.map[0, 0]
-    ))
+    assert bool(jnp.array_equal(st3.env_state.map[0, 0], st2.reset_state.map[0, 0]))
     assert bool(
         jnp.array_equal(
             st3.env_state.achievements_unlocked, st2.reset_state.achievements_unlocked

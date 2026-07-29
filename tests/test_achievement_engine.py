@@ -27,11 +27,11 @@ from factoriax.engine.constants import (
     ItemType,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.state import EnvParams, EnvState
 from factoriax.playground.play.achievements import (
     FREE_PLAY_ACHIEVEMENTS,
     free_play_conditions,
 )
-from factoriax.engine.state import EnvParams, EnvState
 
 
 def _achievement_index(achievement_id: str) -> int:

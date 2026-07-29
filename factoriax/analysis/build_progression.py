@@ -34,7 +34,7 @@ def _bare_axes(ax: plt.Axes) -> None:
     Parameters
     ----------
     ax: plt.Axes :
-        
+
 
     Returns
     -------
@@ -55,9 +55,9 @@ def _region_outline_segments(
     Parameters
     ----------
     mask: np.ndarray :
-        
+
     tile_px: int :
-        
+
 
     Returns
     -------
@@ -101,15 +101,15 @@ def _draw_region_outline(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     mask: np.ndarray :
-        
+
     tile_px: int :
-        
+
     color: str :
-        
+
     linewidth: float :
-        
+
 
     Returns
     -------
@@ -135,15 +135,15 @@ def _apply_dim_overlay(
     Parameters
     ----------
     ax: plt.Axes :
-        
+
     mask: np.ndarray :
-        
+
     tile_px: int :
-        
+
     color: str :
-        
+
     alpha: float :
-        
+
 
     Returns
     -------
@@ -178,7 +178,7 @@ def render_strip(
     outline_linewidth: float = 3.0,
 ) -> Path:
     """Render the build-progression strip (Form C).
-    
+
     Each panel after the spawn dims every tile that is not part of the
     cumulative built region at that snapshot, matching the visual
     language of :func:`render_heatmap`. The current phase's additions
@@ -211,23 +211,23 @@ def render_strip(
     outline_linewidth :
         matplotlib linewidth for the perimeter.
     frames: np.ndarray :
-        
+
     placement_phase: np.ndarray :
-        
+
     snapshot_labels: Sequence[str] :
-        
+
     tile_px: int :
-        
+
     out_path: Path | str :
-        
+
     * :
-        
+
     highlight_color: str :
-        
+
     dim_color: str :
-        
+
     dim_alpha: float :
-        
+
     nrows: int :
          (Default value = 2)
     ncols: int :
@@ -281,7 +281,7 @@ def render_heatmap(
     outline_linewidth: float = 3.5,
 ) -> Path:
     """Render the inverted build-heatmap (Form D).
-    
+
     Non-placed tiles get a translucent dim overlay so the eye drops
     them; the placed region keeps its full-colour render and is
     surrounded by a continuous outline in ``highlight_color``.
@@ -305,21 +305,21 @@ def render_heatmap(
     outline_linewidth :
         matplotlib linewidth for the perimeter.
     final_frame: np.ndarray :
-        
+
     placement_phase: np.ndarray :
-        
+
     tile_px: int :
-        
+
     out_path: Path | str :
-        
+
     * :
-        
+
     highlight_color: str :
-        
+
     dim_color: str :
-        
+
     dim_alpha: float :
-        
+
     outline_linewidth: float :
          (Default value = 3.5)
 

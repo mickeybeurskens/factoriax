@@ -45,7 +45,7 @@ _DIALOG_H = 180
 @dataclasses.dataclass
 class NewLevelDialog:
     """In-editor dialog for specifying a new level's dimensions and name.
-    
+
     Rendered as an RGBA overlay centred on the screen.  Handles its own
     keyboard events and returns ``"ok"`` or ``"cancel"`` when done.
 
@@ -70,11 +70,11 @@ class NewLevelDialog:
         event :
             A ``pygame.KEYDOWN`` event.
         event: pygame.event.Event :
-            
+
 
         Returns
         -------
-        
+
             ``"ok"`` when Enter is pressed, ``"cancel"`` on Escape,
             or ``None`` if the dialog stays open.
 
@@ -112,7 +112,7 @@ class NewLevelDialog:
         ch :
             Character to insert.
         ch: str :
-            
+
 
         Returns
         -------
@@ -137,13 +137,13 @@ class NewLevelDialog:
         base_h :
             Base window height.
         base_w: int :
-            
+
         base_h: int :
-            
+
 
         Returns
         -------
-        
+
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -200,7 +200,7 @@ class NewLevelDialog:
 
         Returns
         -------
-        
+
             ``(width, height, name)`` with fallback defaults for empty
             or invalid inputs.
 
@@ -220,7 +220,7 @@ class NewLevelDialog:
 @dataclasses.dataclass
 class NumberInputDialog:
     """Small overlay for typing a single integer value.
-    
+
     Renders as a compact RGBA overlay centred on the screen.  Accepts
     digits, backspace, Enter to confirm, and Escape to cancel.
 
@@ -246,11 +246,11 @@ class NumberInputDialog:
         event :
             A ``pygame.KEYDOWN`` event.
         event: pygame.event.Event :
-            
+
 
         Returns
         -------
-        
+
             ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
 
         """
@@ -275,7 +275,7 @@ class NumberInputDialog:
 
         Returns
         -------
-        
+
             Integer between ``min_value`` and ``max_value``.
 
         """
@@ -295,13 +295,13 @@ class NumberInputDialog:
         base_h :
             Base window height.
         base_w: int :
-            
+
         base_h: int :
-            
+
 
         Returns
         -------
-        
+
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -357,7 +357,7 @@ _FILE_ROW_BG: tuple[int, int, int, int] = (35, 35, 35, 255)
 @dataclasses.dataclass
 class FileDialog:
     """In-editor dialog for choosing or typing a filename.
-    
+
     Works for both save and load. Shows a text field for the filename
     and a scrollable list of existing ``.json`` files in ``levels/``.
     Press W/S to navigate the list, Enter to confirm, Escape to cancel.
@@ -391,11 +391,11 @@ class FileDialog:
         event :
             A ``pygame.KEYDOWN`` event.
         event: pygame.event.Event :
-            
+
 
         Returns
         -------
-        
+
             ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
 
         """
@@ -426,7 +426,7 @@ class FileDialog:
         Parameters
         ----------
         delta: int :
-            
+
 
         Returns
         -------
@@ -473,13 +473,13 @@ class FileDialog:
         base_h :
             Base window height.
         base_w: int :
-            
+
         base_h: int :
-            
+
 
         Returns
         -------
-        
+
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -609,7 +609,7 @@ def _valid_items_for_role(role: int) -> list[int]:
     role :
         SlotRole
     role: int :
-        
+
 
     Returns
     -------
@@ -637,7 +637,7 @@ _INSP_PICKER_ITEM_H = 18
 @dataclasses.dataclass
 class MachineInspectorDialog:
     """Editor dialog for inspecting and editing machine inventory contents.
-    
+
     Shows each slot with its role badge, current item, and count. Users
     navigate with A/D to select slots, click or press Enter to open an
     item picker, type a count, and press Q to cycle assembler recipes.
@@ -682,11 +682,11 @@ class MachineInspectorDialog:
         event :
             A pygame event (KEYDOWN or MOUSEBUTTONDOWN).
         event: pygame.event.Event :
-            
+
 
         Returns
         -------
-        
+
             ``"close"`` to dismiss, or ``None`` to stay open.
 
         """
@@ -702,11 +702,11 @@ class MachineInspectorDialog:
         event :
             A pygame KEYDOWN event.
         event: pygame.event.Event :
-            
+
 
         Returns
         -------
-        
+
             ``"close"`` to dismiss, or ``None`` to stay open.
 
         """
@@ -753,11 +753,11 @@ class MachineInspectorDialog:
         key :
             Pygame key constant.
         key: int :
-            
+
 
         Returns
         -------
-        
+
             ``None`` (picker stays within the dialog).
 
         """
@@ -795,13 +795,13 @@ class MachineInspectorDialog:
         event :
             Full pygame event for unicode access.
         key: int :
-            
+
         event: pygame.event.Event :
-            
+
 
         Returns
         -------
-        
+
             ``None``.
 
         """
@@ -835,13 +835,13 @@ class MachineInspectorDialog:
         base_h :
             Base window height.
         base_w: int :
-            
+
         base_h: int :
-            
+
 
         Returns
         -------
-        
+
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -944,11 +944,11 @@ class MachineInspectorDialog:
         base_h :
             Base window height.
         overlay: np.ndarray :
-            
+
         base_w: int :
-            
+
         base_h: int :
-            
+
 
         Returns
         -------
@@ -1022,11 +1022,11 @@ class MachineInspectorDialog:
         base_h :
             Base window height.
         overlay: np.ndarray :
-            
+
         base_w: int :
-            
+
         base_h: int :
-            
+
 
         Returns
         -------
@@ -1097,13 +1097,13 @@ def render_help_overlay(base_w: int, base_h: int) -> np.ndarray:
     base_h :
         Base window height.
     base_w: int :
-        
+
     base_h: int :
-        
+
 
     Returns
     -------
-    
+
         RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
     """
@@ -1159,19 +1159,19 @@ def _render_text_rgba(
     color :
         RGB text colour.
     text: str :
-        
+
     font: pygame.font.Font :
-        
+
     color: tuple[int :
-        
+
     int :
-        
+
     int] :
-        
+
 
     Returns
     -------
-    
+
         RGBA uint8 array of shape ``(H, W, 4)``.
 
     """
@@ -1198,13 +1198,13 @@ def _blit_rgba(overlay: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     x :
         Left column.
     overlay: np.ndarray :
-        
+
     src: np.ndarray :
-        
+
     y: int :
-        
+
     x: int :
-        
+
 
     Returns
     -------

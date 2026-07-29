@@ -70,13 +70,13 @@ def _blit_alpha(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
     x :
         Left column in destination.
     dst: np.ndarray :
-        
+
     src: np.ndarray :
-        
+
     y: int :
-        
+
     x: int :
-        
+
 
     Returns
     -------
@@ -123,11 +123,11 @@ def _draw_player_header(
     font :
         Font used for the header text.
     panel: np.ndarray :
-        
+
     player_idx: int :
-        
+
     font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -179,15 +179,15 @@ def _draw_machine_header(
     font :
         Font used for the header text.
     panel: np.ndarray :
-        
+
     state: EditorState :
-        
+
     tx: int :
-        
+
     ty: int :
-        
+
     font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -214,7 +214,7 @@ def _draw_slot(
     small_font: pygame.font.Font,
 ) -> None:
     """Render a single inventory slot cell onto the panel.
-    
+
     Draws the slot background, optional role badge, item icon, count
     label, and item name (or "(empty)" placeholder).
 
@@ -241,25 +241,25 @@ def _draw_slot(
     small_font :
         Font for count and name text.
     panel: np.ndarray :
-        
+
     sx: int :
-        
+
     sy: int :
-        
+
     sw: int :
-        
+
     sh: int :
-        
+
     item_type: int :
-        
+
     count: int :
-        
+
     focused: bool :
-        
+
     role: int | None :
-        
+
     small_font: pygame.font.Font :
-        
+
 
     Returns
     -------
@@ -340,7 +340,7 @@ def render_inventory_panel(
     panel_h: int,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the right-side inventory panel for the active target.
-    
+
     Draws a header identifying the target (player or machine), followed
     by a grid of inventory slots. Each slot shows its item icon, stack
     count, name, and (for machines) a role badge.
@@ -359,15 +359,15 @@ def render_inventory_panel(
     panel_h :
         Desired panel height in pixels.
     state: EditorState :
-        
+
     target: InvTarget :
-        
+
     focused_slot: int :
-        
+
     panel_w: int :
-        
+
     panel_h: int :
-        
+
 
     Returns
     -------

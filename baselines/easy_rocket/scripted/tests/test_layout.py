@@ -17,14 +17,14 @@ from baselines.easy_rocket.scripted.layout import (
     _walk_dag,
     plan_factory,
 )
-from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.constants import Direction, ItemType
-from factoriax.engine.levels import build_state
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.envs.easy_rocket import (
     EASY_ROCKET_RECIPE_TABLE,
     build_easy_rocket_level,
     easy_rocket_conditions,
 )
+from factoriax.engine.levels import build_state
 
 _DXY = {
     int(Direction.LEFT): (-1, 0),

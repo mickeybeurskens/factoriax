@@ -128,7 +128,7 @@ _MACHINE_KEYS = {
 @dataclasses.dataclass
 class ToolState:
     """All mutable tool / brush / interaction state for the editor.
-    
+
     Grouping these in one object keeps the main loop's local namespace
     small and makes it easy to pass the full context to helper functions.
 
@@ -239,7 +239,7 @@ class ToolState:
 
 def _get_palette_items(ts: ToolState, editor: EditorState) -> list[tuple[int, str]]:
     """Return the item palette list appropriate for the current target.
-    
+
     For player targets every non-empty item is offered. For machine
     targets the list is filtered by slot role. When no target is
     selected an empty list is returned.
@@ -251,9 +251,9 @@ def _get_palette_items(ts: ToolState, editor: EditorState) -> list[tuple[int, st
     editor :
         Editor state
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -278,11 +278,11 @@ def _next_direction(current: int) -> int:
     current :
         Current direction as an ``Action`` integer.
     current: int :
-        
+
 
     Returns
     -------
-    
+
         Next direction value.
 
     """
@@ -292,7 +292,7 @@ def _next_direction(current: int) -> int:
 
 def _direction_from_delta(dx: int, dy: int) -> int | None:
     """Infer a cardinal direction from a tile-space delta.
-    
+
     Returns ``None`` when the delta is zero (no movement).
 
     Parameters
@@ -302,13 +302,13 @@ def _direction_from_delta(dx: int, dy: int) -> int | None:
     dy :
         Vertical tile offset (positive = down).
     dx: int :
-        
+
     dy: int :
-        
+
 
     Returns
     -------
-    
+
         ``Action`` direction integer, or ``None``.
 
     """
@@ -335,15 +335,15 @@ def _recalc_layout(
     window_h :
         Pygame window height.
     vp: Viewport :
-        
+
     window_w: int :
-        
+
     window_h: int :
-        
+
 
     Returns
     -------
-    
+
         ``(base_width, base_height, scale)`` tuple.
 
     """
@@ -359,7 +359,7 @@ def _update_viewport(
     reset_camera: bool = False,
 ) -> None:
     """Recalculate tile size so the map fits inside the fixed canvas area.
-    
+
     The canvas dimensions stay constant (set once at startup from the
     window size). Only ``tile_size`` changes so that the full map is
     visible without scrolling. The zoom can still be adjusted manually
@@ -374,9 +374,9 @@ def _update_viewport(
     reset_camera :
         If ``True`` the camera is moved to (0, 0).
     editor: EditorState :
-        
+
     vp: Viewport :
-        
+
     reset_camera: bool :
          (Default value = False)
 
@@ -405,7 +405,7 @@ def _update_viewport(
 
 def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
     """Launch a full play-test session from the editor.
-    
+
     Converts the editor state to a Level and delegates to
     :func:`~factoriax.playground.play.main.play_level`, which provides the
     complete game UI.  Returns to the editor when the user quits.
@@ -417,9 +417,9 @@ def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
     screen :
         Pygame display surface (reused by the play session).
     state: EditorState :
-        
+
     screen: pygame.Surface :
-        
+
 
     Returns
     -------
@@ -461,17 +461,17 @@ def _handle_motion(
     rng :
         Numpy RNG for resource brush sampling.
     event: pygame.event.Event :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
     vp: Viewport :
-        
+
     scale: int :
-        
+
     rng: np.random.Generator :
-        
+
 
     Returns
     -------
@@ -553,9 +553,9 @@ def _handle_toolbar_click(
     ts :
         Tool state (mutated in place).
     hit: ClickRegion :
-        
+
     ts: ToolState :
-        
+
 
     Returns
     -------
@@ -616,7 +616,7 @@ def _handle_inv_canvas_click(
     editor: EditorState,
 ) -> None:
     """Select a player or machine on the canvas during inventory mode.
-    
+
     If the clicked tile contains a player start, the player becomes
     the inventory target. If it contains a machine, the machine
     becomes the target. Otherwise the target is cleared.
@@ -632,13 +632,13 @@ def _handle_inv_canvas_click(
     editor :
         Editor state (read only).
     tx: int :
-        
+
     ty: int :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -667,7 +667,7 @@ def _handle_inv_panel_click(
     shift: bool,
 ) -> None:
     """Handle a click on a slot inside the inventory panel.
-    
+
     Focusing the clicked slot is the default. Shift-click clears
     the slot instead.
 
@@ -682,13 +682,13 @@ def _handle_inv_panel_click(
     shift :
         Whether the shift modifier is held.
     hit: ClickRegion :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
     shift: bool :
-        
+
 
     Returns
     -------
@@ -709,7 +709,7 @@ def _handle_inv_palette_click(
     editor: EditorState,
 ) -> None:
     """Handle a click on an item in the sidebar palette.
-    
+
     Places the item in the focused slot with count 1, or increments
     the count if the slot already contains the same item type.
 
@@ -722,11 +722,11 @@ def _handle_inv_palette_click(
     editor :
         Editor state (mutated in place).
     hit: ClickRegion :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -767,15 +767,15 @@ def _handle_canvas_click(
     rng :
         Numpy RNG for resource brush sampling.
     tx: int :
-        
+
     ty: int :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
     rng: np.random.Generator :
-        
+
 
     Returns
     -------
@@ -821,13 +821,13 @@ def _handle_right_click(
     editor :
         Editor state (mutated in place).
     tx: int :
-        
+
     ty: int :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -863,11 +863,11 @@ def _handle_fill_release(
     rng :
         Numpy RNG for resource brush sampling.
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
     rng: np.random.Generator :
-        
+
 
     Returns
     -------
@@ -926,7 +926,7 @@ def _handle_inv_keydown(
     editor: EditorState,
 ) -> None:
     """Handle keyboard input while inventory mode has a target selected.
-    
+
     Arrow keys navigate the focused slot. Delete/Backspace clears
     the focused slot. Plus/Minus adjust the stack count.
 
@@ -939,11 +939,11 @@ def _handle_inv_keydown(
     editor :
         Editor state (mutated in place for count changes).
     key: int :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -997,7 +997,7 @@ def _handle_keydown(
     NewLevelDialog | FileDialog | MachineInspectorDialog | None,
 ]:
     """Process a KEYDOWN event.
-    
+
     Returns the potentially-replaced editor, updated layout values,
     the running flag, and an optional dialog (new-level, file, or
     machine inspector).
@@ -1019,23 +1019,23 @@ def _handle_keydown(
     window_h :
         Current window height.
     event: pygame.event.Event :
-        
+
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
     vp: Viewport :
-        
+
     screen: pygame.Surface :
-        
+
     window_w: int :
-        
+
     window_h: int :
-        
+
 
     Returns
     -------
-    
+
         ``(editor, base_w, base_h, scale, running, dialog)`` tuple.
 
     """
@@ -1136,9 +1136,9 @@ def _handle_rotate(ts: ToolState, editor: EditorState) -> None:
     editor :
         Editor state (mutated in place if rotating in-place).
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -1172,9 +1172,9 @@ def _open_inspector(
     editor :
         Editor state (read for machine type).
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -1217,11 +1217,11 @@ def _adjust_resource(brush: ResourceBrush, delta: int, shift: bool) -> None:
     shift :
         When ``True`` in range mode, adjusts ``range_min``.
     brush: ResourceBrush :
-        
+
     delta: int :
-        
+
     shift: bool :
-        
+
 
     Returns
     -------
@@ -1260,11 +1260,11 @@ def _handle_resize(
     vp :
         Viewport (updated via :func:`_update_viewport`).
     key: int :
-        
+
     editor: EditorState :
-        
+
     vp: Viewport :
-        
+
 
     Returns
     -------
@@ -1296,9 +1296,9 @@ def _validate_inv_target(ts: ToolState, editor: EditorState) -> None:
     editor :
         Editor state (read only).
     ts: ToolState :
-        
+
     editor: EditorState :
-        
+
 
     Returns
     -------
@@ -1349,17 +1349,17 @@ def _blit_canvas_rgba(
     w :
         Maximum width to composite.
     frame: np.ndarray :
-        
+
     canvas_img: np.ndarray :
-        
+
     frame_y: int :
-        
+
     frame_x: int :
-        
+
     h: int :
-        
+
     w: int :
-        
+
 
     Returns
     -------
@@ -1388,7 +1388,7 @@ def _render_frame(
     inspector_dialog: MachineInspectorDialog | None = None,
 ) -> np.ndarray:
     """Compose the full editor frame from all UI layers.
-    
+
     When inventory mode is active the canvas area is split: the left
     half shows the map, the right half shows the inventory panel for
     the selected target.  The toolbar is replaced with an item palette.
@@ -1414,27 +1414,27 @@ def _render_frame(
     inspector_dialog :
         Active machine inspector dialog, or ``None``.
     editor: EditorState :
-        
+
     vp: Viewport :
-        
+
     ts: ToolState :
-        
+
     base_w: int :
-        
+
     base_h: int :
-        
+
     file_dialog: FileDialog | None :
-        
+
     dialog: NewLevelDialog | None :
-        
+
     number_dialog: NumberInputDialog | None :
-        
+
     inspector_dialog: MachineInspectorDialog | None :
          (Default value = None)
 
     Returns
     -------
-    
+
         RGB uint8 array of shape ``(base_h, base_w, 3)``.
 
     """

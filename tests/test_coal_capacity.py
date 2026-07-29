@@ -12,8 +12,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.engine.constants import BLOCK_MAX_RESOURCES, BlockType
-from factoriax.engine.levels import build_state
 from factoriax.engine.envs.rocket import build_rocket_level
+from factoriax.engine.levels import build_state
 from factoriax.engine.state import EnvParams
 
 

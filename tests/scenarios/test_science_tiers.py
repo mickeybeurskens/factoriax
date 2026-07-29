@@ -58,8 +58,7 @@ def test_obs_shape_matches_easy_rocket(science_env) -> None:
     env, params = science_env
     er_env, er_params = easy_rocket(obs=env.obs, obs_radius=env.obs_radius)
     assert (
-        env.observation_space(params).shape
-        == er_env.observation_space(er_params).shape
+        env.observation_space(params).shape == er_env.observation_space(er_params).shape
     )
 
 

@@ -70,7 +70,6 @@ import pygame  # noqa: E402
 import pytest  # noqa: E402
 from jax import random  # noqa: E402
 
-from factoriax.engine.state import EnvState  # noqa: E402
 from factoriax.engine.constants import (  # noqa: E402
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
@@ -79,7 +78,10 @@ from factoriax.engine.constants import (  # noqa: E402
     Machine,
 )
 from factoriax.engine.envs.base import FactoriaxEnv  # noqa: E402
-from factoriax.engine.state import EnvParams  # noqa: E402
+from factoriax.engine.state import (
+    EnvParams,  # noqa: E402
+    EnvState,  # noqa: E402
+)
 from factoriax.engine.tables import BLOCK_RESOURCE_DTYPE
 
 # Default entity capacity used by the test factory.

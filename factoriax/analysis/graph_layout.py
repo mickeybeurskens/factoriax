@@ -30,9 +30,9 @@ def assign_tiers(adjacency: Mapping[str, Iterable[str]]) -> dict[str, int]:
         only as inputs (sources) need not appear as keys; they are
         discovered while walking the recipes.
     adjacency: Mapping[str :
-        
+
     Iterable[str]] :
-        
+
 
     Returns
     -------
@@ -61,7 +61,7 @@ def assign_tiers(adjacency: Mapping[str, Iterable[str]]) -> dict[str, int]:
         Parameters
         ----------
         node: str :
-            
+
 
         Returns
         -------
@@ -94,7 +94,7 @@ def order_within_tiers(
     iterations: int = 8,
 ) -> dict[str, int]:
     """Sugiyama barycenter sweep that reduces edge crossings.
-    
+
     Each tier's nodes are reordered so every node sits near the mean
     position of its neighbours in the adjacent tier. The sweep
     alternates direction; eight iterations is the standard default
@@ -134,9 +134,9 @@ def order_within_tiers(
         Parameters
         ----------
         node: str :
-            
+
         tier: int :
-            
+
 
         Returns
         -------
@@ -150,13 +150,13 @@ def order_within_tiers(
         Parameters
         ----------
         node: str :
-            
+
         tier: int :
-            
+
         lookup: dict[str :
-            
+
         list[str]] :
-            
+
 
         Returns
         -------

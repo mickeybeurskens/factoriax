@@ -1,2 +1,1 @@
-"""Core files containing simulation logic, environments and wrappers. 
-"""
+"""Core files containing simulation logic, environments and wrappers."""

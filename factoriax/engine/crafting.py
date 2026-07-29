@@ -32,22 +32,22 @@ def count_item_in_inventory(
     item_type :
         Item type to count.
     state : EnvState :
-        
+
     player_idx : int | jax.Array :
-        
+
     item_type : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     player_idx: int | jax.Array :
-        
+
     item_type: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     return state.player_inventory[player_idx, item_type]
 
@@ -59,7 +59,7 @@ def can_afford_recipe(
     recipe_idx: int | jax.Array,
 ) -> jax.Array:
     """Check if a player can afford to craft a recipe.
-    
+
     Parameters
     ----------
         state: Current environment state.
@@ -71,26 +71,26 @@ def can_afford_recipe(
     recipe_idx :
         Index of the recipe
     state : EnvState :
-        
+
     params : EnvParams :
-        
+
     player_idx : int | jax.Array :
-        
+
     recipe_idx : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     params: EnvParams :
-        
+
     player_idx: int | jax.Array :
-        
+
     recipe_idx: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     table = params.recipe_table
     input_items = table.input_items[recipe_idx]
@@ -114,10 +114,10 @@ def craft_recipe(
     recipe_idx: int | jax.Array,
 ) -> EnvState:
     """Instantly craft a recipe for a player.
-    
+
     Checks affordability, consumes inputs, produces output. Does nothing
     if the player can't afford it or has no space for the output.
-    
+
     Parameters
     ----------
         state: Current environment state.
@@ -129,26 +129,26 @@ def craft_recipe(
     recipe_idx :
         Index of the recipe to craft
     state : EnvState :
-        
+
     params : EnvParams :
-        
+
     player_idx : int | jax.Array :
-        
+
     recipe_idx : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     params: EnvParams :
-        
+
     player_idx: int | jax.Array :
-        
+
     recipe_idx: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     table = params.recipe_table
     # ``recipe_idx`` is -1 when the active table has no recipe for the

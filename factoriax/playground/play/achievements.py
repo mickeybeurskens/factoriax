@@ -110,9 +110,7 @@ FREE_PLAY_ACHIEVEMENTS: tuple[Achievement, ...] = (
     Achievement(
         id="belt_network",
         name="Belt Network",
-        condition=partial(
-            has_machines, machine=int(Machine.CONVEYOR_BELT), count=5
-        ),
+        condition=partial(has_machines, machine=int(Machine.CONVEYOR_BELT), count=5),
         hint="Craft and place at least 5 conveyor belts.",
     ),
     Achievement(

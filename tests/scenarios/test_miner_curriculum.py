@@ -80,8 +80,7 @@ def test_bootstrap_obs_shape_matches_easy_rocket(bootstrap_env) -> None:
     env, params = bootstrap_env
     er_env, er_params = easy_rocket(obs=env.obs, obs_radius=env.obs_radius)
     assert (
-        env.observation_space(params).shape
-        == er_env.observation_space(er_params).shape
+        env.observation_space(params).shape == er_env.observation_space(er_params).shape
     )
 
 
@@ -102,9 +101,7 @@ def test_bootstrap_max_score_is_one() -> None:
     assert MINER_BOOTSTRAP_MAX_SCORE == 1.0
 
 
-def test_bootstrap_random_rollout_pays_zero(
-    bootstrap_env, bootstrap_step
-) -> None:
+def test_bootstrap_random_rollout_pays_zero(bootstrap_env, bootstrap_step) -> None:
     """A random policy never completes: total reward is exactly 0.
 
     (That diagnostic bits latch without paying is asserted by the
@@ -135,9 +132,7 @@ def test_bootstrap_timeout_pays_zero(bootstrap_env, bootstrap_step) -> None:
     done = False
     for _ in range(MAX_TIMESTEPS):
         key, ks = random.split(key)
-        _, state, reward, done, _ = bootstrap_step(
-            ks, state, int(Action.NOOP), params
-        )
+        _, state, reward, done, _ = bootstrap_step(ks, state, int(Action.NOOP), params)
         total += float(reward)
         if bool(done):
             break
@@ -327,9 +322,7 @@ def test_pre_installed_miner_equals_action_path_placement(
     key = random.PRNGKey(3)
     _, hooked = env.reset_env(key, params)
     _, pristine = pristine_env.reset_env(key, params)
-    np.testing.assert_array_equal(
-        np.asarray(hooked.map), np.asarray(pristine.map)
-    )
+    np.testing.assert_array_equal(np.asarray(hooked.map), np.asarray(pristine.map))
 
     machines = np.asarray(hooked.machine_types)
     ys, xs = np.nonzero(machines == int(Machine.MINER))
@@ -339,16 +332,12 @@ def test_pre_installed_miner_equals_action_path_placement(
     # Action path on the pristine state: stand above the tile, face
     # down, place, then pre-fill the buffer with one unit of the ore.
     s = pristine.replace(
-        player_inventory=pristine.player_inventory.at[
-            0, int(ItemType.MINER)
-        ].set(1),
+        player_inventory=pristine.player_inventory.at[0, int(ItemType.MINER)].set(1),
         player_positions=pristine.player_positions.at[0].set(
             jnp.asarray([tx, ty - 1], dtype=pristine.player_positions.dtype)
         ),
         player_directions=pristine.player_directions.at[0].set(
-            jnp.asarray(
-                int(Direction.DOWN), dtype=pristine.player_directions.dtype
-            )
+            jnp.asarray(int(Direction.DOWN), dtype=pristine.player_directions.dtype)
         ),
     )
     s = place_machine(s, params, 0, int(ItemType.MINER))

@@ -92,11 +92,7 @@ def achievement_weights(achievements: Sequence[Achievement]) -> jax.Array:
     """
     items = _validated(achievements)
     declared = jnp.array([a.weight for a in items], dtype=jnp.float32)
-    return (
-        jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32)
-        .at[: len(items)]
-        .set(declared)
-    )
+    return jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.float32).at[: len(items)].set(declared)
 
 
 def max_score(achievements: Sequence[Achievement]) -> float:
@@ -125,8 +121,7 @@ def _validated(achievements: Sequence[Achievement]) -> tuple[Achievement, ...]:
         raise ValueError("achievement set is empty")
     if len(items) > MAX_ACHIEVEMENTS:
         raise ValueError(
-            f"{len(items)} achievements exceeds MAX_ACHIEVEMENTS "
-            f"({MAX_ACHIEVEMENTS})"
+            f"{len(items)} achievements exceeds MAX_ACHIEVEMENTS ({MAX_ACHIEVEMENTS})"
         )
     ids = [a.id for a in items]
     duplicates = sorted({id_ for id_ in ids if ids.count(id_) > 1})

@@ -28,7 +28,7 @@ def achievement_timing(
     traj :
         Trajectory:
     traj: Trajectory :
-        
+
 
     Returns
     -------
@@ -62,11 +62,11 @@ def plot_achievement_timing(
     Parameters
     ----------
     traj : Trajectory
-        
+
     achievement_labels : list[str]
-        
+
     ax, figsize, title :
-        
+
     traj :
         Trajectory:
     achievement_labels :
@@ -78,17 +78,17 @@ def plot_achievement_timing(
     float] :
         (Default value = (10)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     achievement_labels: list[str] | None :
          (Default value = None)
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -142,16 +142,16 @@ def plot_achievement_progress(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot cumulative achievement unlock rate over time.
-    
+
     Shows what fraction of episodes have unlocked each achievement by
     each timestep — essentially a CDF of unlock times.
 
     Parameters
     ----------
     traj : Trajectory
-        
+
     achievement_labels : list[str]
-        
+
     traj :
         Trajectory:
     achievement_labels :
@@ -163,17 +163,17 @@ def plot_achievement_progress(
     float] :
         (Default value = (12)
     5) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     achievement_labels: list[str] | None :
          (Default value = None)
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -232,11 +232,11 @@ def first_action_timestep(
     Parameters
     ----------
     traj : Trajectory
-        
+
     action_id : int
-        
+
     player : int
-        
+
     traj :
         Trajectory:
     action_id :
@@ -244,9 +244,9 @@ def first_action_timestep(
     player :
         int | None:  (Default value = None)
     traj: Trajectory :
-        
+
     action_id: int :
-        
+
     player: int | None :
          (Default value = None)
 
@@ -274,18 +274,18 @@ def plot_first_action_timing(
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
     """Plot the distribution of when each action is first taken.
-    
+
     Useful for seeing when agents first mine, first craft, first place
     a machine, etc.
 
     Parameters
     ----------
     traj : Trajectory
-        
+
     action_ids : list[int]
         Action IDs to analyze.
     action_labels : list[str]
-        
+
     traj :
         Trajectory:
     action_ids :
@@ -301,13 +301,13 @@ def plot_first_action_timing(
     float] :
         (Default value = (10)
     4) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     action_ids: list[int] :
-        
+
     action_labels: list[str] | None :
          (Default value = None)
     player: int | None :
@@ -315,7 +315,7 @@ def plot_first_action_timing(
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 

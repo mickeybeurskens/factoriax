@@ -86,9 +86,7 @@ class TestConditions:
         mined = mined.at[ItemType.IRON_ORE].set(10)
         assert _bit(_dirt(state_factory, items_mined=mined), "stockpile")
 
-    def test_apprentice_engineer_on_any_machine_item(
-        self, state_factory
-    ) -> None:
+    def test_apprentice_engineer_on_any_machine_item(self, state_factory) -> None:
         state = _dirt(state_factory, player_inventory=_player_inv(PALLET=1))
         assert _bit(state, "apprentice_engineer")
 
@@ -140,13 +138,9 @@ class TestConditions:
             assert _bit(state, "first_science"), item
 
     def test_advanced_science_needs_tier_two(self, state_factory) -> None:
-        state = _dirt(
-            state_factory, player_inventory=_player_inv(TIER1_SCIENCE_PACK=1)
-        )
+        state = _dirt(state_factory, player_inventory=_player_inv(TIER1_SCIENCE_PACK=1))
         assert not _bit(state, "advanced_science")
-        state = _dirt(
-            state_factory, player_inventory=_player_inv(TIER2_SCIENCE_PACK=1)
-        )
+        state = _dirt(state_factory, player_inventory=_player_inv(TIER2_SCIENCE_PACK=1))
         assert _bit(state, "advanced_science")
 
 

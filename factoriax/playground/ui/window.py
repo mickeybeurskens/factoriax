@@ -9,7 +9,7 @@ _monitor_size: tuple[int, int] | None = None
 
 def _get_monitor_size() -> tuple[int, int]:
     """Return the monitor resolution, cached on first call.
-    
+
     ``pygame.display.Info()`` reports the monitor size before any
     display mode is set, but returns the *window* size afterwards.
     This function captures the true monitor dimensions once and
@@ -35,7 +35,7 @@ def calculate_window_size(
     base_width: int, base_height: int, scale_factor: float = 0.8
 ) -> tuple[int, int]:
     """Calculate window size using integer scaling for crisp pixel art.
-    
+
     Uses the largest integer scale factor that fits within *scale_factor*
     (default 80%) of the screen.
 
@@ -48,15 +48,15 @@ def calculate_window_size(
     scale_factor :
         Fraction of screen to use (0.0 to 1.0).
     base_width: int :
-        
+
     base_height: int :
-        
+
     scale_factor: float :
          (Default value = 0.8)
 
     Returns
     -------
-    
+
         ``(window_width, window_height)`` in pixels.
 
     """
@@ -73,7 +73,7 @@ def calculate_window_size(
 
 def auto_ui_scale(base_size: int = 1024) -> int:
     """Pick the highest UI scale where the canvas fits the monitor.
-    
+
     Returns the largest integer ``s`` in ``{3, 2, 1}`` such that
     ``base_size * s`` fits within 80% of the monitor on both axes.
 
@@ -86,7 +86,7 @@ def auto_ui_scale(base_size: int = 1024) -> int:
 
     Returns
     -------
-    
+
         Integer scale factor (1, 2, or 3).
 
     """

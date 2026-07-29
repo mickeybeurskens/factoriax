@@ -30,6 +30,7 @@ _FPS: int = 30
 @dataclass(frozen=True)
 class _MenuOption:
     """ """
+
     action: str
     label: str
     description: str
@@ -84,7 +85,7 @@ def run_main_menu(
     Parameters
     ----------
     screen: pygame.Surface :
-        
+
     kb_lookup: KeyLookup | None :
          (Default value = None)
     ctrl_lookup: ControllerLookup | None :
@@ -92,7 +93,7 @@ def run_main_menu(
 
     Returns
     -------
-    
+
         ``"play"``, ``"editor"``, ``"settings"``, or ``None``
         (quit / window closed).
 
@@ -135,7 +136,7 @@ def run_main_menu(
         Parameters
         ----------
         action: str :
-            
+
 
         Returns
         -------

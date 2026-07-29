@@ -14,8 +14,6 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.levels import Level
-from factoriax.engine.recipes import RecipeBook, RecipeTable
 from factoriax.engine.envs.easy_rocket import (
     EASY_ROCKET_ACHIEVEMENT_NAMES,
     EASY_ROCKET_ACHIEVEMENT_WEIGHTS,
@@ -27,6 +25,8 @@ from factoriax.engine.envs.easy_rocket import (
     easy_rocket_conditions,
     easy_rocket_reward,
 )
+from factoriax.engine.levels import Level
+from factoriax.engine.recipes import RecipeBook, RecipeTable
 from factoriax.engine.state import EnvParams
 
 _SPAWN: tuple[int, int] = (8, 8)

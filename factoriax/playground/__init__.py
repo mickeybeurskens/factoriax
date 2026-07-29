@@ -1,2 +1,1 @@
-"""Human playable interface and level editor.
-"""
+"""Human playable interface and level editor."""

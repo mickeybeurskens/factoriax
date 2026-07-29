@@ -53,7 +53,7 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
 @dataclass(frozen=True)
 class Recipe:
     """One recipe's full record: identity plus default balance.
-    
+
     Identity (``output``, ``inputs``-types, ``machine_type``) is fixed
     in the canonical ``BASE_RECIPES`` tuple; tuning it requires a code
     change. Balance numbers (input counts via ``inputs``-amounts,
@@ -92,7 +92,7 @@ class Recipe:
 @dataclass(frozen=True)
 class RecipeOverride:
     """Per-recipe balance override.
-    
+
     Each field is optional; ``None`` means "keep the default from the
     base :class:`Recipe`". Identity (output item, input item *types*,
     machine type) is not tunable through this class — only the
@@ -115,13 +115,13 @@ class RecipeOverride:
 @dataclass(frozen=True)
 class RecipeBalance:
     """Sparse balance overlay keyed by output ``ItemType``.
-    
+
     A :class:`RecipeBalance` is the user-facing config for tuning a
     game without forking the recipe table. Construct one with the
     overrides you want, then apply it via
     :meth:`RecipeBook.with_balance`:
-    
-    
+
+
     The overrides are stored as a tuple of pairs (rather than a dict)
     so :class:`RecipeBalance` is hashable and safe to share across
     JIT cache keys; lookups are linear but the overrides list is
@@ -162,12 +162,12 @@ class RecipeBalance:
         Parameters
         ----------
         output_item: int :
-            
+
 
         Returns
         -------
         type
-            
+
 
         """
         for output, override in self.overrides:
@@ -184,10 +184,10 @@ class RecipeBalance:
 @dataclass(frozen=True)
 class RecipeBook:
     """Validated bundle of :class:`Recipe` records.
-    
+
     Wraps a tuple of recipes and enforces two structural invariants
     that downstream JAX kernels rely on:
-    
+
     1. **Unique outputs** — each ``ItemType`` appears as the output of
        at most one recipe. The reverse-lookup ``OUTPUT_TO_RECIPE`` is a
        single-valued mapping; two recipes producing the same item would
@@ -202,7 +202,7 @@ class RecipeBook:
        gates 1-input recipes on slot-emptiness; different machines are
        always allowed because the matcher already partitions by
        machine.
-    
+
     Both invariants are checked at construction time so a bad book
     fails fast with a named offender rather than producing wrong
     arrays at runtime.
@@ -263,7 +263,7 @@ class RecipeBook:
 
     def with_balance(self, balance: RecipeBalance) -> RecipeBook:
         """Apply a balance overlay, returning a new validated book.
-        
+
         Identity (output items, machine type, recipe order, input
         item types) is preserved — only the per-recipe balance numbers
         (input counts, ``output_count``, ``ticks``) are tunable.
@@ -281,7 +281,7 @@ class RecipeBook:
             ``ItemType``. Overrides for outputs that don't exist
             in this book are silently ignored.
         balance: RecipeBalance :
-            
+
 
         Returns
         -------
@@ -567,7 +567,7 @@ RECIPE_NAMES: list[str] = [r.name for r in BASE_RECIPES]
 
 class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Stacked JAX arrays projected from a :class:`RecipeBook`.
-    
+
     Holds every per-recipe number the engine consumes inside JIT'd
     kernels (combiner cycle matching, crafting yield, action dispatch)
     as a single PyTree leaf set. Stored on :class:`EnvParams` so the
@@ -597,7 +597,7 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     @classmethod
     def from_book(cls, book: RecipeBook) -> RecipeTable:
         """Project a :class:`RecipeBook` into stacked JAX arrays.
-        
+
         The book has already validated uniqueness, so this method is
         a pure shape-and-dtype projection — no further checks. Pads
         1-input recipes with ``(EMPTY, 0)`` so every recipe row has
@@ -608,7 +608,7 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         book :
             Validated :class:`RecipeBook`.
         book: RecipeBook :
-            
+
 
         Returns
         -------

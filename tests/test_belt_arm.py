@@ -316,9 +316,7 @@ class TestArm:
         )
         result = run_arms(state, _PARAMS)
         eid = int(result.tile_entity[0, 2])
-        assert int(result.ent_asm_in_type[eid, 0]) == int(
-            ItemType.TIER1_SCIENCE_PACK
-        )
+        assert int(result.ent_asm_in_type[eid, 0]) == int(ItemType.TIER1_SCIENCE_PACK)
         assert int(result.ent_asm_in_count[eid, 0]) == 1
         assert int(result.ent_buf_count[eid]) == 0
         _, belt_count = _get_buf(result, 0, 0)

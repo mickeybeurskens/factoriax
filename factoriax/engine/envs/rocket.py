@@ -47,9 +47,8 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
 from factoriax.engine.envs.wrappers import ActionMaskWrapper
-from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.envs.base import achievement_hook
 from factoriax.engine.levels import Level, LevelBuilder
 from factoriax.engine.recipes import (
     BASE_RECIPE_BOOK,
@@ -364,13 +363,13 @@ def rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
     """Sparse reward for newly-unlocked rocket-scenario achievements.
-    
+
     Thin wrapper around :func:`factoriax.engine.rewards.achievement_reward`
     bound to :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. Assumes *prev_state*
     and *new_state* are :class:`~factoriax.engine.state.EnvState` instances
     whose ``achievements_unlocked`` field has been latched by the env's
     ``achievement_fn`` (typically :func:`rocket_conditions`).
-    
+
     Parameters
     ----------
         prev_state: EnvState before the step.
@@ -379,22 +378,22 @@ def rocket_reward(
     Parameters
     ----------
     prev_state : EnvState :
-        
+
     new_state : EnvState :
-        
+
     params : EnvParams :
-        
+
     prev_state: EnvState :
-        
+
     new_state: EnvState :
-        
+
     params: EnvParams :
-        
+
 
     Returns
     -------
 
-    
+
     """
     return achievement_reward(
         prev_state, new_state, params, weights=ROCKET_ACHIEVEMENT_WEIGHTS
@@ -477,7 +476,7 @@ _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
 
 def build_rocket_level() -> Level:
     """Construct the canonical 32x32 rocket scenario level.
-    
+
     Player spawns at :data:`_SPAWN`. Five 2x2 ore patches (iron,
     copper, tin, silicon, limestone) sit on cols 3-4, vertically
     stacked with 1-tile dirt gaps (rows 9, 12, 15, 18, 21). A 1-wide
@@ -493,7 +492,7 @@ def build_rocket_level() -> Level:
     Returns
     -------
 
-    
+
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     # Coal column — one tile wide, full map height.

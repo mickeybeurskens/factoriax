@@ -39,7 +39,7 @@ def _require_multi_player(traj: Trajectory) -> None:
     traj :
         Trajectory:
     traj: Trajectory :
-        
+
 
     Returns
     -------
@@ -66,7 +66,7 @@ def plot_comparative_raster(
     player_labels: list[str] | None = None,
 ) -> tuple[Figure, np.ndarray]:
     """Plot action rasters for all players stacked vertically.
-    
+
     This is the most direct way to see whether players are doing the same
     thing at the same time, taking turns, or operating independently.
 
@@ -89,11 +89,11 @@ def plot_comparative_raster(
     float] :
         (Default value = (14)
     4) :
-        
+
     player_labels :
         list[str] | None:  (Default value = None)
     traj: Trajectory :
-        
+
     num_actions: int :
          (Default value = NUM_ACTIONS)
     action_labels: list[str] | None :
@@ -101,7 +101,7 @@ def plot_comparative_raster(
     colors: Sequence[str] | None :
          (Default value = None)
     figsize_per_player: tuple[float :
-        
+
     player_labels: list[str] | None :
          (Default value = None)
 
@@ -148,7 +148,7 @@ def role_divergence(
     time_range: tuple[int, int] | None = None,
 ) -> np.ndarray:
     """Compute pairwise Jensen-Shannon divergence between players' action distributions.
-    
+
     A high JSD means the two players are taking very different actions
     (role specialization).  A low JSD means they behave similarly.
 
@@ -157,7 +157,7 @@ def role_divergence(
     traj : Trajectory
         Must be multi-player.
     num_actions : int
-        
+
     time_range : tuple[int
         Restrict to a specific timestep window.
     traj :
@@ -169,11 +169,11 @@ def role_divergence(
     int] | None :
         (Default value = None)
     traj: Trajectory :
-        
+
     num_actions: int :
          (Default value = NUM_ACTIONS)
     time_range: tuple[int :
-        
+
 
     Returns
     -------
@@ -202,9 +202,9 @@ def role_divergence(
         q :
             np.ndarray:
         p: np.ndarray :
-            
+
         q: np.ndarray :
-            
+
 
         Returns
         -------
@@ -236,11 +236,11 @@ def plot_role_divergence(
     Parameters
     ----------
     traj : Trajectory
-        
+
     phases : list of (start
         If provided, creates subplots for each phase.
     player_labels : list[str]
-        
+
     traj :
         Trajectory:
     num_actions :
@@ -256,17 +256,17 @@ def plot_role_divergence(
     float] :
         (Default value = (6)
     5) :
-        
+
     traj: Trajectory :
-        
+
     num_actions: int :
          (Default value = NUM_ACTIONS)
     phases: list[tuple[int :
-        
+
     player_labels: list[str] | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
 
     Returns
     -------
@@ -343,7 +343,7 @@ def spatial_overlap(
     distance_threshold :
         int:  (Default value = 0)
     traj: Trajectory :
-        
+
     distance_threshold: int :
          (Default value = 0)
 
@@ -391,7 +391,7 @@ def plot_spatial_overlap(
     Parameters
     ----------
     traj : Trajectory
-        
+
     distance_thresholds : list[int]
         Multiple thresholds to plot.
     traj :
@@ -399,9 +399,9 @@ def plot_spatial_overlap(
     distance_thresholds :
         list[int]:  (Default value = [0)
     1 :
-        
+
     3] :
-        
+
     ax :
         Axes | None:  (Default value = None)
     figsize :
@@ -409,17 +409,17 @@ def plot_spatial_overlap(
     float] :
         (Default value = (12)
     4) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     distance_thresholds: list[int] :
          (Default value = [0)
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 
@@ -461,15 +461,15 @@ def joint_action_matrix(
     Parameters
     ----------
     traj : Trajectory
-        
+
     player_a, player_b :
         Player indices.
     num_actions : int
-        
+
     normalize : bool
-        
+
     time_range : tuple[int
-        
+
     traj :
         Trajectory:
     player_a :
@@ -485,7 +485,7 @@ def joint_action_matrix(
     int] | None :
         (Default value = None)
     traj: Trajectory :
-        
+
     player_a: int :
          (Default value = 0)
     player_b: int :
@@ -495,7 +495,7 @@ def joint_action_matrix(
     normalize: bool :
          (Default value = True)
     time_range: tuple[int :
-        
+
 
     Returns
     -------
@@ -559,11 +559,11 @@ def plot_joint_actions(
     float] :
         (Default value = (8)
     7) :
-        
+
     title :
         str | None:  (Default value = None)
     traj: Trajectory :
-        
+
     player_a: int :
          (Default value = 0)
     player_b: int :
@@ -573,11 +573,11 @@ def plot_joint_actions(
     action_labels: list[str] | None :
          (Default value = None)
     time_range: tuple[int :
-        
+
     ax: Axes | None :
          (Default value = None)
     figsize: tuple[float :
-        
+
     title: str | None :
          (Default value = None)
 

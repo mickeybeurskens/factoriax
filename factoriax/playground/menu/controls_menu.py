@@ -42,6 +42,7 @@ _UI_SCALE_LABELS: tuple[str, ...] = ("Auto", "1x", "2x", "3x")
 @dataclass(frozen=True)
 class _PageOption:
     """ """
+
     action: str
     label: str
     description: str
@@ -87,6 +88,7 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
 @dataclass(frozen=True)
 class _BindingRow:
     """ """
+
     action: PlayerAction
     label: str
 
@@ -94,6 +96,7 @@ class _BindingRow:
 @dataclass(frozen=True)
 class _BindingCategory:
     """ """
+
     title: str
     rows: tuple[_BindingRow, ...]
 
@@ -194,7 +197,7 @@ def _format_key_display(names: list[str]) -> str:
     Parameters
     ----------
     names: list[str] :
-        
+
 
     Returns
     -------
@@ -221,7 +224,7 @@ def _format_controller_display(names: list[str]) -> str:
     Parameters
     ----------
     names: list[str] :
-        
+
 
     Returns
     -------
@@ -238,9 +241,9 @@ def _format_binding(names: list[str], device: str) -> str:
     Parameters
     ----------
     names: list[str] :
-        
+
     device: str :
-        
+
 
     Returns
     -------
@@ -267,9 +270,9 @@ def _format_display_values(fullscreen: bool, ui_scale: int) -> list[str]:
     Parameters
     ----------
     fullscreen: bool :
-        
+
     ui_scale: int :
-        
+
 
     Returns
     -------
@@ -291,16 +294,16 @@ def run_controls_menu(
     config: PlayerConfig,
 ) -> tuple[bool, int]:
     """Run the settings menu and return ``(fullscreen, ui_scale)``.
-    
+
     Binding edits are written into ``config.keyboard`` / ``config.controller``
     in place; the caller is responsible for persistence.
 
     Parameters
     ----------
     screen: pygame.Surface :
-        
+
     config: PlayerConfig :
-        
+
 
     Returns
     -------
@@ -342,7 +345,7 @@ def run_controls_menu(
         Parameters
         ----------
         device: str :
-            
+
 
         Returns
         -------
@@ -356,7 +359,7 @@ def run_controls_menu(
         Parameters
         ----------
         device: str :
-            
+
 
         Returns
         -------
@@ -383,7 +386,7 @@ def run_controls_menu(
         Parameters
         ----------
         direction: int :
-            
+
 
         Returns
         -------

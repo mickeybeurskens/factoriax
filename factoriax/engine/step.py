@@ -65,22 +65,22 @@ def is_position_in_bounds(
     map_height :
         Map height.
     position : jax.Array :
-        
+
     map_width : int :
-        
+
     map_height : int :
-        
+
     position: jax.Array :
-        
+
     map_width: int :
-        
+
     map_height: int :
-        
+
 
     Returns
     -------
 
-    
+
     """
     return (
         (position[0] >= 0)
@@ -100,18 +100,18 @@ def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
     position :
         (x, y) coordinates.
     state : EnvState :
-        
+
     position : jax.Array :
-        
+
     state: EnvState :
-        
+
     position: jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
@@ -139,18 +139,18 @@ def is_position_walkable(
     position :
         (x, y) coordinates.
     state : EnvState :
-        
+
     position : jax.Array :
-        
+
     state: EnvState :
-        
+
     position: jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     block = get_block_at(state, position)
     is_solid = jnp.any(
@@ -187,22 +187,22 @@ def move_player(
     player_idx :
         Player index.
     state : EnvState :
-        
+
     action : int | jax.Array :
-        
+
     player_idx : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     action: int | jax.Array :
-        
+
     player_idx: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     pos = state.player_positions[player_idx]
     current_dir = state.player_directions[player_idx]
@@ -259,14 +259,14 @@ def mine_block(
     params: EnvParams,
 ) -> EnvState:
     """Mine the block on the tile in front of the player.
-    
+
     Targets the tile in the player's facing direction. NOOP when the
     target is out of bounds, not a mineable block, depleted, or when
     the player's inventory has no space for any of the resulting yield.
     Each successful action extracts up to ``params.player_mining_yield``
     units, capped by remaining tile resources and remaining inventory
     stack space.
-    
+
     Parameters
     ----------
         state: Current environment state.
@@ -277,22 +277,22 @@ def mine_block(
     attr :
         EnvParams
     state : EnvState :
-        
+
     player_idx : int | jax.Array :
-        
+
     params : EnvParams :
-        
+
     state: EnvState :
-        
+
     player_idx: int | jax.Array :
-        
+
     params: EnvParams :
-        
+
 
     Returns
     -------
 
-    
+
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -348,7 +348,7 @@ def deposit_to_adjacent(
     item_type: int | jax.Array,
 ) -> EnvState:
     """Deposit an item into the machine in front of the player.
-    
+
     For assemblers: deposits into asm_in slots.
     For buffer machines: deposits into buffer.
 
@@ -361,22 +361,22 @@ def deposit_to_adjacent(
     item_type :
         ItemType to deposit.
     state : EnvState :
-        
+
     player_idx : int | jax.Array :
-        
+
     item_type : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     player_idx: int | jax.Array :
-        
+
     item_type: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     item_type_arr = jnp.int32(item_type)
     tx, ty = get_tile_in_front(state, player_idx)
@@ -481,7 +481,7 @@ def withdraw_from_adjacent(
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Withdraw from the output slot of the machine in front of the player.
-    
+
     Each machine exposes exactly one output slot at a time
     (``ent_asm_out`` for combiners mid-cycle, otherwise ``ent_buf``).
     A single WITHDRAW action pulls **as many items as can fit** —
@@ -492,18 +492,18 @@ def withdraw_from_adjacent(
     Parameters
     ----------
     state : EnvState :
-        
+
     player_idx : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     player_idx: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
@@ -602,11 +602,11 @@ def withdraw_from_adjacent(
 
 def run_labs(state: EnvState) -> EnvState:
     """Consume every science pack sitting in any SCIENCE_LAB input slot.
-    
+
     Greedy: whatever's in a lab's two input slots this tick is fully
     consumed. The per-type delta goes into ``science_consumed_step``
     available on ``EnvState.science_consumed_step`` each step.
-    
+
     Vectorised over all entities: one mask, one gather, one
     :func:`jax.ops.segment_sum`, no scatter.
 
@@ -615,14 +615,14 @@ def run_labs(state: EnvState) -> EnvState:
     state :
         Current environment state.
     state : EnvState :
-        
+
     state: EnvState :
-        
+
 
     Returns
     -------
 
-    
+
     """
     is_lab = (state.ent_type == Machine.SCIENCE_LAB) & (state.ent_y >= 0)
     # Shape (E, 2) after broadcasting.
@@ -651,7 +651,7 @@ def _handle_player_action(
     player_idx: int | jax.Array,
 ) -> EnvState:
     """Handle a single player action.
-    
+
     Parameters
     ----------
         state: Current environment state.
@@ -663,26 +663,26 @@ def _handle_player_action(
     player_idx :
         Index of the player
     state : EnvState :
-        
+
     params : EnvParams :
-        
+
     action : int | jax.Array :
-        
+
     player_idx : int | jax.Array :
-        
+
     state: EnvState :
-        
+
     params: EnvParams :
-        
+
     action: int | jax.Array :
-        
+
     player_idx: int | jax.Array :
-        
+
 
     Returns
     -------
 
-    
+
     """
     # Pre-compute all derived action parameters (cheap indexing).
     # CRAFT dispatch: action -> output item (fixed) -> recipe row in the
@@ -755,7 +755,7 @@ def factoriax_step(
     params: EnvParams,
 ) -> EnvState:
     """Execute one step of the environment.
-    
+
     Parameters
     ----------
         rng: JAX random key (unused, kept for API compat).
@@ -765,26 +765,26 @@ def factoriax_step(
     Parameters
     ----------
     rng : jax.Array :
-        
+
     state : EnvState :
-        
+
     action : int | jax.Array :
-        
+
     params : EnvParams :
-        
+
     rng: jax.Array :
-        
+
     state: EnvState :
-        
+
     action: int | jax.Array :
-        
+
     params: EnvParams :
-        
+
 
     Returns
     -------
 
-    
+
     """
     player_idx = state.selected_player
     # Reset the per-step science-lab delta before the action runs. Any
@@ -803,7 +803,7 @@ def is_game_over(
     params: EnvParams,
 ) -> jax.Array:
     """Check if the episode has ended.
-    
+
     Parameters
     ----------
         state: Current environment state.
@@ -811,17 +811,17 @@ def is_game_over(
     Parameters
     ----------
     state : EnvState :
-        
+
     params : EnvParams :
-        
+
     state: EnvState :
-        
+
     params: EnvParams :
-        
+
 
     Returns
     -------
 
-    
+
     """
     return jnp.asarray(state.timestep >= params.max_timesteps, dtype=jnp.bool_)

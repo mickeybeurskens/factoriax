@@ -45,7 +45,7 @@ def plot_item_counts(
     title: str = "Item counts over time",
 ) -> Any:
     """Line plot of player item counts over time.
-    
+
     Draws one line per :class:`ItemType` that exceeds zero at some
     point in the episode. The dense ``player_inventory`` field on the
     trajectory (shape ``(1, T+1, P, N)``) is already per-item, so no
@@ -61,17 +61,17 @@ def plot_item_counts(
     title :
         Figure title.
     traj: Any :
-        
+
     out_path: Any :
-        
+
     * :
-        
+
     title: str :
          (Default value = "Item counts over time")
 
     Returns
     -------
-    
+
         ``out_path`` as written.
 
     Raises
@@ -116,7 +116,7 @@ def plot_action_counts(
     title: str = "Action counts",
 ) -> Any:
     """Bar chart of per-action counts over a single eval episode.
-    
+
     Single-episode action distribution over time is noisy, so this
     helper plots a simple counts view. A moving-average distribution
     is a better fit for multi-episode analyses.
@@ -130,17 +130,17 @@ def plot_action_counts(
     title :
         Figure title.
     actions: np.ndarray :
-        
+
     out_path: Any :
-        
+
     * :
-        
+
     title: str :
          (Default value = "Action counts")
 
     Returns
     -------
-    
+
         ``out_path`` as written.
 
     """
@@ -191,15 +191,15 @@ def generate_eval_plots(
     title_prefix :
         Prepended to each figure title.
     rollout: EvalRollout :
-        
+
     out_dir: Any :
-        
+
     * :
-        
+
     achievement_labels: list[str] :
-        
+
     num_achievements: int :
-        
+
     title_prefix: str :
          (Default value = "Final rollout")
 

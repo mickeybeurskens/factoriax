@@ -24,12 +24,12 @@ from factoriax.engine.levels import (
     _place_players,
     build_state,
     default_resources,
+    generate_state,
     get_level,
     load_level,
     save_level,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.engine.levels import generate_state
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -458,7 +458,9 @@ class TestGenerateState:
     """generate_state produces correctly-shaped states."""
 
     def test_map_shape_matches_params(self) -> None:
-        state = generate_state(jax.random.PRNGKey(0), _PARAMS, map_height=16, map_width=16)
+        state = generate_state(
+            jax.random.PRNGKey(0), _PARAMS, map_height=16, map_width=16
+        )
         assert state.map.shape == (16, 16)
 
     def test_player_count_matches_params(self) -> None:

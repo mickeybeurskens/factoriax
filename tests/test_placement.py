@@ -17,8 +17,7 @@ from factoriax.engine.constants import (
     MoveAction,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.step import factoriax_step
-from factoriax.engine.machine_spec import MAX_HEALTH, MACHINE_MAX_HEALTH
+from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MAX_HEALTH
 from factoriax.engine.placement import (
     apply_repair,
     get_tile_in_front,
@@ -28,6 +27,7 @@ from factoriax.engine.placement import (
     place_machine,
 )
 from factoriax.engine.state import EnvParams
+from factoriax.engine.step import factoriax_step
 from factoriax.engine.tables import ITEM_TO_MACHINE_ARRAY, MACHINE_TO_ITEM_ARRAY
 
 

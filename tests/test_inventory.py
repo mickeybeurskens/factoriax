@@ -3,9 +3,9 @@
 import jax.numpy as jnp
 from jax import random
 
-from factoriax.engine.constants import ItemType
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
+    ItemType,
 )
 from factoriax.engine.jax_renderer import JaxRenderer
 from factoriax.engine.levels import generate_state
@@ -100,9 +100,7 @@ class TestInventoryObservation:
         env, params, _, state = canonical_env_8x8_1p
         obs = env.get_obs(state, params)
 
-        spatial_size = (
-            NUM_SPATIAL_CHANNELS["x_ray"] * env.map_width * env.map_height
-        )
+        spatial_size = NUM_SPATIAL_CHANNELS["x_ray"] * env.map_width * env.map_height
         inv_start = spatial_size
         inv_data = obs[inv_start:]
 

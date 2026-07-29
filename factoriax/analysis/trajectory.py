@@ -99,7 +99,7 @@ _PLAYER_FIELDS: frozenset[str] = frozenset(
 @dataclass(frozen=True)
 class Trajectory:
     """Immutable container for batched episode data.
-    
+
     All array fields follow the convention ``(B, T, ...)`` where *B* is the
     batch (episode) dimension and *T* is the time dimension.  For multi-player
     environments the player dimension *P* follows *T* in player-specific
@@ -111,7 +111,7 @@ class Trajectory:
     Returns
     -------
 
-    
+
     """
 
     actions: np.ndarray
@@ -208,14 +208,14 @@ class Trajectory:
         idx :
             int:
         idx : int :
-            
+
         idx: int :
-            
+
 
         Returns
         -------
 
-        
+
         """
         if idx < 0:
             idx = self.num_episodes + idx
@@ -229,14 +229,14 @@ class Trajectory:
         s :
             slice | np.ndarray:
         s : slice | np.ndarray :
-            
+
         s: slice | np.ndarray :
-            
+
 
         Returns
         -------
 
-        
+
         """
         kwargs: dict[str, Any] = {"actions": self.actions[s]}
         for name in _OPTIONAL_ARRAY_FIELDS:
@@ -254,14 +254,14 @@ class Trajectory:
         idx :
             int:
         idx : int :
-            
+
         idx: int :
-            
+
 
         Returns
         -------
 
-        
+
         """
         if not self.is_multi_player:
             return self
@@ -293,18 +293,18 @@ class Trajectory:
         end :
             int:
         start : int :
-            
+
         end : int :
-            
+
         start: int :
-            
+
         end: int :
-            
+
 
         Returns
         -------
 
-        
+
         """
         kwargs: dict[str, Any] = {"actions": self.actions[:, start:end]}
         for name in _OPTIONAL_ARRAY_FIELDS:
@@ -336,7 +336,7 @@ class Trajectory:
 
     def save(self, path: str) -> None:
         """Save trajectory to a compressed ``.npz`` file.
-        
+
         Scheme dicts are serialized as JSON byte strings stored under
         keys with an underscore prefix (e.g. ``_observation_scheme``).
 
@@ -345,14 +345,14 @@ class Trajectory:
         path :
             str:
         path : str :
-            
+
         path: str :
-            
+
 
         Returns
         -------
 
-        
+
         """
         arrays: dict[str, Any] = {"actions": self.actions}
         for name in _OPTIONAL_ARRAY_FIELDS:
@@ -368,7 +368,7 @@ class Trajectory:
     @classmethod
     def load(cls, path: str) -> Trajectory:
         """Load trajectory from a ``.npz`` file.
-        
+
         Underscore-prefixed JSON entries are deserialized back into
         their corresponding scheme dicts.  Legacy files with scalar
         ``_obs_type`` / ``_obs_radius`` keys are migrated into
@@ -379,14 +379,14 @@ class Trajectory:
         path :
             str:
         path : str :
-            
+
         path: str :
-            
+
 
         Returns
         -------
 
-        
+
         """
         data = np.load(path, allow_pickle=True)
         kwargs: dict[str, Any] = {"actions": data["actions"]}
@@ -473,17 +473,17 @@ def states_to_trajectory(
     params: EnvParams | None = None,
 ) -> Trajectory:
     """Convert a sequence of EnvState snapshots into a Trajectory.
-    
+
     Builds a single-episode trajectory (batch dim = 1) by stacking
     every array field from the state list along a new time axis.
-    
+
     Parameters
     ----------
         states: List of ``EnvState`` objects, one per timestep.
         actions: Optional action array of shape ``(T,)`` or ``(T, P)``.
             If ``None``, a zeros array is used.
         rewards: Optional reward array of shape ``(T,)``.
-    
+
     Parameters
     ----------
       the: dict form is recorded on the returned trajectory as
@@ -496,7 +496,7 @@ def states_to_trajectory(
     Parameters
     ----------
     states : list[EnvState] :
-        
+
     actions : np.ndarray | None :
         (Default value = None)
     rewards : np.ndarray | None :
@@ -504,7 +504,7 @@ def states_to_trajectory(
     params : EnvParams | None :
         (Default value = None)
     states: list[EnvState] :
-        
+
     actions: np.ndarray | None :
          (Default value = None)
     rewards: np.ndarray | None :
@@ -515,7 +515,7 @@ def states_to_trajectory(
     Returns
     -------
 
-    
+
     """
     if not states:
         raise ValueError("states list is empty.")
@@ -567,7 +567,7 @@ def trajectory_to_states(
     episode: int = 0,
 ) -> list[EnvState]:
     """Reconstruct EnvState objects from a Trajectory.
-    
+
     Only fields that are present in the trajectory are set. Missing
     fields will cause the reconstruction to fail if they are required
     by ``EnvState``.
@@ -583,18 +583,18 @@ def trajectory_to_states(
     episode :
         int:  (Default value = 0)
     traj : Trajectory :
-        
+
     episode : int :
         (Default value = 0)
     traj: Trajectory :
-        
+
     episode: int :
          (Default value = 0)
 
     Returns
     -------
 
-    
+
     """
     from factoriax.engine.state import EnvState
 

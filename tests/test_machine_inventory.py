@@ -9,12 +9,11 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from factoriax.engine.constants import BlockType, ItemType
-from factoriax.engine.state import EnvParams, EnvState
-from factoriax.engine.constants import Machine
+from factoriax.engine.constants import BlockType, ItemType, Machine
 from factoriax.engine.levels import generate_state
 from factoriax.engine.machine_spec import MACHINE_MAX_STACK, MACHINE_MAX_TYPES
 from factoriax.engine.machines import run_miners, update_all_machines
+from factoriax.engine.state import EnvParams, EnvState
 
 # The miner's buffer capacity — a "full" buffer value for the stop test.
 _MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])

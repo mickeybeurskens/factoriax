@@ -42,10 +42,7 @@ _MAP_W: int = 8
 _MAP_H: int = 8
 
 _GLOBAL_OBS_SIZE = (
-    NUM_SPATIAL_CHANNELS["x_ray"]
-    * _MAP_W
-    * _MAP_H
-    + NUM_PLAYER_SCALARS["x_ray"]
+    NUM_SPATIAL_CHANNELS["x_ray"] * _MAP_W * _MAP_H + NUM_PLAYER_SCALARS["x_ray"]
 )
 
 
@@ -157,11 +154,7 @@ class TestGlobalArray:
         obs0 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         obs1 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 1))
         # Spatial channels are identical; player scalars differ.
-        spatial_size = (
-            NUM_SPATIAL_CHANNELS["x_ray"]
-            * _MAP_W
-            * _MAP_H
-        )
+        spatial_size = NUM_SPATIAL_CHANNELS["x_ray"] * _MAP_W * _MAP_H
         np.testing.assert_array_equal(obs0[:spatial_size], obs1[:spatial_size])
         assert not np.allclose(obs0[spatial_size:], obs1[spatial_size:])
 
@@ -670,11 +663,7 @@ class TestLocalGlobalEquivalence:
         global_obs = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         local_obs = np.array(local_x_ray(state, _DEFAULT_PARAMS, 0, radius=radius))
 
-        global_spatial = (
-            NUM_SPATIAL_CHANNELS["x_ray"]
-            * _MAP_W
-            * _MAP_H
-        )
+        global_spatial = NUM_SPATIAL_CHANNELS["x_ray"] * _MAP_W * _MAP_H
         window = 2 * radius + 1
         local_spatial = NUM_SPATIAL_CHANNELS["x_ray"] * window * window
         np.testing.assert_array_equal(

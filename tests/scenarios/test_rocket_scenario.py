@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from factoriax.engine.achievements import index_of
 from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,
@@ -18,11 +19,10 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.achievements import index_of
 from factoriax.engine.envs.rocket import (
     MAX_ROCKET_SCORE,
-    ROCKET_ACHIEVEMENTS,
     ROCKET_ACHIEVEMENT_WEIGHTS,
+    ROCKET_ACHIEVEMENTS,
     ROCKET_BLOCKED_ACTIONS,
     build_rocket_level,
     rocket_conditions,

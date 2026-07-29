@@ -86,10 +86,7 @@ class _TierOracle:
     def _craft_action(self, inv: np.ndarray) -> int | None:
         """Next hand-craft toward this tier's pack, or None when done."""
         if self.tier == 2:
-            if (
-                inv[int(ItemType.TIER1_SCIENCE_PACK)]
-                and inv[int(ItemType.WIRE)]
-            ):
+            if inv[int(ItemType.TIER1_SCIENCE_PACK)] and inv[int(ItemType.WIRE)]:
                 return int(Action.CRAFT_TIER2_SCIENCE_PACK)
             if inv[int(ItemType.IRON_ORE)] and inv[int(ItemType.TIN_ORE)]:
                 return int(Action.CRAFT_WIRE)
@@ -104,9 +101,7 @@ class _TierOracle:
         if self.phase == "mine":
             for ore in _TIER_ORES[self.tier]:
                 if int(inv[ore]) < _BATCH:
-                    return goto_and_act(
-                        state, m == _ORE_BLOCK[ore], int(Action.MINE)
-                    )
+                    return goto_and_act(state, m == _ORE_BLOCK[ore], int(Action.MINE))
             self.phase = "craft"
 
         if self.phase == "craft":

@@ -10,8 +10,8 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
-from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.constants import NUM_ACTIONS
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.state import EnvParams
 
 

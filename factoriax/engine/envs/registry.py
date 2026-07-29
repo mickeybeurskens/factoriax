@@ -117,9 +117,9 @@ def make(
         ``resample`` setting; pass ``True``/``False`` to override — e.g.
         ``False`` for the cheap cached restore even on a keyed scenario.
     env_id: str :
-        
+
     * :
-        
+
     obs: str | None :
          (Default value = None)
     obs_radius: int | None :
@@ -131,7 +131,7 @@ def make(
 
     Returns
     -------
-    
+
         ``(env, params)``.
 
     Raises

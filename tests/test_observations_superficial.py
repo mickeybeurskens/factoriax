@@ -46,9 +46,7 @@ _MAP_W: int = 8
 _MAP_H: int = 8
 
 _GLOBAL_SIZE = (
-    NUM_SPATIAL_CHANNELS["superficial"]
-    * _MAP_W
-    * _MAP_H
+    NUM_SPATIAL_CHANNELS["superficial"] * _MAP_W * _MAP_H
     + NUM_PLAYER_SCALARS["superficial"]
 )
 _RADIUS = 3
@@ -159,11 +157,7 @@ class TestGlobalSuperficial:
             player_inventory=inv,
         )
         out = np.array(global_superficial(state, _DEFAULT_PARAMS, 0))
-        spatial_size = (
-            NUM_SPATIAL_CHANNELS["superficial"]
-            * _MAP_W
-            * _MAP_H
-        )
+        spatial_size = NUM_SPATIAL_CHANNELS["superficial"] * _MAP_W * _MAP_H
         tail = out[spatial_size:]
         expected = np.array(_common_scalars(state, _DEFAULT_PARAMS, 0))
         np.testing.assert_allclose(tail, expected)

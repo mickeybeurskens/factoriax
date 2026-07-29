@@ -72,6 +72,7 @@ _MAX_TIMESTEPS: int = 300
 #: Task target: six miners, one per ore patch.
 _N_MINERS: int = 6
 
+
 def _producing_at_least(state: EnvState, count: int) -> jax.Array:
     """At least ``count`` placed miners have ore in their output buffer.
 
@@ -225,7 +226,9 @@ class BootstrapStart:
         """
         _check_k(k)
         return cls(
-            n_placed=_N_MINERS - k, n_miners=0, n_materials=k,
+            n_placed=_N_MINERS - k,
+            n_miners=0,
+            n_materials=k,
             partial_mine=True,
         )
 
@@ -268,16 +271,12 @@ def apply_start(
     player is restored and the inventory set to the stage's counts.
     """
     corners = _patch_corners(state.map)
-    perm = jax.random.permutation(
-        jax.random.fold_in(key, 1), len(PATCH_BLOCKS)
-    )
+    perm = jax.random.permutation(jax.random.fold_in(key, 1), len(PATCH_BLOCKS))
 
     orig_positions = state.player_positions
     orig_directions = state.player_directions
 
-    inventory = state.player_inventory.at[:, int(ItemType.MINER)].set(
-        start.n_placed
-    )
+    inventory = state.player_inventory.at[:, int(ItemType.MINER)].set(start.n_placed)
     state = state.replace(player_inventory=inventory)
     for i in range(start.n_placed):
         cy, cx = corners[perm[i], 0], corners[perm[i], 1]
@@ -286,18 +285,14 @@ def apply_start(
                 jnp.stack([cx, cy - 1]).astype(state.player_positions.dtype)
             ),
             player_directions=state.player_directions.at[0].set(
-                jnp.asarray(
-                    int(Direction.DOWN), dtype=state.player_directions.dtype
-                )
+                jnp.asarray(int(Direction.DOWN), dtype=state.player_directions.dtype)
             ),
         )
         state = place_machine(state, params, 0, int(ItemType.MINER))
         idx = state.tile_entity[cy, cx]
         ore_item = BLOCK_TO_ITEM_ARRAY[state.map[cy, cx].astype(jnp.int32)]
         state = state.replace(
-            ent_buf_type=state.ent_buf_type.at[idx].set(
-                ore_item.astype(jnp.int8)
-            ),
+            ent_buf_type=state.ent_buf_type.at[idx].set(ore_item.astype(jnp.int8)),
             ent_buf_count=state.ent_buf_count.at[idx].set(jnp.int16(1)),
         )
 
@@ -344,9 +339,7 @@ def miner_bootstrap(
         gives a 15×15 view on the 16×16 map); ignored for ``_global``
         variants.
     """
-    reset_hooks = (
-        () if start is None else (partial(apply_start, start=start),)
-    )
+    reset_hooks = () if start is None else (partial(apply_start, start=start),)
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,
         step_hooks=(achievement_hook(miner_bootstrap_conditions),),

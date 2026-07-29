@@ -36,12 +36,12 @@ from .trajectory import _STATE_TO_TRAJ, Trajectory
 @dataclass
 class RolloutRecorder:
     """Accumulates rollout data across training iterations.
-    
+
     This recorder is designed to slot into an existing training loop
     with **zero changes** to your ``collect_fn`` or JIT'd code.  It
     works by extracting numpy arrays from the trajectory struct and
     env states that your collection function already returns.
-    
+
     The recorder segments the continuous stream of ``(T, N)`` rollout
     chunks into complete episodes using the ``done`` flags.
 
@@ -72,7 +72,7 @@ class RolloutRecorder:
     ...     if recorder.is_full:
     ...         break
     >>> traj = recorder.finish()
-    
+
     >>> recorder = RolloutRecorder(max_episodes=32, record_states=True)
     >>> for it in range(total_iters):
     ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
@@ -110,7 +110,7 @@ class RolloutRecorder:
         env_states :
             Any:  (Default value = None)
         trajectories: Any :
-            
+
         env_states: Any :
              (Default value = None)
 
@@ -161,7 +161,7 @@ class RolloutRecorder:
 
     def finish(self, pad_incomplete: bool = True) -> Trajectory:
         """Segment recorded chunks into complete episodes and build a Trajectory.
-        
+
         This method concatenates all recorded chunks along the time axis,
         then splits them into individual episodes using the ``done`` flags.
         When ``record_states=True`` was set, state fields are segmented

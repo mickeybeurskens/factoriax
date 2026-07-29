@@ -11,11 +11,15 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from factoriax.engine.constants import BlockType, ItemType
-from factoriax.engine.state import EnvParams, EnvState
-from factoriax.engine.constants import BLOCK_MAX_RESOURCES, Direction
-from factoriax.engine.step import mine_block
+from factoriax.engine.constants import (
+    BLOCK_MAX_RESOURCES,
+    BlockType,
+    Direction,
+    ItemType,
+)
 from factoriax.engine.levels import generate_state
+from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.step import mine_block
 from factoriax.engine.tables import MINEABLE_BLOCKS
 
 _PARAMS = EnvParams()

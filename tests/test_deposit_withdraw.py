@@ -350,9 +350,7 @@ class TestDepositToScienceLab:
         state = deposit_to_adjacent(state, 0, ItemType.TIER1_SCIENCE_PACK)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.ent_asm_in_type[eidx, 0]) == int(
-            ItemType.TIER1_SCIENCE_PACK
-        )
+        assert int(state.ent_asm_in_type[eidx, 0]) == int(ItemType.TIER1_SCIENCE_PACK)
         assert int(state.ent_asm_in_count[eidx, 0]) == 1
         assert int(state.ent_buf_count[eidx]) == 0
         assert int(state.player_inventory[0, ItemType.TIER1_SCIENCE_PACK]) == 1
