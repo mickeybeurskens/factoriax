@@ -10,7 +10,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.levels import generate_state
-from factoriax.engine.machine_spec import MACHINE_MAX_STACK
 from factoriax.engine.machines import (
     _lookup_neighbor,
     _subtract_buffer,
@@ -19,6 +18,7 @@ from factoriax.engine.machines import (
     update_all_machines,
 )
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import MACHINE_MAX_STACK
 
 # The miner's buffer capacity — a "full" buffer value for the stop tests.
 _MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])

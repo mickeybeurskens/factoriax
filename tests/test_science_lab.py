@@ -241,7 +241,7 @@ class TestScienceConstants:
     def test_lab_slot_roles(self) -> None:
         """The lab has two INPUT slots in MACHINE_SLOT_ROLES."""
         from factoriax.engine.constants import SlotRole
-        from factoriax.engine.machine_spec import MACHINE_SLOT_ROLES
+        from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
 
         roles = MACHINE_SLOT_ROLES[int(Machine.SCIENCE_LAB)]
         assert roles[0] == int(SlotRole.INPUT)

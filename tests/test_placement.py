@@ -17,7 +17,6 @@ from factoriax.engine.constants import (
     MoveAction,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MAX_HEALTH
 from factoriax.engine.placement import (
     apply_repair,
     get_tile_in_front,
@@ -28,7 +27,12 @@ from factoriax.engine.placement import (
 )
 from factoriax.engine.state import EnvParams
 from factoriax.engine.step import factoriax_step
-from factoriax.engine.tables import ITEM_TO_MACHINE_ARRAY, MACHINE_TO_ITEM_ARRAY
+from factoriax.engine.tables import (
+    ITEM_TO_MACHINE_ARRAY,
+    MACHINE_HEALTH,
+    MACHINE_MAX_HEALTH,
+    MACHINE_TO_ITEM_ARRAY,
+)
 
 
 def test_placeable_items_are_exactly_the_non_none_machines() -> None:
@@ -316,13 +320,13 @@ class TestPlacementInitializesHealth:
         )
 
     def test_place_initializes_full_health_default(self, state_factory) -> None:
-        """A freshly placed machine has ``MAX_HEALTH`` HP under defaults."""
+        """A freshly placed machine has ``MACHINE_HEALTH`` HP under defaults."""
         state = self._miner_state(state_factory)
         params = EnvParams()
         new_state = place_machine(state, params, 0, int(ItemType.MINER))
         eidx = int(new_state.tile_entity[0, 1])
         assert eidx >= 0
-        assert int(new_state.ent_health[eidx]) == MAX_HEALTH
+        assert int(new_state.ent_health[eidx]) == MACHINE_HEALTH
 
     def test_failed_placement_leaves_ent_health_unchanged(self, state_factory) -> None:
         """If placement is rejected (no item), ent_health is untouched."""
@@ -351,7 +355,7 @@ class TestPlacementInitializesHealth:
         state = build_state(level, num_players=1)
         eidx = int(state.tile_entity[2, 2])
         assert eidx >= 0
-        assert int(state.ent_health[eidx]) == MAX_HEALTH
+        assert int(state.ent_health[eidx]) == MACHINE_HEALTH
 
 
 class TestActionRepair:
@@ -387,7 +391,7 @@ class TestActionRepair:
         state, params, eidx = self._placed_state(state_factory)
         damaged = state.replace(ent_health=state.ent_health.at[eidx].set(10))
         repaired = apply_repair(damaged, params, 0)
-        assert int(repaired.ent_health[eidx]) == MAX_HEALTH
+        assert int(repaired.ent_health[eidx]) == MACHINE_HEALTH
 
     def test_apply_repair_noop_on_full_health(self, state_factory) -> None:
         """Repair on a full-HP entity leaves ent_health untouched."""
@@ -433,7 +437,7 @@ class TestActionRepair:
             jnp.int32(int(Action.REPAIR)),
             params,
         )
-        assert int(new_state.ent_health[eidx]) == MAX_HEALTH
+        assert int(new_state.ent_health[eidx]) == MACHINE_HEALTH
 
 
 class TestPickupHealthGate:
@@ -492,7 +496,7 @@ class TestPickupHealthGate:
         replaced = place_machine(picked_up, params, 0, int(ItemType.MINER))
         new_eidx = int(replaced.tile_entity[0, 1])
         assert new_eidx >= 0
-        assert int(replaced.ent_health[new_eidx]) == MAX_HEALTH
+        assert int(replaced.ent_health[new_eidx]) == MACHINE_HEALTH
 
 
 class TestTrajectoryRecordsEntHealth:
@@ -614,16 +618,16 @@ class TestWrapperContract:
 
         state, params = self._placed_state(state_factory)
         eidx = int(state.tile_entity[0, 1])
-        # 5 NOOPs: HP should drop by 5 from MAX_HEALTH.
+        # 5 NOOPs: HP should drop by 5 from MACHINE_HEALTH.
         for _ in range(5):
             state = self._wrapped_step(state, jnp.int32(Action.NOOP), params)
-        assert int(state.ent_health[eidx]) == MAX_HEALTH - 5
+        assert int(state.ent_health[eidx]) == MACHINE_HEALTH - 5
 
     def test_override_repair_does_partial_restore(self, state_factory) -> None:
         """The wrapper's REPAIR override applies +10, not full restore.
 
         Concretely: damage to 5 HP, dispatch REPAIR, expect ~14 HP
-        (5 + 10 from override - 1 degradation), NOT MAX_HEALTH. This
+        (5 + 10 from override - 1 degradation), NOT MACHINE_HEALTH. This
         proves the wrapper pre-empted the base full-restore.
         """
         from factoriax.engine.constants import Action
@@ -635,7 +639,7 @@ class TestWrapperContract:
         # 5 (start) + 10 (override) - 1 (degradation) = 14
         assert int(new_state.ent_health[eidx]) == 14
         # Definitely NOT a base full-restore.
-        assert int(new_state.ent_health[eidx]) < MAX_HEALTH
+        assert int(new_state.ent_health[eidx]) < MACHINE_HEALTH
 
     def test_engine_state_only_touches_ent_health(self, state_factory) -> None:
         """The wrapper only ever reads/writes state.ent_health on top of

@@ -50,9 +50,8 @@ from factoriax.engine.constants import (
     Direction,
     Machine,
 )
-from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH
 from factoriax.engine.state import EnvParams, EnvState
-from factoriax.engine.tables import MINEABLE_BLOCKS
+from factoriax.engine.tables import MACHINE_MAX_HEALTH, MINEABLE_BLOCKS
 
 # ---------------------------------------------------------------------------
 # Level dataclass
@@ -74,8 +73,6 @@ class Level:
 
     Returns
     -------
-
-
     >>> from factoriax import FactoriaxEnv, get_level
         >>> env = FactoriaxEnv(level=get_level("15x15_resources"))
         >>> # ``env`` is bound to the registered Level for the lifetime
@@ -1111,8 +1108,9 @@ def save_level(level: Level, path: Path) -> None:
         they do not exist.
     level :
         Level to serialize.
-        Examples
-        --------
+
+    Examples
+    --------
     level : Level :
 
     path : Path :
@@ -1124,8 +1122,6 @@ def save_level(level: Level, path: Path) -> None:
 
     Returns
     -------
-
-
     >>> from pathlib import Path
         >>> import tempfile, factoriax
         >>> level = factoriax.LevelBuilder(8, 8).build("tiny")

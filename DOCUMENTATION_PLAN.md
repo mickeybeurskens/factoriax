@@ -62,7 +62,7 @@ parameter is repeated with the type appended and no description, and most
 | `D` violations | 959 |
 | `W293` (blank line with whitespace, mostly inside the broken docstrings) | 2470 |
 | Files with duplicated `name: type :` stubs | 56 |
-| Modules to cover | 84 |
+| Modules to cover | 83 |
 
 Two rules account for most of the `D` total: 460 `D414` (empty section) and 243
 `D417` (parameter with no description).
@@ -203,7 +203,6 @@ order as a reading order, not a dependency order.
 
 - [x] `factoriax/engine/constants.py`
 - [x] `factoriax/engine/actions.py`
-- [ ] `factoriax/engine/machine_spec.py`
 - [ ] `factoriax/engine/recipes.py`
 - [ ] `factoriax/engine/tables.py`
 - [ ] `factoriax/engine/state.py`

@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from factoriax.engine.constants import Machine
-from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH
+from factoriax.engine.tables import MACHINE_MAX_HEALTH
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import (
     DIRECTIONS,

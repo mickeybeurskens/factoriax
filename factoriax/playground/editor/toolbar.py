@@ -17,7 +17,7 @@ from factoriax.engine.constants import (
     Machine,
     SlotRole,
 )
-from factoriax.engine.machine_spec import MACHINE_SLOT_ROLES
+from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
 from factoriax.engine.tables import MACHINE_TO_ITEM_ARRAY
 from factoriax.playground.ui.fonts import get_pixel_font
 from factoriax.playground.ui.icons import (

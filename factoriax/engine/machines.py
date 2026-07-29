@@ -15,7 +15,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.machine_spec import MACHINE_MAX_STACK
+from factoriax.engine.tables import MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import (
     BLOCK_TO_ITEM_ARRAY,

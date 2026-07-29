@@ -20,13 +20,14 @@ from factoriax.engine.constants import (
     Machine,
     SlotRole,
 )
-from factoriax.engine.machine_spec import (
+from factoriax.engine.recipes import NUM_RECIPES, RECIPE_NAMES
+from factoriax.engine.tables import MACHINE_MAX_STACK
+from factoriax.playground.editor.slot_display import (
     MACHINE_NUM_SLOTS,
     MACHINE_SLOT_ROLES,
-    MACHINE_SPECS,
+    SLOT_ROLE_COLORS,
+    SLOT_ROLE_LABELS,
 )
-from factoriax.engine.recipes import NUM_RECIPES, RECIPE_NAMES
-from factoriax.playground.editor.slot_display import SLOT_ROLE_COLORS, SLOT_ROLE_LABELS
 from factoriax.playground.ui.fonts import get_pixel_font
 from factoriax.playground.ui.icons import render_item_icon
 from factoriax.playground.ui.labels import MACHINE_TYPE_NAMES
@@ -74,7 +75,6 @@ class NewLevelDialog:
 
         Returns
         -------
-
             ``"ok"`` when Enter is pressed, ``"cancel"`` on Escape,
             or ``None`` if the dialog stays open.
 
@@ -143,7 +143,6 @@ class NewLevelDialog:
 
         Returns
         -------
-
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -200,7 +199,6 @@ class NewLevelDialog:
 
         Returns
         -------
-
             ``(width, height, name)`` with fallback defaults for empty
             or invalid inputs.
 
@@ -250,7 +248,6 @@ class NumberInputDialog:
 
         Returns
         -------
-
             ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
 
         """
@@ -275,7 +272,6 @@ class NumberInputDialog:
 
         Returns
         -------
-
             Integer between ``min_value`` and ``max_value``.
 
         """
@@ -301,7 +297,6 @@ class NumberInputDialog:
 
         Returns
         -------
-
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -395,7 +390,6 @@ class FileDialog:
 
         Returns
         -------
-
             ``"ok"`` on Enter, ``"cancel"`` on Escape, or ``None``.
 
         """
@@ -479,7 +473,6 @@ class FileDialog:
 
         Returns
         -------
-
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -672,7 +665,7 @@ class MachineInspectorDialog:
     @property
     def max_count(self) -> int:
         """Per-slot count cap for this machine type (its buffer capacity)."""
-        return MACHINE_SPECS[self.machine_type].buffer_stack
+        return int(MACHINE_MAX_STACK[self.machine_type])
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Process a pygame event.
@@ -686,7 +679,6 @@ class MachineInspectorDialog:
 
         Returns
         -------
-
             ``"close"`` to dismiss, or ``None`` to stay open.
 
         """
@@ -706,7 +698,6 @@ class MachineInspectorDialog:
 
         Returns
         -------
-
             ``"close"`` to dismiss, or ``None`` to stay open.
 
         """
@@ -757,7 +748,6 @@ class MachineInspectorDialog:
 
         Returns
         -------
-
             ``None`` (picker stays within the dialog).
 
         """
@@ -801,7 +791,6 @@ class MachineInspectorDialog:
 
         Returns
         -------
-
             ``None``.
 
         """
@@ -841,7 +830,6 @@ class MachineInspectorDialog:
 
         Returns
         -------
-
             RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
         """
@@ -1103,7 +1091,6 @@ def render_help_overlay(base_w: int, base_h: int) -> np.ndarray:
 
     Returns
     -------
-
         RGBA uint8 array of shape ``(base_h, base_w, 4)``.
 
     """
@@ -1171,7 +1158,6 @@ def _render_text_rgba(
 
     Returns
     -------
-
         RGBA uint8 array of shape ``(H, W, 4)``.
 
     """

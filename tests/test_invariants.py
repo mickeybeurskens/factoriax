@@ -19,10 +19,13 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.machine_spec import MACHINE_MAX_HEALTH, MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.step import factoriax_step, mine_block
-from factoriax.engine.tables import PLAYER_MAX_STACK
+from factoriax.engine.tables import (
+    MACHINE_MAX_HEALTH,
+    MACHINE_MAX_STACK,
+    PLAYER_MAX_STACK,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

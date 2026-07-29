@@ -69,13 +69,13 @@ class SlotRole(IntEnum):
     """Purpose of one inventory slot on a machine.
 
     Declared per machine kind by
-    :class:`~factoriax.engine.machine_spec.MachineSpec`. The role labels the
-    slot for the editor and the play UI; the simulation reads the slot arrays
-    positionally and does not branch on the role.
+    ``factoriax.playground.editor.slot_display.MACHINE_SLOTS``. The role labels
+    the slot for the editor and the play UI. The simulation stores machine
+    contents in its own entity arrays and never reads a role.
 
     ``NONE`` also pads
-    ``factoriax.engine.machine_spec.MACHINE_SLOT_ROLES`` out to the widest
-    machine, so it marks a slot that does not exist. No shipped machine
+    ``factoriax.playground.editor.slot_display.MACHINE_SLOT_ROLES`` out to the
+    widest machine, so it marks a slot that does not exist. No shipped machine
     declares a ``FUEL`` slot; the editor still handles the role, which
     restricts the slot to coal.
     """
@@ -154,9 +154,10 @@ class Machine(IntEnum):
     ``EnvState.ent_type`` hold. ``NONE = 0`` means no machine on the tile, the
     analog of ``ItemType.EMPTY = 0``.
 
-    Values index the per-machine spec rows in
-    :mod:`factoriax.engine.machine_spec`, so adding a member requires a
-    matching :class:`~factoriax.engine.machine_spec.MachineSpec`.
+    Values index the per-machine rows of the capacity arrays in
+    :mod:`factoriax.engine.tables` and of the editor's slot layout in
+    ``factoriax.playground.editor.slot_display``. Both are built by iterating
+    this enum, so adding a member without an entry in each raises at import.
     """
 
     NONE = 0

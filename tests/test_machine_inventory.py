@@ -11,9 +11,9 @@ import jax.numpy as jnp
 
 from factoriax.engine.constants import BlockType, ItemType, Machine
 from factoriax.engine.levels import generate_state
-from factoriax.engine.machine_spec import MACHINE_MAX_STACK, MACHINE_MAX_TYPES
 from factoriax.engine.machines import run_miners, update_all_machines
 from factoriax.engine.state import EnvParams, EnvState
+from factoriax.engine.tables import MACHINE_MAX_STACK
 
 # The miner's buffer capacity — a "full" buffer value for the stop test.
 _MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])
@@ -206,19 +206,3 @@ class TestAssemblerInventory:
         assert int(new.ent_buf_count[eid]) == 0
         assert jnp.all(new.ent_asm_in_count[eid] == 0)
         assert int(new.ent_asm_out_count[eid]) == 0
-
-
-class TestMaxTypesConstraint:
-    """Tests for the MACHINE_MAX_TYPES constraint."""
-
-    def test_belt_max_types_is_one(self) -> None:
-        """Belt should hold at most 1 distinct item type."""
-        assert int(MACHINE_MAX_TYPES[Machine.CONVEYOR_BELT]) == 1
-
-    def test_pallet_max_types_is_one(self) -> None:
-        """Pallet should hold at most 1 distinct item type."""
-        assert int(MACHINE_MAX_TYPES[Machine.PALLET]) == 1
-
-    def test_assembler_max_types_is_four(self) -> None:
-        """Assembler should hold at most 4 distinct item types."""
-        assert int(MACHINE_MAX_TYPES[Machine.ASSEMBLER]) == 4

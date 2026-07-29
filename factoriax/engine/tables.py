@@ -170,3 +170,47 @@ PLAYER_MAX_STACK = jnp.array(
     ],
     dtype=jnp.int32,
 )
+
+# ---------------------------------------------------------------------------
+# Per-machine capacities
+# ---------------------------------------------------------------------------
+#
+# Both arrays below are indexed by Machine value and are built by iterating
+# Machine, so a kind added to the enum without an entry here raises KeyError at
+# import rather than silently reading a neighbour's row.
+
+# Items one buffer slot holds, per machine kind.
+_MACHINE_BUFFER_STACK: dict[Machine, int] = {
+    Machine.NONE: 0,
+    Machine.MINER: 64,
+    Machine.PALLET: 256,
+    Machine.CONVEYOR_BELT: 3,
+    Machine.ASSEMBLER: 1000,
+    Machine.ARM: 1,
+    Machine.ROCKET: 0,
+    Machine.FURNACE: 1000,
+    Machine.SCIENCE_LAB: 1000,
+    Machine.SPLITTER: 2,
+    Machine.CROSSING: 2,
+}
+
+#: Items one buffer slot holds, indexed by ``Machine`` value. Shape
+#: ``(len(Machine),)``, int16 to match ``EnvState.ent_buf_count``. Counted in
+#: items rather than stacks. Zero means the machine holds nothing, and
+#: ``ARM`` holds one because it carries a single item in transit. Transfers in
+#: :mod:`factoriax.engine.machines` compare a destination's count against this
+#: and refuse a move into a full buffer, leaving the source untouched.
+MACHINE_MAX_STACK = jnp.array(
+    [_MACHINE_BUFFER_STACK[m] for m in Machine],
+    dtype=jnp.int16,
+)
+
+#: Hit points a machine is placed with. The same for every machine kind;
+#: :data:`MACHINE_MAX_HEALTH` spreads it over the ``Machine`` range so a caller
+#: can index it with a machine type without special-casing.
+MACHINE_HEALTH: int = 256
+
+#: Hit points a placed machine starts with, indexed by ``Machine`` value. Shape
+#: ``(len(Machine),)``, int16 to match ``EnvState.ent_health``. Repairs clamp to
+#: it, and :mod:`factoriax.engine.placement` only allows a pickup at full health.
+MACHINE_MAX_HEALTH = jnp.full(len(Machine), MACHINE_HEALTH, dtype=jnp.int16)
