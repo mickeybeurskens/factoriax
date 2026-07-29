@@ -13,8 +13,10 @@ import pytest
 
 from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
+    NUM_ITEM_TYPES,
     BlockType,
     Direction,
+    ItemType,
     Machine,
 )
 from factoriax.engine.levels import (
@@ -292,6 +294,106 @@ class TestBuildState:
         eid = int(state.tile_entity[3, 3])
         assert eid >= 0, "Expected an entity at tile (3, 3)"
         assert int(state.ent_direction[eid]) == int(Direction.RIGHT)
+
+
+class TestCombinerInventoryLoading:
+    """A combiner's stored items load into the slot that holds that item.
+
+    ``Level.machine_inventory`` is item-indexed and carries no slot, so
+    ``build_state`` decides per item whether it is an input or the finished
+    output. An item the machine's own recipes produce belongs in
+    ``ent_asm_out``; anything else is an input.
+    """
+
+    @staticmethod
+    def _furnace_level(contents: dict[int, int]) -> Level:
+        """Build an 8x8 level with one furnace at (3, 3) holding *contents*."""
+        machines = np.full((8, 8), int(Machine.NONE), dtype=np.int32)
+        machines[3, 3] = int(Machine.FURNACE)
+        inventory = np.zeros((8, 8, NUM_ITEM_TYPES), dtype=np.int32)
+        for item, count in contents.items():
+            inventory[3, 3, item] = count
+        return Level(
+            name="furnace_inv",
+            map_width=8,
+            map_height=8,
+            block_map=np.full((8, 8), int(BlockType.DIRT), dtype=np.int32),
+            machine_types=machines,
+            machine_inventory=inventory,
+        )
+
+    def test_finished_output_loads_into_the_output_slot(self) -> None:
+        """A plate held by a furnace lands in ``ent_asm_out``, not an input."""
+        level = self._furnace_level({int(ItemType.IRON_PLATE): 5})
+        state = build_state(level, num_players=1)
+        eid = int(state.tile_entity[3, 3])
+
+        assert int(state.ent_asm_out_type[eid]) == int(ItemType.IRON_PLATE)
+        assert int(state.ent_asm_out_count[eid]) == 5
+
+    def test_finished_output_does_not_occupy_an_input_slot(self) -> None:
+        """The output item is absent from ``ent_asm_in``, which feeds crafting."""
+        level = self._furnace_level({int(ItemType.IRON_PLATE): 5})
+        state = build_state(level, num_players=1)
+        eid = int(state.tile_entity[3, 3])
+
+        assert int(state.ent_asm_in_count[eid, 0]) == 0
+        assert int(state.ent_asm_in_count[eid, 1]) == 0
+
+    def test_two_inputs_and_an_output_all_survive(self) -> None:
+        """A full furnace keeps both inputs and its output.
+
+        Three item types exceed the two input columns, so before the output
+        was routed separately the third item was dropped on load.
+        """
+        level = self._furnace_level(
+            {
+                int(ItemType.IRON_ORE): 3,
+                int(ItemType.COAL): 2,
+                int(ItemType.IRON_PLATE): 1,
+            }
+        )
+        state = build_state(level, num_players=1)
+        eid = int(state.tile_entity[3, 3])
+
+        loaded_inputs = {
+            int(state.ent_asm_in_type[eid, s]): int(state.ent_asm_in_count[eid, s])
+            for s in range(2)
+        }
+        assert loaded_inputs == {
+            int(ItemType.IRON_ORE): 3,
+            int(ItemType.COAL): 2,
+        }
+        assert int(state.ent_asm_out_type[eid]) == int(ItemType.IRON_PLATE)
+        assert int(state.ent_asm_out_count[eid]) == 1
+
+    def test_input_items_still_load_into_input_slots(self) -> None:
+        """Ore and coal remain inputs; only recipe outputs move."""
+        level = self._furnace_level({int(ItemType.IRON_ORE): 4, int(ItemType.COAL): 6})
+        state = build_state(level, num_players=1)
+        eid = int(state.tile_entity[3, 3])
+
+        loaded = {
+            int(state.ent_asm_in_type[eid, s]): int(state.ent_asm_in_count[eid, s])
+            for s in range(2)
+        }
+        assert loaded == {int(ItemType.IRON_ORE): 4, int(ItemType.COAL): 6}
+        assert int(state.ent_asm_out_count[eid]) == 0
+
+    def test_output_of_a_different_machine_is_treated_as_an_input(self) -> None:
+        """A furnace holding an assembler-made item keeps it as an input.
+
+        ``FRAME`` is produced by an assembler, so a furnace cannot have made
+        it. It is stored as an input rather than claimed as this machine's
+        finished output.
+        """
+        level = self._furnace_level({int(ItemType.FRAME): 2})
+        state = build_state(level, num_players=1)
+        eid = int(state.tile_entity[3, 3])
+
+        assert int(state.ent_asm_in_type[eid, 0]) == int(ItemType.FRAME)
+        assert int(state.ent_asm_in_count[eid, 0]) == 2
+        assert int(state.ent_asm_out_count[eid]) == 0
 
 
 # ---------------------------------------------------------------------------

@@ -50,8 +50,23 @@ from factoriax.engine.constants import (
     Direction,
     Machine,
 )
+from factoriax.engine.recipes import OUTPUT_TO_RECIPE, RECIPE_MACHINE_TYPE
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import MACHINE_MAX_HEALTH, MINEABLE_BLOCKS
+
+#: Machine kind that produces each item, indexed by ``ItemType`` value, with
+#: ``Machine.NONE`` for items no recipe outputs. :func:`build_state` reads it to
+#: tell a combiner's finished output from its inputs, because
+#: ``Level.machine_inventory`` is item-indexed and records no slot. Derived from
+#: the engine's default recipes; a scenario shipping its own recipe book does
+#: not change this classification.
+_ITEM_PRODUCER: np.ndarray = np.full(NUM_ITEM_TYPES, int(Machine.NONE), dtype=np.int32)
+_out_to_recipe = np.asarray(OUTPUT_TO_RECIPE)
+_recipe_machine = np.asarray(RECIPE_MACHINE_TYPE)
+for _item in range(NUM_ITEM_TYPES):
+    _recipe = int(_out_to_recipe[_item])
+    if _recipe >= 0:
+        _ITEM_PRODUCER[_item] = int(_recipe_machine[_recipe])
 
 # ---------------------------------------------------------------------------
 # Level dataclass
@@ -745,6 +760,8 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
     ent_buf_count_np = np.zeros(mm, dtype=np.int16)
     ent_asm_in_type_np = np.zeros((mm, 2), dtype=np.int8)
     ent_asm_in_count_np = np.zeros((mm, 2), dtype=np.int16)
+    ent_asm_out_type_np = np.zeros(mm, dtype=np.int8)
+    ent_asm_out_count_np = np.zeros(mm, dtype=np.int16)
 
     machine_inv = level.machine_inventory
 
@@ -780,13 +797,23 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
                     int(Machine.ASSEMBLER),
                     int(Machine.FURNACE),
                 ):
+                    # Item-indexed inventory carries no slot, so an item this
+                    # machine's own recipes produce is its finished output and
+                    # everything else is an input. Without the split, an output
+                    # would fill an input slot and push a real input out of the
+                    # two the engine has.
                     slot = 0
                     for it in range(1, NUM_ITEM_TYPES):
-                        if int(inv_row[it]) > 0 and slot < 2:
+                        count = int(inv_row[it])
+                        if count <= 0:
+                            continue
+                        if int(_ITEM_PRODUCER[it]) == mt:
+                            if int(ent_asm_out_count_np[idx]) == 0:
+                                ent_asm_out_type_np[idx] = it
+                                ent_asm_out_count_np[idx] = count
+                        elif slot < 2:
                             ent_asm_in_type_np[idx, slot] = it
-                            ent_asm_in_count_np[idx, slot] = int(
-                                inv_row[it],
-                            )
+                            ent_asm_in_count_np[idx, slot] = count
                             slot += 1
                 else:
                     # Pallet, belt, etc: first non-zero item to buffer.
@@ -812,8 +839,8 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
         ent_buf_count=jnp.array(ent_buf_count_np, dtype=jnp.int16),
         ent_asm_in_type=jnp.array(ent_asm_in_type_np, dtype=jnp.int8),
         ent_asm_in_count=jnp.array(ent_asm_in_count_np, dtype=jnp.int16),
-        ent_asm_out_type=jnp.zeros(mm, dtype=jnp.int8),
-        ent_asm_out_count=jnp.zeros(mm, dtype=jnp.int16),
+        ent_asm_out_type=jnp.array(ent_asm_out_type_np, dtype=jnp.int8),
+        ent_asm_out_count=jnp.array(ent_asm_out_count_np, dtype=jnp.int16),
         ent_health=ent_health,
         player_positions=jnp.array(player_positions_np, dtype=jnp.int16),
         player_directions=jnp.full(
