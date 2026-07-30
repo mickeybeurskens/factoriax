@@ -50,9 +50,6 @@ def _make_fully_populated_level() -> Level:
     machine_inventory = np.zeros((h, w, NUM_ITEM_TYPES), dtype=np.int32)
     machine_inventory[2, 3, int(ItemType.IRON_ORE)] = 42
 
-    machine_selected_recipe = np.zeros((h, w), dtype=np.int32)
-    machine_selected_recipe[3, 1] = 1
-
     player_inventory = [
         (int(ItemType.IRON_ORE), 30),
         (int(ItemType.COAL), 10),
@@ -67,7 +64,6 @@ def _make_fully_populated_level() -> Level:
         machine_types=machine_types,
         machine_directions=machine_directions,
         machine_inventory=machine_inventory,
-        machine_selected_recipe=machine_selected_recipe,
         player_inventory=player_inventory,
     )
 
@@ -111,12 +107,6 @@ class TestEditorRoundTrip:
             original.machine_inventory,
         )
 
-        assert restored.machine_selected_recipe is not None
-        npt.assert_array_equal(
-            restored.machine_selected_recipe,
-            original.machine_selected_recipe,
-        )
-
         assert restored.player_inventory == original.player_inventory
 
     def test_none_fields_stay_none(self) -> None:
@@ -136,7 +126,6 @@ class TestEditorRoundTrip:
         assert restored.machine_types is None
         assert restored.machine_directions is None
         assert restored.machine_inventory is None
-        assert restored.machine_selected_recipe is None
         assert restored.player_inventory is None
 
 

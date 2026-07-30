@@ -102,7 +102,6 @@ class Level:
     machine_types: np.ndarray | None = None
     machine_directions: np.ndarray | None = None
     machine_inventory: np.ndarray | None = None
-    machine_selected_recipe: np.ndarray | None = None
     player_inventory: list[tuple[int, int]] | None = None
     player_inventories: dict[int, list[tuple[int, int]]] | None = None
     player_positions: list[tuple[int, int]] | None = None
@@ -126,7 +125,6 @@ class Level:
             ("machine_types", self.machine_types, expected),
             ("machine_directions", self.machine_directions, expected),
             ("machine_inventory", self.machine_inventory, inv_expected),
-            ("machine_selected_recipe", self.machine_selected_recipe, expected),
         ]:
             if arr is not None and arr.shape != exp:
                 raise ValueError(
@@ -1081,11 +1079,6 @@ def save_level(level: Level, path: Path) -> None:
             if level.machine_inventory is not None
             else None
         ),
-        "machine_selected_recipe": (
-            level.machine_selected_recipe.tolist()
-            if level.machine_selected_recipe is not None
-            else None
-        ),
         "player_inventory": level.player_inventory,
         "player_inventories": (
             {str(k): v for k, v in level.player_inventories.items()}
@@ -1128,7 +1121,6 @@ def load_level(path: Path) -> Level:
     payload = orjson.loads(Path(path).read_bytes())
     raw_dirs = payload.get("machine_directions")
     raw_inv = payload.get("machine_inventory")
-    raw_recipe = payload.get("machine_selected_recipe")
     return Level(
         name=payload["name"],
         map_width=payload["map_width"],
@@ -1149,9 +1141,6 @@ def load_level(path: Path) -> Level:
         ),
         machine_inventory=(
             np.array(raw_inv, dtype=np.int32) if raw_inv is not None else None
-        ),
-        machine_selected_recipe=(
-            np.array(raw_recipe, dtype=np.int32) if raw_recipe is not None else None
         ),
         player_inventory=payload.get("player_inventory"),
         player_inventories=(

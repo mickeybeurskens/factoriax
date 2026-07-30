@@ -54,7 +54,6 @@ def _levels_equal(a: Level, b: Level) -> bool:
         "machine_types",
         "machine_directions",
         "machine_inventory",
-        "machine_selected_recipe",
     ):
         av = getattr(a, field)
         bv = getattr(b, field)

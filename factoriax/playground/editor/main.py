@@ -1199,9 +1199,6 @@ def _open_inspector(
         machine_type=int(editor.machine_types[y, x]),
         inv_items=editor.machine_inventory_items[y, x],
         inv_counts=editor.machine_inventory_counts[y, x],
-        selected_recipe=editor.machine_selected_recipe,
-        recipe_row=y,
-        recipe_col=x,
     )
 
 

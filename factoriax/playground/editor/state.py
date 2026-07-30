@@ -94,7 +94,6 @@ class EditorState:
     machine_directions: np.ndarray
     machine_inventory_items: np.ndarray
     machine_inventory_counts: np.ndarray
-    machine_selected_recipe: np.ndarray
     player_inventory: list[tuple[int, int]] | None = None
     player_inventories: dict[int, list[tuple[int, int]]] = dataclasses.field(
         default_factory=dict,
@@ -144,7 +143,6 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
         machine_directions=np.zeros((height, width), dtype=np.int32),
         machine_inventory_items=np.zeros(inv_shape, dtype=np.int32),
         machine_inventory_counts=np.zeros(inv_shape, dtype=np.int32),
-        machine_selected_recipe=np.zeros((height, width), dtype=np.int32),
     )
 
 
@@ -204,11 +202,6 @@ def editor_state_from_level(level: Level) -> EditorState:
     else:
         inv_items = np.zeros(inv_shape, dtype=np.int32)
         inv_counts = np.zeros(inv_shape, dtype=np.int32)
-    recipe = (
-        level.machine_selected_recipe.copy()
-        if level.machine_selected_recipe is not None
-        else np.zeros((level.map_height, level.map_width), dtype=np.int32)
-    )
     return EditorState(
         name=level.name,
         map_width=level.map_width,
@@ -219,7 +212,6 @@ def editor_state_from_level(level: Level) -> EditorState:
         machine_directions=directions.astype(np.int32),
         machine_inventory_items=inv_items.astype(np.int32),
         machine_inventory_counts=inv_counts.astype(np.int32),
-        machine_selected_recipe=recipe.astype(np.int32),
         player_inventory=level.player_inventory,
         player_inventories=(
             {k: list(v) for k, v in level.player_inventories.items()}
@@ -289,10 +281,6 @@ def editor_state_to_level(state: EditorState) -> Level:
                         pouch[y, x, it] += ct
         machine_inv = pouch
 
-    recipe: np.ndarray | None = state.machine_selected_recipe.copy()
-    if np.all(recipe == 0):
-        recipe = None
-
     pp: list[tuple[int, int]] | None = None
     if state.player_positions:
         pp = [state.player_positions[k] for k in sorted(state.player_positions)]
@@ -309,7 +297,6 @@ def editor_state_to_level(state: EditorState) -> Level:
         machine_types=machines,
         machine_directions=directions,
         machine_inventory=machine_inv,
-        machine_selected_recipe=recipe,
         player_inventory=state.player_inventory,
         player_inventories=(
             dict(state.player_inventories) if state.player_inventories else None
@@ -411,7 +398,6 @@ def set_machine(
     state.machine_directions[y, x] = direction
     state.machine_inventory_items[y, x] = 0
     state.machine_inventory_counts[y, x] = 0
-    state.machine_selected_recipe[y, x] = 0
     state.dirty = True
 
 
@@ -549,7 +535,6 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
     state.machine_directions[y, x] = 0
     state.machine_inventory_items[y, x] = 0
     state.machine_inventory_counts[y, x] = 0
-    state.machine_selected_recipe[y, x] = 0
     state.dirty = True
 
 
@@ -627,10 +612,6 @@ def add_column(state: EditorState) -> None:
         [state.machine_inventory_counts, np.zeros((h, 1, s), dtype=np.int32)],
         axis=1,
     )
-    state.machine_selected_recipe = np.concatenate(
-        [state.machine_selected_recipe, np.zeros((h, 1), dtype=np.int32)],
-        axis=1,
-    )
     state.map_width += 1
     state.dirty = True
 
@@ -659,7 +640,6 @@ def remove_column(state: EditorState) -> None:
     state.machine_directions = state.machine_directions[:, :-1]
     state.machine_inventory_items = state.machine_inventory_items[:, :-1, :]
     state.machine_inventory_counts = state.machine_inventory_counts[:, :-1, :]
-    state.machine_selected_recipe = state.machine_selected_recipe[:, :-1]
     state.map_width -= 1
     _clip_entities(state)
     state.dirty = True
@@ -711,10 +691,6 @@ def add_row(state: EditorState) -> None:
         [state.machine_inventory_counts, np.zeros((1, w, s), dtype=np.int32)],
         axis=0,
     )
-    state.machine_selected_recipe = np.concatenate(
-        [state.machine_selected_recipe, np.zeros((1, w), dtype=np.int32)],
-        axis=0,
-    )
     state.map_height += 1
     state.dirty = True
 
@@ -743,7 +719,6 @@ def remove_row(state: EditorState) -> None:
     state.machine_directions = state.machine_directions[:-1, :]
     state.machine_inventory_items = state.machine_inventory_items[:-1, :, :]
     state.machine_inventory_counts = state.machine_inventory_counts[:-1, :, :]
-    state.machine_selected_recipe = state.machine_selected_recipe[:-1, :]
     state.map_height -= 1
     _clip_entities(state)
     state.dirty = True

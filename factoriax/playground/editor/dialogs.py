@@ -17,10 +17,8 @@ import pygame
 
 from factoriax.engine.constants import (
     ItemType,
-    Machine,
     SlotRole,
 )
-from factoriax.engine.recipes import NUM_RECIPES, RECIPE_NAMES
 from factoriax.engine.tables import MACHINE_MAX_STACK
 from factoriax.playground.editor.slot_display import (
     MACHINE_NUM_SLOTS,
@@ -648,9 +646,6 @@ class MachineInspectorDialog:
     machine_type: int
     inv_items: np.ndarray
     inv_counts: np.ndarray
-    selected_recipe: np.ndarray
-    recipe_row: int
-    recipe_col: int
     focused_slot: int = 0
     editing_slot: int = -1
     editing_count: bool = False
@@ -728,12 +723,6 @@ class MachineInspectorDialog:
                 self.editing_slot = self.focused_slot
                 current = int(self.inv_counts[self.focused_slot])
                 self.count_text = str(current) if current > 0 else ""
-        elif key == pygame.K_q:
-            if self.machine_type == int(Machine.ASSEMBLER):
-                cur = int(self.selected_recipe[self.recipe_row, self.recipe_col])
-                self.selected_recipe[self.recipe_row, self.recipe_col] = (
-                    cur + 1
-                ) % NUM_RECIPES
         return None
 
     def _handle_picker_key(self, key: int) -> str | None:
@@ -837,9 +826,7 @@ class MachineInspectorDialog:
         overlay[:, :] = (0, 0, 0, 140)
 
         ns = self.num_slots
-        is_assembler = self.machine_type == int(Machine.ASSEMBLER)
-        recipe_h = 20 if is_assembler else 0
-        dlg_h = 50 + ns * _INSP_SLOT_H + recipe_h + 24
+        dlg_h = 50 + ns * _INSP_SLOT_H + 24
         dlg_w = min(_INSP_W, base_w - 20)
         dx = (base_w - dlg_w) // 2
         dy = (base_h - dlg_h) // 2
@@ -859,15 +846,6 @@ class MachineInspectorDialog:
         _blit_rgba(overlay, title, dy + 8, dx + (dlg_w - title.shape[1]) // 2)
 
         y = dy + 30
-
-        if is_assembler:
-            r_idx = int(self.selected_recipe[self.recipe_row, self.recipe_col])
-            r_name = RECIPE_NAMES[r_idx]
-            rtxt = _render_text_rgba(
-                f"Recipe: {r_name}  [Q] cycle", small, (190, 165, 55)
-            )
-            _blit_rgba(overlay, rtxt, y, dx + 12)
-            y += 20
 
         slot_roles = MACHINE_SLOT_ROLES[self.machine_type]
         for slot_idx in range(ns):
@@ -905,8 +883,6 @@ class MachineInspectorDialog:
 
         hint_y = dy + dlg_h - 20
         hint_parts = ["A/D: slot", "Enter: item", "C: count", "Esc: close"]
-        if is_assembler:
-            hint_parts.insert(0, "Q: recipe")
         hint_str = "  ".join(hint_parts)
         hint = _render_text_rgba(hint_str, small, _LABEL_COLOR)
         _blit_rgba(overlay, hint, hint_y, dx + (dlg_w - hint.shape[1]) // 2)
