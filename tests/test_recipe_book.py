@@ -67,6 +67,24 @@ def test_arity_outside_engine_limit_raises(
         RecipeBook(recipes=(wide,))
 
 
+def test_repeated_input_item_raises() -> None:
+    """A recipe must not name the same input item in both slots.
+
+    ``can_afford_recipe`` checks each slot on its own, so a repeat reads as
+    affordable while the player holds enough for one slot. ``craft_recipe``
+    then subtracts both slots and the inventory goes below zero. Rejecting
+    the book is what keeps that unreachable.
+    """
+    repeated = Recipe(
+        output=int(ItemType.WIRE),
+        inputs=((int(ItemType.IRON_PLATE), 1), (int(ItemType.IRON_PLATE), 1)),
+        ticks=1,
+        name="repeated-input",
+    )
+    with pytest.raises(ValueError, match="names IRON_PLATE twice"):
+        RecipeBook(recipes=(repeated,))
+
+
 def test_unique_output_constraint_raises() -> None:
     """Two recipes producing the same ItemType must be rejected.
 

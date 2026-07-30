@@ -228,17 +228,21 @@ class RecipeBalance:
 class RecipeBook:
     """A tuple of recipes, validated against the rules the engine relies on.
 
-    Construction checks three rules, so a bad book fails immediately and names
+    Construction checks four rules, so a bad book fails immediately and names
     the offender instead of producing arrays that misbehave at runtime:
 
     1. **Input arity.** Every recipe takes 1 to :data:`MAX_RECIPE_INPUTS`
        input types. A combiner has that many input slots in ``EnvState``, so
        the engine cannot feed a wider recipe.
-    2. **Unique outputs.** Each item is produced by at most one recipe.
+    2. **No repeated input item.** A recipe names each input item at most
+       once. :func:`factoriax.engine.crafting.can_afford_recipe` checks each
+       slot on its own, so a repeat would read as affordable on one slot's
+       worth and then craft the player's count below zero.
+    3. **Unique outputs.** Each item is produced by at most one recipe.
        :attr:`RecipeTable.output_to_recipe` maps an item back to a single
        recipe, and two recipes making the same item would also break the yield
        calculation in :func:`factoriax.engine.crafting.craft_recipe`.
-    3. **Unique input set per machine and arity.** No two recipes on the same
+    4. **Unique input set per machine and arity.** No two recipes on the same
        combiner kind, taking the same number of inputs, consume the same
        unordered set of input item types. The combiner matcher picks a recipe
        by input item types; a recipe's counts only gate whether the match
@@ -257,21 +261,21 @@ class RecipeBook:
     Raises
     ------
     ValueError
-        If any of the three rules above is broken.
+        If any of the four rules above is broken.
     """
 
     recipes: tuple[Recipe, ...]
 
     def __post_init__(self) -> None:
-        """Check the three construction rules, naming the first offender.
+        """Check the construction rules, naming the first offender.
 
         Raises
         ------
         ValueError
             If a recipe's input arity falls outside 1 to
-            :data:`MAX_RECIPE_INPUTS`, if two recipes produce the same item,
-            or if two recipes on one machine kind share an input item-type set
-            at the same arity.
+            :data:`MAX_RECIPE_INPUTS`, if a recipe names the same input item
+            twice, if two recipes produce the same item, or if two recipes on
+            one machine kind share an input item-type set at the same arity.
         """
         for idx, recipe in enumerate(self.recipes):
             arity = len(recipe.inputs)
@@ -283,6 +287,19 @@ class RecipeBook:
                     f"{MAX_RECIPE_INPUTS} input slots in EnvState, so the "
                     f"engine cannot feed a wider recipe."
                 )
+
+            seen_inputs: set[int] = set()
+            for item, _ in recipe.inputs:
+                if item in seen_inputs:
+                    raise ValueError(
+                        f"Recipe {idx} ({ItemType(recipe.output).name}, "
+                        f"{recipe.name!r}) names {ItemType(item).name} twice. "
+                        f"craft_recipe checks and subtracts each input slot "
+                        f"on its own, so a repeated item reads as affordable "
+                        f"on one slot's worth and crafts into a negative "
+                        f"count. Combine the amounts into one slot."
+                    )
+                seen_inputs.add(item)
 
         seen_outputs: dict[int, int] = {}
         for idx, recipe in enumerate(self.recipes):
