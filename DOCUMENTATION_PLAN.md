@@ -204,7 +204,7 @@ order as a reading order, not a dependency order.
 - [x] `factoriax/engine/constants.py`
 - [x] `factoriax/engine/actions.py`
 - [x] `factoriax/engine/recipes.py`
-- [ ] `factoriax/engine/tables.py`
+- [x] `factoriax/engine/tables.py`
 - [ ] `factoriax/engine/state.py`
 - [ ] `factoriax/engine/achievements.py`
 - [ ] `factoriax/engine/crafting.py`
