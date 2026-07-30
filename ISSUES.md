@@ -71,6 +71,70 @@ reliable anchor.
   actually checks. Fixing `first_pipeline` needs a condition that implies
   transport, since no state field records how an item reached a buffer.
 
+- **Machine health has no damage source, so repair is unreachable**
+  Found 2026-07-30.
+  Files: `factoriax/engine/placement.py:220` (place sets full),
+  `:325` (pickup gate), `:411` (pickup clears to 0), `:494` (`apply_repair`),
+  `factoriax/engine/constants.py` (`InteractAction.REPAIR`),
+  `factoriax/engine/tables.py` (`MACHINE_HEALTH`, `MACHINE_MAX_HEALTH`).
+  Every write to `ent_health` either sets it to `MACHINE_MAX_HEALTH` on
+  placement, clears it to 0 on pickup, or raises it toward full in
+  `apply_repair`. Nothing decrements it, so a placed machine is always at full
+  health. Two consequences: `apply_repair` can only ever be a no-op, and the
+  `is_full_health` gate on pickup always passes. `REPAIR` is still a member of
+  `InteractAction`, so an agent spends part of its action space on an action
+  that cannot change the state.
+  The field itself is not dead: pickup clearing it to 0 and placement setting
+  it make it an occupancy marker alongside `ent_y`. Removing `REPAIR` would
+  renumber `Action` and invalidate trained checkpoints, so this needs a
+  decision, either add a damage source or drop the action and accept the
+  action-space change.
+
+- **The pixel observation hides state an agent needs to play**
+  Found 2026-07-30.
+  Files: `factoriax/engine/observations.py:843` (`rgb`), `:258`
+  (`_common_scalars`), `:321` (`_facing_scalars`),
+  `factoriax/engine/renderer.py` (`render_map`),
+  `factoriax/assets/atlas.layout.md` (rows 5 and 7).
+  `observations.rgb` returns `render_map` output unchanged, so a pixel agent
+  sees terrain, machine kind and facing, and player position and facing, and
+  nothing else. The symbolic profiles carry more: `_common_scalars` adds the
+  timestep, the player's whole inventory, and a per-item craft-affordability
+  flag, and `_facing_scalars` adds the kind and contents of the machine the
+  player faces. A pixel agent therefore cannot see what it is carrying or
+  whether a recipe is affordable, which makes crafting unlearnable from
+  visuals alone. The two observation profiles are not solving the same task.
+
+  The split to draw is HUD against UI. HUD is game state an agent must read to
+  act: carried items and counts, what is selected for placement, machine
+  contents and craft progress, and time remaining. That belongs in
+  `render_map`. UI is interaction chrome, the pause menu, help overlay,
+  control hints, and dialogs in `factoriax/playground/play/ui.py`, which an
+  agent never needs and which should stay out of the renderer.
+
+  Two pieces of the groundwork are already committed and unused. Atlas row 5
+  holds an icon per `ItemType` and row 7 holds digit glyphs baked by
+  `build_digit_atlas`; `render_map` reads neither, and `atlas.layout.md`
+  records row 5 as reserved for exactly this. Anything added has to stay
+  traceable and vmappable, so a readout has to be a gather and a blend over
+  fixed-size arrays rather than a text draw, and it changes the observation
+  shape, which invalidates checkpoints trained on the current `rgb` output.
+
+- **Player 8 draws in two different colors**
+  Found 2026-07-30.
+  Files: `factoriax/engine/renderer.py` (`_ATLAS_NUM_PLAYERS`,
+  `player_icon_rgba`, `render_map`), `factoriax/assets/build_atlas.py`
+  (`NUM_PLAYERS`), `factoriax/playground/ui/icons.py:306` (`PLAYER_COLORS`).
+  `PLAYER_COLORS` lists nine palettes, but the atlas bakes eight player
+  sprites and both the map renderer and `player_icon_rgba` wrap the index
+  modulo 8. `create_player_texture` and the editor inventory panel wrap modulo
+  `len(PLAYER_COLORS)`, which is 9. Player 8 therefore appears light green in
+  the inventory panel and in player 0's red on the map. Every earlier slot
+  agrees, so the split only shows on a nine-player scenario. The fix is to
+  pick one count: either drop the ninth entry of `PLAYER_COLORS` or raise
+  `NUM_PLAYERS` to 9 and rebuild the atlas, which widens the misc row and
+  changes the committed PNG that `tests/test_atlas_fresh.py` pins.
+
 - **Machine inventory loading is a hand-written branch per machine kind**
   Found 2026-07-29.
   Files: `factoriax/engine/levels.py:796-825`.
