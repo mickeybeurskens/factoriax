@@ -2,9 +2,9 @@
 
 One parametrized sweep over every set in the tree, so a new scenario
 inherits these checks by declaring its tuple rather than by copying a
-per-scenario test. Bit order and ids are a wire format — trajectories
-persist ``achievements_unlocked`` positionally and the baselines log
-per-bit metrics by name — so this pins the shape of that contract.
+per-scenario test. Bit order and ids are a wire format: trajectories
+persist ``achievements_unlocked`` positionally and training runs log
+per-bit metrics by name, so this pins the shape of that contract.
 """
 
 from __future__ import annotations

@@ -486,8 +486,8 @@ EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
 )
 
 #: Stable per-bit names in curriculum order, for display and logging.
-#: These double as W&B metric keys in ``baselines/easy_rocket`` — treat
-#: them as a wire format, same as the bit order itself.
+#: Training runs log these as metric keys, so treat them as a wire format,
+#: same as the bit order itself.
 EASY_ROCKET_ACHIEVEMENT_NAMES: tuple[str, ...] = tuple(
     a.name for a in EASY_ROCKET_ACHIEVEMENTS
 )
