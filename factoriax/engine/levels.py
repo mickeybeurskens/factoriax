@@ -1302,9 +1302,9 @@ def load_level(path: Path) -> Level:
 #: Coal: top-left. Copper: top-right. Iron: bottom-left.
 _15X15_RESOURCES: Level = (
     LevelBuilder(15, 15)
-    .fill_rect(0, 0, 4, 4, BlockType.COAL, resources=3)
-    .fill_rect(11, 0, 4, 4, BlockType.COPPER, resources=3)
-    .fill_rect(0, 11, 4, 4, BlockType.IRON, resources=3)
+    .fill_rect(0, 0, 4, 4, BlockType.COAL, resources=BLOCK_MAX_RESOURCES)
+    .fill_rect(11, 0, 4, 4, BlockType.COPPER, resources=BLOCK_MAX_RESOURCES)
+    .fill_rect(0, 11, 4, 4, BlockType.IRON, resources=BLOCK_MAX_RESOURCES)
     .build("15x15_resources")
 )
 

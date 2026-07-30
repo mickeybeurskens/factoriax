@@ -819,3 +819,17 @@ class TestTerrainShares:
         terrain = np.asarray(generate_terrain(jax.random.PRNGKey(0), params, 160, 160))
         share = float((terrain == int(BlockType.WATER)).mean())
         assert abs(share - float(params.water_probability)) < 0.01
+
+
+class TestBuiltInLevelOre:
+    """The shipped level's patches must hold a full deposit."""
+
+    def test_patches_hold_max_resources(self) -> None:
+        level = get_level("15x15_resources")
+        assert level.block_resources is not None
+        for y, x in [(0, 0), (0, 11), (11, 0)]:
+            assert int(level.block_resources[y, x]) == BLOCK_MAX_RESOURCES
+
+    def test_dirt_holds_no_ore(self) -> None:
+        level = get_level("15x15_resources")
+        assert int(level.block_resources[7, 7]) == 0

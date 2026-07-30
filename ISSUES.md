@@ -117,16 +117,6 @@ reliable anchor.
   not mistaken for a regression later. Removing it would mean partitioning one
   draw into bands, which changes what the probabilities mean.
 
-- **The one built-in level ships ore patches holding 3 units**
-  Found 2026-07-30.
-  Files: `factoriax/engine/levels.py` (`_15X15_RESOURCES`).
-  Each `fill_rect` passes `resources=3` where `BLOCK_MAX_RESOURCES` is 30000,
-  so every patch in `15x15_resources` holds 3 units per tile, 48 per ore
-  across the whole map. It is the only registered level and the default for
-  anything calling `get_level`. Three units may be deliberate for a short
-  test, but it is four orders of magnitude off the constant the rest of the
-  module treats as a full deposit, and nothing records which was intended.
-
 - **The pixel observation hides state an agent needs to play**
   Found 2026-07-30.
   Files: `factoriax/engine/observations.py:843` (`rgb`), `:258`
