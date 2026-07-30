@@ -54,6 +54,23 @@ reliable anchor.
   cost the same recipe imposes on a machine, and no action or state field
   exists to carry a partially finished player craft.
 
+- **`first_pipeline` unlocks without a pipeline**
+  Found 2026-07-30.
+  Files: `factoriax/playground/play/achievements.py:106` (`first_pipeline`),
+  `factoriax/engine/achievements.py` (`any_buffer_nonempty`),
+  `factoriax/engine/step.py:405` (`deposit_to_adjacent`).
+  The achievement is hinted "Use an arm to move miner output into a pallet",
+  but its condition is only `any_buffer_nonempty(PALLET)`. `deposit_to_adjacent`
+  writes `ent_buf` for any machine that is neither a miner nor a combiner, so
+  a player standing next to a pallet unlocks it with one `DEPOSIT_` action, no
+  arm and no miner involved. Reproduced: place a pallet, face it, deposit one
+  coal, and the bit flips False to True in a single step. An agent rewarded
+  for this bit learns the shortcut, not the automation.
+  `pallet_filled` in `factoriax/engine/envs/rocket.py:243` shares the
+  condition but is hinted "Put an item in a pallet", which matches what it
+  actually checks. Fixing `first_pipeline` needs a condition that implies
+  transport, since no state field records how an item reached a buffer.
+
 - **Machine inventory loading is a hand-written branch per machine kind**
   Found 2026-07-29.
   Files: `factoriax/engine/levels.py:796-825`.
