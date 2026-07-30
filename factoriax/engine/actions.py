@@ -1,12 +1,20 @@
-"""JAX compatible lookup tables between an item and the action that acts on it.
+"""Lookup tables between an item and the action that acts on it.
 
 A ``PLACE_``, ``CRAFT_``, or ``DEPOSIT_`` action is named after the item it acts
-on, so the action and the item can be looked up from each other. The environment
-step function resolves action to item inside the JIT boundary. Host-side callers
-(scripted agents, the play UI) ask the opposite question: which action places,
-crafts, or deposits a given item. This module holds both directions as jnp
-gather arrays, derived from the tuples in :mod:`factoriax.engine.constants`.
-Indexing them is a traced gather, so both are usable inside ``jax.jit``.
+on, so an action and an item determine each other. This module holds both
+directions as ``jnp`` gather arrays, built from the item tuples in
+:mod:`factoriax.engine.constants`.
+
+The two directions answer different questions. ``*_ACTION_TO_ITEM`` maps an
+action offset to the item it acts on, which is what ``execute_action`` in
+:mod:`factoriax.engine.step` needs once it holds an action. It is indexed by a
+traced value inside ``jax.jit``. ``ITEM_TO_*_ACTION`` maps an item back to an
+absolute action, which is what the play UI needs to turn a click on an item
+into an action. It is indexed on the host with a Python int.
+
+Importing this module runs :func:`_validate`. Tables that disagree raise
+``ValueError`` there, so the module fails to import rather than letting the
+engine dispatch an action to the wrong item.
 """
 
 from __future__ import annotations
@@ -28,7 +36,9 @@ from factoriax.engine.constants import (
     ItemType,
 )
 
-#: Backward-table entry for an item with no action in that list.
+#: Backward-table entry for an item with no action in that list. Negative
+#: rather than ``0``, because ``0`` is itself an action (``MoveAction.NOOP``),
+#: so a caller must compare against this value instead of testing truthiness.
 NO_ACTION: int = -1
 
 
@@ -37,7 +47,7 @@ def _build_forward_table(items: Iterable[IntEnum]) -> list[int]:
 
     Parameters
     ----------
-    items : Iterable[IntEnum]
+    items
         Items the actions address, in action order:
         :data:`~factoriax.engine.constants.PLACEMENT_ITEMS`,
         :data:`~factoriax.engine.constants.CRAFT_ITEMS`, or
@@ -65,11 +75,11 @@ def _build_backward_table(items: Iterable[IntEnum], prefix: str) -> list[int]:
 
     Parameters
     ----------
-    items : Iterable[IntEnum]
+    items
         Items the actions address, as passed to :func:`_build_forward_table`.
         Order does not matter here, because each entry is written at its own
         item id.
-    prefix : str
+    prefix
         Action name prefix, one of ``"PLACE"``, ``"CRAFT"``, or ``"DEPOSIT"``.
         Joined to an item name with an underscore to look up the
         :class:`~factoriax.engine.constants.Action` member.
@@ -112,13 +122,14 @@ _CRAFT_BWD = _build_backward_table(CRAFT_ITEMS, "CRAFT")
 _DEPOSIT_BWD = _build_backward_table(DEPOSIT_ITEMS, "DEPOSIT")
 
 #: ``PLACE_`` action for each item, indexed by ``ItemType``. :data:`NO_ACTION`
-#: for the items that cannot be placed.
+#: for every item that is not a machine, ``EMPTY`` included.
 ITEM_TO_PLACE_ACTION = jnp.array(_PLACE_BWD, dtype=jnp.int32)
 #: ``CRAFT_`` action for each item, indexed by ``ItemType``. :data:`NO_ACTION`
-#: for raw resources, which are mined rather than crafted.
+#: for the raw resources, which are mined rather than crafted, and for
+#: ``EMPTY``.
 ITEM_TO_CRAFT_ACTION = jnp.array(_CRAFT_BWD, dtype=jnp.int32)
 #: ``DEPOSIT_`` action for each item, indexed by ``ItemType``. :data:`NO_ACTION`
-#: only at ``ItemType.EMPTY``.
+#: at ``EMPTY`` and nowhere else: every real item can be deposited.
 ITEM_TO_DEPOSIT_ACTION = jnp.array(_DEPOSIT_BWD, dtype=jnp.int32)
 
 
