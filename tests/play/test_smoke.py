@@ -36,7 +36,7 @@ class TestRendererSmoke:
 
     def test_render_pixels(self, env_and_state) -> None:
         """The renderer returns an RGB array."""
-        from factoriax.engine.jax_renderer import JaxRenderer
+        from factoriax.engine.renderer import JaxRenderer
 
         _, _, state = env_and_state
         img = np.asarray(JaxRenderer(tile_px=8).jit_render_map(state))
@@ -46,7 +46,7 @@ class TestRendererSmoke:
 
     def test_render_after_step(self, env_and_state) -> None:
         """Rendering works after stepping the environment."""
-        from factoriax.engine.jax_renderer import JaxRenderer
+        from factoriax.engine.renderer import JaxRenderer
 
         env, params, state = env_and_state
         _, state2, _, _, _ = env.step_env(

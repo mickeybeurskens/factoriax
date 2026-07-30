@@ -7,7 +7,7 @@ from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     ItemType,
 )
-from factoriax.engine.jax_renderer import JaxRenderer
+from factoriax.engine.renderer import JaxRenderer
 from factoriax.engine.levels import generate_state
 from factoriax.engine.observations import NUM_PLAYER_SCALARS, NUM_SPATIAL_CHANNELS
 from factoriax.engine.state import EnvParams

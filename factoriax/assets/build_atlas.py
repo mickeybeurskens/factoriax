@@ -62,7 +62,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.jax_renderer import build_digit_atlas
+from factoriax.engine.renderer import build_digit_atlas
 from factoriax.playground.ui.icons import (
     MACHINE_TO_ITEM,
     create_biter_texture,
@@ -91,8 +91,8 @@ _DIRECTION_ORDER: tuple[Direction, ...] = (
 NUM_DIRECTIONS: int = len(_DIRECTION_ORDER)
 
 
-# Row indices — keep in sync with atlas.layout.md and with the
-# constants in factoriax/jax_renderer.py.
+# Row indices, kept in sync with atlas.layout.md and with the constants in
+# factoriax/engine/renderer.py.
 ROW_BLOCKS: int = 0
 ROW_MACHINES_BASE: int = 1  # rows 1..4 hold one direction each.
 ROW_ITEMS: int = ROW_MACHINES_BASE + NUM_DIRECTIONS  # 5

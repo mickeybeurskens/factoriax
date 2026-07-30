@@ -63,7 +63,7 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.crafting import can_afford_recipe
-from factoriax.engine.jax_renderer import JaxRenderer
+from factoriax.engine.renderer import JaxRenderer
 from factoriax.engine.placement import get_tile_in_front
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import PLAYER_MAX_STACK

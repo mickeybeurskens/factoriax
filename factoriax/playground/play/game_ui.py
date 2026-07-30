@@ -33,7 +33,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.jax_renderer import JaxRenderer
+from factoriax.engine.renderer import JaxRenderer
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.playground.config import (
     ControllerLookup,
