@@ -717,7 +717,6 @@ class TestLoadLevelMissingKeys:
             "machine_inventory",
             "player_inventory",
             "player_positions",
-            "biter_positions",
         ],
     )
     def test_missing_optional_key_loads(self, key: str) -> None:

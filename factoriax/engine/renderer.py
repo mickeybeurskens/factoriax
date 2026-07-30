@@ -84,9 +84,8 @@ _ATLAS_ROW_BLOCKS: int = 0
 _ATLAS_ROW_MACHINES_BASE: int = 1
 _ATLAS_NUM_DIRECTIONS: int = 4
 _ATLAS_ROW_MISC: int = 6
-# Misc row: col 0 is the biter, then 8 players x 4 directions from col 1, so
-# player p facing d sits at col 1 + p * 4 + (d - 1).
-_ATLAS_MISC_BITER: int = 0
+# Misc row: 8 players x 4 directions from col 1, so player p facing d sits at
+# col 1 + p * 4 + (d - 1). Col 0 holds a sprite nothing reads any more.
 _ATLAS_MISC_PLAYER_BASE: int = 1
 # Eight player sprites are baked into the atlas, so an index past the eighth
 # wraps to the first color rather than failing.
@@ -348,30 +347,6 @@ def machine_icon_rgba(machine_type: int, size: int, direction: int) -> np.ndarra
     direction_idx = max(0, min(_ATLAS_NUM_DIRECTIONS - 1, direction - 1))
     row = _ATLAS_ROW_MACHINES_BASE + direction_idx
     cell = _atlas_cell(row, machine_type)
-    return _downsample(cell, size).astype(np.uint8, copy=False)
-
-
-@functools.lru_cache(maxsize=8)
-def biter_icon_rgba(size: int) -> np.ndarray:
-    """Return the biter sprite for a pygame surface to blit.
-
-    A biter is level data, held in
-    :attr:`~factoriax.engine.levels.Level.biter_positions` rather than in
-    :class:`~factoriax.engine.state.EnvState`, so :func:`render_map` never
-    draws one and only the editor reads this cell.
-
-    Parameters
-    ----------
-    size
-        Side length in pixels for the returned sprite.
-
-    Returns
-    -------
-    np.ndarray
-        Shape ``(size, size, 4)``, uint8, with a transparent margin. Cached
-        and shared between callers, so treat it as read-only.
-    """
-    cell = _atlas_cell(_ATLAS_ROW_MISC, _ATLAS_MISC_BITER)
     return _downsample(cell, size).astype(np.uint8, copy=False)
 
 

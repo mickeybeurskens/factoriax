@@ -127,11 +127,6 @@ class Level:
         ``(x, y)`` spawn per player. Each listed tile is forced to DIRT, so a
         spawn never lands inside ore or water. When set, the list must hold
         exactly one entry per player the state is built for.
-    biter_positions
-        ``(x, y)`` per biter. Carried through save and load, but nothing in
-        the engine reads them: biters are not part of
-        :class:`~factoriax.engine.state.EnvState` and only the editor draws
-        them.
 
     Raises
     ------
@@ -152,7 +147,6 @@ class Level:
     player_inventory: list[tuple[int, int]] | None = None
     player_inventories: dict[int, list[tuple[int, int]]] | None = None
     player_positions: list[tuple[int, int]] | None = None
-    biter_positions: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
         """Check every supplied array against the declared dimensions.
@@ -240,7 +234,6 @@ class LevelBuilder:
         self._machine_directions: np.ndarray | None = None
         self._machine_inv: np.ndarray | None = None
         self._player_positions: list[tuple[int, int]] | None = None
-        self._biter_positions: list[tuple[int, int]] | None = None
 
     def fill_rect(
         self,
@@ -484,39 +477,6 @@ class LevelBuilder:
         self._player_positions.append((x, y))
         return self
 
-    def add_biter(self, x: int, y: int) -> LevelBuilder:
-        """Append a biter spawn.
-
-        Biters are level data only. They survive save and load and the editor
-        draws them, but :func:`build_state` ignores them and no engine state
-        field records one, so a biter never appears in a running environment.
-
-        Parameters
-        ----------
-        x
-            Column.
-        y
-            Row.
-
-        Returns
-        -------
-        LevelBuilder
-            ``self``, so calls chain.
-
-        Raises
-        ------
-        IndexError
-            The position is outside the map.
-        """
-        if not (0 <= x < self._width and 0 <= y < self._height):
-            raise IndexError(
-                f"Position ({x}, {y}) is outside the {self._width}x{self._height} map."
-            )
-        if self._biter_positions is None:
-            self._biter_positions = []
-        self._biter_positions.append((x, y))
-        return self
-
     def set_player_inventory(self, items: list[tuple[int, int]]) -> LevelBuilder:
         """Give every player the same starting inventory.
 
@@ -581,11 +541,6 @@ class LevelBuilder:
             player_positions=(
                 list(self._player_positions)
                 if self._player_positions is not None
-                else None
-            ),
-            biter_positions=(
-                list(self._biter_positions)
-                if self._biter_positions is not None
                 else None
             ),
             player_inventory=getattr(self, "_player_inventory", None),
@@ -1257,7 +1212,6 @@ def save_level(level: Level, path: Path) -> None:
             else None
         ),
         "player_positions": level.player_positions,
-        "biter_positions": level.biter_positions,
     }
     path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
 
@@ -1335,11 +1289,6 @@ def load_level(path: Path) -> Level:
         player_positions=(
             [tuple(p) for p in raw_pos]
             if (raw_pos := payload.get("player_positions")) is not None
-            else None
-        ),
-        biter_positions=(
-            [tuple(p) for p in raw_bp]
-            if (raw_bp := payload.get("biter_positions")) is not None
             else None
         ),
     )

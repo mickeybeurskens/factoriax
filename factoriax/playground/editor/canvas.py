@@ -20,7 +20,6 @@ import pygame
 
 from factoriax.engine.constants import Machine
 from factoriax.engine.renderer import (
-    biter_icon_rgba,
     block_textures_rgba,
     machine_icon_rgba,
 )
@@ -401,11 +400,8 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
 
 
 def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
-    """Draw player start markers and biters on the canvas.
+    """Draw player start markers on the canvas.
 
-    Biters are drawn first so player markers appear on top when
-    they overlap. Biter sprites come from the atlas (same source the
-    play renderer uses); player start markers stay procedural since
     they're editor-only spawn-point indicators with no in-game
     counterpart.
 
@@ -429,10 +425,6 @@ def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
 
     """
     ts = vp.tile_size
-    biter_sprite = biter_icon_rgba(ts)
-    for bx, by in es.biter_positions:
-        sx, sy = tile_to_screen(vp, bx, by)
-        _blit_alpha(canvas, biter_sprite, sy, sx)
     for idx, (px, py) in es.player_positions.items():
         sx, sy = tile_to_screen(vp, px, py)
         _blit_alpha(canvas, _cached_player_start_icon(idx, ts), sy, sx)

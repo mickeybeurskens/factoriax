@@ -678,8 +678,7 @@ class TestSolidBlocksIsTheSingleSource:
         walkable = bool(is_position_walkable(state, jnp.array([0, 0])))
         solid = int(block) in [int(b) for b in SOLID_BLOCKS.tolist()]
         assert walkable is not solid, (
-            f"{BlockType(block).name}: walkable={walkable}, "
-            f"in SOLID_BLOCKS={solid}"
+            f"{BlockType(block).name}: walkable={walkable}, in SOLID_BLOCKS={solid}"
         )
 
     @pytest.mark.parametrize("block", list(BlockType))
@@ -691,8 +690,7 @@ class TestSolidBlocksIsTheSingleSource:
         )
         solid = int(block) in [int(b) for b in SOLID_BLOCKS.tolist()]
         assert buildable is not solid, (
-            f"{BlockType(block).name}: buildable={buildable}, "
-            f"in SOLID_BLOCKS={solid}"
+            f"{BlockType(block).name}: buildable={buildable}, in SOLID_BLOCKS={solid}"
         )
 
     def test_out_of_bounds_is_not_walkable(self, state_factory) -> None:

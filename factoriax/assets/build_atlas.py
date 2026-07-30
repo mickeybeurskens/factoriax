@@ -82,6 +82,8 @@ NUM_COLS: int = NUM_ITEM_TYPES
 # Index = atlas row offset for machines (0 = LEFT row, 3 = DOWN row),
 # and atlas column offset for the player cells in the misc row
 # (1 + index gives the column, leaving col 0 for the biter sprite).
+# Biters were removed from the game; the cell stays because dropping it
+# would shift every player column and rewrite the committed atlas.
 _DIRECTION_ORDER: tuple[Direction, ...] = (
     Direction.LEFT,
     Direction.RIGHT,

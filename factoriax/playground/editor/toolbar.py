@@ -21,7 +21,6 @@ from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
 from factoriax.engine.tables import MACHINE_TO_ITEM_ARRAY
 from factoriax.playground.ui.fonts import get_pixel_font
 from factoriax.playground.ui.icons import (
-    create_biter_texture,
     create_player_start_icon,
     get_textures,
     render_item_icon,
@@ -184,7 +183,7 @@ def render_toolbar(
         Whether the resource overlay is active.
     selected_entity :
         Active entity selection as ``(kind, index)``
-        where *kind* is ``"player"`` or ``"biter"``, or ``None``.
+        where *kind* is ``"player"``, or ``None``.
     selected_tool: str :
 
     selected_block: int :
@@ -400,12 +399,6 @@ def render_toolbar(
         )
         y += icon_size + 2
 
-    biter_icon = create_biter_texture(icon_size)
-    bx = 4
-    _blit_rgba(bar, biter_icon, y, bx)
-    if selected_entity == ("biter", 0):
-        _draw_border(bar, bx, y, icon_size, icon_size, _SELECTED_BORDER)
-    txt = _render_text("Biter", font, _TEXT_COLOR)
     _blit_rgb(bar, txt, y + (icon_size - txt.shape[0]) // 2, bx + icon_size + 4)
     regions.append(
         ClickRegion(

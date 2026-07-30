@@ -41,7 +41,6 @@ from factoriax.playground.editor.state import (
     EditorState,
     InvTarget,
     ResourceBrush,
-    add_biter,
     add_column,
     add_row,
     clear_inventory_slot,
@@ -201,10 +200,8 @@ class ToolState:
         if self.tool == TOOL_ERASE:
             return "Eraser"
         if self.entity is not None:
-            kind, idx = self.entity
-            if kind == "player":
-                return f"Player {idx}"
-            return "Biter"
+            _kind, idx = self.entity
+            return f"Player {idx}"
         if self.machine != 0:
             for mid, name in MACHINE_ITEMS:
                 if mid == self.machine:
@@ -511,11 +508,8 @@ def _handle_motion(
                     erase_tile(editor, tx, ty)
                     erase_entity(editor, tx, ty)
             elif ts.entity is not None:
-                kind, idx = ts.entity
-                if kind == "player":
-                    set_player_position(editor, idx, tx, ty)
-                else:
-                    add_biter(editor, tx, ty)
+                _kind, idx = ts.entity
+                set_player_position(editor, idx, tx, ty)
             elif ts.machine != 0:
                 direction = ts.direction
                 if ts.machine == _CONVEYOR and ts.last_paint_tile is not None:
@@ -575,8 +569,6 @@ def _handle_toolbar_click(
     elif hit.action == "entity":
         if hit.param < MAX_EDITOR_PLAYERS:
             ts.entity = ("player", hit.param)
-        else:
-            ts.entity = ("biter", 0)
         ts.machine = 0
     elif hit.action == "toggle_res_mode":
         ts.brush.mode = "range" if ts.brush.mode == "exact" else "exact"
@@ -791,11 +783,8 @@ def _handle_canvas_click(
             erase_tile(editor, tx, ty)
             erase_entity(editor, tx, ty)
         elif ts.entity is not None:
-            kind, idx = ts.entity
-            if kind == "player":
-                set_player_position(editor, idx, tx, ty)
-            else:
-                add_biter(editor, tx, ty)
+            _kind, idx = ts.entity
+            set_player_position(editor, idx, tx, ty)
         elif ts.machine != 0:
             set_machine(editor, tx, ty, ts.machine, ts.direction)
         else:
@@ -877,17 +866,8 @@ def _handle_fill_release(
         return
     tx, ty = ts.cursor_tile
     if ts.entity is not None:
-        kind, idx = ts.entity
-        if kind == "biter":
-            lx = min(ts.fill_start[0], tx)
-            ly = min(ts.fill_start[1], ty)
-            rx = max(ts.fill_start[0], tx)
-            ry = max(ts.fill_start[1], ty)
-            for fy in range(max(0, ly), min(editor.map_height, ry + 1)):
-                for fx in range(max(0, lx), min(editor.map_width, rx + 1)):
-                    add_biter(editor, fx, fy)
-        else:
-            set_player_position(editor, idx, tx, ty)
+        _kind, idx = ts.entity
+        set_player_position(editor, idx, tx, ty)
         ts.cancel_fill()
         return
     if ts.machine != 0:
