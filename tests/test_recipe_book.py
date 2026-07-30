@@ -155,7 +155,6 @@ def test_recipe_table_from_book_matches_defaults() -> None:
         "ticks",
         "machine_type",
         "output_to_recipe",
-        "craft_action_to_recipe",
     ):
         a = getattr(projected, field_name)
         b = getattr(DEFAULT_RECIPE_TABLE, field_name)
@@ -178,7 +177,6 @@ def test_recipe_table_shapes_match_book_size() -> None:
     assert table.input_items.shape == (NUM_RECIPES, max_inputs)
     assert table.input_counts.shape == (NUM_RECIPES, max_inputs)
     assert table.output_to_recipe.shape == (len(ItemType),)
-    assert table.craft_action_to_recipe.shape == (NUM_RECIPES,)
 
 
 def test_output_to_recipe_round_trip() -> None:
