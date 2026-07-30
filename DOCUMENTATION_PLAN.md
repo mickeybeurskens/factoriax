@@ -259,7 +259,7 @@ order as a reading order, not a dependency order.
 - [x] `factoriax/engine/crafting.py`
 - [x] `factoriax/engine/renderer.py`
 - [x] `factoriax/engine/levels.py`
-- [x] `factoriax/engine/machines.py`
+- [ ] `factoriax/engine/machines.py`
 - [ ] `factoriax/engine/placement.py`
 - [ ] `factoriax/engine/rewards.py`
 - [ ] `factoriax/engine/step.py`
