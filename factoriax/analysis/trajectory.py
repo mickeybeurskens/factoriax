@@ -438,29 +438,11 @@ _TRAJ_TO_STATE: dict[str, str] = {
     "block_map": "map",
 }
 
-# Deprecated trajectory fields that no longer exist on EnvState.
-# These are silently skipped during reconstruction.
-_DEPRECATED_TRAJ_FIELDS: frozenset[str] = frozenset(
-    {
-        "achievements",
-        "inventory_items",
-        "inventory_counts",
-        "selected_slots",
-        "crafting_recipe",
-        "craft_progress",
-        "machine_power",
-        "machine_inventory",
-        "machine_inventory_items",
-        "machine_inventory_counts",
-        "machine_selected_recipe",
-        "machine_selected_slot",
-        "machine_direction",
-        "machine_health",
-        "biter_positions",
-        "biter_health",
-        "scent_field",
-    }
-)
+# Trajectory fields with no EnvState counterpart, skipped during
+# reconstruction because EnvState would reject them as unknown keywords.
+# ``achievements`` is per-step and as wide as the scenario's set, where
+# EnvState carries the latched ``achievements_unlocked`` at MAX_ACHIEVEMENTS.
+_TRAJ_ONLY_FIELDS: frozenset[str] = frozenset({"achievements"})
 
 # Inverse mapping.
 _STATE_TO_TRAJ: dict[str, str] = {v: k for k, v in _TRAJ_TO_STATE.items()}
@@ -606,7 +588,7 @@ def trajectory_to_states(
         for traj_name in _OPTIONAL_ARRAY_FIELDS:
             if traj_name in ("rewards", "timesteps"):
                 continue
-            if traj_name in _DEPRECATED_TRAJ_FIELDS:
+            if traj_name in _TRAJ_ONLY_FIELDS:
                 continue
             val = getattr(traj, traj_name)
             if val is None:
