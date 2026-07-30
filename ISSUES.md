@@ -90,23 +90,19 @@ reliable anchor.
   decision, either add a damage source or drop the action and accept the
   action-space change.
 
-- **Every doctest in `levels.py` calls an API that does not exist**
-  Found 2026-07-30.
-  Files: `factoriax/engine/levels.py` (`build_state`, `save_level`,
-  `load_level`, and the `Level` docstring), `factoriax/__init__.py`.
-  The examples call `factoriax.LevelBuilder`, `factoriax.build_state`,
-  `factoriax.save_level`, `factoriax.load_level`, `factoriax.make`,
-  `factoriax.LEVELS`, `FactoriaxEnv`, and `get_level` as top-level names.
-  `factoriax/__init__.py` is deliberately kept free of imports, so none of
-  them resolve. They also pass `EnvParams(num_players=...)` to `build_state`,
-  which takes `num_players: int` and reads it from an `EnvParams` field that
-  does not exist. `build_state`'s example additionally assigns `params` twice,
-  discarding the first value.
-  Nothing catches this: `pyproject.toml` sets `testpaths = ["tests"]` with no
-  `--doctest-modules`, so the examples are inert text. They are wrong in a way
-  that is worse than absent, because they read as the supported entry point.
-  Either wire up doctest collection so examples are executable, or write them
-  against the real import paths and accept that nothing verifies them.
+- **Nothing runs the doctests, so examples rot silently**
+  Found 2026-07-30. `levels.py` corrected 2026-07-30; the gap remains.
+  Files: `pyproject.toml` (`testpaths = ["tests"]`, no `--doctest-modules`).
+  Docstring examples across the tree are inert text. The ones in
+  `factoriax/engine/levels.py` had drifted to an API that never existed,
+  calling `factoriax.LevelBuilder`, `factoriax.make`, and
+  `EnvParams(num_players=...)` against an `__init__.py` deliberately kept free
+  of imports. They are now written against real import paths and verified once
+  by hand with `uv run python -m doctest factoriax/engine/levels.py`, which
+  passes 16 examples. Nothing repeats that check, so they can drift again.
+  Enabling `--doctest-modules` would catch it, but it collects the whole tree
+  and other modules have not been checked, so turning it on is its own piece
+  of work rather than a flag flip.
 
 - **Terrain layers overwrite each other, so only water hits its share**
   Found 2026-07-30. Overlap accepted 2026-07-30; not a bug to fix.

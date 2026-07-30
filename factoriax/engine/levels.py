@@ -155,11 +155,17 @@ class Level:
     biter_positions: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
-        """Validate array shapes match declared dimensions.
+        """Check every supplied array against the declared dimensions.
+
+        Runs on construction, so a level cannot exist in a shape the rest of
+        the module would have to guard against. Fields left ``None`` are
+        skipped rather than treated as empty.
 
         Raises
         ------
-            ValueError: If any array has an unexpected shape.
+        ValueError
+            An array disagrees with ``map_width`` or ``map_height``. The
+            message names the offending field and both shapes.
         """
         expected = (self.map_height, self.map_width)
         inv_expected = (self.map_height, self.map_width, NUM_ITEM_TYPES)
@@ -681,25 +687,53 @@ def _fill_buffer(
 
 
 def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvState:
-    """Construct a JAX :class:`~factoriax.engine.state.EnvState` from a :class:`Level`.
+    """Turn a level into a live state, ready to step.
 
-    Players are placed at the centre of the map, spread horizontally,
-    each guaranteed to land on a DIRT tile.  All dynamic fields
-    (inventory, craft progress, machine state) are zero-initialised.
+    This is where the level's per-tile view becomes the engine's per-entity
+    view. Each occupied tile gets one entry in the entity arrays, and
+    ``tile_entity`` records the join. Everything the level does not describe
+    starts empty: no craft is in progress, no items have been mined, and no
+    achievement is unlocked.
+
+    Where the level leaves a field unset the default applies, so a bare block
+    map still yields a playable world. Where it does set one, the level wins
+    and is taken literally, which is why the mismatches below raise instead of
+    being papered over.
+
+    Parameters
+    ----------
+    level
+        World to build from. Not modified.
+    num_players
+        How many players to spawn. Decides the length of every player array,
+        and must match ``level.player_positions`` when that is set.
+    max_machines
+        Entity table size. The default 0 means "choose one", which is
+        ``max(64, tiles // 4)``, enough for a quarter of the map. A level
+        cannot place more machines than this.
 
     Returns
     -------
     EnvState
-        A fully initialised :class:`~factoriax.engine.state.EnvState`.
+        A state whose ``timestep`` is 0 and whose players all face DOWN.
 
+    Raises
+    ------
+    ValueError
+        The level places more machines than ``max_machines`` allows, lists a
+        number of spawns other than ``num_players``, or gives a single-buffer
+        machine more than one kind of item. Each case describes a world the
+        state cannot represent, so none of them is silently trimmed.
 
-    >>> import factoriax
-        >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
-        >>> _, params = factoriax.make("EasyRocket-v1")
-        >>> params = EnvParams(num_players=1)
-        >>> state = factoriax.build_state(level, params)
-        >>> state.map.shape
-        (8, 8)
+    Examples
+    --------
+    >>> from factoriax.engine.levels import LevelBuilder, build_state
+    >>> level = LevelBuilder(8, 8).build("tiny")
+    >>> state = build_state(level, num_players=1)
+    >>> state.map.shape
+    (8, 8)
+    >>> int(state.timestep)
+    0
     """
     if level.player_positions is not None:
         if len(level.player_positions) != num_players:
@@ -878,7 +912,36 @@ def initial_state(
     num_players: int,
     max_machines: int,
 ) -> EnvState:
-    """Assemble an initial :class:`EnvState` from a generated block map."""
+    """Wrap a generated block map in a state with no machines standing.
+
+    The procedural counterpart to :func:`build_state`. It takes a finished
+    block map rather than a :class:`Level`, so there is nothing to place: the
+    entity table is allocated and left empty, and the world starts bare.
+
+    Ore is derived here from ``MINEABLE_BLOCKS`` and
+    ``params.base_resources``, which is the same set :func:`default_resources`
+    uses but a different amount, so a generated tile and a hand-built one can
+    hold different quantities of the same ore.
+
+    Parameters
+    ----------
+    world_map
+        Block type per tile, shape ``(H, W)``. Spawn tiles are overwritten
+        with DIRT, and the edited copy is what the state carries.
+    params
+        Read for ``base_resources`` only.
+    num_players
+        How many players to spawn, along the middle row as in
+        :func:`_place_players`.
+    max_machines
+        Entity table size. 0 means ``max(64, tiles // 4)``.
+
+    Returns
+    -------
+    EnvState
+        A state with an empty entity table, ``timestep`` 0, and every player
+        facing DOWN with an empty inventory.
+    """
     h, w = world_map.shape
     center_x = w // 2
     center_y = h // 2
@@ -950,43 +1013,32 @@ def _smooth_noise(
     width: int,
     scale: int = 4,
 ) -> jax.Array:
-    """Generate a smooth 2D noise field via low-res sampling and upscale.
+    """Draw a field of smooth blobs whose values are spread evenly over [0, 1).
 
-    A small random grid is bilinearly upscaled to the full map size,
-    producing natural-looking blobs suitable for patch-based terrain.
+    Two properties matter to the caller and they pull against each other.
+    Neighbouring tiles hold close values, which is what makes patches instead
+    of speckle. Across the whole field the values are spread evenly, so
+    ``field < p`` selects a fraction ``p`` of the map for any ``p``, and a
+    probability in :class:`~factoriax.engine.state.EnvParams` means what it
+    says.
 
     Parameters
     ----------
-    rng :
-        JAX random key.
-    height :
-        Output height in tiles.
-    width :
-        Output width in tiles.
-    scale :
-        Downscale factor.  Larger values produce bigger, smoother
-        patches.  The low-res grid is ``ceil(dim / scale) + 1``.
-    rng : jax.Array :
-
-    height : int :
-
-    width : int :
-
-    scale : int :
-        (Default value = 4)
-    rng: jax.Array :
-
-    height: int :
-
-    width: int :
-
-    scale: int :
-         (Default value = 4)
+    rng
+        Key for the draw. The same key and shape give the same field.
+    height, width
+        Output size in tiles.
+    scale
+        Blob size. The grid drawn before upscaling is
+        ``height // scale + 2`` by ``width // scale + 2``, so a larger scale
+        means fewer, broader patches.
 
     Returns
     -------
-
-
+    jax.Array
+        Shape ``(height, width)``, float32, values in (0, 1). Evenly spread by
+        construction rather than on average, so even one small map divides
+        cleanly at any threshold.
     """
     lo_h = height // scale + 2
     lo_w = width // scale + 2
@@ -1010,6 +1062,33 @@ def generate_terrain(
     map_height: int,
     map_width: int,
 ) -> jax.Array:
+    """Draw a random block map of ore patches, water, and dirt.
+
+    Each block type gets its own noise field and its own threshold, so the
+    draws are independent. The results are then layered in a fixed order,
+    silicon first and water last, and each layer overwrites the one before.
+    Only water lands on the share its probability names. Every earlier layer
+    keeps just the tiles no later layer claimed, so silicon, drawn first,
+    realises about half its figure. Dirt is whatever no layer claimed.
+
+    Parameters
+    ----------
+    rng
+        Key for the draw. Split six ways, one per block type, so the same key
+        gives the same map.
+    params
+        Read for the six ``*_probability`` fields. Each is the share of the
+        map that block would cover on its own, before later layers overwrite
+        it.
+    map_height, map_width
+        Map size in tiles.
+
+    Returns
+    -------
+    jax.Array
+        Block type per tile, shape ``(map_height, map_width)``, int32. Holds
+        terrain only: no machines, no players, no ore amounts.
+    """
     h, w = map_height, map_width
     keys = random.split(rng, 6)
 
@@ -1068,7 +1147,36 @@ def generate_state(
     num_players: int = 1,
     max_machines: int = 0,
 ) -> EnvState:
-    """Generate a procedural EnvState for use in tests and scripts."""
+    """Generate a random world and return its state.
+
+    A convenience wrapper for tests and scripts. It builds a
+    :class:`~factoriax.engine.envs.base.FactoriaxEnv` and resets it, so the
+    result matches what an environment would produce rather than assembling
+    one here. That import is deferred to the call because ``envs.base``
+    imports this module.
+
+    Not traceable. It constructs an environment from Python integers, so it
+    cannot be placed under ``jax.jit``; only the reset it delegates to is
+    traceable.
+
+    Parameters
+    ----------
+    rng
+        Key for the terrain draw. The same key gives the same world.
+    params
+        Passed to the reset, which reads the terrain probabilities from it.
+    map_height, map_width
+        Map dimensions in tiles.
+    num_players
+        How many players to spawn.
+    max_machines
+        Entity table size. 0 means ``max(64, tiles // 4)``.
+
+    Returns
+    -------
+    EnvState
+        A state on freshly generated terrain, with no machines standing.
+    """
     from factoriax.engine.envs.base import FactoriaxEnv  # avoid circular import
 
     env = FactoriaxEnv(
@@ -1087,37 +1195,35 @@ def generate_state(
 
 
 def save_level(level: Level, path: Path) -> None:
-    """Serialize a :class:`Level` to a JSON file using orjson.
+    """Write a level to a JSON file.
 
-    Arrays are stored as nested integer lists.  The file is
-    human-readable and can be edited in any text editor.
+    Arrays become nested integer lists and the output is indented, so a level
+    can be read and edited by hand. Every optional field is written, as
+    ``null`` where unset, though :func:`load_level` accepts a file that omits
+    one entirely.
+
+    The format carries no version marker, so a future change to the field set
+    has no way to announce itself to an older reader.
 
     Parameters
     ----------
-    path :
-        Destination file path.  Parent directories are created if
-        they do not exist.
-    level :
-        Level to serialize.
+    level
+        Level to write. Not modified.
+    path
+        Destination. Missing parent directories are created, and an existing
+        file is overwritten without warning.
 
     Examples
     --------
-    level : Level :
-
-    path : Path :
-
-    level: Level :
-
-    path: Path :
-
-
-    Returns
-    -------
+    >>> import tempfile
     >>> from pathlib import Path
-        >>> import tempfile, factoriax
-        >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
-        >>> with tempfile.TemporaryDirectory() as d:
-        ...     factoriax.save_level(level, Path(d) / "tiny.json")
+    >>> from factoriax.engine.levels import LevelBuilder, save_level
+    >>> level = LevelBuilder(8, 8).build("tiny")
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     path = Path(directory) / "tiny.json"
+    ...     save_level(level, path)
+    ...     path.exists()
+    True
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1159,29 +1265,42 @@ def save_level(level: Level, path: Path) -> None:
 def load_level(path: Path) -> Level:
     """Deserialize a :class:`Level` from a JSON file written by :func:`save_level`.
 
+    Only ``name``, ``map_width``, ``map_height``, and ``block_map`` are
+    required. Every other field may be ``null`` or absent, both meaning unset,
+    so a hand-written file need only carry what it wants to say.
+
+    Arrays come back as int32 and position lists as tuples, which is what
+    :class:`LevelBuilder` produces, so a level survives a round trip
+    unchanged. The shapes are checked by ``Level.__post_init__``, so a file
+    whose arrays disagree with its dimensions fails here.
+
     Parameters
     ----------
-    path :
-        Path to the JSON file.
-    path : Path :
-
-    path: Path :
-
+    path
+        File to read.
 
     Returns
     -------
-    The reconstructed
-        class:`Level`.
+    Level
+        The level the file describes.
 
+    Raises
+    ------
+    KeyError
+        A required field is missing.
+    ValueError
+        An array disagrees with the declared dimensions.
 
+    Examples
+    --------
+    >>> import tempfile
     >>> from pathlib import Path
-        >>> import tempfile, factoriax
-        >>> level = factoriax.LevelBuilder(8, 8).build("tiny")
-        >>> with tempfile.TemporaryDirectory() as d:
-        ...     p = Path(d) / "tiny.json"
-        ...     factoriax.save_level(level, p)
-        ...     factoriax.load_level(p).name
-        'tiny'
+    >>> from factoriax.engine.levels import LevelBuilder, load_level, save_level
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     path = Path(directory) / "tiny.json"
+    ...     save_level(LevelBuilder(8, 8).build("tiny"), path)
+    ...     load_level(path).name
+    'tiny'
     """
     payload = orjson.loads(Path(path).read_bytes())
     # Only name, dimensions, and the block map are required. Every other field
@@ -1251,22 +1370,27 @@ def get_level(name: str) -> Level:
 
     Parameters
     ----------
-    name :
-        Level name as registered in :data:`LEVELS`.
-    name : str :
-
-    name: str :
-
+    name
+        Key into :data:`LEVELS`.
 
     Returns
     -------
-    The corresponding
-        class:`Level`.
+    Level
+        The registered level itself, not a copy. It is shared with every other
+        caller and with :data:`LEVELS`, so mutating its arrays changes the
+        level for the whole process. :func:`build_state` only reads it.
 
+    Raises
+    ------
+    KeyError
+        No level is registered under that name. The message lists the names
+        that are.
 
-    >>> import factoriax
-        >>> factoriax.get_level("15x15_resources").name
-        '15x15_resources'
+    Examples
+    --------
+    >>> from factoriax.engine.levels import get_level
+    >>> get_level("15x15_resources").name
+    '15x15_resources'
     """
     if name not in LEVELS:
         available = ", ".join(sorted(LEVELS))
