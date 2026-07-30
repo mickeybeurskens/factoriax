@@ -108,29 +108,18 @@ reliable anchor.
   Either wire up doctest collection so examples are executable, or write them
   against the real import paths and accept that nothing verifies them.
 
-- **Terrain probabilities do not produce the shares they name**
-  Found 2026-07-30.
-  Files: `factoriax/engine/levels.py` (`generate_terrain`, `_smooth_noise`
-  and its "so probability thresholds work as expected" comment),
-  `factoriax/engine/state.py` (the `*_probability` fields of `EnvParams`).
-  Two faults compound, and both make ore rarer than requested. On a 200x200
-  map with default params every block came in far under its configured share:
-  water 0.016 against 0.100, iron 0.021 against 0.120, silicon 0.011 against
-  0.100.
-  First, `_smooth_noise` bilinearly upscales a small uniform grid and then
-  min-max rescales the result. Rescaling the range to [0, 1] does not make the
-  distribution uniform, and interpolating uniform samples concentrates values
-  around the mean, so the fraction of the field below 0.1 is nothing like 0.1.
-  Water proves this on its own: it is applied last and nothing overwrites it,
-  yet it lands at 0.016.
-  Second, the `jnp.where` chain applies silicon, tin, coal, copper, iron, then
-  water, and each overwrites the last. The draws are independent but the
-  outcomes are not, so an earlier entry keeps only the part of its field that
-  no later entry claimed. Silicon, applied first, suffers most. The comment
-  above the section calls these "independent shares rather than bands over a
-  shared draw", which is true of the draws and false of the result.
-  Fixing the first fault alone would raise every share by roughly six times at
-  once, so the two want deciding together.
+- **Terrain layers overwrite each other, so only water hits its share**
+  Found 2026-07-30. Overlap accepted 2026-07-30; not a bug to fix.
+  Files: `factoriax/engine/levels.py` (`generate_terrain`).
+  The `jnp.where` chain applies silicon, tin, coal, copper, iron, then water,
+  and each overwrites the last. The noise draws are independent but the
+  outcomes are not, so a layer keeps only the part no later layer claimed.
+  Measured on a 200x200 map with default params: water 0.100 against 0.100
+  configured, iron 0.109, copper 0.094, coal 0.079, tin 0.055, silicon 0.052
+  against 0.100. Silicon is applied first and loses most.
+  Recorded so the gap between a configured probability and a realised share is
+  not mistaken for a regression later. Removing it would mean partitioning one
+  draw into bands, which changes what the probabilities mean.
 
 - **The one built-in level ships ore patches holding 3 units**
   Found 2026-07-30.

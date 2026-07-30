@@ -936,8 +936,11 @@ def initial_state(
 # Terrain generation
 #
 # generate_terrain is the only algorithm. It draws one smooth-noise field per
-# resource and tests each against its own probability, so the probabilities
-# are independent shares rather than bands over a shared draw.
+# resource and tests each against its own probability. The draws are
+# independent, but the results are layered silicon first and water last, and
+# each layer overwrites the one before. Only water, applied last, lands on the
+# share its probability names; everything earlier keeps just the part no later
+# layer claimed, so silicon realises about half its figure. Accepted as is.
 # ---------------------------------------------------------------------------
 
 
@@ -989,11 +992,15 @@ def _smooth_noise(
     lo_w = width // scale + 2
     lo = random.uniform(rng, (lo_h, lo_w))
     hi = jax.image.resize(lo, (height, width), method="bilinear")
-    # Rescale to [0, 1) so probability thresholds work as expected.
-    lo_val = jnp.min(hi)
-    hi_val = jnp.max(hi)
-    span = jnp.maximum(hi_val - lo_val, 1e-6)
-    result: jax.Array = (hi - lo_val) / span
+    # Replace each value by its rank. Interpolating uniform samples piles them
+    # up around the mean, and rescaling that range to [0, 1] leaves the pile in
+    # place, so a threshold of 0.1 used to select far less than a tenth of the
+    # map. Ranking flattens the distribution instead of just its bounds. It is
+    # monotonic, so the blobs keep their shape and only their values move.
+    flat = hi.ravel()
+    order = jnp.argsort(flat)
+    ranks = jnp.zeros_like(order).at[order].set(jnp.arange(flat.size))
+    result: jax.Array = ((ranks + 0.5) / flat.size).reshape(height, width)
     return result
 
 

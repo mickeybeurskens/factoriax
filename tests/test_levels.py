@@ -783,3 +783,40 @@ class TestPlayerPositionCount:
         builder.set_player_position(1, 1).set_player_position(2, 2)
         state = build_state(builder.build("pair"), num_players=2)
         assert np.asarray(state.player_positions).shape == (2, 2)
+
+
+class TestNoiseIsUniform:
+    """A threshold on the noise field must select that share of the map."""
+
+    @pytest.mark.parametrize("threshold", [0.05, 0.1, 0.25, 0.5, 0.9])
+    def test_threshold_selects_matching_share(self, threshold: float) -> None:
+        from factoriax.engine.levels import _smooth_noise
+
+        field = np.asarray(_smooth_noise(jax.random.PRNGKey(0), 128, 128))
+        share = float((field < threshold).mean())
+        assert abs(share - threshold) < 0.01, (
+            f"threshold {threshold} selected {share:.3f} of the map"
+        )
+
+    def test_field_keeps_spatial_structure(self) -> None:
+        """Remapping values must not shuffle the map into noise."""
+        from factoriax.engine.levels import _smooth_noise
+
+        field = np.asarray(_smooth_noise(jax.random.PRNGKey(0), 64, 64))
+        neighbour_gap = np.abs(np.diff(field, axis=1)).mean()
+        shuffled = field.ravel().copy()
+        np.random.default_rng(0).shuffle(shuffled)
+        shuffled_gap = np.abs(np.diff(shuffled.reshape(64, 64), axis=1)).mean()
+        assert neighbour_gap < shuffled_gap / 2.5
+
+
+class TestTerrainShares:
+    """The last block applied must land on the share its probability names."""
+
+    def test_water_share_matches_probability(self) -> None:
+        from factoriax.engine.levels import generate_terrain
+
+        params = EnvParams()
+        terrain = np.asarray(generate_terrain(jax.random.PRNGKey(0), params, 160, 160))
+        share = float((terrain == int(BlockType.WATER)).mean())
+        assert abs(share - float(params.water_probability)) < 0.01
