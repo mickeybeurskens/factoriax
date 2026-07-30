@@ -923,65 +923,12 @@ def initial_state(
 
 
 # ---------------------------------------------------------------------------
-# Terrain generation algorithms
+# Terrain generation
 #
-# Each algorithm takes the same (rng, params) signature and returns
-# an int32 terrain grid.  generate_terrain delegates to one of these.
+# generate_terrain is the only algorithm. It draws one smooth-noise field per
+# resource and tests each against its own probability, so the probabilities
+# are independent shares rather than bands over a shared draw.
 # ---------------------------------------------------------------------------
-
-
-def _generate_terrain_uniform(
-    rng: jax.Array,
-    params: EnvParams,
-    map_height: int,
-    map_width: int,
-) -> jax.Array:
-    random_values = random.uniform(rng, (map_height, map_width))
-
-    water_threshold = params.water_probability
-    iron_threshold = water_threshold + params.iron_probability
-    copper_threshold = iron_threshold + params.copper_probability
-    coal_threshold = copper_threshold + params.coal_probability
-    tin_threshold = coal_threshold + params.tin_probability
-    silicon_threshold = tin_threshold + params.silicon_probability
-
-    terrain = jnp.full(
-        (map_height, map_width),
-        int(BlockType.DIRT),
-        dtype=jnp.int32,
-    )
-    terrain = jnp.where(
-        random_values < silicon_threshold,
-        int(BlockType.SILICON),
-        terrain,
-    )
-    terrain = jnp.where(
-        random_values < tin_threshold,
-        int(BlockType.TIN),
-        terrain,
-    )
-    terrain = jnp.where(
-        random_values < coal_threshold,
-        int(BlockType.COAL),
-        terrain,
-    )
-    terrain = jnp.where(
-        random_values < copper_threshold,
-        int(BlockType.COPPER),
-        terrain,
-    )
-    terrain = jnp.where(
-        random_values < iron_threshold,
-        int(BlockType.IRON),
-        terrain,
-    )
-    terrain = jnp.where(
-        random_values < water_threshold,
-        int(BlockType.WATER),
-        terrain,
-    )
-
-    return terrain
 
 
 def _smooth_noise(
