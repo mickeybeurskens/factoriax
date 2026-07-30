@@ -2,15 +2,16 @@
 
 Source of truth for `factoriax/assets/atlas.png` and its sidecar
 `factoriax/assets/atlas.json`. Both are regenerated from
-`factoriax/assets/build_atlas.py`; CI verifies they match this layout via
-`tests/test_atlas_fresh.py`.
+`factoriax/assets/build_atlas.py`. `tests/test_atlas_fresh.py` checks that
+they match this layout, run by hand since the repository has no CI.
 
 ## Grid
 
 The atlas is a uniform grid of 32×32 px **RGBA** cells, packed
 **row-major by category, column-by-enum-value**. Indexing a sprite
-is two integers: `(row, col)`. The renderer reads them via
-`atlas.json`, which the `JaxRenderer` slurps at construction time.
+is two integers: `(row, col)`. `factoriax/engine/renderer.py` hardcodes
+those indices rather than reading `atlas.json`, so a layout change has
+to be mirrored there by hand.
 
 Cell size is fixed at 32×32. Display tile size (`tile_px`) is a
 renderer-construction parameter; downsampling from 32×32 to the
@@ -34,18 +35,18 @@ artifact rather than silent zeros.
 
 | Row | Category               | Source enum                      | Cells | Notes |
 | --: | ---------------------- | -------------------------------- | ----: | ----- |
-|   0 | blocks                 | `factoriax.engine.constants.BlockType`  | 11    | Sourced from `factoriax.playground.ui.icons.get_textures`. Alpha forced to 255 — terrain is opaque. |
-|   1 | machines, dir LEFT     | `factoriax.engine.constants.MachineType`| 11    | Directional machines render with `direction=LEFT`; non-directional machines duplicate the DOWN sprite. |
-|   2 | machines, dir RIGHT    | `factoriax.engine.constants.MachineType`| 11    | Same, with `direction=RIGHT`. |
-|   3 | machines, dir UP       | `factoriax.engine.constants.MachineType`| 11    | Same, with `direction=UP`. |
-|   4 | machines, dir DOWN     | `factoriax.engine.constants.MachineType`| 11    | Same, with `direction=DOWN`. |
-|   5 | items                  | `factoriax.engine.constants.ItemType`   | 33    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
+|   0 | blocks                 | `factoriax.engine.constants.BlockType`  | 10    | Sourced from `factoriax.playground.ui.icons.get_textures`. Alpha forced to 255, since terrain is opaque. |
+|   1 | machines, dir LEFT     | `factoriax.engine.constants.Machine`    | 11    | Directional machines render with `direction=LEFT`; non-directional machines duplicate the DOWN sprite. |
+|   2 | machines, dir RIGHT    | `factoriax.engine.constants.Machine`    | 11    | Same, with `direction=RIGHT`. |
+|   3 | machines, dir UP       | `factoriax.engine.constants.Machine`    | 11    | Same, with `direction=UP`. |
+|   4 | machines, dir DOWN     | `factoriax.engine.constants.Machine`    | 11    | Same, with `direction=DOWN`. |
+|   5 | items                  | `factoriax.engine.constants.ItemType`   | 34    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
 |   6 | misc                   | (manually enumerated)            | 33    | col 0 = biter; cols 1..32 hold 8 players × 4 directions packed as `(player_idx, direction)` starting at col 1, with `col = 1 + player_idx * 4 + direction_idx`. Player slots beyond 8 wrap modulo 8. |
 |   7 | digits                 | digits 0-9                       | 10    | Each cell is 32×32; the 3×5 glyph is rendered at the cell's top-left, padded with zeros. Alpha=255. |
 
-Width of the atlas is `max(num_cells_per_row) = 33` (driven by
+Width of the atlas is `max(num_cells_per_row) = 34` (driven by
 `ItemType`). Height is `num_rows = 8`. Atlas image:
-`(8 × 32, 33 × 32, 4) = (256, 1056, 4)` uint8.
+`(8 × 32, 34 × 32, 4) = (256, 1088, 4)` uint8.
 
 ### Direction axis
 
@@ -65,8 +66,10 @@ gather is uniform.
 
 Player slots use the same `[LEFT, RIGHT, UP, DOWN]` axis but are
 also keyed by `player_idx`. Eight palettes are baked in (the
-distinct entries of `PLAYER_COLORS` in `factoriax/ui/icons.py`);
-players 8 and beyond reuse palette 0 onwards via modulo-8.
+first eight entries of `PLAYER_COLORS` in
+`factoriax/playground/ui/icons.py`); players 8 and beyond reuse
+palette 0 onwards via modulo-8. `PLAYER_COLORS` itself holds nine
+entries, so player 8 does not match here (see `ISSUES.md`).
 
 ## Sidecar JSON shape
 
@@ -76,7 +79,7 @@ players 8 and beyond reuse palette 0 onwards via modulo-8.
 {
   "cell_px": 32,
   "rows": 8,
-  "cols": 33,
+  "cols": 34,
   "direction_axis": ["LEFT", "RIGHT", "UP", "DOWN"],
   "categories": {
     "blocks":   {"row": 0, "names": ["INVALID", "OUT_OF_BOUNDS", ...], "missing": "magenta"},
