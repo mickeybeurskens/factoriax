@@ -1,8 +1,18 @@
 """Derived JAX arrays and lookup tables for the FactoriaX engine.
 
-:mod:`factoriax.engine.constants` holds pure-Python definitions; this is the JAX layer
-that projects them into the jnp gather tables and state-array dtypes the engine
-uses.
+:mod:`factoriax.engine.constants` holds the pure-Python definitions. This module
+projects them into the ``jnp`` arrays engine code reads, and every array is
+built once at import.
+
+The arrays come in two shapes. A gather table is sized over the full range of
+whatever indexes it, an ``ItemType``, a ``Machine``, a ``BlockType``, or a
+``Direction``, and holds a neutral value at every position with no entry. A
+traced index therefore never falls outside it and a lookup needs no membership
+test first. A membership set, such as :data:`MINEABLE_BLOCKS` or
+:data:`SOLID_BLOCKS`, holds only the values that belong and is compared against
+rather than indexed.
+
+Both shapes keep the lookups traced code needs branchless under ``jax.jit``.
 """
 
 from __future__ import annotations
@@ -21,11 +31,11 @@ from factoriax.engine.constants import (
     Machine,
 )
 
-# State-array dtypes.
-MACHINE_INVENTORY_COUNT_DTYPE = jnp.int16
-BLOCK_RESOURCE_DTYPE = jnp.int16
-
-# (dx, dy) offset per Direction value; index 0 is the unused NONE slot.
+#: ``(dx, dy)`` step per :class:`~factoriax.engine.constants.Direction` value.
+#: Shape ``(5, 2)``, int32. Row 0 is ``(0, 0)`` for the value ``Direction``
+#: leaves unnumbered, so a machine with no direction set moves nothing. ``dy``
+#: grows downward, matching the row order of ``EnvState.map``: ``UP`` is
+#: ``(0, -1)``.
 DIRECTIONS = jnp.array(
     [
         [0, 0],
@@ -113,37 +123,57 @@ CROSSING_VERT_SLOT: int = 0
 CROSSING_HORIZ_SLOT: int = 1
 
 
-# Mineable ore blocks (the BLOCK_TO_ITEM keys) and impassable blocks.
+#: The mineable block types, as a set to test membership against rather than a
+#: table to index. These are the keys of
+#: :data:`~factoriax.engine.constants.BLOCK_TO_ITEM`; mining any other block
+#: yields nothing.
 MINEABLE_BLOCKS = jnp.array([int(b) for b in BLOCK_TO_ITEM], dtype=jnp.int32)
+#: The block types that nothing can stand on or build on, likewise a membership
+#: set. Both :func:`factoriax.engine.step.is_position_walkable` and
+#: :func:`factoriax.engine.placement.is_valid_placement_tile` read it, so the
+#: two agree on what is solid.
 SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32)
 
-# Block -> mined item, over the full BlockType range, EMPTY where not mineable.
 _block_to_item = [int(ItemType.EMPTY)] * len(BlockType)
 for _block, _item in BLOCK_TO_ITEM.items():
     _block_to_item[int(_block)] = int(_item)
+#: Item each block yields when mined, indexed by ``BlockType``. Shape
+#: ``(len(BlockType),)``, int32. A block that is not mineable holds
+#: ``ItemType.EMPTY``, so a mine action on it produces item 0 and the caller
+#: needs no separate check.
 BLOCK_TO_ITEM_ARRAY = jnp.array(_block_to_item, dtype=jnp.int32)
 
-# Item <-> machine, built in one pass so forward and inverse cannot disagree.
-# Each is indexed over its full enum range; absent slots hold the NONE/EMPTY id.
+# Built in one pass so the forward and inverse arrays cannot disagree.
 _item_to_machine = [int(Machine.NONE)] * NUM_ITEM_TYPES
 _machine_to_item = [int(ItemType.EMPTY)] * len(Machine)
 for _it, _machine in ITEM_TO_MACHINE.items():
     _item_to_machine[int(_it)] = int(_machine)
     _machine_to_item[int(_machine)] = int(_it)
+#: Machine an item becomes when placed, indexed by ``ItemType``. Shape
+#: ``(NUM_ITEM_TYPES,)``, int32. An item that is not placeable holds
+#: ``Machine.NONE``, which is how placement rejects it.
 ITEM_TO_MACHINE_ARRAY = jnp.array(_item_to_machine, dtype=jnp.int32)
+#: Item a machine returns when picked up, indexed by ``Machine`` value. Shape
+#: ``(len(Machine),)``, int32. The inverse of :data:`ITEM_TO_MACHINE_ARRAY`,
+#: with ``ItemType.EMPTY`` at ``Machine.NONE``.
 MACHINE_TO_ITEM_ARRAY = jnp.array(_machine_to_item, dtype=jnp.int32)
 
-# Placeable item membership.
+#: The placeable item ids, as a membership set. Same contents as
+#: :data:`~factoriax.engine.constants.PLACEABLE_ITEM_LIST`, in the same order,
+#: which is the play UI's palette order and carries no meaning here.
 PLACEABLE_ITEMS = jnp.array(PLACEABLE_ITEM_LIST, dtype=jnp.int32)
 
-# ItemType -> position in SCIENCE_PACK_TYPES, -1 for non-pack items.
 _science_pack_index = [-1] * NUM_ITEM_TYPES
 for _pos, _pack in enumerate(SCIENCE_PACK_TYPES):
     _science_pack_index[_pack] = _pos
+#: Position of an item in
+#: :data:`~factoriax.engine.constants.SCIENCE_PACK_TYPES`, indexed by
+#: ``ItemType``. Shape ``(NUM_ITEM_TYPES,)``, int8. An item that is not a
+#: science pack holds ``-1``. The step function uses the position as a segment
+#: id when it totals ``EnvState.science_consumed_step``.
 SCIENCE_PACK_INDEX = jnp.array(_science_pack_index, dtype=jnp.int8)
 
-# Per-item player inventory stack caps; machines and large rocket components
-# are bulky, so the player carries fewer per stack.
+# Machines and the large rocket components are bulky, so a stack holds fewer.
 _DEFAULT_PLAYER_STACK = 1024
 _BULKY_PLAYER_STACK = 128
 _PLAYER_STACK_OVERRIDES: dict[int, int] = {
@@ -163,6 +193,11 @@ _PLAYER_STACK_OVERRIDES: dict[int, int] = {
     int(ItemType.SPLITTER): _BULKY_PLAYER_STACK,
     int(ItemType.CROSSING): _BULKY_PLAYER_STACK,
 }
+#: Items of one type a player can carry, indexed by ``ItemType``. Shape
+#: ``(NUM_ITEM_TYPES,)``, int32. Counted in items, not stacks. ``EMPTY`` holds
+#: 0, so nothing accumulates in the slot that marks an empty one. A craft or
+#: pickup that would pass the cap is refused rather than clipped: the craft's
+#: inputs stay in the inventory, and the machine stays on the map.
 PLAYER_MAX_STACK = jnp.array(
     [
         _PLAYER_STACK_OVERRIDES.get(i, _DEFAULT_PLAYER_STACK)

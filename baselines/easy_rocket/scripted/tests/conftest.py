@@ -23,7 +23,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.state import EnvState
-from factoriax.engine.tables import BLOCK_RESOURCE_DTYPE
 
 # One machine to place in a synthetic state: (x, y, machine_type,
 # direction, buf_type, buf_count).
@@ -72,7 +71,7 @@ def _make_state(
         block_resources=(
             block_resources
             if block_resources is not None
-            else jnp.zeros((h, w), dtype=BLOCK_RESOURCE_DTYPE)
+            else jnp.zeros((h, w), dtype=jnp.int16)
         ),
         machine_types=jnp.array(mt_grid),
         tile_entity=jnp.array(tile_ent),

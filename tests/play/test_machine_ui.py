@@ -17,7 +17,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
 from factoriax.playground.play.ui import ClickRegion, render_machine_menu
 
 _SW = 320
@@ -188,7 +187,7 @@ class TestMachineMenuContents:
         """Miner with coal output renders without crash."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            dtype=jnp.int16,
         )
         machine_inv = machine_inv.at[2, 3, int(ItemType.COAL)].set(12)
         state = state_factory(
@@ -207,7 +206,7 @@ class TestMachineMenuContents:
         """Assembler with multiple item types renders cleanly."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            dtype=jnp.int16,
         )
         machine_inv = machine_inv.at[0, 0, int(ItemType.COPPER_ORE)].set(5)
         machine_inv = machine_inv.at[0, 0, int(ItemType.IRON_ORE)].set(5)
@@ -228,7 +227,7 @@ class TestMachineMenuContents:
         """Pallet with many item types filled renders cleanly."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            dtype=jnp.int16,
         )
         for i, item in enumerate(
             [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE, ItemType.MINER],
@@ -284,7 +283,7 @@ class TestMachineMenuFocusedItem:
         """Different focused machine items render without crash."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            dtype=jnp.int16,
         )
         machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(5)
         machine_inv = machine_inv.at[0, 0, int(ItemType.IRON_ORE)].set(3)

@@ -19,7 +19,6 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.engine.tables import MACHINE_INVENTORY_COUNT_DTYPE
 from factoriax.playground.config import build_key_lookup, default_keyboard
 from factoriax.playground.play.game_ui import GameUI
 
@@ -138,7 +137,7 @@ class TestWithdrawAction:
         """Machines have one output slot; CONFIRM emits WITHDRAW regardless of focus."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
-            dtype=MACHINE_INVENTORY_COUNT_DTYPE,
+            dtype=jnp.int16,
         )
         machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(10)
         state = state_factory(

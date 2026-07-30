@@ -309,8 +309,8 @@ NUM_ACTIONS = len(Action)
 MAX_ACHIEVEMENTS = 64
 #: Units of ore an ore tile can hold when a level does not set a count. Also the
 #: divisor that normalizes ``block_resources`` into the observation, so a tile
-#: above this value normalizes past 1.0. Must fit
-#: ``factoriax.engine.tables.BLOCK_RESOURCE_DTYPE`` (int16).
+#: above this value normalizes past 1.0. ``EnvState.block_resources`` is int16,
+#: so this must stay under 32767.
 BLOCK_MAX_RESOURCES = 30000
 
 # Base offsets for the parametric action families. The PLACE_/CRAFT_/DEPOSIT_

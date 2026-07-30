@@ -102,3 +102,25 @@ def test_auto_reset_restores_episode_on_done(level8) -> None:
     # not the post-step value it would hold without auto-reset.
     assert int(state1.env_state.timestep) == int(state.reset_state.timestep)
     assert int(state1.env_state.timestep) < int(params.max_timesteps)
+
+
+#: State fields whose width bounds a game value, and the dtype they must keep.
+#: ``block_resources`` at int16 is what caps ``BLOCK_MAX_RESOURCES``; the count
+#: fields at int16 cap what a machine slot can hold. Widening or narrowing one
+#: changes those limits and the observation built from them.
+_PINNED_STATE_DTYPES = {
+    "block_resources": jnp.int16,
+    "ent_buf_count": jnp.int16,
+    "ent_asm_in_count": jnp.int16,
+    "ent_asm_out_count": jnp.int16,
+    "ent_health": jnp.int16,
+}
+
+
+@pytest.mark.parametrize(("field", "dtype"), sorted(_PINNED_STATE_DTYPES.items()))
+def test_state_array_dtypes(field, dtype, default_env) -> None:
+    """A reset state carries the dtypes the engine's value ranges depend on."""
+    env, params = default_env
+    _, state = env.reset_env(random.PRNGKey(0), params)
+    got = getattr(state, field).dtype
+    assert got == dtype, f"{field}: {got}, expected {jnp.dtype(dtype)}"

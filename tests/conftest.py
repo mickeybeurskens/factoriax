@@ -82,7 +82,6 @@ from factoriax.engine.state import (
     EnvParams,  # noqa: E402
     EnvState,  # noqa: E402
 )
-from factoriax.engine.tables import BLOCK_RESOURCE_DTYPE
 
 # Default entity capacity used by the test factory.
 _TEST_MAX_MACHINES: int = 64
@@ -345,7 +344,7 @@ def state_factory():
             block_resources=(
                 block_resources
                 if block_resources is not None
-                else jnp.zeros(shape, dtype=BLOCK_RESOURCE_DTYPE)
+                else jnp.zeros(shape, dtype=jnp.int16)
             ),
             machine_types=mt_grid,
             tile_entity=jnp.array(tile_ent, dtype=jnp.int16),
