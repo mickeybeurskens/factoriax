@@ -26,12 +26,13 @@ from factoriax.engine.placement import (
     place_machine,
 )
 from factoriax.engine.state import EnvParams
-from factoriax.engine.step import factoriax_step
+from factoriax.engine.step import factoriax_step, is_position_walkable
 from factoriax.engine.tables import (
     ITEM_TO_MACHINE_ARRAY,
     MACHINE_HEALTH,
     MACHINE_MAX_HEALTH,
     MACHINE_TO_ITEM_ARRAY,
+    SOLID_BLOCKS,
 )
 
 
@@ -660,3 +661,41 @@ class TestWrapperContract:
         # stayed structurally identical in shape.
         assert before.ent_health.shape == after.ent_health.shape
         assert not bool(jnp.all(before.ent_health == after.ent_health))
+
+
+class TestSolidBlocksIsTheSingleSource:
+    """Movement and placement agree on which terrain is solid.
+
+    ``is_position_walkable`` and ``is_valid_placement_tile`` each reject
+    solid terrain. Both must read the same set, or a tile becomes walkable
+    but unbuildable (or the reverse) with nothing to flag the split.
+    """
+
+    @pytest.mark.parametrize("block", list(BlockType))
+    def test_walkability_matches_solid_blocks(self, block, state_factory) -> None:
+        """Empty terrain is walkable exactly when it is not in SOLID_BLOCKS."""
+        state = state_factory(world_map=jnp.array([[block]], dtype=jnp.int8))
+        walkable = bool(is_position_walkable(state, jnp.array([0, 0])))
+        solid = int(block) in [int(b) for b in SOLID_BLOCKS.tolist()]
+        assert walkable is not solid, (
+            f"{BlockType(block).name}: walkable={walkable}, "
+            f"in SOLID_BLOCKS={solid}"
+        )
+
+    @pytest.mark.parametrize("block", list(BlockType))
+    def test_placement_matches_solid_blocks(self, block, state_factory) -> None:
+        """Empty terrain is buildable exactly when it is not in SOLID_BLOCKS."""
+        state = state_factory(world_map=jnp.array([[block]], dtype=jnp.int8))
+        buildable = bool(
+            is_valid_placement_tile(state, jnp.array(0), jnp.array(0)),
+        )
+        solid = int(block) in [int(b) for b in SOLID_BLOCKS.tolist()]
+        assert buildable is not solid, (
+            f"{BlockType(block).name}: buildable={buildable}, "
+            f"in SOLID_BLOCKS={solid}"
+        )
+
+    def test_out_of_bounds_is_not_walkable(self, state_factory) -> None:
+        """A query off the map is solid, whatever the stored tile says."""
+        state = state_factory(world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int8))
+        assert not bool(is_position_walkable(state, jnp.array([5, 5])))

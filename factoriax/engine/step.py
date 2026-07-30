@@ -39,6 +39,7 @@ from factoriax.engine.tables import (
     MINEABLE_BLOCKS,
     PLAYER_MAX_STACK,
     SCIENCE_PACK_INDEX,
+    SOLID_BLOCKS,
 )
 
 # ROTATE_* offset (0..3) -> Direction value. (The PLACE/CRAFT/DEPOSIT
@@ -153,15 +154,7 @@ def is_position_walkable(
 
     """
     block = get_block_at(state, position)
-    is_solid = jnp.any(
-        block
-        == jnp.array(
-            [
-                BlockType.WATER,
-                BlockType.OUT_OF_BOUNDS,
-            ]
-        )
-    )
+    is_solid = jnp.any(block == SOLID_BLOCKS)
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
     clipped_x = jnp.clip(position[0], 0, map_width - 1)
