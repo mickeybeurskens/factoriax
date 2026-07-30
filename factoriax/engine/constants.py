@@ -21,17 +21,19 @@ class BlockType(IntEnum):
     """Terrain kind of one tile, stored in ``EnvState.map``.
 
     A tile carries exactly one block type. ``INVALID = 0`` is a sentinel: the
-    generator never emits it and the editor palette omits it, so a tile holding
-    it means the map array was left zero-filled. The engine gives it no
-    behavior of its own, and treats it as walkable, non-mineable ground.
-    ``OUT_OF_BOUNDS`` never occupies a stored tile either:
-    queries outside the map return it, and observation padding fills the
-    border with it so a policy can see the map edge.
+    editor palette omits it, so a tile holding it means the map array was left
+    zero-filled. The engine gives it no behavior of its own and treats it as
+    walkable, non-mineable ground. ``OUT_OF_BOUNDS`` never occupies a stored
+    tile either: queries outside the map return it, and observation padding
+    fills the border with it so a policy can see the map edge.
 
-    ``WATER`` and ``OUT_OF_BOUNDS`` block player movement
-    (``factoriax.engine.tables.SOLID_BLOCKS``). ``DIRT`` is plain walkable
-    ground. The remaining six are ore tiles: they are the keys of
-    :data:`BLOCK_TO_ITEM` and are the only mineable tiles.
+    ``WATER`` and ``OUT_OF_BOUNDS`` are the terrain that blocks movement,
+    listed in ``factoriax.engine.tables.SOLID_BLOCKS``. ``DIRT`` is plain
+    walkable ground. Terrain is not the whole rule: a placed machine blocks
+    its own tile too, every kind except ``CONVEYOR_BELT``.
+
+    The remaining six are ore tiles. They are the keys of
+    :data:`BLOCK_TO_ITEM` and the only mineable tiles.
     """
 
     INVALID = 0
@@ -154,10 +156,11 @@ class Machine(IntEnum):
     ``EnvState.ent_type`` hold. ``NONE = 0`` means no machine on the tile, the
     analog of ``ItemType.EMPTY = 0``.
 
-    Values index the per-machine rows of the capacity arrays in
-    :mod:`factoriax.engine.tables` and of the editor's slot layout in
-    ``factoriax.playground.editor.slot_display``. Both are built by iterating
-    this enum, so adding a member without an entry in each raises at import.
+    Values index the per-machine rows of
+    ``factoriax.engine.tables.MACHINE_MAX_STACK`` and of the editor's
+    ``factoriax.playground.editor.slot_display.MACHINE_SLOT_ROLES``. Both are
+    built by iterating this enum over a dict keyed by member, so adding a
+    member without an entry in each raises ``KeyError`` at import.
     """
 
     NONE = 0
@@ -254,12 +257,12 @@ class InteractAction(IntEnum):
 
 #: Items with a ``PLACE_`` action, one per placeable machine kind.
 PLACEMENT_ITEMS: tuple[Machine, ...] = tuple(m for m in Machine if m.name != "NONE")
-#: Items with a ``CRAFT_`` action. Every item except raw resources, which are
-#: mined rather than crafted.
+#: Items with a ``CRAFT_`` action: the half-fabricates and the machines. Raw
+#: resources are mined rather than crafted, and ``EMPTY`` is not an item.
 CRAFT_ITEMS: tuple[HalfFabricate | Machine, ...] = tuple(
     m for cat in (HalfFabricate, Machine) for m in cat if m.name != "NONE"
 )
-#: Items with a ``DEPOSIT_`` action: Every item type except ``EMPTY``.
+#: Items with a ``DEPOSIT_`` action: every item type except ``EMPTY``.
 DEPOSIT_ITEMS: tuple[Resource | HalfFabricate | Machine, ...] = tuple(
     m for cat in (Resource, HalfFabricate, Machine) for m in cat if m.name != "NONE"
 )
@@ -297,7 +300,8 @@ invalidates existing checkpoints.
 
 #: Width of the item axis of every inventory array, ``EMPTY`` included.
 NUM_ITEM_TYPES = len(ItemType)
-#: Size of the total available discrete action space. Valid actions are ``0..NUM_ACTIONS - 1``.
+#: Size of the discrete action space. Valid actions are ``0`` to
+#: ``NUM_ACTIONS - 1``.
 NUM_ACTIONS = len(Action)
 #: Fixed width of the ``EnvState.achievements_unlocked`` bit vector. A scenario
 #: may define fewer achievements; the unused trailing bits stay False. Raising
