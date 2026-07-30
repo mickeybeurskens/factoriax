@@ -75,6 +75,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     # Global fields — shape (B, T, ...).
     "selected_player",
     "achievements",
+    "achievements_unlocked",
     "items_mined",
     "science_consumed_step",
     "rewards",
@@ -144,6 +145,7 @@ class Trajectory:
     # Global fields — (B, T, ...).
     selected_player: np.ndarray | None = None
     achievements: np.ndarray | None = None
+    achievements_unlocked: np.ndarray | None = None
     items_mined: np.ndarray | None = None
     science_consumed_step: np.ndarray | None = None
     rewards: np.ndarray | None = None
@@ -608,26 +610,6 @@ def trajectory_to_states(
             state_kwargs["timestep"] = int(traj.timesteps[episode, t])
         else:
             state_kwargs["timestep"] = t
-
-        # Trajectories saved before ent_health was a recorded field
-        # have no entry for it. Zero-fill from ent_y's MAX_M dimension
-        # so legacy files still reconstruct without raising.
-        if "ent_health" not in state_kwargs and "ent_y" in state_kwargs:
-            import jax.numpy as jnp
-
-            state_kwargs["ent_health"] = jnp.zeros(
-                state_kwargs["ent_y"].shape, dtype=jnp.int16
-            )
-
-        # Same backward-compat fallback for achievements_unlocked.
-        if "achievements_unlocked" not in state_kwargs:
-            import jax.numpy as jnp
-
-            from factoriax.engine.constants import MAX_ACHIEVEMENTS
-
-            state_kwargs["achievements_unlocked"] = jnp.zeros(
-                MAX_ACHIEVEMENTS, dtype=jnp.bool_
-            )
 
         states.append(EnvState(**state_kwargs))
 
