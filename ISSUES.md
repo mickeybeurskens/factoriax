@@ -44,6 +44,16 @@ reliable anchor.
   No shipped scenario changes the output set today, so this is latent. Fixing
   it means adding a recipe table argument to `build_state`.
 
+- **Agent crafting does not have a tick count**
+  Found 2026-07-30.
+  Files: `factoriax/engine/crafting.py:109` (`craft_recipe`),
+  `factoriax/engine/recipes.py` (`Recipe.ticks`).
+  `craft_recipe` never reads `ticks`. A player craft checks affordability,
+  consumes the inputs, and writes the output in the same step, so a recipe's
+  duration applies to combiners only. Hand-crafting is therefore free of the
+  cost the same recipe imposes on a machine, and no action or state field
+  exists to carry a partially finished player craft.
+
 - **Machine inventory loading is a hand-written branch per machine kind**
   Found 2026-07-29.
   Files: `factoriax/engine/levels.py:796-825`.
