@@ -50,9 +50,17 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
     }
 )
 
-#: Most input types one recipe may consume. A fixed engine limit, not a
-#: property of :data:`BASE_RECIPES`: ``EnvState.ent_asm_in_type`` gives a
-#: combiner two input slots. :class:`RecipeBook` rejects anything wider.
+#: Most distinct input item types one recipe may consume. Not a limit on
+#: amounts: a recipe may ask for any count of each type, so Hull consumes four
+#: items, 2 frames and 2 iron plates, and still counts as two inputs.
+#:
+#: A fixed engine limit, not a property of :data:`BASE_RECIPES`, and it applies
+#: to hand crafting as much as to machines. It is 2 because
+#: ``EnvState.ent_asm_in_type`` gives a combiner two input slots; a player's
+#: inventory could feed a wider recipe, but the engine commits to one width so
+#: both paths read the same rows. Raising it means widening those state arrays
+#: and generalising the combiner matcher, which checks two slots in both
+#: orderings by hand. :class:`RecipeBook` rejects anything wider.
 MAX_RECIPE_INPUTS: int = 2
 
 

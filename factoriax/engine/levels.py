@@ -184,7 +184,6 @@ class LevelBuilder:
         self._machine_types: np.ndarray | None = None
         self._machine_directions: np.ndarray | None = None
         self._machine_inv: np.ndarray | None = None
-        self._machine_selected_recipe: np.ndarray | None = None
         self._player_positions: list[tuple[int, int]] | None = None
         self._biter_positions: list[tuple[int, int]] | None = None
 
@@ -350,46 +349,6 @@ class LevelBuilder:
             shape = (self._height, self._width, NUM_ITEM_TYPES)
             self._machine_inv = np.zeros(shape, dtype=np.int32)
         self._machine_inv[y, x, item_type] = count
-        return self
-
-    def set_machine_recipe(self, x: int, y: int, recipe_idx: int) -> LevelBuilder:
-        """Set the selected assembler recipe for a machine tile.
-
-        Parameters
-        ----------
-        x :
-            Column (0-indexed).
-        y :
-            Row (0-indexed).
-        recipe_idx :
-            Assembler recipe index.
-        x : int :
-
-        y : int :
-
-        recipe_idx : int :
-
-        x: int :
-
-        y: int :
-
-        recipe_idx: int :
-
-
-        Returns
-        -------
-
-
-        """
-        if not (0 <= x < self._width and 0 <= y < self._height):
-            raise IndexError(
-                f"Tile ({x}, {y}) is outside the {self._width}x{self._height} map."
-            )
-        if self._machine_selected_recipe is None:
-            self._machine_selected_recipe = np.zeros(
-                (self._height, self._width), dtype=np.int32
-            )
-        self._machine_selected_recipe[y, x] = recipe_idx
         return self
 
     def place_machine(
@@ -578,11 +537,6 @@ class LevelBuilder:
             ),
             machine_inventory=(
                 self._machine_inv.copy() if self._machine_inv is not None else None
-            ),
-            machine_selected_recipe=(
-                self._machine_selected_recipe.copy()
-                if self._machine_selected_recipe is not None
-                else None
             ),
             player_positions=(
                 list(self._player_positions)
