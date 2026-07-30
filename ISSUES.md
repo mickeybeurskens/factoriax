@@ -84,6 +84,18 @@ reliable anchor.
 
 ## Fixed
 
+- **A recipe repeating an input item crafted into a negative inventory**
+  Found and fixed 2026-07-30.
+  Files: `factoriax/engine/recipes.py` (`RecipeBook.__post_init__`),
+  `factoriax/engine/crafting.py`, `tests/test_recipe_book.py`.
+  `can_afford_recipe` checks each of the two input slots on its own, so a
+  recipe naming the same item in both slots read as affordable while the
+  player held enough for one slot, and `craft_recipe` then subtracted each
+  slot in turn. A one-recipe book taking `(IRON_PLATE, 1)` twice left a
+  player holding 1 plate on -1 plate plus the output. `RecipeBook` now
+  rejects a repeated input item at construction, so no book reaching the
+  engine can express it. Covered by `test_repeated_input_item_raises`.
+
 - **A combiner's finished output loaded into an input slot**
   Found and fixed 2026-07-29, commit `67f45cf`.
   Files: `factoriax/engine/levels.py`, `tests/test_levels.py`.
