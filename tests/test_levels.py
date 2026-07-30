@@ -659,3 +659,127 @@ class TestResetWithBoundLevel:
         np.testing.assert_array_equal(
             np.array(s1.player_positions), np.array(s2.player_positions)
         )
+
+
+# ---------------------------------------------------------------------------
+# Regressions for the defects recorded in ISSUES.md
+# ---------------------------------------------------------------------------
+
+
+class TestMachineCapacity:
+    """A level that overflows the entity table must not build a broken state."""
+
+    def test_machines_beyond_capacity_raise(self) -> None:
+        builder = LevelBuilder(10, 10)
+        for y in range(10):
+            for x in range(10):
+                builder.place_machine(x, y, int(Machine.PALLET))
+        with pytest.raises(ValueError, match="max_machines"):
+            build_state(builder.build("many"), num_players=1, max_machines=8)
+
+    def test_machines_within_capacity_all_get_entities(self) -> None:
+        builder = LevelBuilder(4, 4)
+        for x in range(3):
+            builder.place_machine(x, 0, int(Machine.PALLET))
+        state = build_state(builder.build("few"), num_players=1, max_machines=8)
+        machine_tiles = np.asarray(state.machine_types) != int(Machine.NONE)
+        backed = np.asarray(state.tile_entity) >= 0
+        assert np.array_equal(machine_tiles, backed)
+
+
+class TestMachineInventoryPreserved:
+    """Contents a level records must survive the build, not be truncated."""
+
+    def test_pallet_keeps_every_item(self) -> None:
+        builder = LevelBuilder(3, 3).place_machine(1, 1, int(Machine.PALLET))
+        builder.set_machine_inventory(1, 1, int(ItemType.COAL), 5)
+        builder.set_machine_inventory(1, 1, int(ItemType.IRON_ORE), 7)
+        with pytest.raises(ValueError, match="one item"):
+            build_state(builder.build("pallet"), num_players=1)
+
+    def test_pallet_with_one_item_builds(self) -> None:
+        builder = LevelBuilder(3, 3).place_machine(1, 1, int(Machine.PALLET))
+        builder.set_machine_inventory(1, 1, int(ItemType.COAL), 5)
+        state = build_state(builder.build("pallet"), num_players=1)
+        assert int(np.asarray(state.ent_buf_type)[0]) == int(ItemType.COAL)
+        assert int(np.asarray(state.ent_buf_count)[0]) == 5
+
+
+class TestLoadLevelMissingKeys:
+    """Every optional field must be optional on load, not just some of them."""
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "block_resources",
+            "machine_types",
+            "machine_directions",
+            "machine_inventory",
+            "player_inventory",
+            "player_positions",
+            "biter_positions",
+        ],
+    )
+    def test_missing_optional_key_loads(self, key: str) -> None:
+        import orjson
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "level.json"
+            save_level(_dirt_level(4, 4), path)
+            payload = orjson.loads(path.read_bytes())
+            del payload[key]
+            path.write_bytes(orjson.dumps(payload))
+            assert load_level(path).map_width == 4
+
+    def test_missing_required_key_raises(self) -> None:
+        import orjson
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "level.json"
+            save_level(_dirt_level(4, 4), path)
+            payload = orjson.loads(path.read_bytes())
+            del payload["block_map"]
+            path.write_bytes(orjson.dumps(payload))
+            with pytest.raises(KeyError):
+                load_level(path)
+
+
+class TestDefaultResourcesCoversMineableBlocks:
+    """Hand-built and procedural worlds must agree on what carries ore."""
+
+    def test_every_mineable_block_gets_resources(self) -> None:
+        from factoriax.engine.tables import MINEABLE_BLOCKS
+
+        for block in np.asarray(MINEABLE_BLOCKS):
+            block_map = np.full((2, 2), int(block), dtype=np.int32)
+            resources = default_resources(block_map)
+            assert int(resources[0, 0]) == BLOCK_MAX_RESOURCES, (
+                f"{BlockType(int(block)).name} got no ore"
+            )
+
+
+class TestResourceSnapshotOrdering:
+    """Ore painted after the resource array exists must still hold ore."""
+
+    def test_fill_rect_after_set_resources_has_ore(self) -> None:
+        builder = LevelBuilder(6, 6)
+        builder.set_resources(5, 5, 7)
+        builder.fill_rect(0, 0, 2, 2, BlockType.IRON)
+        level = builder.build("ordering")
+        assert int(level.block_resources[0, 0]) == BLOCK_MAX_RESOURCES
+        assert int(level.block_resources[5, 5]) == 7
+
+
+class TestPlayerPositionCount:
+    """A level must not build a state whose player arrays disagree."""
+
+    def test_too_few_positions_raises(self) -> None:
+        builder = LevelBuilder(8, 8).set_player_position(1, 1)
+        with pytest.raises(ValueError, match="player"):
+            build_state(builder.build("short"), num_players=3)
+
+    def test_matching_positions_build(self) -> None:
+        builder = LevelBuilder(8, 8)
+        builder.set_player_position(1, 1).set_player_position(2, 2)
+        state = build_state(builder.build("pair"), num_players=2)
+        assert np.asarray(state.player_positions).shape == (2, 2)

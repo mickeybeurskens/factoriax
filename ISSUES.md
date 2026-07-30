@@ -90,6 +90,58 @@ reliable anchor.
   decision, either add a damage source or drop the action and accept the
   action-space change.
 
+- **Every doctest in `levels.py` calls an API that does not exist**
+  Found 2026-07-30.
+  Files: `factoriax/engine/levels.py` (`build_state`, `save_level`,
+  `load_level`, and the `Level` docstring), `factoriax/__init__.py`.
+  The examples call `factoriax.LevelBuilder`, `factoriax.build_state`,
+  `factoriax.save_level`, `factoriax.load_level`, `factoriax.make`,
+  `factoriax.LEVELS`, `FactoriaxEnv`, and `get_level` as top-level names.
+  `factoriax/__init__.py` is deliberately kept free of imports, so none of
+  them resolve. They also pass `EnvParams(num_players=...)` to `build_state`,
+  which takes `num_players: int` and reads it from an `EnvParams` field that
+  does not exist. `build_state`'s example additionally assigns `params` twice,
+  discarding the first value.
+  Nothing catches this: `pyproject.toml` sets `testpaths = ["tests"]` with no
+  `--doctest-modules`, so the examples are inert text. They are wrong in a way
+  that is worse than absent, because they read as the supported entry point.
+  Either wire up doctest collection so examples are executable, or write them
+  against the real import paths and accept that nothing verifies them.
+
+- **Terrain probabilities do not produce the shares they name**
+  Found 2026-07-30.
+  Files: `factoriax/engine/levels.py` (`generate_terrain`, `_smooth_noise`
+  and its "so probability thresholds work as expected" comment),
+  `factoriax/engine/state.py` (the `*_probability` fields of `EnvParams`).
+  Two faults compound, and both make ore rarer than requested. On a 200x200
+  map with default params every block came in far under its configured share:
+  water 0.016 against 0.100, iron 0.021 against 0.120, silicon 0.011 against
+  0.100.
+  First, `_smooth_noise` bilinearly upscales a small uniform grid and then
+  min-max rescales the result. Rescaling the range to [0, 1] does not make the
+  distribution uniform, and interpolating uniform samples concentrates values
+  around the mean, so the fraction of the field below 0.1 is nothing like 0.1.
+  Water proves this on its own: it is applied last and nothing overwrites it,
+  yet it lands at 0.016.
+  Second, the `jnp.where` chain applies silicon, tin, coal, copper, iron, then
+  water, and each overwrites the last. The draws are independent but the
+  outcomes are not, so an earlier entry keeps only the part of its field that
+  no later entry claimed. Silicon, applied first, suffers most. The comment
+  above the section calls these "independent shares rather than bands over a
+  shared draw", which is true of the draws and false of the result.
+  Fixing the first fault alone would raise every share by roughly six times at
+  once, so the two want deciding together.
+
+- **The one built-in level ships ore patches holding 3 units**
+  Found 2026-07-30.
+  Files: `factoriax/engine/levels.py` (`_15X15_RESOURCES`).
+  Each `fill_rect` passes `resources=3` where `BLOCK_MAX_RESOURCES` is 30000,
+  so every patch in `15x15_resources` holds 3 units per tile, 48 per ore
+  across the whole map. It is the only registered level and the default for
+  anything calling `get_level`. Three units may be deliberate for a short
+  test, but it is four orders of magnitude off the constant the rest of the
+  module treats as a full deposit, and nothing records which was intended.
+
 - **The pixel observation hides state an agent needs to play**
   Found 2026-07-30.
   Files: `factoriax/engine/observations.py:843` (`rgb`), `:258`
