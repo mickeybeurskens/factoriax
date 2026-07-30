@@ -6,11 +6,13 @@ Systematic docstring pass over every module in `factoriax/`.
 
 1. Work through the **Modules** list at the bottom in the order given, one
    module at a time.
-2. After each module is edited, stop. The reviewer reads the file.
-3. Iterate on that module until the reviewer greenlights it.
-4. Only then tick its box and move to the next module.
-5. Do not edit ahead. One module in flight at any time.
-6. Docstring format for this project: NumPy style.
+2. Inspect the module for correctness while documenting it. See **Correctness
+   review** below. The docstrings and the code are both under review.
+3. After each module is edited, stop. The reviewer reads the file.
+4. Iterate on that module until the reviewer greenlights it.
+5. Only then tick its box and move to the next module.
+6. Do not edit ahead. One module in flight at any time.
+7. Docstring format for this project: NumPy style.
 
 The **Rubric** section is grading criteria, not trackable state. It applies to
 every module, so it carries no checkboxes. The only boxes in this document are
@@ -72,6 +74,50 @@ edit owns them: 16 `F821`, 7 `E501`, 6 `F401`, 5 `I001`, 1 `F841`.
 
 The per-module job is therefore mostly deleting generated noise and writing a
 real contract, not editing prose.
+
+## Correctness review
+
+Writing the contract is what tests it. Every sentence about what a function
+guarantees has to be checked against what the function does, and each mismatch
+is a finding: either the code is wrong or the sentence is. Both count.
+
+The linter cannot help here and neither can a green test suite. Rubric items 10
+to 15 ask for the boundary cases, the units, and the side effects, which is
+exactly the material no existing test was written to cover.
+
+Three rules for handling what turns up:
+
+1. Confirm before reporting. Reproduce the failure and quote the numbers. A
+   finding phrased as "this looks wrong" hands the reviewer the work.
+2. Report, do not silently fix. A behavior change does not belong in a
+   documentation commit unless the reviewer asks for it. Say what is wrong,
+   what it costs, and what the fix would be.
+3. On a greenlight, fix with a failing test first. Write the test that fails
+   against current behavior, watch it fail, then change the code.
+
+### Shapes that have hidden real bugs
+
+All four of these were live in `engine/machines.py` and none of them failed a
+test. Under `jit` there is no per-lane control flow: every entity slot runs
+every pass, free ones included, and masking is the only thing that discards a
+result. Free slots hold `ent_y < 0`, which the position clip folds onto tile
+(0, 0), putting them on the neighbour list of whatever stands next to that
+corner. So:
+
+- A gather that reads `x[some_safe_index]` and keeps the result without
+  `& active`. Both the receiving side and the paying side need the gate. Three
+  of the four passes had it; one did not, and minted an item into all 61 free
+  slots per transfer.
+- `.at[idx].set(...)` where `idx` repeats. Duplicate scatter indices resolve in
+  an unspecified order, so a real write loses to a stale one. Prefer
+  `.at[idx].add(delta)` with a zero delta on the lanes that must not write.
+- A fixture that shrinks the entity array. `max_machines=1` leaves no free slot,
+  so the test passes on code that is broken for every real map.
+- A destination whose capacity is zero. The transfer clamps to nothing while
+  the receiver still takes the item type, leaving a typed slot holding none.
+
+Modules further down the list index the entity arrays the same way. Check each
+one for the same shapes rather than assuming this was local to one file.
 
 ## Rubric
 
@@ -179,6 +225,9 @@ Repo-wide, done once. Not per module.
       documentation (docstrings work well only once the reader already knows
       the project)
 - [ ] Confirm `uv run ruff check factoriax` reports zero `D` violations
+- [ ] Sweep the engine for the four shapes listed under **Correctness review**,
+      once the per-module pass has covered every module that indexes entity
+      arrays
 
 Standing practice, no box: keep docs in the same commit as the code and the
 tests, flag stale docs in review, and treat docstrings as part of done.

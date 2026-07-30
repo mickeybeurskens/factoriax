@@ -1,11 +1,46 @@
-"""Machine update logic using entity-based processing.
+"""Move the factory forward by one step.
 
-Machine state lives in fixed-size entity arrays instead of grid arrays.
-Each function iterates over entity slots (MAX_M) rather than the full
-map (H×W), making cost proportional to machine count not map size.
+A factory is machines standing on tiles, handing items to each other. This
+module is that handoff. Ore leaves the ground, items become other items, and
+both travel between machines that do not touch. Everything on the map that
+acts on its own acts here.
 
-Neighbor lookups use ``tile_entity[y, x]`` to find the entity index at
-a grid position, then gather that entity's state.
+Four passes do the work. :func:`update_all_machines` runs them in order and
+is what a step calls:
+
+:func:`run_miners`
+    Ore out of the ground, into the machine the miner faces.
+:func:`run_assemblers`
+    Assemblers and furnaces turn input items into an output item, over time.
+:func:`run_conveyor_belts`
+    Belts, splitters, and crossings carry items across the map.
+:func:`run_arms`
+    Arms lift one item between two machines a tile apart.
+
+A pass takes a state and returns a new one. Machines run whether or not a
+player is nearby, and player actions are handled elsewhere.
+
+Machine state lives in the ``ent_`` arrays of
+:class:`~factoriax.engine.state.EnvState`, indexed by entity id rather than by
+tile. There are ``E`` slots, fixed when the level is built, and a machine
+holds one for as long as it stands on the map. An entity finds its neighbours
+through ``state.tile_entity``, which maps a tile back to the entity id
+standing on it, or to ``-1`` for an empty tile.
+
+Every pass runs over all ``E`` slots at once, free ones included. Under
+``jit`` there is no per-entity branch to skip a slot with, so a free slot
+computes a neighbour, a transfer, and a receipt like everybody else. What
+makes it harmless is a mask, not a skip: a result is kept only where
+``active = state.ent_y >= 0``. A free slot holds ``ent_y < 0``, which the
+position clip folds onto tile (0, 0), so it reads as a neighbour of whatever
+stands beside that corner. Miss the mask on one line and nothing raises. An
+item appears in a slot that holds no machine.
+
+Two things follow. Cost tracks ``E`` and the map shape rather than how much
+has been built, so an empty factory costs what a full one costs. And items
+move by scatter-gather: the sending side works out what it would push, the
+receiving side reaches back and recomputes the same decision from its own
+point of view, and neither writes into the other's slot.
 """
 
 import jax.numpy as jnp
@@ -15,24 +50,24 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.tables import MACHINE_MAX_STACK
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import (
     BLOCK_TO_ITEM_ARRAY,
     CROSSING_AXIS_DIRS,
     CROSSING_HORIZ_SLOT,
     CROSSING_VERT_SLOT,
+    MACHINE_MAX_STACK,
     SPLITTER_PERP_OUTPUTS,
 )
 
+# Row and column step per ``Direction`` value, so ``_DY[d], _DX[d]`` moves one
+# tile in direction ``d``. Index 0 is the unset direction and stays put.
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
 _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
 
-# Miner output slot holds at most one mining cycle's worth. Combined
-# with ``miner_mining_rate`` this means a miner tops up in one tick
-# and idles until something (arm, belt, player) drains it — matching
-# the "no buffering in output slots" rule. Pallets remain the only
-# large-capacity storage.
+#: Items a miner's output slot holds. At the default ``miner_mining_rate`` a
+#: miner fills this in one step and then idles until an arm, a belt, or a
+#: player drains it. Pallets stay the only large storage.
 MINER_OUTPUT_CAP: int = 3
 
 
@@ -42,31 +77,35 @@ def _subtract_buffer(
     buf_count: jnp.ndarray,
     amt: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Subtract amt from buf_count where cond, clear buf_type when count hits 0.
+    """Take ``amt`` items out of a buffer slot wherever ``cond`` holds.
+
+    Every transfer in this module has a side that pays, and this is it. What
+    makes it worth sharing is the item type. A slot that reaches zero has to
+    forget what it held, because the rest of the engine reads a cleared type
+    as "free to accept anything". Drop a count without that step and the slot
+    still looks committed to an item it no longer has.
+
+    Elementwise over entity slots, and nothing is clamped. Subtracting more
+    than a slot holds leaves a negative count and a stale type, so every
+    caller passes an ``amt`` already capped by the source count.
 
     Parameters
     ----------
-    cond : jnp.ndarray :
-
-    buf_type : jnp.ndarray :
-
-    buf_count : jnp.ndarray :
-
-    amt : jnp.ndarray :
-
-    cond: jnp.ndarray :
-
-    buf_type: jnp.ndarray :
-
-    buf_count: jnp.ndarray :
-
-    amt: jnp.ndarray :
-
+    cond
+        Which slots to subtract from. Shape ``(E,)``, bool.
+    buf_type
+        Item id held per slot. Shape ``(E,)``, int8.
+    buf_count
+        Items held per slot. Shape ``(E,)``, int16.
+    amt
+        Amount to remove per slot. Shape ``(E,)``, int16. Read only where
+        ``cond`` holds.
 
     Returns
     -------
-
-
+    tuple of jnp.ndarray
+        The updated ``(buf_type, buf_count)`` pair. Slots outside ``cond``
+        come back untouched.
     """
     new_c = jnp.where(cond, buf_count - amt, buf_count)
     return jnp.where(cond & (new_c == 0), jnp.int8(0), buf_type), new_c
@@ -84,50 +123,55 @@ def _lookup_neighbor(
 ) -> tuple[
     jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray
 ]:
-    """Look up the neighbor at (ey+dy, ex+dx), clipped to grid bounds.
+    """Find the entity one tile away in a fixed direction, for every entity.
 
-    Returns (ny, nx, eidx, valid, diff, safe) where valid = eidx >= 0,
-    diff = clipped position differs from (ey, ex), safe = eidx clipped to [0, n].
+    Every pass here needs to know who is standing next door. This answers that
+    for all entities at once, and hands back the flags a caller needs to tell
+    a real neighbour from an artefact of having asked.
+
+    The artefacts come from asking on behalf of every slot. Some of those
+    entities sit on an edge of the map, and some hold no machine at all.
+    Neither can be turned away with a branch, so both get an answer and a flag
+    instead.
+
+    A tile past the edge is clipped back on, which makes an edge entity look
+    up itself. ``diff`` is False in exactly that case, and callers put it in
+    their transfer mask so an edge machine does not push into its own slot.
+    ``safe`` is the entity index clipped into range for the same reason: a
+    caller gathers with it unconditionally and drops what it read afterwards.
 
     Parameters
     ----------
-    ey : jnp.ndarray :
-
-    ex : jnp.ndarray :
-
-    dy : int :
-
-    dx : int :
-
-    h : int :
-
-    w : int :
-
-    tile_entity : jnp.ndarray :
-
-    n : int :
-
-    ey: jnp.ndarray :
-
-    ex: jnp.ndarray :
-
-    dy: int :
-
-    dx: int :
-
-    h: int :
-
-    w: int :
-
-    tile_entity: jnp.ndarray :
-
-    n: int :
-
+    ey
+        Row of every entity, already clipped to the map. Shape ``(E,)``.
+    ex
+        Column of every entity, already clipped to the map. Shape ``(E,)``.
+    dy
+        Row offset to step, a Python int so the caller's direction loop
+        unrolls at trace time.
+    dx
+        Column offset to step.
+    h
+        Map height in tiles.
+    w
+        Map width in tiles.
+    tile_entity
+        ``state.tile_entity``: entity id per tile, ``-1`` where the tile
+        holds no machine. Shape ``(H, W)``.
+    n
+        Highest entity index that exists, used as the clip bound for the
+        gather index. Callers pass ``E - 1``.
 
     Returns
     -------
-
-
+    tuple of jnp.ndarray
+        ``(ny, nx, eidx, valid, diff, safe)``, each shaped like ``ey``.
+        ``ny`` and ``nx`` are the clipped neighbour tile. ``eidx`` is the
+        entity standing there, ``-1`` for an empty tile. ``valid`` is
+        ``eidx >= 0``. ``diff`` is False when the clip folded the neighbour
+        back onto ``(ey, ex)``. ``safe`` is ``eidx`` clipped into ``[0, n]``
+        so a gather stays in bounds; what it reads means nothing unless
+        ``valid`` and ``diff`` both hold.
     """
     ny = jnp.clip(ey + dy, 0, h - 1)
     nx = jnp.clip(ex + dx, 0, w - 1)
@@ -139,27 +183,34 @@ def update_all_machines(
     state: EnvState,
     params: EnvParams,
 ) -> EnvState:
-    """Update all machines for one step.
+    """Run every machine on the map for one step.
+
+    This is the entry point a step calls. It runs the four passes in one
+    fixed order: miners, then assemblers and furnaces, then the belt network,
+    then arms.
+
+    The order sets how far an item can travel in a single step. Ore a miner
+    pushes into a pallet can be lifted back out by an arm in that same step,
+    because arms run last. An item an arm drops onto a belt waits for the next
+    step, because the belt pass has already gone by. Reordering the calls
+    changes throughput, so the order is part of the contract rather than an
+    implementation detail.
+
+    Science labs are not driven here. ``factoriax.engine.step.run_labs``
+    drains their input slots as a separate part of the full step.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    state : EnvState :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    params: EnvParams :
-
+    state
+        State to advance.
+    params
+        Supplies ``miner_mining_rate`` and ``recipe_table``.
 
     Returns
     -------
-
-
+    EnvState
+        New state with the entity arrays, ``map``, ``block_resources``, and
+        ``items_mined`` advanced by one step.
     """
     state = run_miners(state, params)
     state = run_assemblers(state, params)
@@ -172,40 +223,45 @@ def run_miners(
     state: EnvState,
     params: EnvParams,
 ) -> EnvState:
-    """Extract ore from the tile a miner is standing on.
+    """Extract ore under every miner and push the result one tile forward.
 
-    Miners mine the tile **directly underneath them** — they read
-    ``state.block_resources`` at their own ``(ent_y, ent_x)``, never
-    at an adjacent tile. To start a node, place the miner ON an
-    ore-patch tile (typically the south-edge tile, with its facing
-    direction pointing at an adjacent pallet to receive the push).
+    Mining is where items enter the world. Everything downstream of a miner
+    is a rearrangement of what miners produce.
 
-    Per tick, the miner extracts ``params.miner_mining_rate`` ore,
-    capped by the tile's remaining ``block_resources`` and the
-    miner's ``MINER_OUTPUT_CAP`` buffer slot. The miner stops once
-    its tile is depleted, even if other tiles of the same patch
-    still hold ore — covering a full patch needs one miner per
-    tile, or moving the miner.
+    A miner works the tile it stands on, not one beside it. Place it on the
+    ore patch, facing whatever should receive the output. Each step it takes
+    ``params.miner_mining_rate`` ore and pushes its buffer into the machine
+    in front, so a working miner is two decisions: where it stands and which
+    way it looks.
+
+    Three limits apply to the amount. What the tile still holds, the free
+    space in the miner's own output slot, and the room left in the machine it
+    faces. The output slot is small, :data:`MINER_OUTPUT_CAP`, so a miner that
+    nothing drains fills up and idles rather than stockpiling.
+
+    A tile that runs out turns to ``BlockType.DIRT`` and that miner stops,
+    even when other tiles of the same patch still hold ore. Working a whole
+    patch takes one miner per tile.
+
+    The push needs a real machine in front, of a kind that can hold items and
+    holding either nothing or the same item already. A miner facing open
+    ground, or facing something with no room, keeps its ore and stalls. It
+    pushes in no direction but the one it faces.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    state : EnvState :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    params: EnvParams :
-
+    state
+        State to read.
+    params
+        Supplies ``miner_mining_rate``.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``map``, ``block_resources``, ``ent_buf_type``,
+        ``ent_buf_count``, and ``items_mined`` updated. ``items_mined``
+        counts coal, iron ore, copper ore, tin ore, and silicon only; ore of
+        any other item id is still mined and buffered but never tallied.
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -230,9 +286,8 @@ def run_miners(
         jnp.int16(0),
     )
     mine_amt = jnp.minimum(mine_amt, resources)
-    # Buf-space clamp: only meaningful for miners (non-miners have
-    # mine_amt=0 already, and their buf may legitimately exceed
-    # MINER_OUTPUT_CAP — e.g. pallets go up to 1000).
+    # Clamp to free output space, miners only. Other kinds already have
+    # mine_amt=0 and are allowed to hold more than MINER_OUTPUT_CAP.
     slot_left = jnp.where(
         is_miner,
         jnp.int16(MINER_OUTPUT_CAP) - state.ent_buf_count,
@@ -254,8 +309,13 @@ def run_miners(
         jnp.where(mined, -mine_amt, jnp.int16(0)),
     )
     is_depleted = (new_resources[ey, ex] <= 0) & mined
-    new_map = state.map.at[ey, ex].set(
-        jnp.where(is_depleted, jnp.int8(int(BlockType.DIRT)), state.map[ey, ex]),
+    # Add a delta rather than setting the value: free slots all clip to tile
+    # (0, 0) and would put a second, stale write on that index, and duplicate
+    # scatter indices resolve in an unspecified order. Every lane that is not
+    # depleting contributes zero.
+    to_dirt = jnp.int8(int(BlockType.DIRT)) - state.map[ey, ex]
+    new_map = state.map.at[ey, ex].add(
+        jnp.where(is_depleted, to_dirt, jnp.int8(0)),
     )
 
     # Track mined items.
@@ -298,6 +358,7 @@ def run_miners(
             & has_buf
             & dn_valid
             & dn_diff
+            & (dn_max > 0)
             & (dn_empty | (dn_same & (dn_bc < dn_max)))
         )
         xfer = jnp.where(can_push, new_buf_count, jnp.int16(0))
@@ -332,39 +393,49 @@ def run_miners(
 
 
 def run_arms(state: EnvState, params: EnvParams) -> EnvState:
-    """Transfer one item from source (behind) to destination (in front).
+    """Move one item through every arm, from the tile behind to the one ahead.
 
-    Arms perform instant pass-through: no internal buffer. Each tick
-    an arm looks at the entity behind it (opposite of facing), takes
-    one item from it, and deposits it into the entity it faces (if
-    that entity has space).
+    Machines do not reach into each other. An arm is what connects two of
+    them, and it is the only way to unload a machine that does not push on
+    its own, such as an assembler or a pallet.
 
-    The source slot picks ``ent_asm_out`` over ``ent_buf``: when an
-    assembler/furnace finishes a recipe its output sits in
-    ``ent_asm_out``, and an adjacent arm pulls from there to free
-    the slot for the next cycle. Buffer machines (miner, pallet,
-    belt) keep their items in ``ent_buf``, so the same arm can
-    drain those too.
+    An arm bridges the two tiles it sits between. Each step it takes one item
+    off the machine behind it, meaning the tile opposite its facing, and gives
+    that item to the machine in front. One item per arm per step, both ends
+    required: no source, no room in front, and nothing moves.
+
+    Which slot an item comes from depends on the machine behind. A finished
+    craft parks in ``ent_asm_out`` and blocks the next one, so arms drain
+    that slot first and keep an assembler or furnace cycling. Machines that
+    only store, such as miners, pallets, and belts, are drained from
+    ``ent_buf`` instead.
+
+    Which slot it lands in depends on the machine in front. An assembler,
+    furnace, or science lab takes delivery into ``ent_asm_in``, slot 0 when
+    that is empty or already holds the same item, otherwise slot 1. That is
+    the only route into a science lab, since
+    ``factoriax.engine.step.run_labs`` reads nothing else. Everything else
+    receives into ``ent_buf`` up to its ``MACHINE_MAX_STACK``.
+
+    An arm's own ``ent_buf`` plays no part in any of that, but it is not
+    sealed. ``MACHINE_MAX_STACK`` gives an arm room for one item and a belt
+    facing an arm will push into it. No pass takes it back out, so an item
+    parked there stays until a player withdraws it.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    state : EnvState :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    params: EnvParams :
-
+    state
+        State to read.
+    params
+        Unused. Present so every pass in this module takes the same pair and
+        :func:`update_all_machines` can call them in a row.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``ent_buf_type``, ``ent_buf_count``,
+        ``ent_asm_in_type``, ``ent_asm_in_count``, ``ent_asm_out_type``, and
+        ``ent_asm_out_count`` updated.
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -385,8 +456,8 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     buf_count = state.ent_buf_count
     out_type = state.ent_asm_out_type
     out_count = state.ent_asm_out_count
-    # Per-slot scalars for asm_in updates — stack only at function
-    # return so per-iteration jnp.stack allocations don't dominate.
+    # Per-slot scalars for asm_in updates. Stacked once at return so the
+    # direction loop does not allocate a jnp.stack per iteration.
     in_t0 = state.ent_asm_in_type[..., 0]
     in_c0 = state.ent_asm_in_count[..., 0]
     in_t1 = state.ent_asm_in_type[..., 1]
@@ -436,7 +507,9 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         dst_empty = dst_bc == 0
         dst_same = dst_bt == src_bt
         dst_space = dst_bc < dst_max
-        dst_buf_accepts = dst_empty | (dst_same & dst_space)
+        # An empty destination is not automatically a willing one: a machine
+        # whose MACHINE_MAX_STACK is 0 reads as empty and holds nothing.
+        dst_buf_accepts = (dst_max > 0) & (dst_empty | (dst_same & dst_space))
 
         # Combiner-destination receptivity: slot 0 first if empty
         # or matches type, else slot 1.
@@ -452,7 +525,10 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         can_xfer = facing_d & src_has & dst_valid & dst_diff & dst_accepts
 
         # Gather destination side: entity at (ey-dy, ex-dx) = src_* tile.
-        receiving = can_xfer[src_safe] & (src_eidx >= 0) & src_diff
+        # Gate on the receiver being active: free slots all clip to tile
+        # (0, 0), so without this each one would take a copy of a transfer
+        # aimed at (0, 0)'s neighbour and mint an item from nothing.
+        receiving = active & can_xfer[src_safe] & (src_eidx >= 0) & src_diff
         rcv_bt = src_bt[src_safe]
 
         # ent_buf-track: combiners receive into ``ent_asm_in`` instead.
@@ -475,7 +551,9 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
         # Gather source side: entity at (ey+dy, ex+dx) = dst_* tile.
         # Decrement asm_out first if it has stuff; otherwise decrement buf.
-        giving = can_xfer[dst_safe] & (dst_eidx >= 0) & dst_diff
+        # Same active gate, mirrored: an ungated free slot pays for a
+        # transfer it never made and goes negative.
+        giving = active & can_xfer[dst_safe] & (dst_eidx >= 0) & dst_diff
         gave_out = giving & (out_count > 0)
         gave_buf = giving & ~(out_count > 0)
         out_type, out_count = _subtract_buffer(
@@ -496,33 +574,56 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
 
 def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
-    """Run assemblers: pull inputs, craft, push output to buffer.
+    """Advance every assembler and furnace one step: feed, count down, finish.
 
-    Entity-based: iterates over entity slots. Neighbor lookups use
-    ``tile_entity`` grid to find adjacent entities. Recipe identity
-    and balance numbers are read via ``params.recipe_table`` so a
-    tuned :class:`~factoriax.engine.state.EnvParams` re-uses the cached XLA
-    trace (shape stable) but applies the user's balance overlay.
+    This is where one item becomes another. A miner only ever yields what was
+    already in the ground; a recipe run here is the only way to get an item
+    that no tile contains.
+
+    A machine holds two input slots, a countdown, and one output slot. Give it
+    the inputs a recipe wants and it starts, counts down while it works, and
+    parks the result in its output slot. Assemblers and furnaces run this same
+    cycle and differ only in which recipes they accept, which
+    ``params.recipe_table.machine_type`` fixes per recipe.
+
+    Two things decide whether the cycle keeps turning, and both are the
+    caller's problem rather than this function's. Inputs have to arrive, and
+    the output has to leave.
+
+    Inputs arrive one of two ways: an arm delivering into ``ent_asm_in``, or
+    the pull at the start of this pass. The pull takes one item from each
+    adjacent conveyor belt whose facing points at the machine. Only belts feed
+    this way. A pallet, miner, splitter, or arm standing beside a machine is
+    left alone, so storage put down next to an assembler is not quietly
+    drained, and a belt running past sideways is not read as a feed.
+
+    The output never leaves on its own. Nothing in this pass empties
+    ``ent_asm_out``, so a machine that has finished a craft stays stopped
+    until a player, an arm, or a belt takes the result away. That is what
+    makes pallets the only way to buffer a chain.
+
+    The rest is timing. Inputs are consumed when a craft starts, not when it
+    finishes, so a craft cut short by a pickup loses them. The countdown is
+    the recipe's ``ticks``, held in ``ent_power``, and the output appears on
+    the step it reaches 1. A recipe takes one or two inputs, and the two slots
+    are matched in either order, so it does not matter which slot an arm or
+    belt happened to fill.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    state : EnvState :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    params: EnvParams :
-
+    state
+        State to read.
+    params
+        Supplies ``recipe_table``. The recipe count sets the length of an
+        unrolled match loop, so a table of a different size retraces under
+        ``jit`` while a retuned table of the same size does not.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``ent_power``, ``ent_buf_type``, ``ent_buf_count``,
+        ``ent_asm_in_type``, ``ent_asm_in_count``, ``ent_asm_out_type``, and
+        ``ent_asm_out_count`` updated.
     """
     table = params.recipe_table
     h, w = state.map.shape
@@ -546,14 +647,9 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
 
     # --- Phase 0: Directional pull from facing-belt neighbours ---
     #
-    # Combiners pull only from a neighbour that is a CONVEYOR_BELT
-    # whose direction points *at* the machine (``nb_dir ==
-    # opposite(d)``). Pallets, miners, splitters, and arms are
-    # excluded — pallets in particular don't push, so they shouldn't
-    # passively feed adjacent machines (this kills the F+A drain on
-    # incidentally-adjacent ent_buf storage). Belts whose direction
-    # is parallel/perpendicular to the scan are also excluded — only
-    # a belt aimed at the machine counts as a feed.
+    # Only a CONVEYOR_BELT aimed at the machine feeds it. A pallet next door
+    # would otherwise be drained without pushing, and a belt running past
+    # sideways would count as a feed.
     opposite_dir = {1: 2, 2: 1, 3: 4, 4: 3}
     n = buf_type.shape[0] - 1
     for d in range(1, 5):
@@ -581,11 +677,13 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
         in_c1 = jnp.where(tk1, in_c1 + jnp.int16(1), in_c1)
 
         # Gather: each entity checks if a combiner on the opposite
-        # side (direction d) is pulling from it.
+        # side (direction d) is pulling from it. Gate on the payer being
+        # active: free slots all clip to tile (0, 0), so without this each
+        # one pays for a pull aimed at (0, 0)'s neighbour and goes negative.
         _, _, asm_eidx, _, asm_diff, asm_safe = _lookup_neighbor(
             ey, ex, -dy, -dx, h, w, state.tile_entity, n
         )
-        taken = tk[asm_safe] & (asm_eidx >= 0) & asm_diff
+        taken = active & tk[asm_safe] & (asm_eidx >= 0) & asm_diff
         buf_type, buf_count = _subtract_buffer(taken, buf_type, buf_count, jnp.int16(1))
 
     # --- Phase 1: Complete crafts (power == 1) ---
@@ -669,58 +767,62 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
 
 
 def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
-    """Advance the belt network one tick — belts, splitters, crossings.
+    """Advance the belt network one step: belts, splitters, and crossings.
 
-    Three tile types share this pass:
+    Arms move items one tile. Belts are how items cross a map. A chain of them
+    is what connects a mine on one side to an assembler on the other.
 
-    * **CONVEYOR_BELT** — pushes its buffer in the single direction it
-      faces (1 item every tick, capped by destination space).
-    * **SPLITTER** — buffers up to 2 items in ``ent_buf``. When the
-      buffer holds a pair (>= 2), the splitter dispatches one push per
-      perpendicular output side; each push commits independently using
-      the d-loop's standard receptivity check, so a half-blocked
-      splitter still drains 1 to its receptive side instead of
-      stalling on both. With buffer of 1 the splitter holds — the
-      pair-firing semantic keeps the even-split contract honest under
-      symmetric flow, and the in-loop ``has_item`` guard prevents
-      overdraw if the second push would race the first.
-    * **CROSSING** — two independent per-axis flows. Slot
-      ``ent_asm_in[idx, 0]`` is the vertical buffer (UP/DOWN flow),
-      slot ``ent_asm_in[idx, 1]`` is the horizontal buffer (LEFT/RIGHT
-      flow). Streams cannot mix because they live in disjoint slots
-      and each axis only fires in its own direction. A push from a
-      belt or splitter onto a crossing's *output* side is rejected
-      (the crossing has well-defined input and output sides per axis).
-      Per-axis cap is 2 — one cell of slack so a saturated chain
-      fed at one tile per tick can also drain at one tile per tick
-      without a separate look-ahead pass: the gather puts incoming +
-      old (= 2) into the slot, the scatter subtracts the outgoing
-      (= 1), leaving 1 in steady state.
+    Every machine in the network moves items in the direction it faces, one
+    tile per step, and each has room for only a few items. That is what makes
+    a belt line behave like a line: when the far end stops taking items, the
+    tile behind it fills, then the one behind that, and the stall travels
+    backwards to the source.
 
-    Folding all three tile types into a single 4-iteration
-    scatter-gather loop shares the receptivity work (one pass instead
-    of three). The branching per entity is constant-time and remains
-    XLA-friendly because every branch is a ``jnp.where`` over masks.
+    Three kinds share the network, and the difference between them is only
+    what shape of junction they make.
+
+    ``CONVEYOR_BELT``
+        The plain link. Pushes its whole buffer into the tile it faces, as far
+        as the destination has room.
+
+    ``SPLITTER``
+        A fork. Outputs to the two tiles perpendicular to its facing, one item
+        per side. It fires only while holding at least 2, so an even split
+        stays even under steady flow instead of favouring whichever side came
+        first. The two sides commit separately, so a splitter with one blocked
+        side still feeds the other rather than stalling on both.
+
+    ``CROSSING``
+        An overpass. Two streams pass through at right angles and never mix,
+        because each axis has its own buffer and its own direction. A push
+        aimed at the output face of an axis is refused. Each axis holds 2
+        items, one more than it moves per step, so a saturated crossing can
+        still accept and forward in the same step.
+
+    One kind of neighbour refuses delivery. A belt or splitter will not push
+    into an assembler or furnace, which take items only through their own pull
+    or through an arm. A belt line ending at a machine therefore holds its
+    items until the machine reaches out and takes them.
+
+    Under the hood, a crossing stores its two streams in the slot pair a
+    combiner uses for inputs: ``ent_asm_in[:, CROSSING_VERT_SLOT]`` for the
+    vertical stream and ``ent_asm_in[:, CROSSING_HORIZ_SLOT]`` for the
+    horizontal one. Its two axis directions are packed into the single
+    ``ent_direction`` byte and unpacked by ``CROSSING_AXIS_DIRS``.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    state : EnvState :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    params: EnvParams :
-
+    state
+        State to read.
+    params
+        Unused. Present so every pass in this module takes the same pair and
+        :func:`update_all_machines` can call them in a row.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``ent_buf_type``, ``ent_buf_count``,
+        ``ent_asm_in_type``, and ``ent_asm_in_count`` updated.
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -743,9 +845,8 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     # directions this splitter pushes to.
     splitter_outputs = SPLITTER_PERP_OUTPUTS[dir_index]
 
-    # Crossing per-axis output directions — decoded from the packed
-    # ent_direction (1..4 maps the four flow combinations). Indexing
-    # the (5, 2) lookup yields a (N, 2) per-entity table.
+    # Crossing per-axis output directions, unpacked from the single
+    # ent_direction byte. Indexing the (5, 2) lookup gives (N, 2).
     crossing_axes = CROSSING_AXIS_DIRS[dir_index]
     crossing_vert_dir = crossing_axes[:, 0]  # output direction of vertical axis
     crossing_horiz_dir = crossing_axes[:, 1]  # output direction of horizontal axis
@@ -758,17 +859,14 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
     for d in range(1, 5):
         dy, dx = _DY[d], _DX[d]
 
-        # Crossings push: vert axis fires when d == vert_axis_dir; horiz
-        # axis fires when d == horiz_axis_dir. The two axes are
-        # independent — a single crossing can fire in two iterations
-        # (one per axis), but never twice in the same iteration.
-        # ``axis`` is the slot that this iteration's crossing pushes
-        # *and receives* read/write from.
-        if d in (3, 4):  # UP, DOWN — vertical axis
+        # One crossing axis fires per iteration, the one whose output
+        # direction is d. ``axis`` is the slot it both pushes from and
+        # receives into.
+        if d in (3, 4):  # UP, DOWN: vertical axis
             axis = CROSSING_VERT_SLOT
             crossing_pusher_d = is_crossing & (crossing_vert_dir == d)
             crossing_dst_axis_dir = crossing_vert_dir  # used dest-side
-        else:  # LEFT, RIGHT — horizontal axis
+        else:  # LEFT, RIGHT: horizontal axis
             axis = CROSSING_HORIZ_SLOT
             crossing_pusher_d = is_crossing & (crossing_horiz_dir == d)
             crossing_dst_axis_dir = crossing_horiz_dir
@@ -797,19 +895,12 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         )
         dn_type = state.ent_type[dn_safe]
         dn_is_crossing = dn_type == Machine.CROSSING
-        # Reject pushes into combiner destinations. Combiners receive
-        # inputs only via Phase 0's directional pull (from facing
-        # belts) or via an arm pushing into ``ent_asm_in`` — never via
-        # a belt's blind push into ``ent_buf`` (where items would
-        # accumulate uncontrolled). Belts whose terminus faces a
-        # combiner back-pressure: items hold on the belt and Phase 0
-        # picks them up next tick.
+        # Refuse pushes into a combiner. It takes items through its own pull
+        # or through an arm, so a belt aimed at one backs up instead.
         dn_is_combiner = (dn_type == Machine.ASSEMBLER) | (dn_type == Machine.FURNACE)
-        # Crossing destination only accepts pushes that align with the
-        # *input direction* for the relevant axis. The input direction is
-        # the same as the axis output direction (a flow N→S takes inputs
-        # from the N side and outputs to the S side; a belt pushing DOWN
-        # is correctly entering the N face).
+        # A crossing accepts only on the input face of the axis, which is the
+        # face opposite its output: a belt pushing DOWN enters a downward
+        # axis from the north.
         dn_axis_dir = crossing_dst_axis_dir[dn_safe]
         crossing_accepts_d = dn_is_crossing & (dn_axis_dir == d)
 
@@ -840,6 +931,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
             & dn_diff
             & dn_accepts
             & ~dn_is_combiner
+            & (dn_max > 0)
             & (dn_empty | (dn_same & dn_space))
         )
 
@@ -867,11 +959,8 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         in_type = src_type[up_safe]
         in_xfer = xfer[up_safe]
 
-        # Buf-track gather: receivers that are not crossings.
-        # Combiner receivers are unreachable here because can_push
-        # already excluded ``dn_is_combiner`` — combiners are fed only
-        # by Phase 0's directional pull and by arms pushing into
-        # ``ent_asm_in`` (see ``run_arms``).
+        # Buf-track gather: receivers that are not crossings. A combiner
+        # cannot appear here, can_push already excluded it.
         receives_buf = incoming & ~is_crossing
         buf_type = jnp.where(receives_buf, in_type, buf_type)
         buf_count = jnp.where(receives_buf, buf_count + in_xfer, buf_count)
@@ -884,10 +973,9 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
             receives_axis, axis_slot_count + in_xfer, axis_slot_count
         )
 
-        # Scatter (subtract from source). The post-gather buf/axis values
-        # are what we subtract from — same chain semantics as the
-        # original belt loop (an entity that both received and pushed
-        # in the same iteration ends with old + in_xfer - xfer).
+        # Scatter, subtracting from the post-gather values so an entity that
+        # received and pushed in the same iteration ends at
+        # old + in_xfer - xfer.
         buf_type, buf_count = _subtract_buffer(
             can_push & is_buf_pusher, buf_type, buf_count, xfer
         )
