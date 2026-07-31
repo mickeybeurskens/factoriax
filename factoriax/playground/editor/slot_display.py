@@ -1,13 +1,16 @@
-"""Machine inventory slot layout and role badges for the editor.
+"""The slot layout that the editor draws for each machine.
 
-Declares how many inventory slots the editor shows per machine kind, what role
-each slot has, and the badge label and colour drawn for a role.
+The module gives the number of slots for each machine kind. It also gives the
+part that each slot has in the recipe, with the label and the color of the
+badge for that part.
 
-None of this reaches the simulation. A level file stores machine contents as an
-item-indexed pouch, so slots are an editor view that
-:mod:`factoriax.playground.editor.state` converts to on load and back from on
-save. :mod:`factoriax.engine.levels` packs the pouch into engine arrays with its
-own per-machine rules and never reads the layout here. Role semantics live with
+None of this reaches the simulation. A level records the contents of a machine
+by item, and records no slot. A slot is therefore a view that the editor
+draws, and :mod:`factoriax.playground.editor.state` builds that view from the
+items.
+
+:mod:`factoriax.engine.levels` gives each item a slot by its own rules, and
+never reads the layout here. The meaning of each part is with
 :class:`~factoriax.engine.constants.SlotRole`.
 """
 

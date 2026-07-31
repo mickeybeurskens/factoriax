@@ -17,8 +17,8 @@ from factoriax.engine.constants import (
     Machine,
     SlotRole,
 )
-from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
 from factoriax.engine.tables import MACHINE_TO_ITEM_ARRAY
+from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
 from factoriax.playground.ui.fonts import get_pixel_font
 from factoriax.playground.ui.icons import (
     create_player_start_icon,
@@ -92,7 +92,6 @@ def _render_text(
 
     Returns
     -------
-
         RGB uint8 array of shape ``(H, W, 3)``.
 
     """
@@ -114,7 +113,6 @@ def render_menu_bar(
 
     Returns
     -------
-
         ``(image, regions)`` where *image* is RGB shape
         ``(MENU_BAR_HEIGHT, width, 3)`` and *regions* contains
         click regions for each button.
@@ -205,7 +203,6 @@ def render_toolbar(
 
     Returns
     -------
-
         ``(image, regions)`` where *image* is RGB shape
         ``(height, TOOLBAR_WIDTH, 3)``.
 
@@ -467,7 +464,6 @@ def render_status_bar(
 
     Returns
     -------
-
         RGB uint8 array of shape ``(STATUS_BAR_HEIGHT, width, 3)``.
 
     """
@@ -522,42 +518,24 @@ def _draw_border(
     h: int,
     color: tuple[int, int, int],
 ) -> None:
-    """Draw a 1px border around a rectangle on an RGB image.
+    """Draw a border one pixel wide around a rectangle.
+
+    The function draws the part of the border that falls on the image.
 
     Parameters
     ----------
-    img :
-        RGB image (mutated in place).
-    x :
-        Left column.
-    y :
-        Top row.
-    w :
-        Width.
-    h :
-        Height.
-    color :
-        RGB border colour.
-    img: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    w: int :
-
-    h: int :
-
-    color: tuple[int :
-
-    int :
-
-    int] :
-
-
-    Returns
-    -------
-
+    img
+        Destination RGB image. The function writes to it.
+    x
+        Left column of the rectangle.
+    y
+        Top row of the rectangle.
+    w
+        Width of the rectangle in pixels.
+    h
+        Height of the rectangle in pixels.
+    color
+        Border color, as red, green, and blue.
     """
     ih, iw = img.shape[:2]
     x0 = max(0, x)
@@ -573,30 +551,21 @@ def _draw_border(
 
 
 def _blit_rgb(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
-    """Copy an RGB patch onto *dst* with clipping.
+    """Copy one RGB image onto another.
+
+    The function copies the part of the source that falls on the destination.
+    A source fully outside the destination has no effect.
 
     Parameters
     ----------
-    dst :
-        Destination RGB array (mutated in place).
-    src :
+    dst
+        Destination RGB array. The function writes to it.
+    src
         Source RGB array.
-    y :
-        Top row.
-    x :
-        Left column.
-    dst: np.ndarray :
-
-    src: np.ndarray :
-
-    y: int :
-
-    x: int :
-
-
-    Returns
-    -------
-
+    y
+        Top row in the destination.
+    x
+        Left column in the destination.
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -614,33 +583,22 @@ def _blit_rgb(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
 
 
 def _blit_rgba(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
-    """Composite an RGBA patch onto an RGB *dst* using alpha blending.
+    """Draw an RGBA image on an RGB image, and mix the two by the alpha.
 
-    Pixels with zero alpha leave the destination unchanged. Fully opaque
-    pixels overwrite directly.
+    A pixel with an alpha of 0 leaves the destination unchanged. A pixel with
+    a full alpha replaces the destination. The function draws the part of the
+    source that falls on the destination.
 
     Parameters
     ----------
-    dst :
-        Destination RGB array (mutated in place).
-    src :
+    dst
+        Destination RGB array. The function writes to it.
+    src
         Source RGBA array.
-    y :
-        Top row.
-    x :
-        Left column.
-    dst: np.ndarray :
-
-    src: np.ndarray :
-
-    y: int :
-
-    x: int :
-
-
-    Returns
-    -------
-
+    y
+        Top row in the destination.
+    x
+        Left column in the destination.
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -676,17 +634,14 @@ _PALETTE_BG = (35, 35, 40)
 
 
 def get_palette_items_for_player() -> list[tuple[int, str]]:
-    """Return all non-empty items for the player inventory palette.
-
-    Parameters
-    ----------
+    """Return every item that a player inventory slot can hold.
 
     Returns
     -------
-    type
-        List of ``(item_type_int, display_name)`` pairs, one per
-        ``ItemType`` member excluding ``EMPTY``.
-
+    list[tuple[int, str]]
+        One ``(item, name)`` pair for each
+        :class:`~factoriax.engine.constants.ItemType` member, without
+        ``EMPTY``.
     """
     return [
         (int(it), _ITEM_DISPLAY_NAMES[int(it)])
@@ -699,30 +654,24 @@ def get_palette_items_for_machine_slot(
     machine_type: int,
     slot_idx: int,
 ) -> list[tuple[int, str]]:
-    """Return items valid for a specific machine slot role.
+    """Return every item that one slot of a machine can hold.
 
-    If the slot has role ``NONE`` the list is empty, meaning no items
-    can be placed there.  All other roles (INPUT, OUTPUT, STORAGE)
-    allow every non-empty item type so the editor can pre-fill any
-    value.
+    The part that the slot has in the recipe sets the list. A slot with the
+    ``NONE`` part holds nothing, and gives an empty list. A ``FUEL`` slot
+    holds coal only. Every other part gives each item except ``EMPTY``, so
+    the editor can put any value in the slot.
 
     Parameters
     ----------
-    machine_type :
-        Machine
-    slot_idx :
-        Zero
-    machine_type: int :
-
-    slot_idx: int :
-
+    machine_type
+        :class:`~factoriax.engine.constants.Machine` value of the machine.
+    slot_idx
+        Index of the slot in that machine.
 
     Returns
     -------
-    type
-        List of ``(item_type_int, display_name)`` pairs.  Empty list
-        when the slot role is ``NONE``.
-
+    list[tuple[int, str]]
+        One ``(item, name)`` pair for each item that the slot can hold.
     """
     role = int(MACHINE_SLOT_ROLES[machine_type, slot_idx])
     if role == int(SlotRole.NONE):
@@ -741,40 +690,27 @@ def render_item_palette(
     height: int,
     scroll_offset: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
-    """Render an item palette sidebar for the inventory view mode.
+    """Draw the item palette of the inventory view.
 
-    Each item is drawn as a 22px-tall row with an 18x18 icon on the
-    left and a text label beside it.  A small "Items" header in the
-    accent colour appears above the list.  Rows that fall outside the
-    visible area (after applying *scroll_offset*) are clipped.
+    The palette holds an ``"Items"`` header, and then one row for each item.
+    A row holds the icon of the item and the name. The function draws the part
+    of a row that falls inside the height.
 
     Parameters
     ----------
-    items :
-        ``(ItemType_int, display_name)`` pairs to show.
-    height :
-        Available pixel height for the palette (same as the
-        toolbar content area).
-    scroll_offset :
-        Pixel offset for vertical scrolling when the
-        item list is taller than *height*.
-    items: list[tuple[int :
-
-    str]] :
-
-    height: int :
-
-    scroll_offset: int :
-         (Default value = 0)
+    items
+        ``(item, name)`` pairs to show, in the order to draw them.
+    height
+        Palette height in pixels. It is the height of the toolbar content.
+    scroll_offset
+        Number of pixels to move the list up. If the list is taller than
+        ``height``, this offset selects the part to show.
 
     Returns
     -------
-
-        class:`ClickRegion` per visible item row with
-
-        class:`ClickRegion` per visible item row with
-        ``action="inv_item"`` and ``param=item_type_int``.
-
+    tuple[numpy.ndarray, list[ClickRegion]]
+        The RGB palette, and one click region for each row that it drew. Each
+        region holds the action ``"inv_item"`` and the item as the parameter.
     """
     content_h = max(height, _estimate_content_height(len(items)))
     bar = np.full((content_h, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
@@ -845,7 +781,6 @@ def _estimate_content_height(num_items: int) -> int:
 
     Returns
     -------
-
         Pixel height needed to render the header plus all rows.
 
     """

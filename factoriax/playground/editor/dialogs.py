@@ -1,10 +1,14 @@
-"""Dialogs for the level editor: new-level, file open/save, machine inspector.
+"""The dialogs of the level editor.
 
-The new-level dialog is rendered as an RGBA overlay (similar to the
-game's pause menu).  Save/load write to a ``levels/`` directory,
-avoiding any dependency on tkinter or native OS file pickers.
-The machine inspector dialog lets users edit pre-filled machine
-inventories and assembler recipes.
+There are three dialogs. The new level dialog asks for the size and the name.
+The file dialog opens and saves a level. The machine inspector shows the
+contents of one machine, and lets the user change them.
+
+Each dialog draws an RGBA overlay at the center of the screen, and reads its
+own keyboard events.
+
+The file dialog lists the files of the ``levels/`` directory. It is therefore
+free of tkinter, and free of the file picker of the operating system.
 """
 
 from __future__ import annotations
@@ -43,17 +47,20 @@ _DIALOG_H = 180
 
 @dataclasses.dataclass
 class NewLevelDialog:
-    """In-editor dialog for specifying a new level's dimensions and name.
+    """Dialog that asks for the size and the name of a new level.
 
-    Rendered as an RGBA overlay centred on the screen.  Handles its own
-    keyboard events and returns ``"ok"`` or ``"cancel"`` when done.
+    :meth:`handle_event` returns ``"ok"`` when the user accepts the dialog,
+    and ``"cancel"`` when the user leaves it. It returns ``None`` while the
+    dialog is open.
 
-    Parameters
+    Attributes
     ----------
-
-    Returns
-    -------
-
+    width_text, height_text
+        Size fields, as the text that the user typed.
+    name_text
+        Name field, as the text that the user typed.
+    active_field
+        Index of the field that has the keyboard focus.
     """
 
     width_text: str = "15"
@@ -62,20 +69,18 @@ class NewLevelDialog:
     active_field: int = 0
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
-        """Process a pygame event and return a result if the dialog closes.
+        """Read one event, and report whether the dialog closes.
 
         Parameters
         ----------
-        event :
-            A ``pygame.KEYDOWN`` event.
-        event: pygame.event.Event :
-
+        event
+            Event to read. The dialog reads a ``pygame.KEYDOWN`` event only.
 
         Returns
         -------
-            ``"ok"`` when Enter is pressed, ``"cancel"`` on Escape,
-            or ``None`` if the dialog stays open.
-
+        str or None
+            ``"ok"`` for Enter, and ``"cancel"`` for Escape. It is ``None``
+            while the dialog stays open.
         """
         if event.type != pygame.KEYDOWN:
             return None
@@ -103,18 +108,14 @@ class NewLevelDialog:
             self.name_text = self.name_text[:-1]
 
     def _insert_char(self, ch: str) -> None:
-        """Append a character to the active field.
+        """Add one character to the field that has the focus.
+
+        A size field takes a digit only. The name field takes any character.
 
         Parameters
         ----------
-        ch :
-            Character to insert.
-        ch: str :
-
-
-        Returns
-        -------
-
+        ch
+            Character to add.
         """
         if self.active_field == 0:
             if ch.isdigit():
@@ -190,16 +191,15 @@ class NewLevelDialog:
         return overlay
 
     def get_values(self) -> tuple[int, int, str]:
-        """Parse the dialog fields into typed values.
+        """Return the size and the name that the user typed.
 
-        Parameters
-        ----------
+        An empty field, or a field that holds no number, gives the default
+        value of that field.
 
         Returns
         -------
-            ``(width, height, name)`` with fallback defaults for empty
-            or invalid inputs.
-
+        tuple[int, int, str]
+            Width, height, and name of the new level.
         """
         try:
             w = max(3, int(self.width_text))
@@ -215,17 +215,21 @@ class NewLevelDialog:
 
 @dataclasses.dataclass
 class NumberInputDialog:
-    """Small overlay for typing a single integer value.
+    """Dialog that asks for one number.
 
-    Renders as a compact RGBA overlay centred on the screen.  Accepts
-    digits, backspace, Enter to confirm, and Escape to cancel.
+    The dialog takes a digit and a backspace. Enter accepts the value, and
+    Escape leaves the dialog.
 
-    Parameters
+    Attributes
     ----------
-
-    Returns
-    -------
-
+    label
+        Text that the dialog shows in front of the field.
+    text
+        Field, as the text that the user typed.
+    min_value, max_value
+        Lowest and highest value that :meth:`get_value` returns.
+    default
+        Value that :meth:`get_value` returns for an empty field.
     """
 
     label: str = "Value:"
@@ -263,15 +267,15 @@ class NumberInputDialog:
         return None
 
     def get_value(self) -> int:
-        """Parse the text field into a clamped integer.
+        """Return the number that the user typed.
 
-        Parameters
-        ----------
+        An empty field gives ``default``. A value outside the limits moves to
+        the nearest limit.
 
         Returns
         -------
-            Integer between ``min_value`` and ``max_value``.
-
+        int
+            A value from ``min_value`` to ``max_value``.
         """
         try:
             val = int(self.text)
@@ -349,18 +353,24 @@ _FILE_ROW_BG: tuple[int, int, int, int] = (35, 35, 35, 255)
 
 @dataclasses.dataclass
 class FileDialog:
-    """In-editor dialog for choosing or typing a filename.
+    """Dialog that asks for a file name, to save a level or to open one.
 
-    Works for both save and load. Shows a text field for the filename
-    and a scrollable list of existing ``.json`` files in ``levels/``.
-    Press W/S to navigate the list, Enter to confirm, Escape to cancel.
+    The dialog holds a field for the name, and a list of the ``.json`` files
+    of the ``levels/`` directory. W and S move through the list. Enter accepts
+    the name, and Escape leaves the dialog.
 
-    Parameters
+    Attributes
     ----------
-
-    Returns
-    -------
-
+    mode
+        ``"save"`` or ``"load"``. It sets the title and the button text.
+    filename_text
+        Name field, as the text that the user typed.
+    files
+        Names of the files in the ``levels/`` directory.
+    selected_index
+        Index of the file that the list shows as selected.
+    scroll_offset
+        Number of files that the list moved past the top edge.
     """
 
     mode: str = "save"
@@ -413,16 +423,16 @@ class FileDialog:
         return None
 
     def _move_selection(self, delta: int) -> None:
-        """Move the file list selection by *delta* rows.
+        """Move the selection through the file list.
+
+        The selection stops at the first and the last file. The list then
+        moves, so the selected file stays in view. The name field takes the
+        name of the selected file.
 
         Parameters
         ----------
-        delta: int :
-
-
-        Returns
-        -------
-
+        delta
+            Number of rows to move. A positive value moves down.
         """
         if not self.files:
             return
@@ -436,16 +446,16 @@ class FileDialog:
             self.scroll_offset = new_idx - _FILE_LIST_ROWS + 1
 
     def get_path(self) -> Path | None:
-        """Return the chosen path, or ``None`` for empty input.
+        """Return the path of the file that the user selected.
 
-        Parameters
-        ----------
+        The function adds the ``.json`` suffix to a name without one. If the
+        ``levels/`` directory is absent, the function makes it.
 
         Returns
         -------
-        type
-            :class:`Path` in the levels directory, or ``None``.
-
+        Path or None
+            Path in the ``levels/`` directory. It is ``None`` when the name
+            field is empty.
         """
         name = self.filename_text.strip()
         if not name:
@@ -540,16 +550,13 @@ class FileDialog:
 
 
 def _list_level_files() -> list[str]:
-    """Return sorted list of level filenames (stems) in the levels dir.
-
-    Parameters
-    ----------
+    """Return the name of each level in the ``levels/`` directory.
 
     Returns
     -------
-    type
-        List of filename stems, sorted alphabetically.
-
+    list[str]
+        File name of each level, without the ``.json`` suffix, in alphabetic
+        order. An absent directory gives an empty list.
     """
     if not LEVELS_DIR.is_dir():
         return []
@@ -560,35 +567,26 @@ def _list_level_files() -> list[str]:
 # Item names and valid items per slot role
 # ---------------------------------------------------------------------------
 
-_ITEM_NAMES: dict[int, str] = {
+# Names that differ from the title-cased enum name, because a dialog row is
+# narrow and the full name does not fit.
+_ITEM_NAME_OVERRIDES: dict[int, str] = {
     int(ItemType.EMPTY): "(empty)",
-    int(ItemType.COAL): "Coal",
-    int(ItemType.IRON_ORE): "Iron Ore",
-    int(ItemType.COPPER_ORE): "Copper Ore",
-    int(ItemType.TIN_ORE): "Tin Ore",
-    int(ItemType.SILICON): "Silicon",
-    int(ItemType.IRON_PLATE): "Iron Plate",
-    int(ItemType.COPPER_PLATE): "Copper Plate",
-    int(ItemType.TIN_PLATE): "Tin Plate",
-    int(ItemType.WAFER): "Wafer",
-    int(ItemType.FRAME): "Frame",
-    int(ItemType.CIRCUIT): "Circuit",
-    int(ItemType.WIRE): "Wire",
-    int(ItemType.MOTOR): "Motor",
-    int(ItemType.SENSOR): "Sensor",
-    int(ItemType.MINER): "Miner",
-    int(ItemType.PALLET): "Pallet",
     int(ItemType.CONVEYOR_BELT): "Belt",
-    int(ItemType.ASSEMBLER): "Assembler",
-    int(ItemType.ROCKET): "Rocket",
     int(ItemType.TIER1_SCIENCE_PACK): "T1 Sci",
     int(ItemType.TIER2_SCIENCE_PACK): "T2 Sci",
     int(ItemType.TIER3_SCIENCE_PACK): "T3 Sci",
 }
 
-# Items valid for each slot role. INPUT and STORAGE accept raw materials
-# and intermediates; OUTPUT is set by machine logic so we allow the same
-# items for editor pre-fill.
+#: Name that a dialog shows for each item. The enum supplies the entries, so a
+#: new item gets a name with no edit here.
+_ITEM_NAMES: dict[int, str] = {
+    int(it): _ITEM_NAME_OVERRIDES.get(int(it), it.name.replace("_", " ").title())
+    for it in ItemType
+}
+
+# Items that each slot can hold. A machine writes its own output, so the
+# editor offers the same items for every part, and lets the user fill any of
+# them.
 _ALL_ITEMS: list[int] = [int(it) for it in ItemType if it != ItemType.EMPTY]
 
 
@@ -627,18 +625,35 @@ _INSP_PICKER_ITEM_H = 18
 
 @dataclasses.dataclass
 class MachineInspectorDialog:
-    """Editor dialog for inspecting and editing machine inventory contents.
+    """Dialog that shows the contents of one machine, and edits them.
 
-    Shows each slot with its role badge, current item, and count. Users
-    navigate with A/D to select slots, and click or press Enter to open an
-    item picker and type a count.
+    The dialog holds one row for each slot. A row gives the part that the slot
+    has in the recipe, the item, and the count. A and D move through the rows.
+    Enter opens a picker for the item, and then takes a count.
 
-    Parameters
+    The dialog edits its own copy of the rows. When the dialog closes,
+    ``factoriax.playground.editor.main`` writes that copy back. The dialog
+    therefore does not reach into the editor state.
+
+    Attributes
     ----------
-
-    Returns
-    -------
-
+    tile_x, tile_y
+        Tile of the machine.
+    machine_type
+        :class:`~factoriax.engine.constants.Machine` value of the machine.
+    inv_items, inv_counts
+        Item and count of each row.
+    focused_slot
+        Index of the row that A and D move.
+    editing_slot
+        Index of the row that the picker is open for. It is -1 while the
+        picker is closed.
+    editing_count
+        ``True`` while the dialog takes a count for ``editing_slot``.
+    count_text
+        Count field, as the text that the user typed.
+    picker_scroll
+        Number of items that the picker moved past its top edge.
     """
 
     tile_x: int
@@ -897,26 +912,19 @@ class MachineInspectorDialog:
     def _render_item_picker(
         self, overlay: np.ndarray, base_w: int, base_h: int
     ) -> None:
-        """Render the item type picker sub-dialog.
+        """Draw the item picker over the dialog.
+
+        The picker lists the items that the focused slot can hold. A slot that
+        holds no item draws no picker.
 
         Parameters
         ----------
-        overlay :
-            RGBA overlay (mutated in place).
-        base_w :
-            Base window width.
-        base_h :
-            Base window height.
-        overlay: np.ndarray :
-
-        base_w: int :
-
-        base_h: int :
-
-
-        Returns
-        -------
-
+        overlay
+            RGBA overlay. The function writes to it.
+        base_w
+            Window width in pixels.
+        base_h
+            Window height in pixels.
         """
         role = int(MACHINE_SLOT_ROLES[self.machine_type, self.editing_slot])
         valid = _valid_items_for_role(role)
@@ -975,26 +983,19 @@ class MachineInspectorDialog:
     def _render_count_editor(
         self, overlay: np.ndarray, base_w: int, base_h: int
     ) -> None:
-        """Render the count entry sub-dialog.
+        """Draw the count field over the dialog.
+
+        The field shows the highest count that the slot holds, so the user can
+        see the limit of the machine.
 
         Parameters
         ----------
-        overlay :
-            RGBA overlay (mutated in place).
-        base_w :
-            Base window width.
-        base_h :
-            Base window height.
-        overlay: np.ndarray :
-
-        base_w: int :
-
-        base_h: int :
-
-
-        Returns
-        -------
-
+        overlay
+            RGBA overlay. The function writes to it.
+        base_w
+            Window width in pixels.
+        base_h
+            Window height in pixels.
         """
         font = get_pixel_font(14)
         small = get_pixel_font(10)
@@ -1147,30 +1148,21 @@ def _render_text_rgba(
 
 
 def _blit_rgba(overlay: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
-    """Alpha-composite *src* onto *overlay* with clipping.
+    """Draw one RGBA image on another, and mix the two by the alpha channel.
+
+    The function draws the part of the source that falls on the destination.
+    A source fully outside the destination has no effect.
 
     Parameters
     ----------
-    overlay :
-        Destination RGBA array (mutated in place).
-    src :
+    overlay
+        Destination RGBA array. The function writes to it.
+    src
         Source RGBA array.
-    y :
-        Top row.
-    x :
-        Left column.
-    overlay: np.ndarray :
-
-    src: np.ndarray :
-
-    y: int :
-
-    x: int :
-
-
-    Returns
-    -------
-
+    y
+        Top row in the destination.
+    x
+        Left column in the destination.
     """
     oh, ow = overlay.shape[:2]
     sh, sw = src.shape[:2]

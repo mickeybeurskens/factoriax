@@ -1,12 +1,12 @@
-"""Viewport and tile rendering for the level editor canvas.
+"""The camera and the tile drawing of the editor canvas.
 
-Renders only the visible slice of the map. Block and machine sprites
-come from the same sprite atlas the JAX renderer reads, so the editor
-canvas is pixel-identical to the play view down to the swapped art on
-``factoriax/assets/atlas.png``. Per-cell helpers in
-:mod:`factoriax.engine.renderer` (``block_textures_rgba``,
-``machine_icon_rgba``) provide RGBA numpy arrays at the requested
-tile size.
+The canvas draws the part of the map that the camera shows, and no more.
+
+The blocks and the machines come from the sprite atlas that the JAX renderer
+reads. The canvas is therefore the same image as the play view, down to new
+art in ``factoriax/assets/atlas.png``. ``block_textures_rgba`` and
+``machine_icon_rgba`` in :mod:`factoriax.engine.renderer` give the RGBA arrays
+at the tile size that the camera holds.
 """
 
 from __future__ import annotations
@@ -35,7 +35,19 @@ _SELECT_COLOR = (100, 200, 255, 100)
 
 @dataclasses.dataclass
 class Viewport:
-    """Camera state for the scrollable/zoomable canvas."""
+    """Position and zoom of the editor camera.
+
+    Attributes
+    ----------
+    camera_x, camera_y
+        Tile at the top left corner of the canvas. The value is a float, so
+        the camera can stop between two tiles.
+    tile_size
+        Width and height of one tile in pixels. It is a member of
+        :data:`TILE_SIZES`.
+    canvas_w, canvas_h
+        Width and height of the canvas in pixels.
+    """
 
     camera_x: float = 0.0
     camera_y: float = 0.0
@@ -45,28 +57,21 @@ class Viewport:
 
 
 def screen_to_tile(vp: Viewport, sx: int, sy: int) -> tuple[int, int]:
-    """Convert canvas-relative pixel coordinates to tile coordinates.
+    """Return the tile at one pixel of the canvas.
 
     Parameters
     ----------
-    vp :
-        Current viewport state.
-    sx :
-        X pixel offset from the canvas left edge.
-    sy :
-        Y pixel offset from the canvas top edge.
-    vp: Viewport :
-
-    sx: int :
-
-    sy: int :
-
+    vp
+        Camera to read.
+    sx
+        Pixel offset from the left edge of the canvas.
+    sy
+        Pixel offset from the top edge of the canvas.
 
     Returns
     -------
-
-        ``(tile_x, tile_y)`` integer tile coordinates.
-
+    tuple[int, int]
+        Column and row of the tile. The tile can be outside the map.
     """
     tx = int(vp.camera_x + sx / vp.tile_size)
     ty = int(vp.camera_y + sy / vp.tile_size)
@@ -74,28 +79,22 @@ def screen_to_tile(vp: Viewport, sx: int, sy: int) -> tuple[int, int]:
 
 
 def tile_to_screen(vp: Viewport, tx: int, ty: int) -> tuple[int, int]:
-    """Convert tile coordinates to canvas-relative pixel coordinates.
+    """Return the pixel at the top left corner of one tile.
 
     Parameters
     ----------
-    vp :
-        Current viewport state.
-    tx :
+    vp
+        Camera to read.
+    tx
         Tile column.
-    ty :
+    ty
         Tile row.
-    vp: Viewport :
-
-    tx: int :
-
-    ty: int :
-
 
     Returns
     -------
-
-        ``(px, py)`` pixel offset from the canvas top-left.
-
+    tuple[int, int]
+        Pixel offset from the top left corner of the canvas. The pixel can be
+        outside the canvas.
     """
     px = int((tx - vp.camera_x) * vp.tile_size)
     py = int((ty - vp.camera_y) * vp.tile_size)
@@ -103,26 +102,19 @@ def tile_to_screen(vp: Viewport, tx: int, ty: int) -> tuple[int, int]:
 
 
 def clamp_camera(vp: Viewport, map_w: int, map_h: int) -> None:
-    """Clamp camera so visible area stays within map bounds.
+    """Move the camera back until it shows the map only.
+
+    If the map is smaller than the canvas, the camera stops at the top left
+    corner of the map.
 
     Parameters
     ----------
-    vp :
-        Viewport (mutated in place).
-    map_w :
+    vp
+        Camera. The function writes to it.
+    map_w
         Map width in tiles.
-    map_h :
+    map_h
         Map height in tiles.
-    vp: Viewport :
-
-    map_w: int :
-
-    map_h: int :
-
-
-    Returns
-    -------
-
     """
     max_x = max(0.0, map_w - vp.canvas_w / vp.tile_size)
     max_y = max(0.0, map_h - vp.canvas_h / vp.tile_size)
@@ -131,34 +123,23 @@ def clamp_camera(vp: Viewport, map_w: int, map_h: int) -> None:
 
 
 def pan(vp: Viewport, dx: float, dy: float, map_w: int, map_h: int) -> None:
-    """Pan the camera by a tile-space offset, clamped to map bounds.
+    """Move the camera across the map.
+
+    The function then calls :func:`clamp_camera`, so the camera shows the map
+    only.
 
     Parameters
     ----------
-    vp :
-        Viewport (mutated in place).
-    dx :
-        Horizontal offset in tiles (positive = right).
-    dy :
-        Vertical offset in tiles (positive = down).
-    map_w :
+    vp
+        Camera. The function writes to it.
+    dx
+        Distance to move in tiles. A positive value moves right.
+    dy
+        Distance to move in tiles. A positive value moves down.
+    map_w
         Map width in tiles.
-    map_h :
+    map_h
         Map height in tiles.
-    vp: Viewport :
-
-    dx: float :
-
-    dy: float :
-
-    map_w: int :
-
-    map_h: int :
-
-
-    Returns
-    -------
-
     """
     vp.camera_x += dx
     vp.camera_y += dy
@@ -173,40 +154,25 @@ def zoom(
     map_w: int,
     map_h: int,
 ) -> None:
-    """Zoom in or out, keeping the tile under the mouse fixed.
+    """Change the tile size, and hold the tile under the mouse in place.
 
-    Cycles through :data:`TILE_SIZES` in the given direction.
+    The function moves one step along :data:`TILE_SIZES`. At the first or the
+    last size, a step past the end has no effect.
 
     Parameters
     ----------
-    vp :
-        Viewport (mutated in place).
-    direction :
-        ``+1`` to zoom in, ``-1`` to zoom out.
-    mouse_sx :
-        Mouse x relative to canvas left edge.
-    mouse_sy :
-        Mouse y relative to canvas top edge.
-    map_w :
+    vp
+        Camera. The function writes to it.
+    direction
+        ``+1`` makes the tiles larger. ``-1`` makes them smaller.
+    mouse_sx
+        Mouse offset from the left edge of the canvas.
+    mouse_sy
+        Mouse offset from the top edge of the canvas.
+    map_w
         Map width in tiles.
-    map_h :
+    map_h
         Map height in tiles.
-    vp: Viewport :
-
-    direction: int :
-
-    mouse_sx: int :
-
-    mouse_sy: int :
-
-    map_w: int :
-
-    map_h: int :
-
-
-    Returns
-    -------
-
     """
     idx = TILE_SIZES.index(vp.tile_size) if vp.tile_size in TILE_SIZES else 2
     new_idx = max(0, min(len(TILE_SIZES) - 1, idx + direction))
@@ -230,46 +196,31 @@ def render_canvas(
     selection_rect: tuple[int, int, int, int] | None = None,
     show_resources: bool = False,
 ) -> np.ndarray:
-    """Render the visible canvas area as an RGBA image.
+    """Draw the part of the map that the camera shows.
 
-    Draws terrain tiles via the vectorized texture lookup, overlays
-    machines, grid lines, and cursor / selection highlights.  When
-    *show_resources* is ``True``, the resource count is drawn on each
-    tile that has resources.
+    The function draws the blocks first, and then the machines, the grid
+    lines, the players, and the highlights. A tile with contents in its
+    machine gets a dot at the top right corner.
 
     Parameters
     ----------
-    state :
-        :class:`~factoriax.playground.editor.state.EditorState` instance.
-    vp :
-        Current viewport.
-    cursor_tile :
-        ``(tx, ty)`` of the tile under the mouse, or ``None``.
-    selection_rect :
-        ``(x0, y0, x1, y1)`` tile coordinates of the
-        fill-rect selection, or ``None``.
-    show_resources :
-        Whether to draw resource amounts on tiles.
-    state: object :
-
-    vp: Viewport :
-
-    cursor_tile: tuple[int :
-
-    int] | None :
-         (Default value = None)
-    selection_rect: tuple[int :
-
-    int :
-
-    show_resources: bool :
-         (Default value = False)
+    state
+        :class:`~factoriax.playground.editor.state.EditorState` to read.
+    vp
+        Camera to read.
+    cursor_tile
+        Column and row of the tile under the mouse, or ``None`` when the mouse
+        is off the canvas.
+    selection_rect
+        Corners of the fill rectangle, as ``(x0, y0, x1, y1)`` in tiles. It is
+        ``None`` when the user selects no rectangle.
+    show_resources
+        ``True`` draws the ore amount on each tile that holds ore.
 
     Returns
     -------
-
-        RGBA uint8 array of shape ``(canvas_h, canvas_w, 4)``.
-
+    numpy.ndarray
+        RGBA image of shape ``(canvas_h, canvas_w, 4)``, uint8.
     """
     es: EditorState = state  # type: ignore[assignment]
     canvas = np.zeros((vp.canvas_h, vp.canvas_w, 4), dtype=np.uint8)
@@ -381,18 +332,21 @@ def render_canvas(
 
 @functools.lru_cache(maxsize=72)
 def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
-    """Cached player start icon for the editor canvas.
+    """Return the spawn icon of one player, at one size.
+
+    The cache holds each icon, so a redraw of the canvas builds no icon twice.
 
     Parameters
     ----------
-    player_idx: int :
-
-    size: int :
-
+    player_idx
+        Index of the player. It selects the color of the icon.
+    size
+        Width and height of the icon in pixels.
 
     Returns
     -------
-
+    numpy.ndarray
+        RGBA icon of shape ``(size, size, 4)``, uint8.
     """
     from factoriax.playground.ui.icons import create_player_start_icon
 
@@ -400,29 +354,19 @@ def _cached_player_start_icon(player_idx: int, size: int) -> np.ndarray:
 
 
 def _render_entities(canvas: np.ndarray, es: EditorState, vp: Viewport) -> None:
-    """Draw player start markers on the canvas.
+    """Draw the spawn tile of each player on the canvas.
 
-    they're editor-only spawn-point indicators with no in-game
-    counterpart.
+    A spawn marker belongs to the editor. The engine draws no such marker in
+    the play view.
 
     Parameters
     ----------
-    canvas :
-        RGBA canvas array (mutated in place).
-    es :
-        Current editor state.
-    vp :
-        Current viewport.
-    canvas: np.ndarray :
-
-    es: EditorState :
-
-    vp: Viewport :
-
-
-    Returns
-    -------
-
+    canvas
+        RGBA canvas array. The function writes to it.
+    es
+        Editor state that holds the spawn tiles.
+    vp
+        Camera to read.
     """
     ts = vp.tile_size
     for idx, (px, py) in es.player_positions.items():
@@ -437,38 +381,22 @@ def _highlight_tile(
     ty: int,
     color: tuple[int, int, int, int],
 ) -> None:
-    """Draw a translucent highlight over a single tile.
+    """Draw a color over one tile, and let the tile show through.
+
+    The function draws the part of the tile that falls on the canvas.
 
     Parameters
     ----------
-    canvas :
-        RGBA canvas array (mutated in place).
-    vp :
-        Current viewport.
-    tx :
+    canvas
+        RGBA canvas array. The function writes to it.
+    vp
+        Camera to read.
+    tx
         Tile column.
-    ty :
+    ty
         Tile row.
-    color :
-        RGBA highlight colour.
-    canvas: np.ndarray :
-
-    vp: Viewport :
-
-    tx: int :
-
-    ty: int :
-
-    color: tuple[int :
-
-    int :
-
-    int] :
-
-
-    Returns
-    -------
-
+    color
+        Highlight color, as red, green, blue, and alpha.
     """
     px, py = tile_to_screen(vp, tx, ty)
     ts = vp.tile_size
@@ -489,30 +417,21 @@ def _highlight_tile(
 
 
 def _blit_clipped(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
-    """Copy *src* onto *dst* at ``(y, x)`` with boundary clipping.
+    """Copy one RGBA image onto another.
+
+    The function copies the part of the source that falls on the destination.
+    A source fully outside the destination has no effect.
 
     Parameters
     ----------
-    dst :
-        Destination RGBA array (mutated in place).
-    src :
+    dst
+        Destination RGBA array. The function writes to it.
+    src
         Source RGBA array.
-    y :
-        Top row in destination.
-    x :
-        Left column in destination.
-    dst: np.ndarray :
-
-    src: np.ndarray :
-
-    y: int :
-
-    x: int :
-
-
-    Returns
-    -------
-
+    y
+        Top row in the destination.
+    x
+        Left column in the destination.
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
@@ -556,27 +475,22 @@ def _get_resource_font(tile_size: int) -> pygame.font.Font:
 
 @functools.lru_cache(maxsize=256)
 def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
-    """Render a resource amount as a small RGBA text label.
+    """Draw one ore amount as a small text label.
 
-    Results are cached per ``(font, amount)`` pair so repeated
-    amounts on the same zoom level don't re-render.
+    The cache holds a label for each ``(font, amount)`` pair, so a redraw of
+    the canvas builds the same label once only.
 
     Parameters
     ----------
-    font :
-        Pygame font for rendering.
-    amount :
-        Resource count to display.
-    font: pygame.font.Font :
-
-    amount: int :
-
+    font
+        Font for the text.
+    amount
+        Ore amount to show.
 
     Returns
     -------
-
-        RGBA uint8 array of shape ``(H, W, 4)``.
-
+    numpy.ndarray
+        RGBA label of shape ``(height, width, 4)``, uint8.
     """
     color = (255, 255, 255)
     surface = font.render(str(amount), False, color)
@@ -589,30 +503,21 @@ def _render_resource_label(font: pygame.font.Font, amount: int) -> np.ndarray:
 
 
 def _blit_alpha(dst: np.ndarray, src: np.ndarray, y: int, x: int) -> None:
-    """Alpha-composite *src* onto *dst* with boundary clipping.
+    """Draw one RGBA image on another, and mix the two by the alpha channel.
+
+    The function draws the part of the source that falls on the destination.
+    A source fully outside the destination has no effect.
 
     Parameters
     ----------
-    dst :
-        Destination RGBA array (mutated in place).
-    src :
+    dst
+        Destination RGBA array. The function writes to it.
+    src
         Source RGBA array.
-    y :
-        Top row in destination.
-    x :
-        Left column in destination.
-    dst: np.ndarray :
-
-    src: np.ndarray :
-
-    y: int :
-
-    x: int :
-
-
-    Returns
-    -------
-
+    y
+        Top row in the destination.
+    x
+        Left column in the destination.
     """
     dh, dw = dst.shape[:2]
     sh, sw = src.shape[:2]
