@@ -34,7 +34,6 @@ from factoriax.playground.editor.state import (
     set_machine,
     set_player_position,
     set_tile,
-    swap_inventory_slots,
 )
 
 
@@ -668,8 +667,7 @@ class TestGetInventorySlots:
     def test_machine_inventory(self) -> None:
         state = new_editor_state(5, 5)
         set_machine(state, 2, 2, int(Machine.PALLET), 0)
-        state.machine_inventory_items[2, 2, 0] = int(ItemType.IRON_ORE)
-        state.machine_inventory_counts[2, 2, 0] = 10
+        state.machine_inventory[2, 2, int(ItemType.IRON_ORE)] = 10
         slots = get_inventory_slots(state, ("machine", 2, 2))
         assert slots[0] == (int(ItemType.IRON_ORE), 10)
 
@@ -690,8 +688,7 @@ class TestSetInventorySlot:
         set_machine(state, 1, 1, int(Machine.MINER), 0)
         target: InvTarget = ("machine", 1, 1)
         set_inventory_slot(state, target, 0, int(ItemType.COAL), 5)
-        assert state.machine_inventory_items[1, 1, 0] == int(ItemType.COAL)
-        assert state.machine_inventory_counts[1, 1, 0] == 5
+        assert state.machine_inventory[1, 1, int(ItemType.COAL)] == 5
 
 
 class TestClearInventorySlot:
@@ -704,20 +701,6 @@ class TestClearInventorySlot:
         clear_inventory_slot(state, target, 0)
         slots = get_inventory_slots(state, target)
         assert slots[0] == (int(ItemType.EMPTY), 0)
-
-
-class TestSwapInventorySlots:
-    """Tests for swap_inventory_slots."""
-
-    def test_swap(self) -> None:
-        state = new_editor_state(5, 5)
-        target: InvTarget = ("player", 0, 0)
-        set_inventory_slot(state, target, 0, int(ItemType.COAL), 10)
-        set_inventory_slot(state, target, 1, int(ItemType.IRON_ORE), 20)
-        swap_inventory_slots(state, target, 0, 1)
-        slots = get_inventory_slots(state, target)
-        assert slots[0] == (int(ItemType.IRON_ORE), 20)
-        assert slots[1] == (int(ItemType.COAL), 10)
 
 
 class TestGetNumSlots:

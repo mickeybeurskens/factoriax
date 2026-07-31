@@ -315,8 +315,8 @@ def render_canvas(
         ix = int(px0 + mx * ts + offset)
         _blit_clipped(canvas, icon, iy, ix)
 
-    inv_items = es.machine_inventory_items[row0:row1, col0:col1]
-    has_inv = np.any(inv_items != 0, axis=2)
+    inv_slice = es.machine_inventory[row0:row1, col0:col1]
+    has_inv = np.any(inv_slice != 0, axis=2)
     iys, ixs = np.nonzero(has_inv)
     for iy_np, ix_np in zip(iys, ixs):
         iy = int(iy_np)

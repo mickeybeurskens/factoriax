@@ -164,8 +164,6 @@ class ToolState:
     inventory_mode: bool = False
     inv_target: InvTarget | None = None
     inv_focused_slot: int = 0
-    inv_dragging: bool = False
-    inv_drag_slot: int = -1
 
     @property
     def layer(self) -> str:
@@ -1173,13 +1171,33 @@ def _open_inspector(
         return None
     if editor.machine_types[y, x] == int(Machine.NONE):
         return None
+    # The dialog edits its own copy of the slot view. _commit_inspector writes
+    # it back, so the dialog never reaches into the editor arrays.
+    slots = get_inventory_slots(editor, ("machine", x, y))
     return MachineInspectorDialog(
         tile_x=x,
         tile_y=y,
         machine_type=int(editor.machine_types[y, x]),
-        inv_items=editor.machine_inventory_items[y, x],
-        inv_counts=editor.machine_inventory_counts[y, x],
+        inv_items=np.array([item for item, _ in slots], dtype=np.int32),
+        inv_counts=np.array([count for _, count in slots], dtype=np.int32),
     )
+
+
+def _commit_inspector(editor: EditorState, dialog: MachineInspectorDialog) -> None:
+    """Write the slot rows of a closed inspector back to the editor state.
+
+    Parameters
+    ----------
+    editor
+        Editor state, mutated in place.
+    dialog
+        Inspector that the user just closed.
+    """
+    target = ("machine", dialog.tile_x, dialog.tile_y)
+    for slot, (item, count) in enumerate(
+        zip(dialog.inv_items, dialog.inv_counts, strict=True)
+    ):
+        set_inventory_slot(editor, target, slot, int(item), int(count))
 
 
 def _adjust_resource(brush: ResourceBrush, delta: int, shift: bool) -> None:
@@ -1602,6 +1620,7 @@ def main(screen: pygame.Surface | None = None) -> None:
             if inspector_dialog is not None:
                 result = inspector_dialog.handle_event(event)
                 if result == "close":
+                    _commit_inspector(editor, inspector_dialog)
                     editor.dirty = True
                     inspector_dialog = None
                 continue

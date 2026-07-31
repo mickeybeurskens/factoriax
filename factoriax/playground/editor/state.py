@@ -13,6 +13,7 @@ import numpy as np
 
 from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
+    NUM_ITEM_TYPES,
     BlockType,
     ItemType,
     Machine,
@@ -74,15 +75,16 @@ def sample_resource(brush: ResourceBrush, rng: np.random.Generator) -> int:
 class EditorState:
     """Mutable editor state representing a level being edited.
 
-    All arrays use numpy (never JAX) and are mutated in place for
-    responsiveness.
+    Every field mirrors the field of :class:`~factoriax.engine.levels.Level`
+    that carries the same name, and holds it in the same shape. A conversion
+    therefore copies, and never translates. All arrays use numpy (never JAX)
+    and are mutated in place for responsiveness.
 
-    Parameters
-    ----------
-
-    Returns
-    -------
-
+    ``machine_inventory`` indexes the contents of a machine by item, as the
+    level does, and records no slot. The engine assigns the slots when it
+    builds the state, by the part each item plays in the recipe of that
+    machine. A slot order held here could not survive a save, and would not
+    match the order the engine picks.
     """
 
     name: str
@@ -92,8 +94,7 @@ class EditorState:
     block_resources: np.ndarray
     machine_types: np.ndarray
     machine_directions: np.ndarray
-    machine_inventory_items: np.ndarray
-    machine_inventory_counts: np.ndarray
+    machine_inventory: np.ndarray
     player_inventory: list[tuple[int, int]] | None = None
     player_inventories: dict[int, list[tuple[int, int]]] = dataclasses.field(
         default_factory=dict,
@@ -129,7 +130,6 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
 
     """
     block_map = np.full((height, width), int(BlockType.DIRT), dtype=np.int32)
-    inv_shape = (height, width, MAX_MACHINE_INVENTORY_SLOTS)
     return EditorState(
         name=name,
         map_width=width,
@@ -138,8 +138,7 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
         block_resources=np.zeros((height, width), dtype=np.int32),
         machine_types=np.full((height, width), int(Machine.NONE), dtype=np.int32),
         machine_directions=np.zeros((height, width), dtype=np.int32),
-        machine_inventory_items=np.zeros(inv_shape, dtype=np.int32),
-        machine_inventory_counts=np.zeros(inv_shape, dtype=np.int32),
+        machine_inventory=np.zeros((height, width, NUM_ITEM_TYPES), dtype=np.int32),
     )
 
 
@@ -180,25 +179,14 @@ def editor_state_from_level(level: Level) -> EditorState:
         if level.machine_directions is not None
         else np.zeros((level.map_height, level.map_width), dtype=np.int32)
     )
-    inv_shape = (level.map_height, level.map_width, MAX_MACHINE_INVENTORY_SLOTS)
-    if level.machine_inventory is not None:
-        # Convert pouch (H, W, NUM_ITEM_TYPES) to slot-based for editor.
-        from factoriax.engine.constants import NUM_ITEM_TYPES as _NIT
-
-        pouch = level.machine_inventory
-        inv_items = np.zeros(inv_shape, dtype=np.int32)
-        inv_counts = np.zeros(inv_shape, dtype=np.int32)
-        for y in range(level.map_height):
-            for x in range(level.map_width):
-                slot = 0
-                for it in range(1, _NIT):
-                    if pouch[y, x, it] > 0 and slot < MAX_MACHINE_INVENTORY_SLOTS:
-                        inv_items[y, x, slot] = it
-                        inv_counts[y, x, slot] = int(pouch[y, x, it])
-                        slot += 1
-    else:
-        inv_items = np.zeros(inv_shape, dtype=np.int32)
-        inv_counts = np.zeros(inv_shape, dtype=np.int32)
+    inventory = (
+        level.machine_inventory.copy()
+        if level.machine_inventory is not None
+        else np.zeros(
+            (level.map_height, level.map_width, NUM_ITEM_TYPES),
+            dtype=np.int32,
+        )
+    )
     return EditorState(
         name=level.name,
         map_width=level.map_width,
@@ -207,9 +195,13 @@ def editor_state_from_level(level: Level) -> EditorState:
         block_resources=resources.astype(np.int32),
         machine_types=machines.astype(np.int32),
         machine_directions=directions.astype(np.int32),
-        machine_inventory_items=inv_items.astype(np.int32),
-        machine_inventory_counts=inv_counts.astype(np.int32),
-        player_inventory=level.player_inventory,
+        machine_inventory=inventory.astype(np.int32),
+        # Copy, so an edit in the editor cannot reach back into the level.
+        player_inventory=(
+            list(level.player_inventory)
+            if level.player_inventory is not None
+            else None
+        ),
         player_inventories=(
             {k: list(v) for k, v in level.player_inventories.items()}
             if level.player_inventories
@@ -242,8 +234,12 @@ def editor_state_to_level(state: EditorState) -> Level:
         class:`Level` ready for serialization or ``build_state``.
 
     """
+    # ``None`` tells build_state to fill the ore tiles itself, and zeros tell
+    # it the world starts with nothing. Drop the array only when it already
+    # holds what the default would produce, so a depleted deposit stays
+    # depleted and the saved file still stays compact.
     resources: np.ndarray | None = state.block_resources.copy()
-    if np.all(resources == 0):
+    if np.array_equal(resources, default_resources(state.block_map)):
         resources = None
 
     machines: np.ndarray | None = state.machine_types.copy()
@@ -254,28 +250,26 @@ def editor_state_to_level(state: EditorState) -> Level:
     if np.all(directions == 0):
         directions = None
 
-    # Convert slot-based editor inventory back to pouch for Level.
-    from factoriax.engine.constants import NUM_ITEM_TYPES as _NIT
+    machine_inv: np.ndarray | None = state.machine_inventory.copy()
+    if np.all(machine_inv == 0):
+        machine_inv = None
 
-    machine_inv: np.ndarray | None = None
-    if not (
-        np.all(state.machine_inventory_items == 0)
-        and np.all(state.machine_inventory_counts == 0)
-    ):
-        h, w = state.map_height, state.map_width
-        pouch = np.zeros((h, w, _NIT), dtype=np.int32)
-        for y in range(h):
-            for x in range(w):
-                for s in range(MAX_MACHINE_INVENTORY_SLOTS):
-                    it = int(state.machine_inventory_items[y, x, s])
-                    ct = int(state.machine_inventory_counts[y, x, s])
-                    if it > 0 and ct > 0:
-                        pouch[y, x, it] += ct
-        machine_inv = pouch
-
+    # A level numbers its players by list position, so a gap in the editor
+    # keys closes here. The contents follow the same move, or a player would
+    # inherit the items of the one that was removed.
     pp: list[tuple[int, int]] | None = None
+    inventories: dict[int, list[tuple[int, int]]] | None = None
     if state.player_positions:
-        pp = [state.player_positions[k] for k in sorted(state.player_positions)]
+        order = sorted(state.player_positions)
+        pp = [state.player_positions[k] for k in order]
+        renumbered = {
+            new: list(state.player_inventories[old])
+            for new, old in enumerate(order)
+            if old in state.player_inventories
+        }
+        inventories = renumbered or None
+    elif state.player_inventories:
+        inventories = {k: list(v) for k, v in state.player_inventories.items()}
     return Level(
         name=state.name,
         map_width=state.map_width,
@@ -285,10 +279,12 @@ def editor_state_to_level(state: EditorState) -> Level:
         machine_types=machines,
         machine_directions=directions,
         machine_inventory=machine_inv,
-        player_inventory=state.player_inventory,
-        player_inventories=(
-            dict(state.player_inventories) if state.player_inventories else None
+        player_inventory=(
+            list(state.player_inventory)
+            if state.player_inventory is not None
+            else None
         ),
+        player_inventories=inventories,
         player_positions=pp,
     )
 
@@ -383,8 +379,7 @@ def set_machine(
         return
     state.machine_types[y, x] = machine
     state.machine_directions[y, x] = direction
-    state.machine_inventory_items[y, x] = 0
-    state.machine_inventory_counts[y, x] = 0
+    state.machine_inventory[y, x] = 0
     state.dirty = True
 
 
@@ -520,8 +515,7 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
         return
     state.machine_types[y, x] = int(Machine.NONE)
     state.machine_directions[y, x] = 0
-    state.machine_inventory_items[y, x] = 0
-    state.machine_inventory_counts[y, x] = 0
+    state.machine_inventory[y, x] = 0
     state.dirty = True
 
 
@@ -571,7 +565,6 @@ def add_column(state: EditorState) -> None:
 
     """
     h = state.map_height
-    s = MAX_MACHINE_INVENTORY_SLOTS
     state.block_map = np.concatenate(
         [state.block_map, np.full((h, 1), int(BlockType.DIRT), dtype=np.int32)],
         axis=1,
@@ -591,12 +584,8 @@ def add_column(state: EditorState) -> None:
         [state.machine_directions, np.zeros((h, 1), dtype=np.int32)],
         axis=1,
     )
-    state.machine_inventory_items = np.concatenate(
-        [state.machine_inventory_items, np.zeros((h, 1, s), dtype=np.int32)],
-        axis=1,
-    )
-    state.machine_inventory_counts = np.concatenate(
-        [state.machine_inventory_counts, np.zeros((h, 1, s), dtype=np.int32)],
+    state.machine_inventory = np.concatenate(
+        [state.machine_inventory, np.zeros((h, 1, NUM_ITEM_TYPES), dtype=np.int32)],
         axis=1,
     )
     state.map_width += 1
@@ -625,8 +614,7 @@ def remove_column(state: EditorState) -> None:
     state.block_resources = state.block_resources[:, :-1]
     state.machine_types = state.machine_types[:, :-1]
     state.machine_directions = state.machine_directions[:, :-1]
-    state.machine_inventory_items = state.machine_inventory_items[:, :-1, :]
-    state.machine_inventory_counts = state.machine_inventory_counts[:, :-1, :]
+    state.machine_inventory = state.machine_inventory[:, :-1, :]
     state.map_width -= 1
     _clip_entities(state)
     state.dirty = True
@@ -650,7 +638,6 @@ def add_row(state: EditorState) -> None:
 
     """
     w = state.map_width
-    s = MAX_MACHINE_INVENTORY_SLOTS
     state.block_map = np.concatenate(
         [state.block_map, np.full((1, w), int(BlockType.DIRT), dtype=np.int32)],
         axis=0,
@@ -670,12 +657,8 @@ def add_row(state: EditorState) -> None:
         [state.machine_directions, np.zeros((1, w), dtype=np.int32)],
         axis=0,
     )
-    state.machine_inventory_items = np.concatenate(
-        [state.machine_inventory_items, np.zeros((1, w, s), dtype=np.int32)],
-        axis=0,
-    )
-    state.machine_inventory_counts = np.concatenate(
-        [state.machine_inventory_counts, np.zeros((1, w, s), dtype=np.int32)],
+    state.machine_inventory = np.concatenate(
+        [state.machine_inventory, np.zeros((1, w, NUM_ITEM_TYPES), dtype=np.int32)],
         axis=0,
     )
     state.map_height += 1
@@ -704,8 +687,7 @@ def remove_row(state: EditorState) -> None:
     state.block_resources = state.block_resources[:-1, :]
     state.machine_types = state.machine_types[:-1, :]
     state.machine_directions = state.machine_directions[:-1, :]
-    state.machine_inventory_items = state.machine_inventory_items[:-1, :, :]
-    state.machine_inventory_counts = state.machine_inventory_counts[:-1, :, :]
+    state.machine_inventory = state.machine_inventory[:-1, :, :]
     state.map_height -= 1
     _clip_entities(state)
     state.dirty = True
@@ -860,9 +842,11 @@ def get_inventory_slots(state: EditorState, target: InvTarget) -> list[tuple[int
         )
         return padded[:NUM_INVENTORY_SLOTS]
     x, y = target[1], target[2]
-    items = state.machine_inventory_items[y, x]
-    counts = state.machine_inventory_counts[y, x]
-    return [(int(items[s]), int(counts[s])) for s in range(MAX_MACHINE_INVENTORY_SLOTS)]
+    pouch = state.machine_inventory[y, x]
+    filled = [(it, int(pouch[it])) for it in np.nonzero(pouch)[0] if it != 0]
+    width = max(MAX_MACHINE_INVENTORY_SLOTS, len(filled))
+    padded = filled + [(int(ItemType.EMPTY), 0)] * (width - len(filled))
+    return [(int(i), int(c)) for i, c in padded]
 
 
 def get_num_slots(state: EditorState, target: InvTarget) -> int:
@@ -939,8 +923,13 @@ def set_inventory_slot(
         state.player_inventories[player_idx] = slots
     else:
         x, y = target[1], target[2]
-        state.machine_inventory_items[y, x, slot] = item_type
-        state.machine_inventory_counts[y, x, slot] = count
+        current = get_inventory_slots(state, target)
+        if slot < len(current):
+            # Free the item this row showed, so a row rewrite does not leave
+            # the old item behind under its own index.
+            state.machine_inventory[y, x, current[slot][0]] = 0
+        if item_type != int(ItemType.EMPTY) and count > 0:
+            state.machine_inventory[y, x, item_type] = count
     state.dirty = True
 
 
@@ -967,38 +956,3 @@ def clear_inventory_slot(state: EditorState, target: InvTarget, slot: int) -> No
 
     """
     set_inventory_slot(state, target, slot, int(ItemType.EMPTY), 0)
-
-
-def swap_inventory_slots(
-    state: EditorState, target: InvTarget, slot_a: int, slot_b: int
-) -> None:
-    """Swap two inventory slots.
-
-    Parameters
-    ----------
-    state :
-        Editor state (mutated in place).
-    target :
-        Inventory target.
-    slot_a :
-        First slot index.
-    slot_b :
-        Second slot index.
-    state: EditorState :
-
-    target: InvTarget :
-
-    slot_a: int :
-
-    slot_b: int :
-
-
-    Returns
-    -------
-
-    """
-    slots = get_inventory_slots(state, target)
-    a_item, a_count = slots[slot_a]
-    b_item, b_count = slots[slot_b]
-    set_inventory_slot(state, target, slot_a, b_item, b_count)
-    set_inventory_slot(state, target, slot_b, a_item, a_count)
