@@ -183,7 +183,6 @@ class TestCraftAction:
         )
         ps = game_ui.play_state
         ps.inventory_open = True
-        ps.menu_focus = "crafting"
         ps.selected_recipe = 0
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
@@ -200,7 +199,6 @@ class TestCraftAction:
         )
         ps = game_ui.play_state
         ps.inventory_open = True
-        ps.menu_focus = "crafting"
         ps.selected_recipe = 1
 
         result = game_ui.handle_event(_make_keydown(_confirm_key()), state)
@@ -227,7 +225,6 @@ class TestCraftAction:
         )
         ps = game_ui.play_state
         ps.inventory_open = True
-        ps.menu_focus = "crafting"
 
         for recipe_idx in (0, 1, 9, NUM_RECIPES - 1):
             ps.selected_recipe = recipe_idx

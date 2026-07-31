@@ -126,7 +126,6 @@ _BINDING_CATEGORIES: tuple[_BindingCategory, ...] = (
             _BindingRow(PlayerAction.OPEN_ACHIEVEMENTS, "Achievements"),
             _BindingRow(PlayerAction.OPEN_MACHINE, "Inspect Machine"),
             _BindingRow(PlayerAction.OPEN_HELP, "Help"),
-            _BindingRow(PlayerAction.TOGGLE_HOTBAR, "Hotbar Page"),
             _BindingRow(PlayerAction.CONFIRM, "Confirm"),
             _BindingRow(PlayerAction.BACK, "Back"),
             _BindingRow(PlayerAction.QUIT, "Quit"),

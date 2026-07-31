@@ -30,7 +30,6 @@ from factoriax.engine.constants import (
     ROTATE_BASE,
     Action,
     Direction,
-    ItemType,
     Machine,
 )
 from factoriax.engine.renderer import JaxRenderer
@@ -95,21 +94,11 @@ _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
 # rotate-machine play action; lives here as it is play-UI-only wiring.
 TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
-# Machines the play hotbar offers, in palette order (SPLITTER / CROSSING are
-# intentionally not hand-placeable from the UI). The palette is the policy;
-# the PLACE action ids come from factoriax.engine.actions so they track the enum.
-_PLACE_PALETTE: tuple[ItemType, ...] = (
-    ItemType.MINER,
-    ItemType.PALLET,
-    ItemType.CONVEYOR_BELT,
-    ItemType.ASSEMBLER,
-    ItemType.ARM,
-    ItemType.ROCKET,
-    ItemType.FURNACE,
-    ItemType.SCIENCE_LAB,
-)
+# Machines the play hotbar offers, in engine order. The engine decides what is
+# placeable: PLACEABLE_ITEM_LIST names the items and ITEM_TO_PLACE_ACTION gives
+# the action, so a new placeable machine reaches the hotbar with no edit here.
 _ITEM_TO_PLACE_ACTION: dict[int, int] = {
-    int(it): int(ITEM_TO_PLACE_ACTION[it]) for it in _PLACE_PALETTE
+    int(it): int(ITEM_TO_PLACE_ACTION[it]) for it in PLACEABLE_ITEM_LIST
 }
 
 # Maps PlayerAction movement names to (Direction, move_Action, face_Action).
@@ -132,13 +121,23 @@ _MOVE_TO_DIR: dict[str, tuple[int, int, int]] = {
     ),
 }
 
+# Number key -> hotbar pocket, in the same order the hotbar draws them. The
+# engine list sets both the order and the length, so every drawn pocket has a
+# key and no key points past the end.
+_SLOT_KEYS: tuple[str, ...] = (
+    PlayerAction.SLOT_1,
+    PlayerAction.SLOT_2,
+    PlayerAction.SLOT_3,
+    PlayerAction.SLOT_4,
+    PlayerAction.SLOT_5,
+    PlayerAction.SLOT_6,
+    PlayerAction.SLOT_7,
+    PlayerAction.SLOT_8,
+    PlayerAction.SLOT_9,
+    PlayerAction.SLOT_10,
+)
 _SLOT_ACTIONS: dict[str, int] = {
-    PlayerAction.SLOT_1: int(ItemType.MINER),
-    PlayerAction.SLOT_2: int(ItemType.PALLET),
-    PlayerAction.SLOT_3: int(ItemType.CONVEYOR_BELT),
-    PlayerAction.SLOT_4: int(ItemType.ASSEMBLER),
-    PlayerAction.SLOT_5: int(ItemType.ARM),
-    PlayerAction.SLOT_6: int(ItemType.ROCKET),
+    key: int(item) for key, item in zip(_SLOT_KEYS, PLACEABLE_ITEM_LIST, strict=False)
 }
 
 _PLAYER_ACTIONS: dict[str, int] = {
@@ -488,10 +487,7 @@ class GameUI:
                 self._params,
                 ui_w,
                 ui_h,
-                ps.menu_focus,
-                ps.held_item,
                 ps.selected_recipe,
-                ps.selected_item,
             )
             composite_rgba_over_rgb(ui_frame, menu_overlay)
             click_regions.extend(inv_regions)
@@ -722,7 +718,6 @@ class GameUI:
                 ps.pause_open = False
             elif ps.inventory_open:
                 ps.inventory_open = False
-                ps.held_item = None
             elif ps.achievement_open:
                 ps.achievement_open = False
             elif ps.machine_open:
@@ -741,8 +736,6 @@ class GameUI:
             state = self._handle_machine_toggle(state)
         elif ps.machine_open:
             state, action = self._handle_machine_keys(actions, state)
-        elif PlayerAction.TOGGLE_HOTBAR in actions:
-            state = self._handle_assembler_recipe_or_hotbar(state)
         elif PlayerAction.OPEN_INVENTORY in actions:
             ps.inventory_open = not ps.inventory_open
             if ps.inventory_open:
@@ -957,32 +950,7 @@ class GameUI:
                 deposit = int(ITEM_TO_DEPOSIT_ACTION[ps.selected_item])
                 if deposit != NO_ACTION:
                     action = deposit
-        elif PlayerAction.CYCLE_RECIPE in actions:
-            state = self._handle_assembler_recipe_or_hotbar(state)
         return state, action
-
-    def _handle_assembler_recipe_or_hotbar(
-        self,
-        state: EnvState,
-    ) -> EnvState:
-        """Handle Q key (no-op, assemblers auto-detect recipes).
-
-        Retained as a stub so the dispatch table entry and key binding
-        continue to resolve without error.
-
-        Parameters
-        ----------
-        state : EnvState :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
-        return state
 
     def _handle_achievement_keys(
         self,
@@ -1073,7 +1041,6 @@ class GameUI:
 
         """
         action: int | None = None
-        params = self._params
 
         if PlayerAction.INTERACT in actions:
             action = _handle_world_interact(

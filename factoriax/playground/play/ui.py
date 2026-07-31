@@ -48,32 +48,24 @@ _FOCUS_STRIP: tuple[int, int, int, int] = (55, 130, 55, 255)
 _AFFORD_COLOR: tuple[int, int, int] = (110, 220, 110)
 _CANNOT_AFFORD_COLOR: tuple[int, int, int] = (200, 80, 80)
 
-# Item display names keyed by ItemType value.
+# Names that differ from the title-cased enum name, because the play UI draws
+# them in narrow slots and the full name does not fit.
+_ITEM_NAME_OVERRIDES: dict[int, str] = {
+    int(ItemType.IRON_ORE): "Iron",
+    int(ItemType.COPPER_ORE): "Copper",
+    int(ItemType.TIN_ORE): "Tin",
+    int(ItemType.CONVEYOR_BELT): "Belt",
+    int(ItemType.TIER1_SCIENCE_PACK): "T1 Sci",
+    int(ItemType.TIER2_SCIENCE_PACK): "T2 Sci",
+    int(ItemType.TIER3_SCIENCE_PACK): "T3 Sci",
+}
+
+# Item display names keyed by ItemType value. The enum supplies the entries, so
+# a new item gets a name without an edit here.
 _ITEM_NAMES: dict[int, str] = {
-    ItemType.COAL: "Coal",
-    ItemType.IRON_ORE: "Iron",
-    ItemType.COPPER_ORE: "Copper",
-    ItemType.TIN_ORE: "Tin",
-    ItemType.SILICON: "Silicon",
-    ItemType.IRON_PLATE: "Iron Plate",
-    ItemType.COPPER_PLATE: "Copper Plate",
-    ItemType.TIN_PLATE: "Tin Plate",
-    ItemType.WAFER: "Wafer",
-    ItemType.FRAME: "Frame",
-    ItemType.CIRCUIT: "Circuit",
-    ItemType.WIRE: "Wire",
-    ItemType.MOTOR: "Motor",
-    ItemType.SENSOR: "Sensor",
-    ItemType.MINER: "Miner",
-    ItemType.PALLET: "Pallet",
-    ItemType.CONVEYOR_BELT: "Belt",
-    ItemType.ASSEMBLER: "Assembler",
-    ItemType.ARM: "Arm",
-    ItemType.ROCKET: "Rocket",
-    ItemType.TIER1_SCIENCE_PACK: "T1 Sci",
-    ItemType.TIER2_SCIENCE_PACK: "T2 Sci",
-    ItemType.TIER3_SCIENCE_PACK: "T3 Sci",
-    ItemType.LIMESTONE: "Limestone",
+    int(it): _ITEM_NAME_OVERRIDES.get(int(it), it.name.replace("_", " ").title())
+    for it in ItemType
+    if it.name != "EMPTY"
 }
 
 # ---------------------------------------------------------------------------
@@ -2451,72 +2443,31 @@ def render_inventory_menu(
     params: EnvParams,
     screen_width: int,
     screen_height: int,
-    menu_focus: str = "crafting",
-    held_item: int | None = None,
     selected_recipe: int = 0,
-    selected_item: int = 0,
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the crafting menu as an RGBA overlay.
 
     Shows a scrollable recipe list with output icons, names, and
-    per-ingredient have/need counts coloured by affordability.
-    Machine selection has moved to the hotbar.
+    per-ingredient have/need counts coloured by affordability. The hotbar
+    selects a machine, so this menu holds no machine selection.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    screen_width :
-        Total screen width in pixels
-    screen_height :
-        Total screen height in pixels
-    menu_focus :
-        Kept for API compat
-    held_item :
-        Kept for API compat
-    selected_recipe :
-        Currently focused recipe index
-    selected_item :
-        Kept for API compat
-    state : EnvState :
-
-    params : EnvParams :
-
-    screen_width : int :
-
-    screen_height : int :
-
-    menu_focus : str :
-        (Default value = "crafting")
-    held_item : int | None :
-        (Default value = None)
-    selected_recipe : int :
-        (Default value = 0)
-    selected_item : int :
-        (Default value = 0)
-    state: EnvState :
-
-    params: EnvParams :
-
-    screen_width: int :
-
-    screen_height: int :
-
-    menu_focus: str :
-         (Default value = "crafting")
-    held_item: int | None :
-         (Default value = None)
-    selected_recipe: int :
-         (Default value = 0)
-    selected_item: int :
-         (Default value = 0)
+    state
+        Current environment state.
+    params
+        Environment parameters, read for this scenario's recipe table.
+    screen_width
+        Total screen width in pixels.
+    screen_height
+        Total screen height in pixels.
+    selected_recipe
+        Index of the focused recipe.
 
     Returns
     -------
-
-
+    tuple[numpy.ndarray, list[ClickRegion]]
+        The RGBA overlay, and the click regions it drew.
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     click_regions: list[ClickRegion] = []
@@ -2543,10 +2494,6 @@ def render_inventory_menu(
 
     selected_player = int(state.selected_player)
     craft_progress = 0
-
-    # Dummy references to suppress unused-parameter warnings for
-    # API-compat kwargs that are no longer used.
-    _ = menu_focus, held_item, selected_item
 
     # ------------------------------------------------------------------
     # Crafting recipes list — rendered into a scroll view

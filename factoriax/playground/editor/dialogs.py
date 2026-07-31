@@ -630,8 +630,8 @@ class MachineInspectorDialog:
     """Editor dialog for inspecting and editing machine inventory contents.
 
     Shows each slot with its role badge, current item, and count. Users
-    navigate with A/D to select slots, click or press Enter to open an
-    item picker, type a count, and press Q to cycle assembler recipes.
+    navigate with A/D to select slots, and click or press Enter to open an
+    item picker and type a count.
 
     Parameters
     ----------

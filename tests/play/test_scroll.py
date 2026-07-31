@@ -285,7 +285,7 @@ class TestRenderInventoryMenuRecipeScroll:
         """Inventory menu with crafting focus renders without error."""
         state = state_factory(world_map=_MAP)
         overlay, regions = render_inventory_menu(
-            state, _PARAMS, 480, 480, menu_focus="crafting"
+            state, _PARAMS, 480, 480
         )
         assert overlay.shape == (480, 480, 4)
         assert any(r.action == "select_recipe" for r in regions)
@@ -294,7 +294,7 @@ class TestRenderInventoryMenuRecipeScroll:
         """All recipe click regions returned are inside the screen."""
         state = state_factory(world_map=_MAP)
         _, regions = render_inventory_menu(
-            state, _PARAMS, 480, 480, menu_focus="crafting"
+            state, _PARAMS, 480, 480
         )
         for r in regions:
             if r.action == "select_recipe":

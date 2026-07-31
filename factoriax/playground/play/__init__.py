@@ -18,19 +18,7 @@ Submodules
 - ``main`` — Game loop and entry point
 - ``game_ui`` — Reusable GameUI component for menus and input dispatch
 - ``ui`` — Menu rendering (inventory, achievements, pause)
+
+This module holds no imports, so the engine import path never pulls in pygame.
+Import from the defining module instead.
 """
-
-from factoriax.playground.play.game_ui import GameUI, GameUIResult
-from factoriax.playground.play.ui import (
-    render_achievement_menu,
-    render_inventory_menu,
-    render_pause_menu,
-)
-
-__all__ = [
-    "GameUI",
-    "GameUIResult",
-    "render_achievement_menu",
-    "render_inventory_menu",
-    "render_pause_menu",
-]

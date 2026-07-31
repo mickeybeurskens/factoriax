@@ -141,7 +141,7 @@ FREE_PLAY_ACHIEVEMENTS: tuple[Achievement, ...] = (
         id="first_assembly",
         name="First Assembly",
         condition=any_assembler_has_output,
-        hint="Set a recipe on your assembler (Q) and feed it inputs.",
+        hint="Feed inputs to your assembler. It picks the recipe itself.",
     ),
     Achievement(
         id="rocket_complete",

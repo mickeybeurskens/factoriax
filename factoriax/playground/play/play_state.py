@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from factoriax.engine.constants import ItemType
+
 if TYPE_CHECKING:
     from factoriax.engine.state import EnvState
     from factoriax.playground.ui.primitives import ClickRegion
@@ -33,12 +35,12 @@ class PlayState:
     achievement_scroll: int = 0
     achievement_selection: int = 0
     pause_selection: int = 0
-    menu_focus: str = "inventory"
     machine_tx: int = 0
     machine_ty: int = 0
     machine_panel_active: bool = True
-    held_item: int | None = None
-    selected_item: int = 4  # ItemType.MINER (first tool belt machine)
+    # First machine of the place palette. Read from the enum, never a literal:
+    # a new item in an earlier category shifts every later value.
+    selected_item: int = int(ItemType.MINER)
     focused_machine_item: int = 0
     selected_recipe: int = 0
 

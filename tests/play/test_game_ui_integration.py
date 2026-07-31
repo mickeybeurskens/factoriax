@@ -268,7 +268,6 @@ class TestInventoryContext:
         )
         ps = ui.play_state
         ps.inventory_open = True
-        ps.menu_focus = "inventory"
         ps.selected_item = int(ItemType.MINER)
         result = ui.handle_event(_key(pygame.K_d), state)
         assert isinstance(result, GameUIResult)
@@ -280,7 +279,6 @@ class TestInventoryContext:
         )
         ps = ui.play_state
         ps.inventory_open = True
-        ps.menu_focus = "crafting"
         ps.selected_recipe = 0
         result = ui.handle_event(_key(pygame.K_e), state)
         assert result.action is not None

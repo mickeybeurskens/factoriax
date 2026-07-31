@@ -63,7 +63,7 @@ class TestRenderInventoryMenu:
         """Should not crash with inventory focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
         result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH, menu_focus="inventory"
+            state, _PARAMS, _SW, _SH
         )
         assert result.shape == (_SH, _SW, 4)
 
@@ -71,7 +71,7 @@ class TestRenderInventoryMenu:
         """Should not crash with crafting focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
         result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH, menu_focus="crafting"
+            state, _PARAMS, _SW, _SH
         )
         assert result.shape == (_SH, _SW, 4)
 
@@ -97,7 +97,7 @@ class TestRenderInventoryMenu:
             craft_progress=jnp.array([2], dtype=jnp.int32),
         )
         result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH, menu_focus="crafting"
+            state, _PARAMS, _SW, _SH
         )
         assert result.shape == (_SH, _SW, 4)
 
