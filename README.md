@@ -1,57 +1,92 @@
 # FactoriaX
 
-A Factorio-inspired grid-world RL environment, written in JAX.
-State lives in JAX arrays; `step` and `reset` compile to a single
-XLA graph, so `jax.vmap` over a batch of envs runs on GPU without
-Python in the inner loop.
+A grid world for reinforcement learning research, in the style of Factorio,
+written in JAX.
+
+The state is a set of JAX arrays. `step` and `reset` compile to one XLA graph,
+so `jax.vmap` runs a batch of environments on the GPU, with no Python in the
+inner loop.
 
 <p align="center">
-  <img src="docs/media/factory.png" width="480" alt="A mid-game factory with miners, conveyor belts, and an assembler" />
+  <img src="docs/guides/_images/getting_started_state.png" width="420"
+       alt="A generated world, with ore patches and a player" />
 </p>
 
-## Quick start
+## Install
 
 ```bash
 uv sync
-make install-hooks
-python -m factoriax
 ```
 
-Opens the launcher (Play, Editor, Settings).
+## Run the playground
+
+The playground is the human interface. It holds the game and the level editor.
+
+```bash
+uv run python -m factoriax.playground
+```
+
+The launcher opens with three entries: Play, Editor, and Settings.
+
+## Build an environment
+
+```python
+import jax
+
+from factoriax.make import env_from_name
+
+env, params = env_from_name("EasyRocket-v1")
+obs, state = env.reset_env(jax.random.PRNGKey(0), params)
+```
+
+Five scenarios carry an id: `Mining-v1`, `MinerBootstrap-v1`,
+`ScienceTiers-v1`, `EasyRocket-v1`, and `Rocket-v1`.
+`factoriax.engine.envs.registry.list_scenarios` returns each id with its spec.
 
 ## Action design
 
-Three properties the action set is built around.
+The action set follows three rules.
 
-**Atomic.** One action, one outcome. Crafting a miner is one action
-(`CRAFT_MINER`), not "cycle recipe three times, then press craft."
-No hidden sequencing.
+**One action, one outcome.** A player crafts a miner with the single action
+`CRAFT_MINER`. It does not cycle through a recipe list and then press a craft
+key. The action space holds 87 actions, and no action hides a sequence.
 
-**Observable.** Whether an action will succeed is in the observation
-before it's taken. Per-recipe affordability bits expose which
-recipes are available now, rather than which one happens to be
-selected in a menu.
+**The observation tells the agent what works.** An affordability bit for each
+item says whether the player can craft that item now. The agent therefore
+reads what an action does before it takes that action. The bit belongs to an
+item, and not to a recipe.
 
-**Composable.** Actions behave the same regardless of context.
-Crafting consumes inventory and adds the result the same way mining
-adds and placing consumes — no separate "crafting mode."
+**Context does not change an action.** A craft takes items from the inventory
+and adds the result. A mine adds an item, and a place takes one. There is no
+separate crafting mode that changes what a key does.
 
-<p align="center">
-  <img src="docs/media/mining.gif" width="320" alt="Agent mining an iron patch" />
-</p>
+## Test and lint
+
+```bash
+uv run pytest
+uv run ruff check factoriax
+```
+
+## Build the documentation
+
+```bash
+cd docs && make html
+```
+
+The build writes the pages to `docs/_build/html`.
+
+The build does not run the notebooks. `nb_execution_mode` is `"off"`, and the
+`html` target removes the stored output first. A guide page therefore holds
+the source of each cell, and the figures that `docs/guides/_images` holds. To
+make a new figure, run the notebook yourself and commit the file that it
+writes.
 
 ## Where to read next
 
-- [`docs/getting-started.md`](docs/getting-started.md) — install,
-  the launcher, building a first level, running a random policy.
-  ~10 minutes end-to-end.
-- [`docs/cookbook.md`](docs/cookbook.md) — short recipes for
-  common research moves (custom rewards, batched eval, achievement
-  tracking, action masking, …).
-- [`docs/api-reference.md`](docs/api-reference.md) — every public
-  symbol with its stability tier. Auto-generated; CI-validated.
-- [`examples/`](examples) — five runnable scripts under 80 lines
-  each, one per pattern, that the cookbook recipes link into.
-- [`scripts/README.md`](scripts/README.md) — what each
-  command-line tool does and where its output goes (benchmarks,
-  profiling, atlas regen, api-reference regen).
+- [`docs/guides/getting_started.ipynb`](docs/guides/getting_started.ipynb) —
+  the environment, the observation, the action space, and a random rollout.
+- [`docs/guides/ppo_training_example.ipynb`](docs/guides/ppo_training_example.ipynb) —
+  train a PPO agent on a FactoriaX task.
+- [`docs/api/index.rst`](docs/api/index.rst) — the reference for every public
+  module. Sphinx builds it from the docstrings.
+- [`ISSUES.md`](ISSUES.md) — the known defects that stay open.
