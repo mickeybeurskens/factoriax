@@ -1,26 +1,26 @@
-"""Rollout recording utilities for building Trajectory objects.
+"""Collect rollout chunks from a training loop into a trajectory.
 
-:class:`RolloutRecorder` — **zero-change integration.**  Call
-:meth:`record` after each ``collect_fn`` call, passing the trajectory
-struct and env states that are *already returned* by your collection
-function.  Accumulates across iterations and produces a
-:class:`~factoriax.analysis.trajectory.Trajectory` via :meth:`finish`.
+:class:`RolloutRecorder` takes the arrays that a collection function
+already returns and turns them into a
+:class:`~factoriax.analysis.trajectory.Trajectory`. A training loop
+therefore needs one new call, and no change to ``collect_fn`` or to
+any code under ``jit``.
 
+Call :meth:`~RolloutRecorder.record` after each collection call, then
+:meth:`~RolloutRecorder.finish` once at the end.
 
-Typical usage
--------------------------------------------------------
->>> from factoriax.analysis.recorder import RolloutRecorder
->>>
->>> recorder = RolloutRecorder(max_episodes=32)
->>>
->>> for it in range(total_iters):
-...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
-...     # One line added to your training loop:
-...     recorder.record(trajectories, env_states)
-...     # ... rest of your PPO update ...
->>>
->>> traj = recorder.finish()
->>> # traj is now a Trajectory ready for analysis
+The sketch below names ``collect_fn`` and ``total_iters`` from the
+training loop it plugs into, so it does not run on its own:
+
+.. code-block:: python
+
+    from factoriax.analysis.recorder import RolloutRecorder
+
+    recorder = RolloutRecorder(max_episodes=32)
+    for _ in range(total_iters):
+        trajectories, env_states, obs, last_values, _ = collect_fn(...)
+        recorder.record(trajectories, env_states)
+    traj = recorder.finish()
 """
 
 from __future__ import annotations
@@ -37,47 +37,33 @@ from .trajectory import _STATE_TO_TRAJ, Trajectory
 class RolloutRecorder:
     """Accumulates rollout data across training iterations.
 
-    This recorder is designed to slot into an existing training loop
-    with **zero changes** to your ``collect_fn`` or JIT'd code.  It
-    works by extracting numpy arrays from the trajectory struct and
-    env states that your collection function already returns.
+    The recorder reads the arrays that a collection function already
+    returns. A training loop therefore needs one new call, and no
+    change to ``collect_fn`` or to any code under ``jit``.
 
-    The recorder segments the continuous stream of ``(T, N)`` rollout
-    chunks into complete episodes using the ``done`` flags.
+    Each call to :meth:`record` stores one ``(T, N)`` chunk.
+    :meth:`finish` joins the chunks and cuts them into episodes at the
+    ``done`` flags.
 
-    Parameters
+    Attributes
     ----------
-    max_episodes : int
-        Stop recording after this many complete episodes.  If *None*,
-        record indefinitely until :meth:`finish` is called.
-    record_states : bool
-        If *True*, also extract ``player_positions`` and
-        ``player_inventory`` from ``env_states`` at each step.
-        This increases memory usage but enables state-evolution analyses.
-    state_fields : list[str]
-        Which ``EnvState`` fields to record when ``record_states=True``.
-        Defaults to ``["player_positions", "player_inventory"]``.
+    max_episodes :
+        Stop storing chunks once this many episodes have finished, and
+        keep at most this many episodes in the result. ``None`` means
+        no limit, and :meth:`finish` then decides the count.
+    record_states :
+        True to also store the fields named in ``state_fields`` from
+        the env states. This costs memory in proportion to the size of
+        those fields, and it is what makes a state-over-time analysis
+        possible.
+    state_fields :
+        Which ``EnvState`` fields to store when ``record_states`` is
+        True.
 
-    Returns
-    -------
-    Examples
-    --------
-    Minimal integration : actions + rewards only
-        With state recording:
-
-    >>> recorder = RolloutRecorder(max_episodes=64)
-    >>> for it in range(total_iters):
-    ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
-    ...     recorder.record(trajectories)
-    ...     if recorder.is_full:
-    ...         break
-    >>> traj = recorder.finish()
-
-    >>> recorder = RolloutRecorder(max_episodes=32, record_states=True)
-    >>> for it in range(total_iters):
-    ...     trajectories, env_states, obs, last_values, _ = collect_fn(...)
-    ...     recorder.record(trajectories, env_states)
-    >>> traj = recorder.finish()
+    Notes
+    -----
+    The episode count in :attr:`is_full` counts ``done`` flags across
+    every parallel environment, and not per environment.
     """
 
     max_episodes: int | None = None
@@ -101,22 +87,26 @@ class RolloutRecorder:
         trajectories: Any,
         env_states: Any = None,
     ) -> None:
-        """Record one chunk of rollout data.
+        """Store one chunk of rollout data.
+
+        The call returns at once when the recorder is already full, so
+        a training loop can keep calling it without a guard. The chunk
+        is then dropped.
 
         Parameters
         ----------
         trajectories :
-            Any:
+            The struct that ``collect_fn`` returns. It must carry
+            ``action``, ``reward``, and ``done``. Actions have shape
+            ``(T, N)`` or ``(T, N, P)``, and the other two ``(T, N)``,
+            where ``T`` is the chunk length and ``N`` the number of
+            parallel environments. JAX arrays and NumPy arrays both
+            work.
         env_states :
-            Any:  (Default value = None)
-        trajectories: Any :
-
-        env_states: Any :
-             (Default value = None)
-
-        Returns
-        -------
-
+            The env states from the same call, or ``None``. They are
+            read only when ``record_states`` is True. A field named in
+            ``state_fields`` but absent from the states is skipped in
+            silence.
         """
         if self.is_full:
             return
@@ -147,41 +137,74 @@ class RolloutRecorder:
 
     @property
     def is_full(self) -> bool:
-        """Whether we've recorded enough complete episodes."""
+        """Whether the episode count has reached ``max_episodes``.
+
+        Returns
+        -------
+        bool
+            Always False when ``max_episodes`` is ``None``.
+        """
         if self.max_episodes is None:
             return False
         return self._num_complete_episodes >= self.max_episodes
 
     @property
     def num_recorded_steps(self) -> int:
-        """Total timesteps recorded so far."""
+        """Total timesteps stored so far, summed over the chunks.
+
+        Returns
+        -------
+        int
+            The length of the time axis, not multiplied by the number
+            of parallel environments. 0 before the first
+            :meth:`record`.
+        """
         if not self._action_chunks:
             return 0
         return sum(chunk.shape[0] for chunk in self._action_chunks)
 
     def finish(self, pad_incomplete: bool = True) -> Trajectory:
-        """Segment recorded chunks into complete episodes and build a Trajectory.
+        """Cut the recorded chunks into episodes and build a trajectory.
 
-        This method concatenates all recorded chunks along the time axis,
-        then splits them into individual episodes using the ``done`` flags.
-        When ``record_states=True`` was set, state fields are segmented
-        using the same episode boundaries and included in the returned
-        Trajectory.
+        The chunks are joined along the time axis and then split at the
+        ``done`` flags, one environment at a time. State fields are cut
+        at the same boundaries.
+
+        Episodes differ in length, so every episode is padded with
+        zeros to the length of the longest one.
 
         Parameters
         ----------
-        pad_incomplete : bool
-            If *True*, include the last (possibly incomplete) episode in
-            each environment, zero-padded to match the longest episode.
-            If *False*, only include fully completed episodes.
         pad_incomplete :
-            bool:  (Default value = True)
-        pad_incomplete: bool :
-             (Default value = True)
+            True to keep the last episode of each environment even when
+            no ``done`` flag ended it. False to keep finished episodes
+            only.
 
         Returns
         -------
+        Trajectory
+            Actions of shape ``(B, T_max)`` or ``(B, T_max, P)``, plus
+            rewards, plus any recorded state fields under their
+            trajectory names. ``B`` is the episode count after the
+            ``max_episodes`` limit.
 
+        Raises
+        ------
+        ValueError
+            When no chunk was recorded, or when the split found no
+            episode at all. The second case happens with
+            ``pad_incomplete=False`` and no ``done`` flag anywhere.
+
+        Notes
+        -----
+        The padding is zeros, and action 0 is ``NOOP``. Padded steps
+        therefore read as real no-op actions to every analysis
+        function, and the trajectory carries no mask that marks them.
+        A per-episode length is the only way to tell them apart, and
+        this method does not return one.
+
+        The method does not clear the buffers. A second call rebuilds
+        the same trajectory. Call :meth:`reset` to start again.
         """
         if not self._action_chunks:
             raise ValueError("No data recorded. Call record() first.")
@@ -281,7 +304,11 @@ class RolloutRecorder:
         )
 
     def reset(self) -> None:
-        """Clear all recorded data."""
+        """Drop every stored chunk and reset the episode count.
+
+        The configuration fields keep their values, so the recorder is
+        ready for another run right away.
+        """
         self._action_chunks.clear()
         self._reward_chunks.clear()
         self._done_chunks.clear()

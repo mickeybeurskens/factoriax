@@ -1,9 +1,17 @@
-"""Frame composition and MP4 encoding for episode rollouts.
+"""Build video frames from env states and encode them to MP4.
 
-Used by both the PPO eval pipeline and the scripted-agent scenarios
-to produce wandb-friendly map+inventory videos. Keep this module
-free of training-loop dependencies — only :class:`EnvState` is
-needed.
+A frame is the map render with the inventory panel of the selected
+player beside it. The PPO eval pipeline and the scripted-agent
+scenarios both use these frames.
+
+Two encoders are available.
+:func:`write_video` holds every frame in memory at once and is the
+simpler call. :func:`write_video_streaming` holds one frame at a time
+and is the one to use for a long episode.
+
+The module reads :class:`EnvState` and nothing else from the training
+side. Keep it that way, so a scenario runner can import it without
+pulling in a training loop.
 """
 
 from __future__ import annotations
@@ -27,18 +35,25 @@ _RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 
 def _get_renderer(block_pixel_size: int) -> JaxRenderer:
-    """
+    """Return the renderer for one tile size, from the cache.
 
     Parameters
     ----------
-    block_pixel_size: int :
-
+    block_pixel_size :
+        The width of one map tile in pixels.
 
     Returns
     -------
-    type
+    JaxRenderer
+        A renderer whose atlases are already on the device. Building
+        one is expensive, so a repeat call for the same size returns
+        the same object.
 
-
+    Notes
+    -----
+    The cache never drops an entry. Each entry holds device memory for
+    its atlases, so a caller that sweeps many tile sizes keeps them all
+    resident.
     """
     renderer = _RENDERER_CACHE.get(block_pixel_size)
     if renderer is None:
@@ -51,17 +66,19 @@ def _get_renderer(block_pixel_size: int) -> JaxRenderer:
 def _suppress_fork_warning() -> Iterator[None]:
     """Silence imageio/FFMPEG's harmless ``os.fork()`` RuntimeWarning.
 
-    JAX initializes a thread pool eagerly, and Python warns when a
-    multithreaded process forks (which is what imageio does to spawn
-    its FFMPEG worker). The warning is not actionable here — the
-    fork happens in a child that immediately ``exec``s ffmpeg.
+    JAX starts a thread pool as soon as it is imported. Python warns
+    when a process with several threads forks, and a fork is how
+    imageio starts its FFMPEG worker.
 
-    Parameters
-    ----------
+    The warning needs no action here. The fork happens in a child that
+    replaces itself with ffmpeg at once, so none of the JAX threads
+    carry over.
 
-    Returns
-    -------
-
+    Yields
+    ------
+    None
+        Inside the block, that one warning is filtered. Every other
+        warning behaves as before, and the filter is removed on exit.
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -83,35 +100,29 @@ def compose_frame_with_inventory(
 ) -> np.ndarray:
     """Return ``map_render | inventory_panel`` concatenated horizontally.
 
-    The inventory panel mirrors the side panel the agent debugger
-    displays in its top-right quadrant, rendered at the same height as
-    the map render so the two stitch together cleanly.
+    The panel is the same one the agent debugger shows in its top
+    right. It is drawn at the height of the map render, so the two
+    join with no gap.
+
+    The panel shows the inventory of ``state.selected_player`` only. In
+    a game with several players, the other inventories do not appear.
 
     Parameters
     ----------
     state :
-        The environment state to render
+        The state to draw.
     block_pixel_size :
-        Tile size in the map render
-    block :
-        Defaults to 16
+        The width of one map tile in pixels. This sets the size of the
+        map render, and therefore of the whole frame.
     inv_panel_width :
-        Width of the inventory side
-    state: EnvState :
-
-    * :
-
-    block_pixel_size: int :
-         (Default value = 16)
-    inv_panel_width: int :
-         (Default value = INV_PANEL_WIDTH)
+        The width of the inventory panel in pixels. A panel under 22
+        pixels tall holds no rows, but the height comes from the map
+        render and is far above that in practice.
 
     Returns
     -------
-    type
-        RGB ``uint8`` array of shape
-        ``(map_h, map_w + inv_panel_width, 3)``.
-
+    numpy.ndarray
+        RGB uint8 of shape ``(map_h, map_w + inv_panel_width, 3)``.
     """
     renderer = _get_renderer(block_pixel_size)
     map_img = np.asarray(renderer.jit_render_map(state))
@@ -128,33 +139,28 @@ def compose_frame_with_inventory(
 def write_video(path: Any, frames: list[np.ndarray], fps: int) -> None:
     """Encode *frames* to an MP4 at *path* using imageio / FFMPEG.
 
-    Buffers all frames as a single ``uint8`` array before encoding.
-    Use :func:`write_video_streaming` instead when ``len(frames)`` or
-    the per-frame size would push peak memory beyond a few hundred MB.
+    The function stacks every frame into one array before it encodes.
+    Peak memory therefore holds the whole episode twice over. Use
+    :func:`write_video_streaming` when that total passes a few hundred
+    megabytes.
 
     Parameters
     ----------
     path :
-        Destination ``.mp4`` path. Parent directories are created.
+        Where to write the ``.mp4``. Missing parent directories are
+        created.
     frames :
-        List of RGB ``uint8`` arrays of identical shape.
+        RGB uint8 frames. Every frame must have the same shape, and
+        both side lengths must be even for the ``yuv420p`` format.
     fps :
-        Output frame rate.
-    path: Any :
-
-    frames: list[np.ndarray] :
-
-    fps: int :
-
-
-    Returns
-    -------
+        Frames per second in the output.
 
     Raises
     ------
     ImportError
-        If ``imageio[ffmpeg]`` is not installed.
-
+        When ``imageio[ffmpeg]`` is absent. The import is inside the
+        function, so a caller that never writes a video does not need
+        the dependency.
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -179,36 +185,36 @@ def write_video_streaming(
 ) -> int:
     """Stream-encode *frames* to an MP4 one frame at a time.
 
-    Memory stays bounded to a single frame, which matters for long
-    scripted episodes that buffer ~6000 frames at ~700x512x3 bytes
-    each (~6 GB of raw RGB if buffered).
+    Memory holds one frame at a time. A long scripted episode can run
+    to 6000 frames of about 700 by 512 pixels. Buffered, that is near
+    6 GB of raw RGB, so streaming is the only workable choice.
 
     Parameters
     ----------
     path :
-        Destination ``.mp4`` path. Parent directories are created.
+        Where to write the ``.mp4``. Missing parent directories are
+        created.
     frames :
-        Iterable of RGB ``uint8`` frames; consumed lazily so a
-        generator that renders on demand is the intended use.
+        RGB uint8 frames, read one at a time. A generator that renders
+        each frame on demand is the intended argument, because it
+        keeps the whole episode out of memory.
     fps :
-        Output frame rate.
-    path: Any :
-
-    frames: Iterable[np.ndarray] :
-
-    fps: int :
-
+        Frames per second in the output.
 
     Returns
     -------
-
-        Number of frames written.
+    int
+        How many frames were written.
 
     Raises
     ------
     ImportError
-        If ``imageio[ffmpeg]`` is not installed.
+        When ``imageio[ffmpeg]`` is absent.
 
+    Notes
+    -----
+    The writer is closed even when a frame raises, so a partial file
+    is left behind and not a locked one.
     """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)

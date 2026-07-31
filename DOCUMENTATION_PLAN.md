@@ -259,44 +259,43 @@ order as a reading order, not a dependency order.
 - [x] `factoriax/engine/crafting.py`
 - [x] `factoriax/engine/renderer.py`
 - [x] `factoriax/engine/levels.py`
-- [ ] `factoriax/engine/machines.py`
-- [ ] `factoriax/engine/placement.py`
-- [ ] `factoriax/engine/rewards.py`
-- [ ] `factoriax/engine/step.py`
-- [ ] `factoriax/engine/observations.py`
-- [ ] `factoriax/engine/__init__.py`
+- [x] `factoriax/engine/machines.py`
+- [x] `factoriax/engine/placement.py`
+- [x] `factoriax/engine/rewards.py`
+- [x] `factoriax/engine/step.py`
+- [x] `factoriax/engine/observations.py`
+- [x] `factoriax/engine/__init__.py`
 
 #### `factoriax/engine/envs/`
 
-- [ ] `factoriax/engine/envs/base.py`
-- [ ] `factoriax/engine/envs/common.py`
-- [ ] `factoriax/engine/envs/easy_rocket.py`
-- [ ] `factoriax/engine/envs/mining.py`
-- [ ] `factoriax/engine/envs/science_tiers.py`
-- [ ] `factoriax/engine/envs/wrappers.py`
-- [ ] `factoriax/engine/envs/miner_curriculum.py`
-- [ ] `factoriax/engine/envs/rocket.py`
-- [ ] `factoriax/engine/envs/registry.py`
-- [ ] `factoriax/engine/envs/__init__.py`
+- [x] `factoriax/engine/envs/base.py`
+- [x] `factoriax/engine/envs/common.py`
+- [x] `factoriax/engine/envs/easy_rocket.py`
+- [x] `factoriax/engine/envs/mining.py`
+- [x] `factoriax/engine/envs/science_tiers.py`
+- [x] `factoriax/engine/envs/wrappers.py`
+- [x] `factoriax/engine/envs/miner_curriculum.py`
+- [x] `factoriax/engine/envs/rocket.py`
+- [x] `factoriax/engine/envs/registry.py`
+- [x] `factoriax/engine/envs/__init__.py`
 
 ### `factoriax/analysis/`
 
-- [ ] `factoriax/analysis/build_progression.py`
-- [ ] `factoriax/analysis/categories.py`
-- [ ] `factoriax/analysis/curriculum_strip.py`
-- [ ] `factoriax/analysis/graph_layout.py`
-- [ ] `factoriax/analysis/inventory.py`
-- [ ] `factoriax/analysis/trajectory.py`
-- [ ] `factoriax/analysis/recipe_graph.py`
-- [ ] `factoriax/analysis/recorder.py`
-- [ ] `factoriax/analysis/utils.py`
-- [ ] `factoriax/analysis/video.py`
-- [ ] `factoriax/analysis/actions.py`
-- [ ] `factoriax/analysis/state.py`
-- [ ] `factoriax/analysis/milestones.py`
-- [ ] `factoriax/analysis/multiagent.py`
-- [ ] `factoriax/analysis/eval.py`
-- [ ] `factoriax/analysis/__init__.py`
+- [x] `factoriax/analysis/build_progression.py`
+- [x] `factoriax/analysis/categories.py`
+- [x] `factoriax/analysis/curriculum_strip.py`
+- [x] `factoriax/analysis/graph_layout.py`
+- [x] `factoriax/analysis/inventory.py`
+- [x] `factoriax/analysis/trajectory.py`
+- [x] `factoriax/analysis/recipe_graph.py`
+- [x] `factoriax/analysis/recorder.py`
+- [x] `factoriax/analysis/utils.py`
+- [x] `factoriax/analysis/video.py`
+- [x] `factoriax/analysis/actions.py`
+- [x] `factoriax/analysis/state.py`
+- [x] `factoriax/analysis/milestones.py`
+- [x] `factoriax/analysis/eval.py`
+- [x] `factoriax/analysis/__init__.py`
 
 ### `factoriax/assets/`
 

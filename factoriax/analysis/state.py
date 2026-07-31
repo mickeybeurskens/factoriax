@@ -1,11 +1,18 @@
-"""State evolution analysis and visualization.
+"""Read and draw how the world changed over an episode.
 
-This module tracks how environment state changes over episodes:
-inventory progression, resource depletion, player movement patterns,
-and machine placement.
+The module covers four subjects. Each has a plot, and two also have a
+finder that returns the numbers. The subjects are the inventory of a
+player, where a player walked, the resource left on the map, and the
+reward at each step.
 
-All functions require the corresponding optional fields on
-:class:`~factoriax.analysis.trajectory.Trajectory` to be populated.
+Every function reads an optional field of
+:class:`~factoriax.analysis.trajectory.Trajectory` and raises
+``ValueError`` when that field was not recorded.
+
+Two coordinate orders meet in this module. A position is ordered
+``(x, y)``, following the engine. A map array is indexed ``[y, x]``,
+following row-major order. The plots invert the y axis so that a
+picture matches the map, with y growing downward.
 """
 
 from __future__ import annotations
@@ -20,8 +27,16 @@ from matplotlib.figure import Figure
 from .trajectory import Trajectory
 from .utils import resolve_ax
 
-# Default item labels matching factoriax ItemType enum
+#: Fallback item names for :func:`plot_inventory`, used when the caller
+#: passes none.
+#:
+#: These do not match the engine. ``ItemType`` gives ``IRON_ORE``,
+#: ``COPPER_ORE``, and ``TIN_ORE`` at ids 2, 3, and 4, so a default plot
+#: labels the tin ore line "MINER". Pass real ``ItemType`` names.
 DEFAULT_ITEM_LABELS = ["EMPTY", "COAL", "IRON", "COPPER", "MINER"]
+
+#: Fallback line colors, one for each entry of
+#: :data:`DEFAULT_ITEM_LABELS` and in the same order.
 DEFAULT_ITEM_COLORS = ["#bdbdbd", "#363636", "#c0c0c0", "#b87333", "#00c800"]
 
 
@@ -35,35 +50,33 @@ def inventory_over_time(
     player: int = 0,
     num_item_types: int = 5,
 ) -> np.ndarray:
-    """Compute mean per-type item counts at each timestep.
+    """Return the mean item count of each type at each timestep.
 
     Parameters
     ----------
-    traj : Trajectory
-        Must have ``player_inventory`` populated. The current
-        engine stores inventory as a dense ``(P, num_item_types)``
-        count vector per state, so the slot-aggregation step the
-        old slot-model required is gone.
-    player : int
-
-    num_item_types : int
-
     traj :
-        Trajectory:
+        A trajectory whose ``player_inventory`` field is set. That
+        field already holds a count for each item, so nothing has to
+        map slots to items.
     player :
-        int:  (Default value = 0)
+        Which player to read. It is ignored when the trajectory is not
+        multi-player.
     num_item_types :
-        int:  (Default value = 5)
-    traj: Trajectory :
-
-    player: int :
-         (Default value = 0)
-    num_item_types: int :
-         (Default value = 5)
+        How many leading item ids to keep. The default of 5 is far
+        below the 34 the engine defines, so a default call drops most
+        items.
 
     Returns
     -------
+    numpy.ndarray
+        Shape ``(T, num_item_types)``, the mean over episodes at each
+        timestep. Column ``i`` is the item with ``ItemType`` value
+        ``i``, and column 0 is ``EMPTY``, which stays at zero.
 
+    Raises
+    ------
+    ValueError
+        When the trajectory carries no ``player_inventory``.
     """
     if traj.player_inventory is None:
         raise ValueError("inventory_over_time requires player_inventory")
@@ -87,64 +100,47 @@ def plot_inventory(
     figsize: tuple[float, float] = (12, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot inventory evolution over an episode.
+    """Draw one line for each item type over the episode.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    player : int
-
-    num_item_types : int
-
-    item_labels, item_colors :
-
-    exclude_empty : bool
-        If *True*, skip the EMPTY item type.
     traj :
-        Trajectory:
+        A trajectory whose ``player_inventory`` field is set.
     player :
-        int:  (Default value = 0)
+        Which player to read.
     num_item_types :
-        int:  (Default value = 5)
+        How many leading item ids to draw. It also indexes
+        ``item_labels`` and ``item_colors``, so all three must agree.
     item_labels :
-        list[str] | None:  (Default value = None)
+        The name of each item, or ``None`` for
+        :data:`DEFAULT_ITEM_LABELS`. Pass real names from ``ItemType``
+        here. The default list is wrong past index 1, so a default
+        call mislabels the legend.
     item_colors :
-        Sequence[str] | None:  (Default value = None)
+        The line color of each item, or ``None`` for
+        :data:`DEFAULT_ITEM_COLORS`.
     exclude_empty :
-        bool:  (Default value = True)
+        True to skip item 0, ``EMPTY``, which is always zero.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (12)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int :
-         (Default value = 0)
-    num_item_types: int :
-         (Default value = 5)
-    item_labels: list[str] | None :
-         (Default value = None)
-    item_colors: Sequence[str] | None :
-         (Default value = None)
-    exclude_empty: bool :
-         (Default value = True)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
 
+    Raises
+    ------
+    IndexError
+        When ``num_item_types`` is greater than the length of
+        ``item_labels`` or ``item_colors``. The two defaults hold five
+        entries each.
     """
     inv = inventory_over_time(traj, player, num_item_types)  # (T, num_item_types)
 
@@ -181,44 +177,37 @@ def position_heatmap(
     map_height: int = 32,
     time_range: tuple[int, int] | None = None,
 ) -> np.ndarray:
-    """Compute a 2D visit-frequency heatmap for a player.
+    """Count how often a player stood on each map tile.
 
     Parameters
     ----------
-    traj : Trajectory
-        Must have ``positions``.
-    player : int
-
-    map_width, map_height :
-
-    time_range : tuple[int
-
     traj :
-        Trajectory:
+        A trajectory whose ``positions`` field is set. Positions are
+        ordered ``(x, y)``, which is the opposite of the ``[y, x]``
+        order used to index the returned grid.
     player :
-        int:  (Default value = 0)
-    map_width :
-        int:  (Default value = 32)
-    map_height :
-        int:  (Default value = 32)
+        Which player to read. It is ignored when the trajectory is not
+        multi-player.
+    map_width, map_height :
+        The map size in tiles. These must match the map the episode
+        ran on. A value too small folds the outer tiles onto the
+        border, because positions are clipped and not dropped.
     time_range :
-        tuple[int:
-    int] | None :
-        (Default value = None)
-    traj: Trajectory :
-
-    player: int :
-         (Default value = 0)
-    map_width: int :
-         (Default value = 32)
-    map_height: int :
-         (Default value = 32)
-    time_range: tuple[int :
-
+        ``(start, end)`` to count only that window of timesteps, or
+        ``None`` for the whole episode.
 
     Returns
     -------
+    numpy.ndarray
+        Shape ``(map_height, map_width)``, indexed ``[y, x]``. The
+        values sum to 1.0, so each is the share of visits to that
+        tile. A trajectory with no steps gives all zeros instead,
+        because the division is skipped.
 
+    Raises
+    ------
+    ValueError
+        When the trajectory carries no ``positions``.
     """
     if traj.positions is None:
         raise ValueError("position_heatmap requires positions data")
@@ -258,58 +247,27 @@ def plot_position_heatmap(
     cmap: str = "hot",
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot a spatial heatmap of player positions.
+    """Draw the visit-frequency heatmap of one player.
 
     Parameters
     ----------
     traj, player, map_width, map_height, time_range :
-        See :func:`position_heatmap`.
-    traj :
-        Trajectory:
-    player :
-        int:  (Default value = 0)
-    map_width :
-        int:  (Default value = 32)
-    map_height :
-        int:  (Default value = 32)
-    time_range :
-        tuple[int:
-    int] | None :
-        (Default value = None)
+        As in :func:`position_heatmap`.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (7)
-    7) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     cmap :
-        str:  (Default value = "hot")
+        Any matplotlib colormap name.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int :
-         (Default value = 0)
-    map_width: int :
-         (Default value = 32)
-    map_height: int :
-         (Default value = 32)
-    time_range: tuple[int :
-
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    cmap: str :
-         (Default value = "hot")
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The image uses ``origin="upper"``, so y
+        grows downward and the picture matches the map.
     """
     hm = position_heatmap(traj, player, map_width, map_height, time_range)
 
@@ -341,62 +299,42 @@ def plot_trajectory_trace(
     title: str | None = None,
     cmap: str = "viridis",
 ) -> tuple[Figure, Axes]:
-    """Plot the movement path of a player for a single episode.
+    """Draw the path one player walked in one episode.
 
-    Color intensity encodes time progression (dark = early, bright = late).
+    The color of the path runs with time, dark at the start and bright
+    at the end. A green circle marks the first position and a red
+    square the last.
 
     Parameters
     ----------
-    traj : Trajectory
-        Must have ``positions``.
-    episode, player :
-
-    map_width, map_height :
-
     traj :
-        Trajectory:
+        A trajectory whose ``positions`` field is set.
     episode :
-        int:  (Default value = 0)
+        Which episode to draw.
     player :
-        int:  (Default value = 0)
-    map_width :
-        int:  (Default value = 32)
-    map_height :
-        int:  (Default value = 32)
+        Which player to draw.
+    map_width, map_height :
+        The map size in tiles, which sets the axis limits.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (7)
-    7) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
+        The figure title, or ``None`` for a default.
     cmap :
-        str:  (Default value = "viridis")
-    traj: Trajectory :
-
-    episode: int :
-         (Default value = 0)
-    player: int :
-         (Default value = 0)
-    map_width: int :
-         (Default value = 32)
-    map_height: int :
-         (Default value = 32)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
-    cmap: str :
-         (Default value = "viridis")
+        The colormap used for the time gradient.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``. The y axis is inverted, so the picture
+        matches the map rather than standard plot orientation.
 
+    Raises
+    ------
+    ValueError
+        When the trajectory carries no ``positions``.
     """
     if traj.positions is None:
         raise ValueError("plot_trajectory_trace requires positions data")
@@ -459,38 +397,37 @@ def plot_resource_depletion(
     figsize: tuple[float, float] = (12, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot total remaining block resources over time.
+    """Draw the total resource left on the map over time.
 
-    Requires the ``block_resources`` field on the trajectory,
-    shaped ``(B, T, H, W)``.  This is not stored by default; researchers
-    need to snapshot ``env_state.block_resources`` during rollouts.
+    The line is the mean over episodes, and the band around it is one
+    standard deviation. The total sums every map tile, so it mixes
+    every ore into one number and does not separate them.
 
     Parameters
     ----------
     traj :
-        Trajectory:
+        A trajectory whose ``block_resources`` field is set, shaped
+        ``(B, T, H, W)``. Recordings do not carry this field by
+        default. A rollout has to snapshot
+        ``env_state.block_resources`` at each step.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (12)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
 
+    Raises
+    ------
+    ValueError
+        When the trajectory carries no ``block_resources``.
     """
     if traj.block_resources is None:
         raise ValueError(
@@ -528,55 +465,39 @@ def plot_episode_rewards(
     figsize: tuple[float, float] = (10, 6),
     title: str | None = None,
 ) -> tuple[Figure, np.ndarray]:
-    """Plot per-step and cumulative rewards for a single episode.
+    """Draw the step reward and the running total of one episode.
 
-    The top panel shows a bar chart of per-step rewards and the bottom
-    panel shows the cumulative reward curve with shaded area.
+    The figure holds two stacked panels that share an x axis. The top
+    panel is a bar for each step. The bottom is the cumulative sum.
 
     Parameters
     ----------
     traj :
-        Trajectory with the ``rewards`` field populated.
+        A trajectory whose ``rewards`` field is set.
     episode :
-        Episode index to plot.
+        Which episode to draw.
     figsize :
-        Figure size.
+        The size of the figure in inches. This function always makes
+        its own figure, because it needs two panels.
     title :
-        Title for the top panel.
-    traj :
-        Trajectory:
-    episode :
-        int:  (Default value = 0)
-    figsize :
-        tuple[float:
-    float] :
-        (Default value = (10)
-    6) :
-
-    title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    episode: int :
-         (Default value = 0)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The title over the top panel, or ``None`` for a default.
 
     Returns
     -------
-
-        Tuple of ``(fig, axes)`` where *axes* is a length-2 array
-
-        Tuple of ``(fig, axes)`` where *axes* is a length-2 array
-        of the step-reward and cumulative-reward axes.
+    tuple
+        ``(figure, axes)``, where ``axes`` holds the step-reward panel
+        and the cumulative panel, in that order.
 
     Raises
     ------
     ValueError
-        If the trajectory has no ``rewards`` field.
+        When the trajectory carries no ``rewards``.
 
+    Notes
+    -----
+    A trajectory padded to a common episode length carries zeros in
+    the pad steps. The cumulative line therefore runs flat at the end
+    rather than stopping.
     """
     if traj.rewards is None:
         raise ValueError("plot_episode_rewards requires the rewards field.")

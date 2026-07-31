@@ -1,18 +1,29 @@
-"""Action and item category definitions with shade palettes.
+"""Group the engine's actions and items into colored categories.
 
-Groups actions and items into semantic categories, each with a base
-color. Individual members within a group get distinct shades of that
-base color, producing the banded look of an Age-of-Empires-style
-stacked area chart.
+Plot code asks two questions of this module. Which category does this
+action or item belong to, and what color is that category? The answers
+drive the bands of a stacked area chart and the node fills of the
+recipe diagram.
+
+Every member of a category shares the base color of that category. The
+color therefore gives the category, and the label gives the member.
+There is no separate shade for each member.
+
+The action groups are written out by hand, because a category such as
+"Movement" has no enum of its own. The item groups come from the
+engine's ``Resource``, ``HalfFabricate``, and ``Machine`` enums, so
+they cannot drift from the item table in ``constants.py``.
+
+Every key in the returned maps is the upper-case name of an
+:class:`~factoriax.engine.constants.ItemType` or
+:class:`~factoriax.engine.constants.Action` member, such as
+``IRON_PLATE``. Colors are hex strings such as ``"#2ca02c"``.
 """
 
 from __future__ import annotations
 
 from collections import OrderedDict
 from enum import IntEnum
-
-import matplotlib.colors as mcolors
-import numpy as np
 
 from factoriax.engine.constants import (
     Action,
@@ -148,10 +159,9 @@ ACTION_GROUPS: OrderedDict[str, tuple[str, list[int]]] = OrderedDict(
 # Item groups: (base_hex, [ItemType members])
 # ---------------------------------------------------------------
 
-# Each item category is one of the engine's source enums. The visual
-# label and base colour are paper-side concerns; the membership comes
-# straight from the engine so categories.py never drifts from the item
-# table in constants.py.
+# Each item category is one of the engine's source enums. The label
+# and base color are set here. The membership comes from the enum, so
+# this file never drifts from the item table in constants.py.
 _CATEGORY_SOURCES: tuple[tuple[str, str, type[IntEnum]], ...] = (
     ("Machines", "#2ca02c", Machine),
     ("Half Fabricates", "#ff7f0e", HalfFabricate),
@@ -160,7 +170,15 @@ _CATEGORY_SOURCES: tuple[tuple[str, str, type[IntEnum]], ...] = (
 
 
 def _build_item_groups() -> OrderedDict[str, tuple[str, list[int]]]:
-    """Mirror the engine's ``Resource``/``HalfFabricate``/``Machine`` enums."""
+    """Build the item groups from the engine's item enums.
+
+    Returns
+    -------
+    collections.OrderedDict
+        ``{category_label: (base_hex, [item_type_values])}``, in the
+        order of :data:`_CATEGORY_SOURCES`. The ``NONE`` member of each
+        enum is dropped, because it names no item.
+    """
     groups: OrderedDict[str, tuple[str, list[int]]] = OrderedDict()
     for label, base_hex, enum in _CATEGORY_SOURCES:
         members = [
@@ -173,47 +191,23 @@ def _build_item_groups() -> OrderedDict[str, tuple[str, list[int]]]:
 ITEM_GROUPS: OrderedDict[str, tuple[str, list[int]]] = _build_item_groups()
 
 
-def shade_palette(
-    base_hex: str,
-    n: int,
-) -> list[str]:
-    """Generate ``n`` shades of a base color from dark to light.
+def item_palette() -> dict[str, str]:
+    """Map every item name to the fill color of its category.
 
-    Interpolates lightness between 60% and 130% of the base RGB,
-    clamped to [0, 1]. With one member the base color is returned
-    unchanged.
-
-    Parameters
-    ----------
-    base_hex :
-        Base color as a hex string (e.g. ``"#2ca02c"``).
-    n :
-        Number of shades to produce.
-    base_hex : str :
-
-    n : int :
-
-    base_hex: str :
-
-    n: int :
-
+    Every item in a category shares the base color of that category.
+    The color therefore gives the category and nothing more. The label
+    separates one item from another. There is no shade for each item,
+    and this is deliberate. A reader cannot rank twelve shades of one
+    hue, but a reader can read a name.
 
     Returns
     -------
-
-
+    dict
+        ``{item_name: hex}``. The key is the upper-case ``ItemType``
+        member name, such as ``IRON_PLATE``. An item outside the three
+        category enums is absent, so the caller needs a fallback
+        color.
     """
-    if n <= 0:
-        return []
-    if n == 1:
-        return [base_hex]
-    rgb = np.array(mcolors.to_rgb(base_hex))
-    factors = np.linspace(0.6, 1.3, n)
-    return [mcolors.to_hex(np.clip(rgb * f, 0.0, 1.0)) for f in factors]
-
-
-def item_palette() -> dict[str, str]:
-    """ """
     palette: dict[str, str] = {}
     for _name, (base_hex, members) in ITEM_GROUPS.items():
         for item in members:
@@ -222,12 +216,35 @@ def item_palette() -> dict[str, str]:
 
 
 def category_palette() -> dict[str, str]:
-    """ """
+    """Map every item category name to its base color.
+
+    Use this for a legend, where one entry stands for a whole category.
+    Use :func:`item_palette` to color a single item.
+
+    Returns
+    -------
+    dict
+        ``{category_label: hex}``, such as ``{"Machines": "#2ca02c"}``.
+        The insertion order follows :data:`_CATEGORY_SOURCES`, so a
+        legend built from it keeps a stable order between runs.
+    """
     return {name: base_hex for name, (base_hex, _) in ITEM_GROUPS.items()}
 
 
 def item_to_category() -> dict[str, str]:
-    """ """
+    """Map every item name to the name of its category.
+
+    This is the inverse view of :data:`ITEM_GROUPS`. Use it to decide
+    which legend entry an item belongs under.
+
+    Returns
+    -------
+    dict
+        ``{item_name: category_label}``. The key is the upper-case
+        ``ItemType`` member name, such as ``IRON_PLATE``. An item
+        outside the three category enums is absent, so a caller must
+        handle a missing key.
+    """
     mapping: dict[str, str] = {}
     for name, (_, members) in ITEM_GROUPS.items():
         for item in members:

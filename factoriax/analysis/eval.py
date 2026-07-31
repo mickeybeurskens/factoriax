@@ -1,11 +1,13 @@
-"""Eval-rollout container and summary plots.
+"""Hold one eval episode and draw its summary plots.
 
-A single-episode rollout (states, actions, achievement masks) is the
-shared input format for offline inspection visualizations: per-item
-inventory trajectories, per-action histograms, and achievement
-unlock timing. Both the PPO eval pipeline and the scripted-agent
-runners produce :class:`EvalRollout` instances and call
-:func:`generate_eval_plots`.
+:class:`EvalRollout` is the shared format for a single episode: the
+states, the actions, and the achievement mask at each step. The PPO
+eval pipeline and the scripted-agent runners both build one and pass
+it to :func:`generate_eval_plots`.
+
+That call writes three figures. One shows the item counts over time,
+one the action totals, and one the timestep at which each achievement
+unlocked.
 """
 
 from __future__ import annotations
@@ -24,7 +26,26 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class EvalRollout:
-    """Collected artifacts from a single deterministic eval episode."""
+    """The recorded output of one deterministic eval episode.
+
+    Attributes
+    ----------
+    frames :
+        RGB frames for a video, or ``None`` when the run rendered
+        none.
+    actions :
+        The action taken at each step, as a 1-D int array of length
+        ``T``.
+    env_states :
+        The state at each step. This list holds ``T + 1`` entries,
+        one more than ``actions``, because it records the state
+        before the first action and after the last.
+    ach_per_step :
+        The achievement mask at each step, of shape
+        ``(T + 1, MAX_ACHIEVEMENTS)``. The mask is latched, so a bit
+        stays set once it is set. Trailing slots past the achievement
+        count of the scenario are padding.
+    """
 
     frames: list[np.ndarray] | None
     actions: np.ndarray
@@ -33,7 +54,15 @@ class EvalRollout:
 
     @property
     def final_ach_mask(self) -> np.ndarray:
-        """Latched achievement mask at the last recorded step."""
+        """The achievement mask at the last recorded step.
+
+        Returns
+        -------
+        numpy.ndarray
+            One row of ``ach_per_step``, of length
+            ``MAX_ACHIEVEMENTS``. Because the mask is latched, this row
+            names every achievement the episode reached.
+        """
         mask: np.ndarray = self.ach_per_step[-1]
         return mask
 
@@ -46,39 +75,38 @@ def plot_item_counts(
 ) -> Any:
     """Line plot of player item counts over time.
 
-    Draws one line per :class:`ItemType` that exceeds zero at some
-    point in the episode. The dense ``player_inventory`` field on the
-    trajectory (shape ``(1, T+1, P, N)``) is already per-item, so no
-    slot-to-item aggregation is needed.
+    The plot holds one line for each item type that rises above zero
+    at some point. An item that stays at zero is left out, which keeps
+    the legend short.
+
+    The function reads episode 0 and player 0 only, from
+    ``player_inventory`` of shape ``(1, T + 1, P, N)``. That field
+    already holds a count for each item, so nothing has to map slots
+    to items.
 
     Parameters
     ----------
     traj :
-        Trajectory pytree from
+        A trajectory from
         :func:`factoriax.analysis.trajectory.states_to_trajectory`.
     out_path :
-        PNG destination.
+        Where to write the PNG. Parent directories are not created.
     title :
-        Figure title.
-    traj: Any :
-
-    out_path: Any :
-
-    * :
-
-    title: str :
-         (Default value = "Item counts over time")
+        The figure title.
 
     Returns
     -------
-
-        ``out_path`` as written.
+    Any
+        ``out_path`` unchanged, after the write.
 
     Raises
     ------
     ValueError
-        If the trajectory has no ``player_inventory``.
+        When the trajectory carries no ``player_inventory``.
 
+    Notes
+    -----
+    The function writes a file and closes its own figure.
     """
     import matplotlib.pyplot as plt  # noqa: PLC0415
 
@@ -117,32 +145,33 @@ def plot_action_counts(
 ) -> Any:
     """Bar chart of per-action counts over a single eval episode.
 
-    Single-episode action distribution over time is noisy, so this
-    helper plots a simple counts view. A moving-average distribution
-    is a better fit for multi-episode analyses.
+    Bars are sorted by count, and an action with a count of zero is
+    left out. The figure grows taller with the number of actions kept,
+    so the labels stay readable.
+
+    One episode gives a noisy distribution over time, so this plot
+    shows plain totals. For several episodes, a moving average of the
+    distribution says more.
 
     Parameters
     ----------
     actions :
-        1-D int32 array of action indices.
+        Action ids in a 1-D int array. Every entry counts, so a
+        trajectory padded with zeros reports those pad steps as real
+        ``NOOP`` actions.
     out_path :
-        PNG destination.
+        Where to write the PNG. Parent directories are not created.
     title :
-        Figure title.
-    actions: np.ndarray :
-
-    out_path: Any :
-
-    * :
-
-    title: str :
-         (Default value = "Action counts")
+        The figure title.
 
     Returns
     -------
+    Any
+        ``out_path`` unchanged, after the write.
 
-        ``out_path`` as written.
-
+    Notes
+    -----
+    The function writes a file and closes its own figure.
     """
     import matplotlib.pyplot as plt  # noqa: PLC0415
 
@@ -175,42 +204,40 @@ def generate_eval_plots(
 ) -> dict[str, Any]:
     """Render inventory, action-count, and achievement-timing plots.
 
+    Each plot is drawn inside its own ``try``. A plot that raises is
+    logged with its traceback and left out of the result, so one
+    failure does not cost the other two.
+
     Parameters
     ----------
     rollout :
-        Recorded episode artifacts.
+        The recorded episode.
     out_dir :
-        Destination directory; created if missing.
+        Where to write the three PNG files. Missing parent directories
+        are created.
     achievement_labels :
-        Per-achievement display names; length
-        equals ``num_achievements``.
+        The display name of each achievement. The list must hold
+        ``num_achievements`` entries.
     num_achievements :
-        How many leading slots of
-        ``rollout.ach_per_step`` are real achievements (the
-        trailing slots are padding from ``MAX_ACHIEVEMENTS``).
+        How many leading slots of ``rollout.ach_per_step`` name a real
+        achievement. The slots after them are padding up to
+        ``MAX_ACHIEVEMENTS``.
     title_prefix :
-        Prepended to each figure title.
-    rollout: EvalRollout :
-
-    out_dir: Any :
-
-    * :
-
-    achievement_labels: list[str] :
-
-    num_achievements: int :
-
-    title_prefix: str :
-         (Default value = "Final rollout")
+        Text put in front of each figure title.
 
     Returns
     -------
-    Mapping ``{"items"
-        path, "actions": path, "achievements": path}``.
-    Mapping ``{"items"
-        path, "actions": path, "achievements": path}``.
-        Keys are omitted when their plot fails to generate.
+    dict
+        ``{"items": path, "actions": path, "achievements": path}``. A
+        key is absent when its plot raised, so a caller must not
+        assume all three.
 
+    Notes
+    -----
+    The function selects the Agg matplotlib backend for the whole
+    process. It also pads ``rollout.actions`` with one zero, to match
+    the state list, which is one longer. Action 0 is ``NOOP``, so the
+    action-count plot plots one extra no-op.
     """
     import matplotlib  # noqa: PLC0415
 

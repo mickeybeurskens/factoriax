@@ -1,39 +1,49 @@
-"""Trajectory container for storing and validating episode rollout data.
+"""Hold the recorded episodes that every analysis function reads.
 
-A Trajectory holds batched sequences of actions and (optionally) state-derived
-features from one or more episodes.  Every analysis function in this package
-accepts a Trajectory as its primary input.
+:class:`Trajectory` is the one input format of this package. It holds
+a batch of episodes, and each field is an array whose first two axes
+are the episode and the timestep.
 
-Typical usage
--------------
+Axis order
+----------
+Every array starts with ``(B, T, ...)``, where ``B`` counts episodes
+and ``T`` counts timesteps. A field that belongs to one player adds a
+player axis after ``T``, giving ``(B, T, P, ...)``. A map field adds
+the two map axes instead, giving ``(B, T, H, W, ...)``.
+
+Only ``actions`` is required. Every other array field defaults to
+``None``, which means "not recorded" and never "empty".
+
+Scheme descriptors
+------------------
+Four dictionary fields record how a trajectory was produced: the
+observation scheme, the reward scheme, the cost scheme, and the engine
+parameters. :meth:`Trajectory.save` writes them to the archive as
+JSON, under keys with a leading underscore, which keeps them apart
+from the array fields.
+
+Examples
+--------
+Build a trajectory from actions alone:
+
 >>> import numpy as np
 >>> from factoriax.analysis.trajectory import Trajectory
->>> actions = np.random.randint(0, 12, size=(16, 200, 2))  # (B, T, P)
+>>> actions = np.random.randint(0, 12, size=(16, 200, 2))
 >>> traj = Trajectory(actions=actions)
+>>> traj.num_episodes, traj.episode_length, traj.num_players
+(16, 200, 2)
 
-With full state information:
->>> traj = Trajectory(
-...     actions=actions,
-...     positions=positions,           # (B, T, P, 2)
-...     inventory_items=inv_items,     # (B, T, P, num_slots)
-...     inventory_counts=inv_counts,   # (B, T, P, num_slots)
-...     achievements=achievements,     # (B, T, num_achievements)
-...     rewards=rewards,               # (B, T) or (B, T, P)
-...     timesteps=timesteps,           # (B, T)
-... )
+Record how it was produced:
 
-With scheme descriptors that capture how the trajectory was produced:
 >>> traj = Trajectory(
 ...     actions=actions,
 ...     observation_scheme={"type": "local", "radius": 7},
-...     reward_scheme={"type": "shaped", "weights": {"mine": 1.0}},
-...     cost_scheme={"type": "action_penalty", "scale": 0.01},
 ... )
+>>> traj.observation_scheme["radius"]
+7
 
-State round-trip (requires factoriax.engine.state):
->>> from factoriax.analysis.trajectory import states_to_trajectory, trajectory_to_states
->>> traj = states_to_trajectory(states, actions)
->>> reconstructed = trajectory_to_states(traj, episode=0)
+Nothing runs these examples. ``pyproject.toml`` sets no
+``--doctest-modules``, so they are text and can go stale.
 """
 
 from __future__ import annotations
@@ -47,8 +57,9 @@ import orjson
 if TYPE_CHECKING:
     from factoriax.engine.state import EnvParams, EnvState
 
-# All optional array fields in the order they are declared.
-# Used by save/load/slice/repr to avoid hardcoding the list in 6 places.
+#: Every optional array field, in declaration order. Save, load, the
+#: slice methods, and ``__repr__`` all walk this tuple, so a new field
+#: has to be added here as well as to the class.
 _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     # Player fields — shape (B, T, P, ...).
     "positions",
@@ -82,17 +93,15 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "timesteps",
 )
 
-# Fields that have a per-player dimension after (B, T).
+#: Fields that carry a player axis after ``(B, T)``.
+#: :meth:`Trajectory.player` reads this set to decide which fields to
+#: slice on that axis. Every name here must also appear in
+#: :data:`_OPTIONAL_ARRAY_FIELDS`, or it is never reached.
 _PLAYER_FIELDS: frozenset[str] = frozenset(
     {
         "positions",
         "player_directions",
         "player_inventory",
-        "inventory_items",
-        "inventory_counts",
-        "selected_slots",
-        "crafting_recipe",
-        "craft_progress",
     }
 )
 
@@ -101,18 +110,83 @@ _PLAYER_FIELDS: frozenset[str] = frozenset(
 class Trajectory:
     """Immutable container for batched episode data.
 
-    All array fields follow the convention ``(B, T, ...)`` where *B* is the
-    batch (episode) dimension and *T* is the time dimension.  For multi-player
-    environments the player dimension *P* follows *T* in player-specific
-    fields.
+    Every array field starts with ``(B, T, ...)``. ``B`` counts
+    episodes and ``T`` counts timesteps. A player field adds a player
+    axis after ``T``. A map field adds the map axes instead.
 
-    Parameters
+    The class is frozen, so a slice method returns a new trajectory
+    and never changes the one it was called on. The arrays inside are
+    not copied, so two trajectories can share memory and a caller that
+    writes into one array affects both.
+
+    Attributes
     ----------
+    actions :
+        The action taken at each step. Shape ``(B, T)`` for one
+        player, or ``(B, T, P)`` for several. A 1-D array is accepted
+        and gets a batch axis of 1.
+    positions :
+        Player positions as ``(B, T, P, 2)``, ordered ``(x, y)`` in
+        tiles. Note the order: x is first, unlike the map fields,
+        which are indexed ``[y, x]`` in row-major order.
+    player_directions :
+        The facing of each player as ``(B, T, P)``.
+    player_inventory :
+        Item counts as ``(B, T, P, NUM_ITEM_TYPES)``, indexed by
+        ``ItemType`` value. This is a count for each item, not a list
+        of slots.
+    block_map :
+        The tile type of each map cell as ``(B, T, H, W)``.
+    block_resources :
+        The resource left in each map cell as ``(B, T, H, W)``.
+    machine_types :
+        The machine on each map cell as ``(B, T, H, W)``.
+    tile_entity :
+        The entity index on each map cell as ``(B, T, H, W)``, or -1
+        for an empty cell.
+    ent_y, ent_x :
+        Entity positions as ``(B, T, MAX_M)``. A free slot holds a
+        negative y.
+    ent_type, ent_direction, ent_power, ent_health :
+        Per-entity fields as ``(B, T, MAX_M)``.
+    ent_buf_type, ent_buf_count :
+        The buffer of each entity as ``(B, T, MAX_M)``.
+    ent_asm_in_type, ent_asm_in_count, ent_asm_out_type,
+    ent_asm_out_count :
+        Assembler input and output slots as ``(B, T, MAX_M)``.
+    selected_player :
+        The index of the acting player as ``(B, T)``.
+    achievements :
+        The achievement mask at each step as ``(B, T, A)``, where
+        ``A`` is the achievement count of the scenario.
+    achievements_unlocked :
+        The latched mask carried by the engine state, padded to
+        ``MAX_ACHIEVEMENTS``. This is wider than ``achievements`` and
+        is not the same field.
+    items_mined :
+        Items mined so far as ``(B, T, ...)``.
+    science_consumed_step :
+        Science consumed at each step as ``(B, T, ...)``.
+    rewards :
+        The reward at each step as ``(B, T)``.
+    timesteps :
+        The engine timestep of each step as ``(B, T)``. This can
+        differ from the position along the time axis when a recording
+        skips steps.
+    observation_scheme, reward_scheme, cost_scheme, env_params_scheme :
+        Plain dictionaries that record how the trajectory was
+        produced. ``None`` means "not recorded".
 
-    Returns
-    -------
+    Raises
+    ------
+    ValueError
+        When ``actions`` has more than three axes, or fewer than one.
 
-
+    Notes
+    -----
+    Nothing checks that the fields agree with each other. A trajectory
+    whose ``rewards`` are shorter than its ``actions`` is built without
+    complaint and fails later, inside whichever function reads both.
     """
 
     actions: np.ndarray
@@ -161,7 +235,16 @@ class Trajectory:
     env_params_scheme: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
-        """Coerce actions to numpy and ensure batch dimension."""
+        """Convert ``actions`` to a NumPy array and add a batch axis.
+
+        A 1-D array describes one episode and gets a batch axis of 1. A
+        2-D or 3-D array is left as it is.
+
+        Raises
+        ------
+        ValueError
+            When ``actions`` has four or more axes, or zero.
+        """
         object.__setattr__(self, "actions", np.asarray(self.actions))
 
         actions = self.actions
@@ -203,42 +286,39 @@ class Trajectory:
     # ---- Slicing helpers ----
 
     def episode(self, idx: int) -> Trajectory:
-        """
+        """Return one episode as a trajectory of batch size 1.
 
         Parameters
         ----------
         idx :
-            int:
-        idx : int :
-
-        idx: int :
-
+            The episode to keep. A negative index counts from the end,
+            as in a Python list.
 
         Returns
         -------
-
-
+        Trajectory
+            A new trajectory with ``B`` of 1. The time axis is kept, so
+            the result is not squeezed to a single episode shape.
         """
         if idx < 0:
             idx = self.num_episodes + idx
         return self.episodes(slice(idx, idx + 1))
 
     def episodes(self, s: slice | np.ndarray) -> Trajectory:
-        """Slice along the batch dimension.
+        """Return the selected episodes as a new trajectory.
 
         Parameters
         ----------
         s :
-            slice | np.ndarray:
-        s : slice | np.ndarray :
-
-        s: slice | np.ndarray :
-
+            Anything NumPy accepts on the first axis: a slice, an
+            array of indexes, or a boolean mask.
 
         Returns
         -------
-
-
+        Trajectory
+            A new trajectory holding those episodes. Every recorded
+            field is sliced the same way, and the scheme dictionaries
+            are carried over unchanged.
         """
         kwargs: dict[str, Any] = {"actions": self.actions[s]}
         for name in _OPTIONAL_ARRAY_FIELDS:
@@ -249,21 +329,22 @@ class Trajectory:
         return Trajectory(**kwargs)
 
     def player(self, idx: int) -> Trajectory:
-        """
+        """Return the view of one player as a new trajectory.
 
         Parameters
         ----------
         idx :
-            int:
-        idx : int :
-
-        idx: int :
-
+            The player to keep.
 
         Returns
         -------
-
-
+        Trajectory
+            A new trajectory with the player axis dropped from the
+            player fields. A trajectory that is not multi-player is
+            returned unchanged, including one of shape ``(B, T, 1)``,
+            which therefore keeps its player axis. Use
+            :func:`factoriax.analysis.utils.resolve_player_actions`
+            when the result must always have two axes.
         """
         if not self.is_multi_player:
             return self
@@ -286,27 +367,22 @@ class Trajectory:
         return Trajectory(**kwargs)
 
     def time_slice(self, start: int, end: int) -> Trajectory:
-        """Slice along the time dimension.
+        """Return the timesteps from ``start`` to ``end`` as a trajectory.
 
         Parameters
         ----------
         start :
-            int:
+            The first timestep to keep.
         end :
-            int:
-        start : int :
-
-        end : int :
-
-        start: int :
-
-        end: int :
-
+            The timestep after the last one to keep, as in a Python
+            slice.
 
         Returns
         -------
-
-
+        Trajectory
+            A new trajectory holding that window of every recorded
+            field. The ``timesteps`` field is sliced too, so it keeps
+            the original engine timesteps and does not restart at 0.
         """
         kwargs: dict[str, Any] = {"actions": self.actions[:, start:end]}
         for name in _OPTIONAL_ARRAY_FIELDS:
@@ -327,7 +403,15 @@ class Trajectory:
     )
 
     def _scheme_kwargs(self) -> dict[str, Any]:
-        """ """
+        """Return the scheme fields that are set, as constructor keywords.
+
+        Returns
+        -------
+        dict
+            One entry for each scheme field that is not ``None``. The
+            slice methods pass this on, so a slice keeps the record of
+            how the trajectory was produced.
+        """
         return {
             name: getattr(self, name)
             for name in self._SCHEME_FIELDS
@@ -337,24 +421,22 @@ class Trajectory:
     # ---- I/O helpers ----
 
     def save(self, path: str) -> None:
-        """Save trajectory to a compressed ``.npz`` file.
+        """Write the trajectory to a compressed ``.npz`` archive.
 
-        Scheme dicts are serialized as JSON byte strings stored under
-        keys with an underscore prefix (e.g. ``_observation_scheme``).
+        Each array field is stored under its own name. Each scheme
+        dictionary is stored as JSON bytes under its name with a
+        leading underscore, such as ``_observation_scheme``.
+
+        A field that is ``None`` is left out of the archive. An
+        unrecorded field is therefore absent, and not present as a
+        null, so :meth:`load` can tell the two apart.
 
         Parameters
         ----------
         path :
-            str:
-        path : str :
-
-        path: str :
-
-
-        Returns
-        -------
-
-
+            Where to write the archive. NumPy appends ``.npz`` when
+            the name does not end with it. Parent directories are not
+            created.
         """
         arrays: dict[str, Any] = {"actions": self.actions}
         for name in _OPTIONAL_ARRAY_FIELDS:
@@ -369,26 +451,32 @@ class Trajectory:
 
     @classmethod
     def load(cls, path: str) -> Trajectory:
-        """Load trajectory from a ``.npz`` file.
+        """Read a trajectory back from a ``.npz`` archive.
 
-        Underscore-prefixed JSON entries are deserialized back into
-        their corresponding scheme dicts.  Legacy files with scalar
-        ``_obs_type`` / ``_obs_radius`` keys are migrated into
-        ``observation_scheme`` automatically.
+        A field absent from the archive stays ``None``. Each JSON entry
+        with a leading underscore is read back into its scheme
+        dictionary, so the values return as plain JSON types.
+
+        An old archive that stored ``_obs_type`` and ``_obs_radius`` as
+        scalars is folded into ``observation_scheme``. That fold runs
+        only when the archive holds no ``observation_scheme`` of its
+        own.
 
         Parameters
         ----------
         path :
-            str:
-        path : str :
-
-        path: str :
-
+            The archive to read.
 
         Returns
         -------
+        Trajectory
+            The trajectory the archive holds.
 
-
+        Notes
+        -----
+        The load runs with ``allow_pickle=True``, which is what lets
+        the JSON entries come back. Read only archives you trust, and
+        treat one from outside the project as untrusted input.
         """
         data = np.load(path, allow_pickle=True)
         kwargs: dict[str, Any] = {"actions": data["actions"]}
@@ -410,7 +498,15 @@ class Trajectory:
         return cls(**kwargs)
 
     def __repr__(self) -> str:
-        """Human-readable summary."""
+        """Return a one-line summary for the console.
+
+        Returns
+        -------
+        str
+            The episode, step, and player counts, then the names of
+            the recorded array fields and scheme fields. The arrays
+            themselves are not printed.
+        """
         parts = [
             f"Trajectory(episodes={self.num_episodes}",
             f"steps={self.episode_length}",
@@ -456,50 +552,39 @@ def states_to_trajectory(
     rewards: np.ndarray | None = None,
     params: EnvParams | None = None,
 ) -> Trajectory:
-    """Convert a sequence of EnvState snapshots into a Trajectory.
+    """Stack a list of engine states into a one-episode trajectory.
 
-    Builds a single-episode trajectory (batch dim = 1) by stacking
-    every array field from the state list along a new time axis.
-
-    Parameters
-    ----------
-        states: List of ``EnvState`` objects, one per timestep.
-        actions: Optional action array of shape ``(T,)`` or ``(T, P)``.
-            If ``None``, a zeros array is used.
-        rewards: Optional reward array of shape ``(T,)``.
+    Every array field of the states is stacked along a new time axis,
+    and a batch axis of 1 is added in front. The result therefore has
+    ``B`` of 1 and ``T`` equal to the number of states.
 
     Parameters
     ----------
-      the: dict form is recorded on the returned trajectory as
-      env_params_scheme: so replay tooling can rebuild the
-      exact: engine parameters that produced the states
-      states: list[EnvState]:
-      actions: np.ndarray | None:  (Default value = None)
-      rewards: np.ndarray | None:  (Default value = None)
-
-    Parameters
-    ----------
-    states : list[EnvState] :
-
-    actions : np.ndarray | None :
-        (Default value = None)
-    rewards : np.ndarray | None :
-        (Default value = None)
-    params : EnvParams | None :
-        (Default value = None)
-    states: list[EnvState] :
-
-    actions: np.ndarray | None :
-         (Default value = None)
-    rewards: np.ndarray | None :
-         (Default value = None)
-    params: EnvParams | None :
-         (Default value = None)
+    states :
+        The states, one for each timestep, in order.
+    actions :
+        The action at each step, of shape ``(T,)`` or ``(T, P)``, or
+        ``None`` for all zeros. Nothing compares its length against
+        the state count, so a mismatch gives a trajectory whose action
+        axis and time axis disagree.
+    rewards :
+        The reward at each step, of shape ``(T,)``, or ``None`` to
+        record none.
+    params :
+        The engine parameters that produced the states, or ``None``.
+        When given, their dictionary form is stored in
+        ``env_params_scheme`` so replay code can rebuild them.
 
     Returns
     -------
+    Trajectory
+        A trajectory with ``B`` of 1. Its ``timesteps`` field counts
+        from 0 to ``T - 1``, whatever the states themselves report.
 
-
+    Raises
+    ------
+    ValueError
+        When ``states`` is empty.
     """
     if not states:
         raise ValueError("states list is empty.")
@@ -550,35 +635,37 @@ def trajectory_to_states(
     traj: Trajectory,
     episode: int = 0,
 ) -> list[EnvState]:
-    """Reconstruct EnvState objects from a Trajectory.
+    """Rebuild the engine states of one episode from a trajectory.
 
-    Only fields that are present in the trajectory are set. Missing
-    fields will cause the reconstruction to fail if they are required
-    by ``EnvState``.
+    This is the inverse of :func:`states_to_trajectory`. Only the
+    fields the trajectory recorded are set. A field that ``EnvState``
+    requires but the trajectory lacks raises inside ``EnvState``, and
+    not here.
+
+    The ``achievements`` field is skipped. It is per-step and only as
+    wide as the achievement count of the scenario, while ``EnvState``
+    carries the latched ``achievements_unlocked`` at
+    ``MAX_ACHIEVEMENTS``.
 
     Parameters
     ----------
     traj :
-        Trajectory with state fields populated.
+        The recording to read.
     episode :
-        Episode index to reconstruct.
-    traj :
-        Trajectory:
-    episode :
-        int:  (Default value = 0)
-    traj : Trajectory :
-
-    episode : int :
-        (Default value = 0)
-    traj: Trajectory :
-
-    episode: int :
-         (Default value = 0)
+        Which episode to rebuild.
 
     Returns
     -------
+    list
+        One ``EnvState`` for each timestep. The ``timestep`` of each
+        state comes from the ``timesteps`` field, or from the position
+        along the time axis when that field was not recorded.
 
-
+    Notes
+    -----
+    A trajectory from :meth:`RolloutRecorder.finish` is padded with
+    zeros to a common length. The states rebuilt from those pad steps
+    look like real states at the origin with empty inventories.
     """
     from factoriax.engine.state import EnvState
 

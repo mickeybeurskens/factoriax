@@ -1,18 +1,28 @@
-"""Action sequence analysis and visualization.
+"""Find temporal patterns in what an agent did, and draw them.
 
-This module provides tools for understanding temporal patterns in agent
-action sequences.  All plotting functions return ``(fig, ax)`` tuples so
-researchers can further customize the output.
+Every function takes a
+:class:`~factoriax.analysis.trajectory.Trajectory`. Each plot returns
+its ``(figure, axes)`` without writing or closing anything, so the
+caller can change the result before saving it.
 
-Key analyses
-------------
-* **Raster plots** — color-coded timelines showing raw action sequences
-* **Transition matrices** — action-to-action transition probabilities
-* **N-gram analysis** — frequency of short action subsequences
-* **Entropy curves** — action diversity over time
-* **Run-length analysis** — distribution of consecutive repeated actions
+Five views, each with a plot and most with a finder that returns the
+numbers behind it:
 
-All functions accept a :class:`~factoriax.analysis.trajectory.Trajectory`.
+* A raster draws one colored cell for each episode and timestep. Phase
+  changes and loops show up as bands.
+* A transition matrix counts how often each action follows each other
+  action.
+* An n-gram count finds the short sequences an agent repeats.
+* An entropy curve measures how much the episodes of a batch agree at
+  each timestep.
+* A run length measures how long an action was repeated without a
+  break.
+
+:data:`DEFAULT_ACTION_LABELS` is built from the ``Action`` enum, so the
+names cannot drift from it. :data:`DEFAULT_ACTION_COLORS` is a hand
+written list and is shorter than the action count, so pass ``colors``
+when every action must be told apart. Each function that takes
+``colors`` says so again.
 """
 
 from __future__ import annotations
@@ -33,12 +43,18 @@ from factoriax.engine.constants import NUM_ACTIONS, Action
 from .trajectory import Trajectory
 from .utils import resolve_ax, resolve_player_actions
 
-# Derived from the Action enum so labels stay in sync automatically.
+#: The name of each action, in ``Action`` value order. Built from the
+#: enum, so it cannot drift from it and always covers every action.
 DEFAULT_ACTION_LABELS: list[str] = [a.name for a in Action]
 
-# Qualitative colormap for distinguishable actions.
-# Movement = cool tones, world interaction = warm tones,
-# UI/slot cycling = grays/purples, crafting = oranges.
+#: Fallback line and cell colors for the plots, in ``Action`` value
+#: order. Movement is cool tones, world interaction warm tones, slot
+#: cycling grays and purples, and crafting oranges.
+#:
+#: The list is shorter than the action count. Matplotlib gives every
+#: action past its end the same last color, so a default plot draws
+#: those actions alike. Pass ``colors`` with one entry for each action
+#: when they must be told apart.
 DEFAULT_ACTION_COLORS: list[str] = [
     "#bdbdbd",  # NOOP              - gray
     "#1f77b4",  # LEFT              - blue
@@ -67,22 +83,30 @@ def _get_action_cmap(
     num_actions: int,
     colors: Sequence[str] | None = None,
 ) -> mcolors.ListedColormap:
-    """Build a discrete colormap for actions.
+    """Build a discrete colormap with one color for each action.
 
     Parameters
     ----------
     num_actions :
-        int:
+        How many colors the map needs.
     colors :
-        Sequence[str] | None:  (Default value = None)
-    num_actions: int :
-
-    colors: Sequence[str] | None :
-         (Default value = None)
+        One color for each action, or ``None`` for
+        :data:`DEFAULT_ACTION_COLORS`.
 
     Returns
     -------
+    matplotlib.colors.ListedColormap
+        A map with ``min(num_actions, len(colors))`` entries. When
+        ``colors`` is shorter than ``num_actions`` the map is short
+        too, and matplotlib then gives every index past its end the
+        same last color.
 
+    Notes
+    -----
+    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
+    defines 87 actions, so a default call draws actions 19 and above
+    in one shared color. Pass ``colors`` with one entry for each
+    action to tell them apart.
     """
     if colors is None:
         colors = DEFAULT_ACTION_COLORS[:num_actions]
@@ -105,76 +129,51 @@ def action_raster(
     figsize: tuple[float, float] = (14, 6),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot a raster of action sequences across episodes.
+    """Draw the action of every episode and timestep as a colored cell.
 
-    Each row is an episode, each column is a timestep, and color encodes the
-    action taken.  This is the single most informative view for spotting
-    temporal structure: phase transitions, loops, stereotyped sub-behaviors.
+    One row is an episode, one column a timestep, and the color is the
+    action. This is the first view to reach for when looking for
+    temporal structure: phase changes, loops, and repeated
+    sub-behaviors all show up as bands.
 
     Parameters
     ----------
-    traj : Trajectory
-        Trajectory data.
-    player : int
-        Player index for multi-player trajectories.  Defaults to 0.
-    num_actions : int
-        Total number of distinct actions.
-    action_labels : list[str]
-        Human-readable labels per action.
-    colors : sequence of str
-        Hex colors per action.
-    episode_labels : list[str]
-        Labels for each episode (y-axis).
-    ax : Axes
-        Existing matplotlib axes.  A new figure is created if *None*.
-    figsize : tuple
-        Figure size if creating a new figure.
-    title : str
-        Plot title.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        How many actions the color scale covers.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for
+        :data:`DEFAULT_ACTION_LABELS`, which is built from the
+        ``Action`` enum and cannot drift from it.
     colors :
-        Sequence[str] | None:  (Default value = None)
+        One color for each action, or ``None`` for the defaults.
     episode_labels :
-        list[str] | None:  (Default value = None)
+        The name of each row, or ``None`` to number them. The list
+        must hold one entry for each episode.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (14)
-    6) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    action_labels: list[str] | None :
-         (Default value = None)
-    colors: Sequence[str] | None :
-         (Default value = None)
-    episode_labels: list[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
 
+    Notes
+    -----
+    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
+    defines 87 actions, so a default call draws actions 19 and above
+    in one shared color. Pass ``colors`` with one entry for each
+    action to tell them apart.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape
@@ -236,47 +235,40 @@ def transition_matrix(
     normalize: bool = True,
     time_range: tuple[int, int] | None = None,
 ) -> np.ndarray:
-    """Compute the action-to-action transition matrix.
+    """Count how often each action follows each other action.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    player : int
-
-    num_actions : int
-
-    normalize : bool
-        If *True*, rows sum to 1 (transition probabilities).
-        If *False*, raw counts.
-    time_range : tuple[int
-        Restrict to a specific timestep window ``(start, end)``.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        The side length of the matrix. An action id at or above this
+        value raises ``IndexError``.
     normalize :
-        bool:  (Default value = True)
+        True to divide each row by its total, giving the probability
+        of the next action. False to return raw counts.
     time_range :
-        tuple[int:
-    int] | None :
-        (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    normalize: bool :
-         (Default value = True)
-    time_range: tuple[int :
-
+        ``(start, end)`` to count only that window of timesteps, or
+        ``None`` for the whole episode.
 
     Returns
     -------
+    numpy.ndarray
+        Shape ``(num_actions, num_actions)``, float64. Entry
+        ``(i, j)`` counts the steps where action ``i`` was followed by
+        action ``j``. Pairs are counted inside an episode only, so the
+        last step of one episode is not paired with the first of the
+        next.
 
+    Notes
+    -----
+    With ``normalize=True``, a row for an action that never occurred
+    is divided by 1 rather than by 0. Such a row is therefore all
+    zeros and not ``NaN``, so it plots as an empty row and does not
+    sum to 1.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     if time_range is not None:
@@ -307,64 +299,40 @@ def plot_transition_matrix(
     cmap: str = "Blues",
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot the action transition matrix as a heatmap.
+    """Draw the transition matrix as a heatmap.
 
     Parameters
     ----------
-    traj, player, num_actions, action_labels, time_range, normalize :
-        See :func:`transition_matrix`.
-    ax, figsize, cmap, title :
-        Plotting options.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        The side length of the matrix.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for the defaults. The
+        names label both axes.
     time_range :
-        tuple[int:
-    int] | None :
-        (Default value = None)
+        ``(start, end)`` to count only that window, or ``None``.
     normalize :
-        bool:  (Default value = True)
+        True for probabilities, False for raw counts. This also sets
+        the colorbar label.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (8)
-    7) :
-
-    cmap :
-        str:  (Default value = "Blues")
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    action_labels: list[str] | None :
-         (Default value = None)
-    time_range: tuple[int :
-
-    normalize: bool :
-         (Default value = True)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    cmap: str :
-         (Default value = "Blues")
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
+    cmap :
+        Any matplotlib colormap name.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
     """
     mat = transition_matrix(traj, player, num_actions, normalize, time_range)
 
@@ -419,61 +387,40 @@ def plot_phase_transitions(
     cmap: str = "Blues",
     phase_labels: list[str] | None = None,
 ) -> tuple[Figure, np.ndarray]:
-    """Plot transition matrices for multiple episode phases side-by-side.
+    """Draw one transition matrix for each phase, side by side.
 
-    This reveals how the policy's sequential behavior changes over the
-    course of an episode (e.g., exploring early, exploiting late).
+    Use this to see how the behavior of a policy changes over an
+    episode. An early phase and a late phase each get their own
+    matrix, on a shared color scale.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    phases : list of (start
-        Timestep ranges for each phase.
-    phase_labels : list[str]
-        Label for each phase subplot.
     traj :
-        Trajectory:
-    phases :
-        list[tuple[int:
-    int]] :
-
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
+    phases :
+        One ``(start, end)`` timestep window for each panel. The
+        windows may overlap and need not cover the whole episode.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        The side length of each matrix.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for the defaults.
     figsize_per_phase :
-        tuple[float:
-    float] :
-        (Default value = (5)
-    4.5) :
-
+        The size of one panel in inches. The figure width grows with
+        the number of phases.
     cmap :
-        str:  (Default value = "Blues")
+        Any matplotlib colormap name.
     phase_labels :
-        list[str] | None:  (Default value = None)
-    traj: Trajectory :
-
-    phases: list[tuple[int :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    action_labels: list[str] | None :
-         (Default value = None)
-    figsize_per_phase: tuple[float :
-
-    cmap: str :
-         (Default value = "Blues")
-    phase_labels: list[str] | None :
-         (Default value = None)
+        The title of each panel, or ``None`` to build one from the
+        window. The list must be as long as ``phases``.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``, where ``axes`` holds one entry for each
+        phase. The figure is not written and not closed.
     """
     n = len(phases)
     fig, axes = plt.subplots(
@@ -514,45 +461,31 @@ def action_ngrams(
     top_k: int = 20,
     action_labels: list[str] | None = None,
 ) -> list[tuple[Any, int]]:
-    """Extract the most common action n-grams.
+    """Count the most common runs of ``n`` actions in a row.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    n : int
-        Length of the subsequences (2 = bigrams, 3 = trigrams, etc.).
-    player : int
-
-    top_k : int
-        Number of top n-grams to return.
-    action_labels : list[str]
-        If provided, n-grams are returned as label tuples.
-        Otherwise, integer tuples.
     traj :
-        Trajectory:
-    n :
-        int:  (Default value = 2)
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
+    n :
+        How many actions make one gram. An ``n`` above the episode
+        length gives an empty result.
     top_k :
-        int:  (Default value = 20)
+        How many of the most common grams to return.
     action_labels :
-        list[str] | None:  (Default value = None)
-    traj: Trajectory :
-
-    n: int :
-         (Default value = 2)
-    player: int | None :
-         (Default value = None)
-    top_k: int :
-         (Default value = 20)
-    action_labels: list[str] | None :
-         (Default value = None)
+        The name of each action, or ``None`` to key the result by
+        action id instead of by name.
 
     Returns
     -------
-
+    list
+        ``(gram, count)`` pairs, most common first. A gram is a tuple
+        of ``n`` action ids, or of ``n`` names when ``action_labels``
+        is given. Grams are counted inside an episode only, so none
+        spans two episodes.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     counter: Counter[tuple[int, ...]] = Counter()
@@ -575,24 +508,25 @@ def _blend_ngram_color(
     action_indices: tuple[int, ...],
     colors: Sequence[str],
 ) -> str:
-    """Average the RGB values of the actions in an n-gram.
+    """Average the colors of the actions in one gram.
+
+    A gram has no color of its own, so its bar takes the mean of the
+    colors of its actions. Two grams that share most of their actions
+    therefore look alike.
 
     Parameters
     ----------
     action_indices :
-        tuple[int:
-    ...] :
-
+        The action ids in the gram.
     colors :
-        Sequence[str]:
-    action_indices: tuple[int :
-
-    colors: Sequence[str] :
-
+        One color for each action. An index past its end wraps around
+        with a modulo, so a short list gives a color rather than
+        raising.
 
     Returns
     -------
-
+    str
+        The mean color as a ``#rrggbb`` string.
     """
     rgbs = [mcolors.to_rgb(colors[min(i, len(colors) - 1)]) for i in action_indices]
     avg = tuple(sum(c) / len(c) for c in zip(*rgbs))
@@ -609,81 +543,43 @@ def plot_ngram_sweep(
     figsize: tuple[float, float] | None = None,
     title: str | None = None,
 ) -> tuple[Figure, np.ndarray]:
-    """Plot top-k n-grams for each n in a range, one row per n.
-
-    Produces a vertically stacked set of horizontal bar charts. Each
-    row shows the *top_k* most frequent n-grams for one value of *n*,
-    making it easy to spot dominant action sequences at every scale
-    from bigrams up to long motifs.
+    """Draw the top grams for each length in a range, one row each.
 
     Parameters
     ----------
     traj :
-        Trajectory data.
-    n_range :
-        Inclusive ``(min_n, max_n)`` range for n-gram lengths.
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        Player index for multi-player trajectories.
-    top_k :
-        Number of top n-grams per row.
-    action_labels :
-        Human-readable labels per action.
-    colors :
-        Hex colors per action, matching the raster palette.
-        Each bar is colored by blending the colors of its
-        constituent actions.
-    figsize :
-        Figure size. Defaults to a height scaled by the
-        number of rows.
-    title :
-        Overall figure title.
-    traj :
-        Trajectory:
+        Which player to read, or ``None`` for player 0.
     n_range :
-        tuple[int:
-    int] :
-        (Default value = (2)
-    10) :
-
-    player :
-        int | None:  (Default value = None)
+        ``(lowest, highest)`` gram length, both included. One row of
+        panels is drawn for each length.
     top_k :
-        int:  (Default value = 3)
+        How many grams to show for each length.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for the defaults.
     colors :
-        Sequence[str] | None:  (Default value = None)
+        One color for each action, or ``None`` for the defaults. Each
+        bar takes the mean color of its gram.
     figsize :
-        tuple[float:
-    float] | None :
-        (Default value = None)
+        The size of the figure in inches, or ``None`` to size it from
+        the row count.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    n_range: tuple[int :
-
-    player: int | None :
-         (Default value = None)
-    top_k: int :
-         (Default value = 3)
-    action_labels: list[str] | None :
-         (Default value = None)
-    colors: Sequence[str] | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``, where ``axes`` holds one entry for each
+        gram length. The figure is not written and not closed.
 
-        Tuple of ``(fig, axes)`` where *axes* is a 1-D array of
-
-        Tuple of ``(fig, axes)`` where *axes* is a 1-D array of
-        ``Axes``, one per n value.
-
+    Notes
+    -----
+    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
+    defines 87 actions, so a default call draws actions 19 and above
+    in one shared color. Pass ``colors`` with one entry for each
+    action to tell them apart.
     """
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS
@@ -812,54 +708,34 @@ def plot_ngrams(
     figsize: tuple[float, float] = (10, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot a bar chart of the most common action n-grams.
+    """Draw the most common grams of one length as a bar chart.
 
     Parameters
     ----------
-    traj, n, player, top_k, action_labels :
-        See :func:`action_ngrams`.
-    ax, figsize, title :
-        Plotting options.
     traj :
-        Trajectory:
-    n :
-        int:  (Default value = 2)
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
+    n :
+        How many actions make one gram.
     top_k :
-        int:  (Default value = 15)
+        How many of the most common grams to draw.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for the defaults.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (10)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    n: int :
-         (Default value = 2)
-    player: int | None :
-         (Default value = None)
-    top_k: int :
-         (Default value = 15)
-    action_labels: list[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
     """
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS
@@ -892,42 +768,39 @@ def action_entropy(
     num_actions: int = NUM_ACTIONS,
     window: int = 1,
 ) -> np.ndarray:
-    """Compute per-timestep action entropy across episodes.
+    """Measure how much the chosen action varies across episodes.
 
-    At each timestep, we compute the empirical distribution of actions
-    across all episodes and return its entropy.  Higher entropy means the
-    agent is less predictable at that point in the episode.
+    At each timestep the function builds the distribution of actions
+    over the episodes of the batch, then takes its Shannon entropy in
+    bits. A value of 0 means every episode took the same action at
+    that step. The largest possible value is ``log2(num_actions)``.
+
+    This measures agreement between episodes at one timestep. It does
+    not measure how varied one episode is over time.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    player : int
-
-    num_actions : int
-
-    window : int
-        Smoothing window.  If > 1, a rolling average is applied.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        How many action ids the distribution covers.
     window :
-        int:  (Default value = 1)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    window: int :
-         (Default value = 1)
+        The width of a rolling mean over time. A ``window`` of 1
+        applies no smoothing.
 
     Returns
     -------
+    numpy.ndarray
+        Shape ``(T,)``, in bits.
 
+    Notes
+    -----
+    The smoothing uses ``mode="same"``, so the first and last
+    ``window // 2`` values average over fewer real timesteps and pull
+    toward zero. Read the two ends with that in mind.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape
@@ -955,50 +828,32 @@ def plot_entropy(
     figsize: tuple[float, float] = (12, 4),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot action entropy over the course of an episode.
+    """Draw the action entropy over the course of an episode.
 
     Parameters
     ----------
-    traj, player, num_actions, window :
-        See :func:`action_entropy`.
-    ax, figsize, title :
-        Plotting options.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        How many action ids the distribution covers.
     window :
-        int:  (Default value = 5)
+        The width of the rolling mean, as in :func:`action_entropy`.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (12)
-    4) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    window: int :
-         (Default value = 5)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
     """
     ent = action_entropy(traj, player, num_actions, window)
 
@@ -1030,26 +885,24 @@ def run_lengths(
     traj: Trajectory,
     player: int | None = None,
 ) -> dict[int, list[int]]:
-    """Compute run-lengths of consecutive identical actions.
+    """Measure how long each action was repeated without a break.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    player : int
-
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
+        Which player to read, or ``None`` for player 0.
 
     Returns
     -------
-
+    dict
+        ``{action_id: [length, ...]}``. A length counts the steps in
+        one unbroken run of that action. Runs are collected inside
+        an episode only. The run at the end of an episode is closed at
+        the last step, and not joined to the next episode. An action
+        that never occurred is absent from the dict.
     """
     actions = resolve_player_actions(traj, player)
     result: dict[int, list[int]] = {}
@@ -1081,58 +934,44 @@ def plot_run_lengths(
     figsize: tuple[float, float] = (10, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot run-length distributions as box plots per action.
+    """Draw one box for each action, over its run lengths.
 
-    Reveals which actions tend to be repeated in long streaks (e.g., an
-    agent walking in one direction for many steps) versus actions that
-    rarely repeat (one-shot interactions).
+    An action that never occurred gets no box, so the chart shows only
+    the actions the policy used.
 
     Parameters
     ----------
-    traj, player, action_labels, num_actions, colors :
-        See other functions.
-    ax, figsize, title :
-        Plotting options.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for the defaults.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        How many action ids to consider.
     colors :
-        Sequence[str] | None:  (Default value = None)
+        One color for each action, or ``None`` for the defaults.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (10)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    action_labels: list[str] | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    colors: Sequence[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
 
+    Notes
+    -----
+    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
+    defines 87 actions, so a default call draws actions 19 and above
+    in one shared color. Pass ``colors`` with one entry for each
+    action to tell them apart.
     """
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS[:num_actions]
@@ -1183,64 +1022,47 @@ def plot_action_distribution(
     figsize: tuple[float, float] = (14, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Stacked area chart showing how the action distribution evolves.
+    """Draw how the mix of actions changes over an episode.
 
-    At each timestep, the distribution of actions across episodes is
-    computed and plotted as stacked areas.  A smoothing window makes
-    the trends readable.
+    The chart is a stacked area, so each band is the share of one
+    action at that timestep and the bands sum to 1.
 
     Parameters
     ----------
-    traj, player, num_actions, action_labels, colors :
-        Standard parameters.
-    window : int
-        Smoothing window size.
-    ax, figsize, title :
-        Plotting options.
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     num_actions :
-        int:  (Default value = NUM_ACTIONS)
+        How many action ids to draw as bands.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The name of each action, or ``None`` for the defaults.
     colors :
-        Sequence[str] | None:  (Default value = None)
+        One color for each action, or ``None`` for the defaults.
     window :
-        int:  (Default value = 10)
+        The width of a rolling mean over time, which smooths the
+        bands.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (14)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    player: int | None :
-         (Default value = None)
-    num_actions: int :
-         (Default value = NUM_ACTIONS)
-    action_labels: list[str] | None :
-         (Default value = None)
-    colors: Sequence[str] | None :
-         (Default value = None)
-    window: int :
-         (Default value = 10)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
 
+    Notes
+    -----
+    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
+    defines 87 actions, so a default call draws actions 19 and above
+    in one shared color. Pass ``colors`` with one entry for each
+    action to tell them apart.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape

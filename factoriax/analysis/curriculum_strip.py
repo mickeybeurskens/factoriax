@@ -7,10 +7,9 @@ Public surface:
 * :func:`render` — top-level entry; consumes a sequence of specs plus a
   phase->hex palette and writes a PNG.
 
-The render is intentionally palette-agnostic: callers (e.g. the paper
-figure adapter) inject the colour scheme through ``phase_palette``.
-This keeps the analysis module reusable across reports that style
-their figures differently.
+This module owns no color scheme. ``phase_palette`` is a necessary
+argument. The caller therefore sets the look of each phase, and two
+reports can style the same curriculum differently.
 
 Internally the renderer is broken into focused helpers: cell-position
 computation, per-cell drawing, phase-label drawing, and the dashed
@@ -34,15 +33,26 @@ from matplotlib.patches import FancyBboxPatch
 class AchievementSpec:
     """One bit in the curriculum.
 
-    Mirrors the engine's per-bit metadata but lives outside the JAX
-    module so callers can render the strip from a JSON dump.
+    This mirrors the per-bit metadata of the engine, but holds plain
+    Python types. A caller can therefore draw the strip from a JSON
+    dump without an import of the JAX-backed engine module.
 
-    Parameters
+    Attributes
     ----------
-
-    Returns
-    -------
-
+    bit :
+        The index of this achievement in the achievement mask. It is
+        also the large number drawn in the cell.
+    name :
+        The short label under the number. Long names overflow the
+        cell, because nothing truncates them.
+    phase :
+        The name of the curriculum phase. Cells with the same phase
+        must be next to each other in the sequence given to
+        :func:`render`. The phase label spans from the first cell of a
+        phase to the last.
+    hand_craftable :
+        True when a player can reach this achievement by hand. The
+        switch from True to False draws the dashed boundary.
     """
 
     bit: int
@@ -65,18 +75,26 @@ class StripLayout:
 
 
 def _darken(hex_color: str, factor: float) -> str:
-    """Multiply RGB by ``factor`` clamped to [0, 1] and return as hex.
+    """Multiply each RGB channel by ``factor`` and return a hex string.
+
+    This is not the same as :func:`factoriax.analysis.recipe_graph._darken`,
+    which scales lightness in HLS and keeps the hue. A plain multiply
+    moves a saturated color toward black faster, which suits a cell
+    border but not a node fill.
 
     Parameters
     ----------
-    hex_color: str :
-
-    factor: float :
-
+    hex_color :
+        Any color string that matplotlib accepts.
+    factor :
+        The multiplier. A value below 1.0 darkens. The result is
+        clamped at 0.0 from below, but not from above, so a factor
+        above 1.0 can raise inside matplotlib.
 
     Returns
     -------
-
+    str
+        The new color as a ``#rrggbb`` string.
     """
     r, g, b = mcolors.to_rgb(hex_color)
     return mcolors.to_hex(
@@ -85,16 +103,22 @@ def _darken(hex_color: str, factor: float) -> str:
 
 
 def _text_color(fill_hex: str) -> str:
-    """Pick a near-black or near-white label colour by sRGB luminance.
+    """Return a near-black or near-white label color for a fill.
+
+    The choice uses relative luminance with the sRGB weights, and
+    switches at 0.65. That threshold is higher than the 0.55 used by
+    :func:`factoriax.analysis.recipe_graph._text_palette`, so the two
+    figures can disagree on a mid-tone fill.
 
     Parameters
     ----------
-    fill_hex: str :
-
+    fill_hex :
+        The cell fill color.
 
     Returns
     -------
-
+    str
+        ``"#1A1A1A"`` on a light fill, ``"#FFFFFF"`` on a dark one.
     """
     r, g, b = mcolors.to_rgb(fill_hex)
     if 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55:
@@ -106,20 +130,26 @@ def _cell_x_positions(
     achievements: Sequence[AchievementSpec],
     layout: StripLayout,
 ) -> list[float]:
-    """
+    """Return the left x of each cell, in sequence order.
+
+    Cells advance by ``cell_w + gap``. A change of phase between two
+    cells widens that step to ``cell_w + phase_gap``. The wider space
+    is the only separator between one phase group and the next, so the
+    caller must keep the cells of a phase together.
 
     Parameters
     ----------
-    achievements: Sequence[AchievementSpec] :
-
-    layout: StripLayout :
-
+    achievements :
+        The bit specs, in the order they will be drawn.
+    layout :
+        The geometry constants that set the widths.
 
     Returns
     -------
-    type
-
-
+    list
+        One x for each spec, in matplotlib data units. The first is
+        always 0.0. An empty input gives an empty list, which
+        :func:`render` cannot handle.
     """
     xs: list[float] = []
     cursor = 0.0
@@ -141,26 +171,24 @@ def _draw_cell(
     stroke: str,
     layout: StripLayout,
 ) -> None:
-    """Draw one number-primary cell: bold bit integer, short name below.
+    """Draw one cell: the bit number in bold, the name under it.
 
     Parameters
     ----------
-    ax: plt.Axes :
-
-    spec: AchievementSpec :
-
-    x: float :
-
-    fill: str :
-
-    stroke: str :
-
-    layout: StripLayout :
-
-
-    Returns
-    -------
-
+    ax :
+        The axes to draw on. The function modifies it in place and
+        returns nothing.
+    spec :
+        The bit to draw. Only ``bit`` and ``name`` are read.
+    x :
+        The left edge of the cell, in data units. The bottom edge is
+        always 0.0.
+    fill :
+        The cell fill color, which also sets the label color.
+    stroke :
+        The cell border color.
+    layout :
+        The geometry constants that set the cell size.
     """
     ax.add_patch(
         FancyBboxPatch(
@@ -202,22 +230,25 @@ def _draw_phase_labels(
     xs: Sequence[float],
     layout: StripLayout,
 ) -> None:
-    """Write each phase name above the centre of its cell group.
+    """Write each phase name over the middle of its group of cells.
+
+    The label spans from the first cell of a phase to the last. Take a
+    phase that appears in two separate runs of the sequence. It gets
+    one label, stretched over everything between those runs, including
+    the cells of other phases. :func:`render` therefore states that
+    the cells of a phase must be next to each other.
 
     Parameters
     ----------
-    ax: plt.Axes :
-
-    achievements: Sequence[AchievementSpec] :
-
-    xs: Sequence[float] :
-
-    layout: StripLayout :
-
-
-    Returns
-    -------
-
+    ax :
+        The axes to draw on. The function modifies it in place and
+        returns nothing.
+    achievements :
+        The bit specs, in draw order.
+    xs :
+        The left x of each cell, from :func:`_cell_x_positions`.
+    layout :
+        The geometry constants that set the label height.
     """
     groups: dict[str, list[int]] = defaultdict(list)
     for index, spec in enumerate(achievements):
@@ -246,24 +277,29 @@ def _draw_boundary(
 ) -> None:
     """Draw the dashed line marking the hand-craftable → automation transition.
 
-    The line sits in the gap between the last hand-craftable cell and
-    the first automation cell. Two short labels above and below name
-    the regimes on either side.
+    The line sits in the gap after the last hand-craftable cell and
+    before the first automation cell. Two short labels under it name
+    the two sides.
+
+    The function draws nothing when every bit is hand craftable, or
+    when none is.
 
     Parameters
     ----------
-    ax: plt.Axes :
-
-    achievements: Sequence[AchievementSpec] :
-
-    xs: Sequence[float] :
-
-    layout: StripLayout :
-
-
-    Returns
-    -------
-
+    ax :
+        The axes to draw on. The function modifies it in place and
+        returns nothing.
+    achievements :
+        The bit specs, in draw order. The function takes the last
+        hand-craftable index and the first automation index. Take a
+        mixed sequence, such as hand, automation, hand. The first of
+        those indexes then comes after the second, and the line lands
+        in the wrong place. The caller must therefore put every hand
+        craftable bit before every automation bit.
+    xs :
+        The left x of each cell, from :func:`_cell_x_positions`.
+    layout :
+        The geometry constants that set how far the line extends.
     """
     last_hand = None
     first_auto = None
@@ -318,37 +354,33 @@ def render(
     phase_palette: Mapping[str, str],
     layout: StripLayout | None = None,
 ) -> Path:
-    """Render the curriculum strip to ``out_path`` and return the resolved path.
+    """Draw the curriculum strip and return the path of the new file.
 
     Parameters
     ----------
     achievements :
-        Ordered bit specs. The strip honours the given
-        order; phases must appear contiguously (e.g. all Bootstrap
-        bits before any Miners-up bits).
+        The bit specs, in draw order. The strip keeps that order. Two
+        rules apply to it. Cells of one phase must be next to each
+        other, and every hand-craftable bit must come before every
+        automation bit. An empty sequence raises ``IndexError``.
     out_path :
-        Destination PNG (or SVG by extension).
+        Where to write the image. The extension sets the format, and
+        matplotlib accepts PNG and SVG among others. Missing parent
+        directories are created.
     phase_palette :
-        ``{phase_name: hex}`` lookup. Phases missing from
-        the palette get :attr:`StripLayout.fallback_color`.
+        ``{phase_name: hex}``. A phase absent from this map gets
+        :attr:`StripLayout.fallback_color` and no warning.
     layout :
-        Optional geometry override.
-    achievements: Sequence[AchievementSpec] :
-
-    out_path: Path | str :
-
-    * :
-
-    phase_palette: Mapping[str :
-
-    str] :
-
-    layout: StripLayout | None :
-         (Default value = None)
+        Geometry constants, or ``None`` for the defaults.
 
     Returns
     -------
+    pathlib.Path
+        ``out_path`` as a :class:`~pathlib.Path`, after the write.
 
+    Notes
+    -----
+    The function writes a file and closes its own figure.
     """
     layout = layout or StripLayout()
     out_path = Path(out_path)

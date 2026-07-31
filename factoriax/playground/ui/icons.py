@@ -58,11 +58,11 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
 # Block textures
 # ---------------------------------------------------------------------------
 
-# Tile colours per BlockType. Single source of truth for the procedural
-# textures used by :func:`create_default_textures` (and therefore the
-# baked sprite atlas at ``factoriax/assets/atlas.png``) and the paper's
-# reset-grid figure, so the engine render and the paper plot agree on
-# what each resource looks like.
+# Tile colors for each BlockType. This is the single source of truth
+# for the procedural textures of :func:`create_default_textures`, and
+# therefore for the baked sprite atlas at ``factoriax/assets/atlas.png``.
+# Code that draws a resource in the color of the game reads this table
+# and does not repeat the values.
 BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
     int(BlockType.DIRT): (201, 167, 121),
     int(BlockType.WATER): (50, 120, 190),

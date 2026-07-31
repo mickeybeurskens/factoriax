@@ -1,14 +1,18 @@
-"""Inventory panel renderer.
+"""Draw a player inventory as a standalone RGB panel.
 
-Renders a player's inventory as a standalone RGB panel: one row per
-non-EMPTY :class:`ItemType`, each with a sprite icon, label, and count.
-Rows are dimmed when the count is zero so the eye can sweep to what
-the agent is actually holding. Item sprites are pulled from
-:func:`factoriax.playground.ui.icons.render_item_icon` so the panel, GPU map
-renderer, hotbar, and editor all show identical art per item.
+The panel holds one row for each item type except ``EMPTY``. A row
+shows a sprite, a label, and a count. A row with a count of zero is
+dimmed and shows a ``-``. The reader can therefore see what the player
+holds and what the player lacks.
 
-Pure NumPy + :mod:`factoriax.playground.ui` primitives. No debugger dependency.
-Used by the agent debugger (live HUD + replay) and the PPO eval video.
+The sprites come from
+:func:`factoriax.playground.ui.icons.render_item_icon`, which is the
+same source the map renderer, the hotbar, and the editor use. One item
+therefore looks the same everywhere.
+
+The module uses NumPy and :mod:`factoriax.playground.ui` only. It does
+not import the debugger. The live debugger HUD, the replay viewer, and
+the PPO eval video all call it.
 """
 
 from __future__ import annotations
@@ -29,18 +33,26 @@ _ICON_CACHE: dict[tuple[int, int], np.ndarray] = {}
 
 
 def _icon_rgba(item_type: int, size: int) -> np.ndarray:
-    """Cached :func:`render_item_icon` for fixed (item, size) pairs.
+    """Return the icon for one item and size, from the cache.
 
     Parameters
     ----------
-    item_type: int :
-
-    size: int :
-
+    item_type :
+        The ``ItemType`` value to draw.
+    size :
+        The side length of the icon in pixels. Icons are square.
 
     Returns
     -------
+    numpy.ndarray
+        RGBA uint8 of shape ``(size, size, 4)``. The array belongs to
+        the cache, so a caller that changes it must copy it first.
 
+    Notes
+    -----
+    The cache never drops an entry. It holds one array for each pair
+    of item and size seen in the process. That count is bounded by the
+    item count times the number of panel sizes in use.
     """
     key = (item_type, size)
     cached = _ICON_CACHE.get(key)
@@ -58,16 +70,19 @@ INVENTORY_ITEMS: tuple[ItemType, ...] = tuple(
 
 
 def _item_label(item: ItemType) -> str:
-    """Human-readable label for an ``ItemType`` (title-cased, 14 char cap).
+    """Return the display label of an item, at most 14 characters.
 
     Parameters
     ----------
-    item: ItemType :
-
+    item :
+        The item to name.
 
     Returns
     -------
-
+    str
+        The enum name in title case with the underscores replaced by
+        spaces. A name longer than 14 characters is cut to 13 and
+        given a trailing period, so the result is 14 characters.
     """
     name = item.name.replace("_", " ").title()
     return name if len(name) <= 14 else name[:13] + "."
@@ -85,14 +100,14 @@ def _inventory_slot_positions(
 ) -> list[tuple[int, int, int, int]]:
     """Compute ``(x, y, col_w, row_h)`` for each inventory item.
 
-    Lays items out column-major, picking the *minimum* column count
-    that lets every row fit at ``min_row_h``. That's what makes the
-    "always show all items" invariant robust under small panels —
-    when one column overflows we go to two; when two overflow we go
-    to three; etc. Row height is then maximised up to ``max_row_h``
-    within the remaining vertical budget. If even the minimum row
-    height can't fit (pathologically small panel), the row height
-    shrinks below ``min_row_h`` rather than dropping items.
+    Items fill one column at a time. The function takes the smallest
+    column count that lets every row reach ``min_row_h``. One column
+    that overflows therefore becomes two, two become three, and so on.
+    Row height then grows to fill the space left, up to ``max_row_h``.
+
+    A panel too small even for ``min_row_h`` gets shorter rows instead
+    of fewer items. The labels can then overlap, but every item keeps
+    a slot.
 
     Parameters
     ----------
@@ -101,41 +116,30 @@ def _inventory_slot_positions(
     height :
         Panel height in pixels.
     num_items :
-        Number of inventory rows to place.
+        How many rows to place.
     row_top :
-        Y offset after the title bar.
+        The y of the first row, under the title bar.
     min_row_h :
-        Minimum per-row height that still fits the label font.
+        The shortest row that still fits the label font.
     max_row_h :
-        Maximum per-row height (single-column keeps rows
-        readable when the quadrant is oversized).
+        The tallest row. A cap keeps rows readable in an oversized
+        panel instead of stretching a few rows over the whole height.
     pad_x :
-        Left/right padding in pixels.
-    width: int :
-
-    height: int :
-
-    num_items: int :
-
-    * :
-
-    row_top: int :
-
-    min_row_h: int :
-         (Default value = 10)
-    max_row_h: int :
-         (Default value = 16)
-    pad_x: int :
-         (Default value = 6)
+        The padding at each side, in pixels.
 
     Returns
     -------
-    are packed column-major
-        the first ``ceil(num_items / num_cols)``
-    are packed column-major
-        the first ``ceil(num_items / num_cols)``
-        items fill column 0, the next batch fills column 1, and so on.
+    list
+        One ``(x, y, col_w, row_h)`` for each item, in the order given.
+        The first ``ceil(num_items / num_cols)`` entries fill column 0,
+        the next batch fills column 1, and so on. A ``num_items`` of 0
+        or less gives an empty list.
 
+    Notes
+    -----
+    The returned rows all fit inside ``height`` only when ``height`` is
+    at least ``row_top`` plus 3. Below that, ``y + row_h`` can exceed
+    ``height`` and :func:`render_inventory_panel` drops those rows.
     """
     if num_items <= 0:
         return []
@@ -169,37 +173,40 @@ def render_inventory_panel(
 ) -> np.ndarray:
     """Render the player inventory as an RGB panel.
 
-    Every non-EMPTY ``ItemType`` gets a slot — this is a hard invariant:
-    at any ``(width, height)`` the returned image contains one row per
-    item in :data:`INVENTORY_ITEMS`. Counts of zero are shown dimmed
-    with a ``-`` placeholder so zero-rows are still visible.
+    Every item in :data:`INVENTORY_ITEMS` gets its own row, at any
+    panel size. One condition applies: the panel must be tall enough
+    for one row under the title bar. With the default title, that
+    means a ``height`` of 22 or more. Below that, the rows do not fit and the
+    function draws none of them, which leaves an almost empty panel.
+
+    A count of zero still gets a row. That row is dimmed and shows a
+    ``-`` in place of the number, so the reader can see which items
+    the player does not hold.
 
     Parameters
     ----------
     inventory :
-        1-D array of per-item counts indexed by ``ItemType``.
+        Per-item counts in a 1-D array, indexed by ``ItemType`` value.
+        An array shorter than the item count is allowed. Items past
+        its end read as 0 instead of raising.
     width :
         Output width in pixels.
     height :
         Output height in pixels.
     title :
-        Panel heading.
-    inventory: np.ndarray :
-
-    width: int :
-
-    height: int :
-
-    * :
-
-    title: str :
-         (Default value = "Inventory")
+        The heading drawn at the top left.
 
     Returns
     -------
+    numpy.ndarray
+        RGB uint8 of shape ``(height, width, 3)``. The panel has a
+        dark background, so a caller can composite it without a mask.
 
-        RGB uint8 array of shape ``(height, width, 3)``.
-
+    Notes
+    -----
+    A label too wide for its column is retried at two smaller fonts,
+    and dropped if it still does not fit. The icon and the count are
+    drawn whether or not the label fits.
     """
     img = np.full((height, width, 3), (30, 30, 35), dtype=np.uint8)
     font = get_pixel_font(11)

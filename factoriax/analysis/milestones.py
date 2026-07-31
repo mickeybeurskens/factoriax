@@ -1,13 +1,23 @@
-"""Achievement and milestone analysis.
+"""Find when key events first happen in an episode, and plot them.
 
-Tracks *when* key events happen during episodes — first craft, first
-machine placement, resource milestones, etc.  Useful for understanding
-learning progress and comparing policies.
+Two questions, each with a finder and its plots. When did each
+achievement unlock, and when did the agent first take a given action?
+The answers show how far a policy gets and how quickly, which is what
+makes two policies comparable.
+
+Every timestep here is a 0-based index along the time axis of the
+trajectory. An event that never happened reports ``-1``, so a caller
+masks with ``>= 0`` before it takes a mean.
+
+The two box plots drop the episodes where the event never happened,
+and put the share that did happen in the tick label. A box therefore
+describes the episodes that reached the event, and not the whole
+batch. A policy that reaches an achievement once, quickly, can look
+better than one that reaches it every time, slowly.
 """
 
 from __future__ import annotations
 
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -19,20 +29,31 @@ from .utils import resolve_ax, resolve_player_actions
 def achievement_timing(
     traj: Trajectory,
 ) -> np.ndarray:
-    """Find the first timestep each achievement is unlocked.
+    """Find the first timestep at which each achievement unlocked.
 
     Parameters
     ----------
-    traj : Trajectory
-        Must have ``achievements`` field, shape ``(B, T, num_achievements)``.
     traj :
-        Trajectory:
-    traj: Trajectory :
-
+        A trajectory whose ``achievements`` field holds a mask of
+        shape ``(B, T, A)``. The mask is read as a boolean, so any
+        non-zero value counts as unlocked.
 
     Returns
     -------
+    numpy.ndarray
+        int32 of shape ``(B, A)``. Entry ``(b, a)`` is the first
+        timestep at which achievement ``a`` was set in episode ``b``,
+        or ``-1`` when it never was.
 
+    Raises
+    ------
+    ValueError
+        When the trajectory carries no ``achievements`` field.
+
+    Notes
+    -----
+    The scan is a Python loop over every episode and achievement, so
+    the cost grows with ``B`` times ``A``.
     """
     if traj.achievements is None:
         raise ValueError("achievement_timing requires achievements data")
@@ -57,44 +78,34 @@ def plot_achievement_timing(
     figsize: tuple[float, float] = (10, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Box plot showing the distribution of achievement unlock times.
+    """Draw one box for each achievement, over its unlock timesteps.
+
+    An achievement that no episode unlocked gets no box. For the rest,
+    the box covers the episodes that did unlock it, and the tick label
+    gives that share as a percentage. Read the box and the percentage
+    together: a low percentage means the box describes few episodes.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    achievement_labels : list[str]
-
-    ax, figsize, title :
-
     traj :
-        Trajectory:
+        A trajectory with an ``achievements`` field.
     achievement_labels :
-        list[str] | None:  (Default value = None)
+        The display name of each achievement, or ``None`` for
+        ``"Achievement 0"`` and so on. The list must be at least as
+        long as the achievement axis.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (10)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    achievement_labels: list[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
     """
     timing = achievement_timing(traj)  # (B, A)
     B, A = timing.shape
@@ -141,45 +152,39 @@ def plot_achievement_progress(
     figsize: tuple[float, float] = (12, 5),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot cumulative achievement unlock rate over time.
+    """Draw the share of episodes that unlocked each achievement.
 
-    Shows what fraction of episodes have unlocked each achievement by
-    each timestep — essentially a CDF of unlock times.
+    Each line is a cumulative distribution over unlock time. At
+    timestep ``t`` it gives the share of all episodes that had
+    unlocked that achievement by ``t``.
+
+    The share is over every episode, and not only over the episodes
+    that unlocked the achievement. A line therefore flattens below 1.0
+    when some episodes never reached it, and that height is the
+    success rate. This differs from
+    :func:`plot_achievement_timing`, which drops the episodes that
+    never reached the achievement.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    achievement_labels : list[str]
-
     traj :
-        Trajectory:
+        A trajectory with an ``achievements`` field.
     achievement_labels :
-        list[str] | None:  (Default value = None)
+        The display name of each achievement, or ``None`` for
+        ``"Achievement 0"`` and so on.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (12)
-    5) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    achievement_labels: list[str] | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
     """
     timing = achievement_timing(traj)  # (B, A)
     B, A = timing.shape
@@ -227,32 +232,29 @@ def first_action_timestep(
     action_id: int,
     player: int | None = None,
 ) -> np.ndarray:
-    """Find the first timestep a specific action is taken per episode.
+    """Find the first timestep at which one action was taken.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    action_id : int
-
-    player : int
-
     traj :
-        Trajectory:
+        The recording to read. Actions of shape ``(B, T)``,
+        ``(B, T, P)``, and ``(B, T, 1)`` all work.
     action_id :
-        int:
+        The action to look for.
     player :
-        int | None:  (Default value = None)
-    traj: Trajectory :
-
-    action_id: int :
-
-    player: int | None :
-         (Default value = None)
+        Which player to read, or ``None`` for player 0.
 
     Returns
     -------
+    numpy.ndarray
+        int32 of shape ``(B,)``. Entry ``b`` is the first timestep at
+        which episode ``b`` took the action, or ``-1`` when it never
+        did.
 
+    Raises
+    ------
+    IndexError
+        When ``player`` names a slot the player axis does not have.
     """
     actions = resolve_player_actions(traj, player)
     B, T = actions.shape
@@ -273,55 +275,41 @@ def plot_first_action_timing(
     figsize: tuple[float, float] = (10, 4),
     title: str | None = None,
 ) -> tuple[Figure, Axes]:
-    """Plot the distribution of when each action is first taken.
+    """Draw one box for each action, over its first-use timesteps.
 
-    Useful for seeing when agents first mine, first craft, first place
-    a machine, etc.
+    This answers when an agent first mines, first crafts, or first
+    places a machine.
+
+    An action that no episode took gets no box. For the rest, the box
+    covers the episodes that did take it, and the tick label gives
+    that share as a percentage. Read the box and the percentage
+    together.
 
     Parameters
     ----------
-    traj : Trajectory
-
-    action_ids : list[int]
-        Action IDs to analyze.
-    action_labels : list[str]
-
     traj :
-        Trajectory:
+        The recording to read.
     action_ids :
-        list[int]:
+        The actions to draw, one box each.
     action_labels :
-        list[str] | None:  (Default value = None)
+        The display name of each action, or ``None`` to look the names
+        up in ``DEFAULT_ACTION_LABELS``. The list must be as long as
+        ``action_ids``.
     player :
-        int | None:  (Default value = None)
+        Which player to read, or ``None`` for player 0.
     ax :
-        Axes | None:  (Default value = None)
+        The axes to draw on, or ``None`` for a new figure.
     figsize :
-        tuple[float:
-    float] :
-        (Default value = (10)
-    4) :
-
+        The size of that new figure in inches. It is ignored when
+        ``ax`` is given.
     title :
-        str | None:  (Default value = None)
-    traj: Trajectory :
-
-    action_ids: list[int] :
-
-    action_labels: list[str] | None :
-         (Default value = None)
-    player: int | None :
-         (Default value = None)
-    ax: Axes | None :
-         (Default value = None)
-    figsize: tuple[float :
-
-    title: str | None :
-         (Default value = None)
+        The figure title, or ``None`` for a default.
 
     Returns
     -------
-
+    tuple
+        ``(figure, axes)``. The figure is not written and not closed,
+        so the caller owns it.
     """
     if action_labels is None:
         from .actions import DEFAULT_ACTION_LABELS

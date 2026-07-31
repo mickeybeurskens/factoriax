@@ -1,9 +1,19 @@
-"""Tests for ``Trajectory.env_params_scheme`` round-trip.
+"""Tests for the ``env_params_scheme`` field on :class:`Trajectory`.
 
-The trajectory format carries the ``EnvParams`` snapshot under the
-``_env_params_scheme`` underscore-prefixed JSON metadata key so that
-replay tooling can reconstruct the engine parameters that produced the
-recording (including the new ``player_mining_yield``).
+A replay needs the engine parameters that made the recording. A value
+such as ``player_mining_yield`` changes how many items one mine action
+gives. Under different parameters, a replayed rollout therefore
+diverges from the recording.
+
+:class:`Trajectory` carries these parameters in ``env_params_scheme``,
+a plain dictionary from :func:`env_params_to_dict`. ``save`` writes the
+dictionary to the ``.npz`` archive as JSON, under the key
+``_env_params_scheme``. The leading underscore separates it from the
+array fields, which keep their own names.
+
+The field is optional and defaults to ``None``. ``save`` omits a
+``None`` scheme from the archive and writes no null. An old reader
+therefore finds no such key, and not a key with nothing in it.
 """
 
 from __future__ import annotations
@@ -20,15 +30,26 @@ from factoriax.playground.config import env_params_to_dict
 
 
 class TestEnvParamsSchemeField:
-    """Direct field assertions on Trajectory."""
+    """The field itself, and how it survives the archive."""
 
     def test_default_is_none(self) -> None:
-        """Without env_params_scheme, the field is None."""
+        """Report ``None`` for a trajectory built without a scheme.
+
+        A recording made before the field existed loads into this
+        state. ``None`` must therefore mean "not recorded" and not
+        "empty".
+        """
         traj = Trajectory(actions=np.zeros((1, 4), dtype=np.int32))
         assert traj.env_params_scheme is None
 
     def test_assigned_value_round_trips_via_save(self, tmp_path: Path) -> None:
-        """A non-default scheme survives save → load byte-for-byte."""
+        """Load a saved scheme back equal to the one that was saved.
+
+        The dictionary goes to JSON, so the values that return are
+        plain JSON types. The first assertion covers the whole
+        dictionary. The second covers one field, and catches a round
+        trip that keeps the keys but turns an integer into a string.
+        """
         scheme = env_params_to_dict(EnvParams(player_mining_yield=3))
         traj = Trajectory(
             actions=np.zeros((1, 4), dtype=np.int32),
@@ -41,7 +62,11 @@ class TestEnvParamsSchemeField:
         assert loaded.env_params_scheme["player_mining_yield"] == 3
 
     def test_none_is_absent_in_load(self, tmp_path: Path) -> None:
-        """Saving with scheme=None does not write the key."""
+        """Write no key at all for a ``None`` scheme.
+
+        An explicit null makes an unrecorded scheme look the same as a
+        scheme recorded as empty.
+        """
         traj = Trajectory(actions=np.zeros((1, 4), dtype=np.int32))
         path = tmp_path / "no_scheme.npz"
         traj.save(str(path))
@@ -52,34 +77,34 @@ class TestEnvParamsSchemeField:
 
 
 class TestStatesToTrajectoryWithParams:
-    """``states_to_trajectory(states, params=...)`` populates the scheme.
+    """``states_to_trajectory`` packing the ``params`` argument.
 
-    Uses ``state_factory`` (function-scoped, no env stepping) instead
-    of a real ``canonical_env_8x8_1p`` rollout. The behavior under test
-    is purely how ``states_to_trajectory`` packs the ``params`` kwarg
-    into ``env_params_scheme``; the contents of the state list don't
-    influence that pack step, so synthetic ``EnvState`` objects are
-    sufficient. Replaces the ~10s rollout setup+call with sub-second
-    state construction.
+    The states are synthetic and not the output of a real rollout.
+    ``states_to_trajectory`` stacks the state fields along a time axis.
+    Separately, it converts ``params`` to a dictionary. No part of the
+    states changes that conversion. Direct construction is therefore
+    sufficient, and it replaces a rollout of about ten seconds with
+    less than one second of work.
     """
 
     @staticmethod
     def _fake_states(state_factory, count: int):
-        """Return ``count`` synthetic states + matching int32 actions.
+        """Return ``count`` synthetic states and matching actions.
 
         Parameters
         ----------
-        state_factory
-            The root conftest ``state_factory`` fixture.
-        count
+        state_factory :
+            The ``state_factory`` fixture from the root ``conftest``.
+        count :
             Number of states to build.
 
         Returns
         -------
         tuple
-            ``(states, actions)`` where ``actions`` is padded to match
-            ``len(states)`` exactly, which is what ``states_to_trajectory``
-            expects when it computes per-step deltas across the rollout.
+            ``(states, actions)``. The action array gets one entry for
+            each state. ``states_to_trajectory`` does not compare the
+            two lengths. A mismatch therefore gives a trajectory whose
+            action axis and time axis disagree.
         """
         world_map = jnp.full((8, 8), BlockType.DIRT, dtype=jnp.int32)
         states = [state_factory(world_map=world_map) for _ in range(count)]
@@ -87,16 +112,20 @@ class TestStatesToTrajectoryWithParams:
         return states, actions
 
     def test_params_kwarg_populates_scheme(self, state_factory) -> None:
-        """Passing params records env_params_to_dict on the trajectory."""
+        """When the caller gives ``params``, record them on the trajectory."""
         params = EnvParams(player_mining_yield=3)
         states, actions = self._fake_states(state_factory, count=4)
         traj = states_to_trajectory(states, actions=actions, params=params)
         assert traj.env_params_scheme is not None
         assert traj.env_params_scheme["player_mining_yield"] == 3
-        assert traj.env_params_scheme["player_mining_yield"] == 3
 
     def test_omitting_params_leaves_scheme_none(self, state_factory) -> None:
-        """Default call (no params kwarg) keeps env_params_scheme=None."""
+        """When the caller omits ``params``, record no parameters.
+
+        The caller asks for the conversion. A caller without an
+        ``EnvParams`` gets a trajectory that says so. It does not get a
+        trajectory with engine defaults that no rollout used.
+        """
         states, actions = self._fake_states(state_factory, count=4)
         traj = states_to_trajectory(states, actions=actions)
         assert traj.env_params_scheme is None
