@@ -15,8 +15,8 @@ caller today, but any layered drawing can use them.
 
 A tier is a longest-path layer, and not a shortest-path one. An item
 reachable by a two-step chain and by a one-step chain sits at tier 2.
-With shortest paths it would sit at tier 1, level with a node that
-feeds it, and that edge would then have to run backwards.
+With shortest paths it sits at tier 1, level with a node that feeds
+it, and that edge then has to run backwards.
 """
 
 from __future__ import annotations

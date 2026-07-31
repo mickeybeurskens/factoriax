@@ -5,7 +5,7 @@ module docstring of ``factoriax.engine.envs.miner_curriculum``).
 Covered: registration, the transfer invariant (obs shape identical to
 EasyRocket-v1 built with the same obs variant), start-state contract,
 completion-only reward accounting (1.0 exactly once, on the completing
-step; every intermediate event pays 0; timeout pays 0; the 14 ladder
+step. Every intermediate event pays 0. A timeout pays 0. The 14 ladder
 bits still latch as free diagnostics), and a scripted-oracle
 solvability check within the 300-step budget.
 """
@@ -97,7 +97,7 @@ def test_bootstrap_starts_empty(bootstrap_env) -> None:
 
 
 def test_bootstrap_max_score_is_one() -> None:
-    """The env pays 1.0 per episode at most — completion, nothing else."""
+    """The env pays 1.0 per episode at most, for completion and nothing else."""
     assert MINER_BOOTSTRAP_MAX_SCORE == 1.0
 
 
@@ -209,7 +209,7 @@ def test_bootstrap_oracle_pays_one_on_completing_step_only(
 ) -> None:
     """The oracle's mine -> craft -> place run passes through every
     intermediate event (first/sixth mined of each material, craft,
-    placements, 1st-5th producing) — all pay 0. The completing step pays
+    placements, 1st-5th producing). All of them pay 0. The completing step pays
     exactly 1.0 and ends the episode inside the budget, with the full
     diagnostic ladder latched."""
     env, params = bootstrap_env
@@ -269,7 +269,7 @@ def test_stage_start_state_contract(bootstrap_env, group, k) -> None:
     pristine_obs, pristine_state = pristine_env.reset_env(key, params)
 
     # Transfer invariant: the stage changes nothing the agent sees
-    # structurally — same obs shape as the unmodified env.
+    # structurally. The obs shape matches the unmodified env.
     assert obs.shape == pristine_obs.shape
 
     # 6-k miners pre-placed and producing from step 0.

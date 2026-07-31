@@ -1,6 +1,6 @@
 """Tests for :class:`RecipeBalance` overlay + ``with_balance`` apply.
 
-These tests cover the construction-time overlay machinery — the
+These tests cover the construction-time overlay machinery: the
 sparse override container, the per-recipe override application via
 :meth:`RecipeBook.with_balance`, and the end-to-end projection
 through :meth:`RecipeTable.from_book` so a tuned overlay reaches
@@ -37,7 +37,7 @@ def _find_base(output: int):
 
 class TestRecipeOverride:
     def test_default_all_none(self) -> None:
-        """A bare ``RecipeOverride()`` keeps every field as None — the
+        """A bare ``RecipeOverride()`` keeps every field as None. This is the
         identity overlay. Useful as a placeholder when only one of the
         three balance fields needs tuning.
         """
@@ -55,7 +55,7 @@ class TestRecipeOverride:
 
 
 # ---------------------------------------------------------------------------
-# RecipeBalance — duplicate-override + lookup
+# RecipeBalance: duplicate-override and lookup
 # ---------------------------------------------------------------------------
 
 
@@ -77,7 +77,7 @@ class TestRecipeBalance:
         assert b.get(int(ItemType.COPPER_PLATE)) is None
 
     def test_duplicate_override_raises(self) -> None:
-        """Two overrides for the same output must be rejected — silent
+        """Two overrides for the same output must be rejected. A silent
         lookup-order dependency is exactly the bug the unique-output
         invariant on RecipeBook also guards against.
         """
@@ -91,7 +91,7 @@ class TestRecipeBalance:
 
 
 # ---------------------------------------------------------------------------
-# RecipeBook.with_balance — overlay application
+# RecipeBook.with_balance: overlay application
 # ---------------------------------------------------------------------------
 
 
@@ -129,7 +129,7 @@ class TestWithBalance:
 
     def test_override_input_counts(self) -> None:
         """Input-count override rewrites the count tuples but keeps
-        the input *item types* identical — identity is not tunable.
+        the input *item types* identical. Identity is not tunable.
         """
         balance = RecipeBalance(
             overrides=((int(ItemType.IRON_PLATE), RecipeOverride(input_counts=(2, 3))),)
@@ -163,8 +163,8 @@ class TestWithBalance:
         assert plate.ticks == 1
 
     def test_unknown_output_silently_ignored(self) -> None:
-        """An override for an output the book doesn't produce passes
-        through silently — the user can write a generous balance file
+        """An override for an output that the book does not produce passes
+        through silently. The user can write a generous balance file
         that targets recipes from a future codebase version without
         breaking on the current one.
         """

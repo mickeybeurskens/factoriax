@@ -105,7 +105,7 @@ def test_reward_fn_used_else_zero(params) -> None:
 
 
 def test_done_fn_ors_with_timestep_limit(params) -> None:
-    """``done_fn`` can end the episode before max_timesteps; default is
+    """``done_fn`` can end the episode before max_timesteps. The default is
     unchanged."""
 
     def after_one_step(state, p):

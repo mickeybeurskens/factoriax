@@ -67,7 +67,7 @@ class TestAchievement:
         assert a.id == "first_ore"
 
     def test_defaults_are_weight_one_and_no_hint(self) -> None:
-        """Unweighted sets pay 1.0 per bit; hints are UI-only."""
+        """Unweighted sets pay 1.0 per bit. Hints are UI-only."""
         assert _ALWAYS.weight == 1.0
         assert _ALWAYS.hint == ""
 
@@ -83,7 +83,7 @@ class TestAchievementFn:
         assert bits.dtype == jnp.bool_
 
     def test_bit_order_follows_declaration_order(self, state_factory) -> None:
-        """Index is the wire format — it must track the tuple."""
+        """Index is the wire format, so it must track the tuple."""
         bits = achievement_fn((_NEVER, _ALWAYS))(_dirt(state_factory))
         assert not bool(bits[0])
         assert bool(bits[1])
@@ -102,12 +102,12 @@ class TestAchievementFn:
             achievement_fn((_ALWAYS, dupe))
 
     def test_rejects_empty_set(self) -> None:
-        """An empty set should be expressed as achievement_fn=None."""
+        """An empty set must be expressed as achievement_fn=None."""
         with pytest.raises(ValueError, match="empty"):
             achievement_fn(())
 
     def test_rejects_more_than_the_slot_budget(self) -> None:
-        """The state vector is fixed width; overflow must not truncate."""
+        """The state vector is fixed width. An overflow must not truncate."""
         too_many = tuple(
             Achievement(f"a{i}", lambda state: jnp.bool_(True))
             for i in range(MAX_ACHIEVEMENTS + 1)
@@ -164,7 +164,7 @@ class TestSetHelpers:
         assert index_of((_NEVER, _ALWAYS), "always") == 1
 
     def test_index_of_raises_on_unknown_id(self) -> None:
-        """A typo'd id must fail loudly, not silently return a wrong bit."""
+        """A mistyped id must fail loudly, and must not return a wrong bit."""
         with pytest.raises(KeyError):
             index_of((_ALWAYS,), "nope")
 
@@ -180,7 +180,7 @@ class TestConditionHelpers:
         assert count_total_items(state, ItemType.COAL) == 10
 
     def test_count_total_items_sums_across_players(self, state_factory) -> None:
-        """Inventories are per-player; conditions ask about the team."""
+        """Inventories are per-player. Conditions ask about the team."""
         inv = jnp.zeros((2, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.IRON_ORE].set(5)
         inv = inv.at[1, ItemType.IRON_ORE].set(7)

@@ -42,7 +42,7 @@ def resolve_ax(
     figsize :
         The width and height of the new figure, in inches. A caller
         that supplies ``ax`` owns the layout, so this value is then
-        ignored. A resize would move every other subplot on that
+        ignored. A resize moves every other subplot on that
         figure.
 
     Returns

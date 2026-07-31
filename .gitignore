@@ -211,7 +211,7 @@ __marimo__/
 *.mp4
 *.png
 *.npz
-# Track the canonical sprite atlas — the renderer reads it at startup.
+# Track the canonical sprite atlas. The renderer reads it at startup.
 !factoriax/assets/atlas.png
 
 # Performance test logs

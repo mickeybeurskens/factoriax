@@ -280,7 +280,7 @@ class TestLocalSuperficial:
 
 
 class TestScalarComposition:
-    """Compose-by-concat: x_ray = common ++ facing; superficial = common."""
+    """Compose-by-concat: x_ray = common ++ facing, and superficial = common."""
 
     def test_x_ray_scalars_decompose_into_common_and_facing(
         self, state_factory

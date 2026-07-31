@@ -75,7 +75,7 @@ class RolloutRecorder:
         ]
     )
 
-    # Internal buffers — populated by record()
+    # Internal buffers, populated by record()
     _action_chunks: list[np.ndarray] = field(default_factory=list, repr=False)
     _reward_chunks: list[np.ndarray] = field(default_factory=list, repr=False)
     _done_chunks: list[np.ndarray] = field(default_factory=list, repr=False)
@@ -111,7 +111,7 @@ class RolloutRecorder:
         if self.is_full:
             return
 
-        # Extract arrays — handles both JAX and numpy transparently
+        # Extract arrays. Handles both JAX and numpy.
         actions = np.asarray(trajectories.action)  # (T, N) or (T, N, P)
         rewards = np.asarray(trajectories.reward)  # (T, N)
         dones = np.asarray(trajectories.done)  # (T, N)

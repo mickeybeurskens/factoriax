@@ -902,7 +902,7 @@ class TestRolloutRecorder:
         rec = RolloutRecorder()
         rec.record(rollout)
         traj = rec.finish(pad_incomplete=True)
-        # Episode 0 has length 3; positions 3..max_len should be zero-padded
+        # Episode 0 has length 3. Positions 3..max_len are zero-padded
         max_len = traj.actions.shape[1]
         if max_len > 3:
             np.testing.assert_array_equal(traj.actions[0, 3:], 0)

@@ -41,7 +41,7 @@ def test_placeable_items_are_exactly_the_non_none_machines() -> None:
 
     Every placeable item maps to a real machine, and every real machine's
     item is placeable. This anchors the placeable definition on
-    ``Machine`` so the two can't drift apart.
+    ``Machine`` so that the two cannot drift apart.
     """
     placeable = set(PLACEABLE_ITEM_LIST)
     for item in placeable:
@@ -62,7 +62,7 @@ def test_place_dispatch_covers_exactly_the_placeable_items() -> None:
     definition) are maintained in separate modules. They carry the same
     items for different reasons -- one is interface ordering, one is the
     definition -- so we guard the *set*, not the order: dispatch order is an
-    interface concern free to differ, but neither side may gain or drop a
+    interface concern free to differ, but neither side can gain or drop a
     placeable item without the other.
     """
     from factoriax.engine.step import PLACE_ACTION_TO_ITEM
@@ -113,7 +113,7 @@ class TestDirectionOffsets:
     def test_tile_in_front(
         self, state_factory, direction, expected_x, expected_y
     ) -> None:
-        """Should return the correct adjacent tile for the given direction."""
+        """The lookup returns the correct adjacent tile for a direction."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
@@ -128,21 +128,21 @@ class TestPlacementValidation:
     """Tests for placement validation."""
 
     def test_valid_placement_on_dirt(self, state_factory) -> None:
-        """Should allow placement on dirt."""
+        """Placement on dirt is allowed."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
         assert is_valid_placement_tile(state, 0, 0)
 
     def test_invalid_placement_on_water(self, state_factory) -> None:
-        """Should not allow placement on water."""
+        """Placement on water is refused."""
         state = state_factory(
             world_map=jnp.array([[BlockType.WATER]], dtype=jnp.int32),
         )
         assert not is_valid_placement_tile(state, 0, 0)
 
     def test_invalid_placement_out_of_bounds(self, state_factory) -> None:
-        """Should not allow placement out of bounds."""
+        """Placement out of bounds is refused."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )
@@ -150,7 +150,7 @@ class TestPlacementValidation:
         assert not is_valid_placement_tile(state, 1, 0)
 
     def test_invalid_placement_on_existing_machine(self, state_factory) -> None:
-        """Should not allow placement where machine exists."""
+        """Placement on a tile that already holds a machine is refused."""
         machine_types = jnp.array([[Machine.MINER]], dtype=jnp.int32)
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
@@ -173,7 +173,7 @@ class TestPlaceableItems:
         ids=["miner", "coal", "iron", "empty"],
     )
     def test_is_placeable(self, item, expected) -> None:
-        """Item placeability should match the expected value."""
+        """The placeability of an item matches the expected value."""
         assert is_placeable_item(item) == expected
 
 
@@ -181,7 +181,7 @@ class TestMachinePlacement:
     """Tests for machine placement."""
 
     def test_place_machine_from_inventory(self, state_factory) -> None:
-        """Should place machine and remove from inventory."""
+        """The action places the machine and removes it from the inventory."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.MINER].set(1)
 
@@ -200,7 +200,7 @@ class TestMachinePlacement:
         assert new_state.player_inventory[0, ItemType.MINER] == 0
 
     def test_place_machine_decrements_stack(self, state_factory) -> None:
-        """Should decrement stack count when placing."""
+        """A placement decrements the stack count."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.MINER].set(3)
 
@@ -218,7 +218,7 @@ class TestMachinePlacement:
         assert new_state.player_inventory[0, ItemType.MINER] == 2
 
     def test_cannot_place_on_water(self, state_factory) -> None:
-        """Should not place machine on water."""
+        """The action does not place a machine on water."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.MINER].set(1)
 
@@ -237,7 +237,7 @@ class TestMachinePlacement:
         assert new_state.player_inventory[0, ItemType.MINER] == 1
 
     def test_cannot_place_without_item(self, state_factory) -> None:
-        """Should not place machine without item in inventory."""
+        """The action does not place a machine without the item in the inventory."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.DIRT, BlockType.DIRT], [BlockType.DIRT, BlockType.DIRT]],
@@ -251,7 +251,7 @@ class TestMachinePlacement:
         assert new_state.machine_types[0, 1] == Machine.NONE
 
     def test_cannot_place_non_placeable_item(self, state_factory) -> None:
-        """Should not place non-placeable items."""
+        """The action does not place non-placeable items."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.COAL].set(5)
 
@@ -274,7 +274,7 @@ class TestPlacementClearsInheritedBuffer:
     """Regression: a freshly-placed machine must start with an empty buffer.
 
     ``place_machine`` reuses the first inactive entity slot. If that slot
-    carries stale buffer contents (e.g. ore that leaked in while it was
+    carries stale buffer contents, for example ore that leaked in while it was
     inactive), the new machine must not inherit it.
     """
 
@@ -462,7 +462,7 @@ class TestPickupHealthGate:
         return placed, params, eidx
 
     def test_pickup_blocked_when_damaged(self, state_factory) -> None:
-        """A damaged target stays in place; inventory unchanged."""
+        """A damaged target stays in place. The inventory is unchanged."""
         state, _, eidx = self._placed_state(state_factory)
         damaged = state.replace(ent_health=state.ent_health.at[eidx].set(50))
         result = pickup_machine(damaged, EnvParams(), 0)
@@ -476,7 +476,7 @@ class TestPickupHealthGate:
         assert int(result.ent_health[eidx]) == 50
 
     def test_pickup_succeeds_at_full_health(self, state_factory) -> None:
-        """A full-HP target is picked up normally; HP cleared on pickup."""
+        """A full-HP target is picked up as usual. Pickup clears the HP."""
         state, _, eidx = self._placed_state(state_factory)
         result = pickup_machine(state, EnvParams(), 0)
         # Tile cleared.
@@ -491,9 +491,9 @@ class TestPickupHealthGate:
     def test_pickup_then_replace_resets_to_full_health(self, state_factory) -> None:
         """Pickup-then-replace restores a fresh machine at full HP."""
         state, params, eidx = self._placed_state(state_factory)
-        # Damage but not enough to block — actually, full HP so pickup works.
+        # Damage but not enough to block. Full HP, so pickup works.
         picked_up = pickup_machine(state, params, 0)
-        # Now place again — should land at full HP in some slot.
+        # Now place again. It must land at full HP in some slot.
         replaced = place_machine(picked_up, params, 0, int(ItemType.MINER))
         new_eidx = int(replaced.tile_entity[0, 1])
         assert new_eidx >= 0
@@ -527,7 +527,7 @@ class TestTrajectoryRecordsEntHealth:
         damaged = placed.replace(ent_health=placed.ent_health.at[eidx].set(33))
 
         traj = states_to_trajectory([damaged])
-        # Field should be present and shaped (B, T, MAX_M).
+        # The field is present and shaped (B, T, MAX_M).
         assert traj.ent_health is not None
         assert traj.ent_health.shape == (1, 1, placed.ent_health.shape[0])
         # Roundtrip back into a state list.
@@ -561,15 +561,15 @@ class TestWrapperContract:
         """Wrap an identity inner-step with custom degradation and repair.
 
         The wrapper's contract is independent of the inner env: it
-        rewrites REPAIR -> NOOP so the inner step couldn't trigger a
+        rewrites REPAIR -> NOOP so that the inner step cannot trigger a
         full-restore, then applies its own +10 bump and -1 degradation
         on top of whatever ent_health the inner step left behind. For
-        NOOP and the REPAIR-rewritten-to-NOOP case, the engine doesn't
+        NOOP and the REPAIR-rewritten-to-NOOP case, the engine does not
         touch ent_health, so an identity passthrough is exactly
         equivalent to a real ``factoriax_step`` call here.
 
         Composition over the real engine is verified at the action
-        level by ``TestActionRepair`` in this file; this contract test
+        level by ``TestActionRepair`` in this file. This contract test
         stays focused on the wrapper-only logic without paying the
         2x2 ``factoriax_step`` XLA compile.
         """
@@ -578,7 +578,7 @@ class TestWrapperContract:
 
         is_repair = action == int(Action.REPAIR)
         # Inner step is a no-op on NOOP, so identity passthrough matches
-        # what the real engine would return for the rewritten action.
+        # what the real engine returns for the rewritten action.
         new_state = state
 
         # If the action was REPAIR, locate the target entity and bump
@@ -619,7 +619,7 @@ class TestWrapperContract:
 
         state, params = self._placed_state(state_factory)
         eidx = int(state.tile_entity[0, 1])
-        # 5 NOOPs: HP should drop by 5 from MACHINE_HEALTH.
+        # 5 NOOPs: HP drops by 5 from MACHINE_HEALTH.
         for _ in range(5):
             state = self._wrapped_step(state, jnp.int32(Action.NOOP), params)
         assert int(state.ent_health[eidx]) == MACHINE_HEALTH - 5
@@ -644,8 +644,8 @@ class TestWrapperContract:
 
     def test_engine_state_only_touches_ent_health(self, state_factory) -> None:
         """The wrapper only ever reads/writes state.ent_health on top of
-        what the base engine does — proving the engine surface needed
-        for degradation/repair is exactly that one field."""
+        what the base engine does. This proves that the engine surface
+        needed for degradation and repair is exactly that one field."""
         from factoriax.engine.constants import Action
 
         state, params = self._placed_state(state_factory)
@@ -654,7 +654,7 @@ class TestWrapperContract:
         # Every entity-array field except ent_health is unchanged by
         # the wrapper's bookkeeping (the base step touches ent_power
         # via update_all_machines, but those are engine writes, not
-        # wrapper writes — we don't compare them here). Player and
+        # wrapper writes, and we do not compare them here). Player and
         # grid are untouched between identical NOOP steps with no
         # active machine work, so we compare pytree leaves.
         # Simpler check: ent_health changed, all other entity fields

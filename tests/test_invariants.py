@@ -1,4 +1,4 @@
-"""Property-based invariant tests for the FactoriaX environment.
+"""Property-based invariant tests for the Factoriax environment.
 
 These tests verify structural invariants that must hold after any
 sequence of actions, regardless of the specific actions taken. They
@@ -37,7 +37,7 @@ _NUM_RANDOM_STEPS = 100
 
 @pytest.fixture(scope="module")
 def random_episode():
-    """Module-scoped JIT'd 100-step random rollout for 8x8 2p.
+    """Module-scoped JIT-compiled 100-step random rollout for 8x8 2p.
 
     Returns ``(env, params, run_fn)``. The ``run_fn`` is a JIT-compiled
     function ``rng -> final_state`` that runs ``_NUM_RANDOM_STEPS``
@@ -88,7 +88,7 @@ class TestStateConsistency:
         assert jnp.all(final.player_positions[:, 1] < env.map_height)
 
     def test_inventory_counts_non_negative(self, random_episode) -> None:
-        """No inventory count should go below zero."""
+        """No inventory count goes below zero."""
         _, _, run = random_episode
         final = run(random.PRNGKey(7))
 

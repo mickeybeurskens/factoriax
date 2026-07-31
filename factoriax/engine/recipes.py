@@ -1,4 +1,4 @@
-"""Recipe definitions for the FactoriaX environment.
+"""Recipe definitions for the Factoriax environment.
 
 Recipe data sits in three layers:
 
@@ -7,7 +7,7 @@ Recipe data sits in three layers:
 - :class:`RecipeBook` is a validated tuple of records. It enforces the rules
   that the recipe matcher of the engine depends on.
 - :class:`RecipeTable` turns a book into stacked JAX arrays, which is what
-  JIT'd engine code reads.
+  JIT-compiled engine code reads.
 
 :data:`BASE_RECIPES` is the tuple that comes with the engine, and
 :data:`DEFAULT_RECIPE_TABLE` is its projection. A scenario can supply its own
@@ -653,9 +653,10 @@ RECIPE_NAMES: list[str] = [r.name for r in BASE_RECIPES]
 class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Stacked JAX arrays that come from a :class:`RecipeBook`.
 
-    This class holds every per-recipe number that the engine reads inside JIT'd
-    code: the machine cycle match, the craft yield, and the action dispatch. It
-    travels on :class:`~factoriax.engine.state.EnvParams`, so the numbers reach
+    This class holds every per-recipe number that the engine reads inside
+    JIT-compiled code: the machine cycle match, the craft yield, and the
+    action dispatch. It travels on
+    :class:`~factoriax.engine.state.EnvParams`, so the numbers reach
     traced code as PyTree leaves, and not as Python globals inside the XLA
     graph. Balance is therefore tunable at runtime with no new compile.
     :class:`RecipeBook` fixes the recipe count and the arity at construction,

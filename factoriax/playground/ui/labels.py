@@ -1,8 +1,9 @@
-"""Human-readable display names for FactoriaX UI applications.
+"""Human-readable display names for Factoriax UI applications.
 
 Maps engine enum values to the label strings the editor and play UI
-render in panel headers, tooltips, and toolbars. Presentation only —
-kept out of the core :mod:`factoriax.engine.constants` module.
+render in panel headers, tooltips, and toolbars. This module is
+presentation only. It stays out of the core
+:mod:`factoriax.engine.constants` module.
 """
 
 from __future__ import annotations

@@ -80,6 +80,6 @@ def test_atlas_alpha_channel_is_non_trivial() -> None:
     img = iio.imread(_COMMITTED_PNG)
     transparent_pixels = (img[..., 3] < 255).sum()
     assert transparent_pixels > 0, (
-        "Atlas has no transparent pixels — alpha compositing in "
+        "Atlas has no transparent pixels. Alpha compositing in "
         "render_map will be a no-op. Re-run factoriax/assets/build_atlas.py."
     )

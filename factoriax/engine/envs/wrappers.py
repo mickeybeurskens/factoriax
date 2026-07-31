@@ -1,4 +1,4 @@
-"""The wrappers that compose over a FactoriaX environment."""
+"""The wrappers that compose over a Factoriax environment."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     Parameters
     ----------
     inner
-        Core FactoriaX environment to wrap.
+        Core Factoriax environment to wrap.
     resample
         Whether a new episode builds a new world. See :meth:`__init__`.
     """

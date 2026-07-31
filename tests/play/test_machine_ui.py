@@ -381,9 +381,9 @@ class TestMachineMenuTileCoords:
             buffer_type=buf_type,
             buffer_count=buf_count,
         )
-        # Inspecting (0, 0): should have no machine slot regions (empty).
+        # Inspecting (0, 0): no machine slot regions, because it is empty.
         result_00, regions_00 = render_machine_menu(state, _PARAMS, _SW, _SH, 0, 0)
-        # Inspecting (1, 1): should have 1 machine slot region (coal).
+        # Inspecting (1, 1): one machine slot region, which holds coal.
         result_11, regions_11 = render_machine_menu(state, _PARAMS, _SW, _SH, 1, 1)
         slots_00 = [r for r in regions_00 if r.action == "select_machine_slot"]
         slots_11 = [r for r in regions_11 if r.action == "select_machine_slot"]

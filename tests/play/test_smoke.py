@@ -2,8 +2,9 @@
 
 These tests verify that the play UI and editor can import, create objects,
 and render frames without crashing. They do NOT test game logic correctness
-or visual output quality — just that the code paths don't hit missing
-attributes, import errors, or type mismatches after state changes.
+or visual output quality. They only check that the code paths do not
+hit missing attributes, import errors, or type mismatches after state
+changes.
 
 Pygame fonts are initialized by the session-scoped ``pygame_font_session``
 fixture in ``tests/play/conftest.py``.
@@ -32,7 +33,7 @@ def env_and_state():
 
 
 class TestRendererSmoke:
-    """Renderer should produce an image from any valid state."""
+    """The renderer produces an image from any valid state."""
 
     def test_render_pixels(self, env_and_state) -> None:
         """The renderer returns an RGB array."""
@@ -60,7 +61,7 @@ class TestRendererSmoke:
 
 
 class TestPlayUISmoke:
-    """Play UI rendering should not crash on a fresh state."""
+    """The play UI render must not crash on a fresh state."""
 
     def test_inventory_menu(self, env_and_state) -> None:
         """render_inventory_menu returns an RGBA overlay."""
@@ -100,7 +101,7 @@ class TestPlayUISmoke:
 
 
 class TestConfigSmoke:
-    """Config loading and EnvParams conversion should work."""
+    """The config load and the EnvParams conversion both work."""
 
     def test_env_params_to_dict(self) -> None:
         """env_params_to_dict covers all current EnvParams fields."""
@@ -127,7 +128,7 @@ class TestConfigSmoke:
 
 
 class TestEnvStepSmoke:
-    """Environment should reset and step at various map sizes.
+    """The environment resets and steps at different map sizes.
 
     Every method triggers a fresh JIT compile for the env at a given
     map size.

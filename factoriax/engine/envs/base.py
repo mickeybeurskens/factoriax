@@ -88,7 +88,7 @@ def achievement_hook(condition_fn: AchievementFn) -> StepHook:
 
 
 class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
-    """The JAX grid environment of FactoriaX.
+    """The JAX grid environment of Factoriax.
 
     The class advances the world state, which holds the terrain, the machines,
     and the player inventories. It also evaluates an optional

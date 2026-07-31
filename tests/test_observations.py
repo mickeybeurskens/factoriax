@@ -1,7 +1,7 @@
 """Tests for factoriax.engine.observations: global_x_ray, local_x_ray, and rgb.
 
 Each function is tested for correct output shape, value range, JAX
-compatibility, and behavioural correctness (e.g. the local window actually
+compatibility, and behavioural correctness (for example, the local window actually
 moves with the player, border tiles are padded correctly).
 """
 
@@ -106,7 +106,7 @@ class TestPlayerScalars:
         )
         scalars_p0 = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 0))
         scalars_p1 = np.array(_x_ray_scalars(state, _DEFAULT_PARAMS, 1))
-        # Player inventories differ, so the scalar vectors should differ.
+        # Player inventories differ, so the scalar vectors differ too.
         assert not np.allclose(scalars_p0, scalars_p1)
 
 
@@ -153,7 +153,7 @@ class TestGlobalArray:
         )
         obs0 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 0))
         obs1 = np.array(global_x_ray(state, _DEFAULT_PARAMS, 1))
-        # Spatial channels are identical; player scalars differ.
+        # Spatial channels are identical. Player scalars differ.
         spatial_size = NUM_SPATIAL_CHANNELS["x_ray"] * _MAP_W * _MAP_H
         np.testing.assert_array_equal(obs0[:spatial_size], obs1[:spatial_size])
         assert not np.allclose(obs0[spatial_size:], obs1[spatial_size:])
@@ -273,10 +273,10 @@ class TestLocalArray:
         obs_near = np.array(local_x_ray(state_near, _DEFAULT_PARAMS, 0, radius=_RADIUS))
         obs_far = np.array(local_x_ray(state_far, _DEFAULT_PARAMS, 0, radius=_RADIUS))
 
-        # The map segment of the near observation should contain a COAL value.
+        # The map segment of the near observation holds a COAL value.
         coal_val = float(BlockType.COAL) / float(max(BlockType))
         assert np.any(np.isclose(obs_near[:window_size], coal_val))
-        # The far observation's map segment should contain only DIRT and OOB.
+        # The far observation's map segment holds only DIRT and OOB.
         assert not np.any(np.isclose(obs_far[:window_size], coal_val))
 
     def test_machine_channel_present(self, state_factory) -> None:
@@ -479,7 +479,7 @@ class TestSlotProjection:
 
         # At the assembler tile, the slot channels are normalised by
         # NUM_ITEM_TYPES for types / by _SLOT_COUNT_NORM for counts.
-        # We only check "this channel is non-zero" here — the exact
+        # We only check "this channel is non-zero" here. The exact
         # normalisation constant can change without breaking the
         # agent's decoder.
         assert s0t[3, 2] > 0
@@ -550,7 +550,7 @@ class TestLocalGlobalEquivalence:
     scalars + research tail appended after the spatial block must be
     identical between the two. If this test fails, either ``local_x_ray``
     and ``global_x_ray`` have drifted in channel ordering / normalisation,
-    or the window indexing is off — both of which silently corrupt
+    or the window indexing is off. Both faults silently corrupt
     training without obvious symptoms.
     """
 
@@ -602,7 +602,7 @@ class TestLocalGlobalEquivalence:
         resources = resources.at[11, 12].set(BLOCK_MAX_RESOURCES // 2)
 
         # Place the player far enough from every edge that the whole
-        # window is in-bounds; OOB padding behaviour is covered by
+        # window is in-bounds. OOB padding behaviour is covered by
         # test_oob_padding_at_corner above.
         px, py = 7, 8
         assert px - radius >= 0 and px + radius < w

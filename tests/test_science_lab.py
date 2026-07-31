@@ -27,7 +27,7 @@ from factoriax.engine.constants import (
 from factoriax.engine.step import run_labs
 
 # ---------------------------------------------------------------------------
-# Low-level run_labs tests — exercise the reduction directly without an env.
+# Low-level run_labs tests. They exercise the reduction without an env.
 # ---------------------------------------------------------------------------
 
 
@@ -178,7 +178,7 @@ class TestRunLabsDelta:
 
 
 # ---------------------------------------------------------------------------
-# Full-env integration — ensure factoriax_step wires run_labs in correctly.
+# Full-env integration. It makes sure that factoriax_step wires run_labs in.
 # ---------------------------------------------------------------------------
 
 
@@ -199,7 +199,7 @@ class TestLabInEnvStep:
     def test_step_consumes_and_resets(
         self, canonical_env_8x8_1p, state_factory
     ) -> None:
-        """A lab with packs consumes them in one step; next step is zero."""
+        """A lab with packs consumes them in one step. The next step is zero."""
         _, params, jit_step_fn, _ = canonical_env_8x8_1p
         # Build a state with one loaded lab.
         state = _lab_state(

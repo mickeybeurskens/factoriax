@@ -53,7 +53,7 @@ class TestMachineInitialization:
     """Tests for machine state initialization."""
 
     def test_generate_state_initializes_no_machines(self) -> None:
-        """Generated world should have no machines by default."""
+        """A generated world has no machines by default."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -63,7 +63,7 @@ class TestMachineInitialization:
         assert jnp.all(state.ent_buf_count == 0)
 
     def test_machine_arrays_match_map_shape(self) -> None:
-        """Machine state arrays should have the expected shapes."""
+        """The machine state arrays have the expected shapes."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params, 16, 24)
@@ -79,7 +79,7 @@ class TestMinerOperation:
     """Tests for miner machine behavior."""
 
     def test_miner_extracts_resources(self, state_factory) -> None:
-        """Miner should extract resources from the block beneath it."""
+        """A miner extracts resources from the block under it."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
@@ -140,7 +140,7 @@ class TestMinerOperation:
         assert new_state.ent_buf_count[eid] == MINER_OUTPUT_CAP
 
     def test_miner_stops_when_no_resources(self, state_factory) -> None:
-        """Miner should stop when block has no resources."""
+        """A miner stops when its block has no resources."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[0]], dtype=jnp.int16),
@@ -154,7 +154,7 @@ class TestMinerOperation:
         assert new_state.ent_buf_count[eid] == 0
 
     def test_miner_depletes_block_to_dirt(self, state_factory) -> None:
-        """Block should become dirt when fully depleted by miner."""
+        """A block becomes dirt when a miner fully depletes it."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[2]], dtype=jnp.int16),
@@ -197,7 +197,7 @@ class TestMinerOperation:
         self,
         state_factory,
     ) -> None:
-        """Miner should extract only available resources when less than rate."""
+        """A miner extracts only the available resources below the rate."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[1]], dtype=jnp.int16),
@@ -248,7 +248,7 @@ class TestMinerDifferentOres:
         ids=["iron", "copper"],
     )
     def test_miner_on_ore(self, state_factory, block_type, item_type) -> None:
-        """Miner should correctly mine the given ore type."""
+        """A miner mines the given ore type correctly."""
         state = state_factory(
             world_map=jnp.array([[block_type]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
@@ -267,7 +267,7 @@ class TestMultipleMiners:
     """Tests for multiple miners operating in parallel."""
 
     def test_multiple_miners_update_in_parallel(self, state_factory) -> None:
-        """Multiple miners should all update in a single step."""
+        """Every miner updates in a single step."""
         state = state_factory(
             world_map=jnp.array(
                 [
@@ -679,7 +679,7 @@ class TestUpdateAllMachines:
     """Tests for the combined machine update function."""
 
     def test_miner_runs_via_update_all(self, state_factory) -> None:
-        """update_all_machines should run miners end-to-end."""
+        """update_all_machines runs miners end-to-end."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
@@ -695,7 +695,7 @@ class TestUpdateAllMachines:
 
 
 class TestMachineHelpers:
-    """Unit tests for private machine helpers — JIT-free, no state_factory."""
+    """Unit tests for private machine helpers: JIT-free, no state_factory."""
 
     def test_subtract_buffer_decrements_by_amount(self) -> None:
         cond = jnp.array([True, True, False])
@@ -704,7 +704,7 @@ class TestMachineHelpers:
         new_bt, new_bc = _subtract_buffer(cond, bt, bc, jnp.int16(2))
         assert new_bc.tolist() == [1, 0, 10]
         assert int(new_bt[0]) == 5  # still positive
-        assert int(new_bt[1]) == 0  # count hit zero — cleared
+        assert int(new_bt[1]) == 0  # count hit zero, so cleared
         assert int(new_bt[2]) == 5  # unconditioned
 
     def test_subtract_buffer_clears_type_exactly_at_zero(self) -> None:
@@ -712,7 +712,7 @@ class TestMachineHelpers:
         bt = jnp.array([7, 7], dtype=jnp.int8)
         bc = jnp.array([1, 2], dtype=jnp.int16)
         new_bt, new_bc = _subtract_buffer(cond, bt, bc, jnp.int16(1))
-        assert int(new_bc[0]) == 0 and int(new_bt[0]) == 0  # zero — cleared
+        assert int(new_bc[0]) == 0 and int(new_bt[0]) == 0  # zero, so cleared
         assert int(new_bc[1]) == 1 and int(new_bt[1]) == 7  # still positive
 
     def test_subtract_buffer_no_change_when_false(self) -> None:

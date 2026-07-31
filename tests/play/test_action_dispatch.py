@@ -134,7 +134,7 @@ class TestWithdrawAction:
         game_ui: GameUI,
         state_factory,
     ) -> None:
-        """Machines have one output slot; CONFIRM emits WITHDRAW regardless of focus."""
+        """Machines have one output slot. CONFIRM emits WITHDRAW for any focus."""
         machine_inv = jnp.zeros(
             (4, 4, NUM_ITEM_TYPES),
             dtype=jnp.int16,
@@ -213,9 +213,9 @@ class TestCraftAction:
 
         The crafting panel lists ``BASE_RECIPES`` in order, but recipe-list
         order and craft-family order differ, so the action must route through
-        the output item -- a ``CRAFT_BASE + index`` offset would be wrong for
-        recipes whose output is out of craft-family position (e.g. a machine
-        recipe interleaved among the half-fabricates).
+        the output item. A ``CRAFT_BASE + index`` offset is wrong for a recipe
+        whose output is out of craft-family position, for example a machine
+        recipe between the half-fabricates.
         """
         from factoriax.engine.actions import ITEM_TO_CRAFT_ACTION
         from factoriax.engine.recipes import BASE_RECIPES, NUM_RECIPES

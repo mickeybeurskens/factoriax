@@ -2,7 +2,7 @@
 
 Mining targets the tile in front of the player. To exercise the engine
 in these tests the player is placed adjacent to the ore and faced
-toward it (e.g. player at (0, 1) with Direction.RIGHT to mine an ore at
+toward it. For example, a player at (0, 1) with Direction.RIGHT mines an ore at
 (1, 1)).
 """
 
@@ -57,7 +57,7 @@ class TestBlockResources:
     """Tests for block resource initialization."""
 
     def test_mineable_blocks_have_base_resources(self) -> None:
-        """Mineable blocks should have params.base_resources."""
+        """A mineable block holds params.base_resources."""
         rng = random.PRNGKey(42)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -69,7 +69,7 @@ class TestBlockResources:
                 assert jnp.all(resources == params.base_resources)
 
     def test_non_mineable_blocks_have_zero_resources(self) -> None:
-        """Non-mineable blocks should have zero resources."""
+        """A non-mineable block holds zero resources."""
         rng = random.PRNGKey(42)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -78,7 +78,7 @@ class TestBlockResources:
         assert jnp.all(state.block_resources[non_mineable] == 0)
 
     def test_block_resources_shape_matches_map(self) -> None:
-        """Block resources should have same shape as map."""
+        """The block resources have the same shape as the map."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -89,31 +89,31 @@ class TestMiningResources:
     """Tests for mining with the resource system."""
 
     def test_mining_decrements_resources(self, state_factory) -> None:
-        """Facing ore should decrement resources by 1 (default yield)."""
+        """A mine that faces ore decrements resources by 1 (default yield)."""
         state = _ore_state(state_factory, ore_resources=5)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.block_resources[1, 1]) == 4
 
     def test_mining_yields_item(self, state_factory) -> None:
-        """Mining should add one item to the player's pouch."""
+        """A mine adds one item to the player's pouch."""
         state = _ore_state(state_factory, ore_resources=5)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.player_inventory[0, ItemType.COAL]) == 1
 
     def test_items_mined_counter_increments(self, state_factory) -> None:
-        """Successful mine should bump the global items_mined counter."""
+        """A successful mine bumps the global items_mined counter."""
         state = _ore_state(state_factory, ore_resources=5)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.items_mined[ItemType.COAL]) == 1
 
     def test_block_stays_while_resources_remain(self, state_factory) -> None:
-        """Block should remain while resources > 0."""
+        """The block remains while resources > 0."""
         state = _ore_state(state_factory, ore_resources=5)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.map[1, 1]) == int(BlockType.COAL)
 
     def test_block_becomes_dirt_when_depleted(self, state_factory) -> None:
-        """Block should become dirt when resources reach zero."""
+        """The block becomes dirt when its resources reach zero."""
         state = _ore_state(state_factory, ore_resources=1)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.map[1, 1]) == int(BlockType.DIRT)
@@ -121,7 +121,7 @@ class TestMiningResources:
         assert int(new.player_inventory[0, ItemType.COAL]) == 1
 
     def test_cannot_mine_depleted_block(self, state_factory) -> None:
-        """Mining a tile with zero resources should be NOOP."""
+        """A mine on a tile with zero resources is a NOOP."""
         state = _ore_state(state_factory, ore_resources=0)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.player_inventory[0, ItemType.COAL]) == 0
@@ -136,7 +136,7 @@ class TestMiningResources:
         ids=["iron", "copper"],
     )
     def test_mining_ore_type(self, state_factory, block_type, item_type) -> None:
-        """Mining should yield the correct ore type."""
+        """A mine yields the correct ore type."""
         state = _ore_state(state_factory, ore_resources=5, block_type=block_type)
         new = mine_block(state, 0, _PARAMS)
         assert int(new.block_resources[1, 1]) == 4
@@ -148,7 +148,7 @@ class TestMiningEdgeCases:
     """Edge case tests for mining."""
 
     def test_mining_non_mineable_in_front_does_nothing(self, state_factory) -> None:
-        """Facing dirt should be a NOOP."""
+        """A mine that faces dirt is a NOOP."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(0, 1),
@@ -199,7 +199,7 @@ class TestMiningEdgeCases:
         assert all(jax.tree.leaves(equal_per_leaf))
 
     def test_max_resources_constant_is_30000(self) -> None:
-        """BLOCK_MAX_RESOURCES should accommodate the rocket-scenario
+        """BLOCK_MAX_RESOURCES holds the rocket-scenario
         coal patch, which carries 28000 per tile (10x the other ore
         patches at 2800/tile) so four parallel smelter cells have
         enough fuel for the full 8000-tick rocket chain.
@@ -220,7 +220,7 @@ class TestPlayerMiningYield:
         assert int(new.block_resources[1, 1]) == 7
 
     def test_yield_capped_by_available_resources(self, state_factory) -> None:
-        """Yield should cap at remaining tile resources."""
+        """The yield caps at the remaining tile resources."""
         state = _ore_state(state_factory, ore_resources=2)
         params = EnvParams(player_mining_yield=5)
         new = mine_block(state, 0, params)
@@ -230,7 +230,7 @@ class TestPlayerMiningYield:
 
 
 # NOTE: A JIT cache-size assertion for MINE lives in
-# tests/test_jit_retrace.py — it warms up via env.reset_env so the state
+# tests/test_jit_retrace.py. It warms up via env.reset_env so the state
 # has fully-canonicalized JAX-array leaves. state_factory builds states
 # with Python-int leaves (selected_player, timestep) that get promoted
 # on first jit, causing a spurious second trace.

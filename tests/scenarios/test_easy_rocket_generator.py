@@ -1,9 +1,10 @@
 """Tests for the JAX-native easy-rocket world generator (refactor Phase 1).
 
-Pins the invariants the host ``build_easy_rocket_level`` guaranteed — six
-2x2 ore patches, one per block, non-overlapping, off the spawn ring — plus the
-JAX properties the host lacked: determinism per key, variation across keys, and
-vmap/jit compatibility. JIT-free assertions on small 16x16 arrays.
+Pins the invariants that the host ``build_easy_rocket_level`` guaranteed:
+six 2x2 ore patches, one per block, non-overlapping, and off the spawn
+ring. It also pins the JAX properties that the host lacked:
+determinism per key, variation across keys, and vmap/jit compatibility.
+The assertions are JIT-free and run on small 16x16 arrays.
 """
 
 from __future__ import annotations

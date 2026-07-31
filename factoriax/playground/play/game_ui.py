@@ -46,7 +46,7 @@ from factoriax.playground.play.achievements import FREE_PLAY_ACHIEVEMENTS
 from factoriax.playground.play.play_state import PlayState
 from factoriax.playground.play.ui import (
     _entity_inventory,
-    _hotbar_h,  # noqa: F401 — re-export
+    _hotbar_h,  # noqa: F401 (re-export)
     render_achievement_menu,
     render_help_overlay,
     render_hotbar,
@@ -711,7 +711,7 @@ class GameUI:
         elif PlayerAction.CONFIRM in actions:
             if ps.machine_panel_active:
                 # Engine withdraws whatever is in the target machine's
-                # output slot — item focus is purely a UI affordance.
+                # output slot. Item focus is purely a UI affordance.
                 action = int(Action.WITHDRAW)
             else:
                 # Deposit the selected item (the guard only skips EMPTY).

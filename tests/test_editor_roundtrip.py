@@ -72,7 +72,7 @@ class TestEditorRoundTrip:
     """Level -> EditorState -> Level must preserve every field."""
 
     def test_round_trip_preserves_all_fields(self) -> None:
-        """Convert to editor state and back; compare field by field."""
+        """Convert to editor state and back, then compare field by field."""
         original = _make_fully_populated_level()
         editor = editor_state_from_level(original)
         restored = editor_state_to_level(editor)
@@ -110,7 +110,7 @@ class TestEditorRoundTrip:
         assert restored.player_inventory == original.player_inventory
 
     def test_none_fields_stay_none(self) -> None:
-        """A Level with all optional fields as None should round-trip cleanly."""
+        """A Level with every optional field as None round-trips cleanly."""
         original = Level(
             name="bare",
             map_width=3,
@@ -133,8 +133,8 @@ class TestFieldCoverage:
     """Structural check: every Level field is represented in EditorState."""
 
     # Fields that exist on Level but have no EditorState counterpart by
-    # design (dimensions are stored as plain ints, block_map is always
-    # present, etc.).
+    # design. Dimensions are stored as plain ints, and block_map is
+    # always present.
     _EXCLUDED = {
         "name",
         "map_width",

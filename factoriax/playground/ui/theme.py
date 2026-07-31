@@ -1,4 +1,4 @@
-"""Shared color and size constants for all FactoriaX UI applications.
+"""Shared color and size constants for all Factoriax UI applications.
 
 All size values are defined at 1x scale (32 px-per-block base resolution).
 Call :func:`apply_scale` once at startup to multiply them by the chosen

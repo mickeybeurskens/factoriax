@@ -1,4 +1,4 @@
-"""FactoriaX Play — human-facing gameplay interface.
+"""Factoriax Play: the human-facing gameplay interface.
 
 This subpackage contains pygame-based UI components for interactive play.
 It is intentionally separated from the core RL environment so that the
@@ -15,9 +15,9 @@ Or import directly:
 
 Submodules
 ----------
-- ``main`` — Game loop and entry point
-- ``game_ui`` — Reusable GameUI component for menus and input dispatch
-- ``ui`` — Menu rendering (inventory, achievements, pause)
+- ``main``: the game loop and the entry point
+- ``game_ui``: the GameUI component for menus and input dispatch
+- ``ui``: menu rendering (inventory, achievements, pause)
 
 This module holds no imports, so the engine import path never pulls in pygame.
 Import from the defining module instead.

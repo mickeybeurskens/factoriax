@@ -45,7 +45,7 @@ class TestLadderShape:
         assert len(ids) == len(set(ids))
 
     def test_every_bit_has_a_keyboard_hint(self) -> None:
-        """This ladder exists to teach a human; a bit without a hint
+        """This ladder exists to teach a human. A bit without a hint
         renders an empty footer in the achievement panel."""
         missing = [a.id for a in FREE_PLAY_ACHIEVEMENTS if not a.hint]
         assert missing == []
@@ -60,8 +60,8 @@ class TestLadderShape:
         assert bits.shape == (MAX_ACHIEVEMENTS,)
 
     def test_no_bit_is_unreachable(self) -> None:
-        """Placeholder bits that can never fire were removed; a bit that
-        is hardcoded False would show as permanently locked to players."""
+        """Placeholder bits that can never fire were removed. A bit that
+        is hardcoded False shows as permanently locked to players."""
         assert not any(
             a.id in {"hull_production", "fuel_production"}
             for a in FREE_PLAY_ACHIEVEMENTS

@@ -1,4 +1,4 @@
-"""Shared UI primitives for all pygame-based FactoriaX applications.
+"""Shared UI primitives for all pygame-based Factoriax applications.
 
 This package provides the common building blocks used by the editor,
 play mode, and inspector. Importing from here (rather than from

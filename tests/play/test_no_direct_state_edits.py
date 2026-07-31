@@ -3,7 +3,7 @@
 The engine owns the dynamics. The play UI turns input into an ``Action`` and
 hands it to :func:`factoriax.engine.step.step`, so a human and a policy move
 the world through the same code. A direct write to ``EnvState`` from the UI
-would give the human a rule the policy does not have.
+gives the human a rule that the policy does not have.
 
 This test reads the play sources and rejects the two ways a caller can write
 to a flax struct: ``state.replace(...)`` and ``state.<field>.at[...].set(...)``.

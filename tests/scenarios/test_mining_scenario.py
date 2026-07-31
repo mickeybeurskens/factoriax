@@ -1,6 +1,6 @@
 """Tests for the Mining-v1 scenario.
 
-Scenario-level contract only — mine-action mechanics live in
+Scenario-level contract only. Mine-action mechanics live in
 ``test_mining.py``, observation encodings in
 ``test_observations_superficial.py``, and wrapper semantics in
 ``test_env_contract.py`` / ``test_env_hooks.py``. Covered here:
@@ -71,7 +71,7 @@ def test_terrain_has_ten_ore_tiles_of_three(env_and_params) -> None:
 
 
 def test_episode_reward_accounting_and_termination(env_and_params, jit_step) -> None:
-    """sum(rewards) == items_mined == inventory; done fires only at t=100."""
+    """sum(rewards) == items_mined == inventory. Done fires only at t=100."""
     env, params = env_and_params
     key = random.PRNGKey(7)
     _, state = env.reset_env(key, params)
@@ -119,8 +119,8 @@ def _oracle_action(state) -> int:
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_scripted_oracle_reaches_max_score(env_and_params, jit_step, seed) -> None:
     """A greedy scripted policy collects all 30 ore within the 100-step
-    budget — guards against mechanics or generator changes silently
-    making the benchmark unsolvable."""
+    budget. This guards against mechanics or generator changes that
+    silently make the benchmark unsolvable."""
     env, params = env_and_params
     key = random.PRNGKey(seed)
     _, state = env.reset_env(key, params)

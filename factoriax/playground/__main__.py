@@ -1,4 +1,4 @@
-"""Entry point for ``python -m factoriax.playground`` — opens the launcher."""
+"""Entry point for ``python -m factoriax.playground``. It opens the launcher."""
 
 from factoriax.playground.app import run_app
 

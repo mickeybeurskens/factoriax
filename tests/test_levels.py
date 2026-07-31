@@ -368,7 +368,7 @@ class TestAssemblerInventoryLoading:
         assert int(state.ent_asm_out_count[eid]) == 1
 
     def test_input_items_still_load_into_input_slots(self) -> None:
-        """Ore and coal remain inputs; only recipe outputs move."""
+        """Ore and coal remain inputs. Only recipe outputs move."""
         level = self._furnace_level({int(ItemType.IRON_ORE): 4, int(ItemType.COAL): 6})
         state = build_state(level, num_players=1)
         eid = int(state.tile_entity[3, 3])
@@ -590,7 +590,7 @@ class TestGenerateState:
         np.testing.assert_array_equal(np.array(s0.map), np.array(s1.map))
 
     def test_ore_tiles_get_base_resources(self) -> None:
-        """All ore tiles should have exactly base_resources resources."""
+        """Every ore tile holds exactly base_resources resources."""
         import numpy as np
 
         from factoriax.engine.tables import MINEABLE_BLOCKS

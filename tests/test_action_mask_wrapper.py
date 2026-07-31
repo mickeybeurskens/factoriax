@@ -104,7 +104,7 @@ def test_empty_mask_passes_everything_through() -> None:
 
 
 def test_multiple_blocked_actions() -> None:
-    """All actions in the mask are blocked; others pass through."""
+    """Every action in the mask is blocked. The others pass through."""
     inner = _StubInner()
     wrapper = ActionMaskWrapper(
         inner, [int(Action.RIGHT), int(Action.LEFT), int(Action.MINE)]

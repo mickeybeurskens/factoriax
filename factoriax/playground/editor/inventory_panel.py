@@ -50,7 +50,7 @@ _SLOT_GAP: int = 4
 _HEADER_H: int = 30
 
 # Human-readable names derived from the ItemType enum. Underscores become
-# spaces and each word is title-cased, giving e.g. "Conveyor Belt".
+# spaces and each word is title-cased, which gives "Conveyor Belt".
 _ITEM_NAMES: dict[int, str] = {
     int(it): it.name.replace("_", " ").title() for it in ItemType
 }
@@ -344,7 +344,7 @@ def render_inventory_panel(
     slot_w = usable_w // cols if cols > 0 else 0
     slot_h = usable_h // rows if rows > 0 else 0
 
-    # Clamp slot height so cells don't get absurdly tall on large panels.
+    # Clamp slot height so that cells do not get too tall on large panels.
     slot_h = min(slot_h, 52)
 
     # Machine type for role lookup (only used for machine targets).

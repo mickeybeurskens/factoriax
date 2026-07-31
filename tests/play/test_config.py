@@ -32,13 +32,13 @@ class TestDefaultBindings:
     """Verify default binding maps are complete and consistent."""
 
     def test_keyboard_covers_all_actions(self) -> None:
-        """Every PlayerAction should appear in the default keyboard map."""
+        """Every PlayerAction appears in the default keyboard map."""
         kb = default_keyboard()
         for action in PlayerAction:
             assert action in kb, f"Missing keyboard binding for {action}"
 
     def test_controller_covers_gameplay_and_nav(self) -> None:
-        """Controller defaults should cover movement and core navigation."""
+        """Controller defaults cover movement and core navigation."""
         ctrl = default_controller()
         essential = [
             PlayerAction.MOVE_UP,
@@ -57,7 +57,7 @@ class TestDefaultBindings:
             assert len(ctrl[action]) > 0, f"Empty controller binding for {action}"
 
     def test_keyboard_movement_has_wasd_and_arrows(self) -> None:
-        """Movement should be bound to both WASD and arrow keys."""
+        """Movement binds to both WASD and the arrow keys."""
         kb = default_keyboard()
         assert "K_w" in kb[PlayerAction.MOVE_UP]
         assert "K_UP" in kb[PlayerAction.MOVE_UP]
@@ -69,21 +69,21 @@ class TestBuildKeyLookup:
     """Verify the reverse lookup builder."""
 
     def test_simple_binding(self) -> None:
-        """A single action with one key should produce a lookup entry."""
+        """A single action with one key produces a lookup entry."""
         bindings = {"mine": ["K_SPACE"]}
         lookup = build_key_lookup(bindings)
         assert (0, pygame.K_SPACE) in lookup
         assert "mine" in lookup[(0, pygame.K_SPACE)]
 
     def test_multiple_keys_same_action(self) -> None:
-        """Multiple keys bound to the same action should all resolve."""
+        """Every key bound to the same action resolves."""
         bindings = {"move_up": ["K_w", "K_UP"]}
         lookup = build_key_lookup(bindings)
         assert "move_up" in lookup[(0, pygame.K_w)]
         assert "move_up" in lookup[(0, pygame.K_UP)]
 
     def test_same_key_multiple_actions(self) -> None:
-        """One key bound to different actions should return both."""
+        """One key bound to different actions returns both actions."""
         bindings = {"move_up": ["K_w"], "nav_up": ["K_w"]}
         lookup = build_key_lookup(bindings)
         result = lookup[(0, pygame.K_w)]
@@ -91,26 +91,26 @@ class TestBuildKeyLookup:
         assert "nav_up" in result
 
     def test_modifier_key(self) -> None:
-        """SHIFT+key should parse into a modified lookup entry."""
+        """SHIFT+key parses into a modified lookup entry."""
         bindings = {"slot_9": ["SHIFT+K_1"]}
         lookup = build_key_lookup(bindings)
         assert (pygame.KMOD_SHIFT, pygame.K_1) in lookup
         assert "slot_9" in lookup[(pygame.KMOD_SHIFT, pygame.K_1)]
 
     def test_ctrl_modifier(self) -> None:
-        """CTRL+key should parse correctly."""
+        """CTRL+key parses into a modified lookup entry."""
         bindings = {"select_player_1": ["CTRL+K_1"]}
         lookup = build_key_lookup(bindings)
         assert (pygame.KMOD_CTRL, pygame.K_1) in lookup
 
     def test_invalid_key_name_skipped(self) -> None:
-        """Invalid key names should be logged and skipped."""
+        """The parser logs an invalid key name and then skips it."""
         bindings = {"mine": ["K_FAKE_KEY"]}
         lookup = build_key_lookup(bindings)
         assert len(lookup) == 0
 
     def test_empty_bindings(self) -> None:
-        """Empty key list should produce no entries for that action."""
+        """An empty key list produces no entries for that action."""
         bindings = {"turn_left": []}
         lookup = build_key_lookup(bindings)
         assert len(lookup) == 0
@@ -125,30 +125,30 @@ class TestResolveKey:
         return build_key_lookup(default_keyboard())
 
     def test_bare_key(self, lookup: KeyLookup) -> None:
-        """Bare key press should resolve to matching actions."""
+        """A bare key press resolves to the matching actions."""
         result = resolve_key(lookup, pygame.K_w)
         assert PlayerAction.MOVE_UP in result
         assert PlayerAction.NAV_UP in result
 
     def test_shift_overrides_bare(self, lookup: KeyLookup) -> None:
-        """SHIFT+1 should match slot_9, not slot_1."""
+        """SHIFT+1 matches slot_9, not slot_1."""
         result = resolve_key(lookup, pygame.K_1, pygame.KMOD_SHIFT)
         assert PlayerAction.SLOT_9 in result
         assert PlayerAction.SLOT_1 not in result
 
     def test_ctrl_overrides_bare(self, lookup: KeyLookup) -> None:
-        """CTRL+1 should match select_player_1, not slot_1."""
+        """CTRL+1 matches select_player_1, not slot_1."""
         result = resolve_key(lookup, pygame.K_1, pygame.KMOD_CTRL)
         assert PlayerAction.SELECT_PLAYER_1 in result
         assert PlayerAction.SLOT_1 not in result
 
     def test_shift_on_unbound_key_falls_back(self, lookup: KeyLookup) -> None:
-        """SHIFT+W has no specific binding; should fall back to bare W."""
+        """SHIFT+W has no specific binding, so it falls back to bare W."""
         result = resolve_key(lookup, pygame.K_w, pygame.KMOD_SHIFT)
         assert PlayerAction.MOVE_UP in result
 
     def test_unbound_key_returns_empty(self, lookup: KeyLookup) -> None:
-        """A key with no binding should return an empty frozenset."""
+        """A key with no binding returns an empty frozenset."""
         result = resolve_key(lookup, pygame.K_F12)
         assert len(result) == 0
 
@@ -165,7 +165,7 @@ class TestEnvParamsConversion:
     """Verify round-trip EnvParams <-> dict conversion."""
 
     def test_round_trip_defaults(self) -> None:
-        """Default EnvParams should survive a dict round trip."""
+        """Default EnvParams survives a dict round trip."""
         params = EnvParams()
         d = env_params_to_dict(params)
         restored = config_to_env_params(PlayerConfig(env_params=d))
@@ -173,29 +173,29 @@ class TestEnvParamsConversion:
             assert getattr(restored, field_name) == getattr(params, field_name)
 
     def test_custom_values(self) -> None:
-        """Custom param values should be preserved."""
+        """A round trip keeps custom param values."""
         params = EnvParams(player_mining_yield=5)
         d = env_params_to_dict(params)
         assert d["player_mining_yield"] == 5
 
     def test_missing_fields_use_defaults(self) -> None:
-        """Missing fields in the dict should fall back to defaults."""
+        """Missing fields in the dict fall back to defaults."""
         config = PlayerConfig(env_params={"max_timesteps": 500})
         params = config_to_env_params(config)
         assert params.max_timesteps == 500
         assert params.player_mining_yield == EnvParams().player_mining_yield
 
     def test_player_mining_yield_default(self) -> None:
-        """EnvParams should expose a default player_mining_yield of 1."""
+        """EnvParams exposes a default player_mining_yield of 1."""
         assert EnvParams().player_mining_yield == 1
 
     def test_player_mining_yield_in_dict(self) -> None:
-        """player_mining_yield should round-trip through env_params_to_dict."""
+        """player_mining_yield round-trips through env_params_to_dict."""
         d = env_params_to_dict(EnvParams())
         assert d["player_mining_yield"] == 1
 
     def test_player_mining_yield_custom_value(self) -> None:
-        """A non-default player_mining_yield should survive round-trip."""
+        """A non-default player_mining_yield survives the round trip."""
         params = EnvParams(player_mining_yield=5)
         d = env_params_to_dict(params)
         restored = config_to_env_params(PlayerConfig(env_params=d))
@@ -207,7 +207,7 @@ class TestLoadSaveConfig:
     """Verify config persistence."""
 
     def test_save_and_load_round_trip(self, tmp_path: Path) -> None:
-        """Saving and loading should preserve all config fields."""
+        """A save and a load keep every config field."""
         path = tmp_path / "test_config.json"
         kb = default_keyboard()
         ctrl = default_controller()
@@ -221,14 +221,14 @@ class TestLoadSaveConfig:
         assert loaded.keyboard[PlayerAction.MINE] == kb[PlayerAction.MINE]
 
     def test_load_missing_file_returns_defaults(self, tmp_path: Path) -> None:
-        """Loading from a missing file should return default config."""
+        """A load from a missing file returns the default config."""
         path = tmp_path / "nonexistent.json"
         config = load_config(path)
         assert config.env_params["max_timesteps"] == EnvParams().max_timesteps
         assert PlayerAction.MINE in config.keyboard
 
     def test_load_merges_missing_actions(self, tmp_path: Path) -> None:
-        """Saved config missing some actions should gain defaults."""
+        """A saved config that lacks some actions gains the defaults."""
         path = tmp_path / "partial.json"
         import orjson
 
@@ -247,7 +247,7 @@ class TestLoadSaveConfig:
         assert len(config.keyboard[PlayerAction.MOVE_UP]) > 0
 
     def test_load_corrupt_file_returns_defaults(self, tmp_path: Path) -> None:
-        """Corrupt JSON should return defaults instead of crashing."""
+        """Corrupt JSON returns the defaults instead of a crash."""
         path = tmp_path / "corrupt.json"
         path.write_text("not valid json {{{")
         config = load_config(path)
@@ -258,11 +258,11 @@ class TestPlayerConfigSeed:
     """Verify the PlayerConfig.seed field and its persistence."""
 
     def test_default_seed_is_42(self) -> None:
-        """PlayerConfig should default seed to 42."""
+        """PlayerConfig defaults the seed to 42."""
         assert PlayerConfig().seed == 42
 
     def test_seed_round_trip(self, tmp_path: Path) -> None:
-        """save_config / load_config should preserve a custom seed."""
+        """save_config and load_config keep a custom seed."""
         path = tmp_path / "seed.json"
         config = PlayerConfig(
             env_params=env_params_to_dict(EnvParams()),
@@ -294,14 +294,14 @@ class TestPlayerConfigSeed:
         assert raw["seed"] == large_seed
 
     def test_missing_seed_falls_back_to_default(self, tmp_path: Path) -> None:
-        """A config file without `seed` should load to seed=42."""
+        """A config file without `seed` loads to seed=42."""
         path = tmp_path / "no_seed.json"
         path.write_bytes(orjson.dumps({"env_params": {}, "keyboard": {}}))
         loaded = load_config(path)
         assert loaded.seed == 42
 
     def test_load_missing_file_returns_default_seed(self, tmp_path: Path) -> None:
-        """Missing config file should yield seed=42."""
+        """A missing config file gives seed=42."""
         path = tmp_path / "nope.json"
         loaded = load_config(path)
         assert loaded.seed == 42

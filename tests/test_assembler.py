@@ -74,7 +74,7 @@ def _make_assembler_state(
     buf_count
         Buffer item count.
     machine_type
-        Machine to place. Defaults to ASSEMBLER; use FURNACE for
+        Machine to place. It defaults to ASSEMBLER. Use FURNACE for
         smelting-recipe tests.
 
     Returns
@@ -123,10 +123,10 @@ def _make_assembler_state(
 
 
 class TestAssemblerStartsCraft:
-    """Assembler should consume inputs and start a countdown."""
+    """The assembler consumes the inputs and starts a countdown."""
 
     def test_iron_plate_recipe_starts(self, state_factory) -> None:
-        """Iron plate recipe needs IRON_ORE + COAL; both consumed."""
+        """The iron plate recipe needs IRON_ORE and COAL. It consumes both."""
         state = _make_assembler_state(
             state_factory,
             machine_type=int(Machine.FURNACE),
@@ -141,7 +141,7 @@ class TestAssemblerStartsCraft:
         assert int(new.ent_asm_in_count[eid, 1]) == 0
 
     def test_assembler_rejects_smelting_recipe(self, state_factory) -> None:
-        """Assemblers can't run smelting recipes (gated to FURNACE)."""
+        """Assemblers cannot run smelting recipes, which are gated to FURNACE."""
         state = _make_assembler_state(
             state_factory,
             asm_in_type=[int(ItemType.IRON_ORE), int(ItemType.COAL)],
@@ -154,7 +154,7 @@ class TestAssemblerStartsCraft:
         assert int(new.ent_asm_in_count[eid, 0]) == 5
 
     def test_no_start_without_coal(self, state_factory) -> None:
-        """Smelting needs BOTH ore and coal — ore alone keeps the
+        """Smelting needs BOTH ore and coal. Ore alone keeps the
         furnace idle. After the LIMESTONE addition every furnace
         recipe is two-input (no coal-alone refractory shortcut), so
         a single populated slot never fires."""
@@ -173,7 +173,7 @@ class TestAssemblerStartsCraft:
     def test_refractory_fires_on_limestone_plus_coal(self, state_factory) -> None:
         """REFRACTORY is now LIMESTONE + COAL in two slots. The
         slot-emptiness gate that used to fire it on coal-alone is no
-        longer reachable for any shipped recipe — every furnace
+        longer reachable for any shipped recipe. Every furnace
         recipe needs both slots populated."""
         state = _make_assembler_state(
             state_factory,
@@ -219,13 +219,13 @@ class TestAssemblerStartsCraft:
 
 
 class TestAssemblerCompletesCraft:
-    """Assembler at power == 1 should produce output."""
+    """An assembler at power == 1 produces output."""
 
     def test_iron_plate_output_produced(self, state_factory) -> None:
-        """Power == 1 completes the craft; output lands in asm_out.
+        """Power == 1 completes the craft. The output lands in asm_out.
 
-        With Phase 4 removed, the output stays in ``ent_asm_out`` —
-        it does NOT drain into ``ent_buf``. That drain is now the
+        With Phase 4 removed, the output stays in ``ent_asm_out``.
+        It does NOT drain into ``ent_buf``. That drain is now the
         caller's responsibility (withdraw action, arm, or belt).
         """
         state = _make_assembler_state(
@@ -239,7 +239,7 @@ class TestAssemblerCompletesCraft:
         assert int(new.ent_power[eid]) == 0
         assert int(new.ent_asm_out_count[eid]) == 1
         assert int(new.ent_asm_out_type[eid]) == int(ItemType.IRON_PLATE)
-        # Buffer is unrelated — stays untouched.
+        # Buffer is unrelated and stays untouched.
         assert int(new.ent_buf_count[eid]) == 0
 
 
@@ -250,7 +250,7 @@ class TestAssemblerStallsOutputFull:
         self,
         state_factory,
     ) -> None:
-        """Even with valid inputs sitting in slots, the machine won't
+        """Even with valid inputs in the slots, the machine does not
         start a new craft while ``ent_asm_out_count > 0``. Pressure to
         withdraw builds naturally."""
         state = _make_assembler_state(
@@ -264,7 +264,7 @@ class TestAssemblerStallsOutputFull:
         new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
 
-        # Output still parked in asm_out; power never ticked up.
+        # Output still parked in asm_out. Power never ticked up.
         assert int(new.ent_asm_out_count[eid]) == 1
         assert int(new.ent_power[eid]) == 0
         assert int(new.ent_asm_in_count[eid, 0]) == 5
@@ -288,7 +288,7 @@ class TestAssemblerTwoInputRecipe:
         assert int(new.ent_asm_in_count[eid, 1]) == 0
 
     def test_frame_missing_second_input(self, state_factory) -> None:
-        """Missing tin_plate should prevent craft start."""
+        """A missing tin_plate prevents the craft from starting."""
         state = _make_assembler_state(
             state_factory,
             asm_in_type=[int(ItemType.IRON_PLATE), 0],
@@ -312,7 +312,7 @@ class TestAssemblerRecipeChangeBlocked:
         assert not is_idle
 
     def test_items_in_input_slots(self, state_factory) -> None:
-        """Items in input slots should be detectable."""
+        """Items in the input slots are detectable."""
         state = _make_assembler_state(
             state_factory,
             asm_in_type=[int(ItemType.IRON_ORE), 0],
@@ -373,7 +373,7 @@ class TestAssemblerDepositFiltering:
 
 
 class TestAssemblerPlacementAndPickup:
-    """Assembler should be placed and queryable in entity state."""
+    """The assembler is placed and queryable in the entity state."""
 
     def test_assembler_exists_in_state(self, state_factory) -> None:
         """Placing an assembler sets the correct machine type."""
@@ -381,7 +381,7 @@ class TestAssemblerPlacementAndPickup:
         assert int(state.machine_types[0, 0]) == int(Machine.ASSEMBLER)
 
     def test_progress_decrements(self, state_factory) -> None:
-        """Power > 1 should decrement by 1 each tick."""
+        """Power > 1 decrements by 1 on each tick."""
         state = _make_assembler_state(state_factory, power=5)
         new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)

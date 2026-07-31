@@ -63,7 +63,7 @@ def test_obs_shape_matches_easy_rocket(science_env) -> None:
 
 
 def test_start_state_has_lab_and_empty_inventory(science_env) -> None:
-    """One pre-placed lab the player is facing; nothing in inventory."""
+    """One pre-placed lab that the player faces, and nothing in the inventory."""
     env, params = science_env
     assert int(params.max_timesteps) == SCIENCE_TIERS_MAX_TIMESTEPS
     for seed in range(3):
@@ -116,7 +116,7 @@ def test_deposited_packs_pay_one_each(science_env, science_step) -> None:
 
 
 def test_higher_tier_packs_also_pay_one_each(science_env, science_step) -> None:
-    """A tier-3 pack pays the same per unit — value is volume, not weight."""
+    """A tier-3 pack pays the same per unit. Value is volume, not weight."""
     env, params = science_env
     key = random.PRNGKey(1)
     _, state = env.reset_env(key, params)

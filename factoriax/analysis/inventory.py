@@ -150,7 +150,7 @@ def _inventory_slot_positions(
     rows_per_col = (num_items + num_cols - 1) // num_cols
     row_h = min(max_row_h, max(min_row_h, avail // rows_per_col))
     # Last-resort: shrink rows below the nominal minimum if the panel is
-    # truly tiny. The label font may overlap, but every item still gets
+    # truly tiny. The label font can overlap, but every item still gets
     # a numbered slot.
     if row_h * rows_per_col > avail:
         row_h = max(1, avail // rows_per_col)
@@ -239,13 +239,13 @@ def render_inventory_panel(
         count = int(inventory[int(item)]) if int(item) < inventory.shape[0] else 0
         active = count > 0
 
-        # Sprite icon — same art as the GPU map renderer's atlas.
+        # Sprite icon: same art as the GPU map renderer's atlas.
         sx = slot_x
         sy = y + (row_h - swatch_sz) // 2
         icon_rgba = _icon_rgba(int(item), swatch_sz).copy()
         if not active:
-            # Dim the alpha so inactive items recede; preserves the
-            # silhouette without recolouring.
+            # Dim the alpha so inactive items recede. This keeps the
+            # silhouette without a recolour.
             icon_rgba[..., 3] = (icon_rgba[..., 3].astype(np.uint16) // 3).astype(
                 np.uint8
             )

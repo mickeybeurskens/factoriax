@@ -36,7 +36,7 @@ def _wrap_with(state: EnvState, unlocked: jnp.ndarray) -> EnvState:
 
 
 #: A concrete ladder to exercise the reward against. achievement_reward
-#: takes weights explicitly — bit indices mean different things per
+#: takes weights explicitly. Bit indices mean different things per
 #: scenario, so there is no default to fall back on.
 _WEIGHTS = achievement_weights(FREE_PLAY_ACHIEVEMENTS)
 
@@ -151,7 +151,7 @@ class TestAchievementReward:
         assert float(reward) == 2.0
 
     def test_jit_compatible(self, state_factory, params) -> None:
-        """achievement_reward should be JIT-compilable."""
+        """achievement_reward is JIT-compilable."""
         state = _wrap(
             state_factory(
                 world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
@@ -162,7 +162,7 @@ class TestAchievementReward:
         assert float(reward) == 0.0
 
     def test_vmap_compatible(self, state_factory, params) -> None:
-        """achievement_reward should be vmappable over batched states."""
+        """achievement_reward is vmappable over batched states."""
         items_mined = (
             jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32).at[ItemType.COAL].set(1)
         )
@@ -205,7 +205,7 @@ class TestMiningReward:
         state_factory,
         params,
     ) -> None:
-        """Proximity component should be 0.05 when player is on an ore tile."""
+        """The proximity component is 0.05 when the player is on an ore tile."""
         world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
         state = state_factory(world_map=world_map, player_position=(0, 0))
         reward = mining_reward(state, state, params)
@@ -216,7 +216,7 @@ class TestMiningReward:
         state_factory,
         params,
     ) -> None:
-        """Proximity should decrease as player moves away from ore."""
+        """Proximity decreases as the player moves away from the ore."""
         world_map = jnp.array(
             [[BlockType.DIRT, BlockType.DIRT, BlockType.COAL]],
             dtype=jnp.int32,
@@ -256,7 +256,7 @@ class TestMiningReward:
         state_factory,
         params,
     ) -> None:
-        """Mining bonus should be zero when items_mined is unchanged."""
+        """The mining bonus is zero when items_mined is unchanged."""
         world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
         state = state_factory(world_map=world_map, player_position=(0, 0))
         reward = float(mining_reward(state, state, params))
@@ -274,7 +274,7 @@ class TestMiningReward:
         assert reward < 0.5
 
     def test_jit_compatible(self, state_factory, params) -> None:
-        """mining_reward should be JIT-compilable."""
+        """mining_reward is JIT-compilable."""
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             player_position=(0, 0),
@@ -284,7 +284,7 @@ class TestMiningReward:
         assert float(reward) == pytest.approx(0.05)
 
     def test_vmap_compatible(self, state_factory, params) -> None:
-        """mining_reward should be vmappable over batched states."""
+        """mining_reward is vmappable over batched states."""
         world_map = jnp.array([[BlockType.COAL]], dtype=jnp.int32)
         state = state_factory(world_map=world_map, player_position=(0, 0))
         batch = jax.tree_util.tree_map(
@@ -362,7 +362,7 @@ class TestSparseMiningReward:
         assert float(sparse_mining_reward(state, state, params)) == 0.0
 
     def test_jit_compatible(self, state_factory, params) -> None:
-        """sparse_mining_reward should be JIT-compilable."""
+        """sparse_mining_reward is JIT-compilable."""
         state = state_factory(
             world_map=jnp.array([[BlockType.DIRT]], dtype=jnp.int32),
         )

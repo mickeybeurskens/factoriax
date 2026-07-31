@@ -38,7 +38,7 @@ _CASES = pytest.mark.parametrize("achievements", ALL_SETS.values(), ids=ALL_SETS
 
 @_CASES
 def test_ids_are_unique(achievements) -> None:
-    """Ids identify bits in logs; duplicates make lookup ambiguous."""
+    """Ids identify bits in logs. Duplicates make the lookup ambiguous."""
     ids = [a.id for a in achievements]
     assert len(ids) == len(set(ids))
 
@@ -52,7 +52,7 @@ def test_ids_are_non_empty_and_stripped(achievements) -> None:
 
 @_CASES
 def test_fits_the_slot_budget(achievements) -> None:
-    """A set larger than the state vector would silently lose bits."""
+    """A set larger than the state vector loses bits in silence."""
     assert 0 < len(achievements) <= MAX_ACHIEVEMENTS
 
 
@@ -65,7 +65,7 @@ def test_index_of_round_trips(achievements) -> None:
 
 @_CASES
 def test_weights_are_padded_and_non_negative(achievements) -> None:
-    """Padding slots must never pay, and no bit may pay negatively."""
+    """Padding slots must never pay, and no bit can pay a negative amount."""
     w = achievement_weights(achievements)
     assert w.shape == (MAX_ACHIEVEMENTS,)
     assert w.dtype == jnp.float32
@@ -82,7 +82,7 @@ def test_max_score_matches_the_weight_vector(achievements) -> None:
 
 @_CASES
 def test_at_least_one_bit_pays(achievements) -> None:
-    """An all-zero set would make its scenario unlearnable in silence."""
+    """An all-zero set makes its scenario unlearnable in silence."""
     assert max_score(achievements) > 0.0
 
 
@@ -104,8 +104,8 @@ def test_sets_do_not_share_bit_meanings() -> None:
     """Guards the decision that there is no shared default ladder.
 
     If two scenarios ever agree bit-for-bit, that is a shared catalogue
-    growing back by accident — which the analysis code would then be
-    tempted to treat as comparable across scenarios. It is not.
+    growing back by accident. The analysis code is then tempted to treat
+    those bits as comparable across scenarios. It is not.
     """
     seen: dict[tuple[str, ...], str] = {}
     for name, achievements in ALL_SETS.items():

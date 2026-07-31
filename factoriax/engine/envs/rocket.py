@@ -101,7 +101,7 @@ ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         "collect_coal",
         partial(holds_item, item=int(ItemType.COAL)),
         name="Collect Coal",
-        hint="Mine coal — needed by every smelt.",
+        hint="Mine coal. Every smelt needs it.",
         weight=1.0,
     ),
     Achievement(
@@ -342,7 +342,7 @@ ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         "place_rocket",
         partial(has_machines, machine=int(Machine.ROCKET)),
         name="Place Rocket",
-        hint="Place the rocket — goal reached.",
+        hint="Place the rocket. This reaches the goal.",
         weight=8.0,
     ),
 )
@@ -418,7 +418,7 @@ ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
 ROCKET_RECIPE_BOOK: RecipeBook = BASE_RECIPE_BOOK.with_balance(ROCKET_RECIPE_BALANCE)
 
 #: The :class:`RecipeTable` of :data:`ROCKET_RECIPE_BOOK`. Pass it as the
-#: ``recipe_table`` of :class:`~factoriax.engine.state.EnvParams`, so the JIT'd
+#: ``recipe_table`` of :class:`~factoriax.engine.state.EnvParams`, so the JIT-compiled
 #: engine produces the new output counts.
 ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(ROCKET_RECIPE_BOOK)
 

@@ -1,4 +1,4 @@
-"""Interactive play script for FactoriaX using pygame.
+"""Interactive play script for Factoriax using pygame.
 
 Uses :class:`~factoriax.playground.play.game_ui.GameUI` for all menu rendering
 and input dispatch. This module handles the pygame window, environment
@@ -146,10 +146,11 @@ def play_level(
         scaled = _BASE_UI_SIZE * _play_theme.UI_SCALE
         game_win_w, game_win_h = calculate_window_size(scaled, scaled)
         screen = pygame.display.set_mode((game_win_w, game_win_h))
-    # Embedded launch (editor playtest): reuse the existing window — no resize
-    # flicker on entry or exit. The play loop adapts via its ScaledCanvas.
+    # Embedded launch (editor playtest): reuse the existing window. This
+    # avoids resize flicker on entry and on exit. The play loop adapts
+    # via its ScaledCanvas.
 
-    pygame.display.set_caption(f"FactoriaX - {level.name}")
+    pygame.display.set_caption(f"Factoriax - {level.name}")
 
     rng = random.PRNGKey(int(seed))
     rng, reset_key = random.split(rng)
@@ -343,7 +344,7 @@ def _play_loop(
     window_width, window_height = screen.get_size()
     step_fn = jax.jit(env.step_env)
 
-    # !! INTENTIONAL JIT WARMUP — DO NOT REMOVE !!
+    # !! INTENTIONAL JIT WARMUP. DO NOT REMOVE !!
     # The first call to step_fn triggers JAX JIT compilation (~5s).
     # Running it behind a loading screen prevents a freeze on the
     # first input of the player.
@@ -573,7 +574,7 @@ def main(screen: pygame.Surface | None = None) -> None:
     """Run free play: a procedurally generated world, no fixed level.
 
     When *screen* is supplied the caller owns the window and pygame
-    outlives this call — that is how the launcher re-enters its menu on
+    outlives this call. That is how the launcher re-enters its menu on
     exit. Standalone, a window is created and torn down here.
 
     Controls:
@@ -598,7 +599,7 @@ def main(screen: pygame.Surface | None = None) -> None:
             _BASE_UI_SIZE * _play_theme.UI_SCALE,
         )
         screen = pygame.display.set_mode((window_width, window_height))
-    pygame.display.set_caption("FactoriaX")
+    pygame.display.set_caption("Factoriax")
 
     def _make_env() -> tuple[FactoriaxEnv, EnvParams]:
         """Build the free play environment and its parameters."""

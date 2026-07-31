@@ -2,10 +2,10 @@
 
 Public surface:
 
-* :class:`AchievementSpec` — plain-Python achievement-bit record.
-* :class:`StripLayout` — geometry constants.
-* :func:`render` — top-level entry; consumes a sequence of specs plus a
-  phase->hex palette and writes a PNG.
+* :class:`AchievementSpec`: plain-Python achievement-bit record.
+* :class:`StripLayout`: geometry constants.
+* :func:`render`: top-level entry. It consumes a sequence of specs plus
+  a phase->hex palette, and writes a PNG.
 
 This module owns no color scheme. ``phase_palette`` is a necessary
 argument. The caller therefore sets the look of each phase, and two

@@ -99,7 +99,7 @@ def test_auto_reset_restores_episode_on_done(level8) -> None:
     )
     assert bool(done)  # timestep reaches max_timesteps (1)
     # Restored to the cached reset: timestep is back to the episode start,
-    # not the post-step value it would hold without auto-reset.
+    # not the post-step value that it holds without auto-reset.
     assert int(state1.env_state.timestep) == int(state.reset_state.timestep)
     assert int(state1.env_state.timestep) < int(params.max_timesteps)
 

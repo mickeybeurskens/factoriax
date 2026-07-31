@@ -21,8 +21,8 @@ def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
     """Coal tiles carry 10x the per-tile resource of every other ore.
 
     The v2 layout uses a 1x32 coal column (32 tiles) and 2x2 ore
-    patches (4 tiles each). Per-tile budgets — not total budgets —
-    are what set how long a single miner can run before depletion.
+    patches (4 tiles each). Per-tile budgets, not total budgets,
+    set how long a single miner can run before depletion.
     """
     level = build_rocket_level()
     params = EnvParams()
@@ -43,7 +43,7 @@ def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
 
     assert iron_per_tile == 6300
     assert coal_per_tile == 28000
-    # ~4.4x per tile — the column has 32 tiles vs 4 per ore patch, so
+    # ~4.4x per tile. The column has 32 tiles against 4 per ore patch, so
     # column-total / ore-total is still ~36x. Per-tile ratio drops
     # because column tiles can run independently.
     assert coal_per_tile > iron_per_tile
@@ -53,8 +53,8 @@ def test_coal_capacity_fits_within_block_max() -> None:
     """The new per-tile coal value must fit under ``BLOCK_MAX_RESOURCES``.
 
     Ore-tile observations are normalised by ``BLOCK_MAX_RESOURCES``.
-    Letting any patch exceed it would push the obs channel past 1.0
-    and break the ``Box[0, 1)`` invariant that
+    A patch that exceeds it pushes the obs channel past 1.0
+    and breaks the ``Box[0, 1)`` invariant that
     :class:`FactoriaxEnv.observation_space` declares.
     """
     level = build_rocket_level()

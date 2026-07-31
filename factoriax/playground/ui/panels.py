@@ -1,4 +1,4 @@
-"""Reusable drawing primitives for FactoriaX menus.
+"""Reusable drawing primitives for Factoriax menus.
 
 All components read sizes and colors from :mod:`factoriax.playground.ui.theme` so the
 look stays consistent across menus. Each function is a stateless drawing
@@ -243,7 +243,7 @@ class LabelValueSection:
     Companion to :class:`SettingSection`: same visual layout, but values are
     arbitrary strings the caller pre-formats (key bindings, toggle state,
     enum-style choices). The active row gets the gold-fill highlight but no
-    chevron decoration — there are no arrow-adjust semantics to advertise.
+    chevron decoration. There are no arrow-adjust semantics to advertise.
     """
 
     title: str
@@ -336,7 +336,7 @@ def draw_setting_sections(
 
     Returns
     -------
-        ``(row_rects, bottom_y)`` — for hit-testing and positioning content
+        ``(row_rects, bottom_y)``, for hit-testing and for positioning content
         below the rendered block.
     """
     heading_h = heading_font.get_height()

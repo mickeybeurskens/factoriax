@@ -145,7 +145,7 @@ def _inv(**items: int) -> jnp.ndarray:
 
 
 def _empty_map() -> jnp.ndarray:
-    """Minimal 1x1 empty map for states that don't need terrain."""
+    """Minimal 1x1 empty map for states that do not need terrain."""
     return jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
 
 
@@ -189,7 +189,7 @@ def test_item_holding_conditions(
     mask = rocket_conditions(state)
     idx = _index_of(achievement_id)
     assert bool(mask[idx]), f"{achievement_id} should unlock"
-    # Every other item-holding achievement should remain False.
+    # Every other item-holding achievement stays False.
     for other_id, _ in _ITEM_ACHIEVEMENT_CASES:
         if other_id == achievement_id:
             continue
@@ -231,12 +231,12 @@ def test_single_placement_conditions(
 
 def test_belt_network_requires_five(state_factory) -> None:
     """belt_network fires at 5 belts, not at 4."""
-    # 1x4 strip of belts — below threshold.
+    # 1x4 strip of belts, below threshold.
     belts_4 = jnp.full((1, 4), Machine.CONVEYOR_BELT, dtype=jnp.int32)
     world_4 = jnp.full((1, 4), BlockType.DIRT, dtype=jnp.int32)
     state_4 = state_factory(world_map=world_4, machine_types=belts_4)
     assert not bool(rocket_conditions(state_4)[_index_of("belt_network")])
-    # 1x5 strip — at threshold.
+    # 1x5 strip, at threshold.
     belts_5 = jnp.full((1, 5), Machine.CONVEYOR_BELT, dtype=jnp.int32)
     world_5 = jnp.full((1, 5), BlockType.DIRT, dtype=jnp.int32)
     state_5 = state_factory(world_map=world_5, machine_types=belts_5)
@@ -274,10 +274,10 @@ def test_automated_mining_requires_buffered_ore(state_factory) -> None:
     """automated_mining fires when a placed miner has buffer items."""
     world = jnp.array([[BlockType.DIRT]], dtype=jnp.int32)
     mt = jnp.array([[Machine.MINER]], dtype=jnp.int32)
-    # Empty buffer — should NOT fire.
+    # Empty buffer. It must NOT fire.
     state_empty = state_factory(world_map=world, machine_types=mt)
     assert not bool(rocket_conditions(state_empty)[_index_of("automated_mining")])
-    # Non-empty buffer — should fire.
+    # Non-empty buffer. It must fire.
     state_full = state_factory(
         world_map=world,
         machine_types=mt,
@@ -320,7 +320,7 @@ def test_first_assembly_requires_assembler_output(state_factory) -> None:
 
 def _ach_state_with(mask_indices: list[int]) -> EnvState:
     """Build an EnvState with specific achievement slots latched."""
-    # The other state fields don't matter for achievement_reward — it
+    # The other state fields do not matter for achievement_reward. It
     # reads only ``achievements_unlocked``.
     unlocked = jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_)
     for i in mask_indices:
@@ -329,7 +329,7 @@ def _ach_state_with(mask_indices: list[int]) -> EnvState:
 
 
 def _dummy_env_state() -> EnvState:
-    """Minimal EnvState — the reward function ignores its contents."""
+    """Minimal EnvState. The reward function ignores its contents."""
     shape = (1, 1)
     return EnvState(
         map=jnp.zeros(shape, dtype=jnp.int8),

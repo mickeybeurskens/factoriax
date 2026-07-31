@@ -14,9 +14,9 @@ those indices rather than reading `atlas.json`, so a layout change has
 to be mirrored there by hand.
 
 Cell size is fixed at 32×32. Display tile size (`tile_px`) is a
-renderer-construction parameter; downsampling from 32×32 to the
-display size happens at gather time using nearest-neighbour.
-Upsampling (rare; for "zoomed-in" views) uses the same path.
+renderer-construction parameter. Downsampling from 32×32 to the
+display size happens at gather time, with nearest-neighbour.
+Upsampling uses the same path. Only "zoomed-in" views upsample.
 
 The atlas image dimensions are `(num_rows × 32, num_cols × 32, 4)`
 uint8. The alpha channel is meaningful: block cells are fully opaque
@@ -36,13 +36,13 @@ artifact rather than silent zeros.
 | Row | Category               | Source enum                      | Cells | Notes |
 | --: | ---------------------- | -------------------------------- | ----: | ----- |
 |   0 | blocks                 | `factoriax.engine.constants.BlockType`  | 10    | Sourced from `factoriax.playground.ui.icons.get_textures`. Alpha forced to 255, since terrain is opaque. |
-|   1 | machines, dir LEFT     | `factoriax.engine.constants.Machine`    | 11    | Directional machines render with `direction=LEFT`; non-directional machines duplicate the DOWN sprite. |
+|   1 | machines, dir LEFT     | `factoriax.engine.constants.Machine`    | 11    | Directional machines render with `direction=LEFT`. Non-directional machines duplicate the DOWN sprite. |
 |   2 | machines, dir RIGHT    | `factoriax.engine.constants.Machine`    | 11    | Same, with `direction=RIGHT`. |
 |   3 | machines, dir UP       | `factoriax.engine.constants.Machine`    | 11    | Same, with `direction=UP`. |
 |   4 | machines, dir DOWN     | `factoriax.engine.constants.Machine`    | 11    | Same, with `direction=DOWN`. |
-|   5 | items                  | `factoriax.engine.constants.ItemType`   | 34    | Sourced from `render_item_icon`. Currently unused by `render_map`; reserved for future HUD work. |
-|   6 | misc                   | (manually enumerated)            | 33    | col 0 holds a biter sprite that no code reads any more, kept so the committed PNG stays byte-identical; cols 1..32 hold 8 players × 4 directions packed as `(player_idx, direction)` starting at col 1, with `col = 1 + player_idx * 4 + direction_idx`. Player slots beyond 8 wrap modulo 8. |
-|   7 | digits                 | digits 0-9                       | 10    | Each cell is 32×32; the 3×5 glyph is rendered at the cell's top-left, padded with zeros. Alpha=255. |
+|   5 | items                  | `factoriax.engine.constants.ItemType`   | 34    | Sourced from `render_item_icon`. Currently unused by `render_map`. Reserved for future HUD work. |
+|   6 | misc                   | (manually enumerated)            | 33    | col 0 holds a biter sprite that no code reads any more, kept so the committed PNG stays byte-identical. Cols 1..32 hold 8 players × 4 directions packed as `(player_idx, direction)` starting at col 1, with `col = 1 + player_idx * 4 + direction_idx`. Player slots beyond 8 wrap modulo 8. |
+|   7 | digits                 | digits 0-9                       | 10    | Each cell is 32×32. The 3×5 glyph is rendered at the cell's top-left, padded with zeros. Alpha=255. |
 
 Width of the atlas is `max(num_cells_per_row) = 34` (driven by
 `ItemType`). Height is `num_rows = 8`. Atlas image:
@@ -67,7 +67,7 @@ gather is uniform.
 Player slots use the same `[LEFT, RIGHT, UP, DOWN]` axis but are
 also keyed by `player_idx`. Eight palettes are baked in (the
 first eight entries of `PLAYER_COLORS` in
-`factoriax/playground/ui/icons.py`); players 8 and beyond reuse
+`factoriax/playground/ui/icons.py`). Players 8 and beyond reuse
 palette 0 onwards via modulo-8. `PLAYER_COLORS` itself holds nine
 entries, so player 8 does not match here (see `ISSUES.md`).
 
@@ -117,8 +117,8 @@ JSON, but the JSON is canonical for tooling and tests.
 The build script must produce byte-identical output across runs:
 
 - Sort enum members by integer value before iterating.
-- Use `np.full(..., dtype=np.uint8)` for backing arrays — no
-  uninitialised memory.
+- Use `np.full(..., dtype=np.uint8)` for backing arrays. This keeps
+  the memory initialised.
 - Encode the PNG with `imageio.imwrite(..., compress_level=6)`
   (default) and a fixed metadata block.
 - Encode the JSON via `orjson.dumps(payload, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)`.
@@ -128,18 +128,18 @@ asserts byte-equivalence with the committed copies.
 
 ## Future extensions (not in scope yet)
 
-- **Animation frames**: extra columns per cell for sprite cycling
-  (e.g. conveyor flow). Renderer reads
+- **Animation frames**: extra columns per cell for sprite cycling,
+  for example conveyor flow. Renderer reads
   `(row, base_col + state.timestep % num_frames)`.
-- **Status overlays**: separate rows for "machine has output",
-  "machine starved of input", etc. — visual debugging aids.
+- **Status overlays**: separate rows for "machine has output" and
+  "machine starved of input". These rows are visual debugging aids.
 - **Glyph atlas**: a richer text atlas to phase out the pygame text
   overlay. Out of scope for v1 by spec decision.
 - **Per-player directional sprites beyond 8 slots**: currently the
   misc row caps at 8 distinct palettes. A 9th-or-later player
   recycles palette 0 onwards. Adding a dedicated row block per
-  player (or sourcing palettes generatively) would lift the cap.
+  player, or sourcing palettes generatively, will lift the cap.
 
-These are listed so the layout doesn't silently invalidate them.
-Adding a row at the bottom is non-breaking; reordering existing
-rows would be breaking. Don't reorder.
+These are listed so that the layout does not silently invalidate them.
+A row added at the bottom is non-breaking. A reorder of the existing
+rows is breaking. Do not reorder the rows.

@@ -88,8 +88,8 @@ def test_repeated_input_item_raises() -> None:
 def test_unique_output_constraint_raises() -> None:
     """Two recipes producing the same ItemType must be rejected.
 
-    The reverse-lookup ``OUTPUT_TO_RECIPE`` is single-valued; a
-    duplicate output would silently overwrite the earlier mapping
+    The reverse-lookup ``OUTPUT_TO_RECIPE`` is single-valued. A
+    duplicate output overwrites the earlier mapping in silence
     and break crafting yield + cycle deposit logic.
     """
     duplicate = (
@@ -107,8 +107,8 @@ def test_unique_output_constraint_raises() -> None:
 
 def test_unique_input_pair_constraint_raises() -> None:
     """Two recipes on the same machine sharing an unordered input
-    type-set at the same arity must be rejected — Phase 3
-    forward-match would be ambiguous.
+    type-set at the same arity must be rejected. The Phase 3
+    forward-match is ambiguous.
     """
     same_machine_same_inputs = (
         Recipe(
@@ -134,7 +134,7 @@ def test_same_inputs_different_machine_allowed() -> None:
     """The matcher partitions by machine type, so two recipes with
     the same input pair on *different* machines are unambiguous and
     must be allowed. This guards against an over-broad uniqueness
-    check that would block a legitimate FURNACE/ASSEMBLER overlap.
+    check that blocks a legitimate FURNACE/ASSEMBLER overlap.
     """
     cross_machine = (
         # Furnace recipe: IRON_ORE + COAL -> IRON_PLATE
@@ -183,8 +183,9 @@ def test_recipe_table_from_book_matches_defaults() -> None:
 
 
 def test_recipe_table_shapes_match_book_size() -> None:
-    """Projected table shapes derive from the book size + max arity
-    — load-bearing for downstream JIT shape stability.
+    """Projected table shapes derive from the book size and the max arity.
+
+    These shapes are load-bearing for downstream JIT shape stability.
     """
     table = DEFAULT_RECIPE_TABLE
     assert table.outputs.shape == (NUM_RECIPES,)
@@ -199,7 +200,7 @@ def test_recipe_table_shapes_match_book_size() -> None:
 
 def test_output_to_recipe_round_trip() -> None:
     """``output_to_recipe[recipe.output]`` returns the recipe's index
-    for every shipped recipe; non-output items map to ``-1``.
+    for every shipped recipe. Non-output items map to ``-1``.
     """
     table = DEFAULT_RECIPE_TABLE
     output_set = {r.output for r in BASE_RECIPES}
@@ -216,7 +217,7 @@ def test_output_to_recipe_round_trip() -> None:
 
 def test_furnace_recipes_assigned_furnace_machine_type() -> None:
     """Sanity: every plate / wafer / refractory in the projected
-    machine_type array is FURNACE; every other recipe is ASSEMBLER.
+    machine_type array is FURNACE. Every other recipe is ASSEMBLER.
     """
     table = DEFAULT_RECIPE_TABLE
     furnace_outputs = {
@@ -242,9 +243,9 @@ def _two_tier_book() -> RecipeBook:
     """A 4-recipe, 2-tier book whose row order deliberately differs from
     the CRAFT_* action order.
 
-    Tier 1 smelts ore into plates; tier 2 assembles plates into parts.
+    Tier 1 smelts ore into plates. Tier 2 assembles plates into parts.
     Rows are scrambled so a positional ``action - CRAFT_BASE`` dispatch
-    would resolve the wrong recipe — only output-keyed resolution gets it
+    resolves the wrong recipe. Only output-keyed resolution gets it
     right. A subset of craftable items, so the rest must resolve to -1.
     """
     iron_plate = Recipe(
@@ -276,9 +277,9 @@ def _two_tier_book() -> RecipeBook:
 
 def _assert_craft_dispatch_resolves_by_output(table: RecipeTable) -> None:
     """Every CRAFT_* action resolves through ``output_to_recipe`` to a
-    recipe whose output is exactly the action's item; items absent from
-    the table resolve to -1 (the dispatch no-ops). Pure indexing on the
-    table arrays — no env, no step, no JIT."""
+    recipe whose output is exactly the action's item. Items absent from
+    the table resolve to -1 (the dispatch no-ops). This is pure indexing
+    on the table arrays, with no env, no step, and no JIT."""
     present = {int(output) for output in table.outputs.tolist()}
     for offset, item in enumerate(CRAFT_ACTION_TO_ITEM.tolist()):
         row = int(table.output_to_recipe[item])

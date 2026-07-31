@@ -186,7 +186,7 @@ class TestDepositToPallet:
     """Deposit items from player inventory into a pallet."""
 
     def test_deposit_coal_into_empty_pallet(self, state_factory) -> None:
-        """Coal should transfer one item into the pallet's buffer."""
+        """Coal transfers one item into the pallet's buffer."""
         p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -204,7 +204,7 @@ class TestDepositToPallet:
         assert int(state.ent_buf_count[eidx]) == 1
 
     def test_deposit_stacks_into_matching_type(self, state_factory) -> None:
-        """Depositing coal should add to existing coal in the buffer."""
+        """A coal deposit adds to the coal already in the buffer."""
         p_inv = _player_inv(1, {ItemType.COAL: 5})
         bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.COAL, 10)})
         state = state_factory(
@@ -250,7 +250,7 @@ class TestDepositToPallet:
         assert int(state.player_inventory[0, ItemType.COAL]) == 20
 
     def test_deposit_noop_no_machine(self, state_factory) -> None:
-        """Deposit into empty tile should be a no-op."""
+        """A deposit into an empty tile is a no-op."""
         p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -264,7 +264,7 @@ class TestDepositToPallet:
         assert int(state.player_inventory[0, ItemType.COAL]) == 10
 
     def test_deposit_noop_empty_type(self, state_factory) -> None:
-        """Deposit with zero count of the item type should be a no-op."""
+        """A deposit with a zero count of the item type is a no-op."""
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -278,7 +278,7 @@ class TestDepositToPallet:
         assert int(state.ent_buf_count[eidx]) == 0
 
     def test_deposit_noop_out_of_bounds(self, state_factory) -> None:
-        """Deposit facing out of bounds should be a no-op."""
+        """A deposit that faces out of bounds is a no-op."""
         p_inv = _player_inv(1, {ItemType.COAL: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -296,7 +296,7 @@ class TestDepositToMiner:
     """Miners have no input slot and reject all deposits."""
 
     def test_deposit_coal_rejected_by_miner(self, state_factory) -> None:
-        """Coal deposited into a miner should be rejected."""
+        """A miner rejects a coal deposit."""
         p_inv = _player_inv(1, {ItemType.COAL: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -311,7 +311,7 @@ class TestDepositToMiner:
         assert int(state.player_inventory[0, ItemType.COAL]) == 5
 
     def test_deposit_iron_rejected_by_miner(self, state_factory) -> None:
-        """Iron deposited into a miner should be rejected."""
+        """A miner rejects an iron deposit."""
         p_inv = _player_inv(1, {ItemType.IRON_ORE: 5})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -330,7 +330,7 @@ class TestDepositToAssembler:
     """Deposit items into an assembler's input slots."""
 
     def test_deposit_iron_into_assembler(self, state_factory) -> None:
-        """Iron should be accepted into an assembler input slot."""
+        """An assembler input slot accepts iron."""
         p_inv = _player_inv(1, {ItemType.IRON_ORE: 10})
         state = state_factory(
             world_map=_DIRT_3X3,
@@ -348,7 +348,7 @@ class TestDepositToAssembler:
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 9
 
     def test_deposit_two_item_types_into_assembler(self, state_factory) -> None:
-        """Two different item types should go into separate input slots."""
+        """Two different item types go into separate input slots."""
         p_inv = _player_inv(1, {ItemType.COPPER_ORE: 3})
         ait, aic = _asm_in_grids(3, 3, {(1, 2): [(ItemType.IRON_ORE, 2), (0, 0)]})
         state = state_factory(
@@ -375,8 +375,8 @@ class TestDepositToAssembler:
 class TestDepositToScienceLab:
     """Deposit science packs into a lab's input slots.
 
-    ``run_labs`` consumes from ``ent_asm_in`` — the deposit must land
-    there (not in the buffer track) or hand-fed labs never consume.
+    ``run_labs`` consumes from ``ent_asm_in``. The deposit must land
+    there, not in the buffer track, or hand-fed labs never consume.
     """
 
     def test_deposit_pack_into_lab_input_slot(self, state_factory) -> None:
@@ -409,7 +409,7 @@ class TestWithdrawFromPallet:
     def test_withdraw_iron_from_pallet(self, state_factory) -> None:
         """WITHDRAW pulls the whole stack (up to player capacity).
 
-        Pallet has 10 iron ore; player starts empty with 1024-stack
+        The pallet has 10 iron ore. The player starts empty, with a 1024-stack
         cap, so all 10 transfer in one action.
         """
         bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.IRON_ORE, 10)})
@@ -429,7 +429,7 @@ class TestWithdrawFromPallet:
         assert int(state.ent_buf_count[eidx]) == 0
 
     def test_withdraw_noop_empty_machine(self, state_factory) -> None:
-        """Withdraw from empty pallet should be a no-op."""
+        """A withdraw from an empty pallet is a no-op."""
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -442,7 +442,7 @@ class TestWithdrawFromPallet:
         assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 0
 
     def test_withdraw_noop_no_machine(self, state_factory) -> None:
-        """Withdraw with no machine in front should be a no-op."""
+        """A withdraw with no machine in front is a no-op."""
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -507,7 +507,7 @@ class TestWithdrawDoesNotClobberOtherEntities:
 
     Before this regression, ``withdraw_from_adjacent`` cleared
     ``ent_asm_out_type`` elementwise for every entity whose count was
-    zero — including unrelated cooking assemblers. The next tick's Phase
+    zero, including unrelated cooking assemblers. The next tick's Phase
     1 then saw ``type=0`` on those and refused to write the output,
     silently consuming inputs without producing anything.
     """
@@ -516,7 +516,7 @@ class TestWithdrawDoesNotClobberOtherEntities:
         self,
         state_factory,
     ) -> None:
-        """Two assemblers. A has a finished wire; B is cooking (type set,
+        """Two assemblers. A has a finished wire. B is cooking (type set,
         count 0). Withdrawing from A must leave B's out_type intact so B's
         cycle can complete next tick.
         """
@@ -552,12 +552,12 @@ class TestWithdrawDoesNotClobberOtherEntities:
         e_a = _ent_lookup(state, 1, 2)
         e_b = _ent_lookup(state, 2, 2)
 
-        # Player got the wire; A's slot is empty and its type cleared.
+        # The player got the wire. Slot A is empty and its type is cleared.
         assert int(state.player_inventory[0, ItemType.WIRE]) == 1
         assert int(state.ent_asm_out_count[e_a]) == 0
         assert int(state.ent_asm_out_type[e_a]) == 0
 
-        # B is untouched — still cooking. Its count stays 0, but its
+        # B is untouched and still cooking. Its count stays 0, but its
         # out_type MUST still mark the in-flight recipe as WIRE so
         # Phase 1 can complete the cycle next tick.
         assert int(state.ent_asm_out_count[e_b]) == 0
@@ -568,7 +568,7 @@ class TestWithdrawDoesNotClobberOtherEntities:
 
 
 class TestWithdrawMergesIntoInventory:
-    """Withdrawn items should merge with existing player stacks."""
+    """Withdrawn items merge with the player stacks that already exist."""
 
     def test_withdraw_merges_with_existing_stack(self, state_factory) -> None:
         """Withdrawn items merge with the existing player stack and

@@ -1,4 +1,4 @@
-# FactoriaX
+# Factoriax
 
 A grid world for reinforcement learning research, in the style of Factorio,
 written in JAX.
@@ -32,10 +32,10 @@ Five scenarios carry an id: `Mining-v1`, `MinerBootstrap-v1`,
 
 ## Where to go next
 
-- {doc}`guides/getting_started` — the environment, the observation, the action
+- {doc}`guides/getting_started`: the environment, the observation, the action
   space, and a random rollout.
-- {doc}`guides/ppo_training_example` — train a PPO agent on a FactoriaX task.
-- {doc}`api/index` — the reference for every public module. Sphinx builds it
+- {doc}`guides/ppo_training_example`: train a PPO agent on a Factoriax task.
+- {doc}`api/index`: the reference for every public module. Sphinx builds it
   from the docstrings.
 
 ## Run the playground

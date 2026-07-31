@@ -1,7 +1,7 @@
 """Integration test: editor machine inventories survive into EnvState.
 
 When the editor places a pallet with items in its inventory and
-launches play mode, those items should end up in the entity's buffer
+launches play mode, those items land in the entity's buffer
 so the factory starts in the expected state. This catches mismatches
 where build_state ignores Level.machine_inventory.
 """
@@ -50,7 +50,7 @@ class TestEditorInventoryInit:
     """Machine inventories from the editor must appear in EnvState."""
 
     def test_pallet_items_go_to_buffer(self) -> None:
-        """Items in a pallet's inventory should populate buffer."""
+        """Items in a pallet's inventory populate the buffer."""
         level = _make_level_with_pallet_items()
         params = EnvParams()
         state = build_state(level, num_players=1)

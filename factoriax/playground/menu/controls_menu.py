@@ -455,7 +455,7 @@ def run_controls_menu(
                     left_idx = (left_idx - 1) % len(_PAGE_OPTIONS)
                     input_source.mark_keyboard()
 
-        # Hover commits left_idx — mouse only wins when it's the most recent
+        # Hover commits left_idx. The mouse only wins when it is the most recent
         # input, and only when focus is on the left panel.
         input_source.tick()
         if input_source.mouse_active and not focus_right:

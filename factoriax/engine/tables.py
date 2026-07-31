@@ -1,4 +1,4 @@
-"""Derived JAX arrays and lookup tables for the FactoriaX engine.
+"""Derived JAX arrays and lookup tables for the Factoriax engine.
 
 :mod:`factoriax.engine.constants` holds the pure-Python definitions. This module
 turns them into the ``jnp`` arrays that engine code reads. It builds every

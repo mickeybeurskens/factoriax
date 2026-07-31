@@ -4,8 +4,8 @@ The load-bearing invariant is **every non-EMPTY ItemType always gets a
 slot in the rendered panel**. This held in practice before, then broke
 silently once new rocket-chain items pushed past the single-column
 height budget on the 320x240 quadrant. These tests lock the invariant
-down at a range of aspect ratios so a future item addition that doesn't
-fit can't slip through unnoticed.
+down at a range of aspect ratios. A future item addition that does not
+fit therefore cannot pass unnoticed.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class TestInventoryItemsConstant:
         assert set(INVENTORY_ITEMS) == expected
 
     def test_stable_order_by_enum_value(self) -> None:
-        """Order is enum value ascending — a layout guarantee, not an accident."""
+        """Order is enum value ascending. This is a layout guarantee."""
         values = [int(it) for it in INVENTORY_ITEMS]
         assert values == sorted(values)
 
@@ -130,7 +130,7 @@ def _slot_has_icon(img: np.ndarray, slot: tuple[int, int, int, int]) -> bool:
     slot. A slot whose entire swatch matches the panel background is a
     silently-dropped item (clipped, off-canvas, or mis-positioned). The
     icon is at least ``swatch_sz x swatch_sz`` starting at ``slot_x``,
-    centred vertically in the row — this helper covers the whole row's
+    centred vertically in the row. This helper covers the whole row's
     leftmost ``swatch_sz`` pixels to catch any active sprite content.
     """
     slot_x, y, _col_w, row_h = slot
@@ -161,10 +161,10 @@ class TestRenderInventoryPanelAllItemsVisible:
         a slot region is entirely the panel background colour, the
         item was clipped or silently dropped.
 
-        Note: the smallest debugger quadrant (200x150) is omitted —
+        Note: the smallest debugger quadrant (200x150) is omitted because
         the layout helper currently overflows the bottom edge for the
-        last few items at that size. That's a layout-helper bug, not
-        a sprite-rendering one; tracked separately.
+        last few items at that size. That is a layout-helper bug and not
+        a sprite-rendering one. It is tracked separately.
         """
         inv = np.ones(NUM_ITEM_TYPES, dtype=np.int32)
         img = render_inventory_panel(inv, width=width, height=height)
@@ -181,8 +181,8 @@ class TestRenderInventoryPanelAllItemsVisible:
     def test_zero_inventory_still_shows_all_dimmed_icons(self) -> None:
         """Even with an all-zero inventory, every item has a (dimmed) icon.
 
-        Inactive icons render with reduced alpha but are still composited
-        — the slot region must differ from the panel background so the
+        Inactive icons render with reduced alpha but are still composited.
+        The slot region must differ from the panel background so the
         operator can see the full item list at a glance.
         """
         inv = np.zeros(NUM_ITEM_TYPES, dtype=np.int32)
@@ -205,7 +205,7 @@ class TestRenderInventoryPanelContent:
         """All-zero and all-one inventories produce visibly different panels.
 
         A defensive check: if counts were ignored entirely, the output
-        would be bit-identical regardless of inventory contents.
+        is bit-identical for any inventory contents.
         """
         img_zero = render_inventory_panel(
             np.zeros(NUM_ITEM_TYPES, dtype=np.int32), width=320, height=240

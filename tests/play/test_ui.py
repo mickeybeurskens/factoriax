@@ -2,7 +2,7 @@
 
 These tests guard the output contract (shape, dtype) of the render functions
 and verify that they do not crash under common state configurations.  Visual
-correctness is validated by running the game — pixel-level assertions are
+correctness is validated by running the game. Pixel-level assertions are
 intentionally absent.
 """
 
@@ -35,13 +35,13 @@ class TestRenderAchievementMenu:
         assert result.shape == (_SH, _SW, 4)
 
     def test_all_locked(self) -> None:
-        """Should not crash when no achievements are unlocked."""
+        """The render must not crash when no achievements are unlocked."""
         achievements = np.zeros(MAX_ACHIEVEMENTS, dtype=np.bool_)
         result = render_achievement_menu(achievements, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
     def test_all_unlocked(self) -> None:
-        """Should not crash when every achievement is unlocked."""
+        """The render must not crash when every achievement is unlocked."""
         achievements = np.ones(MAX_ACHIEVEMENTS, dtype=np.bool_)
         result = render_achievement_menu(achievements, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
@@ -60,23 +60,19 @@ class TestRenderInventoryMenu:
         assert all(isinstance(r, ClickRegion) for r in click_regions)
 
     def test_inventory_focus(self, state_factory) -> None:
-        """Should not crash with inventory focus."""
+        """The render must not crash with inventory focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH
-        )
+        result, _ = render_inventory_menu(state, _PARAMS, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
     def test_crafting_focus(self, state_factory) -> None:
-        """Should not crash with crafting focus."""
+        """The render must not crash with crafting focus."""
         state = state_factory(world_map=jnp.zeros((8, 8), dtype=jnp.int32))
-        result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH
-        )
+        result, _ = render_inventory_menu(state, _PARAMS, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
     def test_populated_inventory(self, state_factory) -> None:
-        """Should not crash when inventory contains items."""
+        """The render must not crash when the inventory holds items."""
         from factoriax.engine.constants import NUM_ITEM_TYPES
 
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
@@ -91,14 +87,12 @@ class TestRenderInventoryMenu:
         assert result.shape == (_SH, _SW, 4)
 
     def test_craft_in_progress(self, state_factory) -> None:
-        """Should not crash when a craft is in progress."""
+        """The render must not crash when a craft is in progress."""
         state = state_factory(
             world_map=jnp.zeros((8, 8), dtype=jnp.int32),
             craft_progress=jnp.array([2], dtype=jnp.int32),
         )
-        result, _ = render_inventory_menu(
-            state, _PARAMS, _SW, _SH
-        )
+        result, _ = render_inventory_menu(state, _PARAMS, _SW, _SH)
         assert result.shape == (_SH, _SW, 4)
 
 
@@ -126,7 +120,7 @@ class TestRenderWelcomeScreen:
         assert np.any(result[:, :, :3] > 20)
 
     def test_various_sizes(self) -> None:
-        """Should render cleanly at different screen sizes without crashing."""
+        """The render stays clean at different screen sizes, with no crash."""
         for w, h in [(320, 320), (640, 480), (1024, 768)]:
             result, _ = render_welcome_screen(w, h)
             assert result.shape == (h, w, 4)
@@ -138,7 +132,7 @@ class TestRenderWelcomeScreen:
         assert len(record_regions) == 0
 
     def test_mine_control_describes_look_at(self) -> None:
-        """The SPACE/mine row should describe the look-at semantic.
+        """The SPACE/mine row describes the look-at semantic.
 
         Source-level check: the welcome screen rasterizes text, so we
         verify the controls list in factoriax.playground.play.ui matches the new
@@ -149,7 +143,7 @@ class TestRenderWelcomeScreen:
         from factoriax.playground.play import ui
 
         src = inspect.getsource(ui.render_welcome_screen)
-        # Old bare label is gone; new look-at phrasing is present.
+        # The old bare label is gone. The new look-at phrasing is present.
         assert '"Mine ore"' not in src, "Stale 'Mine ore' label still present"
         assert '"Mine the tile you face"' in src or "look at" in src.lower()
 
@@ -170,12 +164,12 @@ class TestRenderPauseMenu:
         assert all(isinstance(r, ClickRegion) for r in click_regions)
 
     def test_selection_zero(self) -> None:
-        """Should render correctly with first option selected."""
+        """The render is correct with the first option selected."""
         result, _ = render_pause_menu(self._PAUSE_W, self._PAUSE_H, selected_option=0)
         assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)
 
     def test_selection_one(self) -> None:
-        """Should render correctly with second option selected."""
+        """The render is correct with the second option selected."""
         result, _ = render_pause_menu(self._PAUSE_W, self._PAUSE_H, selected_option=1)
         assert result.shape == (self._PAUSE_H, self._PAUSE_W, 4)
 
@@ -185,7 +179,8 @@ class TestCraftPanelFollowsScenarioBook:
 
     Scenarios ship their own :class:`RecipeBook`. Reading the panel from
     ``BASE_RECIPES`` showed 27 rows with base-book labels regardless, so a
-    10-recipe scenario rendered 17 rows the player could select but not craft.
+    10-recipe scenario rendered 17 rows. The player can select those extra
+    rows but cannot craft them.
     """
 
     # Tall enough that no row is clipped out of the scroll viewport, so the

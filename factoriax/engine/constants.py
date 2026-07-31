@@ -1,4 +1,4 @@
-"""Constants and enumerations for the FactoriaX environment.
+"""Constants and enumerations for the Factoriax environment.
 
 This module holds pure-Python definitions only. The JAX arrays that come from
 them (the gather tables and the state-array dtypes) live in

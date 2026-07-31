@@ -1,4 +1,4 @@
-"""Tests for the FactoriaX environment."""
+"""Tests for the Factoriax environment."""
 
 import jax
 import jax.numpy as jnp
@@ -32,7 +32,7 @@ class TestConstants:
     """Tests for constants module."""
 
     def test_resource_blocks_are_walkable(self) -> None:
-        """Resource blocks should not be in SOLID_BLOCKS."""
+        """Resource blocks are not in SOLID_BLOCKS."""
         solid_set = set(int(b) for b in SOLID_BLOCKS)
         assert int(BlockType.IRON) not in solid_set
         assert int(BlockType.COPPER) not in solid_set
@@ -43,7 +43,7 @@ class TestWorldGeneration:
     """Tests for procedural world generation via ``generate_state``."""
 
     def test_generate_state_creates_valid_state(self) -> None:
-        """Generated world should have valid state structure."""
+        """A generated world has a valid state structure."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -54,7 +54,7 @@ class TestWorldGeneration:
         assert state.timestep == 0
 
     def test_player_spawns_on_dirt(self) -> None:
-        """Players should always spawn on dirt tiles."""
+        """Players always spawn on dirt tiles."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -66,7 +66,7 @@ class TestWorldGeneration:
 
 
 class TestEnvStateSchema:
-    """Tests for the EnvState schema — fields the engine guarantees."""
+    """Tests for the EnvState schema: the fields the engine guarantees."""
 
     def test_generate_state_initializes_achievements_unlocked(self) -> None:
         """Procedural state has all-False achievements_unlocked of correct shape."""
@@ -110,7 +110,7 @@ class TestEnvConstructorLevel:
         _, state = env.reset_env(random.PRNGKey(0), params)
 
         assert state.map.shape == (15, 15)
-        # Level state is deterministic in geometry — different rngs
+        # Level state is deterministic in geometry. Different rngs
         # still produce the same map.
         _, state2 = env.reset_env(random.PRNGKey(99), params)
         assert jnp.array_equal(state.map, state2.map)
@@ -133,7 +133,7 @@ class TestGameLogic:
         return state_factory(world_map=world_map, player_position=(1, 1))
 
     def test_is_position_in_bounds(self) -> None:
-        """Position bounds checking should work correctly."""
+        """The position bounds check is correct."""
         assert is_position_in_bounds(jnp.array([0, 0]), 3, 3)
         assert is_position_in_bounds(jnp.array([2, 2]), 3, 3)
         assert not is_position_in_bounds(jnp.array([-1, 0]), 3, 3)
@@ -145,7 +145,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Should return correct block type at position."""
+        """The lookup returns the correct block type at a position."""
         assert get_block_at(simple_state, jnp.array([0, 0])) == BlockType.DIRT
         assert get_block_at(simple_state, jnp.array([2, 0])) == BlockType.WATER
 
@@ -153,7 +153,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Out of bounds positions should return OUT_OF_BOUNDS."""
+        """An out-of-bounds position returns OUT_OF_BOUNDS."""
         assert get_block_at(simple_state, jnp.array([-1, 0])) == BlockType.OUT_OF_BOUNDS
         assert get_block_at(simple_state, jnp.array([0, 5])) == BlockType.OUT_OF_BOUNDS
 
@@ -161,7 +161,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Dirt should be walkable."""
+        """Dirt is walkable."""
         assert is_position_walkable(simple_state, jnp.array([0, 0]))
         assert is_position_walkable(simple_state, jnp.array([1, 1]))
 
@@ -169,7 +169,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Water should not be walkable."""
+        """Water is not walkable."""
         assert not is_position_walkable(simple_state, jnp.array([2, 0]))
         assert not is_position_walkable(simple_state, jnp.array([0, 2]))
 
@@ -177,7 +177,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Out of bounds should not be walkable."""
+        """An out-of-bounds tile is not walkable."""
         assert not is_position_walkable(simple_state, jnp.array([-1, 0]))
         assert not is_position_walkable(simple_state, jnp.array([5, 5]))
 
@@ -185,7 +185,7 @@ class TestGameLogic:
         self,
         state_factory,
     ) -> None:
-        """Conveyor belts should be walkable despite being machines."""
+        """Conveyor belts are walkable, although they are machines."""
         world_map = jnp.array(
             [[BlockType.DIRT, BlockType.DIRT, BlockType.DIRT]],
             dtype=jnp.int32,
@@ -205,7 +205,7 @@ class TestGameLogic:
         assert not is_position_walkable(state, jnp.array([2, 0]))
 
     def test_up_moves_north(self, state_factory) -> None:
-        """UP should move the player north (y-1) on the map."""
+        """UP moves the player north (y-1) on the map."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
@@ -217,7 +217,7 @@ class TestGameLogic:
         assert int(new_state.player_directions[0]) == Direction.UP
 
     def test_face_does_not_move(self, state_factory) -> None:
-        """FACE_LEFT should change facing without moving."""
+        """FACE_LEFT changes the facing without a move."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
@@ -239,7 +239,7 @@ class TestGameLogic:
     def test_face_sets_direction_without_moving(
         self, state_factory, action: Action, expected_dir: Direction
     ) -> None:
-        """FACE_* actions should snap facing to the target direction."""
+        """A FACE_* action snaps the facing to the target direction."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
@@ -250,7 +250,7 @@ class TestGameLogic:
         assert int(new_state.player_directions[0]) == expected_dir
 
     def test_move_player_blocked_by_water(self, state_factory) -> None:
-        """Player should not move into water."""
+        """The player does not move into water."""
         world_map = jnp.array(
             [
                 [BlockType.DIRT, BlockType.WATER],
@@ -267,7 +267,7 @@ class TestGameLogic:
         assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 0]))
 
     def test_move_player_blocked_by_bounds(self, state_factory) -> None:
-        """Player should not move out of bounds."""
+        """The player does not move out of bounds."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(0, 0),
@@ -276,7 +276,7 @@ class TestGameLogic:
         assert jnp.array_equal(new_state.player_positions[0], jnp.array([0, 0]))
 
     def test_noop_does_not_change_position(self, state_factory) -> None:
-        """NOOP should not change player position or direction."""
+        """NOOP changes neither the player position nor the direction."""
         state = state_factory(
             world_map=jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32),
             player_position=(1, 1),
@@ -290,7 +290,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Game should not be over before max timesteps."""
+        """The game is not over before max timesteps."""
         params = EnvParams(max_timesteps=1000)
         assert not is_game_over(simple_state, params)
 
@@ -298,7 +298,7 @@ class TestGameLogic:
         self,
         simple_state: EnvState,
     ) -> None:
-        """Game should be over at max timesteps."""
+        """The game is over at max timesteps."""
         params = EnvParams(max_timesteps=100)
         state = simple_state.replace(timestep=100)
         assert is_game_over(state, params)
@@ -308,10 +308,10 @@ class TestRenderer:
     """Tests for rendering."""
 
     def test_resource_textures_have_expected_colors(self) -> None:
-        """Resource textures should be dominated by their base color.
+        """The base color dominates each resource texture.
 
         Ore textures now paint darker patches and occasional bright
-        pixels on top of the base fill, so any given pixel might not
+        pixels on top of the base fill, so one given pixel can fail to
         equal the base color. The mode (most common color) still is.
         """
         textures = create_default_textures()
@@ -345,14 +345,14 @@ class TestEnvironment:
     """Tests for the gymnax environment interface."""
 
     def test_make(self) -> None:
-        """Environment factory should return env and params."""
+        """The environment factory returns an env and its params."""
         env = FactoriaxEnv()
         params = env.default_params
         assert env is not None
         assert params is not None
 
     def test_reset_returns_obs_and_state(self) -> None:
-        """Reset should return observation and state."""
+        """Reset returns an observation and a state."""
         env = FactoriaxEnv()
         params = env.default_params
         rng = random.PRNGKey(0)
@@ -363,7 +363,7 @@ class TestEnvironment:
         assert state.timestep == 0
 
     def test_step_returns_correct_tuple(self) -> None:
-        """Step should return (obs, state, reward, done, info)."""
+        """Step returns (obs, state, reward, done, info)."""
         env = FactoriaxEnv()
         params = env.default_params
         rng = random.PRNGKey(0)
@@ -381,7 +381,7 @@ class TestEnvironment:
         assert isinstance(info, dict)
 
     def test_step_increments_timestep(self) -> None:
-        """Each step should increment the timestep."""
+        """Each step increments the timestep."""
         env = FactoriaxEnv()
         params = env.default_params
         rng = random.PRNGKey(0)
@@ -397,14 +397,14 @@ class TestEnvironment:
         assert new_state.timestep == state.timestep + 1
 
     def test_action_space(self) -> None:
-        """Action space should match the number of defined actions."""
+        """The action space matches the number of defined actions."""
         env = FactoriaxEnv()
         params = env.default_params
         action_space = env.action_space(params)
         assert action_space.n == NUM_ACTIONS
 
     def test_observation_space(self) -> None:
-        """Observation space should match expected dimensions."""
+        """The observation space matches the expected dimensions."""
         env = FactoriaxEnv()
         params = env.default_params
         obs_space = env.observation_space(params)
@@ -415,7 +415,7 @@ class TestEnvironment:
         assert obs_space.shape == (expected_size,)
 
     def test_jit_compilation(self) -> None:
-        """Environment should be JIT-compilable."""
+        """The environment is JIT-compilable."""
         env = FactoriaxEnv()
         params = env.default_params
 

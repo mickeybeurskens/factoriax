@@ -1,10 +1,10 @@
 """Tests for SPLITTER push semantics.
 
 Splitter logic lives inside :func:`run_conveyor_belts` (folded from
-the original standalone ``run_splitters`` pass for performance — the
+the original standalone ``run_splitters`` pass for performance. The
 4-iteration scatter-gather is shared with belts). These tests target
 the splitter behaviour specifically by populating only splitter +
-pallet entities; belts can run alongside in the same pass without
+pallet entities. Belts can run alongside in the same pass without
 affecting these assertions.
 
 Splitter semantics under test:
@@ -169,7 +169,7 @@ def test_buffer_of_one_does_not_fire(state_factory) -> None:
 
 
 def test_empty_buffer_is_a_no_op(state_factory) -> None:
-    """A buf=0 splitter shouldn't touch anyone's state."""
+    """A buf=0 splitter must not touch the state of any entity."""
     state = _make_splitter_world(state_factory, facing=int(Direction.UP), buf_count=0)
     out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 0
@@ -184,14 +184,14 @@ def test_empty_buffer_is_a_no_op(state_factory) -> None:
 
 def test_blocked_left_output_fires_right_only(state_factory) -> None:
     """If the LEFT output has no neighbour (DIRT) but RIGHT is
-    receptive, the splitter fires RIGHT only — consumes 1 from the
-    buffer, leaves 1 in place. The blocked side cannot stall the
+    receptive, the splitter fires RIGHT only. It consumes 1 from the
+    buffer and leaves 1 in place. The blocked side cannot stall the
     receptive side."""
     state = _make_splitter_world(
         state_factory,
         facing=int(Direction.UP),
         buf_count=2,
-        left_pallet=False,  # no entity on LEFT — non-receptive
+        left_pallet=False,  # no entity on LEFT, so non-receptive
     )
     out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
@@ -214,8 +214,8 @@ def test_blocked_right_output_fires_left_only(state_factory) -> None:
 
 def test_both_outputs_blocked_holds_both(state_factory) -> None:
     """Neither side has a receptive neighbour, so the splitter holds
-    its pair in place. Same outcome as the old atomic hold — it's the
-    other-side-blocked case that changed, not this one."""
+    its pair in place. The outcome is the same as the old atomic hold.
+    The other-side-blocked case is what changed, not this one."""
     state = _make_splitter_world(
         state_factory,
         facing=int(Direction.UP),
@@ -234,8 +234,8 @@ def test_both_outputs_blocked_holds_both(state_factory) -> None:
 
 def test_inactive_direction_is_no_op(state_factory) -> None:
     """A splitter with ``ent_direction == 0`` (NONE) must not fire.
-    The decode table returns (0, 0) for that row; a regression here
-    would make every NONE-direction splitter spam fictional pushes."""
+    The decode table returns (0, 0) for that row. A regression here
+    makes every NONE-direction splitter spam fictional pushes."""
     state = _make_splitter_world(state_factory, facing=0, buf_count=2)
     out = run_splitters(state, _PARAMS)
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 2
@@ -245,7 +245,7 @@ def test_inactive_direction_is_no_op(state_factory) -> None:
 
 def test_non_splitter_entities_untouched(state_factory) -> None:
     """A pallet at (0, 1) carrying 5 of an item must still hold 5
-    afterward — run_splitters must not affect non-splitter entities
+    afterward. run_splitters must not affect non-splitter entities
     in any way."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
@@ -269,7 +269,7 @@ def test_non_splitter_entities_untouched(state_factory) -> None:
 
 
 def test_two_ticks_drains_then_holds(state_factory) -> None:
-    """Tick 1 drains the buf-of-2 to zero; tick 2 finds buf=0 and
+    """Tick 1 drains the buf-of-2 to zero. Tick 2 finds buf=0 and
     nothing more arrives, so the splitter no-ops."""
     state = _make_splitter_world(state_factory, facing=int(Direction.UP), buf_count=2)
     after1 = run_splitters(state, _PARAMS)
@@ -315,13 +315,13 @@ def test_left_pallet_wrong_type_fires_right_only(state_factory) -> None:
     assert int(out.ent_buf_count[_eid(out, 1, 1)]) == 1
     # RIGHT pallet got the single fired item.
     assert int(out.ent_buf_count[_eid(out, 1, 2)]) == 1
-    # LEFT pallet still holds its 50 COPPER — splitter never pushed.
+    # LEFT pallet still holds its 50 COPPER. The splitter never pushed.
     assert int(out.ent_buf_count[_eid(out, 1, 0)]) == 50
 
 
 def test_buffer_of_one_with_one_side_blocked_holds(state_factory) -> None:
     """Pair-firing gating: a single item never fires, even if the only
-    receptive side is the one that would receive it. The splitter waits
+    receptive side is the one that receives it. The splitter waits
     for upstream to deliver a second item before it dispatches."""
     state = _make_splitter_world(
         state_factory,

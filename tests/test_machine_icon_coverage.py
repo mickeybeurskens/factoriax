@@ -2,7 +2,7 @@
 
 Catches the case where a new Machine is added to ITEM_TO_MACHINE
 in constants.py but ``factoriax.playground.ui.icons.MACHINE_TO_ITEM`` or
-``render_item_icon`` doesn't know about it. The arm was invisible on
+``render_item_icon`` does not know about it. The arm was invisible on
 the map because of exactly this kind of disconnect.
 """
 
@@ -40,7 +40,7 @@ class TestMachineIconCoverage:
             assert icon.dtype.name == "uint8"
 
     def test_machine_type_none_excluded(self) -> None:
-        """Machine.NONE should not appear in the mapping."""
+        """Machine.NONE does not appear in the mapping."""
         assert int(Machine.NONE) not in MACHINE_TO_ITEM
 
 
@@ -49,7 +49,7 @@ class TestDirectionalIcons:
 
     def test_splitter_icon_changes_with_facing(self) -> None:
         """The splitter glyph rotates 90° between vertical-facing and
-        horizontal-facing directions; the two icons must not be pixel-equal."""
+        horizontal-facing directions. The two icons must not be pixel-equal."""
         icon_up = render_item_icon(int(ItemType.SPLITTER), 24, int(Direction.UP))
         icon_left = render_item_icon(int(ItemType.SPLITTER), 24, int(Direction.LEFT))
         assert icon_up.shape == (24, 24, 4)
@@ -67,8 +67,8 @@ class TestDirectionalIcons:
         # uniform fill colour.
         base_pixel = icon[icon.shape[0] // 2, 0, :3]
         assert not np.all(icon[..., :3] == base_pixel), (
-            f"Crossing icon for encoding={encoding} is uniformly coloured — "
-            "the diagonal stripe was not drawn."
+            f"Crossing icon for encoding={encoding} is uniformly coloured. "
+            "The diagonal stripe was not drawn."
         )
 
     def test_crossing_icon_diagonals_match_glyph_table(self) -> None:

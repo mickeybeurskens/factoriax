@@ -384,7 +384,7 @@ def run_play_session(state: EditorState, screen: pygame.Surface) -> None:
     level = editor_state_to_level(state)
     num_players = len(level.player_positions) if level.player_positions else 1
     play_level(level, num_players=num_players, screen=screen)
-    pygame.display.set_caption("FactoriaX Editor")
+    pygame.display.set_caption("Factoriax Editor")
 
 
 # ---------------------------------------------------------------------------
@@ -1324,7 +1324,7 @@ def _render_frame(
 
 
 def main(screen: pygame.Surface | None = None) -> None:
-    """Run the FactoriaX level editor.
+    """Run the Factoriax level editor.
 
     Parameters
     ----------
@@ -1368,7 +1368,7 @@ def main(screen: pygame.Surface | None = None) -> None:
         # adapts to whatever size the caller's window happens to be.
         assert screen is not None
         window_w, window_h = screen.get_size()
-    pygame.display.set_caption("FactoriaX Editor")
+    pygame.display.set_caption("Factoriax Editor")
     clock = pygame.time.Clock()
     base_w, base_h, scale = _recalc_layout(vp, window_w, window_h)
 

@@ -3,8 +3,8 @@
 Movement and interaction primitives used by the miner-curriculum and
 science-tiers oracles: a greedy approach step, adjacency-aware
 face-then-act, nearest-target lookup, and a BFS walker that routes
-around solid machines. Oracles themselves stay in their test modules —
-these are the navigation building blocks they share.
+around solid machines. The oracles themselves stay in their test
+modules. This module holds the navigation blocks that they share.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def approach(px: int, py: int, tx: int, ty: int) -> int:
 
 
 def face_or_act_adjacent(state, wanted: np.ndarray, act: int) -> int | None:
-    """``act`` if facing a wanted tile; FACE it if adjacent; else None.
+    """Return ``act`` when facing a wanted tile, FACE when adjacent, else None.
 
     Parameters
     ----------
@@ -71,7 +71,7 @@ def face_or_act_adjacent(state, wanted: np.ndarray, act: int) -> int | None:
 
 
 def face_or_mine_adjacent(state, wanted_blocks: set[int]) -> int | None:
-    """MINE if facing a wanted block; FACE it if adjacent; else None."""
+    """Return MINE when facing a wanted block, FACE when adjacent, else None."""
     mask = np.isin(np.asarray(state.map), list(wanted_blocks))
     return face_or_act_adjacent(state, mask, int(Action.MINE))
 
@@ -92,9 +92,9 @@ def bfs_step_toward(state, wanted: np.ndarray) -> int:
     """First move of a shortest walkable path to a tile adjacent to
     ``wanted``.
 
-    Machines (all solid on these maps — no belts) block movement, which
-    is what defeats a greedy walker once placed machines appear: BFS
-    routes around them.
+    Machines block movement, and every machine on these maps is solid
+    because there are no belts. This is what defeats a greedy walker
+    once placed machines appear. BFS routes around them.
 
     Parameters
     ----------
@@ -142,8 +142,8 @@ def goto_and_act(state, wanted: np.ndarray, act: int) -> int:
     """One oracle step of walk-to / face / act on a wanted tile.
 
     Returns ``act`` when already facing a wanted tile, a FACE action
-    when merely adjacent, and otherwise the first move of a BFS path —
-    call once per tick until the act fires.
+    when merely adjacent, and otherwise the first move of a BFS path.
+    Call it once per tick until the act fires.
     """
     action = face_or_act_adjacent(state, wanted, act)
     if action is not None:

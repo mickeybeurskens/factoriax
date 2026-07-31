@@ -61,16 +61,16 @@ if TYPE_CHECKING:
 #: slice methods, and ``__repr__`` all walk this tuple, so a new field
 #: has to be added here as well as to the class.
 _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
-    # Player fields — shape (B, T, P, ...).
+    # Player fields, shape (B, T, P, ...).
     "positions",
     "player_directions",
     "player_inventory",
-    # Map fields — shape (B, T, H, W, ...).
+    # Map fields, shape (B, T, H, W, ...).
     "block_map",
     "block_resources",
     "machine_types",
     "tile_entity",
-    # Entity fields — shape (B, T, MAX_M, ...).
+    # Entity fields, shape (B, T, MAX_M, ...).
     "ent_y",
     "ent_x",
     "ent_type",
@@ -83,7 +83,7 @@ _OPTIONAL_ARRAY_FIELDS: tuple[str, ...] = (
     "ent_asm_out_type",
     "ent_asm_out_count",
     "ent_health",
-    # Global fields — shape (B, T, ...).
+    # Global fields, shape (B, T, ...).
     "selected_player",
     "achievements",
     "achievements_unlocked",
@@ -191,18 +191,18 @@ class Trajectory:
 
     actions: np.ndarray
 
-    # Player fields — (B, T, P, ...).
+    # Player fields, shape (B, T, P, ...).
     positions: np.ndarray | None = None
     player_directions: np.ndarray | None = None
     player_inventory: np.ndarray | None = None
 
-    # Map fields — (B, T, H, W, ...).
+    # Map fields, shape (B, T, H, W, ...).
     block_map: np.ndarray | None = None
     block_resources: np.ndarray | None = None
     machine_types: np.ndarray | None = None
     tile_entity: np.ndarray | None = None
 
-    # Entity fields — (B, T, MAX_M, ...).
+    # Entity fields, shape (B, T, MAX_M, ...).
     ent_y: np.ndarray | None = None
     ent_x: np.ndarray | None = None
     ent_type: np.ndarray | None = None
@@ -216,7 +216,7 @@ class Trajectory:
     ent_asm_out_count: np.ndarray | None = None
     ent_health: np.ndarray | None = None
 
-    # Global fields — (B, T, ...).
+    # Global fields, shape (B, T, ...).
     selected_player: np.ndarray | None = None
     achievements: np.ndarray | None = None
     achievements_unlocked: np.ndarray | None = None
@@ -225,13 +225,13 @@ class Trajectory:
     rewards: np.ndarray | None = None
     timesteps: np.ndarray | None = None
 
-    # Scheme descriptors — capture how the trajectory was produced.
+    # Scheme descriptors. They capture how the trajectory was produced.
     observation_scheme: dict[str, object] | None = None
     reward_scheme: dict[str, object] | None = None
     cost_scheme: dict[str, object] | None = None
     # Snapshot of ``env_params_to_dict(params)`` at recording time so
     # replay tooling can rebuild :class:`EnvParams` with the live
-    # ``player_mining_yield`` / ``miner_mining_rate`` / etc.
+    # ``player_mining_yield``, ``miner_mining_rate``, and the others.
     env_params_scheme: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
@@ -537,7 +537,7 @@ _TRAJ_TO_STATE: dict[str, str] = {
 }
 
 # Trajectory fields with no EnvState counterpart, skipped during
-# reconstruction because EnvState would reject them as unknown keywords.
+# reconstruction because EnvState rejects them as unknown keywords.
 # ``achievements`` is per-step and as wide as the scenario's set, where
 # EnvState carries the latched ``achievements_unlocked`` at MAX_ACHIEVEMENTS.
 _TRAJ_ONLY_FIELDS: frozenset[str] = frozenset({"achievements"})

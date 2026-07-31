@@ -2,10 +2,10 @@
 
 Public surface:
 
-* :class:`RecipeSpec` — plain-Python recipe, decoupled from the
+* :class:`RecipeSpec`: plain-Python recipe, decoupled from the
   JAX-backed engine so callers can render diagrams from a JSON dump.
-* :class:`Layout` — geometry constants.
-* :func:`render` — top-level entry that consumes recipes and writes a
+* :class:`Layout`: geometry constants.
+* :func:`render`: top-level entry that consumes recipes and writes a
   PNG (or SVG, by file extension).
 
 The renderer runs as a chain of helpers. Each one takes the values it
@@ -291,8 +291,8 @@ def _text_palette(fill_hex: str) -> tuple[str, str, str]:
     The choice uses relative luminance with the sRGB weights, and
     switches at 0.65. That threshold sits above every fill the palette
     produces, the brightest being the orange for half fabricates at
-    0.573. A warm mid-tone fill therefore keeps light labels, where
-    dark ones would have too little contrast.
+    0.573. A warm mid-tone fill therefore keeps light labels. Dark labels have
+    too little contrast there.
 
     The threshold differs from the 0.55 used by
     :func:`factoriax.analysis.curriculum_strip._text_color`, so the two
@@ -359,8 +359,8 @@ def _assign_ports(
 
     A one-input recipe uses a middle port. A two-input recipe splits:
     the input drawn higher takes the top port, and the other takes the
-    bottom. Sending the higher source to the lower port would make the
-    two arrows cross just before they arrive.
+    bottom. The higher source sent to the lower port makes the two
+    arrows cross just before they arrive.
 
     Parameters
     ----------
@@ -527,15 +527,14 @@ def _route_edge(
 
     A span of 3 or more climbs to the skyway over the top row, crosses
     there, then drops into the target-side channel: six points. A long
-    edge between the rows would cut through the boxes of several
-    tiers.
+    edge between the rows cuts through the boxes of several tiers.
 
     Parameters
     ----------
     source_pos :
         The middle of the source box, as ``(x, y)``.
     target_pos :
-        The middle of the target box. Only its x is read; the y comes
+        The middle of the target box. Only its x is read. The y comes
         from ``port_y``.
     port_y :
         The height at which the edge meets the target box, from
@@ -549,7 +548,7 @@ def _route_edge(
         The x of the target-side vertical run, or ``None`` for a span
         of 1. A span of 2 or more asserts that it is not ``None``.
     inter_row_ys :
-        The y of each lane between two rows. May be empty.
+        The y of each lane between two rows. This can be empty.
     skyway_lane :
         The y of the horizontal run over the top row.
     layout :

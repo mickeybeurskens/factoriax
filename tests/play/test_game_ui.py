@@ -31,7 +31,7 @@ def game_ui(params: EnvParams) -> GameUI:
 
 
 class TestSlotKeySelection:
-    """Number keys should update PlayState.selected_item, not EnvState."""
+    """Number keys update PlayState.selected_item, not EnvState."""
 
     def test_pressing_1_selects_miner(
         self,
@@ -48,7 +48,7 @@ class TestSlotKeySelection:
         )
         result = game_ui.handle_event(event, state)
         assert game_ui.play_state.selected_item == int(ItemType.MINER)
-        # EnvState should not be mutated for UI state
+        # EnvState must not be mutated for UI state
         assert result.state is not None
 
     def test_pressing_3_selects_belt(

@@ -11,7 +11,7 @@ The separation of concerns is:
 - **When** it applies = context logic in the play loop (code).
 - **How** it executes = handler functions (code).
 
-This means the same physical key (e.g. W) can map to both ``move_up``
+This means the same physical key, for example W, can map to both ``move_up``
 and ``nav_up``. The play loop checks which one is relevant based on
 which menu is open.
 """
@@ -104,7 +104,7 @@ class PlayerAction(StrEnum):
 # Bindings type and PlayerConfig
 # ---------------------------------------------------------------------------
 
-# action name -> list of physical key names (e.g. "K_w", "SHIFT+K_1")
+# action name -> list of physical key names, such as "K_w" and "SHIFT+K_1"
 Bindings = dict[str, list[str]]
 
 # Reverse lookup: (modifier_flags, pygame_key_int) -> frozenset of actions
@@ -288,7 +288,7 @@ def resolve_key(lookup: KeyLookup, key: int, mods: int = 0) -> frozenset[str]:
     lookup :
         Reverse lookup dict from :func:`build_key_lookup`.
     key :
-        Pygame key constant (e.g. ``pygame.K_w``).
+        Pygame key constant, for example ``pygame.K_w``.
     mods :
         Pygame modifier bitmask from ``pygame.key.get_mods()``.
     """
@@ -449,7 +449,7 @@ def resolve_event(
 # Input name formatting (for rebinding UI)
 # ---------------------------------------------------------------------------
 
-# Reverse mapping from pygame key int to attribute name (e.g. 119 -> "K_w").
+# Reverse mapping from pygame key int to attribute name, such as 119 -> "K_w".
 _KEY_INT_TO_NAME: dict[int, str] = {
     getattr(pygame, attr): attr for attr in dir(pygame) if attr.startswith("K_")
 }
@@ -465,7 +465,7 @@ def event_to_key_name(key: int, mods: int) -> str:
     Parameters
     ----------
     key :
-        Pygame key constant (e.g. ``pygame.K_w``).
+        Pygame key constant, for example ``pygame.K_w``.
     mods :
         Pygame modifier bitmask from ``pygame.key.get_mods()``.
     """

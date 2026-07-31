@@ -101,7 +101,7 @@ class TestMachineInventory:
 
         A machine cannot hold the same item in two slots and save it: the
         level format indexes contents by item. The editor therefore keeps one
-        entry per item, and shows what a save would keep.
+        entry per item, and shows what a save keeps.
         """
         state = new_editor_state(2, 2)
         state.machine_types[0, 0] = int(Machine.FURNACE)

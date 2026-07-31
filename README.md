@@ -1,4 +1,4 @@
-# FactoriaX
+# Factoriax
 
 A grid world for reinforcement learning research, in the style of Factorio,
 written in JAX.
@@ -83,10 +83,10 @@ writes.
 
 ## Where to read next
 
-- [`docs/guides/getting_started.ipynb`](docs/guides/getting_started.ipynb) —
+- [`docs/guides/getting_started.ipynb`](docs/guides/getting_started.ipynb):
   the environment, the observation, the action space, and a random rollout.
-- [`docs/guides/ppo_training_example.ipynb`](docs/guides/ppo_training_example.ipynb) —
-  train a PPO agent on a FactoriaX task.
-- [`docs/api/index.rst`](docs/api/index.rst) — the reference for every public
+- [`docs/guides/ppo_training_example.ipynb`](docs/guides/ppo_training_example.ipynb):
+  train a PPO agent on a Factoriax task.
+- [`docs/api/index.rst`](docs/api/index.rst): the reference for every public
   module. Sphinx builds it from the docstrings.
-- [`ISSUES.md`](ISSUES.md) — the known defects that stay open.
+- [`ISSUES.md`](ISSUES.md): the known defects that stay open.

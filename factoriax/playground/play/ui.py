@@ -178,7 +178,7 @@ def _render_control_hints(
     overlay :
         Destination RGBA array. Modified in place.
     hints :
-        Hint text to render (e.g. "[TAB] Next | [E] Craft").
+        Hint text to render, for example "[TAB] Next | [E] Craft".
     x :
         Left edge of the hint region.
     y :
@@ -1966,7 +1966,7 @@ def render_inventory_menu(
     craft_progress = 0
 
     # ------------------------------------------------------------------
-    # Crafting recipes list — rendered into a scroll view
+    # Crafting recipes list, rendered into a scroll view
     # ------------------------------------------------------------------
     hint_y = menu_y + menu_h - _theme.HINT_HEIGHT - _theme.BORDER_PX
 

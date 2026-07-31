@@ -235,9 +235,7 @@ def editor_state_from_level(level: Level) -> EditorState:
         machine_inventory=inventory.astype(np.int32),
         # Copy, so an edit in the editor cannot reach back into the level.
         player_inventory=(
-            list(level.player_inventory)
-            if level.player_inventory is not None
-            else None
+            list(level.player_inventory) if level.player_inventory is not None else None
         ),
         player_inventories=(
             {k: list(v) for k, v in level.player_inventories.items()}
@@ -317,9 +315,7 @@ def editor_state_to_level(state: EditorState) -> Level:
         machine_directions=directions,
         machine_inventory=machine_inv,
         player_inventory=(
-            list(state.player_inventory)
-            if state.player_inventory is not None
-            else None
+            list(state.player_inventory) if state.player_inventory is not None else None
         ),
         player_inventories=inventories,
         player_positions=pp,

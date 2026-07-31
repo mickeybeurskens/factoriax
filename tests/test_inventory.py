@@ -19,7 +19,7 @@ class TestInventoryState:
     """Tests for inventory state initialization."""
 
     def test_initial_inventory_is_empty(self) -> None:
-        """New world should have empty inventory."""
+        """A new world has an empty inventory."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -27,7 +27,7 @@ class TestInventoryState:
         assert jnp.all(state.player_inventory == 0)
 
     def test_inventory_arrays_have_correct_shape(self) -> None:
-        """Inventory array should have shape (num_players, NUM_ITEM_TYPES)."""
+        """The inventory array has shape (num_players, NUM_ITEM_TYPES)."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -36,7 +36,7 @@ class TestInventoryState:
         assert state.player_inventory.shape == (num_players, NUM_ITEM_TYPES)
 
     def test_inventory_arrays_are_int16(self) -> None:
-        """Inventory array should be int16 dtype."""
+        """The inventory array has the int16 dtype."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params)
@@ -48,7 +48,7 @@ class TestItemType:
     """Tests for the ItemType enumeration."""
 
     def test_item_types_have_unique_values(self) -> None:
-        """Item types should have distinct values."""
+        """Item types have distinct values."""
         values = [
             ItemType.EMPTY,
             ItemType.COAL,
@@ -58,11 +58,11 @@ class TestItemType:
         assert len(values) == len(set(values))
 
     def test_empty_is_zero(self) -> None:
-        """EMPTY should be 0 for easy initialization."""
+        """EMPTY is 0, which makes initialization simple."""
         assert ItemType.EMPTY == 0
 
     def test_num_item_types_matches_enum(self) -> None:
-        """NUM_ITEM_TYPES should match the number of ItemType members."""
+        """NUM_ITEM_TYPES matches the number of ItemType members."""
         assert NUM_ITEM_TYPES == len(ItemType)
 
 
@@ -77,7 +77,7 @@ class TestInventoryObservation:
     """
 
     def test_observation_includes_inventory(self, canonical_env_8x8_1p) -> None:
-        """Observation should include inventory data."""
+        """The observation includes inventory data."""
         env, params, _, state = canonical_env_8x8_1p
         obs = env.get_obs(state, params)
 
@@ -88,7 +88,7 @@ class TestInventoryObservation:
         assert obs.shape == (expected_size,)
 
     def test_observation_space_matches_observation(self, canonical_env_8x8_1p) -> None:
-        """Observation shape should match observation_space."""
+        """The observation shape matches observation_space."""
         env, params, _, state = canonical_env_8x8_1p
         obs = env.get_obs(state, params)
 
@@ -96,7 +96,7 @@ class TestInventoryObservation:
         assert obs.shape == obs_space.shape
 
     def test_inventory_observation_normalized(self, canonical_env_8x8_1p) -> None:
-        """Inventory values should be in [0, 1]."""
+        """Inventory values are in [0, 1]."""
         env, params, _, state = canonical_env_8x8_1p
         obs = env.get_obs(state, params)
 
@@ -110,7 +110,7 @@ class TestInventoryObservation:
     def test_inventory_observation_encodes_correctly(
         self, canonical_env_8x8_1p
     ) -> None:
-        """Inventory observation should correctly encode item counts."""
+        """The inventory observation encodes the item counts correctly."""
         env, params, _, state = canonical_env_8x8_1p
 
         selected = state.selected_player
@@ -123,7 +123,7 @@ class TestInventoryObservation:
 
         obs = env.get_obs(state, params)
         # Verify the observation is in range -- exact indexing depends on
-        # the scalar layout, but values should be bounded.
+        # the scalar layout, but the values must stay bounded.
         assert jnp.all(obs >= 0.0)
         assert jnp.all(obs <= 1.0)
 
@@ -132,7 +132,7 @@ class TestInventoryRenderer:
     """Regression tests for the base renderer output contract."""
 
     def test_render_pixels_excludes_inventory(self) -> None:
-        """The renderer should return an RGB array sized to the map, no menu."""
+        """The renderer returns an RGB array sized to the map, with no menu."""
         rng = random.PRNGKey(0)
         params = EnvParams()
         state = generate_state(rng, params, map_height=8, map_width=8)

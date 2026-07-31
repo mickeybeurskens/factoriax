@@ -8,7 +8,7 @@ items 1.2 and 1.3.
 
 A module-scoped ``make_env`` factory caches ``(env, params, state)``
 per achievement_fn so that ``factoriax_step``'s internal JIT cache is
-shared across tests that use the same achievement_fn — each unique
+shared across tests that use the same achievement_fn. Each unique
 achievement_fn compiles its step path at most once across the file.
 """
 
@@ -127,7 +127,7 @@ def test_unlocks_are_latched_across_steps(make_env) -> None:
 def test_free_play_conditions_unlock_through_engine(make_env, state_factory) -> None:
     """End-to-end: free_play_conditions wired into the env latches first_ore.
 
-    Uses a custom 1x1 state for this assertion; only the env is shared
+    It uses a custom 1x1 state for this assertion. Only the env is shared
     via ``make_env(free_play_conditions)`` so tests 5 and 6 in this file
     pick up the same env instance.
     """
@@ -152,9 +152,9 @@ def test_free_play_conditions_vmaps(canonical_env_8x8_1p) -> None:
     the full ``env.step_env`` path. The original test built a fresh
     ``FactoriaxEnv(achievement_fn=free_play_conditions)`` and vmapped
     reset+step over 4 envs to verify ``achievements_unlocked.shape ==
-    (4, MAX_ACHIEVEMENTS)`` — a ~14s XLA compile of the vmapped step.
+    (4, MAX_ACHIEVEMENTS)``, which costs a ~14s XLA compile of the vmapped step.
     The shape assertion only depends on ``MAX_ACHIEVEMENTS`` and the
-    batch dim; vmapping the achievement fn itself proves the same
+    batch dim. A vmap over the achievement fn itself proves the same
     property at sub-second cost.
 
     Full env.step + achievement_fn integration is covered by the other

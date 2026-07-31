@@ -1,14 +1,14 @@
-"""Economics oracles for ScienceTiers-v1 — the balance spec as tests.
+"""Economics oracles for ScienceTiers-v1: the balance spec as tests.
 
 Three invariants pin the tier ladder (tasks/plan_science_tiers.md in
-the outer repo); any recipe rebalance that breaks one fails CI:
+the outer repo). Any recipe rebalance that breaks one fails CI:
 
-1. **Baseline** — a scripted tier-1 hand loop (mine coal+limestone,
+1. **Baseline**: a scripted tier-1 hand loop (mine coal+limestone,
    hand-craft, deposit) earns at least ``TIER1_BASELINE_FLOOR`` by the
    1000-tick horizon.
-2. **Dominance** — the tier-2 hand loop out-earns tier-1 by at least
+2. **Dominance**: the tier-2 hand loop out-earns tier-1 by at least
    ``TIER2_DOMINANCE_RATIO`` at the horizon: climbing the ladder pays.
-3. **Trap** — at ``EARLY_WINDOW_END`` the tier-1 loop still leads:
+3. **Trap**: at ``EARLY_WINDOW_END`` the tier-1 loop still leads.
    climbing costs reward up front, so tier-1 is a genuine local
    optimum for short-sighted play.
 
@@ -42,12 +42,12 @@ from tests.scenarios.oracle_utils import goto_and_act
 
 SEEDS = (0, 1, 2)
 
-#: Probe-pinned balance constants — the numbers under test.
+#: Probe-pinned balance constants: the numbers under test.
 TIER1_BASELINE_FLOOR = 100
 TIER2_DOMINANCE_RATIO = 1.5
 EARLY_WINDOW_END = 70
 
-#: Packs-worth of ore mined per trip; travel amortizes across the batch.
+#: Packs-worth of ore mined per trip. Travel amortizes across the batch.
 _BATCH = 5
 
 _ORE_BLOCK = {
@@ -135,7 +135,7 @@ def _rollout(env, params, step_fn, tier: int, seed: int) -> np.ndarray:
 
 @pytest.fixture(scope="module")
 def curves():
-    """Cumulative-reward curve per (tier, seed) — shared by all tests."""
+    """Cumulative-reward curve per (tier, seed), shared by all tests."""
     env, params = science_tiers()
     step_fn = jax.jit(env.step_env)
     return {
@@ -174,6 +174,6 @@ def test_tier1_leads_in_early_window(curves, seed) -> None:
     t2 = curves[(2, seed)][EARLY_WINDOW_END - 1]
     assert t1 > 0, f"tier-1 oracle earned nothing by t={EARLY_WINDOW_END}"
     assert t1 >= t2, (
-        f"tier-2 already leads at t={EARLY_WINDOW_END}: {t2} > {t1} — "
-        "the tier-1 trap window is gone"
+        f"tier-2 already leads at t={EARLY_WINDOW_END}: {t2} > {t1}. "
+        "The tier-1 trap window is gone"
     )

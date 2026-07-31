@@ -267,7 +267,7 @@ def generate_eval_plots(
         paths["items"] = plot_item_counts(
             traj,
             out_dir / "final_items.png",
-            title=f"{title_prefix} — item counts over time",
+            title=f"{title_prefix}: item counts over time",
         )
     except Exception:  # noqa: BLE001
         logger.exception("Item count plot failed.")
@@ -276,7 +276,7 @@ def generate_eval_plots(
         paths["actions"] = plot_action_counts(
             rollout.actions,
             out_dir / "final_actions.png",
-            title=f"{title_prefix} — action counts",
+            title=f"{title_prefix}: action counts",
         )
     except Exception:  # noqa: BLE001
         logger.exception("Action count plot failed.")
@@ -287,7 +287,7 @@ def generate_eval_plots(
         fig, _ = plot_achievement_timing(
             traj,
             achievement_labels=achievement_labels,
-            title=f"{title_prefix} — achievement unlock timing",
+            title=f"{title_prefix}: achievement unlock timing",
         )
         ach_path = out_dir / "final_achievements.png"
         fig.savefig(ach_path, dpi=150)

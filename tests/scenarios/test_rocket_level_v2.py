@@ -54,7 +54,7 @@ def test_ore_patches_at_expected_v2_coords() -> None:
 
 
 def test_dirt_buffer_between_coal_and_ores() -> None:
-    """Cols 1-2 across every patch row are dirt — the 2-tile gap."""
+    """Cols 1-2 across every patch row are dirt. This is the 2-tile gap."""
     level = build_rocket_level()
     block_map = np.asarray(level.block_map)
     for _, top_y, _ in _PATCHES:
@@ -68,7 +68,7 @@ def test_dirt_buffer_between_coal_and_ores() -> None:
 
 
 def test_pre_placed_furnace_and_assembler_unchanged() -> None:
-    """Furnace at (15, 16), assembler at (17, 16) — same as v1."""
+    """Furnace at (15, 16), assembler at (17, 16), the same as v1."""
     level = build_rocket_level()
     machine_types = np.asarray(level.machine_types)
     machine_directions = np.asarray(level.machine_directions)
@@ -88,7 +88,7 @@ def test_player_spawns_at_centre() -> None:
 
 
 def test_factory_zone_east_of_patches_is_dirt() -> None:
-    """Cols 5-31, every row, are all dirt — the factory build area.
+    """Cols 5-31, every row, are all dirt. This is the factory build area.
 
     Only exception: row 16, cols 15+17 (pre-placed F+A).
     """
@@ -106,7 +106,7 @@ def test_factory_zone_east_of_patches_is_dirt() -> None:
 
 
 def test_no_overlap_between_coal_column_and_ore_patches() -> None:
-    """The 2-tile dirt gap at cols 1-2 separates them — sanity check."""
+    """The 2-tile dirt gap at cols 1-2 separates them. This is a sanity check."""
     coal_tiles: set[tuple[int, int]] = {(0, y) for y in range(_MAP_SIZE)}
     ore_tiles: set[tuple[int, int]] = set()
     for top_x, top_y, _ in _PATCHES:

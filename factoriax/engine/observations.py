@@ -1,4 +1,4 @@
-"""Observation constructors for FactoriaX.
+"""Observation constructors for Factoriax.
 
 Each function maps ``(state, params, player_idx) -> jax.Array``. Each one is
 JAX-native and works under JIT. ``rgb`` is the exception. It returns a NumPy RGB

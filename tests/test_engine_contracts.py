@@ -216,7 +216,7 @@ class TestPickupRespectsPlayerStack:
         )
 
     def test_pickup_refused_when_contents_would_overflow(self, state_factory) -> None:
-        """Nothing moves when the payout would exceed the stack limit."""
+        """Nothing moves when the payout exceeds the stack limit."""
         cap = int(PLAYER_MAX_STACK[_COAL])
         state = self._full_pallet(state_factory, cap - 1)
 

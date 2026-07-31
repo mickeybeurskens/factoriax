@@ -1,14 +1,14 @@
 """Shared test fixtures and utilities.
 
 ============================================================================
-Standard env fixtures across the test suite — pick one before you make your own.
+Standard env fixtures across the test suite. Pick one before you make your own.
 ============================================================================
 
 JIT cache thrash is the single biggest driver of test wall time on this
 project. Every fresh ``FactoriaxEnv(...)`` + ``jax.jit(env.step_env)``
 combination triggers a ~7s XLA compile. The catalogue below lists the
-fixtures that already exist; consume them in preference to building your
-own env. If you must build your own, add a comment naming the property
+fixtures that already exist. Consume them in preference to a new env of
+your own. If you must build your own, add a comment naming the property
 you assert that prevents you from using a standard.
 
 Catalogue (env, wrapper, shape -> fixture name @ file):
@@ -18,7 +18,7 @@ Catalogue (env, wrapper, shape -> fixture name @ file):
        returns ``(env, params, jit_step_fn, state)``
 - 10x10 1p inside ``ScenarioRunner``
     -> ``runner`` @ ``tests/scenarios/conftest.py``
-       (multi-entry cache; new ``blocked_actions`` configs compile once)
+       (multi-entry cache. A new ``blocked_actions`` config compiles once)
 - 5x5 1p per skill level
     -> ``run_scripted(level_idx, policy)`` @
        ``tests/scenarios/skills/test_skills_scripted_solves.py``
@@ -28,16 +28,16 @@ Catalogue (env, wrapper, shape -> fixture name @ file):
 Rule of thumb when adding a new test:
 
 1. If the test asserts something shape-independent (observation
-   structure, machine logic, achievement latching, etc.), consume
+   structure, machine logic, or achievement latching), consume
    ``canonical_env_8x8_1p`` and call it done.
-2. If the test wraps the env (custom achievement_fn, action mask,
-   etc.) and the wrapper already has a fixture above, use it.
+2. If the test wraps the env (custom achievement_fn or action mask)
+   and the wrapper already has a fixture above, use it.
 3. If the test asserts a *specific* shape's behaviour (obs space
-   dimensions at 32x32, level builder validation, etc.), build your
+   dimensions at 32x32, or level builder validation), build your
    own env and add a one-line comment naming the assertion.
 4. If the test introduces a new wrapper used by more than one
-   assertion, add a module-scoped fixture for it next to the test —
-   then add a row to this catalogue.
+   assertion, add a module-scoped fixture for it next to the test.
+   Then add a row to this catalogue.
 
 Background: ``SPEC_TEST_SUITE.md`` walks through Phase 2 (Tasks
 2.1-2.11) which collapsed ~60% of wall time by hoisting these
@@ -57,8 +57,8 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 # Pin JAX to the CPU backend for unit tests. The suite is dominated by
 # small ops (single-tile states, MAX_ACHIEVEMENTS-sized masks) where
-# CUDA autotuning costs far more than the kernels themselves; on a GPU
-# host the full suite is ~110s, on CPU it is ~70s. Benchmarks or
+# CUDA autotuning costs far more than the kernels themselves. On a GPU
+# host the full suite takes ~110s. On CPU it takes ~70s. Benchmarks or
 # scripts that legitimately need GPU can override this by exporting
 # ``JAX_PLATFORMS`` before invoking pytest.
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
@@ -138,16 +138,16 @@ def state_factory():
     """Factory for creating test states with sensible defaults.
 
     Returns a function that creates :class:`EnvState` objects. Only
-    ``world_map`` is required; all other fields have sensible defaults.
+    ``world_map`` is required. Every other field has a sensible default.
 
-    Machine state can be expressed in **grid form** for readability —
-    pass ``machine_types``, ``machine_direction``, ``machine_power``,
+    Machine state can be expressed in **grid form** for readability.
+    Pass ``machine_types``, ``machine_direction``, ``machine_power``,
     ``buffer_type``, ``buffer_count``, ``asm_in_type``, ``asm_in_count``,
     ``asm_out_type``, ``asm_out_count`` as ``(H, W)``-shaped arrays and
     the factory packs them into the engine's ``ent_*`` entity arrays
     plus a ``tile_entity`` lookup. This translation is a deliberate
     test ergonomic, not a compatibility shim: the engine itself reads
-    only the entity arrays; tests just use the grid form so a single
+    only the entity arrays. Tests use the grid form so that a single
     setup line can place a machine at ``(y, x)`` with a given facing
     and buffer state.
 
@@ -183,8 +183,8 @@ def state_factory():
         science_consumed_step: jnp.ndarray | None = None,
         max_machines: int = _TEST_MAX_MACHINES,
         # Catch-all for kwargs that older tests pass under retired
-        # EnvState field names. Silently dropped; new tests should
-        # not rely on this.
+        # EnvState field names. They are dropped in silence. A new
+        # test must not rely on this.
         **_kwargs: object,
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
@@ -368,8 +368,8 @@ def state_factory():
                     ent_asm_out_count[idx] = aoc_np[y, x]
                     # Full health, matching what ``place_machine`` writes.
                     # Pickup is gated on full health, so leaving this at 0
-                    # would build machines the engine can never pick up and
-                    # make every pickup test exercise the refused path.
+                    # builds machines that the engine can never pick up, and
+                    # makes every pickup test exercise the refused path.
                     ent_health[idx] = int(MACHINE_MAX_HEALTH[int(mt_np[y, x])])
                     tile_ent[y, x] = idx
                     idx += 1
@@ -403,8 +403,8 @@ def state_factory():
                 else jnp.zeros(inv_shape, dtype=jnp.int16)
             ),
             # Match env.reset_env's pytree shape: factoriax/levels.py:686-687
-            # emits these as jnp.int32(0); a Python-int leaf here would
-            # force jax.jit(env.step_env) to retrace whenever a test feeds
+            # emits these as jnp.int32(0). A Python-int leaf here
+            # forces jax.jit(env.step_env) to retrace whenever a test feeds
             # a state_factory state through the canonical_env_8x8_1p
             # fixture's shared step path.
             selected_player=jnp.int32(selected_player),

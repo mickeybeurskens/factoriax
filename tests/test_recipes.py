@@ -4,9 +4,9 @@ The engine's Phase 3 recipe match relies on every recipe having a
 distinct (unordered) set of input item types within its machine
 type *at the same arity*. 1-input recipes pad their unused slot
 with ``(EMPTY, 0)`` in the derived arrays, so they only fire when
-the machine's second input slot is physically empty — the slot
+the machine's second input slot is physically empty. The slot
 gate disambiguates them from any 2-input recipe whose input set
-is a superset. Same-arity duplicates would still be ambiguous and
+is a superset. Same-arity duplicates stay ambiguous and
 are rejected. As of the LIMESTONE addition every furnace recipe
 is 2-input (REFRACTORY = {LIMESTONE, COAL}), but the 1-input
 support stays in place for forward compatibility.
@@ -34,7 +34,7 @@ def _input_type_set(recipe: Recipe) -> frozenset[int]:
 def test_every_recipe_has_unique_input_type_set() -> None:
     """No two recipes on the same machine share an input type-set
     (at the same arity). Two 2-input recipes with the same pair
-    would be ambiguous; two 1-input recipes with the same item
+    is ambiguous. Two 1-input recipes with the same item
     likewise. Different-arity recipes with overlapping items are
     disambiguated by the slot-emptiness gate in Phase 3.
     """
@@ -55,14 +55,14 @@ def test_every_recipe_has_unique_input_type_set() -> None:
 
 @pytest.mark.parametrize("recipe", BASE_RECIPES)
 def test_recipe_has_one_or_two_inputs(recipe: Recipe) -> None:
-    """Furnace recipes take 1 or 2 inputs; assembler recipes take 2."""
+    """Furnace recipes take 1 or 2 inputs. Assembler recipes take 2."""
     assert len(recipe.inputs) in (1, 2)
 
 
 @pytest.mark.parametrize("idx", range(len(BASE_RECIPES)))
 def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     """Every assembler-gated recipe has exactly 2 input types.
-    Furnace recipes may be 1 or 2 — every shipped furnace recipe
+    Furnace recipes can be 1 or 2. Every shipped furnace recipe
     is currently 2-input with coal as the second (fuel-like) slot
     (IRON_ORE + COAL → IRON_PLATE, …, LIMESTONE + COAL →
     REFRACTORY). The 1-input branch in run_assemblers and furnaces is exercised
@@ -78,7 +78,7 @@ def test_assembler_recipes_have_two_inputs(idx: int) -> None:
 
 
 def test_recipe_output_counts_defaults_to_one() -> None:
-    """Recipes without an explicit ``output_count`` default to 1 — the
+    """Recipes without an explicit ``output_count`` default to 1. This is the
     historical "every craft yields one unit" behaviour. The array
     length must match NUM_RECIPES so the per-cycle yield lookup in
     ``run_assemblers`` indexes safely.
@@ -96,7 +96,7 @@ def test_every_furnace_recipe_is_two_input() -> None:
     """After the LIMESTONE addition every furnace recipe takes two
     inputs. This is a load-bearing structural property the rocket
     scenario's belt-logistics layout relies on (no single-input
-    outliers that would need a special-case feeder shape).
+    outliers that need a special-case feeder shape).
     """
     for idx, recipe in enumerate(BASE_RECIPES):
         if int(RECIPE_MACHINE_TYPE[idx]) == int(Machine.FURNACE):

@@ -291,7 +291,7 @@ class TestLevelConversion:
         assert level.machine_directions[1, 1] == int(Direction.RIGHT)
 
     def test_all_zero_directions_become_none(self) -> None:
-        """All-zero directions should be stored as None."""
+        """All-zero directions are stored as None."""
         state = new_editor_state(5, 5)
         level = editor_state_to_level(state)
         assert level.machine_directions is None

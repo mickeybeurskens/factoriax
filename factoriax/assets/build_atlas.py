@@ -1,10 +1,10 @@
-"""Build the FactoriaX sprite atlas from the procedural drawing code.
+"""Build the Factoriax sprite atlas from the procedural drawing code.
 
 Generates ``factoriax/assets/atlas.png`` and the sidecar
 ``factoriax/assets/atlas.json`` per the layout documented in
 ``factoriax/assets/atlas.layout.md``. The JAX renderer reads sprites
-from this atlas — every visual the play view shows for terrain,
-machines, and the player flows through it.
+from this atlas. Every visual that the play view shows for terrain,
+for machines, and for the player flows through it.
 
 The sprites come from :mod:`factoriax.playground.ui.icons`, the drawing
 module that the editor and the play HUD already read. Both renderers
@@ -15,7 +15,7 @@ The atlas is RGBA. :func:`render_map` of the JAX renderer mixes the machine
 layer and the player layer onto the terrain, through the alpha channel. Three
 rules follow from this:
 
-- Block cells are opaque (alpha=255 everywhere) — terrain is the
+- Block cells are opaque (alpha=255 everywhere). Terrain is the
   ground truth and always paints in full.
 - Machine cells keep the transparent corners that
   :func:`render_item_icon` produces, so placed machines read as
@@ -73,7 +73,7 @@ from factoriax.playground.ui.icons import (
 logger = logging.getLogger(__name__)
 
 CELL_PX: int = 32
-# max(num_block, num_machine, num_item, ...) — ItemType is the widest row.
+# max(num_block, num_machine, num_item, ...). ItemType is the widest row.
 NUM_COLS: int = NUM_ITEM_TYPES
 
 
@@ -118,7 +118,7 @@ NUM_PLAYERS: int = 8
 MISSING_RGBA: tuple[int, int, int, int] = (255, 0, 255, 255)
 
 
-# Directional machines — these get a distinct sprite per direction.
+# Directional machines. These get a distinct sprite per direction.
 # Non-directional machines (PALLET, ASSEMBLER, FURNACE, SCIENCE_LAB,
 # ROCKET, NONE) are rendered once and duplicated across all four
 # direction rows.
@@ -240,7 +240,7 @@ def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray
     if tex is None:
         return None
     if tex.shape[-1] == 4:
-        # Force opaque — terrain is the ground truth layer.
+        # Force opaque. Terrain is the ground truth layer.
         out = tex.copy()
         out[..., 3] = 255
         return out
@@ -376,7 +376,7 @@ def _build_atlas_array() -> np.ndarray:
         row = ROW_MACHINES_BASE + d_idx
         for machine in sorted(Machine, key=int):
             # Non-directional machines render with a fixed fallback so
-            # all four rows show the same sprite — keeps the gather
+            # all four rows show the same sprite. This keeps the gather
             # uniform without forcing the editor to know the difference.
             effective_dir = (
                 direction if machine in _DIRECTIONAL_MACHINES else Direction.DOWN
@@ -393,7 +393,7 @@ def _build_atlas_array() -> np.ndarray:
             continue
         _put(ROW_ITEMS, int(item), cell)
 
-    # Row 6: misc — biter + per-player directional sprites.
+    # Row 6: misc. Biter plus per-player directional sprites.
     _put(ROW_MISC, COL_MISC_BITER, _biter_cell())
     for player_idx in range(NUM_PLAYERS):
         for d_idx, direction in enumerate(_DIRECTION_ORDER):
@@ -482,8 +482,8 @@ def build_atlas(out_png: Path, out_json: Path) -> None:
         orjson.dumps(payload, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)
     )
 
-    # Sanity-check the items row matches NUM_ITEM_TYPES — this catches
-    # an enum extension landing without a matching atlas regen.
+    # Sanity-check the items row matches NUM_ITEM_TYPES. This catches
+    # an enum extension that lands without a matching atlas regen.
     assert len(payload["categories"]["items"]["names"]) == NUM_ITEM_TYPES
 
 

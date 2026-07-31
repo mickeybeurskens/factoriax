@@ -1,4 +1,4 @@
-"""Title screen for FactoriaX.
+"""Title screen for Factoriax.
 
 Two-panel layout: a list of menu options on the left, an explanation
 panel on the right.
@@ -43,8 +43,8 @@ _OPTIONS: tuple[_MenuOption, ...] = (
         description=(
             "Start a new game with custom environment parameters and a "
             "seed of your choice. The world is generated procedurally "
-            "from the engine's general terrain sampler — no pre-built "
-            "level, no achievement scoring. Use this for free-form "
+            "from the engine's general terrain sampler. There is no "
+            "pre-built level and no achievement scoring. Use this for free-form "
             "experimentation."
         ),
     ),
@@ -70,7 +70,7 @@ _OPTIONS: tuple[_MenuOption, ...] = (
     _MenuOption(
         action="quit",
         label="Quit",
-        description="Exit FactoriaX.",
+        description="Exit Factoriax.",
     ),
 )
 

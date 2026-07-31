@@ -34,7 +34,7 @@ from factoriax.engine.state import EnvState
 
 
 def _holds_any_machine_item(state: EnvState) -> jax.Array:
-    """Player holds a placeable machine — i.e. something was crafted."""
+    """Player holds a placeable machine. That is, something was crafted."""
     held = (
         count_total_items(state, int(ItemType.MINER))
         + count_total_items(state, int(ItemType.PALLET))
@@ -44,7 +44,7 @@ def _holds_any_machine_item(state: EnvState) -> jax.Array:
 
 
 def _arm_and_pallet_placed(state: EnvState) -> jax.Array:
-    """Both an arm and a pallet are on the map — the pair moves items."""
+    """Both an arm and a pallet are on the map. The pair moves items."""
     return has_machines(state, int(Machine.ARM)) & has_machines(
         state, int(Machine.PALLET)
     )

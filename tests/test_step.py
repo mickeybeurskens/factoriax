@@ -31,7 +31,7 @@ class TestHandlePlayerAction:
     """Tests for the action dispatch function."""
 
     def test_up_moves_north_on_map(self, state_factory) -> None:
-        """UP should move the player north (y-1) and face UP."""
+        """UP moves the player north (y-1) and faces UP."""
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),
@@ -50,7 +50,7 @@ class TestHandlePlayerAction:
         assert int(new_state.player_directions[0]) == Direction.UP
 
     def test_left_moves_west_on_map(self, state_factory) -> None:
-        """LEFT should move the player west (x-1)."""
+        """LEFT moves the player west (x-1)."""
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),
@@ -70,7 +70,7 @@ class TestHandlePlayerAction:
         self,
         state_factory,
     ) -> None:
-        """FACE_RIGHT should set facing in place without moving."""
+        """FACE_RIGHT sets the facing in place, with no move."""
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),
@@ -102,7 +102,7 @@ class TestHandlePlayerAction:
         action: Action,
         expected_dir: Direction,
     ) -> None:
-        """FACE_* actions should set facing."""
+        """A FACE_* action sets the facing."""
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),
@@ -116,7 +116,7 @@ class TestHandlePlayerAction:
         assert int(new_state.player_directions[0]) == expected_dir
 
     def test_mine_decrements_resources(self, state_factory) -> None:
-        """MINE should extract a resource from the tile the player faces."""
+        """MINE extracts a resource from the tile that the player faces."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.DIRT, BlockType.COAL]],
@@ -131,7 +131,7 @@ class TestHandlePlayerAction:
         assert int(new_state.player_inventory[0, ItemType.COAL]) == 1
 
     def test_noop_preserves_state(self, state_factory) -> None:
-        """NOOP should not change position or inventory."""
+        """NOOP changes neither the position nor the inventory."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.DIRT]],
@@ -153,7 +153,7 @@ class TestCompoundDeposit:
     """Tests for typed deposit actions."""
 
     def test_deposit_into_miner_is_noop(self, state_factory) -> None:
-        """Miners have no input slot; depositing any item is a no-op."""
+        """Miners have no input slot. A deposit of any item is a no-op."""
         inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
         inv = inv.at[0, ItemType.COAL].set(10)
         state = state_factory(
@@ -208,7 +208,7 @@ class TestCompoundWithdraw:
         assert int(new.ent_buf_count[eid]) == 0
 
     def test_withdraw_empty_is_noop(self, state_factory) -> None:
-        """Withdrawing an item that isn't there should be a no-op."""
+        """A withdraw of an item that is not there is a no-op."""
         state = state_factory(
             world_map=jnp.full(
                 (3, 3),
@@ -233,7 +233,7 @@ class TestFactoriaxStep:
     """Tests for the top-level environment step function."""
 
     def test_increments_timestep(self, state_factory) -> None:
-        """Each step should increment the timestep by 1."""
+        """Each step increments the timestep by 1."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.DIRT]],
@@ -249,7 +249,7 @@ class TestFactoriaxStep:
         self,
         state_factory,
     ) -> None:
-        """A step should run player action, crafting, and machines."""
+        """A step runs the player action, crafting, and the machines."""
         state = state_factory(
             world_map=jnp.array(
                 [[BlockType.COAL, BlockType.DIRT, BlockType.IRON]],

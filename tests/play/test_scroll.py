@@ -79,7 +79,7 @@ class TestBlitScrollView:
         blit_scroll_view(
             overlay, content, vp_x=0, vp_y=0, vp_w=60, vp_h=100, scroll_offset=0
         )
-        # Right edge should retain content colour, not scrollbar background
+        # The right edge keeps the content colour, not the scrollbar background
         assert overlay[25, 59, 3] == 255
 
     def test_scrollbar_appears_when_content_overflows(self) -> None:
@@ -92,7 +92,7 @@ class TestBlitScrollView:
             overlay, content, vp_x=0, vp_y=0, vp_w=60, vp_h=100, scroll_offset=0
         )
         bar_x = 60 - _SCROLLBAR_W
-        # Scrollbar background should be present (non-zero alpha)
+        # The scrollbar background is present (non-zero alpha)
         assert overlay[50, bar_x, 3] > 0
 
     def test_scroll_offset_shifts_visible_content(self) -> None:
@@ -118,8 +118,8 @@ class TestBlitScrollView:
         blit_scroll_view(
             overlay, content, vp_x=40, vp_y=80, vp_w=60, vp_h=100, scroll_offset=0
         )
-        assert overlay[80, 40, 3] == 255  # inside viewport — has content
-        assert overlay[79, 40, 3] == 0  # above viewport — untouched
+        assert overlay[80, 40, 3] == 255  # inside viewport, has content
+        assert overlay[79, 40, 3] == 0  # above viewport, untouched
 
     def test_scrollbar_thumb_at_top_when_offset_zero(self) -> None:
         """Scrollbar thumb starts at the top when scroll_offset is 0."""
@@ -228,7 +228,7 @@ class TestScrollAdjustRegions:
 
 
 # ---------------------------------------------------------------------------
-# render_achievement_menu — scroll integration
+# render_achievement_menu: scroll integration
 # ---------------------------------------------------------------------------
 
 
@@ -258,7 +258,7 @@ class TestRenderAchievementMenuScroll:
         assert not np.array_equal(frame0, frame1)
 
     def test_excessive_offset_clamped(self) -> None:
-        """An offset far beyond the content end is clamped; result is stable."""
+        """An offset far beyond the content end is clamped. The result is stable."""
         achievements = np.zeros(len(FREE_PLAY_ACHIEVEMENTS), dtype=bool)
         frame_huge = render_achievement_menu(
             achievements,
@@ -276,7 +276,7 @@ class TestRenderAchievementMenuScroll:
 
 
 # ---------------------------------------------------------------------------
-# render_inventory_menu — recipe scroll integration
+# render_inventory_menu: recipe scroll integration
 # ---------------------------------------------------------------------------
 
 
@@ -284,18 +284,14 @@ class TestRenderInventoryMenuRecipeScroll:
     def test_renders_without_error(self, state_factory) -> None:
         """Inventory menu with crafting focus renders without error."""
         state = state_factory(world_map=_MAP)
-        overlay, regions = render_inventory_menu(
-            state, _PARAMS, 480, 480
-        )
+        overlay, regions = render_inventory_menu(state, _PARAMS, 480, 480)
         assert overlay.shape == (480, 480, 4)
         assert any(r.action == "select_recipe" for r in regions)
 
     def test_recipe_click_regions_within_screen_bounds(self, state_factory) -> None:
         """All recipe click regions returned are inside the screen."""
         state = state_factory(world_map=_MAP)
-        _, regions = render_inventory_menu(
-            state, _PARAMS, 480, 480
-        )
+        _, regions = render_inventory_menu(state, _PARAMS, 480, 480)
         for r in regions:
             if r.action == "select_recipe":
                 assert 0 <= r.x < 480

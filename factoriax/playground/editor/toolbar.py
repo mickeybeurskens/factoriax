@@ -210,7 +210,7 @@ def render_toolbar(
     from factoriax.playground.editor.state import ResourceBrush
 
     brush: ResourceBrush = resource_brush  # type: ignore[assignment]
-    # Render at full content height so small maps don't clip icons.
+    # Render at full content height so that small maps do not clip icons.
     # The caller slices the visible portion using a scroll offset.
     render_h = max(height, 800)
     bar = np.full((render_h, TOOLBAR_WIDTH, 3), _BG, dtype=np.uint8)
@@ -437,7 +437,7 @@ def render_status_bar(
     dirty :
         Whether unsaved changes exist.
     resource_info :
-        Resource brush summary (e.g. ``"Res:100"``).
+        Resource brush summary, for example ``"Res:100"``.
     width :
         Full window width in pixels.
     layer :

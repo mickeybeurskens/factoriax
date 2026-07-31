@@ -59,7 +59,7 @@ def _scaling_display_surface() -> None:
 
     Pygame display + font init lives in the root ``pygame_session``
     fixture (Task 2.1). The default surface there is 800x600, but
-    other modules — notably ``tests/play/test_launch_screen.py`` —
+    other modules (notably ``tests/play/test_launch_screen.py``)
     call ``set_mode`` with different dimensions, and pygame keeps that
     surface for the rest of the session. The hardcoded "Window is
     800x600" math in the tests below depends on the canonical size,

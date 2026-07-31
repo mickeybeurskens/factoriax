@@ -44,8 +44,8 @@ def test_splitter_inactive_row_is_zero() -> None:
 )
 def test_splitter_outputs_are_perpendicular(facing, expected) -> None:
     """Outputs of a splitter facing ``d`` must be the two directions
-    perpendicular to ``d`` (set comparison — the slot order doesn't
-    matter as long as both perpendiculars are present)."""
+    perpendicular to ``d``. This is a set comparison, so the slot order
+    does not matter if both perpendiculars are present."""
     row = SPLITTER_PERP_OUTPUTS[int(facing)]
     got = {Direction(int(row[0])), Direction(int(row[1]))}
     assert got == expected
@@ -53,7 +53,7 @@ def test_splitter_outputs_are_perpendicular(facing, expected) -> None:
 
 def test_splitter_outputs_never_alias_facing() -> None:
     """The output directions for any facing must not include the facing
-    itself — that would mean the splitter pushes back into its own
+    itself. That means that the splitter pushes back into its own
     feeder belt and creates a loop."""
     for d in (Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT):
         row = SPLITTER_PERP_OUTPUTS[int(d)]
@@ -94,8 +94,8 @@ def test_crossing_axes_decode(encoding, expected_vert, expected_horiz) -> None:
 
 
 def test_crossing_axes_are_orthogonal() -> None:
-    """Vertical output is always UP or DOWN; horizontal is always LEFT
-    or RIGHT — never mixed across the axis split."""
+    """Vertical output is always UP or DOWN. Horizontal output is always
+    LEFT or RIGHT. The two axes never mix across the axis split."""
     vert_set = {int(Direction.UP), int(Direction.DOWN)}
     horiz_set = {int(Direction.LEFT), int(Direction.RIGHT)}
     for d in range(1, 5):

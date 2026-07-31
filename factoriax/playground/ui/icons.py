@@ -1255,7 +1255,7 @@ def _draw_science_lab_body(
     _line(s - 1 - inset, s - 1 - inset, cy, cx)
 
     # Four small window panes tucked between ribs (up/down/left/right
-    # of the apex), if there's room.
+    # of the apex), if there is room.
     if s >= 10:
         win_sz = max(1, s // 6)
         offset = max(2, s // 4)
@@ -1509,16 +1509,16 @@ def render_item_icon(
       crystalline sparkles).
     - Plates: diagonal shine band on a uniform base. Wafer adds
       concentric arcs to suggest a disc.
-    - Intermediate items: a shape that hints at the object — wire
-      helix, circuit traces, motor cylinder, sensor lens, frame I-beam,
+    - Intermediate items: a shape that hints at the object. Examples are a
+      wire helix, circuit traces, motor cylinder, sensor lens, frame I-beam,
       flask, rocket silhouette.
     - Machines: a pattern inside the body. A miner gets a bore, a pallet gets
       slats, and a belt gets edge stripes. Every machine also takes a
       highlight at the top left, and a shadow at the bottom right. A placed
       machine therefore looks like a built object.
 
-    When ``direction`` is ``None`` (e.g. in a menu with no placement
-    context), directional indicators default to pointing right.
+    When ``direction`` is ``None``, for example in a menu with no
+    placement context, directional indicators point right by default.
 
     Parameters
     ----------

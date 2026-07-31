@@ -286,7 +286,7 @@ def test_place_miner_unlocks_on_placed_machine(state_factory) -> None:
 
 def test_place_miner_does_not_fire_from_inventory(state_factory) -> None:
     # Inventory miner alone (no placed machine) must not flip the
-    # placement-checking bit; this pins the inventory-vs-placement split.
+    # placement-checking bit. This pins the inventory-vs-placement split.
     state = state_factory(world_map=_dirt_map(), player_inventory=_inv(MINER=1))
     assert not bool(easy_rocket_conditions(state)[_A_PLACE_MINER])
 
@@ -387,7 +387,7 @@ def test_liftoff_needs_placed_rocket(state_factory) -> None:
 
 
 def test_inventory_does_not_unlock_machine_bits(state_factory) -> None:
-    # Hand-held section items must not flip any machine-sourced bit; only
+    # Hand-held section items must not flip any machine-sourced bit. Only
     # populated machine buffers (or placed machines) do. This pins the
     # hand-vs-machine invariant the production curriculum relies on.
     inv = _inv(

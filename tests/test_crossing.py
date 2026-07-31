@@ -54,12 +54,12 @@ def _make_crossing_world(
 ) -> EnvState:
     """Build a 3x3 world with a crossing at (1, 1).
 
-    ``encoding`` is the packed ``ent_direction`` (1..4 — see
-    :data:`factoriax.engine.tables.CROSSING_AXIS_DIRS`).
+    ``encoding`` is the packed ``ent_direction``, from 1 to 4. See
+    :data:`factoriax.engine.tables.CROSSING_AXIS_DIRS`.
 
     ``pallets`` selects which of the four sides has a receptive pallet:
     ``(up, down, left, right)``. Sides without a pallet are DIRT and so
-    non-receptive — useful for testing single-axis flows.
+    non-receptive. This is useful for testing single-axis flows.
 
     The crossing's ``ent_asm_in[idx, 0]`` is pre-loaded with
     ``vert_count`` of ``vert_item`` (the vertical-axis slot); ``[idx, 1]``
@@ -104,7 +104,7 @@ def _make_crossing_world(
 
 
 def test_vertical_axis_pushes_down_for_encoding_1(state_factory) -> None:
-    """encoding=1 → vert_dir=DOWN. The vertical slot should drain to
+    """encoding=1 → vert_dir=DOWN. The vertical slot drains to
     the S pallet, leaving the horizontal axis untouched."""
     state = _make_crossing_world(
         state_factory,
@@ -126,7 +126,7 @@ def test_vertical_axis_pushes_down_for_encoding_1(state_factory) -> None:
 
 
 def test_horizontal_axis_pushes_right_for_encoding_1(state_factory) -> None:
-    """encoding=1 → horiz_dir=RIGHT. The horizontal slot should drain
+    """encoding=1 → horiz_dir=RIGHT. The horizontal slot drains
     to the E pallet, leaving the vertical axis untouched."""
     state = _make_crossing_world(
         state_factory,
@@ -199,7 +199,7 @@ def test_encoding_4_full_dual_drain(state_factory) -> None:
 
 def test_streams_do_not_mix(state_factory) -> None:
     """A crossing with iron in vert and copper in horiz must drain
-    each item to its own axis output. Cross-axis leakage would mean
+    each item to its own axis output. Cross-axis leakage means
     the wrong type appears at one of the destination pallets."""
     state = _make_crossing_world(
         state_factory,
@@ -226,7 +226,7 @@ def test_streams_do_not_mix(state_factory) -> None:
 def test_belt_pushing_into_output_side_is_rejected(state_factory) -> None:
     """A belt pushing UP onto a crossing whose vert flow is N→S
     (encoding=1, vert_dir=DOWN) is hitting the OUTPUT side. The push
-    must fail — the belt's item stays put, the crossing slot stays
+    must fail. The belt's item stays put and the crossing slot stays
     empty."""
     shape = (3, 3)
     world = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)
@@ -282,7 +282,7 @@ def test_belt_pushing_into_correct_input_side_lands_in_axis_slot(
     mt = mt.at[1, 1].set(int(Machine.CROSSING))
     md = md.at[1, 1].set(1)
 
-    # Belt at (0, 1) pushing DOWN — input side N for vert_dir=DOWN.
+    # Belt at (0, 1) pushing DOWN. Input side N for vert_dir=DOWN.
     mt = mt.at[0, 1].set(int(Machine.CONVEYOR_BELT))
     md = md.at[0, 1].set(int(Direction.DOWN))
     bt = bt.at[0, 1].set(int(ItemType.IRON_PLATE))
@@ -306,13 +306,13 @@ def test_belt_pushing_into_correct_input_side_lands_in_axis_slot(
 
 
 # ---------------------------------------------------------------------------
-# Saturated-chain throughput — full one-tile-per-tick flow.
+# Saturated-chain throughput: full one-tile-per-tick flow.
 # ---------------------------------------------------------------------------
 
 
 def test_belt_to_crossing_to_belt_chain_full_throughput(state_factory) -> None:
     """A pre-loaded belt feeding a vertically-flowing crossing whose
-    output side has a receptive belt should advance items by *one
+    output side has a receptive belt advances items by *one
     tile per tick*. The crossing's per-axis cap of 2 is what enables
     this: gather adds the upstream item to the slot (1 → 2) before
     scatter removes the outgoing one (2 → 1), so the slot is never
@@ -362,7 +362,7 @@ def test_belt_to_crossing_to_belt_chain_full_throughput(state_factory) -> None:
     # Upstream belt drained: its iron flowed into the crossing's slot.
     assert int(out.ent_buf_count[upstream_belt]) == 0
     # Crossing slot still has 1 (drained one to downstream, received
-    # one from upstream — the will-drain optimisation enables the
+    # one from upstream. The will-drain optimisation enables the
     # in-flight slot reuse).
     assert int(out.ent_asm_in_count[crossing, CROSSING_VERT_SLOT]) == 1
     # Downstream belt now holds the iron the crossing pushed out.
@@ -388,8 +388,8 @@ def test_crossing_with_empty_slots_is_no_op(state_factory) -> None:
 
 def test_inactive_direction_is_no_op(state_factory) -> None:
     """A crossing with ent_direction=0 decodes to (0, 0) outputs in
-    CROSSING_AXIS_DIRS — neither axis has a valid direction so no
-    pushes should fire even with full slots."""
+    CROSSING_AXIS_DIRS. Neither axis has a valid direction, so no
+    push can fire even with full slots."""
     state = _make_crossing_world(
         state_factory,
         encoding=0,
@@ -415,7 +415,7 @@ def test_inactive_direction_is_no_op(state_factory) -> None:
 def test_blocked_output_holds_axis_item(state_factory) -> None:
     """If the vertical output side has no receiver (DIRT, no entity),
     the vertical slot's item stays put. The horizontal axis is
-    unaffected and should still drain."""
+    unaffected and still drains."""
     state = _make_crossing_world(
         state_factory,
         encoding=1,  # vert→S, horiz→E

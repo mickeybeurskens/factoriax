@@ -158,7 +158,7 @@ def plot_inventory(
 
     ax.set_xlabel("Timestep")
     ax.set_ylabel("Mean item count")
-    ax.set_title(title or f"Inventory evolution — Player {player}")
+    ax.set_title(title or f"Inventory evolution: Player {player}")
     ax.legend(fontsize="small")
     ax.set_xlim(0, inv.shape[0] - 1)
 
@@ -278,7 +278,7 @@ def plot_position_heatmap(
     fig.colorbar(im, ax=ax, label="Visit frequency")
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
-    ax.set_title(title or f"Position heatmap — Player {player}")
+    ax.set_title(title or f"Position heatmap: Player {player}")
 
     fig.tight_layout()
     return fig, ax
@@ -379,7 +379,7 @@ def plot_trajectory_trace(
     ax.set_ylim(map_height - 0.5, -0.5)  # Invert y to match grid convention
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
-    ax.set_title(title or f"Trajectory — Episode {episode}, Player {player}")
+    ax.set_title(title or f"Trajectory: Episode {episode}, Player {player}")
     ax.legend(fontsize="small")
     ax.set_aspect("equal")
 

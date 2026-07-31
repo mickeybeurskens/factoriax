@@ -31,7 +31,7 @@ def run_app() -> None:
         scaled = _BASE_MENU_SIZE * _theme.UI_SCALE
         width, height = calculate_window_size(scaled, scaled)
         screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-        pygame.display.set_caption("FactoriaX")
+        pygame.display.set_caption("Factoriax")
 
         while True:
             choice = run_main_menu(screen)

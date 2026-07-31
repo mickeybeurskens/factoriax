@@ -177,7 +177,7 @@ def action_raster(
     if title:
         ax.set_title(title)
     elif traj.is_multi_player and player is not None:
-        ax.set_title(f"Action raster — Player {player}")
+        ax.set_title(f"Action raster: Player {player}")
 
     if episode_labels is not None:
         ax.set_yticks(range(B))
@@ -379,7 +379,7 @@ def plot_phase_transitions(
         Which player to read, or ``None`` for player 0.
     phases :
         One ``(start, end)`` timestep window for each panel. The
-        windows may overlap and need not cover the whole episode.
+        windows can overlap and need not cover the whole episode.
     num_actions :
         The side length of each matrix.
     action_labels :

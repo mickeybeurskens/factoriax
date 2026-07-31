@@ -1,4 +1,4 @@
-"""FactoriaX: a JAX grid environment for reinforcement learning research.
+"""Factoriax: a JAX grid environment for reinforcement learning research.
 
 The package holds four parts. :mod:`factoriax.engine` is the simulation, the
 environments, and the wrappers. :mod:`factoriax.analysis` reads a recorded
