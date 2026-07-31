@@ -1,24 +1,25 @@
-"""Rocket scenario — achievement-based reward signal with the rocket as capstone.
+"""The Rocket scenario: an achievement reward with the rocket as the last step.
 
-The scenario defines 38 achievements tiered Craftax-style (1/3/5/8 points,
-max 140), ordered to teach the game's natural learning path: gather raw ore,
-refine intermediates via a furnace and assembler, build and deploy the rest
-of the factory, assemble the three rocket sub-components (hull, engine,
-avionics), then launch the rocket.
+The scenario defines 38 achievements in tiers, in the Craftax style, worth 1,
+3, 5, and 8 points. The highest score is 140. The order teaches the natural
+path of the game: gather raw ore, refine half-fabricates in a furnace and an
+assembler, build and place the rest of the factory, assemble the three rocket
+parts (the hull, the engine, and the avionics), then launch the rocket.
 
-Setup:
+The setup:
 
-- A **furnace** and **assembler** are pre-placed adjacent to the player's
-  spawn. The agent doesn't need to hand-craft the starter machinery — all
-  crafting goes through these placed machines. Producing a *second*
-  furnace/assembler via the main assembler is how the ``craft_furnace`` /
-  ``craft_assembler`` achievements unlock.
-- All direct player-crafting actions (``CRAFT_IRON_PLATE`` through
-  ``CRAFT_ROCKET``) are **masked** — the env silently replaces them with
-  ``NOOP``. Production must flow through the furnace / assembler pipeline.
-- ``factoriax.make("Rocket-v1")`` (the :func:`rocket` factory) builds the env
-  with the achievement conditions bound as a step hook and the hand-craft mask
-  (:data:`ROCKET_BLOCKED_ACTIONS`) already applied.
+- A **furnace** and an **assembler** stand next to the spawn tile of the
+  player. The agent therefore does not craft the first machines by hand, and
+  every craft goes through those two machines. The ``craft_furnace`` and
+  ``craft_assembler`` achievements unlock when the main assembler produces a
+  *second* furnace or assembler.
+- The environment **masks** every direct player-craft action, from
+  ``CRAFT_IRON_PLATE`` to ``CRAFT_ROCKET``, and replaces each one with
+  ``NOOP``. It reports nothing. Production must flow through the furnace and
+  the assembler.
+- ``factoriax.make("Rocket-v1")``, which calls the :func:`rocket` factory,
+  builds the environment with the achievement conditions as a step hook and
+  the hand-craft mask :data:`ROCKET_BLOCKED_ACTIONS` already applied.
 """
 
 from __future__ import annotations
@@ -65,15 +66,16 @@ from factoriax.engine.state import EnvParams, EnvState
 
 
 def _ten_machines_placed(state: EnvState) -> jax.Array:
-    """Ten machines of any type are on the map."""
+    """Test whether the map holds ten machines or more, of any type."""
     return total_machines(state) >= 10
 
 
-#: The 38 bits, tiered Craftax-style: 10 Basic (1 pt), 11 Intermediate
-#: (3 pt), 13 Advanced (5 pt), 4 Very Advanced (8 pt) — max score 140.
-#: Ordered to teach the game's natural learning path.
+#: The 38 bits, in tiers in the Craftax style: 10 Basic bits worth 1 point, 11
+#: Intermediate bits worth 3 points, 13 Advanced bits worth 5 points, and 4
+#: Very Advanced bits worth 8 points. The highest score is 140. The order
+#: teaches the natural path of the game.
 ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
-    # ---- Basic (1 pt) — raw gathering + simplest handcrafts.
+    # ---- Basic, 1 point: raw gathering and the simplest hand crafts.
     Achievement(
         "collect_iron",
         partial(holds_item, item=int(ItemType.IRON_ORE)),
@@ -144,7 +146,7 @@ ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         hint="Combine iron and copper into wire.",
         weight=1.0,
     ),
-    # ---- Intermediate (3 pt) — deeper handcrafts + first machines.
+    # ---- Intermediate, 3 points: deeper crafts and the first machines.
     Achievement(
         "craft_circuit",
         partial(holds_item, item=int(ItemType.CIRCUIT)),
@@ -222,7 +224,7 @@ ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         hint="Place a conveyor belt on the map.",
         weight=3.0,
     ),
-    # ---- Advanced (5 pt) — logistics + rocket sub-components.
+    # ---- Advanced, 5 points: logistics and the rocket parts.
     Achievement(
         "craft_pallet",
         partial(holds_item, item=int(ItemType.PALLET)),
@@ -314,7 +316,7 @@ ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
         hint="Assemble a rocket core (engine + avionics).",
         weight=5.0,
     ),
-    # ---- Very Advanced (8 pt) — scale-up and the rocket itself.
+    # ---- Very Advanced, 8 points: a larger factory and the rocket itself.
     Achievement(
         "scaling_up",
         partial(has_machines, machine=int(Machine.MINER), count=3),
@@ -354,35 +356,37 @@ MAX_ROCKET_SCORE: float = max_score(ROCKET_ACHIEVEMENTS)
 
 
 # ---------------------------------------------------------------------------
-# Reward function for training
+# The reward function for training
 # ---------------------------------------------------------------------------
 
 
 def rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Sparse reward for newly-unlocked rocket-scenario achievements.
+    """Sparse reward for the rocket-scenario achievements that a step unlocked.
 
-    Thin wrapper around :func:`factoriax.engine.rewards.achievement_reward`
-    bound to :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. Assumes *prev_state*
-    and *new_state* are :class:`~factoriax.engine.state.EnvState` instances
-    whose ``achievements_unlocked`` field has been latched by the env's
-    ``achievement_fn`` (typically :func:`rocket_conditions`).
+    This function is a short wrapper around
+    :func:`factoriax.engine.rewards.achievement_reward`, bound to
+    :data:`ROCKET_ACHIEVEMENT_WEIGHTS`. It expects two
+    :class:`~factoriax.engine.state.EnvState` objects whose
+    ``achievements_unlocked`` field the ``achievement_fn`` of the environment
+    already latched. That function is usually :func:`rocket_conditions`.
 
     Parameters
     ----------
     prev_state
-        State immediately before the step.
+        State just before the step.
     new_state
-        State immediately after the step.
+        State just after the step.
     params
-        Unused. Present for the shared reward signature.
+        The function does not read this argument. It is present for the shared
+        reward signature.
 
     Returns
     -------
     jax.Array
-        Scalar float32, the weighted sum of achievements newly unlocked
-        this step. Zero on most steps.
+        Scalar float32, the weighted sum of the achievements that this step
+        unlocked. The value is zero on most steps.
     """
     return achievement_reward(
         prev_state, new_state, params, weights=ROCKET_ACHIEVEMENT_WEIGHTS
@@ -390,15 +394,15 @@ def rocket_reward(
 
 
 # ---------------------------------------------------------------------------
-# Recipe balance — rocket-specific tuning over BASE_RECIPE_BOOK
+# Recipe balance: the rocket tuning over BASE_RECIPE_BOOK
 # ---------------------------------------------------------------------------
 
-# Mass-production transport recipes are tuned up so a single craft
-# cycle yields enough belts / splitters / crossings to wire a 4-cell
-# factory without dominating the bootstrap phase. BASE outputs are 1
-# per cycle for all three; the factory needs ~50–80 belts, 4 splitters,
-# and 0–2 crossings (depending on layout) to wire the rocket chain, so
-# 10 / 4 / 4 keeps the bootstrap craft list short.
+# The transport recipes give a larger output here, so one craft cycle produces
+# enough belts, splitters, and crossings to connect a factory of four cells.
+# The bootstrap phase then stays short. The BASE output is 1 for each of the
+# three. The factory needs about 50 to 80 belts, 4 splitters, and 0 to 2
+# crossings, which depends on the layout. Outputs of 10, 4, and 4 therefore
+# keep the bootstrap craft list short.
 ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
     overrides=(
         (int(ItemType.CONVEYOR_BELT), RecipeOverride(output_count=10)),
@@ -407,15 +411,15 @@ ROCKET_RECIPE_BALANCE: RecipeBalance = RecipeBalance(
     )
 )
 
-#: :class:`RecipeBook` used by the rocket scenario — applies
-#: :data:`ROCKET_RECIPE_BALANCE` over :data:`BASE_RECIPE_BOOK`.
-#: Pass to recipe-driven scripted agents so their BOM math tracks
-#: the engine's recipe table.
+#: The :class:`RecipeBook` of the rocket scenario. It applies
+#: :data:`ROCKET_RECIPE_BALANCE` over :data:`BASE_RECIPE_BOOK`. Pass it to a
+#: scripted agent that reads recipes, so the material totals of that agent
+#: match the recipe table of the engine.
 ROCKET_RECIPE_BOOK: RecipeBook = BASE_RECIPE_BOOK.with_balance(ROCKET_RECIPE_BALANCE)
 
-#: :class:`RecipeTable` projection of :data:`ROCKET_RECIPE_BOOK`.
-#: Pass into :class:`~factoriax.engine.state.EnvParams` ``recipe_table`` so
-#: the JIT'd engine produces the rebalanced output counts.
+#: The :class:`RecipeTable` of :data:`ROCKET_RECIPE_BOOK`. Pass it as the
+#: ``recipe_table`` of :class:`~factoriax.engine.state.EnvParams`, so the JIT'd
+#: engine produces the new output counts.
 ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(ROCKET_RECIPE_BOOK)
 
 
@@ -423,38 +427,38 @@ ROCKET_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(ROCKET_RECIPE_BOOK)
 # Level construction
 # ---------------------------------------------------------------------------
 
-# 32x32 map. Layout (the "streamlined" v2 geometry, see
-# docs/rocket_scripted_agent.md):
+# A 32x32 map. The layout is the "streamlined" v2 geometry. See
+# docs/rocket_scripted_agent.md.
 #
-# - Coal occupies the entire left column (x = 0, all 32 rows). Every
-#   smelter cell pulls coal east along its own row — no vertical coal
-#   trunks to navigate around.
-# - The five ore patches sit on cols 3-4 in 2x2 squares, stacked
-#   vertically with a 1-tile dirt gap between them (rows 9, 12, 15,
-#   18, 21). The 2-tile dirt buffer at cols 1-2 keeps belts and arms
-#   off the coal column.
-# - Spawn at the map centre with a furnace / assembler pre-placed
-#   immediately west / east. Hand-crafting is masked, so production
-#   must flow through these two starter machines.
-# - Limestone (rows 21-22) is unused for the rocket chain itself but
-#   kept so the recipe book's REFRACTORY recipe stays satisfiable.
+# - Coal fills the whole left column, at x = 0, over all 32 rows. Every smelter
+#   cell pulls coal east along its own row, and no vertical coal line stands in
+#   the way.
+# - The five ore patches sit on columns 3 and 4, as 2x2 squares, one above the
+#   other with a one-tile dirt gap between them, at rows 9, 12, 15, 18, and 21.
+#   The two-tile dirt gap at columns 1 and 2 keeps the belts and the arms off
+#   the coal column.
+# - The player spawns at the centre of the map, with a furnace to the west and
+#   an assembler to the east. The mask blocks every hand craft, so production
+#   must flow through those two machines.
+# - The rocket chain does not use the limestone at rows 21 and 22. It stays so
+#   that the REFRACTORY recipe of the recipe book still has its input.
 _MAP_SIZE: int = 32
 _ORE_PATCH_SIZE: int = 2  # 2x2 ore squares
-# 6300 per tile × 4 tiles per patch ≈ 25 000 ore per patch. Comparable
-# to the old 9-tile patch budget, so demand-side recipe planning
-# doesn't need to change.
+# 6300 for each tile, over 4 tiles in a patch, is about 25 000 ore in a patch.
+# That is close to the old budget of a 9-tile patch, so the demand side of the
+# recipe planning needs no change.
 _ORE_RESOURCES_PER_TILE: int = 6300
-# Coal column is one tile wide × 32 tiles tall. 28 000 per tile means
-# ~900 000 coal — comfortably more than the rocket chain consumes
-# even if every smelter and every refractory craft fires worst-case.
-# Requires ``BLOCK_MAX_RESOURCES`` to be at least 28 000.
+# The coal column is one tile wide and 32 tiles tall. 28 000 for each tile
+# gives about 900 000 coal. That is far more than the rocket chain consumes,
+# even when every smelter and every refractory craft runs at its highest rate.
+# ``BLOCK_MAX_RESOURCES`` must be 28 000 or more.
 _COAL_RESOURCES_PER_TILE: int = 28000
 _COAL_COLUMN_X: int = 0
 _SPAWN: tuple[int, int] = (_MAP_SIZE // 2, _MAP_SIZE // 2)
 _FURNACE_TILE: tuple[int, int] = (_SPAWN[0] - 1, _SPAWN[1])
 _ASSEMBLER_TILE: tuple[int, int] = (_SPAWN[0] + 1, _SPAWN[1])
 _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
-    # (x, y, block) — top-left corner of the 2x2 patch.
+    # (x, y, block), where x and y are the top-left corner of the 2x2 patch.
     (3, 9, BlockType.IRON),
     (3, 12, BlockType.COPPER),
     (3, 15, BlockType.TIN),
@@ -464,28 +468,27 @@ _PATCH_OFFSETS: list[tuple[int, int, BlockType]] = [
 
 
 def build_rocket_level() -> Level:
-    """Construct the canonical 32x32 rocket scenario level.
+    """Build the 32x32 level of the rocket scenario.
 
-    Player spawns at :data:`_SPAWN`. Five 2x2 ore patches (iron,
-    copper, tin, silicon, limestone) sit on cols 3-4, vertically
-    stacked with 1-tile dirt gaps (rows 9, 12, 15, 18, 21). A 1-wide
-    coal column fills the entire left edge (x = 0). Each ore tile
-    carries :data:`_ORE_RESOURCES_PER_TILE` units; each coal tile
-    carries :data:`_COAL_RESOURCES_PER_TILE`. A furnace and an
-    assembler are pre-placed one tile west and east of spawn
-    respectively.
+    The player spawns at :data:`_SPAWN`. Five 2x2 ore patches, of iron, copper,
+    tin, silicon, and limestone, sit on columns 3 and 4. They stand one above
+    the other with one-tile dirt gaps, at rows 9, 12, 15, 18, and 21. A coal
+    column one tile wide fills the whole left edge, at x = 0. Each ore tile
+    holds :data:`_ORE_RESOURCES_PER_TILE` units, and each coal tile holds
+    :data:`_COAL_RESOURCES_PER_TILE`. A furnace stands one tile west of the
+    spawn, and an assembler stands one tile east of it.
 
-    Takes no arguments and no PRNG key: the layout is fixed, so every
-    reset of this scenario gets the same world.
+    The function takes no arguments and no PRNG key. The layout is fixed, so
+    every reset of this scenario gives the same world.
 
     Returns
     -------
     Level
-        The rocket scenario's level, ready for
+        The level of the rocket scenario, ready for
         :func:`factoriax.engine.levels.build_state`.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
-    # Coal column — one tile wide, full map height.
+    # The coal column: one tile wide, over the full height of the map.
     builder.fill_rect(
         _COAL_COLUMN_X,
         0,
@@ -523,16 +526,17 @@ def build_rocket_level() -> Level:
 # Action mask
 # ---------------------------------------------------------------------------
 
-# The rocket scenario forbids all direct player crafting; production must flow
-# through the pre-placed furnace / assembler. The mask is the whole CRAFT
-# family, derived from the enum so new craftables are blocked automatically.
+# The rocket scenario blocks every direct player craft. Production must flow
+# through the furnace and the assembler that already stand on the map. The mask
+# covers every CRAFT_ action and comes from the enum, so it also blocks a new
+# craftable item with no further change.
 ROCKET_BLOCKED_ACTIONS: frozenset[int] = frozenset(
     int(a) for a in Action if a.name.startswith("CRAFT_")
 )
 
 
 # ---------------------------------------------------------------------------
-# Scenario class
+# The scenario factory
 # ---------------------------------------------------------------------------
 
 
@@ -541,19 +545,20 @@ def rocket(
     obs: str = "x_ray_local",
     obs_radius: int = 5,
 ) -> tuple[Any, EnvParams]:
-    """Build the canonical Rocket-v1 env with achievement hook and action mask applied.
+    """Build the Rocket-v1 environment, with its achievement hook and action mask.
 
     Parameters
     ----------
     obs :
-        Observation variant passed to :class:`~factoriax.engine.envs.FactoriaxEnv`.
+        Observation variant. The function passes it to
+        :class:`~factoriax.engine.envs.FactoriaxEnv`.
     obs_radius :
-        Radius for local observation variants.
+        Radius for a local observation variant.
 
     Returns
     -------
     tuple
-        ``(env, params)`` ready for gymnax-style rollouts.
+        ``(env, params)``, ready for a gymnax-style rollout.
     """
     env: Any = FactoriaxEnv(
         level=build_rocket_level(),

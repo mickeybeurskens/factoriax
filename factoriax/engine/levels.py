@@ -1,18 +1,18 @@
 """Describe a starting world and turn it into an :class:`EnvState`.
 
-A :class:`Level` is the static half of a world: the block layout, and
-optionally the ore amounts, the machines already standing, and where players
-spawn. It holds no live state, has no timestep, and is plain numpy, so it
-serializes to JSON and survives a round trip.
+A :class:`Level` is the static half of a world: the block layout, and, where
+the author gives them, the ore amounts, the machines already on the map, and
+the spawn tiles of the players. It holds no live state and no timestep. It is
+plain numpy, so it writes to JSON and reads back unchanged.
 
-How many players actually spawn is decided at build time, not by the level.
+The level does not fix the number of players. The build decides that.
 :func:`build_state` takes the count as an argument, so one level serves a
-single-agent run and a four-agent run without editing.
+single-agent run and a four-agent run with no edit.
 
-Two ways in. :class:`LevelBuilder` writes a level tile by tile, which is what
-the editor and the hand-written scenarios use. :func:`generate_state` skips
-:class:`Level` entirely and produces a state from a random key, which is what
-an environment falls back to when a scenario ships no level.
+There are two ways in. :class:`LevelBuilder` writes a level tile by tile, and
+the editor and the hand-written scenarios use it. :func:`generate_state` uses
+no :class:`Level` at all and makes a state from a random key. An environment
+calls it when a scenario supplies no level.
 
 Typical usage::
 
@@ -64,11 +64,11 @@ from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import MACHINE_MAX_HEALTH, MINEABLE_BLOCKS
 
 #: Machine kind that produces each item, indexed by ``ItemType`` value, with
-#: ``Machine.NONE`` for items no recipe outputs. :func:`build_state` reads it to
-#: tell a finished output from an input, because
-#: ``Level.machine_inventory`` is item-indexed and records no slot. Derived from
-#: the engine's default recipes; a scenario shipping its own recipe book does
-#: not change this classification.
+#: ``Machine.NONE`` for an item that no recipe produces. :func:`build_state`
+#: reads it to separate a finished output from an input, because an item indexes
+#: ``Level.machine_inventory`` and that field records no slot. The values come
+#: from the default recipes of the engine. A scenario with its own recipe book
+#: does not change them.
 _ITEM_PRODUCER: np.ndarray = np.full(NUM_ITEM_TYPES, int(Machine.NONE), dtype=np.int32)
 _out_to_recipe = np.asarray(OUTPUT_TO_RECIPE)
 _recipe_machine = np.asarray(RECIPE_MACHINE_TYPE)
@@ -86,54 +86,56 @@ for _item in range(NUM_ITEM_TYPES):
 class Level:
     """A starting world, as plain arrays that survive a JSON round trip.
 
-    Every field past ``block_map`` is optional, and ``None`` means "no opinion,
-    let :func:`build_state` decide" rather than "empty". Leaving
-    ``block_resources`` unset fills ore tiles from :func:`default_resources`;
-    leaving ``player_positions`` unset spreads players along the middle row.
-    Setting a field to an all-zero array is a different instruction, and means
-    the world really does start with nothing.
+    Every field after ``block_map`` is optional. A field that holds ``None``
+    means "let :func:`build_state` decide", and not "empty". With no
+    ``block_resources``, :func:`default_resources` fills the ore tiles. With no
+    ``player_positions``, the build spreads the players along the middle row. A
+    field that holds an array of zeros is a different instruction. It means
+    that the world starts with nothing.
 
-    Arrays are indexed ``[row, column]``, so ``block_map[y][x]``, while the
-    position lists hold ``(x, y)`` pairs. The two orders do not match, which
-    matters when hand-writing a level.
+    An array is indexed ``[row, column]``, so ``block_map[y][x]``. A position
+    list holds ``(x, y)`` pairs. The two orders are not the same, and that
+    matters when a person writes a level by hand.
 
     Attributes
     ----------
     name
-        Identifier for the level. :func:`get_level` looks levels up by it.
+        Identifier for the level. :func:`get_level` finds a level by it.
     map_width, map_height
-        Tile dimensions. Every array field is validated against them.
+        Tile dimensions. The class validates every array field against them.
     block_map
-        :class:`~factoriax.engine.constants.BlockType` per tile. Shape
-        ``(map_height, map_width)``. The only required field.
+        :class:`~factoriax.engine.constants.BlockType` of each tile. Shape
+        ``(map_height, map_width)``. This is the one required field.
     block_resources
-        Ore units per tile, or ``None`` to derive them from ``block_map``.
+        Ore units in each tile, or ``None`` to take them from ``block_map``.
     machine_types
-        :class:`~factoriax.engine.constants.Machine` per tile, ``NONE`` where
-        the tile is clear, or ``None`` for a world with no machines standing.
+        :class:`~factoriax.engine.constants.Machine` on each tile, ``NONE``
+        where the tile is clear, or ``None`` for a world with no machines.
     machine_directions
-        Facing per tile, 0 where unset. Meaningless where no machine stands.
+        Facing of each tile, 0 where nothing set it. The value has no meaning
+        on a tile with no machine.
     machine_inventory
-        Items held by the machine on each tile, shape
-        ``(map_height, map_width, NUM_ITEM_TYPES)``. Item-indexed with no slot,
-        so :func:`build_state` has to infer which slot an item belongs in.
+        Items in the machine on each tile, shape
+        ``(map_height, map_width, NUM_ITEM_TYPES)``. An item indexes it and it
+        records no slot, so :func:`build_state` must decide which slot holds
+        each item.
     player_inventory
-        ``(item, count)`` pairs given to every player.
+        ``(item, count)`` pairs for every player.
     player_inventories
-        Per-player contents, keyed by player index. For a player it names it
-        replaces ``player_inventory`` rather than adding to it, and an index
-        past the player count is ignored.
+        Contents for one player, with the player index as the key. For a player
+        that it names, it replaces ``player_inventory`` and does not add to it.
+        An index past the player count has no effect.
     player_positions
-        ``(x, y)`` spawn per player. Each listed tile is forced to DIRT, so a
-        spawn never lands inside ore or water. When set, the list must hold
-        exactly one entry per player the state is built for.
+        ``(x, y)`` spawn tile of each player. The build sets each listed tile to
+        DIRT, so a spawn never lands in ore or water. When the field is set, the
+        list must hold exactly one entry for each player of the state.
 
     Raises
     ------
     ValueError
-        An array field disagrees with ``map_width`` or ``map_height``. Raised
-        from ``__post_init__``, so a malformed level fails at construction
-        rather than at render time.
+        If an array field disagrees with ``map_width`` or ``map_height``.
+        ``__post_init__`` raises it, so a malformed level fails at construction
+        and not at render time.
     """
 
     name: str
@@ -149,17 +151,17 @@ class Level:
     player_positions: list[tuple[int, int]] | None = None
 
     def __post_init__(self) -> None:
-        """Check every supplied array against the declared dimensions.
+        """Test every array that the caller gave against the declared dimensions.
 
-        Runs on construction, so a level cannot exist in a shape the rest of
-        the module would have to guard against. Fields left ``None`` are
-        skipped rather than treated as empty.
+        This method runs at construction, so no level can exist in a shape that
+        the rest of the module has to guard against. A field that holds
+        ``None`` passes, and the method does not treat it as empty.
 
         Raises
         ------
         ValueError
-            An array disagrees with ``map_width`` or ``map_height``. The
-            message names the offending field and both shapes.
+            If an array disagrees with ``map_width`` or ``map_height``. The
+            message names the field at fault and both shapes.
         """
         expected = (self.map_height, self.map_width)
         inv_expected = (self.map_height, self.map_width, NUM_ITEM_TYPES)
@@ -187,17 +189,17 @@ class Level:
 class LevelBuilder:
     """Build a :class:`Level` a tile at a time.
 
-    Every mutating method returns ``self``, so calls chain, and :meth:`build`
-    closes the chain. The builder starts from a canvas of one block type and
-    allocates the optional arrays only when a method first touches them, which
-    is what keeps an untouched field ``None`` in the finished level and lets
-    :func:`build_state` apply its own default.
+    Every method that writes returns ``self``, so the calls chain, and
+    :meth:`build` ends the chain. The builder starts from a canvas of one block
+    type. It allocates an optional array only when a method first writes to it.
+    A field that no method touched therefore stays ``None`` in the finished
+    level, and :func:`build_state` applies its own default.
 
-    A builder is reusable: :meth:`build` copies each array out, so a later
-    edit does not reach back into a level already built.
+    A builder is reusable. :meth:`build` copies each array out, so a later edit
+    cannot change a level that the builder already produced.
 
-    Coordinates are ``(x, y)`` with the origin at the top left, the opposite
-    order from the ``[row, column]`` arrays underneath.
+    A coordinate is ``(x, y)``, with the origin at the top left. This is the
+    opposite order from the ``[row, column]`` arrays below it.
 
     Example::
 
@@ -224,7 +226,7 @@ class LevelBuilder:
         height
             Map height in tiles.
         default_block
-            Block type covering the whole canvas to begin with.
+            Block type that covers the whole canvas at the start.
         """
         self._width = width
         self._height = height
@@ -244,36 +246,36 @@ class LevelBuilder:
         block: BlockType,
         resources: int | None = None,
     ) -> LevelBuilder:
-        """Write a block type across a rectangle, optionally setting its ore.
+        """Write a block type across a rectangle, and set its ore if asked.
 
-        The rectangle is clipped to the map, so a caller may pass coordinates
-        that hang off an edge and get the overlapping part. A rectangle
-        entirely outside the map writes nothing and still returns ``self``.
-        This is the one placement method that does not raise on a bad
-        coordinate.
+        The method clips the rectangle to the map. A caller can therefore give
+        coordinates that pass an edge, and the method writes the part inside
+        the map. A rectangle fully outside the map writes nothing and still
+        returns ``self``. This is the one placement method that raises nothing
+        on a bad coordinate.
 
         Parameters
         ----------
         x
-            Left column, inclusive.
+            Left column, included in the rectangle.
         y
-            Top row, inclusive.
+            Top row, included in the rectangle.
         w
-            Width in tiles. Zero or negative fills nothing.
+            Width in tiles. A value of zero or less fills nothing.
         h
-            Height in tiles. Zero or negative fills nothing.
+            Height in tiles. A value of zero or less fills nothing.
         block
             Block type to write across the region.
         resources
-            Ore units for every tile in the region. When omitted the tiles
-            keep whatever the resource array already held, and if no resource
-            array exists yet none is created, which leaves the amounts to
-            :func:`default_resources` at build time.
+            Ore units for every tile in the region. Without this argument the
+            tiles keep the values that the resource array already held. If no
+            resource array exists, the method creates none, and
+            :func:`default_resources` sets the amounts at build time.
 
         Returns
         -------
         LevelBuilder
-            ``self``, so calls chain.
+            ``self``, so the calls chain.
         """
         x0 = max(0, x)
         y0 = max(0, y)
@@ -285,8 +287,8 @@ class LevelBuilder:
                 self._block_resources = default_resources(self._block_map)
             self._block_resources[y0:y1, x0:x1] = resources
         elif self._block_resources is not None:
-            # The array is a snapshot, so newly painted ore needs its default
-            # written now or the tile would keep the zero it was created with.
+            # The array is a copy of one moment, so new ore needs its default
+            # value now. Without it the tile keeps the zero from its creation.
             self._block_resources[y0:y1, x0:x1] = default_resources(
                 self._block_map[y0:y1, x0:x1],
             )
@@ -295,11 +297,11 @@ class LevelBuilder:
     def set_resources(self, x: int, y: int, amount: int) -> LevelBuilder:
         """Set the ore left in one tile.
 
-        Creating the resource array is what makes it explicit, so a level that
-        calls this once carries a full array from then on and
-        :func:`build_state` stops deriving amounts from the block map. Every
-        other tile keeps its default, and ore painted later still picks one up,
-        because :meth:`fill_rect` keeps the array in step.
+        This call creates the resource array. A level that calls it one time
+        therefore carries a full array from that point, and
+        :func:`build_state` stops taking the amounts from the block map. Every
+        other tile keeps its default value, and ore that a later call paints
+        also gets one, because :meth:`fill_rect` keeps the array in step.
 
         Parameters
         ----------
@@ -308,19 +310,19 @@ class LevelBuilder:
         y
             Row.
         amount
-            Ore units to store. Not clamped, so a value above
-            ``BLOCK_MAX_RESOURCES`` stands, and a non-ore tile can be given a
-            count that no machine will ever mine.
+            Ore units to store. The method does not clamp the value, so a value
+            larger than ``BLOCK_MAX_RESOURCES`` stands. A tile that is not ore
+            can also take a count that no machine ever mines.
 
         Returns
         -------
         LevelBuilder
-            ``self``, so calls chain.
+            ``self``, so the calls chain.
 
         Raises
         ------
         IndexError
-            The tile is outside the map.
+            If the tile is outside the map.
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -340,18 +342,18 @@ class LevelBuilder:
     ) -> LevelBuilder:
         """Give the machine on a tile a starting stock of one item.
 
-        Contents are recorded per item with no slot, so this says what a
-        machine holds but not where. :func:`build_state` decides the slot when
-        it builds the entity, and for an assembler or furnace it uses the
-        recipe book to
-        tell a finished output from an input.
+        The field records the contents by item and holds no slot, so this call
+        gives what a machine holds, and not where. :func:`build_state` selects
+        the slot when it builds the entity. For an assembler or a furnace it
+        reads the recipe book to separate a finished output from an input.
 
-        Nothing checks that a machine stands here. Stock set on an empty tile
-        is carried through save and load and then dropped at build time.
+        The method does not test that a machine stands on the tile. A stock on
+        an empty tile passes through save and load, and the build then drops
+        it.
 
-        A machine with one buffer, which is everything but an assembler or a
-        furnace, holds one item kind. Recording a second is allowed here and
-        refused by :func:`build_state`, because the kind on the tile can change
+        A machine with one buffer, which is every kind except an assembler and
+        a furnace, holds one item kind. This method accepts a second kind, and
+        :func:`build_state` refuses it, because the kind on the tile can change
         after this call.
 
         Parameters
@@ -363,19 +365,19 @@ class LevelBuilder:
         item_type
             :class:`~factoriax.engine.constants.ItemType` value.
         count
-            Number of items. Replaces any count already set for this item on
-            this tile rather than adding to it, and is not capped, so a value
-            above the machine's stack limit is clamped later.
+            Number of items. The method replaces any count for this item on
+            this tile, and does not add to it. It sets no limit, so a value
+            above the stack limit of the machine clamps later.
 
         Returns
         -------
         LevelBuilder
-            ``self``, so calls chain.
+            ``self``, so the calls chain.
 
         Raises
         ------
         IndexError
-            The tile is outside the map.
+            If the tile is outside the map.
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -394,11 +396,11 @@ class LevelBuilder:
         machine_type: int,
         direction: int = 0,
     ) -> LevelBuilder:
-        """Stand a machine on a tile, facing a direction.
+        """Put a machine on a tile, with a facing.
 
-        Placing over an occupied tile replaces what was there. The block
-        underneath is untouched, so a machine can be placed on water or ore
-        even where the engine's own placement rules would refuse it.
+        A call on an occupied tile replaces the machine that was there. The
+        block below stays as it was, so this method places a machine on water
+        or on ore, where the placement rules of the engine refuse one.
 
         Parameters
         ----------
@@ -409,19 +411,19 @@ class LevelBuilder:
         machine_type
             :class:`~factoriax.engine.constants.Machine` value.
         direction
-            :class:`~factoriax.engine.constants.Direction` value. The default
-            0 means unset, which is what a machine that does not care about
-            facing should keep. A belt or miner left at 0 moves nothing.
+            :class:`~factoriax.engine.constants.Direction` value. The default 0
+            means "no direction", and a machine that ignores its facing keeps
+            it. A belt or a miner at 0 moves nothing.
 
         Returns
         -------
         LevelBuilder
-            ``self``, so calls chain.
+            ``self``, so the calls chain.
 
         Raises
         ------
         IndexError
-            The tile is outside the map.
+            If the tile is outside the map.
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -442,15 +444,15 @@ class LevelBuilder:
         return self
 
     def set_player_position(self, x: int, y: int) -> LevelBuilder:
-        """Append a player spawn.
+        """Add one player spawn to the end of the list.
 
-        Call order is player order: the first call is player 0. There is no
-        way to set one player's spawn without setting every earlier player's,
-        and no call removes one.
+        The call order is the player order, so the first call sets player 0. To
+        set the spawn of one player, a caller must also set the spawn of every
+        earlier player. No call removes a spawn.
 
-        Setting any spawn commits the level to setting all of them:
-        :func:`build_state` refuses a level whose spawn count does not match
-        the number of players it is asked for.
+        One spawn commits the level to all of them. :func:`build_state` refuses
+        a level whose spawn count does not match the number of players that the
+        caller asked for.
 
         Parameters
         ----------
@@ -462,12 +464,12 @@ class LevelBuilder:
         Returns
         -------
         LevelBuilder
-            ``self``, so calls chain.
+            ``self``, so the calls chain.
 
         Raises
         ------
         IndexError
-            The position is outside the map.
+            If the position is outside the map.
         """
         if not (0 <= x < self._width and 0 <= y < self._height):
             raise IndexError(
@@ -479,44 +481,44 @@ class LevelBuilder:
         return self
 
     def set_player_inventory(self, items: list[tuple[int, int]]) -> LevelBuilder:
-        """Give every player the same starting inventory.
+        """Give every player the same start inventory.
 
-        Replaces any inventory set by an earlier call rather than adding to
-        it. Repeating an item within one list does add up, since
-        :func:`build_state` accumulates the pairs as it reads them.
+        The method replaces the inventory of an earlier call, and does not add
+        to it. A repeated item inside one list does add up, because
+        :func:`build_state` adds the pairs as it reads them.
 
         Parameters
         ----------
         items
-            ``(item, count)`` pairs. An empty list leaves players
-            empty-handed, which is also what never calling this does.
+            ``(item, count)`` pairs. An empty list leaves the players with
+            nothing, and no call to this method has the same result.
 
         Returns
         -------
         LevelBuilder
-            ``self``, so calls chain.
+            ``self``, so the calls chain.
         """
         self._player_inventory = list(items)
         return self
 
     def build(self, name: str) -> Level:
-        """Close the chain and return the finished level.
+        """End the chain and return the finished level.
 
-        Arrays are copied on the way out, so the builder stays usable and a
-        later edit does not reach into the level just returned. A field no
-        method touched stays ``None`` rather than becoming an empty array,
-        which is what lets :func:`build_state` tell "unset" from "empty".
+        The method copies each array out, so the builder stays usable and a
+        later edit cannot change the level that it just returned. A field that
+        no method touched stays ``None`` and does not become an empty array.
+        :func:`build_state` therefore separates "not set" from "empty".
 
         Parameters
         ----------
         name
-            Identifier for the level. Not checked for uniqueness against
-            :data:`LEVELS`.
+            Identifier for the level. The method does not test it against
+            :data:`LEVELS` for uniqueness.
 
         Returns
         -------
         Level
-            A level whose shapes are validated by ``Level.__post_init__``.
+            A level whose shapes ``Level.__post_init__`` validated.
         """
         return Level(
             name=name,
@@ -554,22 +556,23 @@ class LevelBuilder:
 
 
 def default_resources(block_map: np.ndarray) -> np.ndarray:
-    """Fill every ore tile with a full deposit and everything else with none.
+    """Fill every ore tile with a full deposit, and every other tile with none.
 
-    Ore means anything in ``factoriax.engine.tables.MINEABLE_BLOCKS``, the same
-    set the procedural path tests against, so a hand-built level and a
-    generated one agree on which tiles carry something to mine.
+    Ore means every block in ``factoriax.engine.tables.MINEABLE_BLOCKS``. The
+    generated path tests against the same set, so a hand-built level and a
+    generated level agree on which tiles hold something to mine.
 
     Parameters
     ----------
     block_map
-        Block type per tile, shape ``(H, W)``.
+        Block type of each tile, shape ``(H, W)``.
 
     Returns
     -------
     np.ndarray
-        Shape ``(H, W)``, int32. Ore tiles hold ``BLOCK_MAX_RESOURCES`` and
-        the rest hold 0. A fresh array; the input is not modified.
+        Shape ``(H, W)``, int32. An ore tile holds ``BLOCK_MAX_RESOURCES`` and
+        every other tile holds 0. This is a new array, and the function does
+        not modify the input.
     """
     mineable = np.isin(block_map, np.asarray(MINEABLE_BLOCKS))
     return np.where(mineable, BLOCK_MAX_RESOURCES, 0).astype(np.int32)
@@ -578,27 +581,27 @@ def default_resources(block_map: np.ndarray) -> np.ndarray:
 def _place_players(
     block_map: np.ndarray, num_players: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Spread players along the middle row and clear the tiles they land on.
+    """Spread the players along the middle row and clear the tiles under them.
 
-    Each spawn is forced to DIRT, so a player never starts inside water, ore,
-    or a wall. That edit is the point of returning a block map rather than
-    just positions.
+    The function sets each spawn tile to DIRT, so a player never starts in
+    water, in ore, or in a wall. That edit is the reason to return a block map
+    and not the positions alone.
 
     Parameters
     ----------
     block_map
-        Block type per tile, shape ``(H, W)``. Not modified; a copy is
-        returned.
+        Block type of each tile, shape ``(H, W)``. The function does not modify
+        it and returns a copy.
     num_players
-        How many to place. Positions are packed around the centre column, so
-        on a map narrower than the player count they clamp to the edge and
-        several players share a tile.
+        Number of players to place. The positions sit around the centre
+        column. On a map narrower than the player count they clamp to the edge,
+        and two or more players then share a tile.
 
     Returns
     -------
     tuple of (np.ndarray, np.ndarray)
-        The edited block map, shape ``(H, W)``, and the spawns as ``(x, y)``
-        rows, shape ``(num_players, 2)``, int32.
+        The new block map, shape ``(H, W)``, and the spawns as ``(x, y)`` rows,
+        shape ``(num_players, 2)``, int32.
     """
     h, w = block_map.shape
     block_map = block_map.copy()
@@ -624,7 +627,7 @@ def _fill_buffer(
     buf_type: np.ndarray,
     buf_count: np.ndarray,
 ) -> None:
-    """Load a single-buffer machine's stock, refusing a load it cannot hold."""
+    """Load the stock of a one-buffer machine, and refuse a load it cannot hold."""
     items = [it for it in range(1, NUM_ITEM_TYPES) if int(inv_row[it]) > 0]
     if len(items) > 1:
         raise ValueError(
@@ -645,41 +648,41 @@ def _fill_buffer(
 def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvState:
     """Turn a level into a live state, ready to step.
 
-    This is where the level's per-tile view becomes the engine's per-entity
-    view. Each occupied tile gets one entry in the entity arrays, and
-    ``tile_entity`` records the join. Everything the level does not describe
-    starts empty: no craft is in progress, no items have been mined, and no
-    achievement is unlocked.
+    This function turns the per-tile view of the level into the per-entity view
+    of the engine. Each occupied tile gets one entry in the entity arrays, and
+    ``tile_entity`` records the join. Everything that the level does not
+    describe starts empty. No craft is in progress, no player mined an item,
+    and no achievement is unlocked.
 
-    Where the level leaves a field unset the default applies, so a bare block
-    map still yields a playable world. Where it does set one, the level wins
-    and is taken literally, which is why the mismatches below raise instead of
-    being papered over.
+    Where the level leaves a field unset, the default applies, so a plain block
+    map still gives a playable world. Where the level sets a field, the level
+    wins and the function follows it exactly. The mismatches below therefore
+    raise, and the function does not correct them.
 
     Parameters
     ----------
     level
-        World to build from. Not modified.
+        World to build from. The function does not modify it.
     num_players
-        How many players to spawn. Decides the length of every player array,
-        and must match ``level.player_positions`` when that is set.
+        Number of players to spawn. This sets the length of every player array.
+        It must match ``level.player_positions`` when that field is set.
     max_machines
-        Entity table size. The default 0 means "choose one", which is
+        Size of the entity table. The default 0 means "select one", which is
         ``max(64, tiles // 4)``, enough for a quarter of the map. A level
-        cannot place more machines than this.
+        cannot place more machines than this number.
 
     Returns
     -------
     EnvState
-        A state whose ``timestep`` is 0 and whose players all face DOWN.
+        A state with ``timestep`` at 0, and with every player facing DOWN.
 
     Raises
     ------
     ValueError
-        The level places more machines than ``max_machines`` allows, lists a
-        number of spawns other than ``num_players``, or gives a single-buffer
-        machine more than one kind of item. Each case describes a world the
-        state cannot represent, so none of them is silently trimmed.
+        If the level places more machines than ``max_machines`` allows, lists a
+        spawn count other than ``num_players``, or gives a one-buffer machine
+        more than one kind of item. Each case describes a world that the state
+        cannot hold, so the function trims none of them.
 
     Examples
     --------
@@ -700,7 +703,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
             )
         block_map = level.block_map.copy()
         player_positions_np = np.array(level.player_positions, dtype=np.int32)
-        # Ensure each spawn tile is walkable.
+        # Make each spawn tile walkable.
         for px, py in level.player_positions:
             block_map[py, px] = int(BlockType.DIRT)
     else:
@@ -727,7 +730,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
     map_shape = (level.map_height, level.map_width)
     inv_shape = (num_players, NUM_ITEM_TYPES)
     player_shape = (num_players,)
-    # Build player pouch inventories from (item_type, count) pairs.
+    # Build the player inventories from the (item_type, count) pairs.
     player_inv_np = np.zeros(inv_shape, dtype=np.int32)
     if level.player_inventory is not None:
         for item_type, count in level.player_inventory:
@@ -744,7 +747,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
     h, w = level.map_height, level.map_width
     mm = max_machines if max_machines > 0 else max(64, h * w // 4)
 
-    # Build entity arrays from grid machine data.
+    # Build the entity arrays from the machine data on the grid.
     mt_jnp = jnp.array(machine_types_np, dtype=jnp.int8)
     ent_y = jnp.full(mm, -1, dtype=jnp.int16)
     ent_x = jnp.full(mm, -1, dtype=jnp.int16)
@@ -754,7 +757,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
     max_health_arr = MACHINE_MAX_HEALTH
     tile_ent = jnp.full(map_shape, -1, dtype=jnp.int16)
 
-    # Entity inventory arrays (populated from level.machine_inventory).
+    # The entity inventory arrays, which level.machine_inventory fills.
     ent_buf_type_np = np.zeros(mm, dtype=np.int8)
     ent_buf_count_np = np.zeros(mm, dtype=np.int16)
     ent_asm_in_type_np = np.zeros((mm, 2), dtype=np.int8)
@@ -764,8 +767,8 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
 
     machine_inv = level.machine_inventory
 
-    # Refuse a level that outgrows the entity table. Truncating instead would
-    # leave machine_types naming machines that no entity backs.
+    # Refuse a level that is larger than the entity table. A cut instead leaves
+    # machine_types with machines that no entity holds.
     machine_count = int(np.count_nonzero(machine_types_np != int(Machine.NONE)))
     if machine_count > mm:
         raise ValueError(
@@ -773,7 +776,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
             f"max_machines is {mm}. Raise max_machines or remove machines.",
         )
 
-    # Populate entities from grid (Python loop, only at build time)
+    # Fill the entities from the grid. This Python loop runs at build time only.
     idx = 0
     for y in range(map_shape[0]):
         for x in range(map_shape[1]):
@@ -789,7 +792,7 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
             ent_health = ent_health.at[idx].set(max_health_arr[mt])
             tile_ent = tile_ent.at[y, x].set(jnp.int16(idx))
 
-            # Populate inventory from level data.
+            # Fill the inventory from the level data.
             if machine_inv is not None:
                 inv_row = machine_inv[y, x]
                 if mt == int(Machine.MINER):
@@ -800,11 +803,11 @@ def build_state(level: Level, num_players: int, max_machines: int = 0) -> EnvSta
                     int(Machine.ASSEMBLER),
                     int(Machine.FURNACE),
                 ):
-                    # Item-indexed inventory carries no slot, so an item this
-                    # machine's own recipes produce is its finished output and
-                    # everything else is an input. Without the split, an output
-                    # would fill an input slot and push a real input out of the
-                    # two the engine has.
+                    # An item indexes the inventory, and the field holds no
+                    # slot. An item that the recipes of this machine produce is
+                    # therefore its finished output, and every other item is an
+                    # input. Without that split, an output fills an input slot
+                    # and pushes a real input out of the two that exist.
                     slot = 0
                     for it in range(1, NUM_ITEM_TYPES):
                         count = int(inv_row[it])
@@ -870,33 +873,34 @@ def initial_state(
 ) -> EnvState:
     """Wrap a generated block map in a state with no machines standing.
 
-    The procedural counterpart to :func:`build_state`. It takes a finished
-    block map rather than a :class:`Level`, so there is nothing to place: the
-    entity table is allocated and left empty, and the world starts bare.
+    This function is the generated counterpart of :func:`build_state`. It takes
+    a finished block map and not a :class:`Level`, so it places nothing. It
+    allocates the entity table, leaves it empty, and the world starts with no
+    machines.
 
-    Ore is derived here from ``MINEABLE_BLOCKS`` and
-    ``params.base_resources``, which is the same set :func:`default_resources`
-    uses but a different amount, so a generated tile and a hand-built one can
-    hold different quantities of the same ore.
+    The ore comes from ``MINEABLE_BLOCKS`` and ``params.base_resources``.
+    :func:`default_resources` uses the same set of blocks but a different
+    amount, so a generated tile and a hand-built tile can hold different
+    amounts of the same ore.
 
     Parameters
     ----------
     world_map
-        Block type per tile, shape ``(H, W)``. Spawn tiles are overwritten
-        with DIRT, and the edited copy is what the state carries.
+        Block type of each tile, shape ``(H, W)``. The function writes DIRT to
+        each spawn tile, and the state carries that new copy.
     params
-        Read for ``base_resources`` only.
+        The function reads ``base_resources`` only.
     num_players
-        How many players to spawn, along the middle row as in
+        Number of players to spawn. They stand along the middle row, as in
         :func:`_place_players`.
     max_machines
-        Entity table size. 0 means ``max(64, tiles // 4)``.
+        Size of the entity table. A value of 0 means ``max(64, tiles // 4)``.
 
     Returns
     -------
     EnvState
-        A state with an empty entity table, ``timestep`` 0, and every player
-        facing DOWN with an empty inventory.
+        A state with an empty entity table and ``timestep`` at 0. Every player
+        faces DOWN and holds an empty inventory.
     """
     h, w = world_map.shape
     center_x = w // 2
@@ -954,12 +958,13 @@ def initial_state(
 # ---------------------------------------------------------------------------
 # Terrain generation
 #
-# generate_terrain is the only algorithm. It draws one smooth-noise field per
-# resource and tests each against its own probability. The draws are
-# independent, but the results are layered silicon first and water last, and
-# each layer overwrites the one before. Only water, applied last, lands on the
-# share its probability names; everything earlier keeps just the part no later
-# layer claimed, so silicon realises about half its figure. Accepted as is.
+# generate_terrain is the one algorithm here. It draws one smooth-noise field
+# for each resource and tests each field against its own probability. The draws
+# are independent, but the results go down in layers, silicon first and water
+# last, and each layer writes over the one before. Only water, the last layer,
+# covers the share that its probability names. Every earlier layer keeps only
+# the part that no later layer took, so silicon reaches about half its figure.
+# This behaviour stands as it is.
 # ---------------------------------------------------------------------------
 
 
@@ -971,12 +976,11 @@ def _smooth_noise(
 ) -> jax.Array:
     """Draw a field of smooth blobs whose values are spread evenly over [0, 1).
 
-    Two properties matter to the caller and they pull against each other.
-    Neighbouring tiles hold close values, which is what makes patches instead
-    of speckle. Across the whole field the values are spread evenly, so
-    ``field < p`` selects a fraction ``p`` of the map for any ``p``, and a
-    probability in :class:`~factoriax.engine.state.EnvParams` means what it
-    says.
+    Two properties matter to the caller, and they pull against each other. Two
+    tiles next to each other hold close values, which makes patches and not
+    speckle. Across the whole field the values spread evenly, so ``field < p``
+    selects a fraction ``p`` of the map for any ``p``. A probability in
+    :class:`~factoriax.engine.state.EnvParams` therefore means what it says.
 
     Parameters
     ----------
@@ -985,26 +989,27 @@ def _smooth_noise(
     height, width
         Output size in tiles.
     scale
-        Blob size. The grid drawn before upscaling is
-        ``height // scale + 2`` by ``width // scale + 2``, so a larger scale
-        means fewer, broader patches.
+        Blob size. The grid before the resize is ``height // scale + 2`` by
+        ``width // scale + 2``, so a larger scale gives fewer and wider
+        patches.
 
     Returns
     -------
     jax.Array
-        Shape ``(height, width)``, float32, values in (0, 1). Evenly spread by
-        construction rather than on average, so even one small map divides
-        cleanly at any threshold.
+        Shape ``(height, width)``, float32, with values in (0, 1). The spread
+        is even by construction, and not even on average, so even a small map
+        divides correctly at any threshold.
     """
     lo_h = height // scale + 2
     lo_w = width // scale + 2
     lo = random.uniform(rng, (lo_h, lo_w))
     hi = jax.image.resize(lo, (height, width), method="bilinear")
-    # Replace each value by its rank. Interpolating uniform samples piles them
-    # up around the mean, and rescaling that range to [0, 1] leaves the pile in
-    # place, so a threshold of 0.1 used to select far less than a tenth of the
-    # map. Ranking flattens the distribution instead of just its bounds. It is
-    # monotonic, so the blobs keep their shape and only their values move.
+    # Replace each value by its rank. An interpolation of uniform samples
+    # gathers them around the mean. A rescale of that range to [0, 1] leaves
+    # the gathering in place, so a threshold of 0.1 once selected far less than
+    # a tenth of the map. The rank flattens the whole distribution and not only
+    # its bounds. It is monotonic, so the blobs keep their shape and only their
+    # values move.
     flat = hi.ravel()
     order = jnp.argsort(flat)
     ranks = jnp.zeros_like(order).at[order].set(jnp.arange(flat.size))
@@ -1021,29 +1026,29 @@ def generate_terrain(
     """Draw a random block map of ore patches, water, and dirt.
 
     Each block type gets its own noise field and its own threshold, so the
-    draws are independent. The results are then layered in a fixed order,
-    silicon first and water last, and each layer overwrites the one before.
-    Only water lands on the share its probability names. Every earlier layer
-    keeps just the tiles no later layer claimed, so silicon, drawn first,
-    realises about half its figure. Dirt is whatever no layer claimed.
+    draws are independent. The results then go down in a fixed order, silicon
+    first and water last, and each layer writes over the one before. Only water
+    covers the share that its probability names. Every earlier layer keeps only
+    the tiles that no later layer took, so silicon, the first layer, reaches
+    about half its figure. Dirt covers every tile that no layer took.
 
     Parameters
     ----------
     rng
-        Key for the draw. Split six ways, one per block type, so the same key
-        gives the same map.
+        Key for the draw. The function splits it six ways, one for each block
+        type, so the same key gives the same map.
     params
-        Read for the six ``*_probability`` fields. Each is the share of the
-        map that block would cover on its own, before later layers overwrite
-        it.
+        The function reads the six ``*_probability`` fields. Each one is the
+        share of the map that the block covers on its own, before a later layer
+        writes over it.
     map_height, map_width
         Map size in tiles.
 
     Returns
     -------
     jax.Array
-        Block type per tile, shape ``(map_height, map_width)``, int32. Holds
-        terrain only: no machines, no players, no ore amounts.
+        Block type of each tile, shape ``(map_height, map_width)``, int32. The
+        result holds terrain only: no machines, no players, and no ore amounts.
     """
     h, w = map_height, map_width
     keys = random.split(rng, 6)
@@ -1091,7 +1096,7 @@ def generate_terrain(
 
 
 # ---------------------------------------------------------------------------
-# Convenience: procedural state for tests and scripting
+# A generated state, for tests and scripts
 # ---------------------------------------------------------------------------
 
 
@@ -1105,35 +1110,36 @@ def generate_state(
 ) -> EnvState:
     """Generate a random world and return its state.
 
-    A convenience wrapper for tests and scripts. It builds a
-    :class:`~factoriax.engine.envs.base.FactoriaxEnv` and resets it, so the
-    result matches what an environment would produce rather than assembling
-    one here. That import is deferred to the call because ``envs.base``
-    imports this module.
+    This is a short wrapper for tests and scripts. It builds a
+    :class:`~factoriax.engine.envs.base.FactoriaxEnv` and resets it. The result
+    therefore matches what an environment produces, and this function assembles
+    no state of its own. The import happens inside the call, because
+    ``envs.base`` imports this module.
 
-    Not traceable. It constructs an environment from Python integers, so it
-    cannot be placed under ``jax.jit``; only the reset it delegates to is
-    traceable.
+    JAX cannot trace this function. It builds an environment from Python
+    integers, so it cannot run under ``jax.jit``. Only the reset that it calls
+    is traceable.
 
     Parameters
     ----------
     rng
         Key for the terrain draw. The same key gives the same world.
     params
-        Passed to the reset, which reads the terrain probabilities from it.
+        The function passes this to the reset, which reads the terrain
+        probabilities from it.
     map_height, map_width
         Map dimensions in tiles.
     num_players
-        How many players to spawn.
+        Number of players to spawn.
     max_machines
-        Entity table size. 0 means ``max(64, tiles // 4)``.
+        Size of the entity table. A value of 0 means ``max(64, tiles // 4)``.
 
     Returns
     -------
     EnvState
-        A state on freshly generated terrain, with no machines standing.
+        A state on new terrain, with no machines on the map.
     """
-    from factoriax.engine.envs.base import FactoriaxEnv  # avoid circular import
+    from factoriax.engine.envs.base import FactoriaxEnv  # breaks a circular import
 
     env = FactoriaxEnv(
         num_players=num_players,
@@ -1153,21 +1159,21 @@ def generate_state(
 def save_level(level: Level, path: Path) -> None:
     """Write a level to a JSON file.
 
-    Arrays become nested integer lists and the output is indented, so a level
-    can be read and edited by hand. Every optional field is written, as
-    ``null`` where unset, though :func:`load_level` accepts a file that omits
-    one entirely.
+    Each array becomes a nested list of integers, and the output is indented. A
+    person can therefore read and edit a level by hand. The function writes
+    every optional field, and writes ``null`` where a field is unset.
+    :func:`load_level` also accepts a file that leaves a field out.
 
-    The format carries no version marker, so a future change to the field set
-    has no way to announce itself to an older reader.
+    The format carries no version marker. A later change to the field set
+    therefore has no way to announce itself to an older reader.
 
     Parameters
     ----------
     level
-        Level to write. Not modified.
+        Level to write. The function does not modify it.
     path
-        Destination. Missing parent directories are created, and an existing
-        file is overwritten without warning.
+        Destination file. The function creates the parent directories, and
+        writes over an existing file with no warning.
 
     Examples
     --------
@@ -1218,16 +1224,17 @@ def save_level(level: Level, path: Path) -> None:
 
 
 def load_level(path: Path) -> Level:
-    """Deserialize a :class:`Level` from a JSON file written by :func:`save_level`.
+    """Read a :class:`Level` from a JSON file that :func:`save_level` wrote.
 
     Only ``name``, ``map_width``, ``map_height``, and ``block_map`` are
-    required. Every other field may be ``null`` or absent, both meaning unset,
-    so a hand-written file need only carry what it wants to say.
+    required. Every other field can hold ``null`` or be absent, and both mean
+    "not set". A hand-written file therefore holds only the fields that it
+    needs.
 
-    Arrays come back as int32 and position lists as tuples, which is what
-    :class:`LevelBuilder` produces, so a level survives a round trip
-    unchanged. The shapes are checked by ``Level.__post_init__``, so a file
-    whose arrays disagree with its dimensions fails here.
+    An array comes back as int32 and a position list as tuples, which is what
+    :class:`LevelBuilder` produces. A level therefore passes through a save and
+    a load unchanged. ``Level.__post_init__`` tests the shapes, so a file whose
+    arrays disagree with its dimensions fails here.
 
     Parameters
     ----------
@@ -1237,14 +1244,14 @@ def load_level(path: Path) -> Level:
     Returns
     -------
     Level
-        The level the file describes.
+        The level that the file describes.
 
     Raises
     ------
     KeyError
-        A required field is missing.
+        If a required field is absent.
     ValueError
-        An array disagrees with the declared dimensions.
+        If an array disagrees with the declared dimensions.
 
     Examples
     --------
@@ -1258,8 +1265,9 @@ def load_level(path: Path) -> Level:
     'tiny'
     """
     payload = orjson.loads(Path(path).read_bytes())
-    # Only name, dimensions, and the block map are required. Every other field
-    # is optional on Level, so a file may omit it as readily as write null.
+    # Only the name, the dimensions, and the block map are required. Every
+    # other field is optional on Level, so a file can leave one out or set it
+    # to null.
     raw_res = payload.get("block_resources")
     raw_types = payload.get("machine_types")
     raw_dirs = payload.get("machine_directions")
@@ -1299,8 +1307,8 @@ def load_level(path: Path) -> Level:
 # Built-in levels
 # ---------------------------------------------------------------------------
 
-#: 15x15 map with 4x4 ore patches in three corners and dirt elsewhere.
-#: Coal: top-left. Copper: top-right. Iron: bottom-left.
+#: 15x15 map with 4x4 ore patches in three corners, and dirt on every other
+#: tile. Coal is top-left, copper is top-right, and iron is bottom-left.
 _15X15_RESOURCES: Level = (
     LevelBuilder(15, 15)
     .fill_rect(0, 0, 4, 4, BlockType.COAL, resources=BLOCK_MAX_RESOURCES)
@@ -1309,14 +1317,14 @@ _15X15_RESOURCES: Level = (
     .build("15x15_resources")
 )
 
-#: Registry of all built-in levels, keyed by name.
+#: Every built-in level, with the name as the key.
 LEVELS: dict[str, Level] = {
     _15X15_RESOURCES.name: _15X15_RESOURCES,
 }
 
 
 def get_level(name: str) -> Level:
-    """Look up a built-in level by name.
+    """Find a built-in level by name.
 
     Parameters
     ----------
@@ -1326,15 +1334,16 @@ def get_level(name: str) -> Level:
     Returns
     -------
     Level
-        The registered level itself, not a copy. It is shared with every other
-        caller and with :data:`LEVELS`, so mutating its arrays changes the
-        level for the whole process. :func:`build_state` only reads it.
+        The registered level itself, and not a copy.
+
+        CAUTION: Do not write to the arrays of the result. Every caller shares
+        this object with :data:`LEVELS`, so a write changes the level for the
+        whole process. :func:`build_state` only reads it.
 
     Raises
     ------
     KeyError
-        No level is registered under that name. The message lists the names
-        that are.
+        If no level carries that name. The message lists the names that exist.
 
     Examples
     --------

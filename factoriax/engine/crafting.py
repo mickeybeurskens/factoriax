@@ -1,16 +1,17 @@
-"""Crafting a recipe by hand, out of the player's own inventory.
+"""Craft a recipe by hand, from the inventory of the player.
 
-A player craft finishes in the step that starts it: the inputs leave the
-inventory and the output arrives in the same call. A recipe's ``ticks`` is
-therefore not read here, and an assembler running the same recipe pays a cost
-the player does not.
+A player craft finishes in the step that starts it. The inputs leave the
+inventory and the output arrives in the same call. This module therefore never
+reads the ``ticks`` field of a recipe. An assembler that runs the same recipe
+pays a cost that the player does not pay.
 
-Recipes come from :attr:`~factoriax.engine.state.EnvParams.recipe_table`
-rather than from a module global, so a scenario can ship its own book and a
-balance overlay can retune counts without rebaking the XLA graph.
+Recipes come from :attr:`~factoriax.engine.state.EnvParams.recipe_table`, not
+from a module global. A scenario can therefore supply its own book, and a
+balance overlay can change the counts with no new XLA graph.
 
-Every function here is traceable and takes a player index rather than acting
-on all players, because an action applies to one player per step.
+Every function here is traceable and takes one player index. An action applies
+to one player in each step, so no function here works on all players at the
+same time.
 """
 
 import jax
@@ -26,23 +27,24 @@ def count_item_in_inventory(
     player_idx: int | jax.Array,
     item_type: int | jax.Array,
 ) -> jax.Array:
-    """Count how many of one item a player carries.
+    """Count the items of one type that a player carries.
 
     Parameters
     ----------
     state
-        State to read. Not modified.
+        State to read. The function does not modify it.
     player_idx
-        Row of ``player_inventory`` to read. Not bounds-checked, so an index
-        past the player count silently reads a clamped row under ``jit``.
+        Row of ``player_inventory`` to read. The function does not test the
+        bounds. Under ``jit``, an index past the player count reads a clamped
+        row and raises nothing.
     item_type
         ``ItemType`` value to count.
 
     Returns
     -------
     jax.Array
-        Scalar int16 count. Zero means the player holds none, which is also
-        what an item with no recipe and no source reads as.
+        Scalar int16 count. Zero means that the player holds none of this
+        item. An item with no recipe and no source also reads as zero.
     """
     return state.player_inventory[player_idx, item_type]
 
@@ -53,36 +55,37 @@ def can_afford_recipe(
     player_idx: int | jax.Array,
     recipe_idx: int | jax.Array,
 ) -> jax.Array:
-    """Check whether a player holds every input one craft of a recipe needs.
+    """Test whether a player holds every input that one craft of a recipe needs.
 
-    Inputs only. Whether the output would fit is a separate question, which
-    :func:`craft_recipe` asks before it commits, so an affordable recipe can
-    still refuse to craft.
+    This function tests the inputs only. Space for the output is a separate
+    question. :func:`craft_recipe` asks that question before it writes, so a
+    recipe that the player can afford can still fail to craft.
 
-    Each of the recipe's two input slots is checked on its own, and a slot
-    padded with ``ItemType.EMPTY`` passes. That is correct only because a
-    recipe names each input item at most once, which
-    :class:`~factoriax.engine.recipes.RecipeBook` enforces at construction: a
-    repeated item would read as affordable on one slot's worth and then craft
-    the count below zero.
+    The function tests each of the two input slots of the recipe on its own. A
+    slot with the padding value ``ItemType.EMPTY`` passes. This is correct only
+    because a recipe names each input item one time at most.
+    :class:`~factoriax.engine.recipes.RecipeBook` enforces that rule when it
+    builds the table. With a repeated item, one slot alone can pass the test,
+    and the craft then takes the count below zero.
 
     Parameters
     ----------
     state
-        State to read. Not modified.
+        State to read. The function does not modify it.
     params
-        Supplies ``recipe_table``. A scenario's own book is honoured here.
+        Supplies ``recipe_table``. This function reads the book of the
+        scenario, if the scenario has one.
     player_idx
-        Which player's inventory to check.
+        Player whose inventory the function reads.
     recipe_idx
-        Row of the recipe table. Must be a real row; unlike
-        :func:`craft_recipe` this does not accept ``-1``.
+        Row of the recipe table. The value must be a real row. This function
+        does not accept ``-1``, but :func:`craft_recipe` does.
 
     Returns
     -------
     jax.Array
-        Scalar bool. True when every named input is present in at least the
-        required count.
+        Scalar bool. True when the player holds each named input in the
+        required count or more.
     """
     table = params.recipe_table
     input_items = table.input_items[recipe_idx]
@@ -105,16 +108,22 @@ def craft_recipe(
     player_idx: int | jax.Array,
     recipe_idx: int | jax.Array,
 ) -> EnvState:
-    """Craft one batch of a recipe into a player's inventory, in this step.
+    """Craft one batch of a recipe into the inventory of a player, in this step.
 
-    Consumes the recipe's inputs and adds ``output_count`` of its output. The
-    craft is refused whole, never partially, when the recipe row does not
-    exist, the player cannot afford it, or the output would pass the player's
-    stack cap. A refused craft leaves the inventory exactly as it was, so a
-    caller can issue the action unconditionally.
+    The function consumes the inputs of the recipe and adds ``output_count`` of
+    its output. It refuses the whole craft, and never a part of it, in three
+    cases:
 
-    One batch per call. Crafting takes no time, so ``ticks`` is not read and
-    a player pays none of the delay the same recipe costs an assembler.
+    - The recipe row does not exist.
+    - The player cannot afford the inputs.
+    - The output passes the stack limit of the player.
+
+    A refused craft leaves the inventory exactly as it was, so a caller can
+    issue the action at any time.
+
+    One call crafts one batch. A hand craft takes no time, so this function
+    never reads ``ticks``. The player pays none of the delay that the same
+    recipe costs an assembler.
 
     Parameters
     ----------
@@ -123,27 +132,25 @@ def craft_recipe(
     params
         Supplies ``recipe_table``, which fixes the inputs, output, and yield.
     player_idx
-        Which player's inventory to charge and credit.
+        Player whose inventory the function charges and credits.
     recipe_idx
-        Row of the recipe table, or ``-1`` when the active table has no
-        recipe for the requested item. ``-1`` is expected rather than an
-        error: a ``CRAFT_`` action names an item, and a scenario's book need
-        not produce every item the action space can name. The gather is
-        clamped to a real row and the craft gated off, so the call is a
-        no-op.
+        Row of the recipe table, or ``-1`` when the active table has no recipe
+        for the item. The value ``-1`` is normal and is not an error. A
+        ``CRAFT_`` action names an item, and the book of a scenario does not
+        have to produce every item that the action space can name. The
+        function clamps the gather to a real row and gates the craft off, so
+        such a call does nothing.
 
     Returns
     -------
     EnvState
-        A new state whose ``player_inventory`` reflects the craft, or an
-        equivalent state when the craft was refused. Every other field is
-        carried through untouched.
+        A new state. Its ``player_inventory`` holds the result of the craft.
+        After a refused craft that inventory is equal to the input inventory.
+        Every other field passes through unchanged.
     """
     table = params.recipe_table
-    # ``recipe_idx`` is -1 when the active table has no recipe for the
-    # requested item (e.g. a CRAFT_* action whose output isn't in this
-    # scenario's table). Clamp the gather to a valid row and gate the craft
-    # off ``valid`` so the read is safe and the action no-ops.
+    # Clamp the gather to a valid row and gate the craft off ``valid``, so a
+    # -1 index reads safely and the action does nothing.
     valid = jnp.asarray(recipe_idx) >= 0
     recipe_idx = jnp.maximum(jnp.asarray(recipe_idx), 0)
     can_craft = can_afford_recipe(state, params, player_idx, recipe_idx)

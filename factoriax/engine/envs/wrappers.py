@@ -1,4 +1,4 @@
-"""FactoriaX environment wrappers."""
+"""The wrappers that compose over a FactoriaX environment."""
 
 from __future__ import annotations
 
@@ -28,19 +28,17 @@ __all__ = [
 
 
 class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
-    """State that caches the initial configuration for cheap auto-reset.
+    """State that holds a copy of the start world, for a cheap auto-reset.
 
-    Stores a frozen copy of the initial state alongside the live state.
-    On episode termination, ``lax.select`` swaps in the cached copy
-    instead of calling ``reset_env`` (which runs full procedural
-    terrain generation).
+    The class keeps a frozen copy of the start state next to the live state. At
+    the end of an episode, ``lax.select`` puts the copy back. It does not call
+    ``reset_env``, which runs the whole terrain generation.
 
-    The memory cost is one extra copy of ``EnvState`` per batch
-    element. At 32x32 that is roughly 12 KB per element. At 128x128
-    with ``max_machines=4096`` it grows to roughly 185 KB per element,
-    which doubles total state memory. For large maps, reduce
-    ``batch_size`` or ``max_machines`` accordingly.
-
+    The cost is one extra copy of ``EnvState`` for each batch element. At 32x32
+    that is about 12 KB for each element. At 128x128 with
+    ``max_machines=4096`` it grows to about 185 KB for each element, which
+    doubles the total state memory. On a large map, lower ``batch_size`` or
+    ``max_machines``.
     """
 
     env_state: EnvState
@@ -48,18 +46,18 @@ class AutoResetState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 
 class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # type: ignore[misc]
-    """Gymnax wrapper providing cached-state auto-reset.
+    """A gymnax wrapper that auto-resets from a cached state.
 
-    Use this wrapper when you need auto-reset inside ``lax.scan``
-    training loops (e.g. PureJaxRL-style PPO). For manual episode
-    management, use :class:`FactoriaxEnv` directly.
+    Use this wrapper when you need an auto-reset inside a ``lax.scan`` training
+    loop, such as a PPO loop in the PureJaxRL style. To manage the episodes
+    yourself, use :class:`FactoriaxEnv` directly.
 
     Parameters
     ----------
     inner
         Core FactoriaX environment to wrap.
     resample
-        Whether a new episode regenerates its world. See :meth:`__init__`.
+        Whether a new episode builds a new world. See :meth:`__init__`.
     """
 
     def __init__(self, inner: FactoriaxEnv, resample: bool = False) -> None:
@@ -70,13 +68,13 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         inner
             Core environment instance.
         resample
-            Whether each episode gets a fresh world. ``False`` restores the
-            cached initial state, which is cheap but replays one layout for
-            the whole run, so an agent can overfit to it. ``True`` calls
-            ``inner.reset_env`` with a new key. That runs world generation
-            on every step rather than only on the ones that terminate,
-            because both sides of the select are always evaluated, so it is
-            worth it only for cheap generators.
+            Whether each episode gets a new world. ``False`` puts the cached
+            start state back. That is cheap, but it repeats one layout for the
+            whole run, and an agent can overfit to it. ``True`` calls
+            ``inner.reset_env`` with a new key. That runs the world generation
+            in every step, and not only in the steps that end an episode,
+            because both sides of the select always run. Use ``True`` only
+            with a cheap generator.
         """
         super().__init__()
         self._inner = inner
@@ -84,32 +82,32 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
     @property
     def default_params(self) -> EnvParams:
-        """Delegate to the inner env's default params."""
+        """Return the default parameters of the inner environment."""
         return self._inner.default_params
 
     @property
     def map_width(self) -> int:
-        """Map width in tiles, from the inner env."""
+        """Return the map width in tiles, from the inner environment."""
         return self._inner.map_width
 
     @property
     def map_height(self) -> int:
-        """Map height in tiles, from the inner env."""
+        """Return the map height in tiles, from the inner environment."""
         return self._inner.map_height
 
     @property
     def num_players(self) -> int:
-        """Player count, from the inner env."""
+        """Return the number of players, from the inner environment."""
         return self._inner.num_players  # type: ignore[no-any-return]
 
     @property
     def obs(self) -> str:
-        """Observation variant key, from the inner env."""
+        """Return the observation variant key, from the inner environment."""
         return self._inner.obs
 
     @property
     def obs_radius(self) -> int:
-        """Local-window half-width, from the inner env."""
+        """Return the half-width of the local window, from the inner environment."""
         return self._inner.obs_radius
 
     def step_env(
@@ -119,19 +117,19 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, AutoResetState, jax.Array, jax.Array, dict[str, Any]]:
-        """Step the environment with cached auto-reset on termination.
+        """Step the environment, and auto-reset from the cache at the end.
 
-        When ``done`` is True, the live state is replaced with the
-        cached reset state via ``lax.select``. No terrain generation
-        occurs.
+        When ``done`` is True, ``lax.select`` puts the cached reset state in
+        place of the live state. No terrain generation runs.
 
         Parameters
         ----------
         key
-            PRNG key. Split into a step key and a reset key, so the
-            reset branch draws a fresh world under ``resample``.
+            PRNG key. The method splits it into a step key and a reset key, so
+            the reset branch draws a new world under ``resample``.
         state
-            Wrapped state holding both the live and cached worlds.
+            Wrapped state, which holds both the live world and the cached
+            world.
         action
             Action for the selected player.
         params
@@ -140,11 +138,11 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Returns
         -------
         tuple
-            ``(obs, new_state, reward, done, info)``. When ``done`` is True
-            the returned state is already the next episode's first state,
-            while ``reward`` and ``done`` still describe the step that
-            ended. Both branches run every step: :func:`jax.lax.select`
-            does not short circuit.
+            ``(obs, new_state, reward, done, info)``. When ``done`` is True,
+            the state in the result is already the first state of the next
+            episode, and ``reward`` and ``done`` still describe the step that
+            ended. Both branches run in every step, because
+            :func:`jax.lax.select` evaluates both.
         """
         step_key, reset_key = jax.random.split(key)
         obs_step, new_env, reward, done, info = self._inner.step_env(
@@ -170,21 +168,21 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
     def reset_env(
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, AutoResetState]:
-        """Reset and cache the initial state for future auto-resets.
+        """Reset, and cache the start state for the later auto-resets.
 
         Parameters
         ----------
         key
-            PRNG key for world generation.
+            PRNG key for the world generation.
         params
             Environment parameters.
 
         Returns
         -------
         tuple
-            ``(obs, state)``. The cached copy is taken here and never
-            refreshed, so under ``resample=False`` every episode in the run
-            replays this exact world.
+            ``(obs, state)``. The method takes the cached copy here and never
+            replaces it. With ``resample=False``, every episode of the run
+            therefore repeats this exact world.
         """
         obs, env_state = self._inner.reset_env(key, params)
         state = AutoResetState(
@@ -194,7 +192,7 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         return obs, state
 
     def get_obs(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Pass-through observation from the inner env.
+        """Return the observation of the inner environment.
 
         Parameters
         ----------
@@ -206,13 +204,13 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Returns
         -------
         jax.Array
-            The inner env's observation of the live state, not the cached
-            one.
+            The observation that the inner environment makes of the live
+            state, and not of the cached state.
         """
         return self._inner.get_obs(state.env_state, params)
 
     def is_terminal(self, state: AutoResetState, params: EnvParams) -> jax.Array:
-        """Delegate termination to the inner env.
+        """Ask the inner environment whether the episode is at its end.
 
         Parameters
         ----------
@@ -224,37 +222,39 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
         Returns
         -------
         jax.Array
-            Scalar bool from the inner env.
+            Scalar bool from the inner environment.
         """
         return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Return the inner env's action space, unchanged.
+        """Return the action space of the inner environment, unchanged.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Discrete
-            The inner env's action space, unchanged.
+            The action space of the inner environment, unchanged.
         """
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Return the inner env's observation space, unchanged.
+        """Return the observation space of the inner environment, unchanged.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Box
-            The inner env's observation space, unchanged.
+            The observation space of the inner environment, unchanged.
         """
         return self._inner.observation_space(params)
 
@@ -265,23 +265,21 @@ class AutoResetWrapper(environment.Environment[AutoResetState, EnvParams]):  # t
 
 
 class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
-    """Replace blocked actions with :data:`Action.NOOP`.
+    """Replace a blocked action with :data:`Action.NOOP`.
 
-    Parameters
-    ----------
-    A blocked action is rewritten, not removed. It stays in the action
-    space and still costs a timestep, so an agent that emits one loses a
-    turn rather than being prevented from choosing it.
+    The wrapper rewrites a blocked action and does not remove it. The action
+    stays in the action space and still costs a timestep. An agent that sends
+    one therefore loses a turn, and nothing stops it from choosing that action.
 
     Parameters
     ----------
     inner
-        Environment to wrap. Any gymnax-compatible env whose state type is
-        :class:`EnvState` works.
+        Environment to wrap. Any gymnax-compatible environment with the state
+        type :class:`EnvState` works.
     blocked_actions
-        ``Action`` integers to block. Captured at construction and baked
-        into the JIT graph of :meth:`step_env`, so changing the set means a
-        new env and a new compile.
+        ``Action`` integers to block. The constructor captures them and writes
+        them into the JIT graph of :meth:`step_env`. A different set therefore
+        needs a new environment and a new compile.
     """
 
     def __init__(
@@ -300,27 +298,27 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
 
     @property
     def default_params(self) -> EnvParams:
-        """Delegate to the inner env's default params."""
+        """Return the default parameters of the inner environment."""
         params: EnvParams = self._inner.default_params
         return params
 
     @property
     def map_width(self) -> int:
-        """Map width in tiles, from the inner env."""
+        """Return the map width in tiles, from the inner environment."""
         return self._inner.map_width  # type: ignore[no-any-return]
 
     @property
     def map_height(self) -> int:
-        """Map height in tiles, from the inner env."""
+        """Return the map height in tiles, from the inner environment."""
         return self._inner.map_height  # type: ignore[no-any-return]
 
     @property
     def num_players(self) -> int:
-        """Player count, from the inner env."""
+        """Return the number of players, from the inner environment."""
         return self._inner.num_players  # type: ignore[no-any-return]
 
     def _rewrite(self, action: int | jax.Array) -> jax.Array:
-        """Rewrite a blocked action to NOOP; pass others through unchanged."""
+        """Rewrite a blocked action to NOOP, and return any other action as it is."""
         action_i = jnp.asarray(action, dtype=jnp.int32)
         is_blocked = self._mask[action_i]
         return jnp.asarray(jnp.where(is_blocked, self._noop, action_i))
@@ -332,24 +330,24 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]]:
-        """Step the inner env after rewriting blocked actions to NOOP.
+        """Rewrite a blocked action to NOOP, then step the inner environment.
 
         Parameters
         ----------
         key
-            PRNG key, passed to the inner env.
+            PRNG key. The method passes it to the inner environment.
         state
             State to advance.
         action
-            Action to take. Rewritten to NOOP when blocked.
+            Action to take. The method rewrites it to NOOP when it is blocked.
         params
             Environment parameters.
 
         Returns
         -------
         tuple
-            ``(obs, new_state, reward, done, info)`` from the inner env,
-            after the action was rewritten. A blocked action still costs a
+            ``(obs, new_state, reward, done, info)`` from the inner
+            environment, after the rewrite. A blocked action still costs a
             timestep.
         """
         result: tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]] = (
@@ -362,25 +360,25 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         key: jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, Any]:
-        """Pass-through reset to the inner env.
+        """Reset the inner environment and return its result.
 
         Parameters
         ----------
         key
-            PRNG key for world generation.
+            PRNG key for the world generation.
         params
             Environment parameters.
 
         Returns
         -------
         tuple
-            ``(obs, state)`` from the inner env.
+            ``(obs, state)`` from the inner environment.
         """
         result: tuple[jax.Array, Any] = self._inner.reset_env(key, params)
         return result
 
     def get_obs(self, state: Any, params: EnvParams) -> jax.Array:
-        """Pass-through observation from the inner env.
+        """Return the observation of the inner environment.
 
         Parameters
         ----------
@@ -392,13 +390,13 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         Returns
         -------
         jax.Array
-            The inner env's observation.
+            The observation of the inner environment.
         """
         obs: jax.Array = self._inner.get_obs(state, params)
         return obs
 
     def is_terminal(self, state: Any, params: EnvParams) -> jax.Array:
-        """Pass-through termination check to the inner env.
+        """Ask the inner environment whether the episode is at its end.
 
         Parameters
         ----------
@@ -410,41 +408,43 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
         Returns
         -------
         jax.Array
-            Scalar bool from the inner env.
+            Scalar bool from the inner environment.
         """
         terminal: jax.Array = self._inner.is_terminal(state, params)
         return terminal
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Return the inner env's action space, unchanged.
+        """Return the action space of the inner environment, unchanged.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Discrete
-            The inner env's action space, unchanged. Blocked actions stay
-            in the space and are rewritten rather than removed, so an
-            agent can still emit them and a policy's output width does not
-            depend on the mask.
+            The action space of the inner environment, unchanged. A blocked
+            action stays in the space, and the wrapper rewrites it instead of
+            removing it. An agent can therefore still send it, and the output
+            width of a policy does not depend on the mask.
         """
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Return the inner env's observation space, unchanged.
+        """Return the observation space of the inner environment, unchanged.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Box
-            The inner env's observation space, unchanged.
+            The observation space of the inner environment, unchanged.
         """
         return self._inner.observation_space(params)
 
@@ -455,26 +455,28 @@ class ActionMaskWrapper(environment.Environment[EnvState, EnvParams]):  # type: 
 
 
 class LogEnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
-    """State that accumulates per-episode return and length for logging.
+    """State that totals the return and the length of each episode, for the log.
 
-    All scalar fields are JAX arrays so the state is vmap- and scan-safe.
-    ``returned_*`` hold the last *completed* episode's stats; they are
-    non-zero only on the step where ``done`` fires.
+    Every scalar field is a JAX array, so the state is safe under vmap and
+    under scan. The ``returned_*`` fields hold the numbers of the last finished
+    episode. They are non-zero only on the step where ``done`` becomes True.
 
-    Parameters
+    Attributes
     ----------
     env_state :
-        Inner wrapper's state (any JAX pytree).
+        State of the inner wrapper. It can be any JAX pytree.
     episode_returns :
-        Running return for the current episode (reset to 0 on done).
+        Running return of the current episode. It returns to 0 on ``done``.
     episode_lengths :
-        Running step count for the current episode (reset to 0 on done).
+        Running step count of the current episode. It returns to 0 on ``done``.
     returned_episode_returns :
-        Return of the episode that just completed (0 while in-progress).
+        Return of the episode that just finished. It is 0 while an episode
+        runs.
     returned_episode_lengths :
-        Length of the episode that just completed (0 while in-progress).
+        Length of the episode that just finished. It is 0 while an episode
+        runs.
     timestep :
-        Global step counter (never reset).
+        Global step counter. Nothing resets it.
     """
 
     env_state: Any
@@ -486,21 +488,22 @@ class LogEnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 
 
 class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: ignore[misc]
-    """Inject per-episode statistics into the ``info`` dict on every step.
+    """Add the numbers of each episode to the ``info`` dict in every step.
 
-    Wraps any gymnax-compatible env and augments the step ``info`` dict
-    with the following keys on every call to :meth:`step_env`:
+    This wrapper takes any gymnax-compatible environment. Every call to
+    :meth:`step_env` adds these keys to the ``info`` dict:
 
-    - ``"returned_episode_returns"`` — return of the most recently completed
-      episode (non-zero only on the terminal step).
-    - ``"returned_episode_lengths"`` — length of the most recently completed
-      episode (non-zero only on the terminal step).
-    - ``"returned_episode"`` — ``True`` on the step an episode ends.
-    - ``"timestep"`` — global step counter, incremented every call.
+    - ``"returned_episode_returns"``, the return of the episode that finished
+      last. It is non-zero only on the final step of an episode.
+    - ``"returned_episode_lengths"``, the length of the episode that finished
+      last. It is non-zero only on the final step of an episode.
+    - ``"returned_episode"``, which is ``True`` on the step where an episode
+      ends.
+    - ``"timestep"``, the global step counter, which rises with every call.
 
-    These keys mirror the PureJaxRL ``LogWrapper`` convention so downstream
-    training loops can extract episode stats directly from ``traj_batch.info``
-    returned by ``jax.lax.scan``.
+    These keys follow the ``LogWrapper`` convention of PureJaxRL. A training
+    loop can therefore read the episode numbers directly from
+    ``traj_batch.info``, which ``jax.lax.scan`` returns.
 
     Examples
     --------
@@ -517,35 +520,35 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
 
     @property
     def default_params(self) -> EnvParams:
-        """Delegate to the inner env's default params."""
+        """Return the default parameters of the inner environment."""
         return self._inner.default_params  # type: ignore[return-value]
 
     @property
     def map_width(self) -> int:
-        """Map width in tiles, from the inner env."""
+        """Return the map width in tiles, from the inner environment."""
         return self._inner.map_width  # type: ignore[no-any-return]
 
     @property
     def map_height(self) -> int:
-        """Map height in tiles, from the inner env."""
+        """Return the map height in tiles, from the inner environment."""
         return self._inner.map_height  # type: ignore[no-any-return]
 
     def reset_env(
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, LogEnvState]:
-        """Reset the inner env and initialise all episode counters to zero.
+        """Reset the inner environment, and set every episode counter to zero.
 
         Parameters
         ----------
         key
-            PRNG key for world generation.
+            PRNG key for the world generation.
         params
             Environment parameters.
 
         Returns
         -------
         tuple
-            ``(obs, state)`` with the running episode counters zeroed.
+            ``(obs, state)``, with the running episode counters at zero.
         """
         obs, env_state = self._inner.reset_env(key, params)
         state = LogEnvState(
@@ -565,22 +568,23 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, LogEnvState, jax.Array, jax.Array, dict[str, Any]]:
-        """Step the inner env and update episode accumulators.
+        """Step the inner environment, and update the episode counters.
 
-        On termination (``done=True``):
-        - ``returned_episode_returns`` captures the just-completed return.
-        - ``returned_episode_lengths`` captures the just-completed length.
-        - ``episode_returns`` and ``episode_lengths`` reset to zero.
+        On the step where ``done`` is True:
 
-        All info keys are always present; use ``info["returned_episode"]``
-        as a boolean mask to select valid ``returned_episode_returns`` entries.
+        - ``returned_episode_returns`` takes the return that just finished.
+        - ``returned_episode_lengths`` takes the length that just finished.
+        - ``episode_returns`` and ``episode_lengths`` return to zero.
+
+        Every info key is always present. Use ``info["returned_episode"]`` as a
+        boolean mask to select the valid ``returned_episode_returns`` entries.
 
         Parameters
         ----------
         key
-            PRNG key, passed to the inner env.
+            PRNG key. The method passes it to the inner environment.
         state
-            Wrapped state carrying the running counters.
+            Wrapped state, which carries the running counters.
         action
             Action for the selected player.
         params
@@ -590,8 +594,8 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
         -------
         tuple
             ``(obs, new_state, reward, done, info)``. ``info`` carries the
-            episode return and length, which are only meaningful on the
-            step where ``done`` is True.
+            return and the length of the episode. Those two have meaning only
+            on the step where ``done`` is True.
         """
         obs, env_state, reward, done, info = self._inner.step_env(
             key, state.env_state, action, params
@@ -621,7 +625,7 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
         return obs, new_state, reward, done, info
 
     def get_obs(self, state: LogEnvState, params: EnvParams) -> jax.Array:
-        """Pass-through observation from the inner env.
+        """Return the observation of the inner environment.
 
         Parameters
         ----------
@@ -633,12 +637,12 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
         Returns
         -------
         jax.Array
-            The inner env's observation.
+            The observation of the inner environment.
         """
         return self._inner.get_obs(state.env_state, params)
 
     def is_terminal(self, state: LogEnvState, params: EnvParams) -> jax.Array:
-        """Pass-through termination check to the inner env.
+        """Ask the inner environment whether the episode is at its end.
 
         Parameters
         ----------
@@ -650,36 +654,38 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
         Returns
         -------
         jax.Array
-            Scalar bool from the inner env.
+            Scalar bool from the inner environment.
         """
         return self._inner.is_terminal(state.env_state, params)
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Return the inner env's action space, unchanged.
+        """Return the action space of the inner environment, unchanged.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Discrete
-            The inner env's action space, unchanged.
+            The action space of the inner environment, unchanged.
         """
         return self._inner.action_space(params)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Return the inner env's observation space, unchanged.
+        """Return the observation space of the inner environment, unchanged.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Box
-            The inner env's observation space, unchanged.
+            The observation space of the inner environment, unchanged.
         """
         return self._inner.observation_space(params)

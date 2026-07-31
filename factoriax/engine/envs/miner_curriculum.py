@@ -1,30 +1,31 @@
-"""MinerBootstrap-v1 — sparse completion-only miner bootstrap.
+"""MinerBootstrap-v1: a sparse task that pays only on completion.
 
-One scenario: from an empty inventory on the 16x16 six-patch terrain
-(:mod:`factoriax.engine.envs.common`), mine limestone and silicon,
-craft six miners, and get all six producing. Reward is 1.0 exactly
-once per episode, paid on the step that completes the task (which also
-ends the episode); every other transition pays 0. Max score 1.
+The player starts with an empty inventory on the 16x16 six-patch terrain of
+:mod:`factoriax.engine.envs.common`. The task is to mine limestone and silicon,
+craft six miners, and put all six into production. The reward is 1.0 exactly
+one time in an episode, on the step that completes the task. That step also
+ends the episode. Every other step pays 0, and the highest score is 1.
 
-The 14-bit gate ladder over the mine -> craft -> place loop remains as
-zero-weight *diagnostics*: the bits latch via
-:func:`~factoriax.engine.envs.base.achievement_hook` so analysis can
-see how far an episode got, but they pay nothing and are not part of
-the observation, so the agent sees no difference.
+The ladder of 14 gate bits over the mine, craft, and place loop stays as a
+zero-weight diagnostic. The bits latch through
+:func:`~factoriax.engine.envs.base.achievement_hook`, so analysis code can see
+how far an episode reached. They pay nothing, and they are not part of the
+observation, so the agent sees no difference.
 
-This sparsity is deliberate. Standard PPO is expected to fail here from
-scratch — that failure is the experimental baseline. The hypothesis
-under test is that a *backward curriculum over start states* solves
-what sparse-reward PPO cannot: training starts from nearly-done states
-(place one last miner) and walks backwards to the pristine empty-
-inventory start. The earlier forward curriculum over separate staged
-envs (``MineOres-v1``, ``CraftMiners-v1``, ``PlaceMiners-v1``; see git
-history) lost or tied against from-scratch PPO and was removed.
+This sparsity is deliberate. Standard PPO from scratch is expected to fail
+here, and that failure is the experimental baseline. The hypothesis under test
+is that a backward curriculum over start states solves what sparse-reward PPO
+cannot. Training starts from states that are almost done, where the agent
+places one last miner, and walks backwards to the empty-inventory start. An
+earlier forward curriculum used three separate staged environments:
+``MineOres-v1``, ``CraftMiners-v1``, and ``PlaceMiners-v1``. The git history
+holds them. That curriculum lost against PPO from scratch or drew with it, so
+it is gone.
 
-The scenario shares EasyRocket-v1's world and recipe table and defaults
-to the same egocentric ``superficial_local`` obs with radius 7, so a
-policy trained here transfers onto EasyRocket-v1 built with the same
-obs kwargs without surgery.
+This scenario shares the world and the recipe table of EasyRocket-v1. It
+defaults to the same egocentric ``superficial_local`` observation with radius
+7. A policy that trains here therefore transfers to an EasyRocket-v1 built with
+the same observation arguments, with no change.
 """
 
 from __future__ import annotations
@@ -63,39 +64,39 @@ from factoriax.engine.rewards import achievement_reward
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY
 
-#: Episode budget. The scripted oracle in
-#: ``tests/scenarios/test_miner_curriculum.py`` pins the actual solve
-#: time well under it.
+#: Length of an episode. The scripted oracle in
+#: ``tests/scenarios/test_miner_curriculum.py`` solves the task in far fewer
+#: steps than this.
 _MAX_TIMESTEPS: int = 300
 
-#: Task target: six miners, one per ore patch.
+#: The target of the task: six miners, one for each ore patch.
 _N_MINERS: int = 6
 
 
 def _producing_at_least(state: EnvState, count: int) -> jax.Array:
-    """At least ``count`` placed miners have ore in their output buffer.
+    """Test whether ``count`` placed miners or more hold ore in their buffer.
 
-    A miner on dirt never fills its buffer, so this implies the miners
-    sit on ore tiles.
+    A miner on dirt never fills its buffer, so a True result also means that
+    those miners stand on ore tiles.
     """
     producing, _ = producing_miners(state)
     return jnp.sum(producing) >= count
 
 
 def _placed_at_least(state: EnvState, count: int) -> jax.Array:
-    """At least ``count`` miners are placed on the map."""
+    """Test whether the map holds ``count`` placed miners or more."""
     return count_machines(state, int(Machine.MINER)) >= count
 
 
-#: 14 latched bits over the full mine -> craft -> place loop. Only the
-#: last one pays; the rest carry weight 0 and ride along as free
-#: diagnostics for analysis — how far did an episode get before stalling:
+#: 14 latched bits over the whole mine, craft, and place loop. Only the last
+#: bit pays. The other 13 carry weight 0 and serve as a diagnostic for
+#: analysis: how far did an episode reach before it stopped. The bits are:
 #:
-#: - mining (4): 1 and 6 of each miner ingredient, on the monotone
-#:   ``items_mined`` counter (6 of each = materials for six miners);
-#: - craft (1): hold a miner;
-#: - placement (3): 1 / 3 / 6 miners placed;
-#: - production (6): 1..6 producing miners. The last one is the task.
+#: - 4 mining bits: 1 and 6 of each miner ingredient, on the ``items_mined``
+#:   counter, which never decreases. 6 of each is the material for six miners.
+#: - 1 craft bit: the player holds a miner.
+#: - 3 placement bits: 1, 3, and 6 miners placed.
+#: - 6 production bits: 1 to 6 producing miners. The last one is the task.
 MINER_BOOTSTRAP_ACHIEVEMENTS: tuple[Achievement, ...] = (
     Achievement(
         "mine_limestone",
@@ -163,7 +164,7 @@ MINER_BOOTSTRAP_ACHIEVEMENT_WEIGHTS: jax.Array = achievement_weights(
 def miner_bootstrap_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Sparse reward: 1.0 when the completion bit latches, else 0."""
+    """Sparse reward: 1.0 on the step where the completion bit latches, else 0."""
     return achievement_reward(
         prev_state,
         new_state,
@@ -173,13 +174,13 @@ def miner_bootstrap_reward(
 
 
 def all_miners_producing(state: EnvState, params: EnvParams) -> jax.Array:
-    """Episode-ending condition: six miners producing at once."""
+    """End condition of an episode: six miners produce at the same time."""
     del params
     return _producing_at_least(state, _N_MINERS)
 
 
 # ---------------------------------------------------------------------------
-# Backward-curriculum start states
+# The start states of the backward curriculum
 # ---------------------------------------------------------------------------
 
 
@@ -190,13 +191,14 @@ def _check_k(k: int) -> None:
 
 @dataclasses.dataclass(frozen=True)
 class BootstrapStart:
-    """Start-state spec for one backward-curriculum stage.
+    """Start-state spec for one stage of the backward curriculum.
 
-    The task decomposes as mine -> craft -> place, so the ladder undoes
-    it in reverse: with k = 1..6 missing miners, ``place(k)`` (A_k)
-    starts one action group from done, ``craft(k)`` (B_k) two, and
-    ``mine(k)`` (C_k) three — ``mine(6)`` is the pristine task. All
-    counts are Python-level statics baked into the env at build time.
+    The task divides into mine, then craft, then place. The ladder undoes it in
+    the reverse order. With ``k`` missing miners, from 1 to 6, ``place(k)``, or
+    A_k, starts one group of actions from the end. ``craft(k)``, or B_k, starts
+    two groups from the end, and ``mine(k)``, or C_k, starts three groups from
+    the end. ``mine(6)`` is the full task. Every count is a Python static that
+    the environment holds from build time.
     """
 
     n_placed: int
@@ -206,22 +208,23 @@ class BootstrapStart:
 
     @classmethod
     def place(cls, k: int) -> BootstrapStart:
-        """A_k: 6-k miners producing, k miners in inventory — walk & place."""
+        """A_k: 6-k miners produce, k miners in the inventory. Walk and place."""
         _check_k(k)
         return cls(n_placed=_N_MINERS - k, n_miners=k, n_materials=0)
 
     @classmethod
     def craft(cls, k: int) -> BootstrapStart:
-        """B_k: 6-k producing, k limestone + k silicon — craft & place."""
+        """B_k: 6-k produce, k limestone and k silicon. Craft and place."""
         _check_k(k)
         return cls(n_placed=_N_MINERS - k, n_miners=0, n_materials=k)
 
     @classmethod
     def mine_partial(cls, k: int) -> BootstrapStart:
-        """B'_k: 6-k producing, k of one ore only — mine the other, craft & place.
+        """B'_k: 6-k produce, k of one ore. Mine the other ore, craft, and place.
 
-        Which ore is held (limestone or silicon) is a fair coin flip per
-        episode, so the policy must learn to mine either.
+        The ore that the player holds is limestone or silicon, and each episode
+        draws it with equal probability. The policy must therefore learn to
+        mine both.
         """
         _check_k(k)
         return cls(
@@ -233,17 +236,18 @@ class BootstrapStart:
 
     @classmethod
     def mine(cls, k: int) -> BootstrapStart:
-        """C_k: 6-k producing, empty inventory — mine, craft & place."""
+        """C_k: 6-k produce, empty inventory. Mine, craft, and place."""
         _check_k(k)
         return cls(n_placed=_N_MINERS - k, n_miners=0, n_materials=0)
 
 
 def _patch_corners(world: jax.Array) -> jax.Array:
-    """``(6, 2)`` array of ``(y, x)`` patch corners, in PATCH_BLOCKS order.
+    """Return a ``(6, 2)`` array of ``(y, x)`` corners, in PATCH_BLOCKS order.
 
-    Each 2x2 patch is the only occurrence of its block type, so the
-    first set tile in row-major order is its top-left corner. Fixed-size
-    argmax per known block type keeps this jittable and vmappable.
+    Each 2x2 patch is the one place where its block type appears. The first
+    tile of that type, in row-major order, is therefore its top-left corner.
+    One argmax of fixed size for each known block type keeps the function
+    jittable and vmappable.
     """
     width = world.shape[1]
     corners = []
@@ -256,18 +260,22 @@ def _patch_corners(world: jax.Array) -> jax.Array:
 def apply_start(
     key: jax.Array, state: EnvState, params: EnvParams, start: BootstrapStart
 ) -> EnvState:
-    """Transform a pristine reset state into ``start``'s stage state.
+    """Turn a plain reset state into the stage state that ``start`` describes.
 
-    Pure and jittable; wired into :func:`miner_bootstrap` as a reset
-    hook and importable on its own for analysis. Pre-installs
-    ``start.n_placed`` miners — one per ore patch, patches drawn from
-    ``key`` so the free patch's ore type varies per episode — by
-    routing through :func:`~factoriax.engine.placement.place_machine`
-    (transiently teleporting the player above each patch corner), so
-    the installed entity matches action-path placement field for field.
-    Each pre-installed miner's output buffer is seeded with one unit of
-    its tile's ore, so it counts as producing from step 0. Finally the
-    player is restored and the inventory set to the stage's counts.
+    The function is pure and jittable. :func:`miner_bootstrap` uses it as a
+    reset hook, and analysis code can import it on its own.
+
+    It places ``start.n_placed`` miners, one on each ore patch. ``key`` selects
+    the patches, so the ore type of the free patch changes with the episode.
+    Each placement goes through
+    :func:`~factoriax.engine.placement.place_machine`, and the function moves
+    the player above each patch corner for that one call. The new entity
+    therefore matches a placement from the action path, field for field.
+
+    The function then puts one unit of the ore of its tile into the output
+    buffer of each new miner, so the miner counts as a producer from step 0.
+    Last, it puts the player back where it was and sets the inventory to the
+    counts of the stage.
     """
     corners = _patch_corners(state.map)
     perm = jax.random.permutation(jax.random.fold_in(key, 1), len(PATCH_BLOCKS))
@@ -318,25 +326,25 @@ def miner_bootstrap(
     obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the MinerBootstrap-v1 env.
+    """Build the MinerBootstrap-v1 environment.
 
-    Empty inventory; mine limestone + silicon, craft six miners, and get
-    all six producing on ore. Completion pays 1.0 and ends the episode;
-    everything else pays 0. Max score 1.
+    The player starts with an empty inventory. The task is to mine limestone
+    and silicon, craft six miners, and put all six into production on ore.
+    Completion pays 1.0 and ends the episode. Every other step pays 0, and the
+    highest score is 1.
 
     Parameters
     ----------
     start :
-        Backward-curriculum stage state to reset into; ``None`` builds
-        the pristine task (identical to ``BootstrapStart.mine(6)``).
-        World, obs, actions, reward, and budget are the same for every
-        stage — only the start state differs.
+        Stage state of the backward curriculum to reset into. ``None`` builds
+        the full task, which equals ``BootstrapStart.mine(6)``. The world, the
+        observation, the actions, the reward, and the step budget are the same
+        for every stage. Only the start state changes.
     obs :
-        Observation variant passed to :class:`FactoriaxEnv`.
+        Observation variant. The function passes it to :class:`FactoriaxEnv`.
     obs_radius :
-        Half-width of the egocentric local window (the default radius 7
-        gives a 15×15 view on the 16×16 map); ignored for ``_global``
-        variants.
+        Half-width of the egocentric local window. The default radius 7 gives a
+        15x15 view on the 16x16 map. A ``_global`` variant ignores it.
     """
     reset_hooks = () if start is None else (partial(apply_start, start=start),)
     env = FactoriaxEnv(

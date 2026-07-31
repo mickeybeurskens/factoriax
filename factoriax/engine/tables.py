@@ -1,18 +1,18 @@
 """Derived JAX arrays and lookup tables for the FactoriaX engine.
 
 :mod:`factoriax.engine.constants` holds the pure-Python definitions. This module
-projects them into the ``jnp`` arrays engine code reads, and every array is
-built once at import.
+turns them into the ``jnp`` arrays that engine code reads. It builds every
+array once, at import.
 
-The arrays come in two shapes. A gather table is sized over the full range of
-whatever indexes it, an ``ItemType``, a ``Machine``, a ``BlockType``, or a
-``Direction``, and holds a neutral value at every position with no entry. A
-traced index therefore never falls outside it and a lookup needs no membership
+The arrays have two shapes. A gather table covers the full range of the value
+that indexes it: an ``ItemType``, a ``Machine``, a ``BlockType``, or a
+``Direction``. It holds a neutral value at every position that has no entry. A
+traced index therefore never falls outside it, and a lookup needs no membership
 test first. A membership set, such as :data:`MINEABLE_BLOCKS` or
-:data:`SOLID_BLOCKS`, holds only the values that belong and is compared against
-rather than indexed.
+:data:`SOLID_BLOCKS`, holds only the values that belong to the set. Code
+compares a value against such an array and never indexes it.
 
-Both shapes keep the lookups traced code needs branchless under ``jax.jit``.
+Both shapes keep the lookups of traced code branchless under ``jax.jit``.
 """
 
 from __future__ import annotations
@@ -33,9 +33,9 @@ from factoriax.engine.constants import (
 
 #: ``(dx, dy)`` step per :class:`~factoriax.engine.constants.Direction` value.
 #: Shape ``(5, 2)``, int32. Row 0 is ``(0, 0)`` for the value ``Direction``
-#: leaves unnumbered, so a machine with no direction set moves nothing. ``dy``
-#: grows downward, matching the row order of ``EnvState.map``: ``UP`` is
-#: ``(0, -1)``.
+#: leaves unnumbered, so a machine with no direction moves nothing. ``dy``
+#: increases downward, which matches the row order of ``EnvState.map``. ``UP``
+#: is therefore ``(0, -1)``.
 DIRECTIONS = jnp.array(
     [
         [0, 0],
@@ -51,24 +51,25 @@ DIRECTIONS = jnp.array(
 # Splitter and crossing direction decoding
 # ---------------------------------------------------------------------------
 #
-# ``EnvState.ent_direction`` holds one int8 per entity. A conveyor belt reads it
-# as a plain facing, but a splitter pushes to two sides at once and a crossing
-# carries two independent flows, so both need the byte unpacked into a pair of
-# Direction values. The tables below do that unpacking as a constant array
-# indexed by the byte, which keeps the belt tick in
-# ``factoriax.engine.machines.run_conveyor_belts`` branchless and traceable
-# under jax.jit. Each reserves row 0 for the value Direction leaves unnumbered,
-# which stored state uses to mean "no direction".
+# ``EnvState.ent_direction`` holds one int8 for each entity. A conveyor belt
+# reads it as a plain facing. A splitter pushes to two sides at the same time,
+# and a crossing carries two separate flows, so both need a pair of Direction
+# values out of that one byte. The tables below hold those pairs as constant
+# arrays, indexed by the byte. The belt tick in
+# ``factoriax.engine.machines.run_conveyor_belts`` therefore stays branchless
+# and traceable under jax.jit. Each table keeps row 0 for the value Direction
+# leaves unnumbered, which stored state uses for "no direction".
 
 #: Output sides of a splitter, indexed by ``ent_direction``. Row ``d`` holds the
-#: two :class:`~factoriax.engine.constants.Direction` values perpendicular to
-#: facing ``d``, which are the sides a splitter facing ``d`` pushes to. Shape
-#: ``(5, 2)``, dtype int8. A splitter stores the direction items travel through
-#: it, the same convention a conveyor belt uses: a splitter facing ``d`` takes
-#: items from the neighbour on its ``-d`` side. The two entries sit in ascending
-#: ``Direction`` order and the order carries no meaning, since a splitter treats
-#: both sides alike. Row 0 is ``(0, 0)``, a pair that matches no direction, so an
-#: unset entity never reads as pushing to a real side.
+#: two :class:`~factoriax.engine.constants.Direction` values that are
+#: perpendicular to facing ``d``, and a splitter with facing ``d`` pushes to
+#: those two sides. Shape ``(5, 2)``, dtype int8. A splitter stores the
+#: direction in which items move through it, the same convention that a conveyor
+#: belt uses. A splitter with facing ``d`` therefore takes items from the
+#: neighbour on its ``-d`` side. The two entries are in ascending ``Direction``
+#: order, and that order carries no meaning, because a splitter treats both
+#: sides in the same way. Row 0 is ``(0, 0)``, a pair that matches no direction,
+#: so an entity with no direction never pushes to a real side.
 SPLITTER_PERP_OUTPUTS = jnp.array(
     [
         [0, 0],  # NONE
@@ -83,12 +84,12 @@ SPLITTER_PERP_OUTPUTS = jnp.array(
 #: Output direction of each crossing axis, indexed by the packed
 #: ``ent_direction``. Row ``e`` is ``(vertical_output, horizontal_output)`` for
 #: encoding ``e`` in 1..4. Shape ``(5, 2)``, dtype int8. A crossing runs a
-#: vertical flow and a horizontal flow at the same time and packs both into the
-#: one direction byte. An axis takes items from the neighbour opposite its
-#: output direction, so ``vertical_output == DOWN`` means the vertical flow
-#: reads the tile above and writes the tile below. The two input sides therefore
-#: always meet at a corner. Row 0 is ``(0, 0)``: a crossing with an unset
-#: direction moves nothing on either axis.
+#: vertical flow and a horizontal flow at the same time, and packs both into the
+#: one direction byte. An axis takes items from the neighbour opposite to its
+#: output direction. If ``vertical_output`` is ``DOWN``, the vertical flow reads
+#: the tile above and writes the tile below. The two input sides therefore
+#: always meet at a corner. Row 0 is ``(0, 0)``. A crossing with no direction
+#: moves nothing on either axis.
 CROSSING_AXIS_DIRS = jnp.array(
     [
         [0, 0],  # NONE / unset
@@ -100,11 +101,12 @@ CROSSING_AXIS_DIRS = jnp.array(
     dtype=jnp.int8,
 )
 
-#: Diagonal glyph per crossing encoding, for drawing only. A backslash marks a
-#: NW-SE diagonal, a forward slash a NE-SW one. The diagonal runs from the corner
-#: where the encoding's two input sides meet to the corner across from it. Index
-#: 0 is the empty string, because an unset crossing has no input sides. The
-#: simulation never reads this value; only the crossing icon does.
+#: Diagonal glyph for each crossing encoding, for the display only. A backslash
+#: marks a NW-SE diagonal. A forward slash marks a NE-SW diagonal. The diagonal
+#: runs from the corner where the two input sides of the encoding meet, to the
+#: opposite corner. Index 0 is the empty string, because a crossing with no
+#: direction has no input sides. The simulation never reads this value. Only the
+#: crossing icon reads it.
 CROSSING_DIAGONAL: tuple[str, ...] = (
     "",  # NONE
     "\\",  # 1: input pair (N, W)
@@ -114,22 +116,22 @@ CROSSING_DIAGONAL: tuple[str, ...] = (
 )
 
 #: Slot index of the vertical flow buffer in ``EnvState.ent_asm_in_type`` and
-#: ``EnvState.ent_asm_in_count``. A crossing reuses the two assembler input
-#: slots as one buffer per axis, which is why the two flows cannot mix: each
-#: axis only ever reads and writes its own slot.
+#: ``EnvState.ent_asm_in_count``. A crossing uses the two assembler input slots
+#: as one buffer for each axis. Each axis reads and writes its own slot only, so
+#: the two flows cannot mix.
 CROSSING_VERT_SLOT: int = 0
 #: Slot index of the horizontal flow buffer, in the same two arrays as
 #: :data:`CROSSING_VERT_SLOT`.
 CROSSING_HORIZ_SLOT: int = 1
 
 
-#: The mineable block types, as a set to test membership against rather than a
+#: The block types that a player can mine, as a membership set and not as a
 #: table to index. These are the keys of
-#: :data:`~factoriax.engine.constants.BLOCK_TO_ITEM`; mining any other block
-#: yields nothing.
+#: :data:`~factoriax.engine.constants.BLOCK_TO_ITEM`. Any other block gives
+#: nothing.
 MINEABLE_BLOCKS = jnp.array([int(b) for b in BLOCK_TO_ITEM], dtype=jnp.int32)
-#: The block types that nothing can stand on or build on, likewise a membership
-#: set. Both :func:`factoriax.engine.step.is_position_walkable` and
+#: The block types that hold no player and no machine, also a membership set.
+#: Both :func:`factoriax.engine.step.is_position_walkable` and
 #: :func:`factoriax.engine.placement.is_valid_placement_tile` read it, so the
 #: two agree on what is solid.
 SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.int32)
@@ -137,30 +139,30 @@ SOLID_BLOCKS = jnp.array([BlockType.WATER, BlockType.OUT_OF_BOUNDS], dtype=jnp.i
 _block_to_item = [int(ItemType.EMPTY)] * len(BlockType)
 for _block, _item in BLOCK_TO_ITEM.items():
     _block_to_item[int(_block)] = int(_item)
-#: Item each block yields when mined, indexed by ``BlockType``. Shape
-#: ``(len(BlockType),)``, int32. A block that is not mineable holds
-#: ``ItemType.EMPTY``, so a mine action on it produces item 0 and the caller
-#: needs no separate check.
+#: Item that each block gives to the player who mines it, indexed by
+#: ``BlockType``. Shape ``(len(BlockType),)``, int32. A block that a player
+#: cannot mine holds ``ItemType.EMPTY``. A mine action on it therefore gives
+#: item 0, and the caller needs no separate test.
 BLOCK_TO_ITEM_ARRAY = jnp.array(_block_to_item, dtype=jnp.int32)
 
-# Built in one pass so the forward and inverse arrays cannot disagree.
+# One pass builds both, so the forward and inverse arrays cannot disagree.
 _item_to_machine = [int(Machine.NONE)] * NUM_ITEM_TYPES
 _machine_to_item = [int(ItemType.EMPTY)] * len(Machine)
 for _it, _machine in ITEM_TO_MACHINE.items():
     _item_to_machine[int(_it)] = int(_machine)
     _machine_to_item[int(_machine)] = int(_it)
-#: Machine an item becomes when placed, indexed by ``ItemType``. Shape
-#: ``(NUM_ITEM_TYPES,)``, int32. An item that is not placeable holds
-#: ``Machine.NONE``, which is how placement rejects it.
+#: Machine that an item becomes on the map, indexed by ``ItemType``. Shape
+#: ``(NUM_ITEM_TYPES,)``, int32. An item that no action can place holds
+#: ``Machine.NONE``, and that is how placement refuses it.
 ITEM_TO_MACHINE_ARRAY = jnp.array(_item_to_machine, dtype=jnp.int32)
-#: Item a machine returns when picked up, indexed by ``Machine`` value. Shape
-#: ``(len(Machine),)``, int32. The inverse of :data:`ITEM_TO_MACHINE_ARRAY`,
-#: with ``ItemType.EMPTY`` at ``Machine.NONE``.
+#: Item that a machine gives back after a pickup, indexed by ``Machine`` value.
+#: Shape ``(len(Machine),)``, int32. This is the inverse of
+#: :data:`ITEM_TO_MACHINE_ARRAY`, with ``ItemType.EMPTY`` at ``Machine.NONE``.
 MACHINE_TO_ITEM_ARRAY = jnp.array(_machine_to_item, dtype=jnp.int32)
 
-#: The placeable item ids, as a membership set. Same contents as
-#: :data:`~factoriax.engine.constants.PLACEABLE_ITEM_LIST`, in the same order,
-#: which is the play UI's palette order and carries no meaning here.
+#: The placeable item ids, as a membership set. The contents and the order are
+#: the same as :data:`~factoriax.engine.constants.PLACEABLE_ITEM_LIST`. That
+#: order is the palette order of the play UI and carries no meaning here.
 PLACEABLE_ITEMS = jnp.array(PLACEABLE_ITEM_LIST, dtype=jnp.int32)
 
 _science_pack_index = [-1] * NUM_ITEM_TYPES
@@ -173,7 +175,7 @@ for _pos, _pack in enumerate(SCIENCE_PACK_TYPES):
 #: id when it totals ``EnvState.science_consumed_step``.
 SCIENCE_PACK_INDEX = jnp.array(_science_pack_index, dtype=jnp.int8)
 
-# Machines and the large rocket components are bulky, so a stack holds fewer.
+# Machines and the large rocket parts are bulky, so a stack holds fewer of them.
 _DEFAULT_PLAYER_STACK = 1024
 _BULKY_PLAYER_STACK = 128
 _PLAYER_STACK_OVERRIDES: dict[int, int] = {
@@ -193,11 +195,12 @@ _PLAYER_STACK_OVERRIDES: dict[int, int] = {
     int(ItemType.SPLITTER): _BULKY_PLAYER_STACK,
     int(ItemType.CROSSING): _BULKY_PLAYER_STACK,
 }
-#: Items of one type a player can carry, indexed by ``ItemType``. Shape
-#: ``(NUM_ITEM_TYPES,)``, int32. Counted in items, not stacks. ``EMPTY`` holds
-#: 0, so nothing accumulates in the slot that marks an empty one. A craft or
-#: pickup that would pass the cap is refused rather than clipped: the craft's
-#: inputs stay in the inventory, and the machine stays on the map.
+#: Number of items of one type that a player can carry, indexed by ``ItemType``.
+#: Shape ``(NUM_ITEM_TYPES,)``, int32. The unit is items, not stacks. ``EMPTY``
+#: holds 0, so no count can build up in the slot that marks an empty slot. The
+#: engine refuses a craft or a pickup that passes this limit, and does not clip
+#: it. The inputs of the craft stay in the inventory, and the machine stays on
+#: the map.
 PLAYER_MAX_STACK = jnp.array(
     [
         _PLAYER_STACK_OVERRIDES.get(i, _DEFAULT_PLAYER_STACK)
@@ -210,11 +213,11 @@ PLAYER_MAX_STACK = jnp.array(
 # Per-machine capacities
 # ---------------------------------------------------------------------------
 #
-# Both arrays below are indexed by Machine value and are built by iterating
-# Machine, so a kind added to the enum without an entry here raises KeyError at
-# import rather than silently reading a neighbour's row.
+# A Machine value indexes both arrays below, and both walk Machine to fill
+# themselves. A new kind with no entry here therefore raises KeyError at
+# import, and never reads the row of its neighbour.
 
-# Items one buffer slot holds, per machine kind.
+# Items that one buffer slot holds, for each machine kind.
 _MACHINE_BUFFER_STACK: dict[Machine, int] = {
     Machine.NONE: 0,
     Machine.MINER: 64,
@@ -229,19 +232,20 @@ _MACHINE_BUFFER_STACK: dict[Machine, int] = {
     Machine.CROSSING: 2,
 }
 
-#: Items one buffer slot holds, indexed by ``Machine`` value. Shape
-#: ``(len(Machine),)``, int16 to match ``EnvState.ent_buf_count``. Counted in
-#: items rather than stacks. Zero means the machine holds nothing, and
-#: ``ARM`` holds one because it carries a single item in transit. Transfers in
-#: :mod:`factoriax.engine.machines` compare a destination's count against this
-#: and refuse a move into a full buffer, leaving the source untouched.
+#: Items that one buffer slot holds, indexed by ``Machine`` value. Shape
+#: ``(len(Machine),)``, int16 to match ``EnvState.ent_buf_count``. The unit is
+#: items, not stacks. Zero means that the machine holds nothing. ``ARM`` holds
+#: one, because it carries a single item in transit. A transfer in
+#: :mod:`factoriax.engine.machines` compares the count at the destination
+#: against this value. It refuses a move into a full buffer and leaves the
+#: source unchanged.
 MACHINE_MAX_STACK = jnp.array(
     [_MACHINE_BUFFER_STACK[m] for m in Machine],
     dtype=jnp.int16,
 )
 
-# Machines that receive deliveries into the two ``ent_asm_in`` slots rather
-# than into ``ent_buf``: assemblers, furnaces, and science labs.
+# Machines that take deliveries into the two ``ent_asm_in`` slots and not into
+# ``ent_buf``: assemblers, furnaces, and science labs.
 _MACHINE_HAS_INPUT_SLOTS: dict[Machine, bool] = {
     Machine.NONE: False,
     Machine.MINER: False,
@@ -257,31 +261,35 @@ _MACHINE_HAS_INPUT_SLOTS: dict[Machine, bool] = {
 }
 
 #: Whether a machine takes deliveries into ``ent_asm_in``, indexed by
-#: ``Machine`` value. Shape ``(len(Machine),)``, bool. True for assemblers,
-#: furnaces, and science labs, which is the one property those three share:
-#: assemblers and furnaces consume the slots to run a recipe, while a science
-#: lab consumes them outright in :func:`factoriax.engine.step.run_labs`.
+#: ``Machine`` value. Shape ``(len(Machine),)``, bool. The value is True for
+#: assemblers, furnaces, and science labs, and that is the one property those
+#: three share. An assembler and a furnace consume the slots to run a recipe. A
+#: science lab consumes them directly, in
+#: :func:`factoriax.engine.step.run_labs`.
 #:
-#: Every route into those slots reads this rather than spelling the three
-#: machine kinds out again, so a new kind with input slots is added in one
-#: place. Do not use it to ask whether a machine runs recipes; a science lab
-#: does not, and :mod:`factoriax.engine.machines` tests ``ASSEMBLER`` and
-#: ``FURNACE`` directly for that.
+#: Every path into those slots reads this array, and no path lists the three
+#: machine kinds again. A new kind with input slots therefore needs one change
+#: only. This array does not tell a caller whether a machine runs recipes,
+#: because a science lab does not run recipes.
+#: :mod:`factoriax.engine.machines` tests ``ASSEMBLER`` and ``FURNACE``
+#: directly for that question.
 #:
-#: A ``CROSSING`` is False here despite storing its two axis buffers in the
-#: same two columns. Nothing delivers into a crossing by slot: the belt pass
-#: picks the axis from the direction of travel.
+#: A ``CROSSING`` is False here, although it keeps its two axis buffers in the
+#: same two columns. Nothing delivers into a crossing by slot. The belt pass
+#: selects the axis from the direction of travel.
 MACHINE_HAS_INPUT_SLOTS = jnp.array(
     [_MACHINE_HAS_INPUT_SLOTS[m] for m in Machine],
     dtype=jnp.bool_,
 )
 
-#: Hit points a machine is placed with. The same for every machine kind;
-#: :data:`MACHINE_MAX_HEALTH` spreads it over the ``Machine`` range so a caller
-#: can index it with a machine type without special-casing.
+#: Hit points of a machine at the moment of placement. The value is the same for
+#: every machine kind. :data:`MACHINE_MAX_HEALTH` repeats it over the
+#: ``Machine`` range, so a caller can index it with a machine type and needs no
+#: special case.
 MACHINE_HEALTH: int = 256
 
-#: Hit points a placed machine starts with, indexed by ``Machine`` value. Shape
-#: ``(len(Machine),)``, int16 to match ``EnvState.ent_health``. Repairs clamp to
-#: it, and :mod:`factoriax.engine.placement` only allows a pickup at full health.
+#: Hit points of a placed machine at the start, indexed by ``Machine`` value.
+#: Shape ``(len(Machine),)``, int16 to match ``EnvState.ent_health``. A repair
+#: clamps to this value, and :mod:`factoriax.engine.placement` allows a pickup
+#: only at full health.
 MACHINE_MAX_HEALTH = jnp.full(len(Machine), MACHINE_HEALTH, dtype=jnp.int16)

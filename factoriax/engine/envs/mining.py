@@ -1,8 +1,9 @@
-"""Mining scenario — 8×8 hand-mining benchmark.
+"""The Mining scenario: an 8x8 benchmark for mining by hand.
 
-The agent earns 1 point for every ore item it mines manually. Ten iron-ore
-tiles are placed randomly each episode, each holding 3 resources (30 total
-collectable items). The episode ends after 100 steps.
+The agent earns 1 point for each ore item that it mines by hand. Each episode
+places ten iron-ore tiles at random positions, and each tile holds 3
+resources. An agent can therefore collect 30 items in total. The episode ends
+after 100 steps.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ _MAP_SIZE: int = 8
 _N_ORE_TILES: int = 10
 _ORE_RESOURCES: int = 3
 
-# All tile positions except the player spawn at (4, 4).
+# Every tile position except the player spawn at (4, 4).
 _VALID_POSITIONS: np.ndarray = np.array(
     [
         (x, y)
@@ -57,18 +58,18 @@ def mining(
     obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the Mining-v1 env.
+    """Build the Mining-v1 environment.
 
-    8×8 procgen map with ten randomly placed iron-ore tiles (3 resources
-    each). The agent earns 1 reward per ore item mined manually. Episode
-    length is 100 steps.
+    The map is 8x8 and generated. It holds ten iron-ore tiles at random
+    positions, and each tile holds 3 resources. The agent earns 1 reward for
+    each ore item that it mines by hand. An episode lasts 100 steps.
 
-    Defaults to the egocentric ``superficial_local`` obs with radius 7
-    (the window covers the full 8×8 map from any position): this
-    scenario is an RL baseline, and flat-MLP policies plateau near 7/30
-    on ``superficial_global`` versus 30/30 on ``superficial_local`` —
-    see :mod:`factoriax.engine.observations`. Pass
-    ``obs="superficial_global"`` for the absolute-grid variant.
+    The default observation is the egocentric ``superficial_local`` with radius
+    7. That window covers the whole 8x8 map from any position. This scenario is
+    an RL baseline, and a flat MLP policy stops near 7/30 on
+    ``superficial_global`` and reaches 30/30 on ``superficial_local``. See
+    :mod:`factoriax.engine.observations`. Pass ``obs="superficial_global"`` for
+    the absolute-grid variant.
     """
     env = FactoriaxEnv(
         terrain_fn=_mining_terrain,

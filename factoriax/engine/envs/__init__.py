@@ -1,8 +1,9 @@
-"""Environment implementations, wrappers, and the scenario registry.
+"""The environments, the wrappers, and the scenario registry.
 
-- ``base.py`` — :class:`FactoriaxEnv`, the core gymnax-compatible env.
-- ``wrappers.py`` — :class:`AutoResetWrapper`, :class:`ActionMaskWrapper`,
-  and :class:`LogWrapper`.
-- ``registry.py`` — scenario catalog and :func:`make` factory.
-- ``easy_rocket.py`` / ``rocket.py`` — concrete scenario definitions.
+- ``base.py`` holds :class:`FactoriaxEnv`, the core gymnax-compatible
+  environment.
+- ``wrappers.py`` holds :class:`AutoResetWrapper`,
+  :class:`ActionMaskWrapper`, and :class:`LogWrapper`.
+- ``registry.py`` holds the scenario list and the :func:`make` factory.
+- ``easy_rocket.py`` and ``rocket.py`` hold two scenario definitions.
 """

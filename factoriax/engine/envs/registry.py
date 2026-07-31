@@ -1,9 +1,12 @@
-"""Scenario registry — the catalog behind ``factoriax.make("<id>")``.
+"""The scenario registry, which stands behind ``factoriax.make("<id>")``.
 
-A scenario is a factory ``() -> (env, params)``; the registry maps a gymnax-style
-version id to a :class:`ScenarioSpec` carrying display metadata plus the factory.
-:func:`make` resolves an id and applies the requested observation / auto-reset
-wrappers; :func:`list_scenarios` is the catalog the playground iterates.
+A scenario is a factory of the form ``() -> (env, params)``. The registry maps
+a gymnax-style version id to a :class:`ScenarioSpec`. That spec holds the
+display name and description of the scenario, and the factory itself.
+
+:func:`make` resolves an id and applies the observation settings and the
+auto-reset wrapper that the caller asked for. :func:`list_scenarios` returns
+the list that the playground walks.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from factoriax.engine.state import EnvParams
 
 @dataclass(frozen=True)
 class ScenarioSpec:
-    """A registered scenario: display metadata plus its env factory."""
+    """A registered scenario: its display name, its description, and its factory."""
 
     name: str
     description: str
@@ -93,51 +96,40 @@ def make(
     auto_reset: bool = True,
     resample: bool | None = None,
 ) -> tuple[Any, EnvParams]:
-    """Resolve a scenario id to ``(env, params)``.
+    """Resolve a scenario id to an ``(env, params)`` pair.
 
     Parameters
     ----------
     env_id :
-        Registered scenario id (e.g. ``"EasyRocket-v1"``).
+        Registered scenario id, for example ``"EasyRocket-v1"``.
     obs :
-        Observation variant name (one of the keys in
-        :data:`~factoriax.engine.observations.OBSERVATIONS`). ``None``
-        uses the scenario's opinionated default.
+        Name of an observation variant, which must be a key in
+        :data:`~factoriax.engine.observations.OBSERVATIONS`. ``None`` takes the
+        default of the scenario.
     obs_radius :
-        Local-window half-width. ``None`` uses the scenario's
-        opinionated default; ignored for ``_global`` obs variants.
-    auto_reset :
-        Wrap in :class:`AutoResetWrapper`. Defaults to ``True`` since most
-        callers train inside a fixed-length ``lax.scan`` rollout and need
-        episodes to restart on ``done``. Pass ``False`` for manual episode
-        control (scripted rollouts, interactive play, or a training loop
-        that manages its own reset-on-done logic).
+        Half-width of a local window. ``None`` takes the default of the
+        scenario. A ``_global`` observation variant ignores this argument.
     resample :
-        Auto-reset mode. ``None`` (default) uses the scenario's
-        ``resample`` setting; pass ``True``/``False`` to override — e.g.
-        ``False`` for the cheap cached restore even on a keyed scenario.
-    env_id: str :
-
-    * :
-
-    obs: str | None :
-         (Default value = None)
-    obs_radius: int | None :
-         (Default value = None)
-    auto_reset: bool :
-         (Default value = False)
-    resample: bool | None :
-         (Default value = None)
+        Auto-reset mode. ``None``, the default, takes the ``resample`` setting
+        of the scenario. Pass ``True`` or ``False`` to override it. Pass
+        ``False`` for the cheap cached restore, even on a keyed scenario.
+    auto_reset :
+        Whether to wrap the environment in :class:`AutoResetWrapper`. The
+        default is ``True``, because most callers train inside a ``lax.scan``
+        rollout of fixed length and need an episode to restart on ``done``.
+        Pass ``False`` to control the episodes yourself, as a scripted
+        rollout, interactive play, or a training loop with its own
+        reset-on-done code does.
 
     Returns
     -------
-        ``(env, params)``.
+    tuple
+        The pair ``(env, params)``.
 
     Raises
     ------
     KeyError
-        If ``env_id`` is not registered.
-
+        If no scenario carries the id ``env_id``.
     """
     spec = SCENARIOS[env_id]
     overrides: dict[str, Any] = {}
@@ -153,5 +145,5 @@ def make(
 
 
 def list_scenarios() -> tuple[tuple[str, ScenarioSpec], ...]:
-    """Return all registered scenario ids and their specs."""
+    """Return every registered scenario id, with its spec."""
     return tuple(SCENARIOS.items())

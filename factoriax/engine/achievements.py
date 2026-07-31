@@ -1,22 +1,27 @@
-"""Achievement system for tracking player progress.
+"""Achievement bits that record the progress of a player.
 
-Achievements allow persistent logging of reached world states in an episode.
-Once an achievement is unlocked it is tracked as part of the environment state.
-It can be used to create a curriculum based on unlocks as done with Craftax,
-or can serve to track progress towards a goal regardless of reward structure.
+An achievement records that the world reached a given state during an episode.
+The environment state holds the bit after the unlock. A scenario can build a
+curriculum on those unlocks, as Craftax does. A scenario can also read them to
+follow progress towards a goal, whatever the reward function pays.
 
-Achievement "bits" are tracked in the environment state. Each bit can be
-assigned to a different achievement in different scenarios, so this module
-holds no achievements of its own, only the pieces to declare a set:
-:class:`Achievement` for one bit, :func:`achievement_fn` and
-:func:`achievement_weights` to turn an ordered tuple of them into what the
-env and the reward function need, plus the shared condition helpers.
+The environment state holds the achievement bits. Two scenarios can give the
+same bit to two different achievements, so this module declares no achievements
+of its own. It supplies the parts to declare a set:
 
-Bit order is a wire format. ``achievements_unlocked`` is persisted into
-recorded trajectories as a bare bool vector, and the index is the only
-identifier that survives, so :mod:`factoriax.analysis` reads bits
-positionally. Appending to a set is safe. Reordering or removing a bit
-silently reinterprets every rollout recorded before the change.
+- :class:`Achievement`, which holds one bit.
+- :func:`achievement_fn` and :func:`achievement_weights`, which turn an ordered
+  tuple of achievements into what the environment and the reward function read.
+- The shared condition helpers at the end of this module.
+
+The bit order is a wire format. A recorded trajectory holds
+``achievements_unlocked`` as a plain bool vector, and the index is the only
+identifier that survives. :mod:`factoriax.analysis` therefore reads the bits by
+position. A new bit at the end of a set is safe.
+
+CAUTION: Do not move a bit and do not remove one. Every rollout that was
+recorded before the change then reads as a different set of achievements, and
+nothing reports an error.
 """
 
 from __future__ import annotations
@@ -30,36 +35,40 @@ import jax.numpy as jnp
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, ItemType, Machine
 from factoriax.engine.state import EnvState
 
-#: A single bit's predicate: pure, jittable, returns a scalar bool.
+#: Predicate for one bit. The function must be pure and jittable, and must
+#: return a scalar bool.
 Condition = Callable[[EnvState], jax.Array]
 
 
 @dataclass(frozen=True)
 class Achievement:
-    """One latched bit: what unlocks it, what to call it, what it pays.
+    """One latched bit, with its condition, its labels, and its reward.
 
-    The condition sits next to its metadata so a scenario declares one
-    ordered tuple. A bit's name cannot then drift from what actually unlocks
-    it, and its weight cannot land on the wrong index.
+    The condition sits next to its labels, so a scenario declares one ordered
+    tuple. The name of a bit therefore cannot separate from the condition that
+    unlocks it, and its weight cannot land on the wrong index.
 
     Attributes
     ----------
     id
-        Stable identifier, unique within a set. Used to find a bit's index
-        with :func:`index_of` when code needs one by name rather than
+        Stable identifier, unique inside one set. :func:`index_of` reads it to
+        find the index of a bit, for code that holds a name and not a
         position.
     condition
-        Predicate evaluated every step. Latching is the env's job, so this
-        answers "does the world satisfy it now", not "has it ever".
+        Predicate that the environment evaluates in every step. The
+        environment does the latching, so this predicate answers "does the
+        world satisfy the condition now", and not "did it ever satisfy the
+        condition".
     name
-        Human-readable label. Defaults to ``id``, which is what agent-facing
-        scenarios want, since the string doubles as the metric key in
-        training logs. Set it when a person reads it.
+        Label for a human reader. The default is ``id``. A scenario for an
+        agent needs no other value, because the string is also the metric key
+        in the training logs. Give a different value when a person reads the
+        label.
     hint
-        Text for the interactive UI. Never read by the engine.
+        Text for the interactive UI. The engine never reads it.
     weight
-        Reward paid the step this bit first unlocks. Collected by
-        :func:`achievement_weights`.
+        Reward for the step in which this bit first unlocks.
+        :func:`achievement_weights` collects these values.
     """
 
     id: str
@@ -69,7 +78,7 @@ class Achievement:
     weight: float = 1.0
 
     def __post_init__(self) -> None:
-        """Default ``name`` to ``id`` when the caller left it blank."""
+        """Set ``name`` to ``id`` when the caller gave no name."""
         if not self.name:
             object.__setattr__(self, "name", self.id)
 
@@ -79,29 +88,31 @@ def achievement_fn(
 ) -> Callable[[EnvState], jax.Array]:
     """Build the ``(EnvState) -> bool[MAX_ACHIEVEMENTS]`` evaluator.
 
-    Suitable for :class:`~factoriax.engine.envs.base.FactoriaxEnv`'s
-    ``achievement_fn`` argument. Conditions are stacked at trace time and
-    zero-padded to the full slot budget, so every scenario shares one
-    state shape no matter how many bits it declares.
+    The result fits the ``achievement_fn`` argument of
+    :class:`~factoriax.engine.envs.base.FactoriaxEnv`. The evaluator stacks the
+    conditions at trace time and pads with zeros to the full number of slots.
+    Every scenario therefore has the same state shape, whatever number of bits
+    it declares.
 
     Parameters
     ----------
     achievements
-        The set, in bit order. Position in this sequence is the bit index.
+        The set, in bit order. The position in this sequence is the bit index.
 
     Returns
     -------
     Callable[[EnvState], jax.Array]
-        Evaluator returning a ``(MAX_ACHIEVEMENTS,)`` bool array. Bit ``i``
-        is whether ``achievements[i]`` holds in the state passed, with the
-        trailing slots always False. The env OR-folds the result into
-        ``EnvState.achievements_unlocked``, so latching happens there and
-        not here.
+        An evaluator that returns a ``(MAX_ACHIEVEMENTS,)`` bool array. Bit
+        ``i`` says whether ``achievements[i]`` holds in the state that the
+        caller passed. The slots at the end are always False. The environment
+        folds the result into ``EnvState.achievements_unlocked`` with OR, so
+        the latch happens there and not here.
 
     Raises
     ------
     ValueError
-        If the set is empty, exceeds ``MAX_ACHIEVEMENTS``, or repeats an id.
+        If the set is empty, holds more than ``MAX_ACHIEVEMENTS`` entries, or
+        repeats an id.
     """
     conditions = tuple(a.condition for a in _validated(achievements))
     n_padding = MAX_ACHIEVEMENTS - len(conditions)
@@ -114,15 +125,15 @@ def achievement_fn(
 
 
 def achievement_weights(achievements: Sequence[Achievement]) -> jax.Array:
-    """Per-bit reward weights, zero-padded to ``(MAX_ACHIEVEMENTS,)``.
+    """Reward weight for each bit, with zeros to the length ``MAX_ACHIEVEMENTS``.
 
-    Feeds :func:`factoriax.engine.rewards.achievement_reward`. Padding
-    slots are zero so they can never contribute reward.
+    The result feeds :func:`factoriax.engine.rewards.achievement_reward`. The
+    padding slots hold zero, so they can never add reward.
 
     Parameters
     ----------
     achievements
-        The set, in the same bit order passed to :func:`achievement_fn`.
+        The set, in the same bit order that :func:`achievement_fn` received.
 
     Returns
     -------
@@ -133,7 +144,8 @@ def achievement_weights(achievements: Sequence[Achievement]) -> jax.Array:
     Raises
     ------
     ValueError
-        If the set is empty, exceeds ``MAX_ACHIEVEMENTS``, or repeats an id.
+        If the set is empty, holds more than ``MAX_ACHIEVEMENTS`` entries, or
+        repeats an id.
     """
     items = _validated(achievements)
     declared = jnp.array([a.weight for a in items], dtype=jnp.float32)
@@ -141,11 +153,11 @@ def achievement_weights(achievements: Sequence[Achievement]) -> jax.Array:
 
 
 def max_score(achievements: Sequence[Achievement]) -> float:
-    """Total reward from unlocking every bit in the set exactly once.
+    """Total reward for one unlock of every bit in the set.
 
-    The ceiling for achievement reward over one episode, since a bit latches
-    and so pays at most once. Unlike the other builders this runs no
-    validation, so it will happily total a malformed set.
+    This is the maximum achievement reward for one episode, because a bit
+    latches and pays one time at most. This function runs no validation, unlike
+    the other builders here. It therefore also totals a malformed set.
     """
     return float(sum(a.weight for a in achievements))
 
@@ -153,9 +165,10 @@ def max_score(achievements: Sequence[Achievement]) -> float:
 def index_of(achievements: Sequence[Achievement], achievement_id: str) -> int:
     """Bit index of ``achievement_id``.
 
-    The index is the position in ``achievements``, which is what indexes
-    ``EnvState.achievements_unlocked``. Use this rather than hardcoding a
-    number, so a bit appended to the set does not silently shift a lookup.
+    The index is the position in ``achievements``, and that position indexes
+    ``EnvState.achievements_unlocked``. Call this function instead of a number
+    written into the code. A new bit at the end of the set then cannot move a
+    lookup to the wrong index.
 
     Raises
     ------
@@ -169,7 +182,7 @@ def index_of(achievements: Sequence[Achievement], achievement_id: str) -> int:
 
 
 def _validated(achievements: Sequence[Achievement]) -> tuple[Achievement, ...]:
-    """Return the set as a tuple, rejecting the ways it can be malformed."""
+    """Return the set as a tuple, and refuse a set that is malformed."""
     items = tuple(achievements)
     if not items:
         raise ValueError("achievement set is empty")
@@ -190,51 +203,52 @@ def _validated(achievements: Sequence[Achievement]) -> tuple[Achievement, ...]:
 
 
 def count_total_items(state: EnvState, item_type: int) -> jax.Array:
-    """Total quantity of ``item_type`` across all player inventories."""
+    """Total count of ``item_type`` in all player inventories."""
     total: jax.Array = jnp.sum(state.player_inventory[:, item_type])
     return total
 
 
 def count_machines(state: EnvState, machine_type: int) -> jax.Array:
-    """Return how many placed machines of ``machine_type`` are on the map."""
+    """Return the number of placed machines of ``machine_type`` on the map."""
     count: jax.Array = jnp.sum(state.machine_types == machine_type)
     return count
 
 
 def holds_item(state: EnvState, item: int, count: int = 1) -> jax.Array:
-    """Players hold at least ``count`` of ``item`` between them."""
+    """Test whether the players together hold ``count`` of ``item`` or more."""
     return count_total_items(state, item) >= count
 
 
 def has_machines(state: EnvState, machine: int, count: int = 1) -> jax.Array:
-    """At least ``count`` machines of type ``machine`` are placed."""
+    """Test whether the map holds ``count`` machines of type ``machine`` or more."""
     return count_machines(state, machine) >= count
 
 
 def total_machines(state: EnvState) -> jax.Array:
-    """Return how many machines of any type are placed."""
+    """Return the number of placed machines of all types."""
     return jnp.sum(state.machine_types != Machine.NONE)
 
 
 def mined_at_least(state: EnvState, item: int, count: int) -> jax.Array:
-    """Cumulative mining counter for ``item`` has reached ``count``.
+    """Test whether the mining total for ``item`` is ``count`` or more.
 
-    Reads the monotone ``items_mined`` counter, so this latches on what
-    was ever mined rather than what is currently held.
+    The function reads the ``items_mined`` counter, which never decreases. The
+    result therefore follows the total mined amount, and not the amount that a
+    player holds now.
     """
     return state.items_mined[item] >= count
 
 
 def any_buffer_nonempty(state: EnvState, machine: int) -> jax.Array:
-    """Any placed machine of type ``machine`` has items in its buffer.
+    """Test whether a placed machine of type ``machine`` holds items in its buffer.
 
-    Reads ``ent_buf``, which the simulation fills. A player can fill it too:
-    a ``DEPOSIT_`` action writes ``ent_buf`` for any machine that is neither
-    a miner nor a machine with input slots, so a pallet, belt, splitter, or
-    crossing can be loaded by hand. A miner is excluded from deposit, and an
-    assembler, furnace, or science lab takes
-    the item into its input slots instead, so only for those two does a set
-    buffer bit mean the factory produced the item.
+    The function reads ``ent_buf``, which the simulation fills. A player can
+    also fill it. A ``DEPOSIT_`` action writes ``ent_buf`` for every machine
+    that is not a miner and has no input slots, so a player can load a pallet,
+    a belt, a splitter, or a crossing by hand. A deposit never reaches the
+    ``ent_buf`` of a miner, an assembler, a furnace, or a science lab. Only for
+    those four kinds does a set buffer bit prove that the factory made the
+    item.
     """
     is_type = state.ent_type == machine
     is_active = state.ent_y >= 0
@@ -243,7 +257,7 @@ def any_buffer_nonempty(state: EnvState, machine: int) -> jax.Array:
 
 
 def any_assembler_has_output(state: EnvState) -> jax.Array:
-    """Any placed assembler has items in its output slot."""
+    """Test whether a placed assembler holds items in its output slot."""
     is_asm = state.ent_type == Machine.ASSEMBLER
     is_active = state.ent_y >= 0
     has_output = state.ent_asm_out_count > 0
@@ -251,7 +265,7 @@ def any_assembler_has_output(state: EnvState) -> jax.Array:
 
 
 def total_ore_mined(state: EnvState) -> jax.Array:
-    """Cumulative count of coal, iron ore and copper ore ever mined."""
+    """Total count of coal, iron ore, and copper ore mined since the last reset."""
     return (
         state.items_mined[ItemType.COAL]
         + state.items_mined[ItemType.IRON_ORE]

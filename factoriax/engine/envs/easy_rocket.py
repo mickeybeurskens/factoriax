@@ -1,4 +1,4 @@
-"""Easy Rocket scenario — small recipe book covering eight machines and the rocket."""
+"""The Easy Rocket scenario: a small recipe book for eight machines and a rocket."""
 
 from __future__ import annotations
 
@@ -38,25 +38,26 @@ from factoriax.engine.state import EnvParams, EnvState
 
 
 def build_easy_rocket_level(key: jax.Array) -> Level:
-    """Build a 16x16 easy-rocket level with six 2x2 ore patches placed by PRNG.
+    """Build a 16x16 easy-rocket level with six 2x2 ore patches from a PRNG.
 
-    Patches do not overlap each other, stay clear of the outer 1-cell dirt
-    ring, and stay clear of the 4x4 zone covering the 2x2 spawn area plus its
-    1-cell inner-ring buffer. Same key returns equal Levels; different keys
-    produce different layouts. The JAX-native equivalent is
-    :func:`factoriax.engine.envs.common.six_patch_terrain`.
+    The patches do not overlap each other. They stay clear of the outer
+    one-cell dirt ring, and clear of the 4x4 zone that covers the 2x2 spawn
+    area and its one-cell inner ring. The same key returns equal levels, and
+    two different keys give two different layouts.
+    :func:`factoriax.engine.envs.common.six_patch_terrain` is the JAX-native
+    version of this function.
 
     Parameters
     ----------
     key
-        PRNG key for patch placement. Host-side, so this cannot be
-        traced; call it before entering ``jit``.
+        PRNG key for the patch placement. The function runs on the host, so
+        JAX cannot trace it. Call it before you enter ``jit``.
 
     Returns
     -------
     Level
-        A 16x16 level with six 2x2 ore patches. The same key always
-        returns an equal level.
+        A 16x16 level with six 2x2 ore patches. The same key always returns an
+        equal level.
     """
     builder = LevelBuilder(MAP_SIZE, MAP_SIZE)
     placed: list[tuple[int, int]] = []
@@ -164,7 +165,7 @@ _ORE_BLOCKS: tuple[int, ...] = (
 
 
 def _producing_ore_presence(state: EnvState) -> jax.Array:
-    """Per-ore-block presence: True where a producing miner sits on it.
+    """Report, for each ore block, whether a producing miner stands on it.
 
     Parameters
     ----------
@@ -174,8 +175,9 @@ def _producing_ore_presence(state: EnvState) -> jax.Array:
     Returns
     -------
     jax.Array
-        Shape ``(6,)`` bool, one flag per raw ore block in ``_ORE_BLOCKS``
-        order, True where a producing miner stands on that ore.
+        Shape ``(6,)``, bool. There is one flag for each raw ore block, in
+        ``_ORE_BLOCKS`` order. A flag is True where a producing miner stands
+        on that ore.
     """
     producing, blocks = producing_miners(state)
     return jnp.stack(
@@ -184,7 +186,7 @@ def _producing_ore_presence(state: EnvState) -> jax.Array:
 
 
 def _distinct_producing_ore_types(state: EnvState) -> jax.Array:
-    """At least three distinct ore blocks sit under producing miners.
+    """Test whether producing miners stand on three different ore blocks or more.
 
     Parameters
     ----------
@@ -194,15 +196,15 @@ def _distinct_producing_ore_types(state: EnvState) -> jax.Array:
     Returns
     -------
     jax.Array
-        Scalar bool. True once three or more of the six raw ores each
-        have a producing miner on them.
+        Scalar bool. The value is True when three or more of the six raw ores
+        each hold a producing miner.
     """
     result: jax.Array = jnp.sum(_producing_ore_presence(state).astype(jnp.int32)) >= 3
     return result
 
 
 def _all_ore_types_covered(state: EnvState) -> jax.Array:
-    """Every one of the six raw ores sits under a producing miner.
+    """Test whether a producing miner stands on each of the six raw ores.
 
     Parameters
     ----------
@@ -221,10 +223,10 @@ def _all_ore_types_covered(state: EnvState) -> jax.Array:
 def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Array:
     """Report whether one assembler holds both items in its input slots.
 
-    Each input item must occupy one of the two input slots with a
-    non-empty count. Requiring both inputs in the same assembler keeps
-    the hull, engine, and rocket feeds distinct despite their shared
-    limestone input.
+    Each input item must sit in one of the two input slots, with a count above
+    zero. The test needs both inputs in the same assembler. The hull feed, the
+    engine feed, and the rocket feed therefore stay separate, although all
+    three take limestone.
 
     Parameters
     ----------
@@ -238,8 +240,8 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
     Returns
     -------
     jax.Array
-        Scalar bool. True when one placed assembler holds both, in
-        either input slot.
+        Scalar bool. The value is True when one placed assembler holds both
+        items, in either input slot.
     """
     is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
     in_type = state.ent_asm_in_type
@@ -250,11 +252,11 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
 
 
 def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
-    """Report whether one assembler is carrying an item on its way out.
+    """Report whether one assembler holds an item that is on its way out.
 
-    Reads both ``ent_asm_out`` and ``ent_buf`` because the engine drains
-    a finished output into the buffer on the next tick; checking only the
-    output slot would blink off for that tick.
+    The function reads both ``ent_asm_out`` and ``ent_buf``, because the engine
+    moves a finished output into the buffer on the next tick. A test of the
+    output slot alone therefore returns False for that one tick.
 
     Parameters
     ----------
@@ -275,7 +277,7 @@ def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
 
 
 def _has_any_raw_ore(state: EnvState) -> jax.Array:
-    """Player holds at least one of any raw ore type.
+    """Test whether the player holds one unit or more of any raw ore type.
 
     Parameters
     ----------
@@ -291,7 +293,7 @@ def _has_any_raw_ore(state: EnvState) -> jax.Array:
 
 
 def _has_each_raw_ore(state: EnvState) -> jax.Array:
-    """Player holds at least one of every raw ore type.
+    """Test whether the player holds one unit or more of every raw ore type.
 
     Parameters
     ----------
@@ -307,7 +309,7 @@ def _has_each_raw_ore(state: EnvState) -> jax.Array:
 
 
 def _any_producing_miner(state: EnvState) -> jax.Array:
-    """At least one placed miner has ore in its output buffer.
+    """Test whether one placed miner or more holds ore in its output buffer.
 
     Parameters
     ----------
@@ -323,7 +325,7 @@ def _any_producing_miner(state: EnvState) -> jax.Array:
 
 
 def _has_machine(state: EnvState, machine: int) -> jax.Array:
-    """At least one machine of ``machine`` type is placed on the map.
+    """Test whether the map holds one machine of type ``machine`` or more.
 
     Parameters
     ----------
@@ -341,7 +343,7 @@ def _has_machine(state: EnvState, machine: int) -> jax.Array:
 
 
 def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
-    """At least ``n`` machines of ``machine`` type are placed on the map.
+    """Test whether the map holds ``n`` machines of type ``machine`` or more.
 
     Parameters
     ----------
@@ -350,7 +352,7 @@ def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
     machine
         ``Machine`` value to count.
     n
-        Threshold, inclusive.
+        Threshold. A count equal to ``n`` passes.
 
     Returns
     -------
@@ -363,7 +365,7 @@ def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
 def _has_n_machines_pair(
     state: EnvState, machine_a: int, machine_b: int, n: int
 ) -> jax.Array:
-    """At least ``n`` of ``machine_a`` AND at least ``n`` of ``machine_b``.
+    """Test for ``n`` or more of ``machine_a``, and ``n`` or more of ``machine_b``.
 
     Parameters
     ----------
@@ -374,7 +376,7 @@ def _has_n_machines_pair(
     machine_b
         Second ``Machine`` value to count.
     n
-        Threshold, inclusive, applied to each kind separately.
+        Threshold for each kind on its own. A count equal to ``n`` passes.
 
     Returns
     -------
@@ -387,19 +389,20 @@ def _has_n_machines_pair(
 
 
 def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
-    """Player inventory holds at least one of ``n`` distinct raw ore types.
+    """Test whether the player inventory holds ``n`` different raw ore types.
 
-    Sibling of :func:`_has_any_raw_ore` (n=1) and
-    :func:`_has_each_raw_ore` (n=len(_RAW_ORE_ITEMS)); use this when
-    you want a mid-curriculum variety milestone such as "half the ore
-    types collected".
+    This function generalises :func:`_has_any_raw_ore`, where ``n`` is 1, and
+    :func:`_has_each_raw_ore`, where ``n`` is ``len(_RAW_ORE_ITEMS)``. Use it
+    for a milestone in the middle of a curriculum, such as "half the ore types
+    collected".
 
     Parameters
     ----------
     state
         State to read.
     n
-        How many distinct raw ore types must be held, inclusive.
+        Number of different raw ore types that the player must hold. A count
+        equal to ``n`` passes.
 
     Returns
     -------
@@ -410,11 +413,11 @@ def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
     return jnp.sum(held_types.astype(jnp.int32)) >= n
 
 
-#: Achievement bits in curriculum order, each paired with a stable name. This
-#: is the single source of truth for the bit set: the condition tuple, the
-#: public name list, and :data:`NUM_EASY_ROCKET_ACHIEVEMENTS` all derive from
-#: it. Hand-skill bits read the player inventory; production bits read machine
-#: buffers, so hand crafting cannot unlock them. The four sections are raw ore,
+#: The achievement bits in curriculum order, each one with a stable name. This
+#: tuple is the one definition of the bit set. The condition tuple, the public
+#: name list, and :data:`NUM_EASY_ROCKET_ACHIEVEMENTS` all come from it. A
+#: hand-skill bit reads the player inventory. A production bit reads a machine
+#: buffer, so a hand craft cannot unlock one. The four sections are raw ore,
 #: hulls, engines, and final assembly.
 EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
     # ---- Bootstrap ----
@@ -502,19 +505,21 @@ EASY_ROCKET_ACHIEVEMENTS: tuple[Achievement, ...] = (
     Achievement("liftoff", partial(_has_machine, machine=int(Machine.ROCKET))),
 )
 
-#: Stable per-bit names in curriculum order, for display and logging.
-#: Training runs log these as metric keys, so treat them as a wire format,
-#: same as the bit order itself.
+#: Stable name of each bit, in curriculum order, for the display and the log. A
+#: training run writes these as metric keys.
+#:
+#: CAUTION: Treat these names as a wire format, the same as the bit order. A
+#: new name breaks every log that an earlier run wrote.
 EASY_ROCKET_ACHIEVEMENT_NAMES: tuple[str, ...] = tuple(
     a.name for a in EASY_ROCKET_ACHIEVEMENTS
 )
 
 NUM_EASY_ROCKET_ACHIEVEMENTS: int = len(EASY_ROCKET_ACHIEVEMENTS)
 
-#: Bits walk a four-section production curriculum: raw ore, hulls, engines,
-#: and final assembly. Automated-production bits read machine-internal
-#: buffers, which only the simulation fills; hand actions deposit into the
-#: player inventory, so those bits cannot be unlocked by hand crafting.
+#: The bits walk a production curriculum of four sections: raw ore, hulls,
+#: engines, and final assembly. An automated-production bit reads a buffer
+#: inside a machine, and only the simulation fills such a buffer. A hand action
+#: writes to the player inventory, so a hand craft cannot unlock those bits.
 easy_rocket_conditions = achievement_fn(EASY_ROCKET_ACHIEVEMENTS)
 
 EASY_ROCKET_ACHIEVEMENT_WEIGHTS: jax.Array = achievement_weights(
@@ -527,22 +532,23 @@ MAX_EASY_ROCKET_SCORE: float = max_score(EASY_ROCKET_ACHIEVEMENTS)
 def easy_rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Score a step by the EasyRocket achievements it newly unlocked.
+    """Score a step by the EasyRocket achievements that it unlocked.
 
     Parameters
     ----------
     prev_state
-        State immediately before the step.
+        State just before the step.
     new_state
-        State immediately after the step.
+        State just after the step.
     params
-        Unused. Present for the shared reward signature.
+        The function does not read this argument. It is present for the shared
+        reward signature.
 
     Returns
     -------
     jax.Array
-        Scalar float32, the weighted sum of achievements newly unlocked
-        this step. Zero on most steps.
+        Scalar float32, the weighted sum of the achievements that this step
+        unlocked. The value is zero on most steps.
     """
     return achievement_reward(
         prev_state, new_state, params, weights=EASY_ROCKET_ACHIEVEMENT_WEIGHTS
@@ -554,17 +560,18 @@ def easy_rocket(
     obs: str = "superficial_global",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the EasyRocket-v1 env with achievement hook and reward bound.
+    """Build the EasyRocket-v1 environment, with its achievement hook and reward.
 
-    Binds the keyed generator as ``reset_fn`` (fresh layout each episode),
-    the production achievement conditions as a step hook, and the achievement
-    reward. ``max_machines`` is 100 to avoid overflowing entity arrays on a
-    fully-built 16x16 factory (~80 entities at peak).
+    The function binds the keyed generator as ``terrain_fn``, so each episode
+    gets a new layout. It binds the production achievement conditions as a step
+    hook, and the achievement reward as ``reward_fn``. ``max_machines`` is 100,
+    which keeps the entity arrays large enough for a full 16x16 factory. Such a
+    factory holds about 80 entities at its largest.
 
     Parameters
     ----------
     obs :
-        Observation variant passed to :class:`FactoriaxEnv`.
+        Observation variant. The function passes it to :class:`FactoriaxEnv`.
     obs_radius :
         Half-width of the local observation window.
     """

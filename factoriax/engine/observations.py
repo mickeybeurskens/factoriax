@@ -1,54 +1,52 @@
 """Observation constructors for FactoriaX.
 
-Each function maps ``(state, params, player_idx) -> jax.Array`` and is
-JAX-native and JIT-compatible. ``rgb`` is the exception: it returns a
-NumPy RGB image via the pixel renderer and cannot be JIT'd.
+Each function maps ``(state, params, player_idx) -> jax.Array``. Each one is
+JAX-native and works under JIT. ``rgb`` is the exception. It returns a NumPy RGB
+image from the pixel renderer, and JIT cannot compile it.
 
-Two profiles compose four top-level builders:
+Two profiles and two view extents give four top-level builders.
 
-- **x_ray** sees through every machine to its slot contents and the ore
-  remaining under each terrain tile (10 spatial channels + 81 player
-  scalars).
-- **superficial** sees only what's outwardly visible (3 spatial channels
-  + 72 player scalars; no slot peek, no facing-tile peek).
+- **x_ray** sees through every machine to its slot contents, and sees the ore
+  left under each terrain tile. It has 10 spatial channels and 81 player
+  scalars.
+- **superficial** sees only what is visible from outside. It has 3 spatial
+  channels and 72 player scalars, with no view into a slot and no view of the
+  tile in front.
 
-Each profile pairs with a view extent: ``global_*`` flattens the whole
-map; ``local_*`` extracts a ``(2r+1) x (2r+1)`` window centred on the
-selected player.
+Each profile pairs with a view extent. ``global_*`` flattens the whole map.
+``local_*`` takes a ``(2r+1) x (2r+1)`` window with the selected player at the
+centre.
 
-Choosing a view extent: ``global_*`` keeps the map in absolute
-coordinates and encodes the observing player's position only as two
-scalars — it is built for function approximators that exploit the
-spatial channels (e.g. a CNN over the unflattened grid, ideally with a
-player-position plane added by the training code). Flat MLPs generally
-fail to localize the player in this encoding. The egocentric
-``local_*`` variants are translation-invariant and are the better fit
-for MLPs; with ``radius >= map size - 1`` the window still covers the
-whole map (OUT_OF_BOUNDS padding marks the edges, so absolute position
-stays recoverable). Reference point: on Mining-v1, PPO with a 64x64
-MLP plateaus near 7/30 on ``superficial_global`` but reaches 30/30 on
-``superficial_local``.
+``global_*`` keeps the map in absolute coordinates, and gives the position of
+the observing player as two scalars only. It fits a function approximator that
+uses the spatial channels, such as a CNN over the unflattened grid. The
+training code must add a player-position plane for that CNN. A flat MLP usually
+cannot find the player in this encoding. The ``local_*`` variants are
+egocentric and translation-invariant, and they fit an MLP better. With
+``radius >= map size - 1`` the window still covers the whole map, and the
+``OUT_OF_BOUNDS`` padding marks the edges, so the absolute position stays
+readable. One measurement: on Mining-v1, PPO with a 64x64 MLP stops near 7/30
+on ``superficial_global`` and reaches 30/30 on ``superficial_local``.
 
-x_ray spatial channels (10):
+The 10 x_ray spatial channels:
 
-- ``block_type`` — terrain.
-- ``machine_type`` — ``Machine`` at each tile (or NONE).
-- ``block_resources`` — ore count under the tile.
-- ``slot{0,1,2}_type`` / ``slot{0,1,2}_count`` — a uniform 3-slot
-  projection of every machine's contents. Slots 0 and 1 carry the two
-  ``ent_asm_in`` columns, which covers an assembler's inputs, a science
-  lab's packs, and a crossing's two axis buffers. Slot 2 carries
-  ``ent_asm_out`` where a recipe runs and ``ent_buf`` for every other
-  machine that holds items.
-- ``machine_direction`` — ``ent_direction`` per tile (1..4 or 0).
+- ``block_type``, the terrain.
+- ``machine_type``, the ``Machine`` on each tile, or NONE.
+- ``block_resources``, the ore count under the tile.
+- ``slot{0,1,2}_type`` and ``slot{0,1,2}_count``, a uniform 3-slot view of the
+  contents of every machine. Slots 0 and 1 carry the two ``ent_asm_in``
+  columns, which covers the inputs of an assembler, the packs of a science lab,
+  and the two axis buffers of a crossing. Slot 2 carries ``ent_asm_out`` where
+  a recipe runs, and ``ent_buf`` for every other machine that holds items.
+- ``machine_direction``, the ``ent_direction`` of each tile, 1 to 4 or 0.
 
-superficial spatial channels (3): ``block_type``, ``machine_type``,
+The 3 superficial spatial channels: ``block_type``, ``machine_type``, and
 ``machine_direction``.
 
-x_ray scalars: pose + per-item affordability + player inventory +
-facing-machine readouts (81 floats).
-superficial scalars: pose + per-item affordability + player inventory
-(72 floats; the 9 facing readouts are dropped).
+The x_ray scalars are the pose, the affordability of each item, the player
+inventory, and the readouts of the machine in front: 81 floats. The superficial
+scalars are the pose, the affordability of each item, and the player inventory:
+72 floats. The 9 facing readouts are absent.
 """
 
 from __future__ import annotations
@@ -73,17 +71,17 @@ from factoriax.engine.tables import (
     PLAYER_MAX_STACK,
 )
 
-# JaxRenderer caches device-resident texture atlases per tile size; keep
-# one renderer per requested ``block_pixel_size`` so the JIT compile and
-# atlas build only happen on the first call for that size.
+# JaxRenderer holds one texture atlas on the device for each tile size. Keep
+# one renderer for each ``block_pixel_size``, so the JIT compile and the atlas
+# build happen on the first call for that size only.
 _RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 _MAP_NORM: float = float(max(BlockType))
 _MACHINE_NORM: float = float(max(Machine))
 _DIR_NORM: float = 4.0
-# Count normalisation for slot channels. Big enough to keep pallet
-# counts (up to 1000) finite, small enough that tiny buffers still
-# register visibly. 1024 matches PLAYER_MAX_STACK for common items.
+# Count normalisation for the slot channels. The value is large enough to hold
+# a pallet count of up to 1000, and small enough that a small buffer still
+# shows. 1024 matches PLAYER_MAX_STACK for the common items.
 _SLOT_COUNT_NORM: float = 1024.0
 _PLAYER_MAX_STACK_F: jnp.ndarray = jnp.maximum(
     PLAYER_MAX_STACK.astype(jnp.float32),
@@ -102,18 +100,19 @@ _SlotGrids = tuple[
 
 
 def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
-    """Project every machine's contents onto uniform 3-slot grids.
+    """Put the contents of every machine onto uniform 3-slot grids.
 
-    Machines store their contents in different fields, and an observation
-    needs one shape for all of them. Assemblers and furnaces map
-    ``ent_asm_in[0]`` to slot 0, ``ent_asm_in[1]`` to slot 1, and
-    ``ent_asm_out`` to slot 2. Machines that only store leave slots 0 and 1
-    empty and put ``ent_buf`` in slot 2.
+    Machines keep their contents in different fields, and an observation needs
+    one shape for all of them. An assembler and a furnace map ``ent_asm_in[0]``
+    to slot 0, ``ent_asm_in[1]`` to slot 1, and ``ent_asm_out`` to slot 2. A
+    machine that only stores leaves slots 0 and 1 empty and puts ``ent_buf`` in
+    slot 2.
 
-    Slots 0 and 1 carry whatever sits in the two ``ent_asm_in`` columns, so
-    they cover a science lab's packs and a crossing's two axis buffers as
-    well as an assembler's inputs. Slot 2 carries ``ent_asm_out`` where a
-    recipe runs and ``ent_buf`` for every other machine that holds items.
+    Slots 0 and 1 carry the contents of the two ``ent_asm_in`` columns. They
+    therefore cover the packs of a science lab and the two axis buffers of a
+    crossing, as well as the inputs of an assembler. Slot 2 carries
+    ``ent_asm_out`` where a recipe runs, and ``ent_buf`` for every other
+    machine that holds items.
 
     Parameters
     ----------
@@ -124,9 +123,9 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
     -------
     tuple of jnp.ndarray
         ``(slot0_type, slot0_count, slot1_type, slot1_count, slot2_type,
-        slot2_count)``, each shaped ``(H, W)``. Types are int8 item ids and
-        counts are int16, both zero on a tile with no machine. Raw values,
-        not normalised; the callers divide.
+        slot2_count)``, each with the shape ``(H, W)``. A type is an int8 item
+        id and a count is an int16. Both are zero on a tile with no machine.
+        These are raw values, and the callers divide them.
     """
     h, w = state.map.shape
     active = state.ent_y >= 0
@@ -134,20 +133,20 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
     ex = jnp.clip(state.ent_x, 0, w - 1)
 
     machine_idx = state.ent_type.astype(jnp.int32)
-    # Anything that stores items in the two ``ent_asm_in`` columns: the
-    # machines with real input slots, plus a crossing, which keeps one buffer
-    # per axis in the same two columns.
+    # Every machine that stores items in the two ``ent_asm_in`` columns: the
+    # machines with real input slots, and a crossing, which keeps one buffer
+    # for each axis in the same two columns.
     uses_in_columns = MACHINE_HAS_INPUT_SLOTS[machine_idx] | (
         state.ent_type == Machine.CROSSING
     )
-    # Only assemblers and furnaces produce into ``ent_asm_out``; everything
-    # else that holds items holds them in ``ent_buf``.
+    # Only an assembler and a furnace produce into ``ent_asm_out``. Every other
+    # machine that holds items holds them in ``ent_buf``.
     runs_recipes = (state.ent_type == Machine.ASSEMBLER) | (
         state.ent_type == Machine.FURNACE
     )
     has_buffer = ~uses_in_columns & (MACHINE_MAX_STACK[machine_idx] > 0)
 
-    # Slots 0 and 1: the two ent_asm_in columns, whatever they are used for.
+    # Slots 0 and 1: the two ent_asm_in columns, for every use of them.
     in0_t = jnp.where(
         active & uses_in_columns,
         state.ent_asm_in_type[..., 0],
@@ -169,7 +168,7 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
         jnp.int16(0),
     )
 
-    # Slot 2: asm_out where a recipe runs, ent_buf everywhere else.
+    # Slot 2: asm_out where a recipe runs, and ent_buf in every other case.
     out_t = jnp.where(
         active & runs_recipes,
         state.ent_asm_out_type,
@@ -183,9 +182,9 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
 
     zero_t = jnp.zeros((h, w), dtype=jnp.int8)
     zero_c = jnp.zeros((h, w), dtype=jnp.int16)
-    # Accumulate rather than assign. Free slots clip onto tile (0, 0) and
-    # contribute zero, so an add leaves a real machine standing there intact,
-    # where a set would race with the stale writes and usually lose.
+    # Add, and do not assign. Every free slot clips onto tile (0, 0) and adds
+    # zero, so an add leaves a real machine on that tile unchanged. A set
+    # competes with the stale writes and usually loses.
     return (
         zero_t.at[ey, ex].add(in0_t),
         zero_c.at[ey, ex].add(in0_c),
@@ -197,12 +196,12 @@ def _reconstruct_slot_grids(state: EnvState) -> _SlotGrids:
 
 
 def _reconstruct_machine_direction_grid(state: EnvState) -> jnp.ndarray:
-    """Lay out each machine's facing on a per-tile grid.
+    """Put the facing of each machine onto a per-tile grid.
 
-    Facing decides where a machine sends its output, so an agent needs it to
-    read a factory as a chain rather than a set of unrelated tiles.
+    The facing decides where a machine sends its output. An agent therefore
+    needs it to read a factory as a chain, and not as a set of separate tiles.
 
-    Accumulates rather than assigns, for the reason
+    The function adds and does not assign, for the reason that
     :func:`_reconstruct_slot_grids` gives.
 
     Parameters
@@ -214,7 +213,7 @@ def _reconstruct_machine_direction_grid(state: EnvState) -> jnp.ndarray:
     -------
     jnp.ndarray
         Shape ``(H, W)``, int8. ``Direction`` values 1 to 4, and 0 on a tile
-        with no machine. Raw, not normalised.
+        with no machine. These are raw values.
     """
     h, w = state.map.shape
     grid = jnp.zeros((h, w), dtype=jnp.int8)
@@ -222,11 +221,11 @@ def _reconstruct_machine_direction_grid(state: EnvState) -> jnp.ndarray:
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
     vals = jnp.where(active, state.ent_direction, jnp.int8(0))
-    # Accumulate, for the reason given in ``_reconstruct_slot_grids``.
+    # Add, for the reason that ``_reconstruct_slot_grids`` gives.
     return grid.at[ey, ex].add(vals)
 
 
-# Channel and scalar manifests, per profile.
+# The channel names and scalar names of each profile.
 _X_RAY_SPATIAL_CHANNEL_NAMES: tuple[str, ...] = (
     "block_type",
     "machine_type",
@@ -249,7 +248,7 @@ NUM_SPATIAL_CHANNELS: dict[str, int] = {
     "superficial": len(_SUPERFICIAL_SPATIAL_CHANNEL_NAMES),
 }
 
-# Scalar fields, in vector order, per helper.
+# The scalar fields of each helper, in vector order.
 _COMMON_SCALAR_FIELDS: tuple[str, ...] = (
     "pos_x",
     "pos_y",
@@ -269,9 +268,9 @@ _FACING_SCALAR_FIELDS: tuple[str, ...] = (
     "facing_asm_out_type",
     "facing_asm_out_count",
 )
-#: Scalar count per profile. Independent of how many recipes a scenario's
-#: :class:`~factoriax.engine.recipes.RecipeTable` holds, because the ``afford``
-#: block is indexed by item type rather than by recipe id.
+#: Number of scalars in each profile. The number of recipes in the
+#: :class:`~factoriax.engine.recipes.RecipeTable` of a scenario does not change
+#: it, because an item type indexes the ``afford`` block, not a recipe id.
 NUM_PLAYER_SCALARS: dict[str, int] = {
     "x_ray": len(_COMMON_SCALAR_FIELDS) + len(_FACING_SCALAR_FIELDS),
     "superficial": len(_COMMON_SCALAR_FIELDS),
@@ -283,20 +282,20 @@ def _common_scalars(
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """Build the scalar block both observation profiles share.
+    """Build the scalar block that both observation profiles share.
 
-    Four pose and clock values, then one affordability flag per item type,
-    then the player's inventory. ``NUM_PLAYER_SCALARS["superficial"]``
-    floats in total, currently 72.
+    The block holds four pose and clock values, then one affordability flag for
+    each item type, then the inventory of the player. The total length is
+    ``NUM_PLAYER_SCALARS["superficial"]`` floats, which is 72 today.
 
-    Affordability is indexed by item type rather than by recipe id, because
-    a scenario ships its own recipe book and recipe ids shift between books
-    while item ids do not. An item no recipe in the active book produces
+    An item type indexes the affordability block, not a recipe id. A scenario
+    supplies its own recipe book, and a recipe id changes between books while
+    an item id does not. An item that no recipe in the active book produces
     reads 0.
 
-    Everything is normalised into roughly 0 to 1: positions by map size,
-    direction by 4, timestep by ``max_timesteps``, and inventory by
-    ``PLAYER_MAX_STACK`` per item.
+    Every value normalises to about 0 to 1. The function divides a position by
+    the map size, a direction by 4, the timestep by ``max_timesteps``, and an
+    inventory count by the ``PLAYER_MAX_STACK`` of that item.
 
     Parameters
     ----------
@@ -305,12 +304,12 @@ def _common_scalars(
     params
         Supplies ``max_timesteps`` and ``recipe_table``.
     player_idx
-        Which player is observing.
+        Player that observes.
 
     Returns
     -------
     jax.Array
-        1-D float32, length ``NUM_PLAYER_SCALARS["superficial"]``.
+        1-D float32, of length ``NUM_PLAYER_SCALARS["superficial"]``.
     """
     pos = state.player_positions[player_idx]
     _h, _w = state.map.shape
@@ -323,7 +322,7 @@ def _common_scalars(
         ],
         dtype=jnp.float32,
     )
-    # Item-indexed, not recipe-indexed: recipe ids shift per scenario book.
+    # An item indexes this, not a recipe. A recipe id changes with the book.
     recipe_for_item = params.recipe_table.output_to_recipe
     afford = jax.vmap(
         lambda r: can_afford_recipe(state, params, player_idx, r).astype(
@@ -339,25 +338,27 @@ def _facing_scalars(
     state: EnvState,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """Read the contents of the machine the player faces. x_ray only.
+    """Read the contents of the machine in front of the player, for x_ray only.
 
-    Nine floats: the machine kind, then its buffer and its three crafting
-    slots as type and count pairs. This is what lets an x_ray agent decide
-    whether to deposit or withdraw without walking a machine's history.
+    The block holds nine floats: the machine kind, then its buffer and its
+    three craft slots, each as a type and a count. An x_ray agent reads these
+    to choose between a deposit and a withdraw, and needs no memory of the
+    machine.
 
-    A tile with no machine reads zero on every field, whether it is off the
-    map or simply empty. Both cases are masked.
+    A tile with no machine reads zero on every field. This holds both for a
+    tile outside the map and for an empty tile, because the mask covers both.
 
-    Counts are normalised by ``_SLOT_COUNT_NORM``, which is at or above every
-    machine's ``MACHINE_MAX_STACK``, so these stay inside 0 to 1 and match
-    the bounds :meth:`FactoriaxEnv.observation_space` declares.
+    The function divides a count by ``_SLOT_COUNT_NORM``, which is equal to or
+    larger than the ``MACHINE_MAX_STACK`` of every machine. The values
+    therefore stay inside 0 to 1 and match the bounds that
+    :meth:`FactoriaxEnv.observation_space` declares.
 
     Parameters
     ----------
     state
         State to read.
     player_idx
-        Which player is observing.
+        Player that observes.
 
     Returns
     -------
@@ -373,9 +374,9 @@ def _facing_scalars(
 
     max_e = state.ent_y.shape[0]
     eidx_raw = state.tile_entity[sy, sx]
-    # An in-bounds tile with no machine holds -1, which the clip would turn
-    # into entity 0. Mask on there being an entity, not only on bounds, or
-    # every empty tile reports slot 0's contents.
+    # A tile inside the map with no machine holds -1, and the clip turns that
+    # into entity 0. Mask on the presence of an entity, and not on the bounds
+    # alone. Without that mask every empty tile reports the contents of slot 0.
     mask = (in_bounds & (eidx_raw >= 0)).astype(jnp.float32)
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
     item_norm = float(NUM_ITEM_TYPES)
@@ -404,22 +405,22 @@ def _x_ray_scalars(
     params: EnvParams,
     player_idx: int | jax.Array,
 ) -> jax.Array:
-    """Build the x_ray scalar block: the shared block plus facing readouts.
+    """Build the x_ray scalar block: the shared block and the facing readouts.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Passed through to :func:`_common_scalars`.
+        The function passes this to :func:`_common_scalars`.
     player_idx
-        Which player is observing.
+        Player that observes.
 
     Returns
     -------
     jax.Array
-        1-D float32, length ``NUM_PLAYER_SCALARS["x_ray"]``, currently 81:
-        72 shared values followed by 9 facing readouts.
+        1-D float32, of length ``NUM_PLAYER_SCALARS["x_ray"]``, which is 81
+        today: 72 shared values, and then 9 facing readouts.
     """
     return jnp.concatenate(
         [
@@ -436,23 +437,23 @@ def _superficial_scalars(
 ) -> jax.Array:
     """Build the superficial scalar block, which is the shared block alone.
 
-    The facing readouts are dropped on purpose. A superficial agent has to
-    walk up to a machine and act to learn what is inside it.
+    The facing readouts are absent on purpose. A superficial agent must move to
+    a machine and act on it to learn its contents.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Passed through to :func:`_common_scalars`.
+        The function passes this to :func:`_common_scalars`.
     player_idx
-        Which player is observing.
+        Player that observes.
 
     Returns
     -------
     jax.Array
-        1-D float32, length ``NUM_PLAYER_SCALARS["superficial"]``,
-        currently 72.
+        1-D float32, of length ``NUM_PLAYER_SCALARS["superficial"]``, which is
+        72 today.
     """
     return _common_scalars(state, params, player_idx)
 
@@ -465,7 +466,7 @@ def observation_size(
     map_height: int = 32,
     map_width: int = 32,
 ) -> int:
-    """Flat observation size for ``(profile, view)`` with the given map dimensions."""
+    """Return the flat observation size for one profile, view, and map size."""
     if view == "global":
         spatial_tiles = map_width * map_height
     elif view == "local":
@@ -483,28 +484,28 @@ def global_x_ray(
 ) -> jax.Array:
     """Full-map x_ray observation for one player.
 
-    Ten spatial channels (block type, machine type, ore resources, six
-    slot channels, machine direction) flattened, followed by the x_ray scalar
-    vector.
+    The result holds ten flat spatial channels, and then the x_ray scalar
+    vector. The channels are the block type, the machine type, the ore
+    resources, the six slot channels, and the machine direction.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Passed through to the scalar builders.
+        The function passes this to the scalar builders.
     player_idx
-        Which player is observing. Only the scalar block depends on it; the
-        spatial channels are the same for every player.
+        Player that observes. Only the scalar block depends on it. The spatial
+        channels are the same for every player.
 
     Returns
     -------
     jax.Array
-        1-D float32 of length
-        ``observation_size(profile="x_ray", view="global", ...)``. Ten
-        flattened ``(H, W)`` channels in ``_X_RAY_SPATIAL_CHANNEL_NAMES``
-        order, then the x_ray scalars. A consumer that wants the grid back
-        has to reshape it itself.
+        1-D float32, of length
+        ``observation_size(profile="x_ray", view="global", ...)``. It holds ten
+        flat ``(H, W)`` channels in ``_X_RAY_SPATIAL_CHANNEL_NAMES`` order, and
+        then the x_ray scalars. A reader that wants the grid back must reshape
+        it.
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
     flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
@@ -546,32 +547,32 @@ def local_x_ray(
     player_idx: int | jax.Array,
     radius: int = 10,
 ) -> jax.Array:
-    """Local windowed x_ray observation centered on one player.
+    """Local x_ray observation in a window around one player.
 
-    Extracts a ``(2*radius+1) x (2*radius+1)`` patch from the ten x_ray
-    spatial channels and appends the x_ray scalar vector.
+    The function takes a ``(2*radius+1) x (2*radius+1)`` patch from the ten
+    x_ray spatial channels, and adds the x_ray scalar vector after it.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Passed through to the scalar builders.
+        The function passes this to the scalar builders.
     player_idx
-        Which player is observing. The window centres on this player.
+        Player that observes. This player is at the centre of the window.
     radius
         Half-width of the window in tiles. The window is
-        ``(2 * radius + 1)`` square, so it always has a centre tile. Static
-        under ``jit``: changing it retraces.
+        ``(2 * radius + 1)`` tiles square, so it always has a centre tile. The
+        value is static under ``jit``, and a new value traces again.
 
     Returns
     -------
     jax.Array
-        1-D float32 of length
-        ``observation_size(profile="x_ray", view="local", radius=radius)``.
-        Tiles beyond the map edge are padded with
-        ``BlockType.OUT_OF_BOUNDS`` on the terrain channel and zero
-        elsewhere, so an agent can still tell where the edge is.
+        1-D float32, of length
+        ``observation_size(profile="x_ray", view="local", radius=radius)``. The
+        padding for a tile past the map edge is ``BlockType.OUT_OF_BOUNDS`` on
+        the terrain channel and zero on every other channel, so an agent can
+        still find the edge.
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))
@@ -640,24 +641,25 @@ def global_superficial(
 ) -> jax.Array:
     """Full-map superficial observation for one player.
 
-    Three spatial channels (block type, machine type, machine direction)
-    flattened, followed by the superficial scalar vector.
+    The result holds three flat spatial channels, and then the superficial
+    scalar vector. The channels are the block type, the machine type, and the
+    machine direction.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Passed through to the scalar builders.
+        The function passes this to the scalar builders.
     player_idx
-        Which player is observing.
+        Player that observes.
 
     Returns
     -------
     jax.Array
-        1-D float32 of length
-        ``observation_size(profile="superficial", view="global", ...)``.
-        Three flattened ``(H, W)`` channels then the superficial scalars.
+        1-D float32, of length
+        ``observation_size(profile="superficial", view="global", ...)``. It
+        holds three flat ``(H, W)`` channels, and then the superficial scalars.
     """
     flat_blocks = state.map.flatten().astype(jnp.float32) / _MAP_NORM
     flat_machines = state.machine_types.flatten().astype(jnp.float32) / _MACHINE_NORM
@@ -677,29 +679,29 @@ def local_superficial(
     player_idx: int | jax.Array,
     radius: int = 10,
 ) -> jax.Array:
-    """Local windowed superficial observation centered on one player.
+    """Local superficial observation in a window around one player.
 
-    Extracts a ``(2*radius+1) x (2*radius+1)`` patch from the three
-    superficial spatial channels and appends the 63-float superficial
-    scalar vector.
+    The function takes a ``(2*radius+1) x (2*radius+1)`` patch from the three
+    superficial spatial channels, and adds the superficial scalar vector after
+    it. That vector holds ``NUM_PLAYER_SCALARS["superficial"]`` floats.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Passed through to the scalar builders.
+        The function passes this to the scalar builders.
     player_idx
-        Which player is observing. The window centres on this player.
+        Player that observes. This player is at the centre of the window.
     radius
-        Half-width of the window in tiles. Static under ``jit``.
+        Half-width of the window in tiles. The value is static under ``jit``.
 
     Returns
     -------
     jax.Array
-        1-D float32 of length
+        1-D float32, of length
         ``observation_size(profile="superficial", view="local",
-        radius=radius)``. Padded the same way as :func:`local_x_ray`.
+        radius=radius)``. The padding is the same as in :func:`local_x_ray`.
     """
     size = 2 * radius + 1
     pw = ((radius, radius), (radius, radius))
@@ -739,8 +741,8 @@ def local_superficial(
     )
 
 
-#: Catalog of obs variants. The env takes the name (and a radius for
-#: ``_local`` variants) and dispatches through this dict.
+#: The observation variants. The environment takes the name, and a radius for a
+#: ``_local`` variant, and dispatches through this dict.
 OBSERVATIONS: dict[str, jax.Array] = {  # type: ignore[type-arg]
     "x_ray_global": global_x_ray,
     "x_ray_local": local_x_ray,
@@ -752,30 +754,31 @@ OBSERVATIONS: dict[str, jax.Array] = {  # type: ignore[type-arg]
 def rgb(state: EnvState, block_pixel_size: int = 32) -> np.ndarray:
     """Render the full map as an RGB image.
 
-    The one observation here that is not JAX-native. It returns a NumPy
-    array and cannot be traced, so it belongs outside a ``jit`` boundary.
+    This is the one observation here that is not JAX-native. It returns a NumPy
+    array, and JAX cannot trace it, so a caller must run it outside a ``jit``
+    boundary.
 
-    What it shows is a strict subset of what the symbolic profiles carry:
-    terrain, machine kind and facing, and player position and facing. There
-    is no inventory, no craft affordability, and no machine contents, so a
-    pixel agent cannot learn crafting from this alone. Recorded in
-    ``ISSUES.md``.
+    The image shows less than the symbolic profiles carry: the terrain, the
+    machine kind and facing, and the player position and facing. There is no
+    inventory, no craft affordability, and no machine contents.
+
+    CAUTION: A pixel agent cannot learn to craft from this observation alone.
+    ``ISSUES.md`` records this.
 
     Parameters
     ----------
     state
         State to render.
     block_pixel_size
-        Tile side length in pixels. Each distinct value builds and caches
-        its own renderer, so the atlas build and JIT compile are paid once
-        per size rather than once per call. Passing many sizes grows the
-        cache without bound.
+        Tile side length in pixels. Each different value builds its own
+        renderer and holds it in a cache, so the atlas build and the JIT
+        compile happen one time for each size, and not one time for each call.
+        Many different sizes therefore grow the cache without bound.
 
     Returns
     -------
     numpy.ndarray
-        Shape ``(H * block_pixel_size, W * block_pixel_size, 3)``, uint8
-        RGB.
+        Shape ``(H * block_pixel_size, W * block_pixel_size, 3)``, uint8 RGB.
     """
     renderer = _RENDERER_CACHE.get(block_pixel_size)
     if renderer is None:

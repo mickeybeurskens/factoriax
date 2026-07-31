@@ -1,29 +1,29 @@
 """Put machines on the map, take them off again, and aim them.
 
-Everything here acts on one tile: the one the player faces. A player
-carrying a machine item turns it into a machine standing on that tile, or
-turns the machine standing there back into an item. Nothing in this module
-runs on its own; each function answers a player action from
+Every function here acts on one tile: the tile that the player faces. A player
+who carries a machine item turns that item into a machine on the tile. A player
+can also turn the machine on that tile back into an item. Nothing in this
+module runs on its own. Each function answers a player action from
 :mod:`factoriax.engine.step`.
 
-A placed machine lives in two places at once and the pair has to agree.
-``state.machine_types[y, x]`` says what kind of machine stands on a tile,
-and ``state.tile_entity[y, x]`` says which entity slot holds its contents,
-or ``-1`` for an empty tile. The slot itself carries position, facing,
-health, and whatever the machine is holding. Every function here that
-changes one of the three changes all three.
+A placed machine lives in two places at the same time, and the two must agree.
+``state.machine_types[y, x]`` gives the kind of machine on a tile.
+``state.tile_entity[y, x]`` gives the entity slot that holds its contents, or
+``-1`` for an empty tile. The slot itself carries the position, the facing, the
+health, and the contents of the machine. Every function here that changes one
+of the three changes all three.
 
-Slots are a fixed-size pool, ``E`` of them, decided when the level is built.
-A slot is free when ``ent_y < 0``. :func:`place_machine` takes the
-lowest-numbered free slot and :func:`pickup_machine` gives one back, so a
-long game reuses slots rather than growing. A map with every slot taken
-refuses further placement, and the player keeps the item.
+The slots are a pool of fixed size, ``E`` of them, fixed when the level is
+built. A slot is free when ``ent_y < 0``. :func:`place_machine` takes the free
+slot with the lowest number, and :func:`pickup_machine` gives one back. A long
+game therefore reuses slots and grows no array. A map with every slot in use
+refuses a new placement, and the player keeps the item.
 
-Every function is masked rather than branched, because these run under
-``jit``. An action that cannot happen is not an error and does not raise;
-it writes the state back unchanged. A caller cannot tell a refused
-placement from a successful one by the return value alone, only by looking
-at what changed.
+Every function uses a mask and not a branch, because these functions run under
+``jit``. An action that cannot happen is not an error and raises nothing. It
+writes the state back unchanged. A caller cannot separate a refused placement
+from a placement that worked by the return value alone. It must compare the
+state before and after the call.
 """
 
 import jax
@@ -48,29 +48,30 @@ def get_tile_in_front(
 ) -> tuple[jax.Array, jax.Array]:
     """Return the tile one step ahead of a player, in the way they face.
 
-    Every player action in this module targets this tile. A player never
-    acts on the tile they stand on.
+    Every player action in this module targets this tile. A player never acts
+    on the tile under them.
 
-    The result is not clipped and can name a tile off the map, which is what
-    a player standing on an edge and facing outward gets. Callers test the
-    bounds themselves and mask; nothing here raises.
+    The function does not clip the result, so the result can name a tile
+    outside the map. A player on an edge who faces outward gets such a tile.
+    Callers test the bounds themselves and mask. This function raises nothing.
 
     Parameters
     ----------
     state
-        State to read. Uses ``player_positions`` and ``player_directions``.
+        State to read. The function reads ``player_positions`` and
+        ``player_directions``.
     player_idx
-        Which player to look ahead of. Indexes the leading axis of both
+        Player to look ahead of. This value indexes the first axis of both
         player arrays.
 
     Returns
     -------
     tuple of jax.Array
-        ``(tx, ty)``, column first and row second, matching the ``(x, y)``
-        order of ``player_positions``. Grid lookups take them the other way
-        round, as ``state.map[ty, tx]``. A player whose direction is the
-        unset value 0 gets their own tile back, because ``DIRECTIONS`` row 0
-        is a zero offset.
+        ``(tx, ty)``, the column first and the row second, in the ``(x, y)``
+        order of ``player_positions``. A grid lookup takes them in the other
+        order, as ``state.map[ty, tx]``. A player with the unset direction 0
+        gets their own tile back, because row 0 of ``DIRECTIONS`` is a zero
+        offset.
     """
     pos = state.player_positions[player_idx]
     direction = state.player_directions[player_idx]
@@ -80,17 +81,18 @@ def get_tile_in_front(
 
 
 def is_placeable_item(item_type: int | jax.Array) -> jax.Array:
-    """Report whether an item turns into a machine when placed.
+    """Report whether an item becomes a machine on the map.
 
-    Most items are materials and cannot be placed. The placeable ones are
-    listed in ``PLACEABLE_ITEMS``, and each maps to a machine kind through
-    ``ITEM_TO_MACHINE_ARRAY``.
+    Most items are materials, and no action can place them.
+    ``PLACEABLE_ITEMS`` lists the items that a player can place, and
+    ``ITEM_TO_MACHINE_ARRAY`` maps each one to a machine kind.
 
     Parameters
     ----------
     item_type
-        Item id to test. A scalar; this does not broadcast over an array of
-        candidates, because the reduction collapses every axis.
+        Item id to test. This must be a scalar. The function does not
+        broadcast over an array of items, because the reduction collapses
+        every axis.
 
     Returns
     -------
@@ -107,28 +109,29 @@ def is_valid_placement_tile(
 ) -> jax.Array:
     """Report whether a machine can stand on a tile.
 
-    Three things disqualify a tile: it is off the map, its block is one of
-    ``SOLID_BLOCKS`` such as stone or water, or a machine already stands
-    there. Ore blocks are not solid, which is what lets a miner be placed on
-    the patch it works.
+    Three conditions refuse a tile. The tile is outside the map, or its block
+    is one of ``SOLID_BLOCKS`` such as stone or water, or a machine already
+    stands on it. An ore block is not solid, so a player can place a miner on
+    the patch that it works.
 
-    Players are not considered. A tile another player stands on passes this
-    test, so a machine can be placed underneath them.
+    The function ignores the players. A tile with another player on it passes
+    this test, so a player can place a machine under another player.
 
     Parameters
     ----------
     state
-        State to read. Uses ``map`` and ``machine_types``.
+        State to read. The function reads ``map`` and ``machine_types``.
     tx
-        Target column. May be out of bounds; that is one of the cases this
-        function exists to reject.
+        Target column. The value can fall outside the map, and this function
+        exists to refuse that case.
     ty
-        Target row. May be out of bounds.
+        Target row. The value can fall outside the map.
 
     Returns
     -------
     jax.Array
-        Bool, shaped like ``tx``. True only when all three conditions pass.
+        Bool, with the shape of ``tx``. True only when all three conditions
+        pass.
     """
     h, w = state.map.shape
     in_bounds = (tx >= 0) & (tx < w) & (ty >= 0) & (ty < h)
@@ -148,44 +151,44 @@ def place_machine(
 ) -> EnvState:
     """Spend one carried item to stand a machine on the tile in front.
 
-    Four things all have to hold: the player carries at least one of the
-    item, the item is placeable, the target tile is free, and a free entity
-    slot exists. When any fails the state comes back unchanged and the
-    player keeps the item. Nothing reports which one failed.
+    Four conditions must all hold. The player carries one of the item or more,
+    the item is placeable, the target tile is free, and a free entity slot
+    exists. If one condition fails, the state comes back unchanged and the
+    player keeps the item. The function does not report which condition failed.
 
-    The new machine faces the way the player was facing, so aiming a belt or
-    an arm means standing the right way round before placing it. It starts
-    at ``MACHINE_MAX_HEALTH`` for its kind and with an empty buffer.
+    The new machine takes the facing of the player, so a player must stand in
+    the correct direction before placement to aim a belt or an arm. The machine
+    starts at the ``MACHINE_MAX_HEALTH`` of its kind, with an empty buffer.
 
-    Only the buffer is cleared on the reused slot. The crafting fields,
-    ``ent_power`` and the ``ent_asm_`` arrays, are left as they were, which
-    is safe only because :func:`pickup_machine` zeroes all of them when it
-    frees a slot. A future path that frees a slot some other way has to
-    clear them too, or a newly placed assembler inherits a half-finished
-    craft.
+    The function clears the buffer of the reused slot, and nothing else. It
+    leaves the craft fields ``ent_power`` and the ``ent_asm_`` arrays as they
+    were. This is safe only because :func:`pickup_machine` sets all of them to
+    zero when it frees a slot.
+
+    CAUTION: A new path that frees a slot must also clear those fields. Without
+    that, a newly placed assembler starts with a half-finished craft.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Unused. Present so the player-action functions in this module share
-        one signature and :mod:`factoriax.engine.step` can dispatch to them
-        without special-casing.
+        The function does not read this argument. It is present so that the
+        player-action functions in this module share one signature, and
+        :mod:`factoriax.engine.step` can dispatch to them with no special case.
     player_idx
-        Which player is placing.
+        Player that places the machine.
     item_type
-        Item to spend. Turned into a machine kind by
-        ``ITEM_TO_MACHINE_ARRAY``.
+        Item to spend. ``ITEM_TO_MACHINE_ARRAY`` turns it into a machine kind.
 
     Returns
     -------
     EnvState
-        New state with ``player_inventory``, ``machine_types``,
-        ``tile_entity``, and the placed slot's ``ent_y``, ``ent_x``,
-        ``ent_type``, ``ent_direction``, ``ent_health``, ``ent_buf_type``,
-        and ``ent_buf_count`` updated. Unchanged when the placement is
-        refused.
+        New state, with ``player_inventory``, ``machine_types``,
+        ``tile_entity``, and the ``ent_y``, ``ent_x``, ``ent_type``,
+        ``ent_direction``, ``ent_health``, ``ent_buf_type``, and
+        ``ent_buf_count`` of the new slot updated. The state is unchanged when
+        the function refuses the placement.
     """
     item_type = jnp.int32(item_type)
     player_count = state.player_inventory[player_idx, item_type]
@@ -195,10 +198,10 @@ def place_machine(
     tx, ty = get_tile_in_front(state, player_idx)
     valid_tile = is_valid_placement_tile(state, tx, ty)
 
-    # Find the first inactive entity slot (ent_y < 0).
+    # Find the first free entity slot, which holds ent_y < 0.
     max_e = state.ent_y.shape[0]
     free_mask = state.ent_y < 0
-    # argmax returns first True index; if none free, returns 0.
+    # argmax gives the first True index, and 0 when no slot is free.
     free_idx = jnp.argmax(free_mask)
     has_slot = free_mask[free_idx]
 
@@ -217,7 +220,7 @@ def place_machine(
         state.machine_types[sy, sx],
     )
 
-    # Allocate entity slot.
+    # Claim the entity slot.
     safe_idx = jnp.clip(free_idx, 0, max_e - 1)
     new_ent_y = jnp.where(
         should_place,
@@ -246,8 +249,8 @@ def place_machine(
         state.ent_health.at[safe_idx].set(full_hp.astype(jnp.int16)),
         state.ent_health,
     )
-    # Clear the reused slot's buffer so a new machine never inherits
-    # stale contents left in a previously-inactive slot.
+    # Clear the buffer of the reused slot, so a new machine never starts with
+    # old contents left in a slot that was free.
     new_ent_buf_type = jnp.where(
         should_place,
         state.ent_buf_type.at[safe_idx].set(jnp.int8(0)),
@@ -287,39 +290,40 @@ def pickup_machine(
 ) -> EnvState:
     """Take the machine in front of the player back into the inventory.
 
-    The reverse of :func:`place_machine`. The machine becomes an item again,
-    the tile empties, and the entity slot is cleared and returned to the
-    free pool for the next placement to claim.
+    This function is the reverse of :func:`place_machine`. The machine becomes
+    an item again, the tile empties, and the function clears the entity slot
+    and returns it to the free pool for the next placement.
 
-    Everything the machine was holding comes back with it: ``ent_buf``, both
-    ``ent_asm_in`` slots, and ``ent_asm_out``. Picking up a working assembler
-    therefore costs its progress but none of its items.
+    Everything that the machine held comes back with it: ``ent_buf``, both
+    ``ent_asm_in`` slots, and ``ent_asm_out``. A pickup of a working assembler
+    therefore costs its progress, but none of its items.
 
-    Three conditions gate it: a machine stands on the tile, the machine is at
-    full health for its kind, and the whole payout fits in the player's
-    inventory without pushing any stack past ``PLAYER_MAX_STACK``.
+    Three conditions gate the pickup. A machine stands on the tile, the machine
+    is at full health for its kind, and the whole payout fits in the inventory
+    of the player. No stack can pass ``PLAYER_MAX_STACK``.
 
-    The room check is all or nothing. Paying out only what fits would destroy
-    the remainder along with the machine, so a pickup that would overflow is
-    refused outright and the player has to withdraw some of the contents
-    first. That is the one case where a full inventory blocks a pickup that
-    would otherwise succeed.
+    The room test is all or nothing. A payout of only the part that fits
+    destroys the rest together with the machine. The function therefore refuses
+    a pickup that passes a stack limit, and the player must withdraw some of
+    the contents first. This is the one case where a full inventory blocks a
+    pickup that all other conditions allow.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Unused. Present for the shared player-action signature.
+        The function does not read this argument. It is present for the shared
+        player-action signature.
     player_idx
-        Which player is picking up.
+        Player that picks the machine up.
 
     Returns
     -------
     EnvState
-        New state with ``player_inventory``, ``machine_types``,
+        New state, with ``player_inventory``, ``machine_types``,
         ``tile_entity``, and every ``ent_`` field of the freed slot updated.
-        Unchanged when the pickup is refused.
+        The state is unchanged when the function refuses the pickup.
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -336,11 +340,11 @@ def pickup_machine(
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    # Total the whole payout per item type before deciding anything: the
-    # machine item plus every slot the machine stores items in. Repeated
-    # indices are fine here because this accumulates rather than overwrites,
-    # which is what lets an assembler holding the same item in both input
-    # slots total correctly.
+    # Total the whole payout for each item type before any decision: the
+    # machine item, and every slot in which the machine stores items. A
+    # repeated index is safe here, because this adds and does not overwrite. An
+    # assembler with the same item in both input slots therefore totals
+    # correctly.
     num_items = state.player_inventory.shape[1]
     payout = jnp.zeros(num_items, dtype=jnp.int32)
     payout = payout.at[machine_item].add(jnp.int32(1))
@@ -354,13 +358,13 @@ def pickup_machine(
             jnp.where(slot_count > 0, slot_count.astype(jnp.int32), jnp.int32(0)),
         )
 
-    # All or nothing. Paying out only what fits would destroy the rest along
-    # with the machine, so a pickup that would overflow any stack is refused
-    # and the player is left to withdraw first.
+    # All or nothing. A payout of only the part that fits destroys the rest
+    # together with the machine, so a pickup that passes a stack limit fails
+    # and the player must withdraw first.
     held = state.player_inventory[player_idx].astype(jnp.int32)
     fits = jnp.all(held + payout <= PLAYER_MAX_STACK.astype(jnp.int32))
 
-    # Gate pickup on full health for the entity's type.
+    # Gate the pickup on full health for the type of the entity.
     target_type = state.ent_type[eidx]
     full_hp = MACHINE_MAX_HEALTH[target_type]
     is_full_health = state.ent_health[eidx] >= full_hp
@@ -372,7 +376,7 @@ def pickup_machine(
         ),
     )
 
-    # Clear grid.
+    # Clear the grid.
     cur_mt = state.machine_types[sy, sx]
     new_machine_types = state.machine_types.at[sy, sx].set(
         jnp.where(should_pickup, jnp.int8(Machine.NONE), cur_mt),
@@ -383,7 +387,7 @@ def pickup_machine(
         state.tile_entity,
     )
 
-    # Deactivate entity slot (set ent_y to -1, clear all fields).
+    # Free the entity slot: set ent_y to -1 and clear every other field.
     new_ent_y = jnp.where(
         should_pickup,
         state.ent_y.at[eidx].set(jnp.int16(-1)),
@@ -475,37 +479,38 @@ def apply_repair(
 ) -> EnvState:
     """Restore the entity in front of the player to full health.
 
-    The base engine implements REPAIR as a full restore with no item
-    cost. Wrappers that want a different policy (per-tick repair,
-    inventory consumption, partial restore) pre-empt
-    :data:`~factoriax.engine.constants.Action.REPAIR` by rewriting it to
-    :data:`~factoriax.engine.constants.Action.NOOP` before calling
-    ``step_env`` and then applying their own update to
+    The base engine treats REPAIR as a full restore with no item cost. A
+    wrapper that wants another rule, such as a repair for each tick, an item
+    cost, or a partial restore, rewrites
+    :data:`~factoriax.engine.constants.Action.REPAIR` to
+    :data:`~factoriax.engine.constants.Action.NOOP` before it calls
+    ``step_env``. The wrapper then applies its own update to
     ``state.ent_health``.
 
-    No-op when the target tile is out of bounds, contains no entity,
-    or the entity is already at full health for its type.
+    The function does nothing when the target tile is outside the map, when the
+    tile holds no entity, or when the entity is already at full health for its
+    type.
 
-    No code path in the engine lowers ``ent_health``. Placement sets it
-    full and pickup clears it to zero, so in the base engine every placed
-    machine is already at full health and this function has nothing to
-    restore. It is reachable but its effect is not. Recorded in
-    ``ISSUES.md``.
+    No code path in the engine lowers ``ent_health``. Placement sets it to full
+    and pickup clears it to zero, so in the base engine every placed machine is
+    already at full health. This function therefore has nothing to restore. A
+    caller can reach it, but it changes nothing. ``ISSUES.md`` records this.
 
     Parameters
     ----------
     state
         State to read.
     params
-        Unused. Present for the shared player-action signature.
+        The function does not read this argument. It is present for the shared
+        player-action signature.
     player_idx
-        Which player is repairing.
+        Player that repairs the machine.
 
     Returns
     -------
     EnvState
-        New state with ``ent_health`` raised to full on the targeted slot.
-        Unchanged in every other case.
+        New state, with ``ent_health`` raised to full on the target slot. The
+        state is unchanged in every other case.
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -538,34 +543,36 @@ def set_machine_direction(
 ) -> EnvState:
     """Aim the machine in front of the player at a given direction.
 
-    Turning a placed machine is how a belt line is routed without picking
-    every piece up again. The direction is set outright, not rotated by a
-    step, so repeating the action with the same argument changes nothing.
+    A player turns a placed machine to route a belt line, and does not pick
+    every piece up again. The function writes the direction directly and does
+    not turn the machine by one step. A second call with the same argument
+    therefore changes nothing.
 
-    A machine's facing means different things per kind: which tile a miner,
-    belt, or splitter pushes into, and which two tiles an arm bridges. On a
-    ``CROSSING`` the one byte packs both axis directions at once, so setting
-    it re-aims the vertical and horizontal flows together. ``CROSSING_AXIS_DIRS``
-    unpacks the pair.
+    The facing of a machine means a different thing for each kind. It gives the
+    tile that a miner, a belt, or a splitter pushes into, and the two tiles
+    that an arm joins. On a ``CROSSING`` the one byte holds both axis
+    directions, so a write aims the vertical flow and the horizontal flow
+    together. ``CROSSING_AXIS_DIRS`` unpacks the pair.
 
-    No-op when the tile is out of bounds or holds no machine.
+    The function does nothing when the tile is outside the map or holds no
+    machine.
 
     Parameters
     ----------
     state
         State to read.
     player_idx
-        Which player is aiming.
+        Player that aims the machine.
     target_dir
-        ``Direction`` value to write. Not validated: a value outside 1 to 4
-        is stored as given, and the passes that index a direction table with
-        it are only defined over 0 to 4.
+        ``Direction`` value to write. The function does not validate it. It
+        stores a value outside 1 to 4 as given, and the passes that index a
+        direction table with it are defined over 0 to 4 only.
 
     Returns
     -------
     EnvState
-        New state with ``ent_direction`` updated on the targeted slot.
-        Unchanged in every other case.
+        New state, with ``ent_direction`` updated on the target slot. The state
+        is unchanged in every other case.
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape

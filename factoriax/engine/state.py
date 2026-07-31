@@ -1,14 +1,15 @@
-"""The environment's state and its per-episode parameters.
+"""State of the environment, and its per-episode parameters.
 
-:class:`EnvState` is everything a step reads and writes. :class:`EnvParams`
+:class:`EnvState` is everything that a step reads and writes. :class:`EnvParams`
 is the tuning that stays fixed while an episode runs. Both are
-``flax.struct.PyTreeNode``, so their array fields are PyTree leaves and both
-pass through ``jax.jit`` and ``jax.vmap`` without further registration.
+``flax.struct.PyTreeNode``, so their array fields are PyTree leaves. Both
+therefore pass through ``jax.jit`` and ``jax.vmap`` with no further
+registration.
 
-Machine state is held as entity lists, not as one grid per attribute. Every
-``ent_`` array is indexed by entity id and sized to a capacity fixed when the
-level is built, so shapes stay static however much gets constructed during an
-episode.
+The engine holds machine state as entity lists, and not as one grid for each
+attribute. An entity id indexes every ``ent_`` array. The capacity is fixed when
+the level is built, so the shapes stay static, whatever a player builds during
+an episode.
 """
 
 from typing import ClassVar
@@ -23,18 +24,18 @@ from factoriax.engine.recipes import DEFAULT_RECIPE_TABLE, RecipeTable
 class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Everything one environment step reads and writes.
 
-    Machine state lives in the ``ent_`` arrays, indexed by entity id rather
-    than by tile. A slot is free when ``ent_y < 0``: placement claims the
-    first free one and pickup releases it. The capacity is fixed at level
-    build, so a map with every slot taken refuses further placement instead of
-    growing an array.
+    Machine state lives in the ``ent_`` arrays. An entity id indexes them, not
+    a tile. A slot is free when ``ent_y < 0``. Placement claims the first free
+    slot, and pickup releases it. The capacity is fixed when the level is
+    built. A map with every slot in use therefore refuses a new placement, and
+    no array grows.
 
-    Two fields deliberately hold the same fact. ``machine_types`` answers
-    "is something on this tile" for movement and placement, while ``ent_type``
-    carries the kind per entity for the machine tick. ``tile_entity`` joins
-    them, and placement writes all three together.
+    Two fields hold the same fact, and this is deliberate. ``machine_types``
+    answers "is something on this tile" for movement and placement.
+    ``ent_type`` carries the kind of each entity for the machine tick.
+    ``tile_entity`` joins the two, and placement writes all three together.
 
-    Shapes below use ``H`` and ``W`` for the map, ``E`` for the entity
+    The shapes below use ``H`` and ``W`` for the map, ``E`` for the entity
     capacity, and ``P`` for the player count.
 
     Attributes
@@ -43,86 +44,91 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         Terrain, one :class:`~factoriax.engine.constants.BlockType` per tile.
         Shape ``(H, W)``, int8.
     block_resources
-        Ore units left in each tile, decremented as it is mined. Shape
-        ``(H, W)``, int16. Zero means exhausted. The value is meaningless on a
-        tile that was never an ore block.
+        Ore units left in each tile. A mine action lowers the value. Shape
+        ``(H, W)``, int16. Zero means that the tile is empty. The value has no
+        meaning on a tile that was never an ore block.
     machine_types
-        :class:`~factoriax.engine.constants.Machine` kind occupying each tile,
+        :class:`~factoriax.engine.constants.Machine` kind on each tile,
         ``NONE`` where the tile is clear. Shape ``(H, W)``, int8.
     tile_entity
-        Entity id occupying each tile, ``-1`` where none. Shape ``(H, W)``,
-        int16. This is how a neighbour lookup gets from a tile to entity state.
+        Entity id on each tile, ``-1`` where the tile holds no entity. Shape
+        ``(H, W)``, int16. A neighbour lookup reads this array to go from a
+        tile to entity state.
     ent_y
-        Tile row of each entity. Shape ``(E,)``, int16. Negative marks a free
-        slot, and is the test the engine uses for "this entity is not placed".
+        Tile row of each entity. Shape ``(E,)``, int16. A negative value marks
+        a free slot. This is the test that the engine uses for "this entity is
+        not on the map".
     ent_x
         Tile column of each entity. Shape ``(E,)``, int16.
     ent_type
         Machine kind per entity. Shape ``(E,)``, int8.
     ent_direction
-        Facing per entity, as a
+        Facing of each entity, as a
         :class:`~factoriax.engine.constants.Direction` value, ``0`` when
-        unset. Shape ``(E,)``, int8. A crossing packs both its axes into this
-        one byte; ``factoriax.engine.tables.CROSSING_AXIS_DIRS`` unpacks it.
+        nothing has set it. Shape ``(E,)``, int8. A crossing packs both its
+        axes into this one byte, and
+        ``factoriax.engine.tables.CROSSING_AXIS_DIRS`` unpacks them.
     ent_power
-        Steps left in the machine's current craft, counting down. Shape
-        ``(E,)``, int16. The craft finishes on the step this reaches 1, and 0
-        means idle. Only assemblers and furnaces use it; every other kind
-        holds 0.
+        Steps left in the current craft of the machine. The value counts down.
+        Shape ``(E,)``, int16. The craft finishes on the step where the value
+        reaches 1, and 0 means idle. Only assemblers and furnaces use this
+        field. Every other kind holds 0.
     ent_buf_type
-        Item in the general-purpose buffer slot. Shape ``(E,)``, int8. This is
-        a miner's output, a pallet's storage, and a belt's contents.
+        Item in the general-purpose buffer slot. Shape ``(E,)``, int8. This
+        slot holds the output of a miner, the storage of a pallet, and the
+        contents of a belt.
     ent_buf_count
-        Items in that buffer, capped per kind by
-        ``factoriax.engine.tables.MACHINE_MAX_STACK``. Shape ``(E,)``, int16.
+        Items in that buffer. Shape ``(E,)``, int16.
+        ``factoriax.engine.tables.MACHINE_MAX_STACK`` gives the limit for each
+        kind.
     ent_asm_in_type
-        Item in each of the two input slots. Shape ``(E, 2)``, int8. Used by
-        assemblers, furnaces, and science labs, and reused by a crossing to
-        hold one buffer per axis.
-        A crossing reuses the pair as one buffer per axis, indexed by
+        Item in each of the two input slots. Shape ``(E, 2)``, int8.
+        Assemblers, furnaces, and science labs use these slots. A crossing uses
+        the same pair as one buffer for each axis, at the indexes
         ``CROSSING_VERT_SLOT`` and ``CROSSING_HORIZ_SLOT``.
     ent_asm_in_count
-        Items in each input slot, aligned with ``ent_asm_in_type``. Shape
-        ``(E, 2)``, int16.
+        Items in each input slot, in the same order as ``ent_asm_in_type``.
+        Shape ``(E, 2)``, int16.
     ent_asm_out_type
-        Item in the finished-output slot. Shape ``(E,)``, int8. A completed
-        craft parks here and is not overwritten, so the machine stalls until
-        something withdraws it.
+        Item in the finished-output slot. Shape ``(E,)``, int8. A finished
+        craft stays here, and nothing writes over it. The machine therefore
+        stops until something withdraws the item.
     ent_asm_out_count
         Items in the output slot. Shape ``(E,)``, int16.
     ent_health
-        Hit points per entity. Shape ``(E,)``, int16. Placement sets
-        ``MACHINE_MAX_HEALTH``, repair clamps back to it, and pickup is
-        refused below it.
+        Hit points of each entity. Shape ``(E,)``, int16. Placement sets
+        ``MACHINE_MAX_HEALTH``. A repair clamps back to that value, and the
+        engine refuses a pickup below it.
     player_positions
         ``(x, y)`` tile of each player. Shape ``(P, 2)``, int16.
     player_directions
         Facing of each player, a ``Direction`` value. Shape ``(P,)``, int8.
     player_inventory
-        Items carried, per player and item id. Shape
+        Items that each player carries, by player and item id. Shape
         ``(P, NUM_ITEM_TYPES)``, int16. Column 0 is ``ItemType.EMPTY`` and
-        stays zero. Per-item caps come from
-        ``factoriax.engine.tables.PLAYER_MAX_STACK``.
+        stays zero. ``factoriax.engine.tables.PLAYER_MAX_STACK`` gives the
+        limit for each item.
     selected_player
-        Index of the player an action applies to. Scalar int32. The
-        single-agent step drives this one.
+        Index of the player that an action applies to. Scalar int32. The
+        single-agent step sets this field.
     timestep
-        Steps taken since reset. Scalar int32. The episode ends when it
-        reaches ``EnvParams.max_timesteps``.
+        Steps since the last reset. Scalar int32. The episode ends when this
+        value reaches ``EnvParams.max_timesteps``.
     items_mined
-        Running total mined per item id since reset, never reset mid-episode.
-        Shape ``(NUM_ITEM_TYPES,)``, int32. Reward functions read the
-        difference between two states rather than the total.
+        Total mined for each item id since the last reset. Shape
+        ``(NUM_ITEM_TYPES,)``, int32. Nothing clears this field during an
+        episode. Reward functions read the difference between two states, not
+        the total.
     science_consumed_step
-        Science packs consumed during the last step only, indexed by position
-        in :data:`~factoriax.engine.constants.SCIENCE_PACK_TYPES`. Shape
-        ``(NUM_SCIENCE_PACK_TYPES,)``, int32. This one is a per-step delta,
-        not a running total.
+        Science packs that the last step consumed, by position in
+        :data:`~factoriax.engine.constants.SCIENCE_PACK_TYPES`. Shape
+        ``(NUM_SCIENCE_PACK_TYPES,)``, int32. This field is a per-step delta,
+        not a total.
     achievements_unlocked
-        One latched bit per achievement. Shape ``(MAX_ACHIEVEMENTS,)``, bool.
-        A bit is OR-folded in when its condition first holds and stays set for
-        the rest of the episode. A scenario with fewer achievements leaves the
-        trailing bits False.
+        One latched bit for each achievement. Shape ``(MAX_ACHIEVEMENTS,)``,
+        bool. The engine folds a bit in with OR when its condition first
+        holds, and the bit stays set for the rest of the episode. A scenario
+        with fewer achievements leaves the bits at the end False.
 
     Examples
     --------
@@ -171,23 +177,24 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
 class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Tuning that stays fixed for the length of an episode.
 
-    Passed to every engine function alongside the state, so a scenario can
-    change balance without editing engine code. The defaults describe the
-    generated sandbox map; a scenario shipping its own level overrides the
-    terrain fields, which then go unread.
+    Every engine function takes this object next to the state, so a scenario
+    can change the balance and needs no change to engine code. The defaults
+    describe the generated sandbox map. A scenario that brings its own level
+    overrides the terrain fields, and nothing reads them.
 
-    The six terrain probabilities apply only when a level is generated rather
-    than loaded. Each is tested independently against its own smooth-noise
-    field, so they are per-tile shares rather than bands and need not sum to
-    1. Where two draws claim the same tile the later assignment wins, in the
-    order silicon, tin, coal, copper, iron, water, so water displaces any ore
-    it overlaps. A tile no draw claims stays plain ground.
+    The six terrain probabilities apply only when the engine generates a level,
+    and not when it loads one. The engine tests each probability against its
+    own smooth-noise field. They are therefore per-tile shares and not bands,
+    and their total does not have to be 1. If two draws claim the same tile,
+    the later draw wins. The order is silicon, tin, coal, copper, iron, water,
+    so water replaces any ore on the same tile. A tile that no draw claims
+    stays plain ground.
 
     Attributes
     ----------
     max_timesteps
-        Steps before the episode reports done. Compared against
-        ``EnvState.timestep``.
+        Steps before the episode reports done. The engine compares this value
+        against ``EnvState.timestep``.
     water_probability
         Share of generated tiles that become water, which blocks movement and
         placement.
@@ -202,24 +209,24 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     silicon_probability
         Share of generated tiles that become silicon.
     base_resources
-        Ore units every mineable tile starts with, written into
-        ``EnvState.block_resources``; a non-mineable tile gets 0. Must fit
-        int16. Above
-        :data:`~factoriax.engine.constants.BLOCK_MAX_RESOURCES` the tile
-        still works, but it normalizes past 1.0 in the observation.
+        Ore units in every mineable tile at the start. The engine writes the
+        value into ``EnvState.block_resources``, and a tile that no player can
+        mine gets 0. The value must fit in int16. With more than
+        :data:`~factoriax.engine.constants.BLOCK_MAX_RESOURCES` the tile still
+        works, but it normalizes to more than 1.0 in the observation.
     miner_mining_rate
-        Ore a placed miner extracts per step. Its output slot holds
-        ``factoriax.engine.machines.MINER_OUTPUT_CAP``, so a miner fills up in
-        one step and then idles until something drains it.
+        Ore that a placed miner extracts in one step. Its output slot holds
+        ``factoriax.engine.machines.MINER_OUTPUT_CAP``, so a miner reaches that
+        limit in one step. It then stays idle until something empties the slot.
     player_mining_yield
-        Ore one ``MINE`` action gives the player. Capped by what the tile has
-        left and by the player's stack limit.
+        Ore that one ``MINE`` action gives to the player. The ore left in the
+        tile and the stack limit of the player both limit this amount.
     recipe_table
-        Recipes this episode runs, as a
-        :class:`~factoriax.engine.recipes.RecipeTable`. Defaults to the
-        engine's own book. Engine code sizes its recipe loops from this table
-        rather than from the module-level default, so a scenario may ship a
-        different recipe count.
+        Recipes that this episode runs, as a
+        :class:`~factoriax.engine.recipes.RecipeTable`. The default is the
+        table of the engine itself. Engine code takes the size of its recipe
+        loops from this table, and not from the module-level default. A
+        scenario can therefore supply a different number of recipes.
     """
 
     max_timesteps: int = 1000
@@ -234,7 +241,7 @@ class EnvParams(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     player_mining_yield: int = 1
     recipe_table: RecipeTable = DEFAULT_RECIPE_TABLE
 
-    #: Size of the action space. A ``ClassVar``, so it is neither a PyTree
-    #: leaf nor tunable per episode: the action space is fixed by the
-    #: :class:`~factoriax.engine.constants.Action` enum.
+    #: Size of the action space. This is a ``ClassVar``, so it is not a PyTree
+    #: leaf and no episode can tune it. The
+    #: :class:`~factoriax.engine.constants.Action` enum fixes the action space.
     NUM_ACTIONS: ClassVar[int] = len(Action)

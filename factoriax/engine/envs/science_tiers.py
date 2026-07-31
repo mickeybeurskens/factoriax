@@ -1,10 +1,10 @@
-"""ScienceTiers-v1 — throughput reward over a three-tier science economy.
+"""ScienceTiers-v1: a throughput reward over a science economy of three tiers.
 
-One scenario, one currency: labs consume science packs (any tier) and
-every pack pays reward 1 the tick it is consumed. There are no
-achievement bits and no per-tier reward weights — the tier ladder lives
-entirely in the recipe book, where ore costs double per tier while pack
-output quadruples:
+This scenario has one currency. A lab consumes a science pack of any tier, and
+every pack pays a reward of 1 on the tick where the lab consumes it. There are
+no achievement bits and no per-tier reward weights. The tier ladder lives in
+the recipe book alone. There, the ore cost doubles with each tier while the
+pack output goes up by a factor of four:
 
 ======  ==============================  ========  ======  ===========
 tier    recipe                          ore cost  output  science/ore
@@ -14,24 +14,25 @@ tier    recipe                          ore cost  output  science/ore
 3       tier-2 pack + motor             8         16      2.0
 ======  ==============================  ========  ======  ===========
 
-(wire = iron + tin ore; motor = wire + frame; frame = copper + silicon
-ore — every intermediate bottoms out in raw ore, so the per-tier ore
-costs above are exact.)
+A wire is iron plus tin ore. A motor is a wire plus a frame. A frame is copper
+plus silicon ore. Every half-fabricate therefore ends in raw ore, and the ore
+costs in the table above are exact.
 
-Each tier consumes the pack below it, so climbing means sacrificing
-packs that could have been cashed in — steady-state throughput per ore
-doubles per tier, but the payback arrives only after the deeper chain
-is running. The research target is exactly that tension: agents parked
-at a lower-tier local optimum versus agents that invest through it.
+Each tier consumes the pack of the tier below it. To climb, an agent must give
+up packs that it can spend at once. The steady throughput for each unit of ore
+doubles with each tier, but the return arrives only after the longer chain
+runs. That tension is the research target: an agent that stops at a lower tier
+against an agent that invests through it.
 
-The world is the shared 16x16 six-patch map (one 2x2 patch per ore),
-with one science lab pre-placed on the tile the player initially faces
-so the consume-for-reward loop is discoverable without first deducing
-that labs exist. More labs, miners, assemblers, belts, and arms are
-all craftable from raw ore.
+The world is the shared 16x16 six-patch map, with one 2x2 patch for each ore.
+One science lab stands on the tile that the player faces at the start, so an
+agent can find the consume-for-reward loop and does not first have to work out
+that labs exist. An agent can craft more labs, miners, assemblers, belts, and
+arms from raw ore.
 
-Obs defaults match the miner curriculum (egocentric
-``superficial_local``, radius 7) so policy networks transfer.
+The observation defaults match the miner curriculum: the egocentric
+``superficial_local`` with radius 7. A policy network therefore transfers
+between the two.
 """
 
 from __future__ import annotations
@@ -50,26 +51,29 @@ from factoriax.engine.placement import place_machine
 from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.engine.state import EnvParams, EnvState
 
-#: Episode budget. Longer than the curriculum's 300: the tier-3 chain
-#: has to amortize its setup time before it out-earns tier-1 hand play.
+#: Length of an episode. It is longer than the 300 steps of the curriculum,
+#: because the tier-3 chain must pay back its setup time before it earns more
+#: than tier-1 hand play.
 SCIENCE_TIERS_MAX_TIMESTEPS: int = 1000
 
-#: The three lab-consumable packs, tier order.
+#: The three packs that a lab consumes, in tier order.
 TIER_PACKS: tuple[int, ...] = (
     int(ItemType.TIER1_SCIENCE_PACK),
     int(ItemType.TIER2_SCIENCE_PACK),
     int(ItemType.TIER3_SCIENCE_PACK),
 )
 
-#: Raw-ore cost per pack craft, by tier (intermediates fully expanded).
+#: Raw-ore cost of one pack craft, by tier. Each half-fabricate counts as the
+#: ore that it costs.
 TIER_ORE_COSTS: tuple[int, ...] = (2, 4, 8)
 
-#: Packs produced per craft, by tier. Ore costs double per tier while
-#: output quadruples, so science-per-ore doubles: 0.5 / 1.0 / 2.0.
+#: Packs that one craft produces, by tier. The ore cost doubles with each tier
+#: and the output goes up by a factor of four, so the science for each unit of
+#: ore doubles: 0.5, then 1.0, then 2.0.
 TIER_OUTPUTS: tuple[int, ...] = (1, 4, 16)
 
 SCIENCE_TIERS_RECIPES: tuple[Recipe, ...] = (
-    # -- Tier materials (all bottom out in raw ore). --
+    # -- The tier materials. Each one ends in raw ore. --
     Recipe(
         output=int(ItemType.WIRE),
         inputs=((int(ItemType.IRON_ORE), 1), (int(ItemType.TIN_ORE), 1)),
@@ -88,7 +92,7 @@ SCIENCE_TIERS_RECIPES: tuple[Recipe, ...] = (
         ticks=6,
         name="Motor",
     ),
-    # -- Science packs: each tier consumes the pack below it. --
+    # -- The science packs. Each tier consumes the pack of the tier below. --
     Recipe(
         output=int(ItemType.TIER1_SCIENCE_PACK),
         inputs=((int(ItemType.COAL), 1), (int(ItemType.LIMESTONE), 1)),
@@ -116,8 +120,8 @@ SCIENCE_TIERS_RECIPES: tuple[Recipe, ...] = (
         output_count=TIER_OUTPUTS[2],
         name="Tier 3 Science Pack",
     ),
-    # -- Machines, ore-cheap (EasyRocket precedent) so automation is a
-    # -- time investment rather than a resource cliff. --
+    # -- The machines. They cost little ore, as in EasyRocket, so automation
+    # -- costs time and not a large amount of ore. --
     Recipe(
         output=int(ItemType.MINER),
         inputs=((int(ItemType.LIMESTONE), 1), (int(ItemType.SILICON), 1)),
@@ -164,12 +168,12 @@ SCIENCE_TIERS_RECIPE_TABLE: RecipeTable = RecipeTable.from_book(
 
 
 def _place_lab_at_spawn(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
-    """Reset hook: pre-place one lab on the tile the player faces.
+    """Reset hook that places one lab on the tile in front of the player.
 
-    Routes through :func:`place_machine` so entity allocation matches
-    in-game placement exactly; the temporary lab item is stripped from
-    the inventory afterwards — the world starts with a lab, the player
-    starts with nothing.
+    The function calls :func:`place_machine`, so the entity slot comes from the
+    same path as a placement in the game. It then removes the temporary lab
+    item from the inventory. The world therefore starts with a lab, and the
+    player starts with nothing.
     """
     del key
     lab = int(ItemType.SCIENCE_LAB)
@@ -183,12 +187,13 @@ def _place_lab_at_spawn(key: jax.Array, state: EnvState, params: EnvParams) -> E
 def science_tiers_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """Packs consumed by labs this tick, every tier worth 1.
+    """Count the packs that the labs consumed in this tick, 1 for every tier.
 
-    ``science_consumed_step`` is the per-tick consumption delta (reset
-    at the top of every step), so this is dense throughput reward with
-    no latching — more science is always more reward, and the tier
-    premium comes from the recipe book's output counts alone.
+    ``science_consumed_step`` is the consumption delta of one tick, and the
+    step sets it to zero at its start. This reward is therefore a dense
+    throughput reward with no latch. More science is always more reward, and
+    the extra value of a higher tier comes from the output counts in the recipe
+    book alone.
     """
     del prev_state, params
     return jnp.sum(new_state.science_consumed_step).astype(jnp.float32)
@@ -199,20 +204,20 @@ def science_tiers(
     obs: str = "superficial_local",
     obs_radius: int = 7,
 ) -> tuple[FactoriaxEnv, EnvParams]:
-    """Build the ScienceTiers-v1 env.
+    """Build the ScienceTiers-v1 environment.
 
-    Empty inventory on the six-patch map with one pre-placed lab;
-    reward is packs consumed per tick. Unbounded score; the episode
-    runs the full 1000-tick budget.
+    The player starts with an empty inventory on the six-patch map, and one lab
+    already stands on it. The reward is the number of packs that the labs
+    consume in each tick. The score has no upper limit, and the episode runs
+    the full 1000 ticks.
 
     Parameters
     ----------
     obs :
-        Observation variant passed to :class:`FactoriaxEnv`.
+        Observation variant. The function passes it to :class:`FactoriaxEnv`.
     obs_radius :
-        Half-width of the egocentric local window (the default radius 7
-        gives a 15×15 view on the 16×16 map); ignored for ``_global``
-        variants.
+        Half-width of the egocentric local window. The default radius 7 gives a
+        15x15 view on the 16x16 map. A ``_global`` variant ignores it.
     """
     env = FactoriaxEnv(
         terrain_fn=six_patch_terrain,

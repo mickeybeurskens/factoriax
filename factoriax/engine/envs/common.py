@@ -1,13 +1,14 @@
-"""Shared six-patch geometry and state predicates for 16x16 scenarios.
+"""The shared six-patch geometry and state predicates of the 16x16 scenarios.
 
-The easy-rocket map family — EasyRocket-v1 and the miner-curriculum
-scenarios — shares one world geometry: a 16x16 dirt map with six
-non-overlapping 2x2 ore patches (one per ore block), placed by PRNG
-clear of the centre spawn area and the outer ring. This module owns
-that geometry (host-side sampling helpers plus the jittable
-:func:`six_patch_terrain` generator) and the pure-JAX state predicates
-scenarios compose into achievement conditions, so scenario modules
-never import from each other.
+EasyRocket-v1 and the miner-curriculum scenarios share one world geometry: a
+16x16 dirt map with six 2x2 ore patches that do not overlap, one for each ore
+block. A PRNG places them, and they stay clear of the centre spawn area and of
+the outer ring.
+
+This module owns that geometry. It holds the sampling helpers that run on the
+host, and the jittable generator :func:`six_patch_terrain`. It also holds the
+pure-JAX state predicates that a scenario joins into an achievement condition.
+No scenario module therefore imports from another scenario module.
 """
 
 from __future__ import annotations
@@ -24,26 +25,27 @@ PATCH_SIZE: int = 2
 ORE_RESOURCES_PER_TILE: int = 3000
 MAX_SAMPLE_ATTEMPTS: int = 1000
 
-# --- Centre spawn area (2x2; room for multi-agent later). ---
+# --- The 2x2 spawn area at the centre. It has room for more agents. ---
 SPAWN_AREA_SIZE: int = 2
 SPAWN_AREA_MIN: int = (MAP_SIZE - SPAWN_AREA_SIZE) // 2  # 7
 SPAWN_AREA_MAX: int = SPAWN_AREA_MIN + SPAWN_AREA_SIZE - 1  # 8
 
-# --- Guaranteed-dirt rings flanking the play area. ---
+# --- The dirt rings on each side of the play area. ---
 OUTER_RING_WIDTH: int = 1
 INNER_RING_WIDTH: int = 1
 
-# No-patch zone = spawn area expanded by the inner ring on every side.
+# The zone that holds no patch: the spawn area, plus the inner ring on each
+# side of it.
 INNER_ZONE_MIN: int = SPAWN_AREA_MIN - INNER_RING_WIDTH  # 6
 INNER_ZONE_MAX: int = SPAWN_AREA_MAX + INNER_RING_WIDTH  # 9
 
-# Patch corners must keep the 2x2 patch fully inside the inner play area
-# (i.e. clear of the outer ring on every side).
+# A patch corner must keep the whole 2x2 patch inside the inner play area,
+# which means clear of the outer ring on every side.
 MIN_CORNER: int = OUTER_RING_WIDTH  # 1
 MAX_CORNER: int = MAP_SIZE - PATCH_SIZE - OUTER_RING_WIDTH  # 13
 
-# Active-agent spawn cell. One of the four cells of the 2x2 spawn area;
-# future multi-agent setups fill the other three.
+# The spawn cell of the active agent. It is one of the four cells of the 2x2
+# spawn area. A later multi-agent setup fills the other three.
 SPAWN: tuple[int, int] = (SPAWN_AREA_MAX, SPAWN_AREA_MAX)  # (8, 8)
 
 PATCH_BLOCKS: tuple[BlockType, ...] = (
@@ -57,10 +59,10 @@ PATCH_BLOCKS: tuple[BlockType, ...] = (
 
 
 def patch_touches_inner_zone(px: int, py: int) -> bool:
-    """Report whether a 2x2 patch would land on the spawn zone.
+    """Report whether a 2x2 patch lands on the spawn zone.
 
-    Covers the 2x2 spawn area and the one-cell buffer ring around it, so a
-    player never starts standing on ore.
+    The zone covers the 2x2 spawn area and the one-cell ring around it, so a
+    player never starts on ore.
 
     Parameters
     ----------
@@ -79,26 +81,30 @@ def patch_touches_inner_zone(px: int, py: int) -> bool:
 
 
 def patches_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
-    """Report whether two 2x2 patches share any tile."""
+    """Report whether two 2x2 patches share a tile."""
     return abs(a[0] - b[0]) < PATCH_SIZE and abs(a[1] - b[1]) < PATCH_SIZE
 
 
 def sample_patch_corner(
     key: jax.Array, placed: list[tuple[int, int]]
 ) -> tuple[int, int]:
-    """Host-side rejection sampler for one valid, non-overlapping patch corner.
+    """Draw one valid patch corner on the host that overlaps no other patch.
+
+    The function draws a corner and tests it. If the corner fails a test, the
+    function draws again.
 
     Parameters
     ----------
     key :
-        PRNG key consumed by the rejection loop.
+        PRNG key for the draws.
     placed :
-        Corners already taken; the sample avoids overlap with all of them.
+        Corners that other patches already hold. The result overlaps none of
+        them.
 
     Raises
     ------
     RuntimeError
-        If no valid corner is found in :data:`MAX_SAMPLE_ATTEMPTS` draws.
+        If :data:`MAX_SAMPLE_ATTEMPTS` draws give no valid corner.
     """
     for _ in range(MAX_SAMPLE_ATTEMPTS):
         key, subkey = jax.random.split(key)
@@ -117,10 +123,10 @@ def sample_patch_corner(
     )
 
 
-#: Every 2x2 patch corner inside the outer ring that does not touch the
-#: inner spawn+ring zone, computed once. The JAX generator draws
-#: non-overlapping patches from this fixed set, so the avoidance rules
-#: match the host sampler exactly.
+#: Every 2x2 patch corner inside the outer ring that does not touch the inner
+#: spawn zone or its ring. This module computes the list one time. The JAX
+#: generator draws its patches from this fixed set, so its rules match the
+#: rules of the host sampler exactly.
 VALID_PATCH_CORNERS: np.ndarray = np.array(
     [
         (cx, cy)
@@ -133,20 +139,21 @@ VALID_PATCH_CORNERS: np.ndarray = np.array(
 
 
 def six_patch_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
-    """Build a dirt map with one non-overlapping 2x2 patch per ore block.
+    """Build a dirt map with one 2x2 patch for each ore block, with no overlap.
 
-    Jittable, vmappable placement: shuffle the valid (spawn-avoiding)
-    corners with ``key`` and greedily take the first
-    ``len(PATCH_BLOCKS)`` that do not overlap an already-placed patch.
-    With ~200 candidates and six patches this always succeeds, so no
-    rejection-failure branch is needed.
+    The placement is jittable and vmappable. The function shuffles the valid
+    corners, which already avoid the spawn zone, with ``key``. It then takes
+    the first ``len(PATCH_BLOCKS)`` corners that overlap no patch already
+    placed. There are about 200 candidates and six patches, so this always
+    succeeds and needs no branch for a failure.
 
     Parameters
     ----------
     key :
-        PRNG key deciding the layout.
+        PRNG key that decides the layout.
     params :
-        Unused; present for the ``TerrainFn`` signature.
+        The function does not read this argument. It is present for the
+        ``TerrainFn`` signature.
     """
     corners = jnp.asarray(VALID_PATCH_CORNERS)
     shuffled = corners[jax.random.permutation(key, corners.shape[0])]
@@ -176,20 +183,20 @@ def six_patch_terrain(key: jax.Array, params: EnvParams) -> jax.Array:
 
 
 # ---------------------------------------------------------------------------
-# State predicates — pure-JAX building blocks for achievement conditions
+# State predicates: the pure-JAX parts of an achievement condition
 # ---------------------------------------------------------------------------
 
 
 def blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
-    """Active-miner mask and the block type under each entity slot.
+    """Return the active-miner mask and the block under each entity slot.
 
     Returns
     -------
     tuple[jax.Array, jax.Array]
-        ``active_mask`` is True for slots that hold an active miner.
-        ``block_at_pos`` is the block under the entity's
-        ``(ent_y, ent_x)`` tile, computed with clamped indices so
-        inactive slots stay JIT-safe.
+        ``active_mask`` is True for a slot that holds an active miner.
+        ``block_at_pos`` is the block on the ``(ent_y, ent_x)`` tile of the
+        entity. The function clamps the indices, so a free slot stays safe
+        under JIT.
     """
     active = (state.ent_type == int(Machine.MINER)) & (state.ent_y >= 0)
     safe_y = jnp.maximum(state.ent_y, 0)
@@ -199,11 +206,11 @@ def blocks_under_active_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
 
 
 def producing_miners(state: EnvState) -> tuple[jax.Array, jax.Array]:
-    """Producing-miner mask and the block type under each entity slot.
+    """Return the producing-miner mask and the block under each entity slot.
 
-    Like :func:`blocks_under_active_miners` but the mask also requires a
-    non-empty output buffer, so a slot counts only once its miner has
-    actually mined ore rather than merely being placed on an ore tile.
+    This function is like :func:`blocks_under_active_miners`, but the mask also
+    needs items in the output buffer. A slot therefore counts only after its
+    miner mined ore, and not when a player only placed it on an ore tile.
     """
     active, blocks = blocks_under_active_miners(state)
     producing = active & (state.ent_buf_count > 0)

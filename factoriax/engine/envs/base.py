@@ -1,27 +1,28 @@
 """The environment object a training loop talks to, and the hooks that shape it.
 
-:class:`FactoriaxEnv` wraps the engine in the gymnax interface: ``reset_env``
+:class:`FactoriaxEnv` wraps the engine in the gymnax interface. ``reset_env``
 builds a world, ``step_env`` advances it, and the two space methods describe
-what an agent sends and receives.
+what an agent sends and what it receives.
 
-The engine itself has no notion of a task. It has no reward, no goal, and no
-ending other than running out of time. A scenario is built by passing
-functions in at construction rather than by subclassing, and those functions
-are what turn the same simulation into mining practice or a rocket launch:
+The engine itself knows nothing about a task. It has no reward, no goal, and no
+end except the end of the time budget. An author builds a scenario with
+functions that the constructor takes, and not with a subclass. Those functions
+turn the same simulation into mining practice or into a rocket launch:
 
 ``achievement_fn``
     Reads a state and returns the achievement bits that hold in it.
 ``reward_fn``
-    Scores a step. Absent means every step scores zero.
+    Scores a step. Without it, every step scores zero.
 ``done_fn``
-    Ends an episode early. OR-ed with the timeout, never replacing it.
+    Ends an episode early. The environment ORs it with the timeout and never
+    replaces the timeout.
 ``terrain_fn`` and ``level``
-    Decide what world a reset produces.
+    Decide which world a reset produces.
 ``step_hooks`` and ``reset_hooks``
-    Change a state after the engine has finished with it.
+    Change a state after the engine finishes with it.
 
-Each is captured at construction, so two envs differing only in one of them
-are separate JIT cache entries and each pays its own compile.
+The constructor captures each one. Two environments that differ in one of them
+are therefore two JIT cache entries, and each one pays for its own compile.
 """
 
 from __future__ import annotations
@@ -59,23 +60,22 @@ DoneFn = Callable[[EnvState, EnvParams], jax.Array]
 def achievement_hook(condition_fn: AchievementFn) -> StepHook:
     """Wrap an achievement condition into a step hook that latches its bits.
 
-    Latching is what makes an achievement a milestone rather than a state
-    flag: once a bit is set it stays set for the rest of the episode, even
-    if the condition stops holding. That is what lets
-    :func:`factoriax.engine.rewards.achievement_reward` pay for it exactly
-    once.
+    The latch makes an achievement a milestone and not a state flag. Once a bit
+    is set, it stays set for the rest of the episode, even after the condition
+    stops holding. :func:`factoriax.engine.rewards.achievement_reward`
+    therefore pays for it exactly one time.
 
     Parameters
     ----------
     condition_fn
-        Reads a state and returns which bits hold right now. Shape
+        Reads a state and returns the bits that hold now. Shape
         ``(MAX_ACHIEVEMENTS,)``, bool.
 
     Returns
     -------
     StepHook
-        A hook that OR-folds those bits into ``achievements_unlocked``. It
-        ignores its key and params arguments.
+        A hook that folds those bits into ``achievements_unlocked`` with OR.
+        The hook ignores its key argument and its params argument.
     """
 
     def hook(key: jax.Array, state: EnvState, params: EnvParams) -> EnvState:
@@ -88,73 +88,74 @@ def achievement_hook(condition_fn: AchievementFn) -> StepHook:
 
 
 class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignore[misc]
-    """FactoriaX JAX-based grid environment.
+    """The JAX grid environment of FactoriaX.
 
-    Advances world state (terrain, machines, player inventories) and
-    evaluates an optional achievement-condition function each step.
-    Reward computation and other policy-shaping concerns still belong
-    in gymnax wrappers that compose over this environment. Pixel
-    rendering is provided by :class:`factoriax.engine.renderer.JaxRenderer`;
-    the env itself does not expose a render method.
+    The class advances the world state, which holds the terrain, the machines,
+    and the player inventories. It also evaluates an optional
+    achievement-condition function in each step. The reward and the other parts
+    that shape a policy belong in the gymnax wrappers around this environment.
+    :class:`factoriax.engine.renderer.JaxRenderer` draws the pixels. This class
+    exposes no render method.
 
-    The ``achievement_fn`` parameter is captured at construction time
-    and folded into ``state.achievements_unlocked`` inside
-    :meth:`step_env`. Different functions produce different JIT
-    cache entries via ``static_argnames=("self",)`` on :meth:`step`.
-    Pass ``None`` to skip the eval pass entirely (zero added cost).
+    The constructor captures ``achievement_fn``, and :meth:`step_env` folds its
+    result into ``state.achievements_unlocked``. Two different functions give
+    two JIT cache entries, through ``static_argnames=("self",)`` on
+    :meth:`step`. Pass ``None`` to skip that pass, which then costs nothing.
 
-    Reset behavior is selected by ``reset_fn`` then ``level``: when
-    ``reset_fn`` is supplied, :meth:`reset_env` calls it with the PRNG key
-    (the scenario owns world generation); otherwise a ``None`` ``level``
-    means procedural generation from the key, and a supplied
-    :class:`~factoriax.engine.levels.Level` is materialized via
-    :func:`~factoriax.engine.levels.build_state` (key unused for layout).
-    ``reset_hooks`` then transform the constructed state on every reset
-    path (e.g. to pre-stock a player inventory), same signature as
-    ``step_hooks``. gymnax conformance — ``reset_env(key, params)`` is
-    the only reset surface.
+    ``terrain_fn`` and ``level`` decide what a reset builds, in that order.
+    With a ``terrain_fn``, :meth:`reset_env` calls it with the PRNG key, and
+    the scenario owns the world generation. Without one, a ``level`` of
+    ``None`` means a generated world from the key, and a
+    :class:`~factoriax.engine.levels.Level` goes through
+    :func:`~factoriax.engine.levels.build_state`, which ignores the key for the
+    layout. The ``reset_hooks`` then change the new state on every reset path,
+    for example to fill a player inventory. They take the same arguments as
+    ``step_hooks``. ``reset_env(key, params)`` is the one reset method, as
+    gymnax requires.
 
     Parameters
     ----------
     achievement_fn
-        Reads a state and returns ``bool[MAX_ACHIEVEMENTS]``, evaluated
-        every step. True bits latch into ``state.achievements_unlocked``.
-        ``None`` skips the pass entirely.
+        Reads a state and returns ``bool[MAX_ACHIEVEMENTS]``. The environment
+        evaluates it in every step, and a True bit latches into
+        ``state.achievements_unlocked``. ``None`` skips the pass.
     level
-        Fixed :class:`Level` for :meth:`reset_env` to materialise. ``None``
-        means generate a world from the PRNG key instead.
+        Fixed :class:`Level` for :meth:`reset_env` to build. ``None`` means a
+        world generated from the PRNG key.
     terrain_fn
-        Builds a terrain grid from the key. Takes precedence over
-        ``level``, so a scenario supplying both gets generated terrain and
-        no placed machines.
+        Builds a terrain grid from the key. It wins over ``level``, so a
+        scenario that supplies both gets generated terrain and no placed
+        machines.
     step_hooks
-        Run in order after every step, each taking ``(key, state, params)``
-        and returning a state.
+        Hooks that run in order after every step. Each one takes
+        ``(key, state, params)`` and returns a state.
     reset_hooks
-        Run in order after every reset, same signature. Used to pre-stock a
-        player inventory or place scenario machines.
+        Hooks that run in order after every reset, with the same arguments. Use
+        them to fill a player inventory or to place the machines of a scenario.
     reward_fn
         Scores each step from ``(prev_state, new_state, params)``. ``None``
-        means every step returns 0.0.
+        means that every step returns 0.0.
     done_fn
-        Ends an episode from ``(state, params)``. OR-ed with the timeout,
-        so it can end an episode early but never extend one.
+        Ends an episode from ``(state, params)``. The environment ORs it with
+        the timeout, so it can end an episode early but can never extend one.
     obs
-        Key into ``OBSERVATIONS`` naming the profile and view, for example
-        ``"x_ray_global"``. Raises ``ValueError`` for an unknown key.
+        Key into ``OBSERVATIONS`` that names the profile and the view, for
+        example ``"x_ray_global"``. An unknown key raises ``ValueError``.
     obs_radius
-        Window half-width for a ``local`` observation. Ignored by the
-        global views.
+        Half-width of the window for a ``local`` observation. A global view
+        ignores it.
     map_width
-        Map width in tiles. Ignored when ``level`` supplies the map.
+        Map width in tiles. The environment ignores it when ``level`` supplies
+        the map.
     map_height
-        Map height in tiles. Ignored when ``level`` supplies the map.
+        Map height in tiles. The environment ignores it when ``level`` supplies
+        the map.
     num_players
-        Players in the world. Only ``selected_player`` acts.
+        Number of players in the world. Only ``selected_player`` acts.
     max_machines
-        Entity slots to allocate. 0 asks for a size derived from the map
-        area. Fixed for the episode: a map with every slot taken refuses
-        further placement.
+        Number of entity slots to allocate. A value of 0 asks for a size from
+        the map area. The value is fixed for the episode, and a map with every
+        slot in use refuses a new placement.
     """
 
     def __init__(
@@ -204,7 +205,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
 
     @property
     def default_params(self) -> EnvParams:
-        """Default params for this environment."""
+        """Return the default parameters of this environment."""
         return EnvParams()
 
     @partial(jax.jit, static_argnames=("self",))
@@ -215,35 +216,35 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         action: int | jax.Array,
         params: EnvParams | None = None,
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
-        """Step the environment without auto-reset.
+        """Step the environment, with no auto-reset.
 
-        Overrides the gymnax base ``step()`` which unconditionally
-        calls ``reset_env`` every tick for auto-reset. That design
-        runs full procedural terrain generation on every step even
-        when the episode is not done, roughly tripling the per-step
-        cost. This override simply calls ``step_env`` directly.
+        This method overrides the gymnax ``step()``. That method calls
+        ``reset_env`` in every tick for its auto-reset. It therefore runs the
+        whole terrain generation in every step, even when the episode is not
+        done, and about triples the cost of a step. This method calls
+        ``step_env`` directly instead.
 
-        Use :class:`~factoriax.engine.envs.wrappers.AutoResetWrapper`
-        if you need auto-reset for ``lax.scan`` training loops.
+        Use :class:`~factoriax.engine.envs.wrappers.AutoResetWrapper` when you
+        need auto-reset for a ``lax.scan`` training loop.
 
         Parameters
         ----------
         key
-            PRNG key, passed through to the hooks. The step itself is
+            PRNG key. The method passes it to the hooks. The step itself is
             deterministic.
         state
             State to advance.
         action
             Action for the selected player.
         params
-            Environment parameters. ``None`` uses ``default_params``.
+            Environment parameters. ``None`` takes ``default_params``.
 
         Returns
         -------
         tuple
-            ``(obs, new_state, reward, done, info)``. No auto-reset: when
-            ``done`` is True the returned state is the terminal one, not a
-            fresh episode.
+            ``(obs, new_state, reward, done, info)``. There is no auto-reset.
+            When ``done`` is True, the state in the result is the final state
+            of the episode, and not the start of a new one.
         """
         if params is None:
             params = self.default_params
@@ -256,36 +257,36 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         action: int | jax.Array,
         params: EnvParams,
     ) -> tuple[jax.Array, EnvState, jax.Array, jax.Array, dict[str, Any]]:
-        """Execute one environment step.
+        """Run one environment step.
 
-        Runs game mechanics, then evaluates the optional achievement
-        condition function and OR-folds the result into
-        ``state.achievements_unlocked``. The eval pass is skipped
-        entirely when no ``achievement_fn`` was provided at
-        construction (the ``is None`` check is resolved at JIT trace
-        time, so there is no per-step branch cost in that path).
+        The method runs the game rules. It then evaluates the optional
+        achievement condition function and folds the result into
+        ``state.achievements_unlocked`` with OR. It skips that pass when the
+        constructor received no ``achievement_fn``. The JIT trace resolves the
+        ``is None`` test, so that path costs no branch in a step.
 
-        The order matters. The engine runs first, then ``step_hooks``, then
-        the reward is scored against the post-hook state, then terminality,
-        then the observation. So a hook can change what a step is worth,
-        and ``reward_fn`` sees the state the agent will actually observe.
+        The order matters. The engine runs first, then the ``step_hooks``, then
+        the reward against the state after the hooks, then the end test, then
+        the observation. A hook can therefore change the value of a step, and
+        ``reward_fn`` sees the state that the agent observes.
 
         Parameters
         ----------
         key
-            PRNG key, passed to the hooks.
+            PRNG key. The method passes it to the hooks.
         state
             State to advance.
         action
-            Action for the selected player. Cast to int32.
+            Action for the selected player. The method casts it to int32.
         params
             Environment parameters.
 
         Returns
         -------
         tuple
-            ``(obs, new_state, reward, done, info)``. ``reward`` is 0.0
-            when no ``reward_fn`` was given, and ``info`` is always empty.
+            ``(obs, new_state, reward, done, info)``. ``reward`` is 0.0 when
+            the constructor received no ``reward_fn``, and ``info`` is always
+            empty.
         """
         action_arr = jnp.int32(action)
         new_state = factoriax_step(key, state, action_arr, params)
@@ -304,33 +305,32 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
     def reset_env(
         self, key: jax.Array, params: EnvParams
     ) -> tuple[jax.Array, EnvState]:
-        """Reset the environment to an initial state.
+        """Reset the environment to a start state.
 
-        Dispatches on the env's bound ``level``: when ``None``,
-        procedurally generates a world from the PRNG key; when a
-        :class:`Level` is bound, materializes that level via
-        :func:`~factoriax.engine.levels.build_state` (the key is unused for
-        layout).
+        There are three ways to build a world, and the method tries them in
+        this order: ``terrain_fn``, then a bound ``level``, then the terrain
+        generator. With a ``level``, the method calls
+        :func:`~factoriax.engine.levels.build_state`, which ignores the key for
+        the layout.
 
-        Three ways to build a world, tried in this order: ``terrain_fn``,
-        then a bound ``level``, then procedural generation. A scenario that
-        supplies both a ``terrain_fn`` and a ``level`` gets the terrain and
-        loses the level's machines, which is rarely what is wanted.
+        CAUTION: A scenario that supplies both a ``terrain_fn`` and a ``level``
+        gets the terrain and loses the machines of the level. Few scenarios
+        want that.
 
-        ``reset_hooks`` run afterwards on every path.
+        The ``reset_hooks`` run after the build, on every path.
 
         Parameters
         ----------
         key
-            PRNG key for world generation. Unused for layout when a
-            ``level`` is bound, but still passed to the hooks.
+            PRNG key for the world generation. A bound ``level`` ignores it for
+            the layout, but the method still passes it to the hooks.
         params
             Environment parameters.
 
         Returns
         -------
         tuple
-            ``(obs, state)`` at ``timestep == 0``.
+            ``(obs, state)``, with ``timestep`` at 0.
         """
         if self._terrain_fn is not None:
             world_map = self._terrain_fn(key, params)
@@ -350,10 +350,11 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return obs, state
 
     def get_obs(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Build the observation for the selected player.
+        """Build the observation of the selected player.
 
-        Always observes ``state.selected_player``, so under multiple
-        players this is one agent's view and not a per-player stack.
+        The method always observes ``state.selected_player``. With more than
+        one player, the result is therefore the view of one agent, and not a
+        stack with one view for each player.
 
         Parameters
         ----------
@@ -365,7 +366,7 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         Returns
         -------
         jax.Array
-            1-D float32, sized by :meth:`observation_space`.
+            1-D float32. :meth:`observation_space` gives its length.
         """
         fn = OBSERVATIONS[self.obs]
         if self._obs_is_local:
@@ -373,11 +374,11 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return fn(state, params, state.selected_player)
 
     def is_terminal(self, state: EnvState, params: EnvParams) -> jax.Array:
-        """Report whether the episode has ended.
+        """Report whether the episode is at its end.
 
-        The timeout always applies. A ``done_fn`` is OR-ed on top, so a
-        scenario can end an episode early but cannot make one run longer
-        than ``params.max_timesteps``.
+        The timeout always applies. The method ORs a ``done_fn`` on top of it,
+        so a scenario can end an episode early. No scenario can make an episode
+        run longer than ``params.max_timesteps``.
 
         Parameters
         ----------
@@ -397,37 +398,40 @@ class FactoriaxEnv(environment.Environment[EnvState, EnvParams]):  # type: ignor
         return over
 
     def action_space(self, params: EnvParams) -> spaces.Discrete:
-        """Describe the action space, which is every action the engine has.
+        """Describe the action space, which holds every action of the engine.
 
-        Fixed at ``NUM_ACTIONS`` whatever the scenario. A scenario whose
-        recipe book cannot make an item still exposes that item's
-        ``CRAFT_`` action; it is a no-op rather than an error. Masking
-        unusable actions is a wrapper's job.
+        The size is ``NUM_ACTIONS`` for every scenario. A scenario whose recipe
+        book cannot make an item still exposes the ``CRAFT_`` action of that
+        item. That action does nothing, and it is not an error. A wrapper masks
+        the actions that a scenario cannot use.
 
         Parameters
         ----------
         params
-            Unused. Present for the gymnax signature.
+            The method does not read this argument. It is present for the
+            gymnax signature.
 
         Returns
         -------
         spaces.Discrete
-            Of size ``NUM_ACTIONS``.
+            A space of size ``NUM_ACTIONS``.
         """
         return spaces.Discrete(NUM_ACTIONS)
 
     def observation_space(self, params: EnvParams) -> spaces.Box:
-        """Describe the observation space for the configured variant.
+        """Describe the observation space of the selected variant.
 
-        The bounds are 0.0 to 1.0 and every channel is scaled to hold to
-        them, including the x_ray facing readouts, which divide counts by a
-        norm at or above every machine's ``MACHINE_MAX_STACK``.
+        The bounds are 0.0 to 1.0, and every channel scales to stay inside
+        them. This includes the x_ray facing readouts, which divide each count
+        by a value equal to or larger than the ``MACHINE_MAX_STACK`` of every
+        machine.
 
         Parameters
         ----------
         params
-            Unused. The shape comes from the constructor arguments, so it
-            is fixed for the life of the env.
+            The method does not read this argument. The shape comes from the
+            constructor arguments, so it is fixed for the life of the
+            environment.
 
         Returns
         -------

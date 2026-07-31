@@ -1,13 +1,16 @@
 """Constants and enumerations for the FactoriaX environment.
 
-Pure-Python definitions only. Their derived JAX arrays (gather tables, the
-state-array dtypes) live in :mod:`factoriax.engine.tables`.
+This module holds pure-Python definitions only. The JAX arrays that come from
+them (the gather tables and the state-array dtypes) live in
+:mod:`factoriax.engine.tables`.
 
-Enum values here are a wire format. :func:`factoriax.engine.levels.save_level`
-writes raw integers for terrain and machine kinds into level JSON, observations
-expose them to trained policies, and :class:`Action` values are the policy
-output space. Renumbering an existing member invalidates saved levels and
-trained checkpoints, so new members are appended rather than inserted.
+The enum values here are a wire format.
+:func:`factoriax.engine.levels.save_level` writes raw integers for terrain and
+machine kinds into level JSON. The observation exposes the same integers to
+trained policies, and the :class:`Action` values are the output space of a
+policy. A new number for an existing member therefore invalidates saved levels
+and trained checkpoints. New members must go at the end of an enum, never in
+the middle.
 """
 
 from enum import IntEnum
@@ -20,20 +23,21 @@ from enum import IntEnum
 class BlockType(IntEnum):
     """Terrain kind of one tile, stored in ``EnvState.map``.
 
-    A tile carries exactly one block type. ``INVALID = 0`` is a sentinel: the
-    editor palette omits it, so a tile holding it means the map array was left
-    zero-filled. The engine gives it no behavior of its own and treats it as
-    walkable, non-mineable ground. ``OUT_OF_BOUNDS`` never occupies a stored
-    tile either: queries outside the map return it, and observation padding
-    fills the border with it so a policy can see the map edge.
+    A tile carries exactly one block type. ``INVALID = 0`` is a sentinel. The
+    editor palette does not offer it, so a tile with this value shows that the
+    map array is still full of zeros. The engine gives it no behavior of its
+    own and treats it as walkable ground that no player can mine.
+    ``OUT_OF_BOUNDS`` also never occupies a stored tile. A query outside the
+    map returns this value, and the observation padding fills the border with
+    it. A policy can therefore see the edge of the map.
 
-    ``WATER`` and ``OUT_OF_BOUNDS`` are the terrain that blocks movement,
-    listed in ``factoriax.engine.tables.SOLID_BLOCKS``. ``DIRT`` is plain
-    walkable ground. Terrain is not the whole rule: a placed machine blocks
-    its own tile too, every kind except ``CONVEYOR_BELT``.
+    ``WATER`` and ``OUT_OF_BOUNDS`` are the terrain that blocks movement.
+    ``factoriax.engine.tables.SOLID_BLOCKS`` lists them. ``DIRT`` is plain
+    walkable ground. Terrain is not the whole rule. A placed machine also
+    blocks its own tile, for every machine kind except ``CONVEYOR_BELT``.
 
-    The remaining six are ore tiles. They are the keys of
-    :data:`BLOCK_TO_ITEM` and the only mineable tiles.
+    The other six members are ore tiles. They are the keys of
+    :data:`BLOCK_TO_ITEM` and the only tiles that a player can mine.
     """
 
     INVALID = 0
@@ -51,14 +55,16 @@ class BlockType(IntEnum):
 class Direction(IntEnum):
     """Facing of a player or machine, in absolute map directions.
 
-    Grid coordinates run right and down from the top-left tile, so ``UP`` is
-    the ``-y`` (decreasing row) direction and ``DOWN`` is ``+y``. Facing is
-    absolute, never relative to the entity's own heading.
+    Grid coordinates run right and down from the top-left tile. ``UP`` is
+    therefore the ``-y`` direction, which moves to a lower row number, and
+    ``DOWN`` is ``+y``. A facing is absolute. It is never relative to the
+    direction that the entity itself points to.
 
-    Numbering starts at 1. Zero is not a member, but code that stores a
-    direction uses it as "no direction": ``factoriax.engine.tables.DIRECTIONS``
-    reserves index 0 for a zero offset, and :class:`~factoriax.engine.levels.Level`
-    leaves unset machine directions at 0.
+    The values start at 1. Zero is not a member, but code that stores a
+    direction uses zero for "no direction".
+    ``factoriax.engine.tables.DIRECTIONS`` keeps index 0 for a zero offset, and
+    :class:`~factoriax.engine.levels.Level` leaves a machine direction at 0
+    until something sets it.
     """
 
     LEFT = 1
@@ -70,16 +76,16 @@ class Direction(IntEnum):
 class SlotRole(IntEnum):
     """Purpose of one inventory slot on a machine.
 
-    Declared per machine kind by
-    ``factoriax.playground.editor.slot_display.MACHINE_SLOTS``. The role labels
-    the slot for the editor and the play UI. The simulation stores machine
-    contents in its own entity arrays and never reads a role.
+    ``factoriax.playground.editor.slot_display.MACHINE_SLOTS`` declares the
+    roles for each machine kind. The role labels the slot for the editor and
+    the play UI. The simulation stores the contents of a machine in its own
+    entity arrays and never reads a role.
 
-    ``NONE`` also pads
-    ``factoriax.playground.editor.slot_display.MACHINE_SLOT_ROLES`` out to the
-    widest machine, so it marks a slot that does not exist. No shipped machine
-    declares a ``FUEL`` slot; the editor still handles the role, which
-    restricts the slot to coal.
+    ``NONE`` also fills
+    ``factoriax.playground.editor.slot_display.MACHINE_SLOT_ROLES`` to the
+    width of the widest machine, so it marks a slot that does not exist. No
+    machine in this repository declares a ``FUEL`` slot. The editor still
+    supports the role, which limits the slot to coal.
     """
 
     NONE = 0
@@ -93,17 +99,16 @@ class SlotRole(IntEnum):
 # Items
 # ---------------------------------------------------------------------------
 
-# The three item categories. Each carries a NONE=0 placeholder, stripped from
-# every derivative, so the categories share a uniform shape and Machine can
-# double as the entity tag. ItemType is composed from their member names.
+# The three item categories. Each holds a NONE=0 placeholder that every
+# derivative drops. ItemType comes from their member names.
 
 
 class Resource(IntEnum):
-    """Raw material obtained by mining an ore tile.
+    """Raw material that a player gets from an ore tile.
 
-    One member per ore :class:`BlockType`, paired by :data:`BLOCK_TO_ITEM`.
-    Resources are recipe inputs only: nothing crafts them and nothing places
-    them.
+    There is one member for each ore :class:`BlockType`, and
+    :data:`BLOCK_TO_ITEM` holds the pairs. A resource is a recipe input only.
+    No recipe makes one, and no action places one on the map.
     """
 
     NONE = 0
@@ -116,11 +121,11 @@ class Resource(IntEnum):
 
 
 class HalfFabricate(IntEnum):
-    """Crafted item that cannot be placed on the map.
+    """Crafted item that a player cannot place on the map.
 
-    Every member is a recipe output. Members are ordered roughly by tech
-    depth, from smelted plates up to rocket components, but the order carries
-    no meaning to the engine.
+    Every member is a recipe output. The members follow tech depth
+    approximately, from smelted plates to rocket parts. The engine gives this
+    order no meaning.
     """
 
     NONE = 0
@@ -140,27 +145,28 @@ class HalfFabricate(IntEnum):
     ENGINE_UNIT = 14
     AVIONICS = 15
     ROCKET_CORE = 16
-    # Appended last so existing HalfFabricate values stay stable; the
-    # composed ItemType still renumbers the Machine-derived items (+1)
-    # and Action grows its CRAFT_/DEPOSIT_ entries (+2).
+    # Last in the list, so the existing HalfFabricate values stay stable.
+    # ItemType still renumbers the Machine items (+1), and Action gains
+    # CRAFT_/DEPOSIT_ entries (+2).
     TIER3_SCIENCE_PACK = 17
 
 
 class Machine(IntEnum):
-    """Placeable machine kind, and the entity tag the engine stores per tile.
+    """Placeable machine kind, and the entity tag that the engine stores per tile.
 
-    A machine is both an item (carried in inventory, crafted) and an entity
-    (placed on the map), so this enum does double duty. Its member names
-    compose :class:`ItemType` and the ``PLACE_`` / ``CRAFT_`` / ``DEPOSIT_``
-    action families; its values are what ``EnvState.machine_types`` and
-    ``EnvState.ent_type`` hold. ``NONE = 0`` means no machine on the tile, the
-    analog of ``ItemType.EMPTY = 0``.
+    A machine is both an item and an entity. As an item, a player crafts it and
+    carries it in the inventory. As an entity, it stands on a map tile. The
+    member names compose :class:`ItemType` and the ``PLACE_``, ``CRAFT_``, and
+    ``DEPOSIT_`` actions. The member values are what ``EnvState.machine_types``
+    and ``EnvState.ent_type`` hold. ``NONE = 0`` means no machine on the tile,
+    the analog of ``ItemType.EMPTY = 0``.
 
-    Values index the per-machine rows of
-    ``factoriax.engine.tables.MACHINE_MAX_STACK`` and of the editor's
-    ``factoriax.playground.editor.slot_display.MACHINE_SLOT_ROLES``. Both are
-    built by iterating this enum over a dict keyed by member, so adding a
-    member without an entry in each raises ``KeyError`` at import.
+    The values index the per-machine rows of
+    ``factoriax.engine.tables.MACHINE_MAX_STACK`` and of
+    ``factoriax.playground.editor.slot_display.MACHINE_SLOT_ROLES`` in the
+    editor. Both tables walk this enum over a dict that has one key for each
+    member. A new member with no entry in each dict therefore raises
+    ``KeyError`` at import.
     """
 
     NONE = 0
@@ -187,16 +193,16 @@ ItemType = IntEnum(
 )
 ItemType.__doc__ = """Anything that can occupy an inventory slot.
 
-Composed at import time from the member names of :class:`Resource`,
-:class:`HalfFabricate`, and :class:`Machine`, in that order, with the ``NONE``
-placeholders dropped and ``EMPTY = 0`` prepended. ``EMPTY`` marks an unused
+This enum comes from the member names of :class:`Resource`,
+:class:`HalfFabricate`, and :class:`Machine`, in that order. The ``NONE``
+placeholders drop out, and ``EMPTY = 0`` comes first. ``EMPTY`` marks an unused
 slot, so a slot is empty by type, not by a zero count.
 
-Values are positional within that concatenation. Appending to an earlier
-category therefore shifts every later item, which changes the item axis of
-``EnvState.player_inventory`` and of the observation. Appending to
-:class:`Machine`, the last category, leaves every existing item value
-unchanged.
+Each value is the position of its name in that concatenation. A new member in
+an earlier category therefore moves every later item to a new value. This
+changes the item axis of ``EnvState.player_inventory`` and of the observation.
+:class:`Machine` is the last category, so a new member there leaves every
+existing item value unchanged.
 """
 
 
@@ -208,11 +214,12 @@ unchanged.
 class MoveAction(IntEnum):
     """Action that moves the player or turns it in place.
 
-    The first block of :class:`Action`, at the same values. Directions are
-    absolute map directions, not relative to the current facing. ``UP`` and the
-    three other moves step one tile and also set facing; ``FACE_*`` sets facing
-    without moving. A move into a solid tile leaves the position unchanged and
-    still updates facing.
+    This is the first block of :class:`Action`, at the same values. The
+    directions are absolute map directions. They are not relative to the
+    current facing. ``UP`` and the three other moves step one tile and also set
+    the facing. The ``FACE_*`` actions set the facing only, with no step. A
+    move into a solid tile leaves the position unchanged and still sets the
+    facing.
     """
 
     NOOP = 0
@@ -227,17 +234,17 @@ class MoveAction(IntEnum):
 
 
 class InteractAction(IntEnum):
-    """Action on the tile the player faces, taking no item parameter.
+    """Action on the tile in front of the player, with no item parameter.
 
-    The second block of :class:`Action`, offset by ``len(MoveAction)``. Every
-    member acts on the single tile in front of the player, so the target is
-    chosen by facing rather than by a coordinate argument. ``ROTATE_*`` sets a
-    placed machine to an absolute :class:`Direction` and must stay contiguous
-    and in ``LEFT, RIGHT, UP, DOWN`` order, because the dispatcher reads
-    ``action - ROTATE_BASE`` as an index.
+    This is the second block of :class:`Action`, at an offset of
+    ``len(MoveAction)``. Every member acts on the one tile in front of the
+    player. The facing selects the target, not a coordinate argument.
+    ``ROTATE_*`` sets a placed machine to an absolute :class:`Direction`. These
+    four members must stay next to each other, in ``LEFT, RIGHT, UP, DOWN``
+    order, because the dispatcher reads ``action - ROTATE_BASE`` as an index.
 
-    Members with no valid target are a no-op rather than an error: the step
-    consumes a timestep and leaves the state unchanged.
+    A member with no valid target does nothing, and this is not an error. The
+    step uses one timestep and leaves the state unchanged.
     """
 
     MINE = 0
@@ -250,15 +257,15 @@ class InteractAction(IntEnum):
     ROTATE_DOWN = 7
 
 
-# Items each parametric action family addresses (NONE stripped): Placement per
-# Machine, Craft per non-resource item, Deposit per non-EMPTY item. Action and
-# the actions.py offset->item tables both derive from these, so an action's
-# offset within its block is the item's index in the matching tuple.
+# Items that each parametric action block addresses, with NONE removed. Action
+# and the offset->item tables in actions.py both come from these tuples, so the
+# offset of an action inside its block is the index of its item here.
 
-#: Items with a ``PLACE_`` action, one per placeable machine kind.
+#: Items with a ``PLACE_`` action, one for each placeable machine kind.
 PLACEMENT_ITEMS: tuple[Machine, ...] = tuple(m for m in Machine if m.name != "NONE")
-#: Items with a ``CRAFT_`` action: the half-fabricates and the machines. Raw
-#: resources are mined rather than crafted, and ``EMPTY`` is not an item.
+#: Items with a ``CRAFT_`` action: the half-fabricates and the machines. A
+#: player mines a raw resource and never crafts one, and ``EMPTY`` is not an
+#: item.
 CRAFT_ITEMS: tuple[HalfFabricate | Machine, ...] = tuple(
     m for cat in (HalfFabricate, Machine) for m in cat if m.name != "NONE"
 )
@@ -277,20 +284,20 @@ _ACTION_NAMES: list[str] = [
 Action = IntEnum("Action", _ACTION_NAMES, start=0)
 Action.__doc__ = """Action a player issues per step.
 
-Composed at import time from five contiguous blocks, in order:
-:class:`MoveAction`, :class:`InteractAction`, then ``PLACE_``, ``CRAFT_``, and
-``DEPOSIT_`` over :data:`PLACEMENT_ITEMS`, :data:`CRAFT_ITEMS`, and
-:data:`DEPOSIT_ITEMS`. :data:`PLACE_BASE`, :data:`CRAFT_BASE`, and
+This enum comes from five blocks that follow each other, in this order:
+:class:`MoveAction`, :class:`InteractAction`, then ``PLACE_`` over
+:data:`PLACEMENT_ITEMS`, ``CRAFT_`` over :data:`CRAFT_ITEMS`, and ``DEPOSIT_``
+over :data:`DEPOSIT_ITEMS`. :data:`PLACE_BASE`, :data:`CRAFT_BASE`, and
 :data:`DEPOSIT_BASE` give the first value of each parametric block.
 
-Actions are compound: the item is part of the action name, so an agent needs no
-separate slot cursor or item cursor and the action space stays flat. ``WITHDRAW``
-is the exception, since a machine exposes one output slot at a time and needs no
-item argument.
+The actions are compound. The item is part of the action name, so an agent
+needs no separate slot cursor and no item cursor. The action space stays flat.
+``WITHDRAW`` is the exception, because a machine exposes one output slot at a
+time and needs no item argument.
 
-This is the policy action space. ``NUM_ACTIONS`` is its size, and the integer
-values are what a trained checkpoint has learned, so inserting a member
-invalidates existing checkpoints.
+This is the action space of a policy. ``NUM_ACTIONS`` is its size. A trained
+checkpoint learned the integer values, so a new member in the middle
+invalidates every existing checkpoint.
 """
 
 
@@ -304,16 +311,17 @@ NUM_ITEM_TYPES = len(ItemType)
 #: ``NUM_ACTIONS - 1``.
 NUM_ACTIONS = len(Action)
 #: Fixed width of the ``EnvState.achievements_unlocked`` bit vector. A scenario
-#: may define fewer achievements; the unused trailing bits stay False. Raising
-#: this widens the observation and invalidates trained checkpoints.
+#: can define fewer achievements, and the unused bits at the end stay False. A
+#: larger value widens the observation and invalidates trained checkpoints.
 MAX_ACHIEVEMENTS = 64
-#: Units of ore an ore tile can hold when a level does not set a count. Also the
-#: divisor that normalizes ``block_resources`` into the observation, so a tile
-#: above this value normalizes past 1.0. ``EnvState.block_resources`` is int16,
-#: so this must stay under 32767.
+#: Units of ore that an ore tile holds when a level sets no count. This value is
+#: also the divisor that normalizes ``block_resources`` for the observation, so
+#: a tile with more ore than this value normalizes to more than 1.0.
+#: ``EnvState.block_resources`` is int16, so this value must stay less than
+#: 32767.
 BLOCK_MAX_RESOURCES = 30000
 
-# Base offsets for the parametric action families. The PLACE_/CRAFT_/DEPOSIT_
+# Base offsets for the parametric action blocks. The PLACE_/CRAFT_/DEPOSIT_
 # offset->item tables live with the dispatcher in factoriax.engine.actions.
 
 #: First ``PLACE_`` action value.
@@ -332,10 +340,10 @@ ROTATE_BASE: int = len(MoveAction) + int(InteractAction.ROTATE_LEFT)
 # Item / machine / block mappings
 # ---------------------------------------------------------------------------
 
-#: Machine each placeable item becomes once placed. An item absent here cannot
-#: be placed. The pairing is one to one, so :mod:`factoriax.engine.tables`
-#: builds both the forward gather array and its inverse from this one dict and
-#: the two cannot disagree.
+#: Machine that each placeable item becomes on the map. An item that is absent
+#: here has no ``PLACE_`` action. The pairs are one to one, so
+#: :mod:`factoriax.engine.tables` builds both the forward gather array and its
+#: inverse from this one dict. The two arrays therefore cannot disagree.
 ITEM_TO_MACHINE = {
     ItemType.MINER: Machine.MINER,
     ItemType.PALLET: Machine.PALLET,
@@ -349,20 +357,21 @@ ITEM_TO_MACHINE = {
     ItemType.CROSSING: Machine.CROSSING,
 }
 
-#: Placeable item ids, the keys of :data:`ITEM_TO_MACHINE`. Order is incidental:
-#: it sets the play-UI palette order, and the agent resolves placement by item
-#: identity instead.
+#: Placeable item ids, the keys of :data:`ITEM_TO_MACHINE`. The order sets the
+#: palette order in the play UI and has no other meaning. An agent selects a
+#: placement by item identity.
 PLACEABLE_ITEM_LIST: tuple[int, ...] = tuple(int(it) for it in ITEM_TO_MACHINE)
 
-#: Item ids that are not placeable, meaning resources and intermediates.
-#: The complement of :data:`PLACEABLE_ITEM_LIST` over the item range, with
-#: ``EMPTY`` excluded. Used by the play UI to split the inventory display.
+#: Item ids that no ``PLACE_`` action can place: the resources and the
+#: half-fabricates. This tuple is the complement of
+#: :data:`PLACEABLE_ITEM_LIST` over the item range, without ``EMPTY``. The play
+#: UI reads it to divide the inventory display.
 RESOURCE_ITEM_LIST: tuple[int, ...] = tuple(
     i for i in range(1, NUM_ITEM_TYPES) if i not in PLACEABLE_ITEM_LIST
 )
 
-#: Item each ore block yields when mined. The keys are the mineable blocks;
-#: any block absent here yields nothing.
+#: Item that each ore block gives to the player who mines it. The keys are the
+#: blocks that a player can mine. A block that is absent here gives nothing.
 BLOCK_TO_ITEM: dict[int, int] = {
     BlockType.COAL: ItemType.COAL,
     BlockType.IRON: ItemType.IRON_ORE,
@@ -372,10 +381,10 @@ BLOCK_TO_ITEM: dict[int, int] = {
     BlockType.LIMESTONE: ItemType.LIMESTONE,
 }
 
-#: Science pack item ids that a ``SCIENCE_LAB`` consumes, in tier order.
-#: A pack's position here is its index into the per-step delta vector
-#: ``EnvState.science_consumed_step``, so the order is part of the state
-#: layout that reward functions and analysis code read.
+#: Science pack item ids that a ``SCIENCE_LAB`` consumes, in tier order. The
+#: position of a pack here is its index into the per-step delta vector
+#: ``EnvState.science_consumed_step``. The order is therefore part of the state
+#: layout, and reward functions and analysis code read it.
 SCIENCE_PACK_TYPES: tuple[int, ...] = (
     int(ItemType.TIER1_SCIENCE_PACK),
     int(ItemType.TIER2_SCIENCE_PACK),
