@@ -6,7 +6,7 @@ import numpy as np
 import pygame
 
 # Comma-separated preference list for pygame.font.SysFont.  Terminus is a
-# 1:1 pixel bitmap font common on Linux; the rest are fallbacks.
+# 1:1 pixel bitmap font common on Linux. The rest are fallbacks.
 _PIXEL_FONT_PREFERENCE = "terminus,fixedsys excelsior,courier new,monospace,courier"
 
 _font_cache: dict[int, pygame.font.Font] = {}
@@ -17,12 +17,12 @@ _text_rgba_cache: dict[tuple[int, str, tuple[int, int, int]], np.ndarray] = {}
 def get_pixel_font(size: int) -> pygame.font.Font:
     """Return a pixel-style monospace font at the requested size.
 
-    Results are cached so font objects are created at most once per unique
-    size, regardless of how many frames are rendered. Re-initialises
-    :mod:`pygame.font` automatically if it has been quit (e.g. after
-    ``pygame.quit()`` is called by an interactive play session), clearing
-    stale font and text-render caches so callers always receive a valid
-    ``Font`` object.
+    The cache holds one font for each size, so the number of frames does not
+    change the number of fonts.
+
+    If a play session called ``pygame.quit()``, :mod:`pygame.font` is closed.
+    The function then starts it again, and empties the font cache and the text
+    cache. A caller therefore always gets a font that it can draw with.
 
     Parameters
     ----------
@@ -32,7 +32,6 @@ def get_pixel_font(size: int) -> pygame.font.Font:
     Returns
     -------
     pygame.font.Font
-
     """
     if not pygame.font.get_init():
         pygame.font.init()
@@ -66,22 +65,14 @@ def render_text_rgba(
         pygame Font to use.
     color :
         RGB glyph colour.
-    text: str :
-
-    font: pygame.font.Font :
-
-    color: tuple[int :
 
     int :
 
     int] :
 
-
     Returns
     -------
-
         RGBA uint8 array of shape ``(h, w, 4)``.
-
     """
     key = (id(font), text, color)
     cached = _text_rgba_cache.get(key)

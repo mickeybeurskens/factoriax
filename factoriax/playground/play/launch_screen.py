@@ -3,11 +3,11 @@
 The screen mirrors :mod:`factoriax.playground.menu.main_menu`: a list of options on
 the left, content on the right. Selecting *Settings* on the left turns the
 right panel into an editable list of :class:`~factoriax.engine.state.EnvParams`
-fields; selecting *Play* commits the current values and returns control to
-the play loop; selecting *Reset to defaults* replaces every field with
+fields. Selecting *Play* commits the current values and returns control to
+the play loop. Selecting *Reset to defaults* replaces every field with
 :meth:`EnvParams()` defaults and a fresh seed.
 
-:func:`_confirm_scale_change` is unrelated to the launch flow; it lives here
+:func:`_confirm_scale_change` is unrelated to the launch flow. It lives here
 because :mod:`factoriax.playground.menu.controls_menu` imports it.
 """
 
@@ -84,7 +84,7 @@ _SETTING_FIELDS: tuple[SettingField, ...] = tuple(
 
 @dataclass(frozen=True)
 class _PageOption:
-    """ """
+    """One page of the launch screen, as the left panel lists it."""
 
     action: str
     label: str
@@ -126,18 +126,10 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
 
 
 def _get_value(config: PlayerConfig, field: SettingField) -> float:
-    """
+    """Return the value of one setting.
 
-    Parameters
-    ----------
-    config: PlayerConfig :
-
-    field: SettingField :
-
-
-    Returns
-    -------
-
+    A setting that the configuration does not hold gives the default of
+    :class:`~factoriax.engine.state.EnvParams`.
     """
     if field.key == "seed":
         return float(config.seed)
@@ -148,21 +140,7 @@ def _get_value(config: PlayerConfig, field: SettingField) -> float:
 
 
 def _set_value(config: PlayerConfig, field: SettingField, value: float) -> None:
-    """
-
-    Parameters
-    ----------
-    config: PlayerConfig :
-
-    field: SettingField :
-
-    value: float :
-
-
-    Returns
-    -------
-
-    """
+    """Write one setting to the configuration."""
     if field.key == "seed":
         config.seed = int(value)
         return
@@ -170,37 +148,13 @@ def _set_value(config: PlayerConfig, field: SettingField, value: float) -> None:
 
 
 def _reset_to_defaults(config: PlayerConfig) -> None:
-    """
-
-    Parameters
-    ----------
-    config: PlayerConfig :
-
-
-    Returns
-    -------
-
-    """
+    """Put every setting back to its default, and pick a new seed."""
     config.env_params = env_params_to_dict(EnvParams())
     config.seed = int.from_bytes(os.urandom(4), "little")
 
 
 def _randomize_button_rect(rect: pygame.Rect, scale: int, bottom_y: int) -> pygame.Rect:
-    """Compact button right-aligned under the rendered settings block.
-
-    Parameters
-    ----------
-    rect: pygame.Rect :
-
-    scale: int :
-
-    bottom_y: int :
-
-
-    Returns
-    -------
-
-    """
+    """Compact button right-aligned under the rendered settings block."""
     btn_w = _BASE_BUTTON_W * scale
     btn_h = _BASE_BUTTON_H * scale
     btn_x = rect.right - _theme.ROW_PAD - btn_w
@@ -220,37 +174,23 @@ def run_settings_menu(
     screen: pygame.Surface,
     initial_config: PlayerConfig | None = None,
 ) -> PlayerConfig | None:
-    """Show the launch screen and return the user's choice.
+    """Show the launch screen, and return the settings that the user selected.
 
-    Parameters
-    ----------
-    screen: pygame.Surface :
-
-    initial_config: PlayerConfig | None :
-         (Default value = None)
+    The function writes the settings to disk before it returns, for both
+    results. It calls
+    :func:`factoriax.playground.config.save_config` to do this.
 
     Returns
     -------
-    The
-        class:`PlayerConfig` if the user pressed Enter on *Play* (the
-    The
-        class:`PlayerConfig` if the user pressed Enter on *Play* (the
-        caller should hand it to the play loop), or ``None`` if the user
-    The
-        class:`PlayerConfig` if the user pressed Enter on *Play* (the
-        caller should hand it to the play loop), or ``None`` if the user
-        backed out via Backspace (return to main menu). Edits are persisted
-    via
-        func:`factoriax.playground.config.save_config` before the function returns
-    via
-        func:`factoriax.playground.config.save_config` before the function returns
-        in either case.
-
+    PlayerConfig or None
+        The settings, for Enter on *Play*. The caller then gives them to the
+        play loop. It is ``None`` for Backspace, which returns the user to the
+        main menu.
     """
     from factoriax.playground.config import load_config
 
     config = initial_config if initial_config is not None else load_config()
-    # Ensure env_params has every key the editor displays.
+    # Give env_params every key that the editor shows.
     defaults_dict = env_params_to_dict(EnvParams())
     for key, default in defaults_dict.items():
         config.env_params.setdefault(key, default)
@@ -279,49 +219,42 @@ def run_settings_menu(
     settings_idx = 0  # index into _SETTING_FIELDS + randomize button
     reset_flash_until = 0
     input_source = panels.InputSourceTracker()
-    # Persist the user's choice on exit; Play uses this to launch.
+    # Write the settings to disk at the end. Play reads them to start.
     saved = False
 
     def _persist() -> None:
-        """ """
+        """Write the configuration to disk, one time only.
+
+        The function then reads the values back through
+        :func:`config_to_env_params`, so a bad value raises here and not at
+        the start of a play session.
+        """
         nonlocal saved
         if not saved:
             save_config(config)
-            # config_to_env_params validates types; call it to surface errors early.
+            # config_to_env_params validates types. Call it to surface errors early.
             config_to_env_params(config)
             saved = True
 
     def _launch() -> PlayerConfig:
-        """ """
+        """Save the configuration, and return it to start the game."""
         _persist()
         return config
 
     def _cancel() -> None:
-        """ """
+        """Save the configuration, and leave the launch screen."""
         _persist()
         return None
 
     def _adjust_setting(field: SettingField, direction: int) -> None:
-        """
-
-        Parameters
-        ----------
-        field: SettingField :
-
-        direction: int :
-
-
-        Returns
-        -------
-
-        """
+        """Move one setting up or down by one step, inside its limits."""
         if direction == 0:
             return
         current = _get_value(config, field)
         _set_value(config, field, field.clamp(current + field.step * direction))
 
     def _randomize_seed() -> None:
-        """ """
+        """Pick a new random seed."""
         config.seed = int.from_bytes(os.urandom(4), "little")
 
     while True:
@@ -519,19 +452,7 @@ _CONFIRM_TIMEOUT_MS: int = 10_000
 
 
 def _apply_display_state(fullscreen: bool, ui_scale: int) -> pygame.Surface:
-    """Reapply theme scale and recreate the pygame display surface.
-
-    Parameters
-    ----------
-    fullscreen: bool :
-
-    ui_scale: int :
-
-
-    Returns
-    -------
-
-    """
+    """Reapply theme scale and recreate the pygame display surface."""
     applied = ui_scale if ui_scale > 0 else auto_ui_scale()
     _theme.apply_scale(applied)
     if fullscreen:
@@ -553,21 +474,6 @@ def _confirm_display_change(
     timeout, Escape, or Backspace), restores the previous display state and
     returns ``False``. On confirm (Enter / Keep), returns ``True`` and leaves
     the new state applied.
-
-    Parameters
-    ----------
-    old_fullscreen: bool :
-
-    old_ui_scale: int :
-
-    new_fullscreen: bool :
-
-    new_ui_scale: int :
-
-
-    Returns
-    -------
-
     """
     screen = _apply_display_state(new_fullscreen, new_ui_scale)
     applied = new_ui_scale if new_ui_scale > 0 else auto_ui_scale()
@@ -589,17 +495,7 @@ def _confirm_display_change(
     btn_y = box_y + box_h - btn_h - 16 * applied
 
     def _finish(confirmed: bool) -> bool:
-        """
-
-        Parameters
-        ----------
-        confirmed: bool :
-
-
-        Returns
-        -------
-
-        """
+        """Keep the new display settings, or put the earlier ones back."""
         if not confirmed:
             _apply_display_state(old_fullscreen, old_ui_scale)
         return confirmed

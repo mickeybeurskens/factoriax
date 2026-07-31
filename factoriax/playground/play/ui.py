@@ -1,9 +1,8 @@
 """Player-only UI components using pygame for pixel-font text rendering.
 
-This module is intentionally separate from the JAX renderer so that the
-RL environment never pulls in a pygame dependency. Only the play
-subpackage (and any other human-facing entry points) should import from
-here.
+This module stays apart from the JAX renderer, so the RL environment never
+pulls in pygame. The play subpackage imports from here, together with the
+other entry points that a person starts.
 """
 
 from __future__ import annotations
@@ -84,23 +83,6 @@ def _entity_inventory(state: EnvState, ty: int, tx: int) -> np.ndarray:
         Tile Y coordinate.
     tx :
         Tile X coordinate.
-    state : EnvState :
-
-    ty : int :
-
-    tx : int :
-
-    state: EnvState :
-
-    ty: int :
-
-    tx: int :
-
-
-    Returns
-    -------
-
-
     """
     eidx = int(state.tile_entity[ty, tx])
     inv = np.zeros(NUM_ITEM_TYPES, dtype=np.int32)
@@ -145,7 +127,7 @@ def _draw_section_header(
     Parameters
     ----------
     overlay :
-        Destination RGBA array; modified in place.
+        Destination RGBA array. Modified in place.
     x :
         Left column of the section (panel border column).
     y :
@@ -158,38 +140,6 @@ def _draw_section_header(
         pygame Font for the label.
     is_focused :
         Whether to draw the focus strip.
-    overlay : np.ndarray :
-
-    x : int :
-
-    y : int :
-
-    w : int :
-
-    text : str :
-
-    font : pygame.font.Font :
-
-    is_focused : bool :
-
-    overlay: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    w: int :
-
-    text: str :
-
-    font: pygame.font.Font :
-
-    is_focused: bool :
-
-
-    Returns
-    -------
-
 
     """
     content_y = y + _theme.BORDER_PX
@@ -226,7 +176,7 @@ def _render_control_hints(
     Parameters
     ----------
     overlay :
-        Destination RGBA array; modified in place.
+        Destination RGBA array. Modified in place.
     hints :
         Hint text to render (e.g. "[TAB] Next | [E] Craft").
     x :
@@ -235,30 +185,6 @@ def _render_control_hints(
         Top edge of the hint region.
     w :
         Width of the hint region.
-    overlay : np.ndarray :
-
-    hints : str :
-
-    x : int :
-
-    y : int :
-
-    w : int :
-
-    overlay: np.ndarray :
-
-    hints: str :
-
-    x: int :
-
-    y: int :
-
-    w: int :
-
-
-    Returns
-    -------
-
 
     """
     font = get_pixel_font(_theme.FONT_HINT)
@@ -286,7 +212,7 @@ def scroll_adjust_regions(
 ) -> list[ClickRegion]:
     """Translate content-space click regions to screen-space, clipping to viewport.
 
-    Content-space coordinates have ``x=0`` at the viewport's left edge and
+    A content coordinate has ``x=0`` at the left edge of the viewport, and
     ``y=0`` at the top of the full (unscrolled) content canvas.
 
     Parameters
@@ -301,31 +227,6 @@ def scroll_adjust_regions(
         Viewport height in pixels (used to discard off-screen regions).
     scroll_offset :
         Pixels of content scrolled off the top.
-    regions : list[ClickRegion] :
-
-    vp_x : int :
-
-    vp_y : int :
-
-    vp_h : int :
-
-    scroll_offset : int :
-
-    regions: list[ClickRegion] :
-
-    vp_x: int :
-
-    vp_y: int :
-
-    vp_h: int :
-
-    scroll_offset: int :
-
-
-    Returns
-    -------
-
-
     """
     result: list[ClickRegion] = []
     for r in regions:
@@ -359,11 +260,11 @@ def render_achievement_menu(
 ) -> np.ndarray:
     """Render the achievement menu as a scrollable RGBA overlay.
 
-    Achievements are laid out in a fixed-height scroll view so the list
-    remains comfortable even as more achievements are added.  A scrollbar
-    appears automatically when the content overflows the viewport.  The
-    selected row is highlighted with a border, and a hint string for the
-    selected achievement is shown above the footer.
+    The achievements sit in a scroll view of a fixed height, so a longer list
+    stays easy to read. If the list is taller than the view, the menu draws a
+    scrollbar.
+
+    The selected row gets a border, and its hint sits over the footer.
 
     Parameters
     ----------
@@ -377,31 +278,6 @@ def render_achievement_menu(
         Pixels of content scrolled off the top.
     selected_index :
         Currently selected achievement row index.
-    achievements : np.ndarray :
-
-    screen_width : int :
-
-    screen_height : int :
-
-    scroll_offset : int :
-        (Default value = 0)
-    selected_index : int :
-        (Default value = 0)
-    achievements: np.ndarray :
-
-    screen_width: int :
-
-    screen_height: int :
-
-    scroll_offset: int :
-         (Default value = 0)
-    selected_index: int :
-         (Default value = 0)
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
 
@@ -525,23 +401,6 @@ def render_pause_menu(
     selected_option :
         Currently selected option index
         (0=Resume, 1=Reset, 2=Quit).
-    screen_width : int :
-
-    screen_height : int :
-
-    selected_option : int :
-        (Default value = 0)
-    screen_width: int :
-
-    screen_height: int :
-
-    selected_option: int :
-         (Default value = 0)
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     click_regions: list[ClickRegion] = []
@@ -636,23 +495,6 @@ def render_welcome_screen(
         Total render height in pixels.
     record_enabled :
         Unused, kept for API compat.
-    screen_width : int :
-
-    screen_height : int :
-
-    record_enabled : bool :
-        (Default value = False)
-    screen_width: int :
-
-    screen_height: int :
-
-    record_enabled: bool :
-         (Default value = False)
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     overlay[:, :, :3] = 10
@@ -748,7 +590,7 @@ def render_victory_screen(
     screen_width: int,
     screen_height: int,
 ) -> np.ndarray:
-    """Render a celebration overlay when the player builds a rocket.
+    """Draw the overlay that marks a rocket launch.
 
     Parameters
     ----------
@@ -756,19 +598,6 @@ def render_victory_screen(
         Total render width in pixels.
     screen_height :
         Total render height in pixels.
-    screen_width : int :
-
-    screen_height : int :
-
-    screen_width: int :
-
-    screen_height: int :
-
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     overlay[:, :] = (0, 0, 0, 200)
@@ -843,7 +672,7 @@ def render_machine_menu(
     count, and name.  Empty machines show a placeholder message.
 
     The focused item in the *active* panel is highlighted with a bright white
-    border; the focused item in the *inactive* panel uses a dim gray border
+    border. The focused item in the *inactive* panel uses a dim gray border
     so the player can see both positions at a glance.
 
     Parameters
@@ -851,7 +680,7 @@ def render_machine_menu(
     state :
         Current environment state.
     params :
-        Environment parameters, read for this scenario's recipe table.
+        Environment parameters, read for the recipe table of this scenario.
     screen_width :
         Total render width in pixels.
     screen_height :
@@ -867,42 +696,6 @@ def render_machine_menu(
         Currently selected player inventory item type.
     focused_machine_item :
         Currently focused machine item type.
-    state : EnvState :
-
-    screen_width : int :
-
-    screen_height : int :
-
-    tx : int :
-
-    ty : int :
-
-    machine_panel_active : bool :
-        (Default value = True)
-    selected_item : int :
-        (Default value = 0)
-    focused_machine_item : int :
-        (Default value = 0)
-    state: EnvState :
-
-    screen_width: int :
-
-    screen_height: int :
-
-    tx: int :
-
-    ty: int :
-
-    machine_panel_active: bool :
-         (Default value = True)
-    selected_item: int :
-         (Default value = 0)
-    focused_machine_item: int :
-         (Default value = 0)
-
-    Returns
-    -------
-
 
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
@@ -947,7 +740,7 @@ def render_machine_menu(
         + _theme.BORDER_PX
     )
 
-    # Ideal cell height; shrink to fit if the screen is small.
+    # Ideal cell height. Shrink to fit if the screen is small.
     # badge + gap + icon + gap + count text + gap + name text + bottom margin
     cell_h = badge_h + 4 + icon_size + 4 + line_h + 2 + line_h + 10
     if slot_rows > 0:
@@ -1088,26 +881,7 @@ def render_machine_menu(
         items: tuple[int, ...] | list[int],
         row_y: int,
     ) -> None:
-        """
-
-        Parameters
-        ----------
-        items : tuple[int :
-
-        ...] | list[int] :
-
-        row_y : int :
-
-        items: tuple[int :
-
-        row_y: int :
-
-
-        Returns
-        -------
-
-
-        """
+        """Draw one row of the item strip."""
         n = len(items)
         if n == 0:
             return
@@ -1255,47 +1029,10 @@ def _render_pocket_bg(
         for a static white border when selected.
     frame_tick :
         Frame counter for pulse animation.
-    overlay : np.ndarray :
-
-    x : int :
-
-    y : int :
-
-    w : int :
-
-    h : int :
-
-    selected : bool :
-
-    building_color : tuple[int :
 
     int :
 
     int] | None :
-        (Default value = None)
-    frame_tick : int :
-        (Default value = 0)
-    overlay: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    w: int :
-
-    h: int :
-
-    selected: bool :
-
-    building_color: tuple[int :
-
-    frame_tick: int :
-         (Default value = 0)
-
-    Returns
-    -------
-
-
     """
     oh, ow = overlay.shape[:2]
     if y >= oh or x >= ow or y + h <= 0 or x + w <= 0:
@@ -1390,47 +1127,10 @@ def _render_chips(
         RGB tuple for lit chips.
     num_chips :
         Number of chip slots to draw.
-    overlay : np.ndarray :
-
-    x : int :
-
-    y : int :
-
-    h : int :
-
-    count : int :
-
-    max_stack : int :
-
-    item_color : tuple[int :
 
     int :
 
     int] :
-
-    num_chips : int :
-        (Default value = _CHIP_COUNT)
-    overlay: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    h: int :
-
-    count: int :
-
-    max_stack: int :
-
-    item_color: tuple[int :
-
-    num_chips: int :
-         (Default value = _CHIP_COUNT)
-
-    Returns
-    -------
-
-
     """
     if max_stack <= 0:
         return
@@ -1491,31 +1191,6 @@ def _render_count_badge(
         Item count to display.
     font :
         Font for the count text.
-    overlay : np.ndarray :
-
-    x : int :
-
-    y : int :
-
-    count : int :
-
-    font : pygame.font.Font :
-
-    overlay: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    count: int :
-
-    font: pygame.font.Font :
-
-
-    Returns
-    -------
-
-
     """
     text_arr = _render_text_rgba(str(count), font, _theme.SLOT_COUNT_COLOR)
     th, tw = int(text_arr.shape[0]), int(text_arr.shape[1])
@@ -1558,19 +1233,6 @@ def _ghost_icon(item_type: int, size: int) -> np.ndarray:
         ItemType value
     size :
         Icon size in pixels
-    item_type : int :
-
-    size : int :
-
-    item_type: int :
-
-    size: int :
-
-
-    Returns
-    -------
-
-
     """
     icon = render_item_icon(item_type, size)
     ghost = icon.copy()
@@ -1601,31 +1263,6 @@ def _render_ghost_icon(
         Icon size in pixels.
     item_type :
         ItemType value.
-    overlay : np.ndarray :
-
-    x : int :
-
-    y : int :
-
-    size : int :
-
-    item_type : int :
-
-    overlay: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    size: int :
-
-    item_type: int :
-
-
-    Returns
-    -------
-
-
     """
     _blit_rgba(overlay, _ghost_icon(item_type, size), y, x)
 
@@ -1648,31 +1285,10 @@ def _render_placement_triangle(
         Top edge y of the triangle.
     color :
         RGB fill color.
-    overlay : np.ndarray :
-
-    cx : int :
-
-    y : int :
-
-    color : tuple[int :
 
     int :
 
     int] :
-
-    overlay: np.ndarray :
-
-    cx: int :
-
-    y: int :
-
-    color: tuple[int :
-
-
-    Returns
-    -------
-
-
     """
     # 5px wide, 3px tall filled triangle.
     for row in range(3):
@@ -1689,7 +1305,7 @@ _BASE_HOTBAR_H: int = 154
 
 
 def _hotbar_h() -> int:
-    """ """
+    """Return the height of the bottom bar, at the active UI scale."""
     return _BASE_HOTBAR_H * _theme.UI_SCALE
 
 
@@ -1713,10 +1329,12 @@ def render_hotbar(
 ) -> tuple[np.ndarray, list[ClickRegion]]:
     """Render the building tool belt in the left 2/3 of the bottom bar.
 
-    Shows a player badge on the left and 6 machine pockets in the
-    centre. Each pocket uses the inset pocket style with stack chips,
-    ghost icons when empty, count badges, and a pulsing border when
-    selected for placement.
+    The bar holds a player badge at the left, and one pocket for each
+    placeable machine at the center. The engine list sets the number of
+    pockets.
+
+    A pocket holds a stack chip and a count badge. An empty pocket draws a
+    ghost icon. The selected pocket gets a border that pulses.
 
     Parameters
     ----------
@@ -1730,31 +1348,6 @@ def render_hotbar(
         Currently selected item type for highlighting.
     frame_tick :
         Frame counter for pulsing animation.
-    state : EnvState :
-
-    screen_width : int :
-
-    screen_height : int :
-
-    selected_item : int :
-        (Default value = 0)
-    frame_tick : int :
-        (Default value = 0)
-    state: EnvState :
-
-    screen_width: int :
-
-    screen_height: int :
-
-    selected_item: int :
-         (Default value = 0)
-    frame_tick: int :
-         (Default value = 0)
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     regions: list[ClickRegion] = []
@@ -2072,31 +1665,6 @@ def render_info_panel(
         Hovered tile X coordinate, or -1 if none.
     hover_ty :
         Hovered tile Y coordinate, or -1 if none.
-    state : EnvState :
-
-    screen_width : int :
-
-    screen_height : int :
-
-    hover_tx : int :
-
-    hover_ty : int :
-
-    state: EnvState :
-
-    screen_width: int :
-
-    screen_height: int :
-
-    hover_tx: int :
-
-    hover_ty: int :
-
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
 
@@ -2200,55 +1768,6 @@ def _render_info_machine(
         Font for body text.
     hint_font :
         Font for small labels.
-    overlay : np.ndarray :
-
-    state : EnvState :
-
-    cx : int :
-
-    cy : int :
-
-    max_x : int :
-
-    tx : int :
-
-    ty : int :
-
-    machine_type : int :
-
-    header_font : pygame.font.Font :
-
-    body_font : pygame.font.Font :
-
-    hint_font : pygame.font.Font :
-
-    overlay: np.ndarray :
-
-    state: EnvState :
-
-    cx: int :
-
-    cy: int :
-
-    max_x: int :
-
-    tx: int :
-
-    ty: int :
-
-    machine_type: int :
-
-    header_font: pygame.font.Font :
-
-    body_font: pygame.font.Font :
-
-    hint_font: pygame.font.Font :
-
-
-    Returns
-    -------
-
-
     """
     name = MACHINE_TYPE_NAMES.get(machine_type, "Unknown")
     icon_s = 24
@@ -2343,55 +1862,6 @@ def _render_info_terrain(
         Font for body text.
     hint_font :
         Font for small labels.
-    overlay : np.ndarray :
-
-    state : EnvState :
-
-    cx : int :
-
-    cy : int :
-
-    max_x : int :
-
-    tx : int :
-
-    ty : int :
-
-    block_type : int :
-
-    header_font : pygame.font.Font :
-
-    body_font : pygame.font.Font :
-
-    hint_font : pygame.font.Font :
-
-    overlay: np.ndarray :
-
-    state: EnvState :
-
-    cx: int :
-
-    cy: int :
-
-    max_x: int :
-
-    tx: int :
-
-    ty: int :
-
-    block_type: int :
-
-    header_font: pygame.font.Font :
-
-    body_font: pygame.font.Font :
-
-    hint_font: pygame.font.Font :
-
-
-    Returns
-    -------
-
-
     """
     name = _BLOCK_NAMES.get(block_type, "Unknown")
     color = _BLOCK_COLORS.get(block_type, (220, 215, 180))
@@ -2456,7 +1926,7 @@ def render_inventory_menu(
     state
         Current environment state.
     params
-        Environment parameters, read for this scenario's recipe table.
+        Environment parameters, read for the recipe table of this scenario.
     screen_width
         Total screen width in pixels.
     screen_height
@@ -2510,7 +1980,7 @@ def render_inventory_menu(
     out_icon = 32
     inp_icon = 20
 
-    # This scenario's book, not BASE_RECIPES.
+    # The book of this scenario, and not BASE_RECIPES.
     table = params.recipe_table
     num_recipes = int(table.outputs.shape[0])
 
@@ -2683,19 +2153,6 @@ def render_help_overlay(
         Total render width in pixels.
     screen_height :
         Total render height in pixels.
-    screen_width : int :
-
-    screen_height : int :
-
-    screen_width: int :
-
-    screen_height: int :
-
-
-    Returns
-    -------
-
-
     """
     overlay = np.zeros((screen_height, screen_width, 4), dtype=np.uint8)
     overlay[:, :] = (0, 0, 0, 180)

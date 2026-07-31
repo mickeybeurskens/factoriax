@@ -1,10 +1,12 @@
-"""Settings menu — keyboard, controller, display, and reset bindings.
+"""The settings menu: the keyboard, the controller, the display, and a reset.
 
-Tv-style two-panel layout mirroring :mod:`factoriax.playground.menu.main_menu`:
-left panel lists the page (Keyboard, Controller, Display, Reset Bindings);
-right panel shows the content of the selected page. Bindings are
-group-headed (Movement / Actions / Menus); Display has fullscreen and UI
-scale rows; Reset is an action.
+The menu holds two panels, as :mod:`factoriax.playground.menu.main_menu` does.
+The left panel lists the four pages. The right panel shows the page that the
+user selects.
+
+The keyboard page and the controller page group their rows under Movement,
+Actions, and Menus. The display page holds a row for fullscreen and a row for
+the UI scale. The reset page holds one action.
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ _UI_SCALE_LABELS: tuple[str, ...] = ("Auto", "1x", "2x", "3x")
 
 @dataclass(frozen=True)
 class _PageOption:
-    """ """
+    """One page of the settings menu, as the left panel lists it."""
 
     action: str
     label: str
@@ -87,7 +89,7 @@ _PAGE_OPTIONS: tuple[_PageOption, ...] = (
 
 @dataclass(frozen=True)
 class _BindingRow:
-    """ """
+    """One action of the binding list, with the name that the menu shows."""
 
     action: PlayerAction
     label: str
@@ -95,7 +97,7 @@ class _BindingRow:
 
 @dataclass(frozen=True)
 class _BindingCategory:
-    """ """
+    """A group of binding rows, under one heading."""
 
     title: str
     rows: tuple[_BindingRow, ...]
@@ -144,18 +146,11 @@ _BINDING_SECTIONS: tuple[LabelValueSection, ...] = tuple(
 
 
 def _init_rebind_actions() -> list[tuple[str | None, list[tuple[str, str]]]]:
-    """
+    """Return each binding row, grouped under its heading.
 
-    Parameters
-    ----------
-
-    Returns
-    -------
-    type
-        Provided for :mod:`tests.play.test_rebinding`, which validates that every
-        listed action is a real :class:`PlayerAction` with a default keyboard +
-        controller binding.
-
+    :mod:`tests.play.test_rebinding` reads this list. That test makes sure that
+    every action here is a real :class:`PlayerAction`, and that each one has a
+    default key and a default controller input.
     """
     return [
         (cat.title, [(row.action, row.label) for row in cat.rows])
@@ -191,16 +186,10 @@ _CONTROLLER_DISPLAY: dict[str, str] = {
 
 
 def _format_key_display(names: list[str]) -> str:
-    """
+    """Return the key names of one action, as the menu shows them.
 
-    Parameters
-    ----------
-    names: list[str] :
-
-
-    Returns
-    -------
-
+    The function removes the ``K_`` prefix, and joins two keys with a comma.
+    An action with no key gives ``"-"``.
     """
     if not names:
         return "-"
@@ -218,16 +207,10 @@ def _format_key_display(names: list[str]) -> str:
 
 
 def _format_controller_display(names: list[str]) -> str:
-    """
+    """Return the controller inputs of one action, as the menu shows them.
 
-    Parameters
-    ----------
-    names: list[str] :
-
-
-    Returns
-    -------
-
+    The function gives the name of the button on a standard gamepad. An action
+    with no input gives ``"-"``.
     """
     if not names:
         return "-"
@@ -235,19 +218,7 @@ def _format_controller_display(names: list[str]) -> str:
 
 
 def _format_binding(names: list[str], device: str) -> str:
-    """
-
-    Parameters
-    ----------
-    names: list[str] :
-
-    device: str :
-
-
-    Returns
-    -------
-
-    """
+    """Return the inputs of one action, for the keyboard or the controller."""
     if device == "keyboard":
         return _format_key_display(names)
     return _format_controller_display(names)
@@ -264,19 +235,7 @@ _DISPLAY_SECTIONS: tuple[LabelValueSection, ...] = (
 
 
 def _format_display_values(fullscreen: bool, ui_scale: int) -> list[str]:
-    """
-
-    Parameters
-    ----------
-    fullscreen: bool :
-
-    ui_scale: int :
-
-
-    Returns
-    -------
-
-    """
+    """Return the display settings, as the menu shows them."""
     return [
         "On" if fullscreen else "Off",
         _UI_SCALE_LABELS[ui_scale] if 0 <= ui_scale < len(_UI_SCALE_LABELS) else "?",
@@ -295,17 +254,7 @@ def run_controls_menu(
     """Run the settings menu and return ``(fullscreen, ui_scale)``.
 
     Binding edits are written into ``config.keyboard`` / ``config.controller``
-    in place; the caller is responsible for persistence.
-
-    Parameters
-    ----------
-    screen: pygame.Surface :
-
-    config: PlayerConfig :
-
-
-    Returns
-    -------
+    in place. The caller is responsible for persistence.
 
     """
     from factoriax.playground.config import controller_event_to_name, event_to_key_name
@@ -339,30 +288,13 @@ def run_controls_menu(
     input_source = panels.InputSourceTracker()
 
     def _bindings_for(device: str) -> dict[str, list[str]]:
-        """
-
-        Parameters
-        ----------
-        device: str :
-
-
-        Returns
-        -------
-
-        """
+        """Return the binding map of one device."""
         return config.keyboard if device == "keyboard" else config.controller
 
     def _binding_values(device: str) -> list[str]:
-        """
+        """Return the text of each binding row, in the order the menu draws them.
 
-        Parameters
-        ----------
-        device: str :
-
-
-        Returns
-        -------
-
+        The row that waits for an input shows ``"Press a key..."``.
         """
         bindings = _bindings_for(device)
         out: list[str] = []
@@ -375,22 +307,12 @@ def run_controls_menu(
         return out
 
     def _reset_bindings() -> None:
-        """ """
+        """Put every keyboard and controller binding back to its default."""
         config.keyboard = default_keyboard()
         config.controller = default_controller()
 
     def _cycle_ui_scale(direction: int) -> int:
-        """
-
-        Parameters
-        ----------
-        direction: int :
-
-
-        Returns
-        -------
-
-        """
+        """Return the next UI scale, and start again after the last one."""
         return (ui_scale + direction) % len(_UI_SCALE_LABELS)
 
     while True:

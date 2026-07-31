@@ -60,25 +60,17 @@ from factoriax.playground.ui.compositing import composite_rgba_over_rgb
 from factoriax.playground.ui.primitives import ClickRegion, hit_test_regions
 
 # Module-level renderer cache keyed by tile size. Play windows resize
-# the render at runtime; cache instances so each tile size pays the
+# the render at runtime. Cache instances so each tile size pays the
 # atlas-build + JIT-compile cost once.
 _RENDERER_CACHE: dict[int, JaxRenderer] = {}
 
 
 def _renderer_for(tile_px: int) -> JaxRenderer:
-    """
+    """Return the renderer for one tile size.
 
-    Parameters
-    ----------
-    tile_px : int :
-
-    tile_px: int :
-
-
-    Returns
-    -------
-
-
+    The cache holds one renderer for each size. A window that changes size
+    therefore builds the atlas and compiles the render once for each size, and
+    not once for each frame.
     """
     renderer = _RENDERER_CACHE.get(tile_px)
     if renderer is None:
@@ -90,8 +82,8 @@ def _renderer_for(tile_px: int) -> JaxRenderer:
 _PLACEABLE_ITEM_SET: frozenset[int] = frozenset(PLACEABLE_ITEM_LIST)
 
 # Direction -> next direction one step clockwise, indexed by Direction
-# value (1-indexed: LEFT=1..DOWN=4; index 0 is unused). Drives the
-# rotate-machine play action; lives here as it is play-UI-only wiring.
+# value (1-indexed: LEFT=1..DOWN=4. Index 0 is unused). Drives the
+# rotate-machine play action. Lives here as it is play-UI-only wiring.
 TURN_RIGHT_MAP = jnp.array([0, 3, 4, 2, 1], dtype=jnp.int32)
 
 # Machines the play hotbar offers, in engine order. The engine decides what is
@@ -172,19 +164,6 @@ def _tile_in_front(state: EnvState, player_idx: int) -> tuple[int, int]:
         Current environment state
     player_idx :
         Index of the player
-    state : EnvState :
-
-    player_idx : int :
-
-    state: EnvState :
-
-    player_idx: int :
-
-
-    Returns
-    -------
-
-
     """
     pos = np.array(state.player_positions[player_idx])
     direction = int(state.player_directions[player_idx])
@@ -202,11 +181,8 @@ class GameUI:
     """Reusable game UI component for menus, hotbar, and input dispatch.
 
     Owns a :class:`PlayState` internally. Callers feed it pygame events
-    and the current :class:`EnvState`; it returns rendered overlays and
+    and the current :class:`EnvState`. It returns rendered overlays and
     action intents via :class:`GameUIResult`.
-
-    Parameters
-    ----------
 
     Parameters
     ----------
@@ -214,10 +190,6 @@ class GameUI:
         Key lookup table from
     welcome_open :
         Whether to show the welcome screen initially
-
-    Returns
-    -------
-
 
     """
 
@@ -258,30 +230,13 @@ class GameUI:
             Window Y offset of the canvas origin.
         win_scale :
             Integer scale factor from canvas to window pixels.
-        win_ox : int :
-
-        win_oy : int :
-
-        win_scale : int :
-
-        win_ox: int :
-
-        win_oy: int :
-
-        win_scale: int :
-
-
-        Returns
-        -------
-
-
         """
         self._win_ox = win_ox
         self._win_oy = win_oy
         self._win_scale = win_scale
 
     def has_menu_open(self) -> bool:
-        """ """
+        """Report whether any menu or overlay is open."""
         ps = self._ps
         return (
             ps.inventory_open
@@ -309,19 +264,6 @@ class GameUI:
             Pygame event to process.
         state :
             Current environment state.
-        event : pygame.event.Event :
-
-        state : EnvState :
-
-        event: pygame.event.Event :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
         """
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             return self._handle_click(event, state)
@@ -343,15 +285,6 @@ class GameUI:
         ----------
         state :
             Current environment state.
-        state : EnvState :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
         """
         ftx, fty = _tile_in_front(state, int(state.selected_player))
         map_h = int(state.map.shape[0])
@@ -373,9 +306,9 @@ class GameUI:
         world_oy: int,
         achievements: jnp.ndarray | None = None,
     ) -> tuple[np.ndarray, list[ClickRegion]]:
-        """Build one UI frame with all active overlays.
+        """Draw one frame, with every open overlay.
 
-        Renders the game world and composites all menu overlays on top.
+        The function draws the world first, and then each open menu over it.
 
         Parameters
         ----------
@@ -394,39 +327,6 @@ class GameUI:
         achievements :
             Achievement flags from the wrapper state.
             Required when the achievement menu is open.
-        state : EnvState :
-
-        ui_w : int :
-
-        ui_h : int :
-
-        tile_px : int :
-
-        world_ox : int :
-
-        world_oy : int :
-
-        achievements : jnp.ndarray | None :
-            (Default value = None)
-        state: EnvState :
-
-        ui_w: int :
-
-        ui_h: int :
-
-        tile_px: int :
-
-        world_ox: int :
-
-        world_oy: int :
-
-        achievements: jnp.ndarray | None :
-             (Default value = None)
-
-        Returns
-        -------
-
-
         """
         ps = self._ps
         pixels = np.asarray(_renderer_for(tile_px).jit_render_map(state))
@@ -527,24 +427,7 @@ class GameUI:
     # ------------------------------------------------------------------
 
     def _to_canvas(self, window_x: int, window_y: int) -> tuple[int, int]:
-        """Transform window pixel coordinates to canvas coordinates.
-
-        Parameters
-        ----------
-        window_x : int :
-
-        window_y : int :
-
-        window_x: int :
-
-        window_y: int :
-
-
-        Returns
-        -------
-
-
-        """
+        """Transform window pixel coordinates to canvas coordinates."""
         return (
             (window_x - self._win_ox) // self._win_scale,
             (window_y - self._win_oy) // self._win_scale,
@@ -555,24 +438,7 @@ class GameUI:
         event: pygame.event.Event,
         state: EnvState,
     ) -> GameUIResult:
-        """Process a mouse click against the current click regions.
-
-        Parameters
-        ----------
-        event : pygame.event.Event :
-
-        state : EnvState :
-
-        event: pygame.event.Event :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Process a mouse click against the current click regions."""
         ps = self._ps
         action: int | None = None
         quit_flag = False
@@ -629,24 +495,7 @@ class GameUI:
         event: pygame.event.Event,
         state: EnvState,
     ) -> GameUIResult:
-        """Dispatch a KEYDOWN event to the appropriate context handler.
-
-        Parameters
-        ----------
-        event : pygame.event.Event :
-
-        state : EnvState :
-
-        event: pygame.event.Event :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Dispatch a KEYDOWN event to the appropriate context handler."""
         ps = self._ps
 
         if ps.help_open:
@@ -688,25 +537,8 @@ class GameUI:
             Current environment state.
         is_escape :
             Whether to apply escape/back logic.
-        actions : frozenset[str] :
-
-        state : EnvState :
 
         * :
-
-        is_escape : bool :
-            (Default value = False)
-        actions: frozenset[str] :
-
-        state: EnvState :
-
-        is_escape: bool :
-             (Default value = False)
-
-        Returns
-        -------
-
-
         """
         ps = self._ps
         action: int | None = None
@@ -766,24 +598,7 @@ class GameUI:
         event: pygame.event.Event,
         state: EnvState,
     ) -> GameUIResult:
-        """Dispatch a controller button or hat event.
-
-        Parameters
-        ----------
-        event : pygame.event.Event :
-
-        state : EnvState :
-
-        event: pygame.event.Event :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Dispatch a controller button or hat event."""
         if self._ctrl_lookup is None:
             return GameUIResult(state=state)
 
@@ -816,24 +631,7 @@ class GameUI:
         actions: frozenset[str],
         state: EnvState,
     ) -> tuple[EnvState, bool, bool]:
-        """Handle keys while pause menu is open.
-
-        Parameters
-        ----------
-        actions : frozenset[str] :
-
-        state : EnvState :
-
-        actions: frozenset[str] :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Handle keys while pause menu is open."""
         ps = self._ps
         reset_flag = False
         quit_flag = False
@@ -855,20 +653,7 @@ class GameUI:
         return state, reset_flag, quit_flag
 
     def _handle_machine_toggle(self, state: EnvState) -> EnvState:
-        """Toggle the machine inspection menu.
-
-        Parameters
-        ----------
-        state : EnvState :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Toggle the machine inspection menu."""
         ps = self._ps
         if ps.machine_open:
             ps.machine_open = False
@@ -894,24 +679,7 @@ class GameUI:
         actions: frozenset[str],
         state: EnvState,
     ) -> tuple[EnvState, int | None]:
-        """Handle keys while machine menu is open.
-
-        Parameters
-        ----------
-        actions : frozenset[str] :
-
-        state : EnvState :
-
-        actions: frozenset[str] :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Handle keys while machine menu is open."""
         ps = self._ps
         action: int | None = None
         if PlayerAction.NAV_UP in actions or PlayerAction.NAV_DOWN in actions:
@@ -956,20 +724,7 @@ class GameUI:
         self,
         actions: frozenset[str],
     ) -> None:
-        """Handle keys in the achievement menu.
-
-        Parameters
-        ----------
-        actions : frozenset[str] :
-
-        actions: frozenset[str] :
-
-
-        Returns
-        -------
-
-
-        """
+        """Handle keys in the achievement menu."""
         ps = self._ps
         row_h = 36
         if PlayerAction.NAV_UP in actions:
@@ -990,20 +745,7 @@ class GameUI:
         self,
         actions: frozenset[str],
     ) -> int | None:
-        """Handle keys in the crafting panel.
-
-        Parameters
-        ----------
-        actions : frozenset[str] :
-
-        actions: frozenset[str] :
-
-
-        Returns
-        -------
-
-
-        """
+        """Handle keys in the crafting panel."""
         ps = self._ps
         table = self._params.recipe_table
         num_recipes = int(table.outputs.shape[0])
@@ -1022,24 +764,7 @@ class GameUI:
         actions: frozenset[str],
         state: EnvState,
     ) -> tuple[EnvState, int | None]:
-        """Handle keys in the world (no menu open).
-
-        Parameters
-        ----------
-        actions : frozenset[str] :
-
-        state : EnvState :
-
-        actions: frozenset[str] :
-
-        state: EnvState :
-
-
-        Returns
-        -------
-
-
-        """
+        """Handle keys in the world (no menu open)."""
         action: int | None = None
 
         if PlayerAction.INTERACT in actions:
@@ -1084,23 +809,14 @@ class GameUI:
 def _rotate_action_for_tile(state: EnvState) -> int:
     """Compute the ROTATE_* action to cycle a machine clockwise.
 
-    Looks up the machine in front of the player, reads its current
-    direction, advances it one step clockwise via TURN_RIGHT_MAP,
-    and returns the corresponding absolute ROTATE_* action.
+    The function reads the machine in front of the player, and its facing. It
+    then moves that facing one step clockwise through ``TURN_RIGHT_MAP``, and
+    returns the ``ROTATE_`` action for the new facing.
 
     Parameters
     ----------
     state :
         Current environment state.
-    state : EnvState :
-
-    state: EnvState :
-
-
-    Returns
-    -------
-
-
     """
     selected_player = int(state.selected_player)
     tx, ty = _tile_in_front(state, selected_player)
@@ -1135,19 +851,6 @@ def _handle_world_interact(
         Current environment state.
     selected_item :
         Currently selected item type from the hotbar.
-    state : EnvState :
-
-    selected_item : int :
-
-    state: EnvState :
-
-    selected_item: int :
-
-
-    Returns
-    -------
-
-
     """
     selected_player = int(state.selected_player)
     tx, ty = _tile_in_front(state, selected_player)

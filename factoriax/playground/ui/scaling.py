@@ -20,13 +20,16 @@ class ScaledCanvas:
         ui_scale: int,
         window: pygame.Surface,
     ) -> None:
-        """Create a canvas and compute the initial scale for the window.
+        """Make a canvas, and find the scale that fits the window.
 
         Parameters
         ----------
-            base_size: Logical base resolution (e.g. 1024).
-            ui_scale: Theme scale factor (1, 2, or 3).
-            window: The pygame display surface.
+        base_size
+            Width and height of the canvas in canvas pixels, for example 1024.
+        ui_scale
+            Scale of the theme, which is 1, 2, or 3.
+        window
+            Display surface that the canvas draws to.
         """
         self._width = base_size * ui_scale
         self._height = base_size * ui_scale
@@ -60,19 +63,6 @@ class ScaledCanvas:
             New window width in pixels.
         window_h :
             New window height in pixels.
-        window_w : int :
-
-        window_h : int :
-
-        window_w: int :
-
-        window_h: int :
-
-
-        Returns
-        -------
-
-
         """
         self._scale = max(
             1,
@@ -90,19 +80,6 @@ class ScaledCanvas:
             X position in window pixels.
         window_y :
             Y position in window pixels.
-        window_x : int :
-
-        window_y : int :
-
-        window_x: int :
-
-        window_y: int :
-
-
-        Returns
-        -------
-
-
         """
         return (
             (window_x - self._ox) // self._scale,
@@ -119,15 +96,6 @@ class ScaledCanvas:
         ----------
         screen :
             The pygame display surface.
-        screen : pygame.Surface :
-
-        screen: pygame.Surface :
-
-
-        Returns
-        -------
-
-
         """
         scaled = pygame.transform.scale(
             self._surface,

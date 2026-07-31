@@ -2,7 +2,7 @@
 
 All components read sizes and colors from :mod:`factoriax.playground.ui.theme` so the
 look stays consistent across menus. Each function is a stateless drawing
-operation; menus own the layout and event loop.
+operation. Menus own the layout and event loop.
 """
 
 from __future__ import annotations
@@ -16,21 +16,15 @@ from factoriax.playground.ui import theme as _theme
 
 
 class InputSourceTracker:
-    """Tracks whether mouse motion or keyboard nav last moved the selection.
+    """Record which input device moved the selection last.
 
-    Menus use this to decide when mouse hover should commit to the selection:
-    only while :attr:`mouse_active` is ``True``. The flag flips to ``True``
-    when the cursor position changes between :meth:`tick` calls; the caller
-    invokes :meth:`mark_keyboard` on every keyboard navigation action so a
-    stationary cursor doesn't immediately drag the highlight back to wherever
-    the mouse happens to rest.
+    A menu takes the mouse hover only while :attr:`mouse_active` is ``True``.
+    That flag becomes ``True`` when the cursor moves between two calls to
+    :meth:`tick`.
 
-    Parameters
-    ----------
-
-    Returns
-    -------
-
+    The caller calls :meth:`mark_keyboard` for each keyboard action. A cursor
+    that does not move therefore leaves the selection where the keyboard put
+    it.
     """
 
     def __init__(self) -> None:
@@ -38,29 +32,23 @@ class InputSourceTracker:
         self.mouse_active: bool = False
 
     def tick(self) -> None:
-        """Sample the cursor; sets ``mouse_active`` True if it moved this frame."""
+        """Read the cursor, and record whether it moved since the last call."""
         current = pygame.mouse.get_pos()
         if current != self._prev_mouse:
             self.mouse_active = True
         self._prev_mouse = current
 
     def mark_keyboard(self) -> None:
-        """The keyboard just navigated — mouse hover takes a back seat."""
+        """Record that the keyboard moved the selection.
+
+        The mouse hover then stops until the mouse moves again, so the two
+        input devices do not fight over the selection.
+        """
         self.mouse_active = False
 
 
 def rgba_to_surface(rgba: np.ndarray) -> pygame.Surface:
-    """Convert an RGBA uint8 array of shape ``(H, W, 4)`` to a Surface.
-
-    Parameters
-    ----------
-    rgba: np.ndarray :
-
-
-    Returns
-    -------
-
-    """
+    """Convert an RGBA uint8 array of shape ``(H, W, 4)`` to a Surface."""
     h, w = rgba.shape[:2]
     surface = pygame.Surface((w, h), pygame.SRCALPHA)
     pygame.surfarray.blit_array(surface, rgba[:, :, :3].transpose(1, 0, 2))
@@ -69,17 +57,7 @@ def rgba_to_surface(rgba: np.ndarray) -> pygame.Surface:
 
 
 def _border_color(focused: bool) -> tuple[int, int, int]:
-    """
-
-    Parameters
-    ----------
-    focused: bool :
-
-
-    Returns
-    -------
-
-    """
+    """Return the border color of a panel that has the focus, or does not."""
     return _theme.BORDER[:3] if focused else _theme.BORDER_INACTIVE
 
 
@@ -91,26 +69,22 @@ def draw_panel(
     *,
     focused: bool = True,
 ) -> None:
-    """Rounded panel with optional title broken into the top border line.
+    """Draw a panel with round corners.
+
+    A title sits in a gap in the top border line.
 
     Parameters
     ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    title: str | None :
-         (Default value = None)
-    title_font: pygame.font.Font | None :
-         (Default value = None)
-    * :
-
-    focused: bool :
-         (Default value = True)
-
-    Returns
-    -------
-
+    surf
+        Surface to draw on.
+    rect
+        Area of the panel.
+    title
+        Text for the top border line. ``None`` draws no title.
+    title_font
+        Font for the title. ``None`` draws no title.
+    focused
+        ``True`` draws the border in the color of the active panel.
     """
     radius = _theme.BORDER_RADIUS
     pygame.draw.rect(surf, _theme.MENU_PANEL_BG, rect, border_radius=radius)
@@ -138,28 +112,22 @@ def draw_button(
     focused: bool = False,
     hovered: bool = False,
 ) -> None:
-    """Rounded button matching the panel style.
+    """Draw a button with round corners, in the style of a panel.
 
     Parameters
     ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    label: str :
-
-    font: pygame.font.Font :
-
-    * :
-
-    focused: bool :
-         (Default value = False)
-    hovered: bool :
-         (Default value = False)
-
-    Returns
-    -------
-
+    surf
+        Surface to draw on.
+    rect
+        Area of the button.
+    label
+        Text at the center of the button.
+    font
+        Font for the label.
+    focused
+        ``True`` draws the button as the selected one.
+    hovered
+        ``True`` draws the button under the mouse.
     """
     radius = _theme.BORDER_RADIUS
     fill = _theme.BUTTON_HOVER if hovered or focused else _theme.BUTTON_FILL
@@ -183,25 +151,7 @@ def draw_hint_bar(
     text: str,
     font: pygame.font.Font,
 ) -> None:
-    """Centered hint text in :data:`theme.HINT_COLOR`.
-
-    Parameters
-    ----------
-    surf: pygame.Surface :
-
-    sw: int :
-
-    y: int :
-
-    text: str :
-
-    font: pygame.font.Font :
-
-
-    Returns
-    -------
-
-    """
+    """Centered hint text in :data:`theme.HINT_COLOR`."""
     hint_surf = font.render(text, False, _theme.HINT_COLOR)
     surf.blit(hint_surf, ((sw - hint_surf.get_width()) // 2, y))
 
@@ -209,21 +159,9 @@ def draw_hint_bar(
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     """Word-wrap ``text`` to fit ``max_width`` using ``font``.
 
-    Newlines become explicit breaks; empty paragraphs become empty lines so
-    the source's vertical rhythm is preserved. Words longer than ``max_width``
+    Newlines become explicit breaks. Empty paragraphs become empty lines so
+    the line breaks of the source stay. A word longer than ``max_width``
     are kept on their own line (no character-level splitting).
-
-    Parameters
-    ----------
-    text: str :
-
-    font: pygame.font.Font :
-
-    max_width: int :
-
-
-    Returns
-    -------
 
     """
     lines: list[str] = []
@@ -257,55 +195,24 @@ class SettingField:
     max_value: float
 
     def clamp(self, value: float) -> float:
-        """Clamp ``value`` to ``[min_value, max_value]`` and cast to the type.
-
-        Parameters
-        ----------
-        value: float :
-
-
-        Returns
-        -------
-
-        """
+        """Clamp ``value`` to ``[min_value, max_value]`` and cast to the type."""
         value = max(self.min_value, min(self.max_value, value))
         if not self.is_float:
             return float(int(value))
         return round(value, 2)
 
     def format(self, value: float) -> str:
-        """Format ``value`` for display in the right-hand column.
-
-        Parameters
-        ----------
-        value: float :
-
-
-        Returns
-        -------
-
-        """
+        """Format ``value`` for display in the right-hand column."""
         if self.is_float:
             return f"{value:.2f}"
         return str(int(value))
 
 
 def list_row_rects(rect: pygame.Rect, n_rows: int) -> list[pygame.Rect]:
-    """
+    """Return the rectangle of each row of a list.
 
-    Parameters
-    ----------
-    rect: pygame.Rect :
-
-    n_rows: int :
-
-
-    Returns
-    -------
-    type
-        Single source of truth for the list layout so callers can hit-test
-        against the same coordinates :func:`draw_list_rows` draws into.
-
+    :func:`draw_list_rows` draws into these same rectangles. A caller that
+    tests a mouse position therefore reads the layout from one place.
     """
     rects: list[pygame.Rect] = []
     inner_x = rect.left + _theme.ROW_PAD
@@ -323,13 +230,6 @@ class SettingSection:
 
     Used by :func:`draw_setting_sections` to render an editable settings list
     with elegant headings and dividers between groups.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     title: str
@@ -344,13 +244,6 @@ class LabelValueSection:
     arbitrary strings the caller pre-formats (key bindings, toggle state,
     enum-style choices). The active row gets the gold-fill highlight but no
     chevron decoration — there are no arrow-adjust semantics to advertise.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     title: str
@@ -369,24 +262,24 @@ def setting_section_layout(
 ) -> tuple[list[pygame.Rect], list[tuple[int, int]], int]:
     """Compute per-field row rects, per-section heading positions, and bottom y.
 
-    Single source of truth for the sectioned-settings layout; the drawer and
-    callers that need to position a button below the block (or hit-test the
-    rows) share these coordinates.
+    The drawer and every caller read the layout from this one function. A
+    caller can therefore put a button under the block, or test a mouse
+    position, against the same coordinates.
 
     Parameters
     ----------
-    rect: pygame.Rect :
-
-    sections: tuple[SettingSection :
-
-    ...] | list[SettingSection] :
-
-    heading_h: int :
-
+    rect
+        Area that holds the sections.
+    sections
+        Sections to lay out, in order.
+    heading_h
+        Height of one heading in pixels.
 
     Returns
     -------
-
+    tuple[list[pygame.Rect], list[tuple[int, int]], int]
+        The rectangle of each row, the position of each heading, and the row
+        under the last section.
     """
     inner_x = rect.left + _theme.ROW_PAD
     inner_w = rect.width - 2 * _theme.ROW_PAD
@@ -421,36 +314,30 @@ def draw_setting_sections(
 ) -> tuple[list[pygame.Rect], int]:
     """Render sectioned setting rows with headings and dividers.
 
-    ``values`` is a flat list aligned with the concatenation of every
-    section's ``fields``; ``selected_idx`` indexes into that same flat list.
-
     Parameters
     ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    sections: tuple[SettingSection :
-
-    ...] | list[SettingSection] :
-
-    values: list[float] :
-
-    selected_idx: int :
-
-    focused: bool :
-
-    font: pygame.font.Font :
-
-    heading_font: pygame.font.Font :
-
+    surf
+        Surface to draw on.
+    rect
+        Area that holds the rows.
+    sections
+        Sections to draw, in order. Each one has a heading and its rows.
+    values
+        Value of every row, as one flat list. It follows the order of the rows
+        of every section, one section after the other.
+    selected_idx
+        Index into ``values`` of the selected row.
+    focused
+        ``True`` draws the selected row as active.
+    font
+        Font for a row.
+    heading_font
+        Font for a heading.
 
     Returns
     -------
-
         ``(row_rects, bottom_y)`` — for hit-testing and positioning content
         below the rendered block.
-
     """
     heading_h = heading_font.get_height()
     row_rects, heading_positions, bottom_y = setting_section_layout(
@@ -508,22 +395,22 @@ def label_value_section_layout(
     sections: tuple[LabelValueSection, ...] | list[LabelValueSection],
     heading_h: int,
 ) -> tuple[list[pygame.Rect], list[tuple[int, int]], int]:
-    """Per-row rects, heading positions, and bottom y for label/value sections.
+    """Return the layout of a block of label and value sections.
 
     Parameters
     ----------
-    rect: pygame.Rect :
-
-    sections: tuple[LabelValueSection :
-
-    ...] | list[LabelValueSection] :
-
-    heading_h: int :
-
+    rect
+        Area that holds the sections.
+    sections
+        Sections to lay out, in order.
+    heading_h
+        Height of one heading in pixels.
 
     Returns
     -------
-
+    tuple[list[pygame.Rect], list[tuple[int, int]], int]
+        The rectangle of each row, the position of each heading, and the row
+        under the last section.
     """
     inner_x = rect.left + _theme.ROW_PAD
     inner_w = rect.width - 2 * _theme.ROW_PAD
@@ -558,35 +445,28 @@ def draw_label_value_sections(
 ) -> tuple[list[pygame.Rect], int]:
     """Render sectioned label/value rows for bindings, toggles, choices.
 
-    Same visual treatment as :func:`draw_setting_sections` but values are
-    arbitrary strings supplied by the caller; the active row gets the gold
-    highlight without chevron decoration. ``values`` is a flat list aligned
-    with the concatenation of every section's ``labels``.
+    The rows look the same as the rows of :func:`draw_setting_sections`. The
+    caller gives each value as text, and the selected row gets no chevron.
 
     Parameters
     ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    sections: tuple[LabelValueSection :
-
-    ...] | list[LabelValueSection] :
-
-    values: list[str] :
-
-    selected_idx: int :
-
-    focused: bool :
-
-    font: pygame.font.Font :
-
-    heading_font: pygame.font.Font :
-
-
-    Returns
-    -------
-
+    surf
+        Surface to draw on.
+    rect
+        Area that holds the rows.
+    sections
+        Sections to draw, in order. Each one has a heading and its rows.
+    values
+        Value of every row, as one flat list. It follows the order of the rows
+        of every section, one section after the other.
+    selected_idx
+        Index into ``values`` of the selected row.
+    focused
+        ``True`` draws the selected row as active.
+    font
+        Font for a row.
+    heading_font
+        Font for a heading.
     """
     heading_h = heading_font.get_height()
     row_rects, heading_positions, bottom_y = label_value_section_layout(
@@ -648,33 +528,30 @@ def draw_setting_rows(
 ) -> list[pygame.Rect]:
     """Render ``label … value`` rows for an editable settings list.
 
-    When ``focused`` and ``i == selected_idx``, the row gets a gold fill and
-    the value is wrapped with ``<  value  >`` chevrons to signal that
-    Left/Right adjusts it. Returns the row rects so the caller can hit-test
-    mouse clicks against the same coordinates.
+    The selected row gets a gold fill, and chevrons around the value. The
+    chevrons tell the user that Left and Right change this value.
 
     Parameters
     ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    fields: tuple[SettingField :
-
-    ...] | list[SettingField] :
-
-    values: list[float] :
-
-    selected_idx: int :
-
-    focused: bool :
-
-    font: pygame.font.Font :
-
+    surf
+        Surface to draw on.
+    rect
+        Area that holds the rows.
+    fields
+        Setting of each row, in order.
+    values
+        Value of each row, in the same order as ``fields``.
+    selected_idx
+        Index of the selected row.
+    focused
+        ``True`` draws the selected row as active.
+    font
+        Font for a row.
 
     Returns
     -------
-
+    list[pygame.Rect]
+        The rectangle of each row, so a caller can test a mouse position.
     """
     rects = list_row_rects(rect, len(fields))
     for i, (fld, value, row_rect) in enumerate(zip(fields, values, rects, strict=True)):
@@ -719,25 +596,7 @@ def draw_list_rows(
     selected_idx: int,
     font: pygame.font.Font,
 ) -> None:
-    """Render a vertically-stacked selectable list inside ``rect``.
-
-    Parameters
-    ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    rows: list[str] :
-
-    selected_idx: int :
-
-    font: pygame.font.Font :
-
-
-    Returns
-    -------
-
-    """
+    """Render a vertically-stacked selectable list inside ``rect``."""
     for i, (row, row_rect) in enumerate(
         zip(rows, list_row_rects(rect, len(rows)), strict=True)
     ):
@@ -771,25 +630,7 @@ def draw_description(
     scroll: int,
     font: pygame.font.Font,
 ) -> int:
-    """Render wrapped scrollable text in ``rect``. Returns the clamped scroll.
-
-    Parameters
-    ----------
-    surf: pygame.Surface :
-
-    rect: pygame.Rect :
-
-    text: str :
-
-    scroll: int :
-
-    font: pygame.font.Font :
-
-
-    Returns
-    -------
-
-    """
+    """Render wrapped scrollable text in ``rect``. Returns the clamped scroll."""
     inner_x = rect.left + _theme.DOC_PAD
     inner_y = rect.top + _theme.DOC_PAD
     inner_w = rect.width - 2 * _theme.DOC_PAD - _theme.SCROLLBAR_W - 4
@@ -836,13 +677,6 @@ class DecorationStrip:
     Stateless: ``draw`` derives the animation phase from ``time_ms`` (typically
     ``pygame.time.get_ticks()``). Build one with the
     :meth:`factoriax_default` factory or by populating the fields manually.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     surfaces: tuple[pygame.Surface, ...]
@@ -858,17 +692,7 @@ class DecorationStrip:
         """Build the standard 8-slot strip: player, miner, 4×belt, arm, pallet.
 
         Ore travels across the four belt slots (indices 2-5) and onto the arm
-        (index 6); the player and miner slots stay clear.
-
-        Parameters
-        ----------
-        icon_size: int :
-
-        icon_gap: int :
-             (Default value = 10)
-
-        Returns
-        -------
+        (index 6). The player and miner slots stay clear.
 
         """
         from factoriax.engine.constants import Direction, ItemType
@@ -906,7 +730,7 @@ class DecorationStrip:
 
     @property
     def total_width(self) -> int:
-        """ """
+        """Total width of every icon and every gap between them."""
         if not self.surfaces:
             return 0
         return sum(s.get_width() for s in self.surfaces) + self.icon_gap * (
@@ -915,27 +739,11 @@ class DecorationStrip:
 
     @property
     def height(self) -> int:
-        """ """
+        """Height of one icon, which is the height of the whole row."""
         return self.icon_size
 
     def draw(self, surf: pygame.Surface, x: int, y: int, time_ms: int) -> None:
-        """Blit every icon left-to-right at ``(x, y)`` and overlay the ore.
-
-        Parameters
-        ----------
-        surf: pygame.Surface :
-
-        x: int :
-
-        y: int :
-
-        time_ms: int :
-
-
-        Returns
-        -------
-
-        """
+        """Blit every icon left-to-right at ``(x, y)`` and overlay the ore."""
         dx = x
         slot_positions: list[int] = []
         for sprite in self.surfaces:

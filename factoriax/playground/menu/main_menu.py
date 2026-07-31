@@ -29,7 +29,7 @@ _FPS: int = 30
 
 @dataclass(frozen=True)
 class _MenuOption:
-    """ """
+    """One entry of the main menu, with the name that the menu shows."""
 
     action: str
     label: str
@@ -80,23 +80,12 @@ def run_main_menu(
     kb_lookup: KeyLookup | None = None,
     ctrl_lookup: ControllerLookup | None = None,
 ) -> str | None:
-    """Show the main menu and return the user's choice.
-
-    Parameters
-    ----------
-    screen: pygame.Surface :
-
-    kb_lookup: KeyLookup | None :
-         (Default value = None)
-    ctrl_lookup: ControllerLookup | None :
-         (Default value = None)
+    """Show the main menu, and return the entry that the user selected.
 
     Returns
     -------
-
         ``"play"``, ``"editor"``, ``"settings"``, or ``None``
         (quit / window closed).
-
     """
     from factoriax.playground.config import (
         build_controller_lookup,
@@ -131,17 +120,7 @@ def run_main_menu(
     input_source = panels.InputSourceTracker()
 
     def _resolve(action: str) -> str | None:
-        """
-
-        Parameters
-        ----------
-        action: str :
-
-
-        Returns
-        -------
-
-        """
+        """Return the action to report, or ``None`` to leave the game."""
         return None if action == "quit" else action
 
     while True:
@@ -198,9 +177,9 @@ def run_main_menu(
                 selected_idx = (selected_idx + 1) % len(_OPTIONS)
                 input_source.mark_keyboard()
 
-        # Hover commits to selected_idx, but only when the mouse is the most
-        # recent input — otherwise the stationary cursor would drag the
-        # selection back over a fresh keyboard press.
+        # The hover moves selected_idx only when the mouse moved last. If it
+        # moved at any time, a cursor that rests on a row pulls the selection
+        # away from the row that the keyboard selected.
         input_source.tick()
         if input_source.mouse_active:
             mx, my = canvas.to_canvas(*pygame.mouse.get_pos())

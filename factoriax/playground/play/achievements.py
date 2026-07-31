@@ -1,10 +1,11 @@
 """Free-play achievement ladder for the interactive client.
 
-A tutorial progression that walks a human player from hand-mining raw ore
-to launching a rocket, one mechanic at a time. The hints are keyboard
-instructions, so this ladder is specific to the playground — research
-scenarios declare their own sets next to the env that uses them, and none
-of them share this one.
+The ladder takes a human player from mining raw ore by hand to a rocket
+launch, one mechanic at a time.
+
+Each hint names a key, so this ladder belongs to the playground. A research
+scenario declares its own set, next to the env that reads it. No scenario
+shares this ladder.
 
 Not registered as a scenario: free play builds its env directly in
 :mod:`factoriax.playground.play.main`, so the ladder never enters the

@@ -14,13 +14,6 @@ class ClickRegion:
     """Represents a clickable rectangular area in the UI.
 
     Coordinates are in base render resolution (before window scaling).
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
     """
 
     x: int
@@ -42,18 +35,10 @@ def hit_test_regions(regions: list[ClickRegion], x: int, y: int) -> ClickRegion 
         X coordinate in base resolution.
     y :
         Y coordinate in base resolution.
-    regions: list[ClickRegion] :
-
-    x: int :
-
-    y: int :
-
 
     Returns
     -------
-
         The first matching ClickRegion, or None if no hit.
-
     """
     for region in regions:
         if region.x <= x < region.x + region.w and region.y <= y < region.y + region.h:
@@ -94,32 +79,12 @@ def draw_panel(
         Border RGBA colour.
     border_px :
         Border thickness in pixels.
-    overlay: np.ndarray :
-
-    x: int :
-
-    y: int :
-
-    w: int :
-
-    h: int :
 
     * :
-
-    bg: tuple[int :
 
     int :
 
     int] | None :
-         (Default value = None)
-    border: tuple[int :
-
-    border_px: int | None :
-         (Default value = None)
-
-    Returns
-    -------
-
     """
     if bg is None:
         bg = _theme.PANEL_BG

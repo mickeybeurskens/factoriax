@@ -62,32 +62,15 @@ def _run_with_loading_screen(
         Text to show while waiting.
     fn :
         Blocking callable to run in the background.
-    screen : pygame.Surface :
-
-    message : str :
-
-    fn : Callable[[] :
 
     object] :
-
-    screen: pygame.Surface :
-
-    message: str :
-
-    fn: Callable[[] :
-
-
-    Returns
-    -------
-
-
     """
     import threading
 
     result: list[object] = []
 
     def _worker() -> None:
-        """ """
+        """Run the slow call, and keep its result for the main thread."""
         result.append(fn())
 
     thread = threading.Thread(target=_worker)
@@ -139,29 +122,8 @@ def play_level(
         Existing pygame display surface.  If ``None`` a new
         window is created and destroyed on exit.
     seed :
-        PRNG seed for world generation. When ``None`` the player's
+        Seed for the new world. ``None`` takes the seed of the player
         stored :attr:`PlayerConfig.seed` is loaded from disk.
-    level : Level :
-
-    num_players : int :
-        (Default value = 1)
-    screen : pygame.Surface | None :
-        (Default value = None)
-    seed : int | None :
-        (Default value = None)
-    level: Level :
-
-    num_players: int :
-         (Default value = 1)
-    screen: pygame.Surface | None :
-         (Default value = None)
-    seed: int | None :
-         (Default value = None)
-
-    Returns
-    -------
-
-
     """
     owns_pygame = screen is None
     if owns_pygame:
@@ -215,18 +177,15 @@ _MOUSE_DIR_TO_FACE: dict[int, int] = {
 
 
 def _init_joystick() -> pygame.joystick.JoystickType | None:
-    """Initialize the first available joystick, if any.
+    """Start the first joystick, and return it.
 
-    Safe to call multiple times; pygame's joystick subsystem is
-    initialized idempotently.
-
-    Parameters
-    ----------
+    A second call is safe. The joystick part of pygame starts one time only,
+    and a later call changes nothing.
 
     Returns
     -------
-
-
+    pygame.joystick.JoystickType or None
+        The first joystick. It is ``None`` when no joystick is present.
     """
     pygame.joystick.init()
     if pygame.joystick.get_count() == 0:
@@ -251,19 +210,6 @@ def _poll_stick_actions(
         Initialized pygame joystick.
     ctrl_lookup :
         Controller lookup from config.
-    joystick : pygame.joystick.JoystickType :
-
-    ctrl_lookup : ControllerLookup :
-
-    joystick: pygame.joystick.JoystickType :
-
-    ctrl_lookup: ControllerLookup :
-
-
-    Returns
-    -------
-
-
     """
     result: frozenset[str] = frozenset()
     for axis in range(joystick.get_numaxes()):
@@ -285,19 +231,6 @@ def _tile_pixel_size(map_w: int, map_h: int) -> int:
         Map width in tiles.
     map_h :
         Map height in tiles.
-    map_w : int :
-
-    map_h : int :
-
-    map_w: int :
-
-    map_h: int :
-
-
-    Returns
-    -------
-
-
     """
     world_h = _BASE_UI_SIZE * _play_theme.UI_SCALE - _hotbar_h()
     return max(8, min(_BASE_UI_SIZE * _play_theme.UI_SCALE // map_w, world_h // map_h))
@@ -321,27 +254,6 @@ def _mouse_facing_direction(
         Player center x in UI coordinates.
     player_screen_y :
         Player center y in UI coordinates.
-    mx : int :
-
-    my : int :
-
-    player_screen_x : int :
-
-    player_screen_y : int :
-
-    mx: int :
-
-    my: int :
-
-    player_screen_x: int :
-
-    player_screen_y: int :
-
-
-    Returns
-    -------
-
-
     """
     dx = mx - player_screen_x
     dy = my - player_screen_y
@@ -382,43 +294,6 @@ def _handle_welcome_event(
         UI canvas width.
     ui_h :
         UI canvas height.
-    event : pygame.event.Event :
-
-    ps : PlayState :
-
-    state : EnvState :
-
-    win_ox : int :
-
-    win_oy : int :
-
-    win_scale : int :
-
-    ui_w : int :
-
-    ui_h : int :
-
-    event: pygame.event.Event :
-
-    ps: PlayState :
-
-    state: EnvState :
-
-    win_ox: int :
-
-    win_oy: int :
-
-    win_scale: int :
-
-    ui_w: int :
-
-    ui_h: int :
-
-
-    Returns
-    -------
-
-
     """
     if event.type == pygame.KEYDOWN:
         if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
@@ -439,64 +314,27 @@ def _play_loop(
     kb_lookup: KeyLookup | None = None,
     ctrl_lookup: ControllerLookup | None = None,
 ) -> None:
-    """Run the full interactive game loop with all menus and controls.
+    """Run the game loop, with every menu and every control.
 
     Parameters
     ----------
-        env: FactoriaX environment instance with achievement_fn bound.
-            When ``env._level`` is set, resets materialize that level;
-            otherwise resets generate procedurally from the PRNG key.
-        state: Initial environment state.
-
-    Parameters
-    ----------
-    screen :
-        Pygame display surface
-    rng :
-        JAX random key
-    kb_lookup :
-        Key lookup table from
-    from :
-        default bindings when
-    ctrl_lookup :
-        Controller lookup from
-    func :
-        build_controller_lookup
-    bindings :
-        when
-    env : FactoriaxEnv :
-
-    state : EnvState :
-
-    params : EnvParams :
-
-    screen : pygame.Surface :
-
-    rng : jax.Array :
-
-    kb_lookup : KeyLookup | None :
-        (Default value = None)
-    ctrl_lookup : ControllerLookup | None :
-        (Default value = None)
-    env: FactoriaxEnv :
-
-    state: EnvState :
-
-    params: EnvParams :
-
-    screen: pygame.Surface :
-
-    rng: jax.Array :
-
-    kb_lookup: KeyLookup | None :
-         (Default value = None)
-    ctrl_lookup: ControllerLookup | None :
-         (Default value = None)
-
-    Returns
-    -------
-
-
+    env
+        Environment to step. It holds the achievement function. If it holds a
+        level, a reset builds that level. If it holds no level, a reset builds
+        a new world from the random key.
+    state
+        State to start from.
+    params
+        Environment parameters for the whole session.
+    screen
+        Display surface to draw on.
+    rng
+        Random key. The loop splits it for each reset.
+    kb_lookup
+        Key lookup table. ``None`` takes the default keyboard bindings.
+    ctrl_lookup
+        Controller lookup table. ``None`` takes the default controller
+        bindings.
     """
     if kb_lookup is None:
         kb_lookup = build_key_lookup(default_keyboard())
@@ -508,7 +346,7 @@ def _play_loop(
     # !! INTENTIONAL JIT WARMUP — DO NOT REMOVE !!
     # The first call to step_fn triggers JAX JIT compilation (~5s).
     # Running it behind a loading screen prevents a freeze on the
-    # player's first input.
+    # first input of the player.
     #
     # The action MUST be int(), not jnp.int32(), to avoid a
     # weak-type retrace. The state from reset MUST have matching
@@ -520,7 +358,7 @@ def _play_loop(
     _st = state
 
     def _warmup() -> tuple[jax.Array, EnvState]:
-        """ """
+        """Step the engine one time, to compile the step before the first frame."""
         _, s, _, _, _ = step_fn(_wk, _st, int(Action.NOOP), params)
         return _wk, s
 
@@ -624,8 +462,8 @@ def _play_loop(
 
         if action != int(Action.NOOP):
             rng, step_key = random.split(rng)
-            # action MUST be plain int to match the warmup trace type.
-            # IntEnum or jnp.int32 would cause a JIT retrace.
+            # The action MUST be a plain int, to match the warmup trace.
+            # An IntEnum or a jnp.int32 makes JAX trace the step again.
             action = int(action)
             obs, state, reward, done, info = step_fn(
                 step_key,
@@ -696,41 +534,23 @@ def _save_recorded_trajectory(
     rewards: list[float],
     params: EnvParams,
 ) -> None:
-    """Save a recorded play session as a timestamped .npz trajectory.
+    """Write a recorded play session to an ``.npz`` file.
+
+    The file name holds the date and the time, so a second recording writes a
+    second file. The trajectory holds the parameters of the session, so a
+    replay reads back the same world.
 
     Parameters
     ----------
-        states: List of EnvState snapshots.
-        actions: List of action integers.
-        rewards: List of reward floats.
-
-    Parameters
-    ----------
-    env_params_scheme :
-        so replay reproduces the captured
-    items_mined :
-        under non
-    states : list[EnvState] :
-
-    actions : list[int] :
-
-    rewards : list[float] :
-
-    params : EnvParams :
-
-    states: list[EnvState] :
-
-    actions: list[int] :
-
-    rewards: list[float] :
-
-    params: EnvParams :
-
-
-    Returns
-    -------
-
-
+    states
+        State after each step, and the state that the session started from.
+    actions
+        Action of each step. A shorter list gets zeros at the end, to reach
+        the length of ``states``.
+    rewards
+        Reward of each step. A shorter list gets zeros at the end.
+    params
+        Environment parameters of the session.
     """
     from datetime import datetime
 
@@ -769,14 +589,6 @@ def main(screen: pygame.Surface | None = None) -> None:
         Shift+1-2: Quick-select inventory slot 9-10
         Ctrl+1-9: Select player (if that many players exist)
         Escape: Close menus / Open pause menu (with Reset option)
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-
-
     """
     owns_pygame = screen is None
     if owns_pygame:
@@ -789,7 +601,7 @@ def main(screen: pygame.Surface | None = None) -> None:
     pygame.display.set_caption("FactoriaX")
 
     def _make_env() -> tuple[FactoriaxEnv, EnvParams]:
-        """ """
+        """Build the free play environment and its parameters."""
         e = FactoriaxEnv(achievement_fn=free_play_conditions)
         return e, e.default_params
 

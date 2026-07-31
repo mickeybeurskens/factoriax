@@ -15,14 +15,10 @@ def _get_monitor_size() -> tuple[int, int]:
     This function captures the true monitor dimensions once and
     reuses them for all subsequent calls.
 
-    Parameters
-    ----------
-
     Returns
     -------
     type
         ``(width, height)`` of the primary monitor in pixels.
-
     """
     global _monitor_size  # noqa: PLW0603
     if _monitor_size is None:
@@ -47,18 +43,10 @@ def calculate_window_size(
         Base render height in pixels.
     scale_factor :
         Fraction of screen to use (0.0 to 1.0).
-    base_width: int :
-
-    base_height: int :
-
-    scale_factor: float :
-         (Default value = 0.8)
 
     Returns
     -------
-
         ``(window_width, window_height)`` in pixels.
-
     """
     monitor_w, monitor_h = _get_monitor_size()
     max_width = int(monitor_w * scale_factor)
@@ -81,14 +69,10 @@ def auto_ui_scale(base_size: int = 1024) -> int:
     ----------
     base_size :
         Logical base resolution (default 1024).
-    base_size: int :
-         (Default value = 1024)
 
     Returns
     -------
-
         Integer scale factor (1, 2, or 3).
-
     """
     monitor_w, monitor_h = _get_monitor_size()
     limit_w = int(monitor_w * 0.8)

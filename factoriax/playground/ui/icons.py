@@ -75,7 +75,7 @@ BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
 }
 
 # Ores rendered with a crystal-pattern overlay rather than the default
-# blob pattern. Currently SILICON only; the set leaves room for future
+# blob pattern. Currently SILICON only. The set leaves room for future
 # crystalline ores without touching the texture code.
 _CRYSTALLINE_ORES: frozenset[int] = frozenset({int(BlockType.SILICON)})
 
@@ -99,16 +99,10 @@ def _resize_texture(texture: np.ndarray, size: int) -> np.ndarray:
         RGBA array of shape (H, W, 4).
     size :
         Target side length in pixels.
-    texture: np.ndarray :
-
-    size: int :
-
 
     Returns
     -------
-
         RGBA array of shape (size, size, 4).
-
     """
     src_size = texture.shape[0]
     if src_size == size:
@@ -130,20 +124,14 @@ def _solid_texture(
         Side length in pixels.
     color :
         RGB color.
-    size: int :
-
-    color: tuple[int :
 
     int :
 
     int] :
 
-
     Returns
     -------
-
         RGBA uint8 array of shape ``(size, size, 4)``.
-
     """
     t = np.empty((size, size, 4), dtype=np.uint8)
     t[:, :] = (*color, 255)
@@ -153,23 +141,19 @@ def _solid_texture(
 def create_default_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
     """Create patterned block textures without touching disk.
 
-    Ore blocks get the same irregular-patches pattern used by their
-    inventory icons so the tile, the mined item, and any plate that
-    descends from it all share a visual family. Non-ore blocks stay
+    An ore block takes the same patch pattern as its inventory icon. The
+    tile, the mined item, and the plate that comes from it therefore look
+    like one family. Every other block stays
     solid.
 
     Parameters
     ----------
     size :
         Side length of each texture in pixels.
-    size: int :
-         (Default value = BLOCK_PIXEL_SIZE)
 
     Returns
     -------
-
         Dictionary mapping BlockType values to RGBA texture arrays.
-
     """
     textures: dict[int, np.ndarray] = {
         block_id: _solid_texture(size, BLOCK_COLORS[block_id])
@@ -192,19 +176,15 @@ def load_texture(name: str) -> np.ndarray:
     ----------
     name :
         Name of the texture file (without extension).
-    name: str :
-
 
     Returns
     -------
-
         RGBA numpy array of shape (BLOCK_PIXEL_SIZE, BLOCK_PIXEL_SIZE, 4).
 
     Raises
     ------
     FileNotFoundError
         If the texture file does not exist.
-
     """
     import imageio.v3 as iio
 
@@ -217,14 +197,9 @@ def load_texture(name: str) -> np.ndarray:
 def load_all_textures() -> dict[int, np.ndarray]:
     """Load all block textures into a dictionary.
 
-    Parameters
-    ----------
-
     Returns
     -------
-
         Dictionary mapping BlockType values to RGBA texture arrays.
-
     """
     textures: dict[int, np.ndarray] = {}
     texture_names = {
@@ -244,23 +219,22 @@ def load_all_textures() -> dict[int, np.ndarray]:
 
 @functools.lru_cache(maxsize=8)
 def get_textures(size: int = BLOCK_PIXEL_SIZE) -> dict[int, np.ndarray]:
-    """Load textures from files, falling back to defaults if not found.
+    """Return the block textures at one size.
 
-    Results are cached per ``size`` so disk I/O and resizing happen at
-    most once per unique block pixel size across the entire process.
+    The function reads the texture files. If a file is absent, it builds the
+    default pattern instead.
+
+    The cache holds the textures of each size, so the process reads the disk
+    and resizes one time only for each size.
 
     Parameters
     ----------
     size :
         Required texture side length in pixels.
-    size: int :
-         (Default value = BLOCK_PIXEL_SIZE)
 
     Returns
     -------
-
         Dictionary mapping BlockType values to RGBA texture arrays
-
     """
     try:
         raw = load_all_textures()
@@ -280,14 +254,10 @@ def build_texture_lookup(size: int) -> np.ndarray:
     ----------
     size :
         Block pixel size.
-    size: int :
-
 
     Returns
     -------
-
         Array of shape (max_block_id + 1, size, size, 4).
-
     """
     textures = get_textures(size)
     max_id = max(textures.keys())
@@ -338,20 +308,10 @@ def create_player_texture(
         Whether this player is currently selected
     size :
         Side length of the texture in pixels
-    direction: int :
-         (Default value = Direction.DOWN)
-    player_idx: int :
-         (Default value = 0)
-    is_selected: bool :
-         (Default value = True)
-    size: int :
-         (Default value = BLOCK_PIXEL_SIZE)
 
     Returns
     -------
-
         RGBA numpy array of shape (size, size, 4)
-
     """
     player = np.zeros((size, size, 4), dtype=np.uint8)
     center = size // 2
@@ -414,16 +374,10 @@ def create_player_start_icon(
         Player index (determines colour).
     size :
         Side length of the icon in pixels.
-    player_idx: int :
-         (Default value = 0)
-    size: int :
-         (Default value = BLOCK_PIXEL_SIZE)
 
     Returns
     -------
-
         RGBA numpy array of shape ``(size, size, 4)``.
-
     """
     icon = np.zeros((size, size, 4), dtype=np.uint8)
     center = size // 2
@@ -455,14 +409,10 @@ def create_biter_texture(size: int = BLOCK_PIXEL_SIZE) -> np.ndarray:
     ----------
     size :
         Side length of the texture in pixels.
-    size: int :
-         (Default value = BLOCK_PIXEL_SIZE)
 
     Returns
     -------
-
         RGBA numpy array of shape (size, size, 4).
-
     """
     texture = np.zeros((size, size, 4), dtype=np.uint8)
     center = size // 2
@@ -519,20 +469,6 @@ def _draw_chevron(
         Half-extent of the arrow in pixels.
     direction :
         Direction.LEFT / RIGHT / UP / DOWN.
-    image: np.ndarray :
-
-    cy: int :
-
-    cx: int :
-
-    size: int :
-
-    direction: int :
-
-
-    Returns
-    -------
-
     """
     h, w = image.shape[:2]
     for d in range(-size, size + 1):
@@ -564,14 +500,6 @@ def _draw_belt_arrows(
         RGBA array of shape ``(size, size, 4)``, modified in place.
     direction :
         Action enum value for belt facing direction.
-    icon: np.ndarray :
-
-    direction: int :
-
-
-    Returns
-    -------
-
     """
     size = icon.shape[0]
     arrow_size = max(1, size // 8)
@@ -607,14 +535,6 @@ def _draw_miner_indicator(icon: np.ndarray, direction: int) -> None:
         in place.
     direction :
         ``Action`` direction the miner faces (output side).
-    icon: np.ndarray :
-
-    direction: int :
-
-
-    Returns
-    -------
-
     """
     size = icon.shape[0]
     mid = size // 2
@@ -654,14 +574,6 @@ def _draw_arm_indicator(icon: np.ndarray, direction: int) -> None:
         RGBA array modified in place.
     direction :
         ``Direction`` value the arm faces (output side).
-    icon: np.ndarray :
-
-    direction: int :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     mid = s // 2
@@ -718,20 +630,14 @@ def _shade(rgb: tuple[int, int, int], delta: int) -> tuple[int, int, int]:
         Base color.
     delta :
         Amount to add/subtract from each channel. Clamped to [0, 255].
-    rgb: tuple[int :
 
     int :
 
     int] :
 
-    delta: int :
-
-
     Returns
     -------
-
         Shifted RGB triple.
-
     """
     return tuple(max(0, min(255, c + delta)) for c in rgb)  # type: ignore[return-value]
 
@@ -745,12 +651,12 @@ def _draw_ore_patches(
 ) -> None:
     """Paint small speckly darker patches onto an ore icon.
 
-    Each "patch" is a scattered cluster of 3-7 small dots rather than a
-    smooth circular blob, so ore textures read as grainy rock instead of
-    polka dots. Distribution is deterministic for a given ``seed``.
+    A patch is a loose group of three to seven small dots, and not a round
+    blob. An ore texture therefore looks like rough rock. The same ``seed``
+    always gives the same dots.
 
     When ``crystalline`` is True, two to three deliberate bright facet
-    dots are placed near the center to signal silicon's glassy nature
+    dots sit near the center, to show that silicon is glassy
     without looking noisy.
 
     Parameters
@@ -763,24 +669,12 @@ def _draw_ore_patches(
         RNG seed controlling patch layout.
     crystalline :
         Whether to add a few bright facet highlights.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
 
-    seed: int :
-
     * :
-
-    crystalline: bool :
-         (Default value = False)
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 4:
@@ -847,18 +741,10 @@ def _draw_plate_shine(
         RGBA array modified in place.
     base_rgb :
         Base plate color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 4:
@@ -904,18 +790,10 @@ def _draw_wafer(
         RGBA array modified in place.
     base_rgb :
         Base wafer color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     _draw_plate_shine(icon, base_rgb)
     s = icon.shape[0]
@@ -936,7 +814,7 @@ def _draw_wire_helix(
 ) -> None:
     """Draw twin diagonal strands on a transparent background.
 
-    Two 2-pixel-thick diagonal strands in the wire's base color, with
+    Two diagonal strands, two pixels thick, in the base color of the wire, with
     a darker center line for depth. Background stays transparent.
 
     Parameters
@@ -945,18 +823,10 @@ def _draw_wire_helix(
         RGBA array modified in place (assumed transparent).
     base_rgb :
         Base wire color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 4:
@@ -994,18 +864,10 @@ def _draw_circuit_traces(
         RGBA array modified in place (assumed transparent).
     base_rgb :
         Base circuit (green) color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 6:
@@ -1037,18 +899,10 @@ def _draw_motor(
         RGBA array modified in place (assumed transparent).
     base_rgb :
         Base motor color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 6:
@@ -1091,18 +945,10 @@ def _draw_sensor_lens(
         RGBA array modified in place (assumed transparent).
     base_rgb :
         Base sensor body color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 6:
@@ -1138,18 +984,10 @@ def _draw_frame_ibeam(
         RGBA array modified in place (assumed transparent).
     base_rgb :
         Base frame color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 8:
@@ -1182,7 +1020,7 @@ def _draw_flask(
 ) -> None:
     """Draw a flask silhouette on a transparent background.
 
-    The bulb is filled with the base color; the neck, rim, and bulb
+    The bulb is filled with the base color. The neck, rim, and bulb
     outline are drawn in a darker shade. Advanced packs add a central
     glow.
 
@@ -1194,21 +1032,12 @@ def _draw_flask(
         Base flask color.
     advanced :
         If True, draw a central glow.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
 
     * :
-
-    advanced: bool :
-         (Default value = False)
-
-    Returns
-    -------
 
     """
     s = icon.shape[0]
@@ -1250,18 +1079,10 @@ def _draw_rocket(
         RGBA array modified in place (assumed transparent).
     base_rgb :
         Base rocket body color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 8:
@@ -1277,8 +1098,8 @@ def _draw_rocket(
     icon[body_top:body_bot, mid - body_w // 2 : mid - body_w // 2 + body_w] = body
     icon[body_top:body_bot, mid - body_w // 2] = dark
     icon[body_top:body_bot, mid - body_w // 2 + body_w - 1] = dark
-    # Conical nose: widest at the base (y just above the body) and tapering
-    # to a point at the icon's top edge.
+    # Conical nose. It is widest at the base, over the body, and comes to a
+    # point at the top edge of the icon.
     for t in range(body_top):
         y = body_top - 1 - t
         half = body_w // 2 - t // 2
@@ -1312,18 +1133,10 @@ def _draw_assembler_body(
         RGBA array modified in place.
     base_rgb :
         Base assembler (purple) color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 6:
@@ -1353,18 +1166,10 @@ def _draw_furnace_body(
         RGBA array modified in place.
     base_rgb :
         Base furnace (dark red-brown) color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 6:
@@ -1397,26 +1202,19 @@ def _draw_science_lab_body(
     The silhouette is an inset square rim with four diagonal ribs
     meeting at a central apex, plus four small window panels tucked
     between the ribs. At tile sizes below ~8 px the inner detail
-    degrades gracefully — only rim + apex remain.
+    keeps the rim and the apex only.
 
     Parameters
     ----------
     icon :
         RGBA array modified in place. Pre-filled with the body
-        color by the caller; we overwrite the internal structure.
+        color by the caller. We overwrite the internal structure.
     base_rgb :
         Dome body color (palette C ``#4c1d95``).
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
 
     """
     s = icon.shape[0]
@@ -1436,23 +1234,7 @@ def _draw_science_lab_body(
     t = 1 if s < 12 else 2
 
     def _line(y0: int, x0: int, y1: int, x1: int) -> None:
-        """
-
-        Parameters
-        ----------
-        y0: int :
-
-        x0: int :
-
-        y1: int :
-
-        x1: int :
-
-
-        Returns
-        -------
-
-        """
+        """Draw one straight line of pixels between two points."""
         steps = max(abs(y1 - y0), abs(x1 - x0))
         if steps == 0:
             return
@@ -1507,22 +1289,14 @@ def _draw_pallet_slats(
         RGBA array modified in place.
     base_rgb :
         Base pallet surface color.
-    icon: np.ndarray :
-
-    base_rgb: tuple[int :
 
     int :
 
     int] :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     dark = _shade(base_rgb, -60)
-    # Surface was filled by the caller; stripe three gaps across it.
+    # Surface was filled by the caller. Stripe three gaps across it.
     if s < 5:
         return
     for i in range(3):
@@ -1540,12 +1314,6 @@ def _draw_machine_frame(icon: np.ndarray) -> None:
     ----------
     icon :
         RGBA array modified in place.
-    icon: np.ndarray :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 3:
@@ -1569,14 +1337,6 @@ def _draw_belt_edges(icon: np.ndarray, direction: int) -> None:
         RGBA array modified in place.
     direction :
         ``Direction`` value the belt faces.
-    icon: np.ndarray :
-
-    direction: int :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 4:
@@ -1592,8 +1352,10 @@ def _draw_belt_edges(icon: np.ndarray, direction: int) -> None:
 
 
 def _draw_splitter_body(icon: np.ndarray, direction: int) -> None:
-    """Draw a T-shape splitter glyph: a single thick line down the input
-    axis and two chevrons fanning out to the perpendicular output sides.
+    """Draw the splitter glyph, as a T shape.
+
+    The glyph holds one thick line down the input axis, and two chevrons that
+    open out to the two output sides.
 
     A vertical-facing splitter (``Direction.UP`` / ``Direction.DOWN``)
     splits to LEFT and RIGHT, so the trunk runs vertically and the
@@ -1607,14 +1369,6 @@ def _draw_splitter_body(icon: np.ndarray, direction: int) -> None:
         RGBA array modified in place.
     direction :
         ``Direction`` value the splitter faces.
-    icon: np.ndarray :
-
-    direction: int :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 6:
@@ -1625,7 +1379,7 @@ def _draw_splitter_body(icon: np.ndarray, direction: int) -> None:
     half = max(1, s // 8)
 
     if direction in (Direction.UP, Direction.DOWN):
-        # Vertical trunk; outputs LEFT and RIGHT.
+        # Vertical trunk. Outputs LEFT and RIGHT.
         icon[1 : s - 1, mid - half : mid + half + 1, :3] = trunk
         arrow_size = max(1, s // 7)
         _draw_chevron(icon, mid, max(arrow_size, s // 4), arrow_size, Direction.LEFT)
@@ -1633,7 +1387,7 @@ def _draw_splitter_body(icon: np.ndarray, direction: int) -> None:
             icon, mid, s - 1 - max(arrow_size, s // 4), arrow_size, Direction.RIGHT
         )
     else:
-        # Horizontal trunk; outputs UP and DOWN.
+        # Horizontal trunk. Outputs UP and DOWN.
         icon[mid - half : mid + half + 1, 1 : s - 1, :3] = trunk
         arrow_size = max(1, s // 7)
         _draw_chevron(icon, max(arrow_size, s // 4), mid, arrow_size, Direction.UP)
@@ -1643,37 +1397,30 @@ def _draw_splitter_body(icon: np.ndarray, direction: int) -> None:
 
 
 def _draw_crossing_body(icon: np.ndarray, direction: int) -> None:
-    """Draw a single diagonal stripe from the input-corner to the
-    output-corner of the crossing.
+    r"""Draw the crossing glyph, as one diagonal stripe.
+
+    The stripe runs from the input corner to the output corner.
 
     The four crossing encodings map (input-pair, output-pair) to a
     diagonal:
 
-    * ``1`` (inputs N+W, outputs S+E) → ``\\`` (NW → SE)
+    * ``1`` (inputs N+W, outputs S+E) → ``\`` (NW → SE)
     * ``2`` (inputs N+E, outputs S+W) → ``/`` (NE → SW)
     * ``3`` (inputs S+W, outputs N+E) → ``/`` (SW → NE)
-    * ``4`` (inputs S+E, outputs N+W) → ``\\`` (SE → NW)
+    * ``4`` (inputs S+E, outputs N+W) → ``\`` (SE → NW)
 
     The stripe is anti-aliased with a thicker dark band over a thin
     light highlight so the diagonal reads clearly against the base
-    fill. Inactive direction (encoding 0) leaves the icon untouched
-    so unset crossings render as a solid block — useful for inventory
-    icons where the in-flight axes are not yet decided.
+    fill. A direction of 0 is inactive, and the function then draws nothing.
+    A crossing with no direction is therefore a solid block. An inventory icon
+    reads that way, because it has no axes yet.
 
     Parameters
     ----------
     icon :
         RGBA array modified in place.
     direction :
-        Packed crossing direction (1..4); 0 → no-op.
-    icon: np.ndarray :
-
-    direction: int :
-
-
-    Returns
-    -------
-
+        Packed crossing direction, from 1 to 4. A value of 0 draws nothing.
     """
     s = icon.shape[0]
     if s < 6 or not 0 < direction < len(CROSSING_DIAGONAL):
@@ -1706,12 +1453,6 @@ def _draw_miner_bore(icon: np.ndarray) -> None:
     ----------
     icon :
         RGBA array modified in place.
-    icon: np.ndarray :
-
-
-    Returns
-    -------
-
     """
     s = icon.shape[0]
     if s < 5:
@@ -1730,7 +1471,7 @@ def _draw_miner_bore(icon: np.ndarray) -> None:
 # machines read as "built things" against terrain.
 _MACHINE_ITEM_TYPES: frozenset[int] = frozenset(int(it) for it in ITEM_TO_MACHINE)
 
-# Ores share the patched-rock texture; silicon additionally gets
+# Ores share the patched-rock texture. Silicon additionally gets
 # crystalline sparkles on top.
 _ORE_ITEMS: dict[int, bool] = {
     int(ItemType.COAL): False,
@@ -1758,23 +1499,23 @@ def render_item_icon(
     """Render a square RGBA icon for an item type.
 
     This is the single source of truth for how an item looks visually.
-    Every UI surface that paints an item — inventory panels, hotbars,
-    editor toolbar, menu screens — calls this function so identical
-    items always look the same.
+    Four surfaces draw an item: the inventory panels, the hotbar, the editor
+    toolbar, and the menu screens. Each one calls this function, so one item
+    always looks the same.
 
     Each item category has a distinct visual language:
 
     - Ores: irregular darker blobs on a rough base (silicon adds
       crystalline sparkles).
-    - Plates: diagonal shine band on a uniform base; wafer adds
+    - Plates: diagonal shine band on a uniform base. Wafer adds
       concentric arcs to suggest a disc.
     - Intermediate items: a shape that hints at the object — wire
       helix, circuit traces, motor cylinder, sensor lens, frame I-beam,
       flask, rocket silhouette.
-    - Machines: an interior pattern (miner bore, pallet slats, belt
-      edge stripes, assembler ports, furnace glowing maw, rocket
-      silhouette) plus a shared top-left highlight and bottom-right
-      shadow so every placed machine reads as a built object.
+    - Machines: a pattern inside the body. A miner gets a bore, a pallet gets
+      slats, and a belt gets edge stripes. Every machine also takes a
+      highlight at the top left, and a shadow at the bottom right. A placed
+      machine therefore looks like a built object.
 
     When ``direction`` is ``None`` (e.g. in a menu with no placement
     context), directional indicators default to pointing right.
@@ -1788,16 +1529,9 @@ def render_item_icon(
     direction :
         Optional ``Direction`` for directional items.
         Ignored for non-directional items.
-    item_type: int :
-
-    size: int :
-
-    direction: int | None :
-         (Default value = None)
 
     Returns
     -------
-
         RGBA uint8 array of shape ``(size, size, 4)``.
 
     """
@@ -1816,7 +1550,7 @@ def render_item_icon(
         int(ItemType.TIER2_SCIENCE_PACK),
         int(ItemType.TIER3_SCIENCE_PACK),
     }
-    # ROCKET is both a machine (placed on map) and a shaped item; always
+    # ROCKET is both a machine (placed on map) and a shaped item. Always
     # render as a transparent silhouette because its sprite is iconic.
     shaped_items.add(int(ItemType.ROCKET))
 

@@ -1,9 +1,11 @@
 """Launcher: the title menu and what each of its entries opens.
 
-Owns the pygame window for the whole session and hands the same surface
-to each sub-screen, so returning from play or the editor lands back on
-the menu without a resize flicker. Sub-screens return control instead of
-quitting; only :func:`run_app` tears pygame down.
+The launcher holds the pygame window for the whole session. It gives the
+same surface to each sub-screen, so a return from play or from the editor
+comes back to the menu with no flicker.
+
+A sub-screen returns control, and does not quit. :func:`run_app` closes
+pygame, and no other function does.
 
 The launcher is deliberately free-play only. Research scenarios are
 built through :func:`factoriax.make` and driven by training code, not
@@ -43,9 +45,9 @@ def run_app() -> None:
 def _open(choice: str, screen: pygame.Surface) -> pygame.Surface:
     """Run the chosen sub-screen and return the surface to keep using.
 
-    Sub-screens may replace the display surface (the settings menu
-    applies resolution and UI-scale changes), so the live surface is
-    re-read from pygame on the way out rather than assumed unchanged.
+    A sub-screen can replace the display surface, because the settings menu
+    applies a new resolution and a new UI scale. The function therefore reads
+    the surface back from pygame on the way out.
     """
     if choice == "play":
         from factoriax.playground.play.main import main as play_main

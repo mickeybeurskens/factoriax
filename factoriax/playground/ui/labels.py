@@ -10,12 +10,10 @@ from __future__ import annotations
 from factoriax.engine.constants import Machine
 
 # Human-readable display names for each Machine, derived from the
-# enum: underscores become spaces and each word is title-cased, giving
-# e.g. "Conveyor Belt". Every member is covered, so a new Machine
-# gets a name automatically. Mirrors the _ITEM_NAMES derivation in
-# editor/inventory_panel.py. A machine needing a name that differs from
-# its title-cased enum identifier would require an override layered on
-# top of these defaults.
+# enum: an underscore becomes a space, and each word is title-cased, for
+# example "Conveyor Belt". Every member gets a name, so a new Machine needs no
+# edit here. The _ITEM_NAMES tables build their names the same way. A machine
+# that needs another name takes an override on top of this table.
 MACHINE_TYPE_NAMES: dict[int, str] = {
     int(mt): mt.name.replace("_", " ").title() for mt in Machine
 }
