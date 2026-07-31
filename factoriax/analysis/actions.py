@@ -18,11 +18,11 @@ numbers behind it:
 * A run length measures how long an action was repeated without a
   break.
 
-:data:`DEFAULT_ACTION_LABELS` is built from the ``Action`` enum, so the
-names cannot drift from it. :data:`DEFAULT_ACTION_COLORS` is a hand
-written list and is shorter than the action count, so pass ``colors``
-when every action must be told apart. Each function that takes
-``colors`` says so again.
+:data:`DEFAULT_ACTION_LABELS` and :data:`DEFAULT_ACTION_COLORS` are
+both built from the ``Action`` enum, so neither can fall behind it and
+both cover every action. The colors carry no meaning, though. Pass
+``colors`` where the scheme has to say something, such as cool tones
+for movement.
 """
 
 from __future__ import annotations
@@ -41,42 +41,20 @@ from matplotlib.patches import Patch
 from factoriax.engine.constants import NUM_ACTIONS, Action
 
 from .trajectory import Trajectory
-from .utils import resolve_ax, resolve_player_actions
+from .utils import distinct_colors, resolve_ax, resolve_player_actions
 
 #: The name of each action, in ``Action`` value order. Built from the
 #: enum, so it cannot drift from it and always covers every action.
 DEFAULT_ACTION_LABELS: list[str] = [a.name for a in Action]
 
-#: Fallback line and cell colors for the plots, in ``Action`` value
-#: order. Movement is cool tones, world interaction warm tones, slot
-#: cycling grays and purples, and crafting oranges.
+#: Fallback line and cell colors, in ``Action`` value order, one for
+#: each action. Generated, so the list cannot fall behind the enum the
+#: way a hand-written one does.
 #:
-#: The list is shorter than the action count. Matplotlib gives every
-#: action past its end the same last color, so a default plot draws
-#: those actions alike. Pass ``colors`` with one entry for each action
-#: when they must be told apart.
-DEFAULT_ACTION_COLORS: list[str] = [
-    "#bdbdbd",  # NOOP              - gray
-    "#1f77b4",  # LEFT              - blue
-    "#aec7e8",  # RIGHT             - light blue
-    "#2ca02c",  # UP                - green
-    "#98df8a",  # DOWN              - light green
-    "#d62728",  # MINE              - red
-    "#ffbb78",  # PLACE             - light orange
-    "#9467bd",  # NEXT_SLOT         - purple
-    "#c5b0d5",  # PREV_SLOT         - light purple
-    "#e377c2",  # PICKUP            - pink
-    "#17becf",  # DEPOSIT           - cyan
-    "#bcbd22",  # WITHDRAW          - olive
-    "#8c564b",  # ROTATE            - brown
-    "#c49c94",  # NEXT_MACHINE_SLOT - light brown
-    "#7f7f7f",  # PREV_MACHINE_SLOT - dark gray
-    "#ff7f0e",  # CRAFT_MINER       - orange
-    "#ff9e4a",  # CRAFT_PALLET       - light orange
-    "#ffb347",  # CRAFT_BELT        - peach
-    "#ffcc80",  # CRAFT_ARM         - pale orange
-    "#ffe0b2",  # CRAFT_ASSEMBLER   - cream orange
-]
+#: The colors carry no meaning: two neighboring actions are not
+#: related, and an action has no fixed color. Pass ``colors`` to any
+#: plot that needs a chosen scheme, such as cool tones for movement.
+DEFAULT_ACTION_COLORS: list[str] = distinct_colors(NUM_ACTIONS)
 
 
 def _get_action_cmap(
@@ -96,17 +74,17 @@ def _get_action_cmap(
     Returns
     -------
     matplotlib.colors.ListedColormap
-        A map with ``min(num_actions, len(colors))`` entries. When
-        ``colors`` is shorter than ``num_actions`` the map is short
-        too, and matplotlib then gives every index past its end the
-        same last color.
+        A map with ``min(num_actions, len(colors))`` entries. A
+        ``colors`` shorter than ``num_actions`` gives a short map, and
+        matplotlib then hands every index past its end the same last
+        color. The default list covers every action, so this happens
+        only with a short list from the caller.
 
     Notes
     -----
-    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
-    defines 87 actions, so a default call draws actions 19 and above
-    in one shared color. Pass ``colors`` with one entry for each
-    action to tell them apart.
+    The default colors are generated and carry no meaning. Pass
+    ``colors`` where the scheme has to say something, such as cool
+    tones for movement.
     """
     if colors is None:
         colors = DEFAULT_ACTION_COLORS[:num_actions]
@@ -170,10 +148,9 @@ def action_raster(
 
     Notes
     -----
-    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
-    defines 87 actions, so a default call draws actions 19 and above
-    in one shared color. Pass ``colors`` with one entry for each
-    action to tell them apart.
+    The default colors are generated and carry no meaning. Pass
+    ``colors`` where the scheme has to say something, such as cool
+    tones for movement.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape
@@ -576,10 +553,9 @@ def plot_ngram_sweep(
 
     Notes
     -----
-    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
-    defines 87 actions, so a default call draws actions 19 and above
-    in one shared color. Pass ``colors`` with one entry for each
-    action to tell them apart.
+    The default colors are generated and carry no meaning. Pass
+    ``colors`` where the scheme has to say something, such as cool
+    tones for movement.
     """
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS
@@ -968,10 +944,9 @@ def plot_run_lengths(
 
     Notes
     -----
-    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
-    defines 87 actions, so a default call draws actions 19 and above
-    in one shared color. Pass ``colors`` with one entry for each
-    action to tell them apart.
+    The default colors are generated and carry no meaning. Pass
+    ``colors`` where the scheme has to say something, such as cool
+    tones for movement.
     """
     if action_labels is None:
         action_labels = DEFAULT_ACTION_LABELS[:num_actions]
@@ -1059,10 +1034,9 @@ def plot_action_distribution(
 
     Notes
     -----
-    :data:`DEFAULT_ACTION_COLORS` holds 20 colors and the engine
-    defines 87 actions, so a default call draws actions 19 and above
-    in one shared color. Pass ``colors`` with one entry for each
-    action to tell them apart.
+    The default colors are generated and carry no meaning. Pass
+    ``colors`` where the scheme has to say something, such as cool
+    tones for movement.
     """
     actions = resolve_player_actions(traj, player)  # (B, T)
     B, T = actions.shape

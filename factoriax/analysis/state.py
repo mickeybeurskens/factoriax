@@ -24,21 +24,19 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .trajectory import Trajectory
-from .utils import resolve_ax
+from factoriax.engine.constants import NUM_ITEM_TYPES, ItemType
 
-#: Fallback item names for :func:`plot_inventory`, used when the caller
-#: passes none.
-#:
-#: These do not match the engine. ``ItemType`` gives ``IRON_ORE``,
-#: ``COPPER_ORE``, and ``TIN_ORE`` at ids 2, 3, and 4, so a default plot
-#: labels the tin ore line "MINER". Pass real ``ItemType`` names.
-DEFAULT_ITEM_LABELS = ["EMPTY", "COAL", "IRON", "COPPER", "MINER"]
+from .trajectory import Trajectory
+from .utils import distinct_colors, resolve_ax
+
+#: The name of each item, in ``ItemType`` value order. Built from the
+#: enum, so it cannot drift from it and always covers every item.
+DEFAULT_ITEM_LABELS: list[str] = [it.name for it in ItemType]
 
 #: Fallback line colors, one for each entry of
-#: :data:`DEFAULT_ITEM_LABELS` and in the same order.
-DEFAULT_ITEM_COLORS = ["#bdbdbd", "#363636", "#c0c0c0", "#b87333", "#00c800"]
-
+#: :data:`DEFAULT_ITEM_LABELS` and in the same order. Generated, so the
+#: list cannot fall behind the enum. The colors carry no meaning.
+DEFAULT_ITEM_COLORS: list[str] = distinct_colors(NUM_ITEM_TYPES)
 
 # ---------------------------------------------------------------------------
 # Inventory evolution
@@ -48,7 +46,7 @@ DEFAULT_ITEM_COLORS = ["#bdbdbd", "#363636", "#c0c0c0", "#b87333", "#00c800"]
 def inventory_over_time(
     traj: Trajectory,
     player: int = 0,
-    num_item_types: int = 5,
+    num_item_types: int = NUM_ITEM_TYPES,
 ) -> np.ndarray:
     """Return the mean item count of each type at each timestep.
 
@@ -57,14 +55,15 @@ def inventory_over_time(
     traj :
         A trajectory whose ``player_inventory`` field is set. That
         field already holds a count for each item, so nothing has to
-        map slots to items.
+        map slots to items. A rollout gives it four axes,
+        ``(B, T, P, N)``, for one player as much as for several. Three
+        axes are accepted too, for a recording built by hand.
     player :
-        Which player to read. It is ignored when the trajectory is not
-        multi-player.
+        Which player to read. It is ignored when the inventory has no
+        player axis.
     num_item_types :
-        How many leading item ids to keep. The default of 5 is far
-        below the 34 the engine defines, so a default call drops most
-        items.
+        How many leading item ids to keep. The default covers every
+        item the engine defines.
 
     Returns
     -------
@@ -81,10 +80,13 @@ def inventory_over_time(
     if traj.player_inventory is None:
         raise ValueError("inventory_over_time requires player_inventory")
 
-    if traj.is_multi_player:
-        inv = traj.player_inventory[:, :, player, :num_item_types]  # (B, T, K)
-    else:
-        inv = traj.player_inventory[..., :num_item_types]  # (B, T, K)
+    inv = np.asarray(traj.player_inventory)
+    # A rollout always stacks the (P, N) inventory of the state, so the
+    # player axis is there even for one player. is_multi_player counts
+    # players in the action array and does not see it.
+    if inv.ndim == 4:
+        inv = inv[:, :, player, :]
+    inv = inv[..., :num_item_types]
 
     return np.asarray(inv.mean(axis=0))  # (T, num_item_types)
 
@@ -92,7 +94,7 @@ def inventory_over_time(
 def plot_inventory(
     traj: Trajectory,
     player: int = 0,
-    num_item_types: int = 5,
+    num_item_types: int = NUM_ITEM_TYPES,
     item_labels: list[str] | None = None,
     item_colors: Sequence[str] | None = None,
     exclude_empty: bool = True,
@@ -113,9 +115,8 @@ def plot_inventory(
         ``item_labels`` and ``item_colors``, so all three must agree.
     item_labels :
         The name of each item, or ``None`` for
-        :data:`DEFAULT_ITEM_LABELS`. Pass real names from ``ItemType``
-        here. The default list is wrong past index 1, so a default
-        call mislabels the legend.
+        :data:`DEFAULT_ITEM_LABELS`, which is built from the
+        ``ItemType`` enum and cannot drift from it.
     item_colors :
         The line color of each item, or ``None`` for
         :data:`DEFAULT_ITEM_COLORS`.
@@ -139,8 +140,8 @@ def plot_inventory(
     ------
     IndexError
         When ``num_item_types`` is greater than the length of
-        ``item_labels`` or ``item_colors``. The two defaults hold five
-        entries each.
+        ``item_labels`` or ``item_colors``. Both defaults cover every
+        item, so this needs a short list from the caller.
     """
     inv = inventory_over_time(traj, player, num_item_types)  # (T, num_item_types)
 

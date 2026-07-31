@@ -355,12 +355,32 @@ def _assign_ports(
     dict[tuple[str, str], float],
     dict[str, dict[str, tuple[str, int]]],
 ]:
-    """Assign each recipe input a top, middle, or bottom port.
+    """Choose where each input of a recipe meets its target box.
 
-    For two-input recipes the input whose source row is visually higher
-    enters the top port; the other enters the bottom. This minimises
-    arrow crossings near the target. Single-input recipes use a middle
-    port.
+    A one-input recipe uses a middle port. A two-input recipe splits:
+    the input drawn higher takes the top port, and the other takes the
+    bottom. Sending the higher source to the lower port would make the
+    two arrows cross just before they arrive.
+
+    Parameters
+    ----------
+    recipes :
+        The recipes to place ports for.
+    positions :
+        ``{item: (x, y)}`` from :func:`_positions`. Only the y of each
+        item is read, to decide which input is higher.
+    layout :
+        Supplies ``port_offset``, the distance from the middle of a
+        box to its top and bottom port.
+
+    Returns
+    -------
+    tuple
+        ``(port_y, port_info)``. ``port_y`` maps
+        ``(input, output)`` to the height at which that edge meets the
+        box. ``port_info`` maps an output to
+        ``{"top"/"bot"/"mid": (input_label, count)}``, which
+        :func:`_draw_box` writes inside the box.
 
     Raises
     ------
@@ -369,28 +389,6 @@ def _assign_ports(
         inputs. Every input must get a port. The drawing loop reads all
         of them, and a missing port fails there instead, with no
         mention of the recipe that caused it.
-
-    Parameters
-    ----------
-    recipes: Iterable[RecipeSpec] :
-
-    positions: Mapping[str :
-
-    tuple[float :
-
-    float]] :
-
-    layout: Layout :
-
-
-    Returns
-    -------
-    ``port_info[output]`` — ``{"top"/"bot"/"mid"
-        (input_name, count)}``
-    ``port_info[output]`` — ``{"top"/"bot"/"mid"
-        (input_name, count)}``
-        for rendering the per-port labels inside the box.
-
     """
     port_y: dict[tuple[str, str], float] = {}
     port_info: dict[str, dict[str, tuple[str, int]]] = {}
@@ -813,14 +811,14 @@ def _draw_legend(
 ) -> None:
     """Attach a horizontal category legend below the axes.
 
-    ``entries`` is an ordered ``[(category_name, hex_color), ...]`` list.
-    The legend renders one swatch per entry, in the order given, so
-    callers control the visual ordering by sorting the list.
+    The legend draws one swatch for each entry, in the order given, so
+    the caller sets that order by sorting the list.
 
     Parameters
     ----------
-    ax: plt.Axes :
-
+    ax :
+        The axes to draw on. The function modifies it in place and
+        returns nothing.
     entries :
         ``(category_name, hex)`` pairs, in the order to show them. An
         empty sequence draws no legend at all, rather than an empty

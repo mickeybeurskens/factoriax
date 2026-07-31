@@ -7,12 +7,21 @@ function can accept the same two arguments and behave the same way.
 
 from __future__ import annotations
 
+import colorsys
+
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .trajectory import Trajectory
+
+#: Step between the hues of two neighboring colors, as a turn of the
+#: color wheel. The golden ratio spreads a long run of hues about as
+#: evenly as a fixed step can, and it does so without knowing how many
+#: colors are wanted in advance.
+_HUE_STEP: float = 0.618033988749895
 
 
 def resolve_ax(
@@ -85,3 +94,39 @@ def resolve_player_actions(traj: Trajectory, player: int | None) -> np.ndarray:
     if actions.ndim == 3:
         return actions[:, :, player]
     return actions
+
+
+def distinct_colors(n: int) -> list[str]:
+    """Return ``n`` colors that a reader can tell apart.
+
+    Use this to give every member of an enum its own color. A list
+    shorter than the enum is worse than it looks. Matplotlib gives
+    every index past the end of a colormap the same last color.
+    Unrelated members then render alike, and nothing reports it.
+
+    Hues advance by :data:`_HUE_STEP` and wrap. Lightness and
+    saturation cycle over a few values as well, which separates two
+    entries that land on near hues.
+
+    These colors carry no meaning. Neighboring entries are not related,
+    and one entry has no fixed color across two runs with different
+    ``n``. Pass an explicit list where a color has to mean something.
+
+    Parameters
+    ----------
+    n :
+        How many colors to return.
+
+    Returns
+    -------
+    list
+        ``n`` distinct ``#rrggbb`` strings. An ``n`` of 0 or less gives
+        an empty list.
+    """
+    out: list[str] = []
+    for i in range(max(0, n)):
+        hue = (i * _HUE_STEP) % 1.0
+        lightness = (0.42, 0.55, 0.68)[i % 3]
+        saturation = (0.85, 0.55)[i % 2]
+        out.append(mcolors.to_hex(colorsys.hls_to_rgb(hue, lightness, saturation)))
+    return out
