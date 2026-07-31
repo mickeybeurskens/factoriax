@@ -6,21 +6,22 @@ Generates ``factoriax/assets/atlas.png`` and the sidecar
 from this atlas — every visual the play view shows for terrain,
 machines, and the player flows through it.
 
-The atlas is sourced from :mod:`factoriax.playground.ui.icons`, which is the
-procedural-art module that the editor and play HUD already use. By
-funneling both renderers' sprites through the same code we avoid the
-play-vs-editor visual divergence the prior flat-color atlas caused.
+The sprites come from :mod:`factoriax.playground.ui.icons`, the drawing
+module that the editor and the play HUD already read. Both renderers
+therefore take one set of sprites, and the editor cannot drift away from the
+play view. The earlier atlas of flat colors did drift.
 
-Output is RGBA. The JAX renderer's :func:`render_map` blends machine
-and player layers onto the terrain using the alpha channel, so:
+The atlas is RGBA. :func:`render_map` of the JAX renderer mixes the machine
+layer and the player layer onto the terrain, through the alpha channel. Three
+rules follow from this:
 
 - Block cells are opaque (alpha=255 everywhere) — terrain is the
   ground truth and always paints in full.
 - Machine cells keep the transparent corners that
   :func:`render_item_icon` produces, so placed machines read as
   objects sitting on terrain.
-- Player and biter cells composite over what's beneath them, so
-  walking onto a belt no longer hides the belt.
+- A player cell and a biter cell mix with the layer under them. A player
+  that steps onto a belt therefore does not hide that belt.
 
 Directional categories carry one cell per
 :class:`~factoriax.engine.constants.Direction`:
@@ -30,19 +31,17 @@ Directional categories carry one cell per
   ``ASSEMBLER``, ``FURNACE``, ``SCIENCE_LAB``, ``ROCKET``) are
   rendered once and duplicated across all four rows so a uniform
   gather works at render time.
-- Player: misc row col 0 holds the biter; cols 1..32 hold eight
+- Player: misc row col 0 holds the biter. Cols 1..32 hold eight
   players × four directions packed as ``(player_idx, direction)``,
   so player ``p`` direction ``d_idx`` lives at
   ``1 + p * 4 + d_idx``. Players beyond eight wrap modulo eight to
   match :data:`factoriax.playground.ui.icons.PLAYER_COLORS`.
 
-Usage::
-
     uv run python -m factoriax.assets.build_atlas
     uv run python -m factoriax.assets.build_atlas --out custom_dir/
 
-The output is hash-stable across runs; CI verifies this via
-``tests/test_atlas_fresh.py``.
+Two runs of this module give the same bytes. ``tests/test_atlas_fresh.py``
+makes sure of this, and CI runs that test.
 """
 
 from __future__ import annotations
@@ -82,8 +81,8 @@ NUM_COLS: int = NUM_ITEM_TYPES
 # Index = atlas row offset for machines (0 = LEFT row, 3 = DOWN row),
 # and atlas column offset for the player cells in the misc row
 # (1 + index gives the column, leaving col 0 for the biter sprite).
-# Biters were removed from the game; the cell stays because dropping it
-# would shift every player column and rewrite the committed atlas.
+# Biters were removed from the game. The cell stays, because a cell removed
+# here moves every player column and rewrites the committed atlas.
 _DIRECTION_ORDER: tuple[Direction, ...] = (
     Direction.LEFT,
     Direction.RIGHT,
@@ -109,7 +108,7 @@ COL_MISC_PLAYER_BASE: int = 1
 # (player_idx, direction) starting at COL_MISC_PLAYER_BASE. Player p
 # direction d sits at COL_MISC_PLAYER_BASE + p * NUM_DIRECTIONS + d_idx.
 # Eight matches the distinct PLAYER_COLORS palette in
-# factoriax/ui/icons.py; players beyond 8 wrap modulo 8.
+# factoriax/ui/icons.py. Players beyond 8 wrap modulo 8.
 NUM_PLAYERS: int = 8
 
 
@@ -135,33 +134,35 @@ _DIRECTIONAL_MACHINES: frozenset[Machine] = frozenset(
 
 
 def _drop_alpha(rgba: np.ndarray) -> np.ndarray:
-    """Strip alpha from an RGBA cell, returning RGB.
+    """Return one cell without its alpha channel.
 
     Parameters
     ----------
-    rgba: np.ndarray :
-
+    rgba
+        Cell with four channels.
 
     Returns
     -------
-
+    numpy.ndarray
+        The same cell with three channels, uint8.
     """
     return rgba[..., :3].astype(np.uint8)
 
 
 def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
-    """Append a constant alpha channel to an RGB cell.
+    """Return one cell with an alpha channel added.
 
     Parameters
     ----------
-    rgb: np.ndarray :
-
-    alpha: int :
-         (Default value = 255)
+    rgb
+        Cell with three channels.
+    alpha
+        Alpha value for every pixel.
 
     Returns
     -------
-
+    numpy.ndarray
+        The same cell with four channels, uint8.
     """
     h, w = rgb.shape[:2]
     out = np.empty((h, w, 4), dtype=np.uint8)
@@ -171,22 +172,23 @@ def _to_rgba(rgb: np.ndarray, alpha: int = 255) -> np.ndarray:
 
 
 def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
-    """Render a single digit at the cell's top-left.
+    """Draw one digit at the top left corner of a cell.
 
-    The procedural digit atlas is 3 wide × 5 tall bool mask. We blit
-    it as white-on-black at the top-left of a 32x32 cell so the rest
-    of the cell is unused space. Returned cell is fully opaque.
+    A digit glyph is a mask 3 pixels wide and 5 pixels tall. The function
+    draws it in white on black, at the top left corner. The rest of the cell
+    stays black.
 
     Parameters
     ----------
-    digit: int :
-
-    digit_atlas: np.ndarray :
-
+    digit
+        Digit to draw, from 0 to 9.
+    digit_atlas
+        Glyph mask of each digit.
 
     Returns
     -------
-
+    numpy.ndarray
+        One cell, with an alpha of 255 at every pixel.
     """
     cell = np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
     cell[..., 3] = 255
@@ -198,39 +200,41 @@ def _digit_cell(digit: int, digit_atlas: np.ndarray) -> np.ndarray:
 
 
 def _ordered_enum_names(enum_cls: type) -> list[str]:
-    """
+    """Return the name of each member of an enum, in value order.
+
+    The sidecar JSON lists the names in this order, so a reader can find a
+    cell by the value of its enum member.
 
     Parameters
     ----------
-    enum_cls: type :
-
+    enum_cls
+        Enum to read.
 
     Returns
     -------
-    type
-
-
+    list[str]
+        One name for each member, from the lowest value to the highest.
     """
     return [m.name for m in sorted(enum_cls, key=int)]
 
 
 def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray | None:
-    """
+    """Return the atlas cell of one block type.
+
+    Terrain is the lowest layer, so the cell is opaque at every pixel.
 
     Parameters
     ----------
-    block: BlockType :
-
-    textures: dict[int :
-
-    np.ndarray] :
-
+    block
+        Block type to draw.
+    textures
+        Texture of each block type, by block value.
 
     Returns
     -------
-    type
-
-
+    numpy.ndarray or None
+        The cell. It is ``None`` when no texture matches the block, and the
+        atlas then keeps its magenta marker.
     """
     tex = textures.get(int(block))
     if tex is None:
@@ -244,26 +248,26 @@ def _block_cell(block: BlockType, textures: dict[int, np.ndarray]) -> np.ndarray
 
 
 def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
-    """
+    """Return the atlas cell of one machine, at one facing.
+
+    A machine with one look only takes the same cell for all four facings.
 
     Parameters
     ----------
-    machine: Machine :
-
-    direction: Direction :
-
+    machine
+        Machine to draw.
+    direction
+        Facing to draw the machine at.
 
     Returns
     -------
-    type
-        Non-directional machines ignore *direction*. Returns ``None`` to
-        leave the cell magenta when no item maps to this machine
-        (e.g. ``Machine.NONE``); the renderer's NONE row is fully
-        transparent so the sentinel never paints in practice.
-
+    numpy.ndarray or None
+        The cell. ``Machine.NONE`` gives a cell that is clear at every pixel,
+        so it never paints. The result is ``None`` when no item matches the
+        machine, and the atlas then keeps its magenta marker.
     """
     if machine == Machine.NONE:
-        # Fully transparent — alpha compositing turns this into a no-op.
+        # Clear at every pixel, so the alpha mix leaves the terrain as it is.
         return np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
     item_id = MACHINE_TO_ITEM.get(int(machine))
     if item_id is None:
@@ -275,19 +279,21 @@ def _machine_cell(machine: Machine, direction: Direction) -> np.ndarray | None:
 
 
 def _item_cell(item: ItemType) -> np.ndarray | None:
-    """
+    """Return the atlas cell of one item.
+
+    The world renderer draws no item today. These cells wait for later work
+    on the HUD.
 
     Parameters
     ----------
-    item: ItemType :
-
+    item
+        Item to draw.
 
     Returns
     -------
-    type
-        Items aren't currently drawn by the world renderer, so the cells
-        are reserved for future HUD work.
-
+    numpy.ndarray or None
+        The cell. ``ItemType.EMPTY`` gives a cell that is clear at every
+        pixel.
     """
     if item == ItemType.EMPTY:
         return np.zeros((CELL_PX, CELL_PX, 4), dtype=np.uint8)
@@ -298,21 +304,22 @@ def _item_cell(item: ItemType) -> np.ndarray | None:
 
 
 def _player_cell(player_idx: int, direction: Direction) -> np.ndarray:
-    """
+    """Return the atlas cell of one player, at one facing.
+
+    Each player takes its own colors from
+    :data:`factoriax.playground.ui.icons.PLAYER_COLORS`.
 
     Parameters
     ----------
-    player_idx: int :
-
-    direction: Direction :
-
+    player_idx
+        Index of the player. It selects the colors.
+    direction
+        Facing to draw the player at.
 
     Returns
     -------
-    type
-        Player colors come from :data:`factoriax.playground.ui.icons.PLAYER_COLORS`,
-        which provides a distinct palette per slot.
-
+    numpy.ndarray
+        The cell, with four channels.
     """
     sprite = create_player_texture(
         direction=int(direction),
@@ -326,7 +333,7 @@ def _player_cell(player_idx: int, direction: Direction) -> np.ndarray:
 
 
 def _biter_cell() -> np.ndarray:
-    """ """
+    """Return the atlas cell of the biter."""
     sprite = create_biter_texture(CELL_PX)
     if sprite.shape[-1] == 3:
         return _to_rgba(sprite)
@@ -336,16 +343,14 @@ def _biter_cell() -> np.ndarray:
 def _build_atlas_array() -> np.ndarray:
     """Construct the (NUM_ROWS * 32, NUM_COLS * 32, 4) uint8 atlas image.
 
-    Cells beyond a category's defined enum values are filled with
-    MISSING_RGBA so future enum extensions produce a visible artifact
-    rather than silent zeros.
-
-    Parameters
-    ----------
+    A cell past the last member of a category holds ``MISSING_RGBA``. A new
+    enum member therefore shows a magenta cell, and not a clear one.
 
     Returns
     -------
-
+    numpy.ndarray
+        The atlas image, of shape ``(NUM_ROWS * 32, NUM_COLS * 32, 4)``,
+        uint8.
     """
     height = NUM_ROWS * CELL_PX
     width = NUM_COLS * CELL_PX
@@ -353,21 +358,7 @@ def _build_atlas_array() -> np.ndarray:
     atlas[:, :] = MISSING_RGBA
 
     def _put(row: int, col: int, cell: np.ndarray) -> None:
-        """
-
-        Parameters
-        ----------
-        row: int :
-
-        col: int :
-
-        cell: np.ndarray :
-
-
-        Returns
-        -------
-
-        """
+        """Write one cell into the atlas, at one row and one column."""
         y0, x0 = row * CELL_PX, col * CELL_PX
         atlas[y0 : y0 + CELL_PX, x0 : x0 + CELL_PX] = cell
 
@@ -479,14 +470,6 @@ def build_atlas(out_png: Path, out_json: Path) -> None:
         Path to write the atlas PNG.
     out_json :
         Path to write the sidecar JSON.
-    out_png: Path :
-
-    out_json: Path :
-
-
-    Returns
-    -------
-
     """
     out_png.parent.mkdir(parents=True, exist_ok=True)
     out_json.parent.mkdir(parents=True, exist_ok=True)
