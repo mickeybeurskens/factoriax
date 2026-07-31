@@ -65,9 +65,10 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         unset. Shape ``(E,)``, int8. A crossing packs both its axes into this
         one byte; ``factoriax.engine.tables.CROSSING_AXIS_DIRS`` unpacks it.
     ent_power
-        Steps left in the combiner's current craft, counting down. Shape
+        Steps left in the machine's current craft, counting down. Shape
         ``(E,)``, int16. The craft finishes on the step this reaches 1, and 0
-        means idle. Only combiners use it; every other kind holds 0.
+        means idle. Only assemblers and furnaces use it; every other kind
+        holds 0.
     ent_buf_type
         Item in the general-purpose buffer slot. Shape ``(E,)``, int8. This is
         a miner's output, a pallet's storage, and a belt's contents.
@@ -75,7 +76,9 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         Items in that buffer, capped per kind by
         ``factoriax.engine.tables.MACHINE_MAX_STACK``. Shape ``(E,)``, int16.
     ent_asm_in_type
-        Item in each of a combiner's two input slots. Shape ``(E, 2)``, int8.
+        Item in each of the two input slots. Shape ``(E, 2)``, int8. Used by
+        assemblers, furnaces, and science labs, and reused by a crossing to
+        hold one buffer per axis.
         A crossing reuses the pair as one buffer per axis, indexed by
         ``CROSSING_VERT_SLOT`` and ``CROSSING_HORIZ_SLOT``.
     ent_asm_in_count
@@ -83,7 +86,7 @@ class EnvState(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         ``(E, 2)``, int16.
     ent_asm_out_type
         Item in the finished-output slot. Shape ``(E,)``, int8. A completed
-        craft parks here and is not overwritten, so a combiner stalls until
+        craft parks here and is not overwritten, so the machine stalls until
         something withdraws it.
     ent_asm_out_count
         Items in the output slot. Shape ``(E,)``, int16.

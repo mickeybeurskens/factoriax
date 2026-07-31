@@ -230,8 +230,9 @@ def any_buffer_nonempty(state: EnvState, machine: int) -> jax.Array:
 
     Reads ``ent_buf``, which the simulation fills. A player can fill it too:
     a ``DEPOSIT_`` action writes ``ent_buf`` for any machine that is neither
-    a miner nor a combiner, so a pallet, belt, splitter, or crossing can be
-    loaded by hand. A miner is excluded from deposit and a combiner takes
+    a miner nor a machine with input slots, so a pallet, belt, splitter, or
+    crossing can be loaded by hand. A miner is excluded from deposit, and an
+    assembler, furnace, or science lab takes
     the item into its input slots instead, so only for those two does a set
     buffer bit mean the factory produced the item.
     """

@@ -12,6 +12,7 @@ import numpy as np
 
 from factoriax.engine.constants import Action, BlockType, Direction, ItemType, Machine
 from factoriax.engine.step import deposit_to_adjacent, withdraw_from_adjacent
+from factoriax.engine.tables import MACHINE_MAX_STACK
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,13 +26,19 @@ def _machine_types(
 ) -> jnp.ndarray:
     """Build a machine_types grid with specific placements.
 
-    Args:
-        w: Grid width.
-        h: Grid height.
-        placements: Map of (x, y) -> Machine.
+    Parameters
+    ----------
+    w
+        Grid width.
+    h
+        Grid height.
+    placements
+        Map of ``(x, y)`` to a ``Machine``.
 
-    Returns:
-        Machine types grid of shape (h, w).
+    Returns
+    -------
+    jnp.ndarray
+        Machine types grid of shape ``(h, w)``.
     """
     arr = jnp.full((h, w), Machine.NONE, dtype=jnp.int32)
     for (x, y), mtype in placements.items():
@@ -42,12 +49,17 @@ def _machine_types(
 def _player_inv(num_players: int, entries: dict[int, int]) -> jnp.ndarray:
     """Build a player inventory array.
 
-    Args:
-        num_players: Number of players.
-        entries: Mapping of item_type -> count for player 0.
+    Parameters
+    ----------
+    num_players
+        Number of players.
+    entries
+        Mapping of item type to count, for player 0 only.
 
-    Returns:
-        Player inventory of shape (num_players, NUM_ITEM_TYPES).
+    Returns
+    -------
+    jnp.ndarray
+        Player inventory of shape ``(num_players, NUM_ITEM_TYPES)``.
     """
     from factoriax.engine.constants import NUM_ITEM_TYPES
 
@@ -64,13 +76,19 @@ def _buf_grid(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Build buffer_type and buffer_count grids.
 
-    Args:
-        h: Grid height.
-        w: Grid width.
-        entries: Map of (y, x) -> (item_type, count).
+    Parameters
+    ----------
+    h
+        Grid height.
+    w
+        Grid width.
+    entries
+        Map of ``(y, x)`` to ``(item_type, count)``.
 
-    Returns:
-        Tuple of (buffer_type, buffer_count) arrays.
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(buffer_type, buffer_count)``.
     """
     bt = np.zeros((h, w), dtype=np.int8)
     bc = np.zeros((h, w), dtype=np.int16)
@@ -87,13 +105,19 @@ def _asm_out_grids(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Build asm_out_type and asm_out_count grids.
 
-    Args:
-        h: Grid height.
-        w: Grid width.
-        entries: Map of (y, x) -> (item_type, count).
+    Parameters
+    ----------
+    h
+        Grid height.
+    w
+        Grid width.
+    entries
+        Map of ``(y, x)`` to ``(item_type, count)``.
 
-    Returns:
-        Tuple of (asm_out_type, asm_out_count) arrays.
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(asm_out_type, asm_out_count)``.
     """
     ot = np.zeros((h, w), dtype=np.int8)
     oc = np.zeros((h, w), dtype=np.int16)
@@ -110,13 +134,19 @@ def _asm_in_grids(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Build asm_in_type and asm_in_count grids.
 
-    Args:
-        h: Grid height.
-        w: Grid width.
-        entries: Map of (y, x) -> [(item_type, count), ...] for up to 2 slots.
+    Parameters
+    ----------
+    h
+        Grid height.
+    w
+        Grid width.
+    entries
+        Map of ``(y, x)`` to ``[(item_type, count), ...]``, up to 2 slots.
 
-    Returns:
-        Tuple of (asm_in_type, asm_in_count) arrays with shape (h, w, 2).
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(asm_in_type, asm_in_count)``, each shaped ``(h, w, 2)``.
     """
     ait = np.zeros((h, w, 2), dtype=np.int8)
     aic = np.zeros((h, w, 2), dtype=np.int16)
@@ -130,12 +160,18 @@ def _asm_in_grids(
 def _ent_lookup(state, y: int, x: int) -> int:
     """Get entity index for a tile position.
 
-    Args:
-        state: Current environment state.
-        y: Tile row.
-        x: Tile column.
+    Parameters
+    ----------
+    state
+        Current environment state.
+    y
+        Tile row.
+    x
+        Tile column.
 
-    Returns:
+    Returns
+    -------
+    int
         Entity index.
     """
     return int(state.tile_entity[y, x])
@@ -188,9 +224,15 @@ class TestDepositToPallet:
         assert int(state.ent_buf_count[eidx]) == 11
 
     def test_deposit_noop_at_cap(self, state_factory) -> None:
-        """Deposit should be a no-op when buffer is at capacity (64)."""
+        """Deposit is a no-op once the buffer is at the machine's capacity.
+
+        The capacity is the pallet's own ``MACHINE_MAX_STACK`` entry. This
+        used to assert 64, a literal the deposit path enforced for every
+        machine kind regardless of the table.
+        """
+        cap = int(MACHINE_MAX_STACK[int(Machine.PALLET)])
         p_inv = _player_inv(1, {ItemType.COAL: 20})
-        bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.COAL, 64)})
+        bt, bc = _buf_grid(3, 3, {(1, 2): (ItemType.COAL, cap)})
         state = state_factory(
             world_map=_DIRT_3X3,
             player_position=(1, 1),
@@ -204,7 +246,7 @@ class TestDepositToPallet:
         state = deposit_to_adjacent(state, 0, ItemType.COAL)
 
         eidx = _ent_lookup(state, 1, 2)
-        assert int(state.ent_buf_count[eidx]) == 64
+        assert int(state.ent_buf_count[eidx]) == cap
         assert int(state.player_inventory[0, ItemType.COAL]) == 20
 
     def test_deposit_noop_no_machine(self, state_factory) -> None:
@@ -459,7 +501,7 @@ class TestWithdrawFromAssembler:
 class TestWithdrawDoesNotClobberOtherEntities:
     """Regression: withdraw must not zero unrelated entities' slot metadata.
 
-    ``run_combiners`` writes ``ent_asm_out_type`` at Phase 3 (cycle start)
+    ``run_assemblers and furnaces`` writes ``ent_asm_out_type`` at Phase 3 (cycle start)
     so an in-flight cycle can be identified as ``type=recipe_output,
     count=0``. Phase 1 only completes the cycle when ``asm_out_type != 0``.
 

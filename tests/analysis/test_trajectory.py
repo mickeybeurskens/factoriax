@@ -67,13 +67,18 @@ class TestStatesToTrajectoryWithParams:
     def _fake_states(state_factory, count: int):
         """Return ``count`` synthetic states + matching int32 actions.
 
-        Args:
-            state_factory: The root conftest ``state_factory`` fixture.
-            count: Number of states to build.
+        Parameters
+        ----------
+        state_factory
+            The root conftest ``state_factory`` fixture.
+        count
+            Number of states to build.
 
-        Returns:
+        Returns
+        -------
+        tuple
             ``(states, actions)`` where ``actions`` is padded to match
-            ``len(states)`` exactly — that's what ``states_to_trajectory``
+            ``len(states)`` exactly, which is what ``states_to_trajectory``
             expects when it computes per-step deltas across the rollout.
         """
         world_map = jnp.full((8, 8), BlockType.DIRT, dtype=jnp.int32)

@@ -296,8 +296,8 @@ class TestBuildState:
         assert int(state.ent_direction[eid]) == int(Direction.RIGHT)
 
 
-class TestCombinerInventoryLoading:
-    """A combiner's stored items load into the slot that holds that item.
+class TestAssemblerInventoryLoading:
+    """Stored items load into the slot the machine actually reads.
 
     ``Level.machine_inventory`` is item-indexed and carries no slot, so
     ``build_state`` decides per item whether it is an input or the finished

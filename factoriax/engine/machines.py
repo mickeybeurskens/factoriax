@@ -56,6 +56,7 @@ from factoriax.engine.tables import (
     CROSSING_AXIS_DIRS,
     CROSSING_HORIZ_SLOT,
     CROSSING_VERT_SLOT,
+    MACHINE_HAS_INPUT_SLOTS,
     MACHINE_MAX_STACK,
     SPLITTER_PERP_OUTPUTS,
 )
@@ -65,9 +66,12 @@ from factoriax.engine.tables import (
 _DY: tuple[int, ...] = (0, 0, 0, -1, 1)
 _DX: tuple[int, ...] = (0, -1, 1, 0, 0)
 
-#: Items a miner's output slot holds. At the default ``miner_mining_rate`` a
-#: miner fills this in one step and then idles until an arm, a belt, or a
-#: player drains it. Pallets stay the only large storage.
+#: Ore a miner will mine into its own buffer. At the default
+#: ``miner_mining_rate`` a miner reaches this in one step and then idles until
+#: an arm, a belt, or a player drains it. This is not the buffer's capacity.
+#: ``MACHINE_MAX_STACK`` gives a miner far more room than this, and a push
+#: from a belt or an arm fills it past the cap. Pallets stay the only large
+#: storage.
 MINER_OUTPUT_CAP: int = 3
 
 
@@ -234,10 +238,11 @@ def run_miners(
     in front, so a working miner is two decisions: where it stands and which
     way it looks.
 
-    Three limits apply to the amount. What the tile still holds, the free
-    space in the miner's own output slot, and the room left in the machine it
-    faces. The output slot is small, :data:`MINER_OUTPUT_CAP`, so a miner that
-    nothing drains fills up and idles rather than stockpiling.
+    Two limits apply to the amount mined: what the tile still holds, and the
+    room left under :data:`MINER_OUTPUT_CAP`. That cap is small, so a miner
+    nothing drains fills up and idles rather than stockpiling. The machine in
+    front limits the push instead, not the mining, so a miner facing a full
+    pallet still takes ore out of the ground and then stalls holding it.
 
     A tile that runs out turns to ``BlockType.DIRT`` and that miner stops,
     even when other tiles of the same patch still hold ore. Working a whole
@@ -412,15 +417,22 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
 
     Which slot it lands in depends on the machine in front. An assembler,
     furnace, or science lab takes delivery into ``ent_asm_in``, slot 0 when
-    that is empty or already holds the same item, otherwise slot 1. That is
-    the only route into a science lab, since
-    ``factoriax.engine.step.run_labs`` reads nothing else. Everything else
-    receives into ``ent_buf`` up to its ``MACHINE_MAX_STACK``.
+    that is empty or already holds the same item, otherwise slot 1. An input
+    slot fills to the machine's ``MACHINE_MAX_STACK``, the same limit the
+    buffer route uses, so an arm feeding a machine that is not consuming
+    stalls rather than piling up without bound. Everything else receives into
+    ``ent_buf``, also up to ``MACHINE_MAX_STACK``.
 
-    An arm's own ``ent_buf`` plays no part in any of that, but it is not
+    An arm and a player deposit are the two ways to give a science lab a pack
+    it will consume. ``factoriax.engine.step.run_labs`` reads ``ent_asm_in``
+    and nothing else, and both routes land there. A belt aimed at a lab is not
+    refused, but it delivers into the lab's ``ent_buf``, where the items sit
+    unconsumed until an arm or a player takes them back out.
+
+    An arm never draws from its own ``ent_buf``, but that buffer is not
     sealed. ``MACHINE_MAX_STACK`` gives an arm room for one item and a belt
-    facing an arm will push into it. No pass takes it back out, so an item
-    parked there stays until a player withdraws it.
+    facing an arm pushes into it. The next arm along treats a loaded arm as an
+    ordinary source and drains it like any other machine.
 
     Parameters
     ----------
@@ -440,14 +452,11 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
     h, w = state.map.shape
     active = state.ent_y >= 0
     is_arm = (state.ent_type == Machine.ARM) & active
-    # Science labs count as combiners on the *receiving* side: they
-    # share the 2-input-slot shape and ``run_labs`` only consumes from
-    # ``ent_asm_in``, so arm deliveries must land there.
-    self_is_combiner = (
-        (state.ent_type == Machine.ASSEMBLER)
-        | (state.ent_type == Machine.FURNACE)
-        | (state.ent_type == Machine.SCIENCE_LAB)
-    )
+    # Assemblers, furnaces, and science labs take a delivery into
+    # ``ent_asm_in``. One table decides that everywhere; see
+    # ``MACHINE_HAS_INPUT_SLOTS``.
+    self_has_input_slots = MACHINE_HAS_INPUT_SLOTS[state.ent_type.astype(jnp.int32)]
+    self_max_stack = MACHINE_MAX_STACK[state.ent_type.astype(jnp.int32)]
 
     ey = jnp.clip(state.ent_y, 0, h - 1)
     ex = jnp.clip(state.ent_x, 0, w - 1)
@@ -495,11 +504,7 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
             ey, ex, dy, dx, h, w, state.tile_entity, n
         )
         dst_type = state.ent_type[dst_safe]
-        dst_is_combiner = (
-            (dst_type == Machine.ASSEMBLER)
-            | (dst_type == Machine.FURNACE)
-            | (dst_type == Machine.SCIENCE_LAB)
-        )
+        dst_has_input_slots = MACHINE_HAS_INPUT_SLOTS[dst_type.astype(jnp.int32)]
 
         dst_bc = buf_count[dst_safe]
         dst_bt = buf_type[dst_safe]
@@ -511,16 +516,18 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         # whose MACHINE_MAX_STACK is 0 reads as empty and holds nothing.
         dst_buf_accepts = (dst_max > 0) & (dst_empty | (dst_same & dst_space))
 
-        # Combiner-destination receptivity: slot 0 first if empty
-        # or matches type, else slot 1.
+        # Input-slot receptivity: slot 0 first if empty or holding the same
+        # item with room left, else slot 1. Capacity comes from the same
+        # MACHINE_MAX_STACK the buffer route uses, so an input slot fills up
+        # rather than growing without bound.
         dst_in_t0 = in_t0[dst_safe]
         dst_in_c0 = in_c0[dst_safe]
         dst_in_t1 = in_t1[dst_safe]
         dst_in_c1 = in_c1[dst_safe]
-        dst_combiner_s0_ok = (dst_in_c0 == 0) | (dst_in_t0 == src_bt)
-        dst_combiner_s1_ok = (dst_in_c1 == 0) | (dst_in_t1 == src_bt)
-        dst_combiner_accepts = dst_combiner_s0_ok | dst_combiner_s1_ok
-        dst_accepts = jnp.where(dst_is_combiner, dst_combiner_accepts, dst_buf_accepts)
+        dst_s0_ok = (dst_in_c0 == 0) | ((dst_in_t0 == src_bt) & (dst_in_c0 < dst_max))
+        dst_s1_ok = (dst_in_c1 == 0) | ((dst_in_t1 == src_bt) & (dst_in_c1 < dst_max))
+        dst_slot_accepts = (dst_max > 0) & (dst_s0_ok | dst_s1_ok)
+        dst_accepts = jnp.where(dst_has_input_slots, dst_slot_accepts, dst_buf_accepts)
 
         can_xfer = facing_d & src_has & dst_valid & dst_diff & dst_accepts
 
@@ -531,19 +538,19 @@ def run_arms(state: EnvState, params: EnvParams) -> EnvState:
         receiving = active & can_xfer[src_safe] & (src_eidx >= 0) & src_diff
         rcv_bt = src_bt[src_safe]
 
-        # ent_buf-track: combiners receive into ``ent_asm_in`` instead.
-        receives_buf = receiving & ~self_is_combiner
+        # ent_buf track: machines with input slots receive there instead.
+        receives_buf = receiving & ~self_has_input_slots
         buf_type = jnp.where(receives_buf, rcv_bt, buf_type)
         buf_count = jnp.where(receives_buf, buf_count + jnp.int16(1), buf_count)
 
-        # ent_asm_in track: pick slot 0 first if empty or matches the
-        # incoming type, else slot 1. Per-slot scalar updates avoid
+        # ent_asm_in track: pick slot 0 first if empty or holding the same
+        # item with room left, else slot 1. Per-slot scalar updates avoid
         # the per-iteration ``jnp.stack`` allocator pressure.
-        receives_combiner = receiving & self_is_combiner
-        self_s0_ok = (in_c0 == 0) | (in_t0 == rcv_bt)
-        self_s1_ok = (in_c1 == 0) | (in_t1 == rcv_bt)
-        to_s0 = receives_combiner & self_s0_ok
-        to_s1 = receives_combiner & ~self_s0_ok & self_s1_ok
+        receives_slots = receiving & self_has_input_slots
+        self_s0_ok = (in_c0 == 0) | ((in_t0 == rcv_bt) & (in_c0 < self_max_stack))
+        self_s1_ok = (in_c1 == 0) | ((in_t1 == rcv_bt) & (in_c1 < self_max_stack))
+        to_s0 = receives_slots & self_s0_ok
+        to_s1 = receives_slots & ~self_s0_ok & self_s1_ok
         in_t0 = jnp.where(to_s0, rcv_bt, in_t0)
         in_c0 = jnp.where(to_s0, in_c0 + jnp.int16(1), in_c0)
         in_t1 = jnp.where(to_s1, rcv_bt, in_t1)
@@ -602,12 +609,14 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     until a player, an arm, or a belt takes the result away. That is what
     makes pallets the only way to buffer a chain.
 
-    The rest is timing. Inputs are consumed when a craft starts, not when it
-    finishes, so a craft cut short by a pickup loses them. The countdown is
-    the recipe's ``ticks``, held in ``ent_power``, and the output appears on
-    the step it reaches 1. A recipe takes one or two inputs, and the two slots
-    are matched in either order, so it does not matter which slot an arm or
-    belt happened to fill.
+    The rest is timing. Inputs are consumed on the step a craft starts, not
+    on the step it finishes. The countdown is the recipe's ``ticks``, held in
+    ``ent_power``, and the output appears on the step that begins with
+    ``ent_power == 1``, which is the step after the one that decremented it
+    there. A recipe of ``T`` ticks therefore takes ``T + 1`` calls, counting
+    the call that starts it. A recipe takes one or two inputs, and the two
+    slots are matched in either order, so it does not matter which slot an arm
+    or belt happened to fill.
 
     Parameters
     ----------
@@ -630,8 +639,9 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     active = state.ent_y >= 0
     # Assemblers and furnaces share the same engine shape and code path;
     # they only differ in which recipes they're allowed to match in
-    # Phase 3 (via params.recipe_table.machine_type).
-    is_combiner = (
+    # Phase 3 (via params.recipe_table.machine_type). A science lab is not
+    # here: it has the same input slots but runs no recipe.
+    is_assembler_or_furnace = (
         (state.ent_type == Machine.ASSEMBLER) | (state.ent_type == Machine.FURNACE)
     ) & active
 
@@ -667,8 +677,8 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
 
         s0_ok = (in_c0 == 0) | (in_t0 == nb_bt)
         s1_ok = (in_c1 == 0) | (in_t1 == nb_bt)
-        tk0 = is_combiner & nb_eligible & s0_ok
-        tk1 = is_combiner & nb_eligible & ~tk0 & s1_ok
+        tk0 = is_assembler_or_furnace & nb_eligible & s0_ok
+        tk1 = is_assembler_or_furnace & nb_eligible & ~tk0 & s1_ok
         tk = tk0 | tk1
 
         in_t0 = jnp.where(tk0, nb_bt, in_t0)
@@ -676,10 +686,10 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
         in_t1 = jnp.where(tk1, nb_bt, in_t1)
         in_c1 = jnp.where(tk1, in_c1 + jnp.int16(1), in_c1)
 
-        # Gather: each entity checks if a combiner on the opposite
-        # side (direction d) is pulling from it. Gate on the payer being
-        # active: free slots all clip to tile (0, 0), so without this each
-        # one pays for a pull aimed at (0, 0)'s neighbour and goes negative.
+        # Gather: each entity checks if an assembler or furnace on the
+        # opposite side (direction d) is pulling from it. Gate on the payer
+        # being active: free slots all clip to tile (0, 0), so without this
+        # each pays for a pull aimed at (0, 0)'s neighbour and goes negative.
         _, _, asm_eidx, _, asm_diff, asm_safe = _lookup_neighbor(
             ey, ex, -dy, -dx, h, w, state.tile_entity, n
         )
@@ -687,7 +697,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
         buf_type, buf_count = _subtract_buffer(taken, buf_type, buf_count, jnp.int16(1))
 
     # --- Phase 1: Complete crafts (power == 1) ---
-    completing = is_combiner & (state.ent_power == 1)
+    completing = is_assembler_or_furnace & (state.ent_power == 1)
     out_empty = state.ent_asm_out_count == 0
     can_complete = completing & (state.ent_asm_out_type != 0) & out_empty
 
@@ -712,7 +722,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     new_power = jnp.where(completing, jnp.int16(0), state.ent_power)
 
     # --- Phase 2: Progress (power > 1) ---
-    progressing = is_combiner & (new_power > 1)
+    progressing = is_assembler_or_furnace & (new_power > 1)
     new_power = jnp.where(progressing, new_power - jnp.int16(1), new_power)
 
     # --- Phase 3: Start new crafts ---
@@ -723,7 +733,7 @@ def run_assemblers(state: EnvState, params: EnvParams) -> EnvState:
     # ``asm_out_count == 0`` is part of the idle gate: without a
     # downstream buffer to drain to (no Phase 4), a stuck output
     # must be withdrawn before the machine can start a new cycle.
-    idle = is_combiner & (new_power == 0) & (new_out_count == 0)
+    idle = is_assembler_or_furnace & (new_power == 0) & (new_out_count == 0)
     matched = jnp.int32(-1)
     for r in range(num_recipes):
         # 1-input recipes pad the unused slot with (EMPTY, 0) in the
@@ -796,17 +806,25 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         An overpass. Two streams pass through at right angles and never mix,
         because each axis has its own buffer and its own direction. A push
         aimed at the output face of an axis is refused. Each axis holds 2
-        items, one more than it moves per step, so a saturated crossing can
-        still accept and forward in the same step.
+        items and moves 1 per step, so an axis holding 1 accepts and forwards
+        in the same step. An axis already holding 2 forwards but refuses,
+        because a sender tests the destination against the count it had at the
+        start of the step, before the destination pushed.
 
     One kind of neighbour refuses delivery. A belt or splitter will not push
     into an assembler or furnace, which take items only through their own pull
-    or through an arm. A belt line ending at a machine therefore holds its
+    or through an arm. A belt line ending at one of those therefore holds its
     items until the machine reaches out and takes them.
 
+    A science lab is not on that list, and the asymmetry is worth knowing
+    before wiring one up. A belt pushes into a lab's ``ent_buf`` and the lab
+    accepts, but ``factoriax.engine.step.run_labs`` reads ``ent_asm_in``, so
+    nothing consumes what lands there. Feed a lab with an arm or a player
+    deposit. A belt run into one fills it with packs it will never spend.
+
     Under the hood, a crossing stores its two streams in the slot pair a
-    combiner uses for inputs: ``ent_asm_in[:, CROSSING_VERT_SLOT]`` for the
-    vertical stream and ``ent_asm_in[:, CROSSING_HORIZ_SLOT]`` for the
+    an assembler uses for inputs: ``ent_asm_in[:, CROSSING_VERT_SLOT]`` for
+    the vertical stream and ``ent_asm_in[:, CROSSING_HORIZ_SLOT]`` for the
     horizontal one. Its two axis directions are packed into the single
     ``ent_direction`` byte and unpacked by ``CROSSING_AXIS_DIRS``.
 
@@ -895,9 +913,13 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         )
         dn_type = state.ent_type[dn_safe]
         dn_is_crossing = dn_type == Machine.CROSSING
-        # Refuse pushes into a combiner. It takes items through its own pull
-        # or through an arm, so a belt aimed at one backs up instead.
-        dn_is_combiner = (dn_type == Machine.ASSEMBLER) | (dn_type == Machine.FURNACE)
+        # Refuse pushes into an assembler or a furnace. Each takes items
+        # through its own pull or through an arm, so a belt aimed at one
+        # backs up instead. A science lab is deliberately not in this set;
+        # see the module docstring and ``ISSUES.md``.
+        dn_is_assembler_or_furnace = (dn_type == Machine.ASSEMBLER) | (
+            dn_type == Machine.FURNACE
+        )
         # A crossing accepts only on the input face of the axis, which is the
         # face opposite its output: a belt pushing DOWN enters a downward
         # axis from the north.
@@ -930,7 +952,7 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
             & dn_valid
             & dn_diff
             & dn_accepts
-            & ~dn_is_combiner
+            & ~dn_is_assembler_or_furnace
             & (dn_max > 0)
             & (dn_empty | (dn_same & dn_space))
         )
@@ -959,8 +981,8 @@ def run_conveyor_belts(state: EnvState, params: EnvParams) -> EnvState:
         in_type = src_type[up_safe]
         in_xfer = xfer[up_safe]
 
-        # Buf-track gather: receivers that are not crossings. A combiner
-        # cannot appear here, can_push already excluded it.
+        # Buf-track gather: receivers that are not crossings. An assembler
+        # or furnace cannot appear here; can_push already excluded them.
         receives_buf = incoming & ~is_crossing
         buf_type = jnp.where(receives_buf, in_type, buf_type)
         buf_count = jnp.where(receives_buf, buf_count + in_xfer, buf_count)

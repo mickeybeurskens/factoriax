@@ -37,12 +37,17 @@ def _buf_grids(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Build buffer_type and buffer_count grids.
 
-    Args:
-        shape: Grid (H, W).
-        entries: Mapping of (y, x) -> (item_type, count).
+    Parameters
+    ----------
+    shape
+        Grid ``(H, W)``.
+    entries
+        Mapping of ``(y, x)`` to ``(item_type, count)``.
 
-    Returns:
-        Tuple of (buffer_type, buffer_count) arrays, each shape (H, W).
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(buffer_type, buffer_count)``, each shaped ``(H, W)``.
     """
     bt = jnp.zeros(shape, dtype=jnp.int8)
     bc = jnp.zeros(shape, dtype=jnp.int16)
@@ -65,15 +70,23 @@ def _make_state(
     Uses max_machines equal to the actual entity count to avoid
     inactive-entity scatter collisions in JAX vectorised loops.
 
-    Args:
-        state_factory: Pytest fixture that creates EnvState.
-        machine_types: Machine type per tile.
-        machine_direction: Direction per tile.
-        buffer_type: Buffer item type per tile (optional).
-        buffer_count: Buffer item count per tile (optional).
+    Parameters
+    ----------
+    state_factory
+        Pytest fixture that creates an ``EnvState``.
+    machine_types
+        Machine type per tile.
+    machine_direction
+        Direction per tile.
+    buffer_type
+        Buffer item type per tile. Optional.
+    buffer_count
+        Buffer item count per tile. Optional.
 
-    Returns:
-        Configured EnvState.
+    Returns
+    -------
+    EnvState
+        Configured state.
     """
     shape = machine_types.shape
     n_entities = int((machine_types != int(Machine.NONE)).sum())
@@ -90,13 +103,19 @@ def _make_state(
 def _get_buf(state, y: int, x: int) -> tuple[int, int]:
     """Return (buf_type, buf_count) for the entity at tile (y, x).
 
-    Args:
-        state: Environment state.
-        y: Tile row.
-        x: Tile column.
+    Parameters
+    ----------
+    state
+        Environment state.
+    y
+        Tile row.
+    x
+        Tile column.
 
-    Returns:
-        Tuple of (item_type, count). Returns (0, 0) if no entity.
+    Returns
+    -------
+    tuple of int
+        ``(item_type, count)``, or ``(0, 0)`` when the tile is empty.
     """
     eid = int(state.tile_entity[y, x])
     if eid < 0:

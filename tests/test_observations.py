@@ -388,8 +388,10 @@ class TestRgb:
     def test_block_pixel_size_scales_output(self, state_factory, bps: int) -> None:
         """Output dimensions must scale linearly with block_pixel_size.
 
-        Args:
-            bps: Block pixel size to test.
+        Parameters
+        ----------
+        bps
+            Block pixel size to test.
         """
         state = state_factory(
             world_map=jnp.ones((4, 4), dtype=jnp.int32) * int(BlockType.DIRT),

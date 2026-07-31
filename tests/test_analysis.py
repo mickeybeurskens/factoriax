@@ -67,14 +67,22 @@ def make_single_player_traj(
 ) -> Trajectory:
     """Build a (num_eps, num_steps) single-player trajectory with random actions.
 
-    Args:
-        num_eps: Number of episodes.
-        num_steps: Episode length.
-        num_actions: Action space size.
-        seed: RNG seed for reproducibility.
+    Parameters
+    ----------
+    num_eps
+        Number of episodes.
+    num_steps
+        Episode length.
+    num_actions
+        Action space size.
+    seed
+        RNG seed for reproducibility.
 
-    Returns:
-        Single-player Trajectory with integer actions in [0, num_actions).
+    Returns
+    -------
+    Trajectory
+        Single-player trajectory with integer actions in
+        ``[0, num_actions)``.
     """
     rng = np.random.default_rng(seed)
     actions = rng.integers(0, num_actions, size=(num_eps, num_steps)).astype(np.int32)
@@ -90,16 +98,24 @@ def make_multi_player_traj(
 ) -> Trajectory:
     """Build a multi-player trajectory with all optional fields populated.
 
-    Args:
-        num_eps: Number of episodes.
-        num_steps: Episode length.
-        num_p: Number of players.
-        num_actions: Action space size.
-        seed: RNG seed for reproducibility.
+    Parameters
+    ----------
+    num_eps
+        Number of episodes.
+    num_steps
+        Episode length.
+    num_p
+        Number of players.
+    num_actions
+        Action space size.
+    seed
+        RNG seed for reproducibility.
 
-    Returns:
-        Multi-player Trajectory with actions, positions, inventory, achievements,
-        rewards, and timesteps.
+    Returns
+    -------
+    Trajectory
+        Multi-player trajectory with actions, positions, inventory,
+        achievements, rewards, and timesteps.
     """
     rng = np.random.default_rng(seed)
     actions = rng.integers(0, num_actions, size=(num_eps, num_steps, num_p)).astype(
@@ -133,12 +149,17 @@ def make_multi_player_traj(
 def make_minimal_traj(num_eps: int, num_steps: int) -> Trajectory:
     """Build a trajectory with only zero actions and no optional fields.
 
-    Args:
-        num_eps: Number of episodes.
-        num_steps: Episode length.
+    Parameters
+    ----------
+    num_eps
+        Number of episodes.
+    num_steps
+        Episode length.
 
-    Returns:
-        Minimal Trajectory for error-condition tests.
+    Returns
+    -------
+    Trajectory
+        Minimal trajectory for error-condition tests.
     """
     return Trajectory(actions=np.zeros((num_eps, num_steps), dtype=np.int32))
 
@@ -455,13 +476,19 @@ class TestState:
         """Build a single-player trajectory with player_inventory shaped
         ``(num_eps, num_steps, num_item_types)``.
 
-        Args:
-            num_eps: Number of episodes.
-            num_steps: Episode length.
-            num_item_types: Distinct item types to populate.
+        Parameters
+        ----------
+        num_eps
+            Number of episodes.
+        num_steps
+            Episode length.
+        num_item_types
+            Distinct item types to populate.
 
-        Returns:
-            Trajectory with randomly populated player_inventory.
+        Returns
+        -------
+        Trajectory
+            Trajectory with a randomly populated ``player_inventory``.
         """
         rng = np.random.default_rng(42)
         actions = np.zeros((num_eps, num_steps), dtype=np.int32)
@@ -938,13 +965,19 @@ class TestRolloutRecorder:
     ) -> FakeRollout:
         """Build a FakeRollout with specified done positions.
 
-        Args:
-            num_steps: Number of timesteps.
-            num_envs: Number of environments.
-            done_steps: List of (t, env_idx) pairs where done=True.
+        Parameters
+        ----------
+        num_steps
+            Number of timesteps.
+        num_envs
+            Number of environments.
+        done_steps
+            ``(t, env_idx)`` pairs where ``done`` is True.
 
-        Returns:
-            FakeRollout with sequential action values for easy verification.
+        Returns
+        -------
+        FakeRollout
+            Rollout with sequential action values for easy verification.
         """
         actions = (
             np.arange(num_steps * num_envs, dtype=np.int32).reshape(num_steps, num_envs)

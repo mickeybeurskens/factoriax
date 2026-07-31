@@ -1,6 +1,7 @@
 """Tests for the machine system."""
 
 import jax.numpy as jnp
+import pytest
 from jax import random
 
 from factoriax.engine.constants import (
@@ -11,6 +12,7 @@ from factoriax.engine.constants import (
 )
 from factoriax.engine.levels import generate_state
 from factoriax.engine.machines import (
+    MINER_OUTPUT_CAP,
     _lookup_neighbor,
     _subtract_buffer,
     run_arms,
@@ -22,19 +24,26 @@ from factoriax.engine.machines import (
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import MACHINE_MAX_STACK
 
-# The miner's buffer capacity — a "full" buffer value for the stop tests.
-_MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])
+# Room a miner's buffer has, which is far above MINER_OUTPUT_CAP: the cap
+# bounds what a miner mines, not what its buffer holds.
+_MINER_MAX_STACK = int(MACHINE_MAX_STACK[int(Machine.MINER)])
 
 
 def _eid(state: EnvState, y: int, x: int) -> int:
     """Look up the entity index at grid position (y, x).
 
-    Args:
-        state: Environment state with tile_entity grid.
-        y: Row index.
-        x: Column index.
+    Parameters
+    ----------
+    state
+        Environment state with a ``tile_entity`` grid.
+    y
+        Row index.
+    x
+        Column index.
 
-    Returns:
+    Returns
+    -------
+    int
         Entity index at the given tile.
     """
     return int(state.tile_entity[y, x])
@@ -85,15 +94,23 @@ class TestMinerOperation:
         assert new_state.ent_buf_count[eid] == 3
         assert new_state.ent_buf_type[eid] == ItemType.COAL
 
-    def test_miner_stops_when_output_full(self, state_factory) -> None:
-        """Miner should stop when output type is at max stack."""
+    def test_miner_mines_nothing_when_buffer_is_above_the_cap(
+        self, state_factory
+    ) -> None:
+        """A buffer past MINER_OUTPUT_CAP stops mining without going negative.
+
+        A miner only mines up to :data:`MINER_OUTPUT_CAP`, but a belt or an arm
+        can push its buffer well past that, up to ``MACHINE_MAX_STACK``. The
+        free-space term is then negative and has to clamp at zero rather than
+        subtract from the tile.
+        """
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
             machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
             buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
             buffer_count=jnp.array(
-                [[_MINER_BUF_CAP]],
+                [[_MINER_MAX_STACK]],
                 dtype=jnp.int16,
             ),
         )
@@ -103,7 +120,24 @@ class TestMinerOperation:
 
         eid = _eid(new_state, 0, 0)
         assert new_state.block_resources[0, 0] == 50
-        assert new_state.ent_buf_count[eid] == _MINER_BUF_CAP
+        assert new_state.ent_buf_count[eid] == _MINER_MAX_STACK
+
+    def test_miner_mines_nothing_when_buffer_is_at_the_cap(self, state_factory) -> None:
+        """A buffer exactly at MINER_OUTPUT_CAP stops mining."""
+        state = state_factory(
+            world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
+            block_resources=jnp.array([[50]], dtype=jnp.int16),
+            machine_types=jnp.array([[Machine.MINER]], dtype=jnp.int32),
+            buffer_type=jnp.array([[int(ItemType.COAL)]], dtype=jnp.int8),
+            buffer_count=jnp.array([[MINER_OUTPUT_CAP]], dtype=jnp.int16),
+        )
+        params = EnvParams()
+
+        new_state = run_miners(state, params)
+
+        eid = _eid(new_state, 0, 0)
+        assert new_state.block_resources[0, 0] == 50
+        assert new_state.ent_buf_count[eid] == MINER_OUTPUT_CAP
 
     def test_miner_stops_when_no_resources(self, state_factory) -> None:
         """Miner should stop when block has no resources."""
@@ -186,8 +220,6 @@ class TestMinerOperation:
         Full output slot: next tick mines 0 until a withdraw/arm/belt
         drains it.
         """
-        from factoriax.engine.machines import MINER_OUTPUT_CAP
-
         state = state_factory(
             world_map=jnp.array([[BlockType.COAL]], dtype=jnp.int32),
             block_resources=jnp.array([[50]], dtype=jnp.int16),
@@ -206,8 +238,6 @@ class TestMinerOperation:
 
 class TestMinerDifferentOres:
     """Tests for miners on different ore types."""
-
-    import pytest
 
     @pytest.mark.parametrize(
         "block_type, item_type",
@@ -293,10 +323,14 @@ class TestMinerPushDoesNotLeakIntoInactiveSlots:
         clips onto, so any ungated gather leaks the miner's ore into the
         inactive slots in lockstep with the real pallet.
 
-        Args:
-            state_factory: The shared ``state_factory`` fixture.
+        Parameters
+        ----------
+        state_factory
+            The shared ``state_factory`` fixture.
 
-        Returns:
+        Returns
+        -------
+        EnvState
             A state with two active entities (pallet, miner) and the
             remaining slots inactive at (0, 0).
         """
@@ -354,10 +388,14 @@ class TestBeltPushDoesNotLeakIntoInactiveSlots:
     def _belt_into_corner_state(self, state_factory) -> EnvState:
         """Build a belt at (0, 1) pushing COAL left into a pallet at (0, 0).
 
-        Args:
-            state_factory: The shared ``state_factory`` fixture.
+        Parameters
+        ----------
+        state_factory
+            The shared ``state_factory`` fixture.
 
-        Returns:
+        Returns
+        -------
+        EnvState
             A state with two active entities (pallet, belt) and the
             remaining slots inactive at (0, 0). The belt holds one COAL.
         """
@@ -477,12 +515,12 @@ class TestPushIntoZeroCapacityMachine:
 
 
 class TestAssemblerPullDoesNotLeakIntoInactiveSlots:
-    """Regression: the combiner's belt pull must debit only the placed belt.
+    """Regression: the belt pull must debit only the placed belt.
 
-    ``run_assemblers`` opens with a directional pull: a combiner takes one
+    ``run_assemblers`` opens with a directional pull: the machine takes one
     item from each adjacent belt facing it. The pull side is gated on
-    ``is_combiner``, which carries ``active``, but the side that pays for it
-    is not. Every inactive slot clips onto tile (0, 0), so a combiner on
+    ``is_assembler_or_furnace``, which carries ``active``, but the side that pays for it
+    is not. Every inactive slot clips onto tile (0, 0), so a machine on
     (0, 1) pulling leftwards reads as pulling from all of them at once and
     drives each to ``-1``.
     """
@@ -494,10 +532,14 @@ class TestAssemblerPullDoesNotLeakIntoInactiveSlots:
         onto, which is what puts the inactive slots on the paying side of
         the pull.
 
-        Args:
-            state_factory: The shared ``state_factory`` fixture.
+        Parameters
+        ----------
+        state_factory
+            The shared ``state_factory`` fixture.
 
-        Returns:
+        Returns
+        -------
+        EnvState
             A state with two active entities and the remaining slots
             inactive at (0, 0). The belt holds one IRON_ORE.
         """
@@ -561,11 +603,16 @@ class TestArmTransferDoesNotLeakIntoInactiveSlots:
         every inactive slot clips onto, so either facing puts the arm on the
         inactive slots' neighbour tile.
 
-        Args:
-            state_factory: The shared ``state_factory`` fixture.
-            arm_direction: ``Direction.LEFT`` or ``Direction.RIGHT``.
+        Parameters
+        ----------
+        state_factory
+            The shared ``state_factory`` fixture.
+        arm_direction
+            ``Direction.LEFT`` or ``Direction.RIGHT``.
 
-        Returns:
+        Returns
+        -------
+        EnvState
             A state with three active entities and the remaining slots
             inactive at (0, 0). One COAL sits in the pallet the arm draws
             from.

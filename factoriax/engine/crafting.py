@@ -2,7 +2,7 @@
 
 A player craft finishes in the step that starts it: the inputs leave the
 inventory and the output arrives in the same call. A recipe's ``ticks`` is
-therefore not read here, and a combiner running the same recipe pays a cost
+therefore not read here, and an assembler running the same recipe pays a cost
 the player does not.
 
 Recipes come from :attr:`~factoriax.engine.state.EnvParams.recipe_table`
@@ -114,7 +114,7 @@ def craft_recipe(
     caller can issue the action unconditionally.
 
     One batch per call. Crafting takes no time, so ``ticks`` is not read and
-    a player pays none of the delay the same recipe costs a combiner.
+    a player pays none of the delay the same recipe costs an assembler.
 
     Parameters
     ----------

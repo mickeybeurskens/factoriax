@@ -65,7 +65,7 @@ def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     Furnace recipes may be 1 or 2 — every shipped furnace recipe
     is currently 2-input with coal as the second (fuel-like) slot
     (IRON_ORE + COAL → IRON_PLATE, …, LIMESTONE + COAL →
-    REFRACTORY). The 1-input branch in run_combiners is exercised
+    REFRACTORY). The 1-input branch in run_assemblers and furnaces is exercised
     only by the slot-emptiness gate test below.
     """
     recipe = BASE_RECIPES[idx]

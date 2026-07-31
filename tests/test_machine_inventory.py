@@ -22,12 +22,18 @@ _MINER_BUF_CAP = int(MACHINE_MAX_STACK[int(Machine.MINER)])
 def _eid(state: EnvState, y: int, x: int) -> int:
     """Look up the entity index at grid position (y, x).
 
-    Args:
-        state: Environment state with tile_entity grid.
-        y: Row index.
-        x: Column index.
+    Parameters
+    ----------
+    state
+        Environment state with a ``tile_entity`` grid.
+    y
+        Row index.
+    x
+        Column index.
 
-    Returns:
+    Returns
+    -------
+    int
         Entity index at the given tile.
     """
     return int(state.tile_entity[y, x])

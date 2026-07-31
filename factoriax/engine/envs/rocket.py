@@ -27,7 +27,6 @@ from functools import partial
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 
 from factoriax.engine.achievements import (
     Achievement,
@@ -372,28 +371,18 @@ def rocket_reward(
 
     Parameters
     ----------
-        prev_state: EnvState before the step.
-        new_state: EnvState after the step.
-
-    Parameters
-    ----------
-    prev_state : EnvState :
-
-    new_state : EnvState :
-
-    params : EnvParams :
-
-    prev_state: EnvState :
-
-    new_state: EnvState :
-
-    params: EnvParams :
-
+    prev_state
+        State immediately before the step.
+    new_state
+        State immediately after the step.
+    params
+        Unused. Present for the shared reward signature.
 
     Returns
     -------
-
-
+    jax.Array
+        Scalar float32, the weighted sum of achievements newly unlocked
+        this step. Zero on most steps.
     """
     return achievement_reward(
         prev_state, new_state, params, weights=ROCKET_ACHIEVEMENT_WEIGHTS
@@ -486,13 +475,14 @@ def build_rocket_level() -> Level:
     assembler are pre-placed one tile west and east of spawn
     respectively.
 
-    Parameters
-    ----------
+    Takes no arguments and no PRNG key: the layout is fixed, so every
+    reset of this scenario gets the same world.
 
     Returns
     -------
-
-
+    Level
+        The rocket scenario's level, ready for
+        :func:`factoriax.engine.levels.build_state`.
     """
     builder = LevelBuilder(_MAP_SIZE, _MAP_SIZE)
     # Coal column — one tile wide, full map height.

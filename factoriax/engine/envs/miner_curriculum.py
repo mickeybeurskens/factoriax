@@ -30,7 +30,6 @@ obs kwargs without surgery.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
 from functools import partial
 
 import jax

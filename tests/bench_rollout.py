@@ -18,10 +18,14 @@ from factoriax.engine.state import EnvParams
 def bench_single_env(num_steps: int = 2000) -> float:
     """Benchmark single-environment rollout.
 
-    Args:
-        num_steps: Number of steps to run.
+    Parameters
+    ----------
+    num_steps
+        Number of steps to run.
 
-    Returns:
+    Returns
+    -------
+    float
         Steps per second.
     """
     env = FactoriaxEnv()
@@ -61,12 +65,17 @@ def bench_single_env(num_steps: int = 2000) -> float:
 def bench_batched_env(num_envs: int = 64, num_steps: int = 500) -> float:
     """Benchmark vmapped multi-environment rollout.
 
-    Args:
-        num_envs: Number of parallel environments.
-        num_steps: Number of steps per environment.
+    Parameters
+    ----------
+    num_envs
+        Number of parallel environments.
+    num_steps
+        Number of steps per environment.
 
-    Returns:
-        Total steps per second (num_envs * num_steps / elapsed).
+    Returns
+    -------
+    float
+        Total steps per second, ``num_envs * num_steps / elapsed``.
     """
     env = FactoriaxEnv()
     params = EnvParams()

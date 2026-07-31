@@ -39,14 +39,21 @@ def _lab_state(
 ) -> object:
     """Build a state with one or more SCIENCE_LAB entities pre-loaded.
 
-    Args:
-        state_factory: pytest fixture.
-        lab_slot_types: per-lab ``(slot0_type, slot1_type)``.
-        lab_slot_counts: per-lab ``(slot0_count, slot1_count)``.
-        lab_positions: per-lab ``(x, y)`` placements.
+    Parameters
+    ----------
+    state_factory
+        The shared ``state_factory`` fixture.
+    lab_slot_types
+        Per-lab ``(slot0_type, slot1_type)``.
+    lab_slot_counts
+        Per-lab ``(slot0_count, slot1_count)``.
+    lab_positions
+        Per-lab ``(x, y)`` placements.
 
-    Returns:
-        ``EnvState`` with labs placed and slots populated.
+    Returns
+    -------
+    EnvState
+        State with labs placed and slots populated.
     """
     h = w = 8
     world_map = jnp.full((h, w), int(BlockType.DIRT), dtype=jnp.int32)

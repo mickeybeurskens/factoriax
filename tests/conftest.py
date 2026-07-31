@@ -82,6 +82,7 @@ from factoriax.engine.state import (
     EnvParams,  # noqa: E402
     EnvState,  # noqa: E402
 )
+from factoriax.engine.tables import MACHINE_MAX_HEALTH  # noqa: E402
 
 # Default entity capacity used by the test factory.
 _TEST_MAX_MACHINES: int = 64
@@ -114,14 +115,16 @@ def canonical_env_8x8_1p() -> tuple[FactoriaxEnv, EnvParams, Any, Any]:
     ``env.step_env`` happens exactly once per session instead of once
     per test.
 
-    Returns:
-        Tuple ``(env, params, jit_step_fn, initial_state)``. The state
-        is the post-reset state at ``timestep == 0`` from
-        ``random.PRNGKey(0)``; tests step *from* it without mutating
-        it (JAX pytrees are immutable by construction).
-
-    Consumers must NOT replace ``initial_state`` in-place — pass a
+    Consumers must NOT replace ``initial_state`` in-place. Pass a
     different state forward locally if a test needs to step further.
+
+    Returns
+    -------
+    tuple
+        ``(env, params, jit_step_fn, initial_state)``. The state is the
+        post-reset state at ``timestep == 0`` from ``random.PRNGKey(0)``;
+        tests step *from* it without mutating it, JAX pytrees being
+        immutable by construction.
     """
     env = FactoriaxEnv(map_width=8, map_height=8)
     params = EnvParams()
@@ -186,41 +189,68 @@ def state_factory():
     ) -> EnvState:
         """Create a test state with defaults for unspecified fields.
 
-        Args:
-            world_map: Block types array (required).
-            player_position: Single player (x, y) position.
-            player_positions: All player positions.
-            player_direction: Single player direction.
-            player_directions: All player directions.
-            timestep: Current timestep.
-            player_inventory: Item counts per player.
-            selected_player: Currently selected player index.
-            num_players: Number of players (for defaults).
-            block_resources: Resources per tile.
-            machine_types: Machine type per tile.
-            machine_power: Power per machine (grid form; packed into
-                ``ent_power``).
-            machine_direction: Direction per machine (grid form; packed
-                into ``ent_direction``).
-            buffer_type: Buffer item type per tile (grid form; packed
-                into ``ent_buf_type``).
-            buffer_count: Buffer item count per tile (grid form; packed
-                into ``ent_buf_count``).
-            asm_in_type: Assembler input types (grid form; packed into
-                ``ent_asm_in_type``).
-            asm_in_count: Assembler input counts (grid form; packed
-                into ``ent_asm_in_count``).
-            asm_out_type: Assembler output type (grid form; packed into
-                ``ent_asm_out_type``).
-            asm_out_count: Assembler output count (grid form; packed
-                into ``ent_asm_out_count``).
-            items_mined: Lifetime mined counts.
-            science_consumed_step: Per-step science pack consumption
-                delta (from SCIENCE_LAB entities).
-            max_machines: Entity array capacity.
+        Parameters
+        ----------
+        world_map
+            Block types array. Required.
+        player_position
+            Single player ``(x, y)`` position.
+        player_positions
+            All player positions.
+        player_direction
+            Single player direction.
+        player_directions
+            All player directions.
+        timestep
+            Current timestep.
+        player_inventory
+            Item counts per player.
+        selected_player
+            Currently selected player index.
+        num_players
+            Number of players, used for the defaults.
+        block_resources
+            Resources per tile.
+        machine_types
+            Machine type per tile.
+        machine_power
+            Power per machine, grid form, packed into ``ent_power``.
+        machine_direction
+            Direction per machine, grid form, packed into
+            ``ent_direction``.
+        buffer_type
+            Buffer item type per tile, grid form, packed into
+            ``ent_buf_type``.
+        buffer_count
+            Buffer item count per tile, grid form, packed into
+            ``ent_buf_count``.
+        asm_in_type
+            Assembler input types, grid form, packed into
+            ``ent_asm_in_type``.
+        asm_in_count
+            Assembler input counts, grid form, packed into
+            ``ent_asm_in_count``.
+        asm_out_type
+            Assembler output type, grid form, packed into
+            ``ent_asm_out_type``.
+        asm_out_count
+            Assembler output count, grid form, packed into
+            ``ent_asm_out_count``.
+        items_mined
+            Lifetime mined counts.
+        science_consumed_step
+            Per-step science pack consumption delta, from SCIENCE_LAB
+            entities.
+        max_machines
+            Entity array capacity.
+        **_kwargs
+            Dropped. Absorbs retired ``EnvState`` field names that older
+            tests still pass.
 
-        Returns:
-            Configured EnvState for testing.
+        Returns
+        -------
+        EnvState
+            Configured state for testing.
         """
         shape = world_map.shape
         mm = max_machines
@@ -336,6 +366,11 @@ def state_factory():
                     ent_asm_in_count[idx] = aic_np[y, x]
                     ent_asm_out_type[idx] = aot_np[y, x]
                     ent_asm_out_count[idx] = aoc_np[y, x]
+                    # Full health, matching what ``place_machine`` writes.
+                    # Pickup is gated on full health, so leaving this at 0
+                    # would build machines the engine can never pick up and
+                    # make every pickup test exercise the refused path.
+                    ent_health[idx] = int(MACHINE_MAX_HEALTH[int(mt_np[y, x])])
                     tile_ent[y, x] = idx
                     idx += 1
 

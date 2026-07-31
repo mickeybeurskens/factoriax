@@ -57,8 +57,10 @@ PATCH_BLOCKS: tuple[BlockType, ...] = (
 
 
 def patch_touches_inner_zone(px: int, py: int) -> bool:
-    """True if a 2x2 patch at ``(px, py)`` overlaps the spawn area or its
-    inner-ring buffer.
+    """Report whether a 2x2 patch would land on the spawn zone.
+
+    Covers the 2x2 spawn area and the one-cell buffer ring around it, so a
+    player never starts standing on ore.
 
     Parameters
     ----------
@@ -77,7 +79,7 @@ def patch_touches_inner_zone(px: int, py: int) -> bool:
 
 
 def patches_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
-    """True if 2x2 patches with corners ``a`` and ``b`` share any tile."""
+    """Report whether two 2x2 patches share any tile."""
     return abs(a[0] - b[0]) < PATCH_SIZE and abs(a[1] - b[1]) < PATCH_SIZE
 
 

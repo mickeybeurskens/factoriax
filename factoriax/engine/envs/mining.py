@@ -13,7 +13,7 @@ import numpy as np
 
 from factoriax.engine.constants import BlockType
 from factoriax.engine.envs.base import FactoriaxEnv
-from factoriax.engine.state import EnvParams
+from factoriax.engine.state import EnvParams, EnvState
 
 _MAP_SIZE: int = 8
 _N_ORE_TILES: int = 10

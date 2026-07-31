@@ -19,7 +19,8 @@ than declared per recipe. Recipes take 1 or 2 input types and the projection
 pads the unused slot with ``(EMPTY, 0)``, so every row is a two-slot lookup.
 
 A player crafting a recipe consumes inventory and gets the output in the same
-step. A combiner takes ``ticks`` steps instead, and its output slot cannot be
+step. An assembler or furnace takes ``ticks`` steps instead, and its output
+slot cannot be
 overwritten, so its throughput is bounded by how fast the output is withdrawn.
 """
 
@@ -56,10 +57,10 @@ _FURNACE_OUTPUTS: frozenset[int] = frozenset(
 #:
 #: A fixed engine limit, not a property of :data:`BASE_RECIPES`, and it applies
 #: to hand crafting as much as to machines. It is 2 because
-#: ``EnvState.ent_asm_in_type`` gives a combiner two input slots; a player's
+#: ``EnvState.ent_asm_in_type`` gives a machine two input slots; a player's
 #: inventory could feed a wider recipe, but the engine commits to one width so
 #: both paths read the same rows. Raising it means widening those state arrays
-#: and generalising the combiner matcher, which checks two slots in both
+#: and generalising the recipe matcher, which checks two slots in both
 #: orderings by hand. :class:`RecipeBook` rejects anything wider.
 MAX_RECIPE_INPUTS: int = 2
 
@@ -83,10 +84,11 @@ class Recipe:
         ``(item_type, count)`` pairs consumed per craft, one or two of them.
         Order pairs each count with its item and fixes the order a
         :class:`RecipeOverride` must list ``input_counts`` in. It does not
-        decide which combiner input slot an item lands in: the matcher
+        decide which input slot an item lands in: the matcher
         accepts either slot ordering.
     ticks
-        Steps a combiner takes to finish one craft. Player crafting ignores
+        Steps an assembler or furnace takes to finish one craft. Player
+        crafting ignores
         this and completes in the same step.
     output_count
         Items produced per craft.
@@ -103,7 +105,7 @@ class Recipe:
 
     @property
     def machine_type(self) -> int:
-        """Return the combiner kind that runs this recipe.
+        """Return the machine kind that runs this recipe.
 
         Derived from the output item rather than stored, so a recipe cannot
         declare a machine that disagrees with what it produces.
@@ -142,7 +144,7 @@ class RecipeOverride:
     output_count
         Replacement number of items produced per craft.
     ticks
-        Replacement combiner craft duration, in steps.
+        Replacement machine craft duration, in steps.
     """
 
     input_counts: tuple[int, ...] | None = None
@@ -240,7 +242,7 @@ class RecipeBook:
     the offender instead of producing arrays that misbehave at runtime:
 
     1. **Input arity.** Every recipe takes 1 to :data:`MAX_RECIPE_INPUTS`
-       input types. A combiner has that many input slots in ``EnvState``, so
+       input types. A machine has that many input slots in ``EnvState``, so
        the engine cannot feed a wider recipe.
     2. **No repeated input item.** A recipe names each input item at most
        once. :func:`factoriax.engine.crafting.can_afford_recipe` checks each
@@ -251,8 +253,8 @@ class RecipeBook:
        recipe, and two recipes making the same item would also break the yield
        calculation in :func:`factoriax.engine.crafting.craft_recipe`.
     4. **Unique input set per machine and arity.** No two recipes on the same
-       combiner kind, taking the same number of inputs, consume the same
-       unordered set of input item types. The combiner matcher picks a recipe
+       machine kind, taking the same number of inputs, consume the same
+       unordered set of input item types. The recipe matcher picks a recipe
        by input item types; a recipe's counts only gate whether the match
        fires, so counts cannot tell two recipes apart and such a pair would be
        ambiguous. Two recipes may share an input set at different arities,
@@ -291,7 +293,7 @@ class RecipeBook:
                 raise ValueError(
                     f"Recipe {idx} ({ItemType(recipe.output).name}, "
                     f"{recipe.name!r}) has {arity} input types; a recipe must "
-                    f"have 1 to {MAX_RECIPE_INPUTS}. A combiner holds "
+                    f"have 1 to {MAX_RECIPE_INPUTS}. A machine holds "
                     f"{MAX_RECIPE_INPUTS} input slots in EnvState, so the "
                     f"engine cannot feed a wider recipe."
                 )
@@ -337,7 +339,7 @@ class RecipeBook:
                     f"consume the input set {{{input_names}}} as "
                     f"{key[1]}-input recipes on machine "
                     f"{Machine(key[0]).name}. The forward-match in "
-                    f"run_combiners dispatches a machine's input buffers to a "
+                    f"run_assemblers dispatches a machine's input buffers to a "
                     f"recipe by input item-types alone (counts are ignored), "
                     f"so it cannot tell these two apart. Give one recipe a "
                     f"distinct input item-type set, or a different number of "
@@ -646,7 +648,7 @@ RECIPE_NAMES: list[str] = [r.name for r in BASE_RECIPES]
 class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
     """Stacked JAX arrays projected from a :class:`RecipeBook`.
 
-    Holds every per-recipe number the engine reads inside JIT'd code: combiner
+    Holds every per-recipe number the engine reads inside JIT'd code: machine
     cycle matching, crafting yield, and action dispatch. It rides on
     :class:`~factoriax.engine.state.EnvParams`, so the numbers reach traced
     code as PyTree leaves instead of Python globals baked into the XLA graph.
@@ -670,7 +672,7 @@ class RecipeTable(struct.PyTreeNode):  # type: ignore[no-untyped-call]
         Items consumed per slot, aligned with :attr:`input_items`. Shape
         ``(n, MAX_RECIPE_INPUTS)``, int32. A padded slot holds 0.
     ticks
-        Steps a combiner needs per craft. Shape ``(n,)``, int32.
+        Steps an assembler or furnace needs per craft. Shape ``(n,)``, int32.
     machine_type
         ``Machine`` value that runs each recipe. Shape ``(n,)``, int32.
     output_to_recipe

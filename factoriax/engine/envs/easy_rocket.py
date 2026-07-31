@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from functools import partial
 
 import jax
@@ -35,7 +34,7 @@ from factoriax.engine.envs.common import (
 from factoriax.engine.levels import Level, LevelBuilder
 from factoriax.engine.recipes import Recipe, RecipeBook, RecipeTable
 from factoriax.engine.rewards import achievement_reward
-from factoriax.engine.state import EnvParams
+from factoriax.engine.state import EnvParams, EnvState
 
 
 def build_easy_rocket_level(key: jax.Array) -> Level:
@@ -49,12 +48,15 @@ def build_easy_rocket_level(key: jax.Array) -> Level:
 
     Parameters
     ----------
-    key: jax.Array :
-
+    key
+        PRNG key for patch placement. Host-side, so this cannot be
+        traced; call it before entering ``jit``.
 
     Returns
     -------
-
+    Level
+        A 16x16 level with six 2x2 ore patches. The same key always
+        returns an equal level.
     """
     builder = LevelBuilder(MAP_SIZE, MAP_SIZE)
     placed: list[tuple[int, int]] = []
@@ -166,12 +168,14 @@ def _producing_ore_presence(state: EnvState) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
+    jax.Array
+        Shape ``(6,)`` bool, one flag per raw ore block in ``_ORE_BLOCKS``
+        order, True where a producing miner stands on that ore.
     """
     producing, blocks = producing_miners(state)
     return jnp.stack(
@@ -184,12 +188,14 @@ def _distinct_producing_ore_types(state: EnvState) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool. True once three or more of the six raw ores each
+        have a producing miner on them.
     """
     result: jax.Array = jnp.sum(_producing_ore_presence(state).astype(jnp.int32)) >= 3
     return result
@@ -200,19 +206,20 @@ def _all_ore_types_covered(state: EnvState) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     result: jax.Array = jnp.all(_producing_ore_presence(state))
     return result
 
 
 def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Array:
-    """An active assembler holds both ``item_a`` and ``item_b`` in its inputs.
+    """Report whether one assembler holds both items in its input slots.
 
     Each input item must occupy one of the two input slots with a
     non-empty count. Requiring both inputs in the same assembler keeps
@@ -221,16 +228,18 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
 
     Parameters
     ----------
-    state: EnvState :
-
-    item_a: int :
-
-    item_b: int :
-
+    state
+        State to read.
+    item_a
+        First required input item id.
+    item_b
+        Second required input item id.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool. True when one placed assembler holds both, in
+        either input slot.
     """
     is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
     in_type = state.ent_asm_in_type
@@ -241,7 +250,7 @@ def _assembler_holds_inputs(state: EnvState, item_a: int, item_b: int) -> jax.Ar
 
 
 def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
-    """An active assembler carries ``item`` in its output or buffer slot.
+    """Report whether one assembler is carrying an item on its way out.
 
     Reads both ``ent_asm_out`` and ``ent_buf`` because the engine drains
     a finished output into the buffer on the next tick; checking only the
@@ -249,14 +258,15 @@ def _assembler_outputs_item(state: EnvState, item: int) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
-    item: int :
-
+    state
+        State to read.
+    item
+        Item id to look for.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     is_asm = (state.ent_type == int(Machine.ASSEMBLER)) & (state.ent_y >= 0)
     out_has = (state.ent_asm_out_type == item) & (state.ent_asm_out_count > 0)
@@ -269,12 +279,13 @@ def _has_any_raw_ore(state: EnvState) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     return jnp.any(jnp.stack([holds_item(state, item) for item in _RAW_ORE_ITEMS]))
 
@@ -284,12 +295,13 @@ def _has_each_raw_ore(state: EnvState) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     return jnp.all(jnp.stack([holds_item(state, item) for item in _RAW_ORE_ITEMS]))
 
@@ -299,12 +311,13 @@ def _any_producing_miner(state: EnvState) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     return jnp.any(producing_miners(state)[0])
 
@@ -314,14 +327,15 @@ def _has_machine(state: EnvState, machine: int) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
-    machine: int :
-
+    state
+        State to read.
+    machine
+        ``Machine`` value to count.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     return count_machines(state, machine) >= 1
 
@@ -331,16 +345,17 @@ def _has_n_machines(state: EnvState, machine: int, n: int) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
-    machine: int :
-
-    n: int :
-
+    state
+        State to read.
+    machine
+        ``Machine`` value to count.
+    n
+        Threshold, inclusive.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     return count_machines(state, machine) >= n
 
@@ -352,18 +367,19 @@ def _has_n_machines_pair(
 
     Parameters
     ----------
-    state: EnvState :
-
-    machine_a: int :
-
-    machine_b: int :
-
-    n: int :
-
+    state
+        State to read.
+    machine_a
+        First ``Machine`` value to count.
+    machine_b
+        Second ``Machine`` value to count.
+    n
+        Threshold, inclusive, applied to each kind separately.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     return (count_machines(state, machine_a) >= n) & (
         count_machines(state, machine_b) >= n
@@ -380,14 +396,15 @@ def _has_n_raw_ore_types(state: EnvState, n: int) -> jax.Array:
 
     Parameters
     ----------
-    state: EnvState :
-
-    n: int :
-
+    state
+        State to read.
+    n
+        How many distinct raw ore types must be held, inclusive.
 
     Returns
     -------
-
+    jax.Array
+        Scalar bool.
     """
     held_types = jnp.stack([holds_item(state, item) for item in _RAW_ORE_ITEMS])
     return jnp.sum(held_types.astype(jnp.int32)) >= n
@@ -510,20 +527,22 @@ MAX_EASY_ROCKET_SCORE: float = max_score(EASY_ROCKET_ACHIEVEMENTS)
 def easy_rocket_reward(
     prev_state: EnvState, new_state: EnvState, params: EnvParams
 ) -> jax.Array:
-    """
+    """Score a step by the EasyRocket achievements it newly unlocked.
 
     Parameters
     ----------
-    prev_state: EnvState :
-
-    new_state: EnvState :
-
-    params: EnvParams :
-
+    prev_state
+        State immediately before the step.
+    new_state
+        State immediately after the step.
+    params
+        Unused. Present for the shared reward signature.
 
     Returns
     -------
-
+    jax.Array
+        Scalar float32, the weighted sum of achievements newly unlocked
+        this step. Zero on most steps.
     """
     return achievement_reward(
         prev_state, new_state, params, weights=EASY_ROCKET_ACHIEVEMENT_WEIGHTS

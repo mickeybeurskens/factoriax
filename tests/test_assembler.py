@@ -22,13 +22,19 @@ _PARAMS = EnvParams()
 def _eid(state: EnvState, y: int, x: int) -> int:
     """Return entity index at grid position (y, x).
 
-    Args:
-        state: Current environment state.
-        y: Row position.
-        x: Column position.
+    Parameters
+    ----------
+    state
+        Current environment state.
+    y
+        Row position.
+    x
+        Column position.
 
-    Returns:
-        Entity index (asserts >= 0).
+    Returns
+    -------
+    int
+        Entity index, asserted to be >= 0.
     """
     eid = int(state.tile_entity[y, x])
     assert eid >= 0, f"No entity at ({y}, {x})"
@@ -47,22 +53,34 @@ def _make_assembler_state(
     buf_count: int = 0,
     machine_type: int = int(Machine.ASSEMBLER),
 ) -> EnvState:
-    """Create a 3x3 world with a combiner (assembler or furnace) at (0, 0).
+    """Create a 3x3 world with an assembler or furnace at (0, 0).
 
-    Args:
-        state_factory: Conftest fixture for building states.
-        power: Initial ent_power for the machine.
-        asm_in_type: Input slot types [slot0, slot1].
-        asm_in_count: Input slot counts [slot0, slot1].
-        asm_out_type: Output item type.
-        asm_out_count: Output item count.
-        buf_type: Buffer item type.
-        buf_count: Buffer item count.
-        machine_type: Machine to place. Defaults to ASSEMBLER;
-            use FURNACE for smelting-recipe tests.
+    Parameters
+    ----------
+    state_factory
+        Conftest fixture for building states.
+    power
+        Initial ``ent_power`` for the machine.
+    asm_in_type
+        Input slot types, ``[slot0, slot1]``.
+    asm_in_count
+        Input slot counts, ``[slot0, slot1]``.
+    asm_out_type
+        Output item type.
+    asm_out_count
+        Output item count.
+    buf_type
+        Buffer item type.
+    buf_count
+        Buffer item count.
+    machine_type
+        Machine to place. Defaults to ASSEMBLER; use FURNACE for
+        smelting-recipe tests.
 
-    Returns:
-        Configured EnvState.
+    Returns
+    -------
+    EnvState
+        Configured state.
     """
     shape = (3, 3)
     world_map = jnp.full(shape, int(BlockType.DIRT), dtype=jnp.int32)

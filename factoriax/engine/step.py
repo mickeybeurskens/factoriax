@@ -1,7 +1,27 @@
-"""Advance the environment one step and apply the action the player issued.
+"""Advance the environment one step.
 
-Uses compound actions: placement, deposit, withdraw, and craft actions
-name the specific item type. No slot cursors or recipe selection needed.
+A step is one player action followed by the whole factory running once.
+:func:`factoriax_step` is the order: the action lands first, then every
+machine on the map moves, then science labs drain, then the clock ticks.
+An agent therefore sees the consequences of its action only on the next
+observation.
+
+Actions are compound. Rather than a cursor that selects a slot and a
+separate key that acts on it, each action names its own target: there is one
+action per placeable item, one per craftable item, and one per depositable
+item. That makes the action space wide and every action meaningful on its
+own, so nothing in the state has to remember what was selected.
+
+Every player action here targets one tile, the one the player faces, and
+each is masked rather than branched. An action that cannot happen writes the
+state back unchanged and reports nothing.
+
+Positions are ``(x, y)``, column first, while every grid lookup is ``[y, x]``.
+
+The player-facing transfers here obey the same per-machine capacities as the
+machine passes in :mod:`factoriax.engine.machines`, both reading
+``MACHINE_MAX_STACK``. A player cannot put more into a belt than a miner
+could.
 """
 
 import jax
@@ -36,6 +56,8 @@ from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.tables import (
     BLOCK_TO_ITEM_ARRAY,
     DIRECTIONS,
+    MACHINE_HAS_INPUT_SLOTS,
+    MACHINE_MAX_STACK,
     MINEABLE_BLOCKS,
     PLAYER_MAX_STACK,
     SCIENCE_PACK_INDEX,
@@ -55,33 +77,22 @@ def is_position_in_bounds(
     map_width: int,
     map_height: int,
 ) -> jax.Array:
-    """Check if a position is within map bounds.
+    """Report whether a position falls on the map.
 
     Parameters
     ----------
-    position :
-        (x, y) array.
-    map_width :
-        Map width.
-    map_height :
-        Map height.
-    position : jax.Array :
-
-    map_width : int :
-
-    map_height : int :
-
-    position: jax.Array :
-
-    map_width: int :
-
-    map_height: int :
-
+    position
+        Tile to test as ``(x, y)``, column first.
+    map_width
+        Map width in tiles.
+    map_height
+        Map height in tiles.
 
     Returns
     -------
-
-
+    jax.Array
+        Scalar bool. False for any negative coordinate or one at or past
+        the far edge.
     """
     return (
         (position[0] >= 0)
@@ -92,27 +103,23 @@ def is_position_in_bounds(
 
 
 def get_block_at(state: EnvState, position: jax.Array) -> jax.Array:
-    """Get the block type at a position, or OUT_OF_BOUNDS.
+    """Read the terrain block at a position.
+
+    Off-map positions get ``BlockType.OUT_OF_BOUNDS`` rather than raising,
+    so a caller can look past an edge without checking first. The lookup is
+    clipped before it happens, so nothing indexes out of range.
 
     Parameters
     ----------
-    state :
-        Current environment state.
-    position :
-        (x, y) coordinates.
-    state : EnvState :
-
-    position : jax.Array :
-
-    state: EnvState :
-
-    position: jax.Array :
-
+    state
+        State to read.
+    position
+        Tile to read as ``(x, y)``, column first.
 
     Returns
     -------
-
-
+    jax.Array
+        Scalar block id, or ``BlockType.OUT_OF_BOUNDS`` off the map.
     """
     map_height, map_width = state.map.shape
     in_bounds = is_position_in_bounds(position, map_width, map_height)
@@ -131,27 +138,29 @@ def is_position_walkable(
     state: EnvState,
     position: jax.Array,
 ) -> jax.Array:
-    """Check if a position can be walked on.
+    """Report whether a player can stand on a position.
+
+    Two things block a tile: a block in ``SOLID_BLOCKS``, such as stone or
+    water, and a machine. Conveyor belts are the one exception and can be
+    walked over, so a belt line does not wall a player off from its own
+    factory.
+
+    Other players are not considered, so two players can occupy one tile.
+
+    Off-map positions are refused, because ``OUT_OF_BOUNDS`` is a solid
+    block.
 
     Parameters
     ----------
-    state :
-        Current environment state.
-    position :
-        (x, y) coordinates.
-    state : EnvState :
-
-    position : jax.Array :
-
-    state: EnvState :
-
-    position: jax.Array :
-
+    state
+        State to read.
+    position
+        Tile to test as ``(x, y)``, column first.
 
     Returns
     -------
-
-
+    jax.Array
+        Scalar bool.
     """
     block = get_block_at(state, position)
     is_solid = jnp.any(block == SOLID_BLOCKS)
@@ -169,33 +178,36 @@ def move_player(
     action: int | jax.Array,
     player_idx: int | jax.Array,
 ) -> EnvState:
-    """Move or face a player based on the action.
+    """Move a player one tile, or turn them without moving.
+
+    Facing matters more than position, because every other player action
+    targets the tile in front. Two ways to set it: a movement action turns
+    the player and then moves them if the target is walkable, and a
+    ``FACE_`` action turns them without moving.
+
+    A movement action into a blocked tile still turns the player. That is
+    deliberate: it means one action can always aim at a wall, a machine, or
+    an ore patch in order to act on it next.
+
+    Any action that is neither a movement nor a ``FACE_`` leaves the player
+    where they are, facing as they were, so this is safe to call
+    unconditionally.
 
     Parameters
     ----------
-    state :
-        Current environment state.
-    action :
-        Movement or facing action.
-    player_idx :
-        Player index.
-    state : EnvState :
-
-    action : int | jax.Array :
-
-    player_idx : int | jax.Array :
-
-    state: EnvState :
-
-    action: int | jax.Array :
-
-    player_idx: int | jax.Array :
-
+    state
+        State to read.
+    action
+        Action id. Only the four movement and four ``FACE_`` values have
+        an effect.
+    player_idx
+        Which player to move.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``player_positions`` and ``player_directions``
+        updated for that player.
     """
     pos = state.player_positions[player_idx]
     current_dir = state.player_directions[player_idx]
@@ -260,32 +272,30 @@ def mine_block(
     units, capped by remaining tile resources and remaining inventory
     stack space.
 
-    Parameters
-    ----------
-        state: Current environment state.
-        player_idx: Player index.
+    This is the only way to get ore without building a miner, and it is how
+    a run bootstraps: the first miner has to be crafted from ore mined by
+    hand.
+
+    A tile emptied of resources turns to ``BlockType.DIRT``, the same as
+    under a miner.
 
     Parameters
     ----------
-    attr :
-        EnvParams
-    state : EnvState :
-
-    player_idx : int | jax.Array :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    player_idx: int | jax.Array :
-
-    params: EnvParams :
-
+    state
+        State to read.
+    player_idx
+        Which player is mining.
+    params
+        Supplies ``player_mining_yield``, the amount per action before the
+        tile and inventory caps apply.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``map``, ``player_inventory``, ``block_resources``,
+        and ``items_mined`` updated. Unchanged when nothing was mined.
+        Unlike :func:`factoriax.engine.machines.run_miners`, this tallies
+        every mined item into ``items_mined``, not only the five ore types.
     """
     tx, ty = get_tile_in_front(state, player_idx)
     h, w = state.map.shape
@@ -340,36 +350,40 @@ def deposit_to_adjacent(
     player_idx: int | jax.Array,
     item_type: int | jax.Array,
 ) -> EnvState:
-    """Deposit an item into the machine in front of the player.
+    """Hand one item to the machine in front of the player.
 
-    For assemblers: deposits into asm_in slots.
-    For buffer machines: deposits into buffer.
+    One item per action, whatever the machine. That is the asymmetry with
+    :func:`withdraw_from_adjacent`, which empties a slot in one action.
+
+    Where the item lands depends on the machine. An assembler, furnace, or
+    science lab takes it into ``ent_asm_in``, slot 0 when that is empty or
+    already holds the same item and slot 1 otherwise. Every other machine
+    takes it into ``ent_buf``, provided the buffer is empty or already holds
+    the same item.
+
+    A miner is the one machine that refuses a deposit outright. Its buffer
+    is an output.
+
+    Both routes honour ``MACHINE_MAX_STACK``, the same table the machine
+    passes read, so a belt fills to 3 and a rocket refuses every item. A
+    refused deposit leaves the item in the player's inventory.
 
     Parameters
     ----------
-    state :
-        Current environment state.
-    player_idx :
-        Player index.
-    item_type :
-        ItemType to deposit.
-    state : EnvState :
-
-    player_idx : int | jax.Array :
-
-    item_type : int | jax.Array :
-
-    state: EnvState :
-
-    player_idx: int | jax.Array :
-
-    item_type: int | jax.Array :
-
+    state
+        State to read.
+    player_idx
+        Which player is depositing.
+    item_type
+        Item to hand over. The action itself names it; there is no
+        selection cursor.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``player_inventory``, ``ent_buf_type``,
+        ``ent_buf_count``, ``ent_asm_in_type``, and ``ent_asm_in_count``
+        updated. Unchanged when the deposit is refused.
     """
     item_type_arr = jnp.int32(item_type)
     tx, ty = get_tile_in_front(state, player_idx)
@@ -388,34 +402,34 @@ def deposit_to_adjacent(
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    # Assemblers, furnaces, and science labs share the 2-input-slot
-    # shape; labs must receive into ``ent_asm_in`` because ``run_labs``
-    # only consumes from there.
-    is_combiner = (
-        (mt == Machine.ASSEMBLER)
-        | (mt == Machine.FURNACE)
-        | (mt == Machine.SCIENCE_LAB)
-    )
+    # Assemblers, furnaces, and science labs take a delivery into
+    # ``ent_asm_in`` rather than ``ent_buf``. ``MACHINE_HAS_INPUT_SLOTS`` is
+    # the one definition of that set; spelling the three kinds out here is
+    # how this path and the belt pass drifted apart in the first place.
+    max_stack = MACHINE_MAX_STACK[mt.astype(jnp.int32)]
+    has_input_slots = MACHINE_HAS_INPUT_SLOTS[mt.astype(jnp.int32)]
 
-    # Deposit to combiner input slot.
+    # Deposit into an input slot.
     in_t0 = state.ent_asm_in_type[eidx, 0]
     in_c0 = state.ent_asm_in_count[eidx, 0]
     in_t1 = state.ent_asm_in_type[eidx, 1]
     in_c1 = state.ent_asm_in_count[eidx, 1]
 
-    slot0_ok = (in_c0 == 0) | (in_t0 == item_type_arr)
-    slot1_ok = (in_c1 == 0) | (in_t1 == item_type_arr)
-    use_s0 = is_combiner & slot0_ok
-    use_s1 = is_combiner & ~use_s0 & slot1_ok
+    slot0_ok = (in_c0 == 0) | ((in_t0 == item_type_arr) & (in_c0 < max_stack))
+    slot1_ok = (in_c1 == 0) | ((in_t1 == item_type_arr) & (in_c1 < max_stack))
+    use_s0 = has_input_slots & (max_stack > 0) & slot0_ok
+    use_s1 = has_input_slots & (max_stack > 0) & ~use_s0 & slot1_ok
 
     can_deposit_asm = in_bounds & has_item & (use_s0 | use_s1)
 
-    # Deposit to buffer machine (non-combiner, non-miner).
+    # Deposit into a buffer machine. Capacity comes from MACHINE_MAX_STACK,
+    # so a belt takes 3 and a rocket takes none, matching what every
+    # machine-driven transfer in factoriax.engine.machines enforces.
     is_miner = mt == Machine.MINER
     buf_empty = state.ent_buf_count[eidx] == 0
     buf_same = state.ent_buf_type[eidx] == item_type_arr
-    buf_space = state.ent_buf_count[eidx] < jnp.int16(64)
-    is_buf = ~is_combiner & ~is_miner & has_machine
+    buf_space = state.ent_buf_count[eidx] < max_stack
+    is_buf = ~has_input_slots & ~is_miner & has_machine & (max_stack > 0)
     can_deposit_buf = in_bounds & has_item & is_buf & (buf_empty | buf_same) & buf_space
 
     can_deposit = can_deposit_asm | can_deposit_buf
@@ -476,27 +490,36 @@ def withdraw_from_adjacent(
     """Withdraw from the output slot of the machine in front of the player.
 
     Each machine exposes exactly one output slot at a time
-    (``ent_asm_out`` for combiners mid-cycle, otherwise ``ent_buf``).
+    (``ent_asm_out`` for an assembler or furnace mid-cycle, otherwise
+    ``ent_buf``).
     A single WITHDRAW action pulls **as many items as can fit** —
     the min of what's in the slot and the player's remaining
     inventory space. That keeps agents from burning 100 ticks
     emptying a 100-ore pallet one item at a time.
 
+    Which slot is read is decided by what is in them, not by the machine
+    kind: ``ent_asm_out`` when it holds anything, ``ent_buf`` otherwise. In
+    practice the two never both hold items, because an assembler or furnace
+    writes only
+    ``asm_out`` and buffer machines only ``buf``.
+
+    Emptying a slot clears its item type as well as its count, since the
+    rest of the engine reads a cleared type as free to accept anything.
+
     Parameters
     ----------
-    state : EnvState :
-
-    player_idx : int | jax.Array :
-
-    state: EnvState :
-
-    player_idx: int | jax.Array :
-
+    state
+        State to read.
+    player_idx
+        Which player is withdrawing.
 
     Returns
     -------
-
-
+    EnvState
+        New state with ``player_inventory``, ``ent_buf_type``,
+        ``ent_buf_count``, ``ent_asm_out_type``, and ``ent_asm_out_count``
+        updated. Unchanged when the tile holds no machine, the machine
+        holds nothing, or the player has no room for the item.
     """
     tx, ty = get_tile_in_front(state, player_idx)
     map_h, map_w = state.map.shape
@@ -511,9 +534,10 @@ def withdraw_from_adjacent(
     eidx_raw = state.tile_entity[sy, sx]
     eidx = jnp.clip(eidx_raw, 0, max_e - 1)
 
-    # Prefer ``asm_out`` when populated (combiner mid-cycle); otherwise
+    # Prefer ``asm_out`` when populated (assembler or furnace mid-cycle);
     # read from ``buf``. The two slots are mutually exclusive in
-    # practice — combiners only use asm_out, buffer machines only buf.
+    # practice: assemblers and furnaces only use asm_out, buffer machines
+    # only buf.
     out_has = state.ent_asm_out_count[eidx] > 0
     buf_has = state.ent_buf_count[eidx] > 0
     use_asm = is_machine & out_has
@@ -596,26 +620,32 @@ def withdraw_from_adjacent(
 def run_labs(state: EnvState) -> EnvState:
     """Consume every science pack sitting in any SCIENCE_LAB input slot.
 
-    Greedy: whatever's in a lab's two input slots this tick is fully
-    consumed. The per-type delta goes into ``science_consumed_step``
-    available on ``EnvState.science_consumed_step`` each step.
+    A lab is a sink. It has no countdown and no output: whatever sits in its
+    two input slots at this point in the step is consumed outright, and the
+    per-type amount is recorded in ``science_consumed_step`` for the reward
+    functions and achievements to read. ``factoriax_step`` zeroes that field
+    at the top of every step, so it is a per-step delta and not a running
+    total.
 
-    Vectorised over all entities: one mask, one gather, one
-    :func:`jax.ops.segment_sum`, no scatter.
+    Only science packs are consumed. A non-pack item delivered into a lab's
+    input slot stays there and blocks that slot.
+
+    Only ``ent_asm_in`` is read. A lab's ``ent_buf`` is never touched, which
+    is what makes a belt aimed at a lab a dead end. See
+    :func:`factoriax.engine.machines.run_conveyor_belts`.
 
     Parameters
     ----------
-    state :
-        Current environment state.
-    state : EnvState :
-
-    state: EnvState :
-
+    state
+        State to read.
 
     Returns
     -------
-
-
+    EnvState
+        New state with the consumed slots of every lab cleared in
+        ``ent_asm_in_type`` and ``ent_asm_in_count``, and
+        ``science_consumed_step`` set to this step's per-type totals.
+        The totals are zero when no lab held a pack.
     """
     is_lab = (state.ent_type == Machine.SCIENCE_LAB) & (state.ent_y >= 0)
     # Shape (E, 2) after broadcasting.
@@ -643,39 +673,42 @@ def _handle_player_action(
     action: int | jax.Array,
     player_idx: int | jax.Array,
 ) -> EnvState:
-    """Handle a single player action.
+    """Route one action to the function that carries it out.
+
+    Sorts every action into one of nine categories and runs exactly that
+    handler through :func:`jax.lax.switch`, so the cost of a step is one
+    handler rather than all nine.
+
+    The three wide action families, ``PLACE_``, ``CRAFT_``, and
+    ``DEPOSIT_``, are half-open ranges anchored at their base offset and
+    sized by their lookup table, so adding an item extends a range rather
+    than needing a new branch. Anything that matches no category falls
+    through to movement, which is a no-op for an action that is not a
+    movement.
+
+    ``CRAFT_`` dispatches through the item rather than the recipe index:
+    the action names an output item, and the active recipe table is asked
+    which of its rows produces it. A scenario can therefore reorder or
+    replace its recipes without changing what an action means. A table with
+    no recipe for that item yields -1, and
+    :func:`factoriax.engine.crafting.craft_recipe` treats that as a no-op.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    action :
-        Action to take
-    player_idx :
-        Index of the player
-    state : EnvState :
-
-    params : EnvParams :
-
-    action : int | jax.Array :
-
-    player_idx : int | jax.Array :
-
-    state: EnvState :
-
-    params: EnvParams :
-
-    action: int | jax.Array :
-
-    player_idx: int | jax.Array :
-
+    state
+        State to read.
+    params
+        Supplies ``recipe_table`` for craft dispatch, and is passed through
+        to the handlers that take it.
+    action
+        Action id.
+    player_idx
+        Which player is acting.
 
     Returns
     -------
-
-
+    EnvState
+        New state after the one matching handler ran.
     """
     # Pre-compute all derived action parameters (cheap indexing).
     # CRAFT dispatch: action -> output item (fixed) -> recipe row in the
@@ -747,37 +780,38 @@ def factoriax_step(
     action: int | jax.Array,
     params: EnvParams,
 ) -> EnvState:
-    """Execute one step of the environment.
+    """Apply one action, run the factory, and advance the clock.
+
+    The order is fixed and is part of the contract. The player acts first,
+    then :func:`factoriax.engine.machines.update_all_machines` runs every
+    machine, then :func:`run_labs` drains science labs, then ``timestep``
+    increments.
+
+    Acting first means a player deposit reaches a machine in time for that
+    machine to use it on the same step. Labs running last means a pack an
+    arm delivered this step is consumed this step.
+
+    Only ``state.selected_player`` acts. Other players hold position; there
+    is no per-player action vector here.
 
     Parameters
     ----------
-        rng: JAX random key (unused, kept for API compat).
-        state: Current environment state.
-        action: Action to take.
-
-    Parameters
-    ----------
-    rng : jax.Array :
-
-    state : EnvState :
-
-    action : int | jax.Array :
-
-    params : EnvParams :
-
-    rng: jax.Array :
-
-    state: EnvState :
-
-    action: int | jax.Array :
-
-    params: EnvParams :
-
+    rng
+        Unused. Nothing in a step is random. Kept so the signature matches
+        the gymnax-style step API that wraps it.
+    state
+        State to advance.
+    action
+        Action for the selected player.
+    params
+        Passed through to the action handlers and the machine passes.
 
     Returns
     -------
-
-
+    EnvState
+        New state one step on, with ``timestep`` incremented and
+        ``science_consumed_step`` holding this step's totals rather than
+        the previous step's.
     """
     player_idx = state.selected_player
     # Reset the per-step science-lab delta before the action runs. Any
@@ -795,26 +829,22 @@ def is_game_over(
     state: EnvState,
     params: EnvParams,
 ) -> jax.Array:
-    """Check if the episode has ended.
+    """Report whether the episode has run out of time.
+
+    Time is the only ending condition in the base engine. There is no
+    losing state and no goal that stops a run early; a scenario that wants
+    one adds it in a wrapper.
 
     Parameters
     ----------
-        state: Current environment state.
-
-    Parameters
-    ----------
-    state : EnvState :
-
-    params : EnvParams :
-
-    state: EnvState :
-
-    params: EnvParams :
-
+    state
+        State to test.
+    params
+        Supplies ``max_timesteps``.
 
     Returns
     -------
-
-
+    jax.Array
+        Scalar bool. True once ``timestep`` reaches ``max_timesteps``.
     """
     return jnp.asarray(state.timestep >= params.max_timesteps, dtype=jnp.bool_)

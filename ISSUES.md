@@ -19,6 +19,66 @@ reliable anchor.
   building a level with one `SCIENCE_LAB` holding `TIER1_SCIENCE_PACK`: the
   packs land in `ent_buf_count` and `ent_asm_in_count` stays zero.
 
+- **A belt fills a science lab's buffer instead of being refused**
+  Found 2026-07-31.
+  Files: `factoriax/engine/machines.py` (`dn_is_combiner` in
+  `run_conveyor_belts`, around line 921), `factoriax/engine/step.py`
+  (`run_labs`).
+  The belt pass refuses to push into an assembler or a furnace, which take
+  items only through an arm or a player deposit. A science lab is not in that
+  refusal set, so a belt aimed at one delivers into `ent_buf`, up to a
+  `MACHINE_MAX_STACK` of 1000. `run_labs` consumes from `ent_asm_in` and
+  nothing else, so a belt-fed lab yields no science however long it runs. The
+  items are recoverable by an arm or a player, but nothing signals the
+  mistake. Reproduced with a belt facing a lab and holding 3 `COAL`: after one
+  `run_conveyor_belts` the lab holds `ent_buf_count == 3` and
+  `ent_asm_in_count == [0, 0]`.
+  A lab has no belt pull either, so the coherent rule is the one assemblers
+  and furnaces already follow: combiners are never belt-fed. Adding
+  `SCIENCE_LAB` to the refusal set turns a silent sink into a visible stall.
+  `tests/test_belt_arm.py:322` already records arms as the intended route.
+  Same symptom as the level-loading entry above, different cause.
+
+- **`miner_output_reward` pays for a miner that nothing drains**
+  Found 2026-07-31.
+  Files: `factoriax/engine/rewards.py` (`miner_output_reward`, and
+  `dense_deploy_reward`, which scales it by 5).
+  The reward is the rise in `ent_buf_count` across placed miners, which is a
+  level and not a flow. A miner wired into a belt or a pallet ends each step as
+  empty as it started, so automating scores nothing, while an unattended miner
+  scores the full mining rate. Reproduced on a one-tile coal patch: a miner
+  facing a pallet scores 0.0 and the same miner facing nothing scores 3.0.
+  Draining a miner scores negative. `miner_throughput_reward` measures the same
+  intent correctly, from `block_resources`, and should be preferred.
+
+- **`mining_reward` guides toward ore it does not pay for**
+  Found 2026-07-31.
+  Files: `factoriax/engine/rewards.py` (`mining_reward`),
+  `factoriax/engine/tables.py` (`MINEABLE_BLOCKS`).
+  The proximity term targets every block in `MINEABLE_BLOCKS`, which is coal,
+  iron, copper, tin, silicon, and limestone. The bonus counts only coal, iron
+  ore, and copper ore. An agent drawn to a silicon patch by the shaping term
+  and mining it there earns nothing for the ore. The two terms need the same
+  set, whichever set that turns out to be.
+
+- **`dense_pickup_reward` pays for a place-and-pickup loop**
+  Found 2026-07-31.
+  Files: `factoriax/engine/rewards.py` (`dense_pickup_reward`).
+  The reward is `max(prev_machine_count - new_machine_count, 0)` scaled by 10.
+  Placing a machine raises the count and is clamped to no penalty, so an agent
+  can place a machine and pick it straight back up for 10.0 every two steps for
+  as long as the episode runs. The level it scores is short enough that the
+  loop does not dominate, but the term does not survive a longer episode.
+
+- **`dense_craft_reward` cannot tell crafting from picking things up**
+  Found 2026-07-31.
+  Files: `factoriax/engine/rewards.py` (`dense_craft_reward`).
+  The craft term is the rise in the player's total count of miners, pallets,
+  belts, and assemblers, clamped at zero. It never checks that materials were
+  spent, so picking a machine up off the map pays the same 10.0 as crafting
+  one. `sparse_pallet_crafting_reward` and `sparse_miner_crafting_reward`
+  already do this correctly by requiring the inputs to fall in the same step.
+
 - **Crossing contents load into a buffer the crossing never reads**
   Found 2026-07-29.
   Files: `factoriax/engine/levels.py` (same `else` branch),
@@ -103,6 +163,13 @@ reliable anchor.
   Enabling `--doctest-modules` would catch it, but it collects the whole tree
   and other modules have not been checked, so turning it on is its own piece
   of work rather than a flag flip.
+  Confirmed 2026-07-31 to be wider than `levels.py`. Examples in
+  `factoriax/engine/rewards.py`, `factoriax/engine/observations.py`,
+  `factoriax/engine/envs/base.py`, and `factoriax/engine/envs/wrappers.py` all
+  called `factoriax.make`, `factoriax.mining_reward`, `factoriax.global_x_ray`,
+  `factoriax.rgb`, or `from factoriax import FactoriaxEnv`. None of those
+  exist: `factoriax/__init__.py` is empty by design. All of them have been
+  removed rather than repaired, since nothing would keep a repair honest.
 
 - **Terrain layers overwrite each other, so only water hits its share**
   Found 2026-07-30. Overlap accepted 2026-07-30; not a bug to fix.
@@ -175,6 +242,183 @@ reliable anchor.
 
 ## Fixed
 
+- **A science lab's contents appear in no observation channel**
+  Found 2026-07-31.
+  Files: `factoriax/engine/observations.py:121` (`is_combiner`), `:124`
+  (`is_buffer_machine`).
+  The symbolic observation writes `ent_asm_in` into slots 0 and 1 for
+  combiners and `ent_buf` into slot 2 for buffer machines. `is_combiner` names
+  `ASSEMBLER` and `FURNACE`; `is_buffer_machine` names `MINER`, `PALLET`, and
+  `CONVEYOR_BELT`. Two kinds are in neither set: `SCIENCE_LAB`, and `CROSSING`,
+  which keeps a per-axis buffer in the same two `ent_asm_in` columns a combiner
+  uses. Every slot channel reads zero whatever they hold. An agent cannot see whether a lab has packs, is
+  running, or is starved, which makes the science loop unobservable from the
+  symbolic profile. The fix is to add labs to `is_combiner`, since they use
+  the same two input slots; it changes no shape, only which values are
+  non-zero.
+  Fixed 2026-07-31. Slots 0 and 1 now carry the two `ent_asm_in` columns for
+  anything that stores items there, which covers science labs and crossings,
+  and slot 2 carries `ent_buf` for every machine with a non-zero
+  `MACHINE_MAX_STACK`, which adds splitters and arms. Covered by
+  `TestSlotGridsSeeEveryMachine`.
+
+- **"Combiner" has no single definition, so the sets have drifted apart**
+  Found 2026-07-31.
+  Files: `factoriax/engine/machines.py` (`self_is_combiner`,
+  `dst_is_combiner`, `dn_is_combiner`, `is_combiner`),
+  `factoriax/engine/step.py` (`deposit_to_adjacent`),
+  `factoriax/engine/observations.py:121`.
+  Six sites spell out "combiner" as an inline `|` chain over machine types,
+  under two different meanings: "has two input slots" and "crafts a recipe".
+  Nothing ties them together. Of the five sites meaning two input slots, three
+  include `SCIENCE_LAB` (the two arm sites and the player deposit) and two do
+  not (the belt refusal and the observation), which is exactly the two entries
+  above. The crafting site correctly excludes labs.
+  A new machine kind with input slots has to be added to five separate
+  expressions, and omitting one fails silently. Naming the predicate once,
+  next to `MACHINE_MAX_STACK` in `tables.py`, would make the two defects above
+  impossible rather than merely unlikely.
+  Fixed 2026-07-31. The word is gone from the codebase. The shared set is now
+  `MACHINE_HAS_INPUT_SLOTS` in `factoriax/engine/tables.py`, read by the arm
+  delivery, the player deposit, and the observation projection. The crafting
+  set is spelled `is_assembler_or_furnace` at its one use site, since a
+  science lab shares the slots but runs no recipe.
+
+- **Picking up a machine destroys everything in its crafting slots**
+  Found 2026-07-31.
+  Files: `factoriax/engine/placement.py` (`pickup_machine`).
+  The pickup pays the machine item back and adds `ent_buf` to the player's
+  inventory, then zeroes `ent_asm_in` and `ent_asm_out` without paying either
+  out. Picking up an assembler therefore discards both what was loaded into it
+  and what it had finished. Reproduced with an assembler holding 5 `IRON_ORE`
+  in input slot 0 and 4 `IRON_PLATE` in its output: after `pickup_machine` the
+  player holds 1 assembler, 0 iron ore, and 0 iron plate.
+  Fixing it means paying out all three slots, which needs a decision about what
+  happens when the player has no room, since the gate does not check that
+  today. See the entry below.
+  Fixed 2026-07-31. `pickup_machine` now totals a per-item payout across the
+  machine item, `ent_buf`, both `ent_asm_in` slots, and `ent_asm_out`, and pays
+  the whole thing out. Covered by `TestPickupReturnsEveryStoredItem` in
+  `tests/test_engine_contracts.py`.
+
+- **Pickup pays buffer contents past `PLAYER_MAX_STACK`**
+  Found 2026-07-31.
+  Files: `factoriax/engine/placement.py` (`pickup_machine`).
+  The `fits` gate checks room for the machine item only. Buffer contents are
+  added afterwards with no cap, so emptying a full pallet can push a stack
+  above its per-item limit. Reproduced with the player holding 1023 coal
+  (`PLAYER_MAX_STACK` is 1024) and a pallet holding 250: the inventory ends at
+  1273, 249 over. Every other transfer path in the engine clamps to the cap.
+  Fixed 2026-07-31. The gate now checks the whole payout against
+  `PLAYER_MAX_STACK` per item and refuses the pickup outright if any stack
+  would overflow, rather than paying out what fits and destroying the rest
+  with the machine. A full inventory can therefore block a pickup; the player
+  withdraws first. Covered by `TestPickupRespectsPlayerStack`.
+
+- **A player deposit ignores `MACHINE_MAX_STACK`**
+  Found 2026-07-31.
+  Files: `factoriax/engine/step.py` (`deposit_to_adjacent`, the `buf_space`
+  term), `factoriax/engine/tables.py` (`MACHINE_MAX_STACK`).
+  The buffer branch tests `ent_buf_count < 64`, a literal, rather than the
+  machine's own capacity. Every machine-driven transfer in
+  `factoriax/engine/machines.py` respects the table and this one does not.
+  Reproduced with 10 successive deposits: a `CONVEYOR_BELT` that holds 3 ends
+  at 10, a `CROSSING` that holds 2 ends at 10, an `ARM` that holds 1 ends at
+  10, and a `ROCKET` that holds nothing ends at 10. Items pushed into a rocket
+  this way are unreachable by every machine pass.
+  Fixed 2026-07-31. Both deposit routes read `MACHINE_MAX_STACK` for the target
+  machine, and a machine whose capacity is 0 refuses every item. Covered by
+  `TestDepositRespectsMachineCapacity`.
+
+- **`dense_withdraw_reward` cannot see a target in the bottom-right corner**
+  Found 2026-07-31.
+  Files: `factoriax/engine/rewards.py` (`dense_withdraw_reward`).
+  The proximity mask is built with
+  `has_output_grid.at[ent_y, ent_x].set(has_output)` over every entity slot.
+  A free slot holds `ent_y == ent_x == -1`, which Python indexing wraps to the
+  last row and column rather than clipping, so every free slot writes False
+  onto the bottom-right tile. Duplicate scatter indices resolve in an
+  unspecified order and the real write loses. Reproduced on a 3x3 map with the
+  player at (0, 0), a miner holding 3 coal at (2, 2), and 63 free slots: the
+  reward is 1/7, the no-target floor, where the Manhattan distance of 4 gives
+  1/5. Same shape as the entity-array scatters in `machines.py`.
+  Fixed 2026-07-31. Positions are clipped before the scatter, and the mask is
+  built with `.at[].max(...)` so a free slot's False cannot overwrite a real
+  machine's True. Covered by `TestWithdrawRewardSeesTheCorner`.
+
+- **A machine on tile (0, 0) is invisible in the x_ray slot channels**
+  Found 2026-07-31.
+  Files: `factoriax/engine/observations.py` (`_reconstruct_slot_grids`,
+  `_reconstruct_machine_direction_grid`).
+  Both scatter with `.at[ey, ex].set(...)` at clipped positions. Every free
+  entity slot clips onto (0, 0) carrying a zero, so that tile collects one real
+  write and many stale ones, and duplicate scatter indices resolve in an
+  unspecified order. Reproduced on a 2x2 map with a pallet holding 50 coal at
+  (0, 0) and 63 free slots: `slot2_type` and `slot2_count` both read 0, and the
+  direction channel reads 0. Same shape as the two entries above.
+  Fixed 2026-07-31. Both grids accumulate with `.at[].add(...)` instead of
+  assigning, so the zeros every free slot contributes to tile (0, 0) leave a
+  real machine there intact. Covered by `TestSlotGridsSeeEveryMachine`.
+
+- **Facing an empty tile reports entity 0's contents**
+  Found 2026-07-31.
+  Files: `factoriax/engine/observations.py` (`_facing_scalars`).
+  The readouts index the `ent_*` arrays at
+  `clip(tile_entity[sy, sx], 0, max_e - 1)`, and `tile_entity` is -1 on a tile
+  with no machine, so the clip turns that into entity 0. The only mask applied
+  is `in_bounds`, which does not cover it. Reproduced with a player facing an
+  empty in-bounds tile while entity 0 held 50 coal: `facing_buffer_type` reads
+  0.0294 and `facing_buffer_count` reads 0.781, both of which should be 0.
+  `facing_machine_type` correctly reads 0, so the nine-float block contradicts
+  itself. An x_ray agent sees phantom contents on every empty tile it faces.
+  Fixed 2026-07-31. The mask is now `in_bounds & (tile_entity >= 0)`, so an
+  empty tile reads zero on every field. Covered by
+  `TestFacingScalarsNeedAMachine`.
+
+- **The declared observation bounds do not hold for the x_ray profile**
+  Found 2026-07-31.
+  Files: `factoriax/engine/envs/base.py` (`observation_space`),
+  `factoriax/engine/observations.py` (`_facing_scalars`).
+  `observation_space` returns a `Box` with `low=0.0, high=1.0`. The facing
+  readouts divide counts by 64 while the slots they read hold far more: a
+  pallet holds 256, so facing a full one puts that field at 4.0, and a combiner
+  input slot has no cap at all. Training code that trusts the declared bounds,
+  for normalisation or for clipping, is working from a wrong number.
+  Fixed 2026-07-31. The facing readouts divide by `_SLOT_COUNT_NORM` rather
+  than 64, which is at or above every machine's `MACHINE_MAX_STACK`, so the
+  values stay inside the declared `Box`. This changes the numeric observation
+  and invalidates checkpoints trained on the old scaling. Covered by
+  `TestObservationsStayInDeclaredBounds`.
+
+- **A combiner input slot has no capacity**
+  Found 2026-07-31.
+  Files: `factoriax/engine/machines.py` (`dst_combiner_accepts` in `run_arms`),
+  `factoriax/engine/step.py` (`can_deposit_asm` in `deposit_to_adjacent`).
+  Both routes into `ent_asm_in` test the item type and never the count, and
+  `MACHINE_MAX_STACK` is read on neither path. An arm feeding an assembler that
+  is not consuming piles items into one slot until int16 overflows; measured at
+  8 after 8 arm steps with no sign of a limit. Whether a cap is wanted is a
+  design decision, but its absence was undocumented until this pass.
+  Fixed 2026-07-31. Both routes into `ent_asm_in`, the arm delivery in
+  `run_arms` and the player deposit, now test the slot count against the
+  machine's `MACHINE_MAX_STACK`. Covered by `TestInputSlotCapacity`.
+
+- **`state_factory` builds machines at zero health, so pickup tests pass vacuously**
+  Found 2026-07-31.
+  Files: `tests/conftest.py` (`ent_health` seeding in `state_factory`),
+  `factoriax/engine/placement.py` (`pickup_machine` health gate).
+  The fixture leaves `ent_health` at 0 for every machine it places, while
+  `place_machine` in the real engine always sets `MACHINE_MAX_HEALTH`. Pickup
+  is gated on full health, so a machine built by the fixture can never be
+  picked up, and a test asserting on a pickup silently exercises the refused
+  path instead. Found while probing `pickup_machine`: the first two probes
+  returned 0 for every field, including the machine item. Same shape as the
+  `max_machines=1` fixture already recorded under **Correctness review** in
+  `DOCUMENTATION_PLAN.md`. Seeding full health will change what some existing
+  tests assert.
+  Fixed 2026-07-31. The fixture seeds `MACHINE_MAX_HEALTH` for every machine it
+  places, matching `place_machine`, and leaves free slots at 0. Covered by
+  `TestFixtureSeedsFullHealth`.
 - **A recipe repeating an input item crafted into a negative inventory**
   Found and fixed 2026-07-30.
   Files: `factoriax/engine/recipes.py` (`RecipeBook.__post_init__`),

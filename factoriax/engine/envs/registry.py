@@ -131,7 +131,6 @@ def make(
 
     Returns
     -------
-
         ``(env, params)``.
 
     Raises

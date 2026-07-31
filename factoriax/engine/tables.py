@@ -240,6 +240,42 @@ MACHINE_MAX_STACK = jnp.array(
     dtype=jnp.int16,
 )
 
+# Machines that receive deliveries into the two ``ent_asm_in`` slots rather
+# than into ``ent_buf``: assemblers, furnaces, and science labs.
+_MACHINE_HAS_INPUT_SLOTS: dict[Machine, bool] = {
+    Machine.NONE: False,
+    Machine.MINER: False,
+    Machine.PALLET: False,
+    Machine.CONVEYOR_BELT: False,
+    Machine.ASSEMBLER: True,
+    Machine.ARM: False,
+    Machine.ROCKET: False,
+    Machine.FURNACE: True,
+    Machine.SCIENCE_LAB: True,
+    Machine.SPLITTER: False,
+    Machine.CROSSING: False,
+}
+
+#: Whether a machine takes deliveries into ``ent_asm_in``, indexed by
+#: ``Machine`` value. Shape ``(len(Machine),)``, bool. True for assemblers,
+#: furnaces, and science labs, which is the one property those three share:
+#: assemblers and furnaces consume the slots to run a recipe, while a science
+#: lab consumes them outright in :func:`factoriax.engine.step.run_labs`.
+#:
+#: Every route into those slots reads this rather than spelling the three
+#: machine kinds out again, so a new kind with input slots is added in one
+#: place. Do not use it to ask whether a machine runs recipes; a science lab
+#: does not, and :mod:`factoriax.engine.machines` tests ``ASSEMBLER`` and
+#: ``FURNACE`` directly for that.
+#:
+#: A ``CROSSING`` is False here despite storing its two axis buffers in the
+#: same two columns. Nothing delivers into a crossing by slot: the belt pass
+#: picks the axis from the direction of travel.
+MACHINE_HAS_INPUT_SLOTS = jnp.array(
+    [_MACHINE_HAS_INPUT_SLOTS[m] for m in Machine],
+    dtype=jnp.bool_,
+)
+
 #: Hit points a machine is placed with. The same for every machine kind;
 #: :data:`MACHINE_MAX_HEALTH` spreads it over the ``Machine`` range so a caller
 #: can index it with a machine type without special-casing.

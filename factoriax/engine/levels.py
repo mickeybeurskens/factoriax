@@ -65,7 +65,7 @@ from factoriax.engine.tables import MACHINE_MAX_HEALTH, MINEABLE_BLOCKS
 
 #: Machine kind that produces each item, indexed by ``ItemType`` value, with
 #: ``Machine.NONE`` for items no recipe outputs. :func:`build_state` reads it to
-#: tell a combiner's finished output from its inputs, because
+#: tell a finished output from an input, because
 #: ``Level.machine_inventory`` is item-indexed and records no slot. Derived from
 #: the engine's default recipes; a scenario shipping its own recipe book does
 #: not change this classification.
@@ -342,7 +342,8 @@ class LevelBuilder:
 
         Contents are recorded per item with no slot, so this says what a
         machine holds but not where. :func:`build_state` decides the slot when
-        it builds the entity, and for a combiner it uses the recipe book to
+        it builds the entity, and for an assembler or furnace it uses the
+        recipe book to
         tell a finished output from an input.
 
         Nothing checks that a machine stands here. Stock set on an empty tile

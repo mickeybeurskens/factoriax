@@ -55,7 +55,7 @@ def test_arity_outside_engine_limit_raises(
 ) -> None:
     """A recipe must consume 1 or 2 input types.
 
-    A combiner has exactly two input slots in ``EnvState``, so a wider recipe
+    A machine has exactly two input slots in ``EnvState``, so a wider recipe
     has nowhere to put its third input. Without this check the projection pads
     to the widest recipe and the engine reads only the first two slots, which
     drops the extra ingredient without reporting anything.
