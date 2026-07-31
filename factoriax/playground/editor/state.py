@@ -1,8 +1,11 @@
-"""Editor state: mutable numpy arrays for the level editor.
+"""The level under edit, as mutable numpy arrays.
 
-The editor works on plain numpy arrays so there is no JAX dependency
-during editing.  Conversion to/from :class:`~factoriax.engine.levels.Level`
-happens only at save/load/play boundaries.
+The editor holds a level in plain numpy arrays, so an edit needs no JAX. The
+editor converts to or from :class:`~factoriax.engine.levels.Level` at three
+moments only: it loads a file, it saves a file, or it starts a play session.
+
+Every field of :class:`EditorState` has the name and the shape of the level
+field that it holds. A conversion therefore copies, and does not translate.
 """
 
 from __future__ import annotations
@@ -21,19 +24,30 @@ from factoriax.engine.constants import (
 from factoriax.engine.levels import Level, default_resources
 from factoriax.playground.editor.slot_display import MAX_MACHINE_INVENTORY_SLOTS
 
-#: Number of inventory slots shown per player in the editor. The engine
-#: player inventory is item-indexed (it has no slot concept); this is
-#: purely the editor's display capacity.
+#: Number of inventory rows that the editor shows for one player. The engine
+#: holds a player inventory by item and has no slot, so this number is a
+#: display width and not a limit of the engine.
 NUM_INVENTORY_SLOTS: int = 10
 
-#: Target type for inventory operations.
-#: ``("player", player_idx, 0)`` or ``("machine", tile_x, tile_y)``.
+#: Target of an inventory operation. It is ``("player", player_index, 0)`` for
+#: a player, or ``("machine", tile_x, tile_y)`` for a machine.
 InvTarget = tuple[str, int, int]
 
 
 @dataclasses.dataclass
 class ResourceBrush:
-    """Controls how resource amounts are assigned when painting ore tiles."""
+    """Amount of ore that the editor writes to each tile that it paints.
+
+    Attributes
+    ----------
+    mode
+        ``"exact"`` gives every tile the same amount. ``"range"`` gives each
+        tile its own random amount.
+    exact_value
+        Amount for one tile in ``"exact"`` mode.
+    range_min, range_max
+        Lowest and highest amount in ``"range"`` mode. Both ends are included.
+    """
 
     mode: str = "exact"
     exact_value: int = BLOCK_MAX_RESOURCES
@@ -47,24 +61,19 @@ _ORE_BLOCKS = frozenset(
 
 
 def sample_resource(brush: ResourceBrush, rng: np.random.Generator) -> int:
-    """Return a resource amount from the brush settings.
+    """Return the ore amount for one tile.
 
     Parameters
     ----------
-    brush :
-        Active resource brush
-    rng :
-        Numpy random generator for range mode
-    brush: ResourceBrush :
-
-    rng: np.random.Generator :
-
+    brush
+        Brush that gives the mode and the limits.
+    rng
+        Random generator. The function reads it in ``"range"`` mode only.
 
     Returns
     -------
-    type
-        Integer resource amount.
-
+    int
+        Ore amount for one tile.
     """
     if brush.mode == "range":
         return int(rng.integers(brush.range_min, brush.range_max + 1))
@@ -73,18 +82,51 @@ def sample_resource(brush: ResourceBrush, rng: np.random.Generator) -> int:
 
 @dataclasses.dataclass
 class EditorState:
-    """Mutable editor state representing a level being edited.
+    """The level that the editor has open.
 
-    Every field mirrors the field of :class:`~factoriax.engine.levels.Level`
-    that carries the same name, and holds it in the same shape. A conversion
-    therefore copies, and never translates. All arrays use numpy (never JAX)
-    and are mutated in place for responsiveness.
+    Every field has the name and the shape of the field of
+    :class:`~factoriax.engine.levels.Level` that it holds. The arrays are
+    numpy and not JAX, and the functions of this module write to them in
+    place.
 
-    ``machine_inventory`` indexes the contents of a machine by item, as the
-    level does, and records no slot. The engine assigns the slots when it
-    builds the state, by the part each item plays in the recipe of that
-    machine. A slot order held here could not survive a save, and would not
-    match the order the engine picks.
+    ``machine_inventory`` records the contents of a machine by item, as the
+    level does, and records no slot. When the engine builds the state, it
+    gives each item a slot. It selects that slot from the part that the item
+    has in the recipe of that machine. A slot order in this class can
+    therefore not survive a save, and does not agree with the engine.
+
+    Attributes
+    ----------
+    name
+        Identifier of the level. A save writes it to the file.
+    map_width, map_height
+        Tile dimensions. Every array field has these dimensions.
+    block_map
+        :class:`~factoriax.engine.constants.BlockType` of each tile. Shape
+        ``(map_height, map_width)``.
+    block_resources
+        Ore units in each tile. A zero means an empty deposit, and not "use
+        the default".
+    machine_types
+        :class:`~factoriax.engine.constants.Machine` on each tile, and
+        ``NONE`` where the tile is clear.
+    machine_directions
+        Facing of each tile. The value has no meaning on a tile with no
+        machine.
+    machine_inventory
+        Contents of the machine on each tile, by item. Shape
+        ``(map_height, map_width, NUM_ITEM_TYPES)``.
+    player_inventory
+        ``(item, count)`` pairs that every player starts with, or ``None``.
+    player_inventories
+        Contents for one player, with the player index as the key. For a
+        player that it names, it replaces ``player_inventory``.
+    player_positions
+        ``(x, y)`` spawn tile of each player, with the player index as the
+        key. A save numbers the players by list position, so a gap in these
+        keys closes on the way out.
+    dirty
+        ``True`` after an edit that no save has written yet.
     """
 
     name: str
@@ -106,28 +148,21 @@ class EditorState:
 
 
 def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorState:
-    """Create a blank editor state filled with dirt.
+    """Return a new editor state of dirt tiles.
 
     Parameters
     ----------
-    width :
+    width
         Map width in tiles.
-    height :
+    height
         Map height in tiles.
-    name :
-        Level name.
-    width: int :
-
-    height: int :
-
-    name: str :
-         (Default value = "untitled")
+    name
+        Identifier of the level.
 
     Returns
     -------
-    Fresh
-        class:`EditorState` with all-dirt terrain and no machines.
-
+    EditorState
+        A level of dirt tiles, with no ore, no machine, and no player.
     """
     block_map = np.full((height, width), int(BlockType.DIRT), dtype=np.int32)
     return EditorState(
@@ -143,22 +178,24 @@ def new_editor_state(width: int, height: int, name: str = "untitled") -> EditorS
 
 
 def editor_state_from_level(level: Level) -> EditorState:
-    """Convert a loaded :class:`Level` into a mutable :class:`EditorState`.
+    """Return an editor state that holds the contents of a level.
 
-    Missing optional arrays are filled with sensible defaults.
+    A level field that holds ``None`` gives the editor the value that the
+    engine applies by default. For ``block_resources`` this is a full deposit
+    on each ore tile, and for the other fields it is an empty array.
+
+    Every array and every list is a copy, so an edit in the editor cannot
+    reach the level that this function read.
 
     Parameters
     ----------
-    level :
-        Source level.
-    level: Level :
-
+    level
+        Level to read. The function does not modify it.
 
     Returns
     -------
-
-        class:`EditorState` mirroring the level data.
-
+    EditorState
+        The same level, in the form that the editor writes to.
     """
     resources = (
         level.block_resources.copy()
@@ -216,28 +253,28 @@ def editor_state_from_level(level: Level) -> EditorState:
 
 
 def editor_state_to_level(state: EditorState) -> Level:
-    """Convert the editor state back to a :class:`Level` for saving or play.
+    """Return a level that holds the contents of the editor state.
 
-    All-zero optional arrays are stored as ``None`` to keep the JSON
-    compact.
+    An optional field becomes ``None`` when it holds what the engine applies
+    by default. This keeps the saved file small, and the value that comes back
+    is the same.
+
+    ``block_resources`` is the one field where a zero and ``None`` are
+    different instructions. ``None`` tells the engine to fill each ore tile,
+    and a zero tells it that the deposit is empty. The function therefore
+    compares against the default, and does not test for zeros.
 
     Parameters
     ----------
-    state :
-        Current editor state.
-    state: EditorState :
-
+    state
+        Editor state to read. The function does not modify it.
 
     Returns
     -------
-    A
-        class:`Level` ready for serialization or ``build_state``.
-
+    Level
+        A level that a save or :func:`~factoriax.engine.levels.build_state`
+        can read.
     """
-    # ``None`` tells build_state to fill the ore tiles itself, and zeros tell
-    # it the world starts with nothing. Drop the array only when it already
-    # holds what the default would produce, so a depleted deposit stays
-    # depleted and the saved file still stays compact.
     resources: np.ndarray | None = state.block_resources.copy()
     if np.array_equal(resources, default_resources(state.block_map)):
         resources = None
@@ -254,9 +291,9 @@ def editor_state_to_level(state: EditorState) -> Level:
     if np.all(machine_inv == 0):
         machine_inv = None
 
-    # A level numbers its players by list position, so a gap in the editor
-    # keys closes here. The contents follow the same move, or a player would
-    # inherit the items of the one that was removed.
+    # A level numbers its players by list position, so a gap closes here. The
+    # inventories move with the positions, or a player gets the items of the
+    # player that was removed.
     pp: list[tuple[int, int]] | None = None
     inventories: dict[int, list[tuple[int, int]]] | None = None
     if state.player_positions:
@@ -297,41 +334,25 @@ def set_tile(
     brush: ResourceBrush,
     rng: np.random.Generator,
 ) -> None:
-    """Paint a single tile, updating block type and resources.
+    """Paint one tile with a block type, and set the ore of that tile.
 
-    Non-ore blocks always receive 0 resources.  Ore blocks use the
-    active :class:`ResourceBrush` to determine the amount.
+    An ore block gets its amount from the brush. Every other block gets zero.
+    A column or a row outside the map has no effect.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    block :
-        ``BlockType`` integer value.
-    brush :
-        Active resource brush.
-    rng :
-        Numpy random generator for range-mode sampling.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-    block: int :
-
-    brush: ResourceBrush :
-
-    rng: np.random.Generator :
-
-
-    Returns
-    -------
-
+    block
+        :class:`~factoriax.engine.constants.BlockType` value to write.
+    brush
+        Brush that gives the ore amount.
+    rng
+        Random generator that the brush reads in ``"range"`` mode.
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -346,34 +367,23 @@ def set_tile(
 def set_machine(
     state: EditorState, x: int, y: int, machine: int, direction: int
 ) -> None:
-    """Place or replace a machine on a tile.
+    """Put a machine on one tile, and clear the contents of that tile.
+
+    A machine that was on the tile is lost, together with its contents. A
+    column or a row outside the map has no effect.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    machine :
-        ``Machine`` integer value.
-    direction :
-        ``Action`` direction value for the machine facing.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-    machine: int :
-
-    direction: int :
-
-
-    Returns
-    -------
-
+    machine
+        :class:`~factoriax.engine.constants.Machine` value to write.
+    direction
+        :class:`~factoriax.engine.constants.Direction` value for the facing.
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -393,48 +403,29 @@ def fill_rect_tiles(
     brush: ResourceBrush,
     rng: np.random.Generator,
 ) -> None:
-    """Fill a rectangular area with a block type using the resource brush.
+    """Paint a rectangle of tiles with a block type.
 
-    Coordinates are inclusive and automatically clamped to map bounds.
+    The rectangle includes all four edges. If an edge is outside the map, the
+    function moves that edge to the map. A rectangle fully outside the map has
+    no effect.
+
+    In ``"range"`` mode each tile of an ore rectangle gets its own random
+    amount.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x0 :
-        Left column of the rectangle.
-    y0 :
-        Top row.
-    x1 :
-        Right column (inclusive).
-    y1 :
-        Bottom row (inclusive).
-    block :
-        ``BlockType`` integer value.
-    brush :
-        Active resource brush.
-    rng :
-        Numpy random generator for range-mode sampling.
-    state: EditorState :
-
-    x0: int :
-
-    y0: int :
-
-    x1: int :
-
-    y1: int :
-
-    block: int :
-
-    brush: ResourceBrush :
-
-    rng: np.random.Generator :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
+    x0, y0
+        Column and row of one corner.
+    x1, y1
+        Column and row of the opposite corner.
+    block
+        :class:`~factoriax.engine.constants.BlockType` value to write.
+    brush
+        Brush that gives the ore amount.
+    rng
+        Random generator that the brush reads in ``"range"`` mode.
     """
     lx = max(0, min(x0, x1))
     ly = max(0, min(y0, y1))
@@ -461,26 +452,19 @@ def fill_rect_tiles(
 
 
 def erase_block(state: EditorState, x: int, y: int) -> None:
-    """Reset a tile's terrain to dirt, leaving any machine untouched.
+    """Set one tile to dirt, and keep the machine on that tile.
+
+    The ore of the tile becomes zero. A column or a row outside the map has no
+    effect.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -490,26 +474,19 @@ def erase_block(state: EditorState, x: int, y: int) -> None:
 
 
 def erase_machine(state: EditorState, x: int, y: int) -> None:
-    """Remove a machine from a tile, leaving the terrain untouched.
+    """Remove the machine from one tile, and keep the block of that tile.
+
+    The contents of the machine are lost. A column or a row outside the map
+    has no effect.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -520,49 +497,33 @@ def erase_machine(state: EditorState, x: int, y: int) -> None:
 
 
 def erase_tile(state: EditorState, x: int, y: int) -> None:
-    """Reset a tile to dirt and remove any machine.
+    """Set one tile to dirt, and remove the machine on that tile.
 
-    Convenience function that clears both layers.
+    This function calls :func:`erase_block` and then :func:`erase_machine`.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-
-    Returns
-    -------
-
     """
     erase_block(state, x, y)
     erase_machine(state, x, y)
 
 
 def add_column(state: EditorState) -> None:
-    """Append one dirt column to the right edge of the map.
+    """Add one column of dirt tiles to the right edge of the map.
 
-    All four arrays are extended in place and ``map_width`` is
-    incremented.
+    The function makes every array one column wider, and adds 1 to
+    ``map_width``.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    state: EditorState :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
     """
     h = state.map_height
     state.block_map = np.concatenate(
@@ -593,20 +554,15 @@ def add_column(state: EditorState) -> None:
 
 
 def remove_column(state: EditorState) -> None:
-    """Remove the rightmost column from the map.
+    """Remove the right column of the map.
 
-    No-op if the map is 1 tile wide.
+    A player on that column is removed with it. A map one tile wide does not
+    change.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    state: EditorState :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
     """
     if state.map_width <= 1:
         return
@@ -621,21 +577,15 @@ def remove_column(state: EditorState) -> None:
 
 
 def add_row(state: EditorState) -> None:
-    """Append one dirt row to the bottom edge of the map.
+    """Add one row of dirt tiles to the bottom edge of the map.
 
-    All four arrays are extended in place and ``map_height`` is
-    incremented.
+    The function makes every array one row taller, and adds 1 to
+    ``map_height``.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    state: EditorState :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
     """
     w = state.map_width
     state.block_map = np.concatenate(
@@ -666,20 +616,15 @@ def add_row(state: EditorState) -> None:
 
 
 def remove_row(state: EditorState) -> None:
-    """Remove the bottom row from the map.
+    """Remove the bottom row of the map.
 
-    No-op if the map is 1 tile tall.
+    A player on that row is removed with it. A map one tile tall does not
+    change.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    state: EditorState :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
     """
     if state.map_height <= 1:
         return
@@ -699,16 +644,15 @@ def remove_row(state: EditorState) -> None:
 
 
 def _clip_entities(state: EditorState) -> None:
-    """Remove entities that fall outside the current map bounds.
+    """Remove each player that is outside the map.
+
+    A call to :func:`remove_column` or :func:`remove_row` can put a player
+    outside the map, and this function then removes that player.
 
     Parameters
     ----------
-    state: EditorState :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
     """
     state.player_positions = {
         k: v
@@ -718,32 +662,21 @@ def _clip_entities(state: EditorState) -> None:
 
 
 def set_player_position(state: EditorState, player_idx: int, x: int, y: int) -> None:
-    """Place or move a player start position.
+    """Set the spawn tile of one player.
 
-    If player *player_idx* already has a position it is moved.
+    If the player has a spawn tile, the function moves that player to the new
+    tile. A column or a row outside the map has no effect.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    player_idx :
-        Player index (0-7).
-    x :
+    state
+        Editor state. The function writes to it.
+    player_idx
+        Index of the player.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    state: EditorState :
-
-    player_idx: int :
-
-    x: int :
-
-    y: int :
-
-
-    Returns
-    -------
-
     """
     if not (0 <= x < state.map_width and 0 <= y < state.map_height):
         return
@@ -752,26 +685,19 @@ def set_player_position(state: EditorState, player_idx: int, x: int, y: int) -> 
 
 
 def remove_player_at(state: EditorState, x: int, y: int) -> None:
-    """Remove any player start at the given tile.
+    """Remove each player that has its spawn tile at one tile.
+
+    This can leave a gap in the player numbering.
+    :func:`editor_state_to_level` closes that gap.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-
-    Returns
-    -------
-
     """
     to_remove = [k for k, v in state.player_positions.items() if v == (x, y)]
     for k in to_remove:
@@ -781,26 +707,19 @@ def remove_player_at(state: EditorState, x: int, y: int) -> None:
 
 
 def erase_entity(state: EditorState, x: int, y: int) -> None:
-    """Remove all entities (players) at the given tile.
+    """Remove each entity at one tile.
+
+    A player is the only entity that the editor puts on a tile, so this
+    function calls :func:`remove_player_at`.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    x :
+    state
+        Editor state. The function writes to it.
+    x
         Tile column.
-    y :
+    y
         Tile row.
-    state: EditorState :
-
-    x: int :
-
-    y: int :
-
-
-    Returns
-    -------
-
     """
     remove_player_at(state, x, y)
 
@@ -811,27 +730,28 @@ def erase_entity(state: EditorState, x: int, y: int) -> None:
 
 
 def get_inventory_slots(state: EditorState, target: InvTarget) -> list[tuple[int, int]]:
-    """Return the inventory as a list of ``(ItemType, count)`` pairs.
+    """Return the contents of a player or a machine, as one row for each slot.
+
+    For a machine the rows are a view over ``machine_inventory``. The machine
+    records its contents by item, so each item fills one row, and the rows
+    follow the item order. An item can therefore not hold two rows.
+
+    The list holds at least :data:`NUM_INVENTORY_SLOTS` rows for a player, and
+    at least ``MAX_MACHINE_INVENTORY_SLOTS`` rows for a machine. A machine
+    with more items than that gets one row for each item, so no item is lost.
 
     Parameters
     ----------
-    state :
-        Editor state
-    target :
-        player
-    machine :
-        tile_x
-    state: EditorState :
-
-    target: InvTarget :
-
+    state
+        Editor state to read.
+    target
+        Player or machine to read.
 
     Returns
     -------
-    type
-        List of ``(item_type, count)`` per slot, padded to the
-        slot count with ``(EMPTY, 0)``.
-
+    list[tuple[int, int]]
+        One ``(item, count)`` pair for each row. An empty row is
+        ``(ItemType.EMPTY, 0)``.
     """
     kind = target[0]
     if kind == "player":
@@ -850,24 +770,20 @@ def get_inventory_slots(state: EditorState, target: InvTarget) -> list[tuple[int
 
 
 def get_num_slots(state: EditorState, target: InvTarget) -> int:
-    """Return the number of active slots for a target.
+    """Return the number of slots that a player or a machine has.
 
     Parameters
     ----------
-    state :
-        Editor state
-    target :
-        Inventory target
-    state: EditorState :
-
-    target: InvTarget :
-
+    state
+        Editor state to read.
+    target
+        Player or machine to read.
 
     Returns
     -------
-    type
-        Slot count (10 for players, machine-type-dependent for machines).
-
+    int
+        :data:`NUM_INVENTORY_SLOTS` for a player. For a machine, the slot
+        count of that machine type.
     """
     from factoriax.playground.editor.slot_display import MACHINE_NUM_SLOTS
 
@@ -884,34 +800,27 @@ def set_inventory_slot(
     item_type: int,
     count: int,
 ) -> None:
-    """Set an inventory slot to a specific item and count.
+    """Put one item and its count in one slot.
+
+    For a machine the slot is a row of the view that
+    :func:`get_inventory_slots` returns. The write removes the item that the
+    row showed. If the same item is already in another row, the machine keeps
+    one entry for that item, and this count replaces the earlier one.
+
+    A count of 0, or an item of ``ItemType.EMPTY``, clears the row.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    target :
-        Inventory target.
-    slot :
-        Slot index.
-    item_type :
-        ``ItemType`` integer.
-    count :
-        Stack count.
-    state: EditorState :
-
-    target: InvTarget :
-
-    slot: int :
-
-    item_type: int :
-
-    count: int :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
+    target
+        Player or machine to write to.
+    slot
+        Index of the row.
+    item_type
+        :class:`~factoriax.engine.constants.ItemType` value to write.
+    count
+        Number of items.
     """
     kind = target[0]
     if kind == "player":
@@ -934,25 +843,15 @@ def set_inventory_slot(
 
 
 def clear_inventory_slot(state: EditorState, target: InvTarget, slot: int) -> None:
-    """Clear an inventory slot to empty.
+    """Clear one slot.
 
     Parameters
     ----------
-    state :
-        Editor state (mutated in place).
-    target :
-        Inventory target.
-    slot :
-        Slot index.
-    state: EditorState :
-
-    target: InvTarget :
-
-    slot: int :
-
-
-    Returns
-    -------
-
+    state
+        Editor state. The function writes to it.
+    target
+        Player or machine to write to.
+    slot
+        Index of the row.
     """
     set_inventory_slot(state, target, slot, int(ItemType.EMPTY), 0)
