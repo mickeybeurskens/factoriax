@@ -44,7 +44,10 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 64
+# Measured at 66.8% on 2026-08-03. The floor sits just under it, so a real
+# drop fails while normal drift does not. tasks/coverage-gaps.md says which
+# modules hold the rest.
+fail_under = 66
 show_missing = false
 skip_covered = true
 

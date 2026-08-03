@@ -266,9 +266,13 @@ reliable anchor.
   Three are entry points and are fair waivers: `playground/app.py`,
   `playground/editor/main.py`, and `playground/play/main.py`. So is
   `analysis/video.py`, which shells out to ffmpeg.
-  `engine/crafting.py` is the one that matters most. It is 182 lines of engine
-  core with nothing on it. Task 21 of `tasks/plan.md` covers it. Task 20
-  writes the full verdict table to `tasks/coverage-gaps.md`.
+  A missing entry is not the same as missing coverage. `engine/crafting.py`,
+  `playground/ui/compositing.py`, and `playground/ui/labels.py` all sit at
+  100 percent, because a module that imports them is under test.
+  `engine/step.py` imports `craft_recipe`, and the step tests drive it. The
+  gap there is a mirror entry and a direct test of the two helpers, not
+  coverage. `tasks/coverage-gaps.md` carries the verdict per module, with the
+  measured figure.
 
 - **The craft progress bar in the inventory menu is dead code**
   Found 2026-08-03.

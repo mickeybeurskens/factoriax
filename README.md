@@ -67,6 +67,46 @@ uv run pytest
 uv run ruff check factoriax tests
 ```
 
+### Where a test goes
+
+`tests/` mirrors the package. The path `tests/<area>/test_<module>.py` maps to
+`factoriax/<area>/<module>.py`, so the tests for `engine/machines.py` are the
+only thing that can sit at `tests/engine/machines/`.
+
+A mirror entry is a file or a package. Write `test_<module>.py` first. When it
+passes about 600 lines, turn it into a `<module>/` package of topic-named
+files. `engine/machines.py` carries 2600 lines of tests, so its entry is a
+package split by machine kind.
+
+Three directories sit beside the mirror, for the tests that belong to no one
+module:
+
+- `tests/contracts/` holds a test that asserts a rule no single module owns.
+  The gymnax API conformance, the invariants over random episodes, and the AST
+  guard that stops the play UI writing `EnvState` all live here.
+- `tests/integration/` holds a test that needs two or more subpackages to have
+  meaning. The editor-to-level-to-engine round trip is one.
+  `tests/integration/scenarios/` holds the end-to-end scripted rollouts.
+- `tests/benchmarks/` holds scripts. Pytest does not collect it.
+
+Put a test in the mirror unless it cannot go there. A file in `contracts/` or
+`integration/` states in its module docstring why it is not in the mirror.
+
+`tests/helpers/` holds support code that more than one directory shares: the
+state factory, the trajectory builders, the observation scaffolding, and the
+scripted-oracle navigation. A helper that one file uses belongs beside that
+file.
+
+### Two things that bite
+
+Only `tests/playground/` initialises a pygame display, through an autouse
+fixture. A test elsewhere that renders must request `pygame_display` by name.
+A file that does not will pass in a full run and fail on its own, because an
+earlier directory left a display behind.
+
+`tasks/coverage-gaps.md` lists every module with no mirror entry, and says
+whether that is a gap, covered through another module, or waived.
+
 ## Build the documentation
 
 ```bash
