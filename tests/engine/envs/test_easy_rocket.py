@@ -1,10 +1,9 @@
-"""Tests for the JAX-native easy-rocket world generator (refactor Phase 1).
+"""Tests for :mod:`factoriax.engine.envs.easy_rocket`.
 
-Pins the invariants that the host ``build_easy_rocket_level`` guaranteed:
-six 2x2 ore patches, one per block, non-overlapping, and off the spawn
-ring. It also pins the JAX properties that the host lacked:
-determinism per key, variation across keys, and vmap/jit compatibility.
-The assertions are JIT-free and run on small 16x16 arrays.
+The easy rocket scenario generates its world in JAX rather than shipping an
+authored level. These tests cover the generator invariants: one patch per ore
+block, a clear spawn, nothing in the outer ring, and the same world for the
+same key.
 """
 
 from __future__ import annotations

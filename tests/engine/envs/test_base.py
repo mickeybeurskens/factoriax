@@ -1,35 +1,22 @@
-"""Tests for the additive FactoriaxEnv extension points (Phase 0 of the
-scenario refactor): ``reset_fn``, ``step_hooks``, ``reward_fn``, the
-``achievement_hook`` helper, and ``AutoResetWrapper(resample=True)``.
+"""Tests for the extension points on :class:`FactoriaxEnv`.
 
-Kept cheap: one 8x8 level built once, at most one step per test, no recompiles.
+``engine/envs/base.py`` takes a scenario's behaviour as constructor
+arguments rather than through a subclass: ``terrain_fn``, the step and
+reset hooks, ``reward_fn``, ``done_fn``, and the achievement hook. Each one
+is additive, so an env that passes none of them behaves as the plain
+engine.
 """
 
 from __future__ import annotations
 
-import dataclasses
-
-import jax
 import jax.numpy as jnp
-import pytest
 from jax import random
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
 from factoriax.engine.envs.base import FactoriaxEnv, achievement_hook
-from factoriax.engine.envs.wrappers import AutoResetState, AutoResetWrapper
-from factoriax.engine.levels import LevelBuilder, build_state
+from factoriax.engine.levels import build_state
 
 _NOOP = int(Action.NOOP)
-
-
-@pytest.fixture(scope="module")
-def level8():
-    return LevelBuilder(8, 8).build("hooks")
-
-
-@pytest.fixture(scope="module")
-def params(level8):
-    return FactoriaxEnv(level=level8).default_params
 
 
 def _bit(index: int) -> jnp.ndarray:
@@ -137,38 +124,3 @@ def test_achievement_hook_latches(level8, params) -> None:
     assert bool(state.achievements_unlocked[3])
     state = hook_b(random.PRNGKey(0), state, params)
     assert bool(state.achievements_unlocked[3]) and bool(state.achievements_unlocked[5])
-
-
-def test_autoreset_resample_regenerates_on_done(level8, params) -> None:
-    """``resample=True`` reruns ``terrain_fn`` on a fresh key at termination;
-    ``resample=False`` restores the cached reset state."""
-    from factoriax.engine.constants import BlockType
-
-    def keyed_terrain(key, p):
-        del p
-        # Encode a random value into tile (0,0) so we can detect resampling.
-        val = jax.random.randint(key, (), 0, 200).astype(jnp.int32)
-        base = jnp.full((8, 8), int(BlockType.DIRT), dtype=jnp.int32)
-        return base.at[0, 0].set(val)
-
-    p1 = dataclasses.replace(params, max_timesteps=1)
-    inner = FactoriaxEnv(terrain_fn=keyed_terrain)
-    step_key = random.PRNGKey(1)
-
-    resampling = AutoResetWrapper(inner, resample=True)
-    _, st = resampling.reset_env(random.PRNGKey(0), p1)
-    _, st1, _, done, _ = resampling.step_env(step_key, st, _NOOP, p1)
-    assert bool(done)
-    assert isinstance(st1, AutoResetState)
-
-    cached = AutoResetWrapper(inner, resample=False)
-    _, st2 = cached.reset_env(random.PRNGKey(0), p1)
-    _, st3, _, done2, _ = cached.step_env(step_key, st2, _NOOP, p1)
-    assert bool(done2)
-    # Cached reset restores the original map tile value.
-    assert bool(jnp.array_equal(st3.env_state.map[0, 0], st2.reset_state.map[0, 0]))
-    assert bool(
-        jnp.array_equal(
-            st3.env_state.achievements_unlocked, st2.reset_state.achievements_unlocked
-        )
-    )

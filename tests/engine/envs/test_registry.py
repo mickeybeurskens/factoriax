@@ -1,9 +1,8 @@
-"""Tests for the scenario registry and ``make("<id>")`` (refactor Phase 2).
+"""Tests for :mod:`factoriax.engine.envs.registry`.
 
-Pins the gymnax-style loading surface: the catalog lists the registered
-scenarios with display metadata, ``make`` returns a steppable ``(env, params)``
-pair, optional wrappers are applied, and ``factoriax.make`` dispatches string
-scenario ids to the registry.
+The registry maps a scenario id to a built env. ``make`` is the entry point a
+consumer binds to, so an id that the catalog lists must build and step, and a
+retired id must raise rather than resolve to something else.
 """
 
 from __future__ import annotations

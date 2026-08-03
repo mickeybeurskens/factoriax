@@ -7,7 +7,13 @@ still routes every action through ``step_env``.
 
 from __future__ import annotations
 
+import dataclasses
+from typing import Any
+
+import jax
 import jax.numpy as jnp
+import pytest
+from jax import random
 
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
@@ -16,9 +22,17 @@ from factoriax.engine.constants import (
     Direction,
     ItemType,
 )
+from factoriax.engine.envs.base import FactoriaxEnv
+from factoriax.engine.envs.wrappers import (
+    ActionMaskWrapper,
+    AutoResetState,
+    AutoResetWrapper,
+)
 from factoriax.engine.placement import place_machine
 from factoriax.engine.state import EnvParams
 from factoriax.engine.tables import MACHINE_HEALTH, MACHINE_MAX_HEALTH
+
+_NOOP = int(Action.NOOP)
 
 
 class TestWrapperContract:
@@ -142,3 +156,144 @@ class TestWrapperContract:
         # stayed structurally identical in shape.
         assert before.ent_health.shape == after.ent_health.shape
         assert not bool(jnp.all(before.ent_health == after.ent_health))
+
+
+# -------------------------------------------------------------------------
+# ActionMaskWrapper
+# -------------------------------------------------------------------------
+
+
+class _StubInner:
+    """Minimal stand-in for the inner env.
+
+    ``step_env`` records the action it was called with so tests can
+    assert what ``ActionMaskWrapper`` passed through. Returns a dummy
+    five-tuple in the gymnax-style shape.
+    """
+
+    default_params = None  # ActionMaskWrapper.__init__ doesn't read this.
+
+    def __init__(self) -> None:
+        self.last_action: int | None = None
+
+    def step_env(
+        self,
+        key: jax.Array,
+        state: Any,
+        action: int | jax.Array,
+        params: Any,
+    ) -> tuple[jax.Array, Any, jax.Array, jax.Array, dict[str, Any]]:
+        self.last_action = int(jnp.asarray(action))
+        return (
+            jnp.zeros(1),
+            state,
+            jnp.float32(0.0),
+            jnp.bool_(False),
+            {},
+        )
+
+    def reset_env(self, key: jax.Array, params: Any) -> tuple[jax.Array, Any]:
+        return jnp.zeros(1), object()
+
+    def get_obs(self, state: Any, params: Any) -> jax.Array:
+        return jnp.zeros(1)
+
+    def is_terminal(self, state: Any, params: Any) -> jax.Array:
+        return jnp.bool_(False)
+
+    def action_space(self, params: Any) -> Any:
+        return None
+
+    def observation_space(self, params: Any) -> Any:
+        return None
+
+
+@pytest.fixture
+def stub_and_wrapper():
+    """Return (stub_inner, wrapper) with RIGHT blocked."""
+    inner = _StubInner()
+    wrapper = ActionMaskWrapper(inner, [int(Action.RIGHT)])
+    return inner, wrapper
+
+
+def test_blocked_action_rewritten_to_noop(stub_and_wrapper) -> None:
+    """A blocked action becomes NOOP at the inner env's call site."""
+    inner, wrapper = stub_and_wrapper
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.RIGHT), None)
+    assert inner.last_action == int(Action.NOOP)
+
+
+def test_unblocked_action_passes_through(stub_and_wrapper) -> None:
+    """An action not in the mask reaches the inner env unchanged."""
+    inner, wrapper = stub_and_wrapper
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.UP), None)
+    assert inner.last_action == int(Action.UP)
+
+
+def test_noop_passes_through(stub_and_wrapper) -> None:
+    """NOOP is never blocked even if someone tries to mask it."""
+    inner, wrapper = stub_and_wrapper
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.NOOP), None)
+    assert inner.last_action == int(Action.NOOP)
+
+
+def test_empty_mask_passes_everything_through() -> None:
+    """A wrapper with no blocked actions is the identity at step time."""
+    inner = _StubInner()
+    wrapper = ActionMaskWrapper(inner, [])
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.MINE), None)
+    assert inner.last_action == int(Action.MINE)
+
+
+def test_multiple_blocked_actions() -> None:
+    """Every action in the mask is blocked. The others pass through."""
+    inner = _StubInner()
+    wrapper = ActionMaskWrapper(
+        inner, [int(Action.RIGHT), int(Action.LEFT), int(Action.MINE)]
+    )
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.MINE), None)
+    assert inner.last_action == int(Action.NOOP)
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.LEFT), None)
+    assert inner.last_action == int(Action.NOOP)
+    wrapper.step_env(jax.random.PRNGKey(0), object(), int(Action.UP), None)
+    assert inner.last_action == int(Action.UP)
+
+
+# -------------------------------------------------------------------------
+# AutoResetWrapper
+# -------------------------------------------------------------------------
+
+
+def test_autoreset_resample_regenerates_on_done(level8, params) -> None:
+    """``resample=True`` reruns ``terrain_fn`` on a fresh key at termination;
+    ``resample=False`` restores the cached reset state."""
+    from factoriax.engine.constants import BlockType
+
+    def keyed_terrain(key, p):
+        del p
+        # Encode a random value into tile (0,0) so we can detect resampling.
+        val = jax.random.randint(key, (), 0, 200).astype(jnp.int32)
+        base = jnp.full((8, 8), int(BlockType.DIRT), dtype=jnp.int32)
+        return base.at[0, 0].set(val)
+
+    p1 = dataclasses.replace(params, max_timesteps=1)
+    inner = FactoriaxEnv(terrain_fn=keyed_terrain)
+    step_key = random.PRNGKey(1)
+
+    resampling = AutoResetWrapper(inner, resample=True)
+    _, st = resampling.reset_env(random.PRNGKey(0), p1)
+    _, st1, _, done, _ = resampling.step_env(step_key, st, _NOOP, p1)
+    assert bool(done)
+    assert isinstance(st1, AutoResetState)
+
+    cached = AutoResetWrapper(inner, resample=False)
+    _, st2 = cached.reset_env(random.PRNGKey(0), p1)
+    _, st3, _, done2, _ = cached.step_env(step_key, st2, _NOOP, p1)
+    assert bool(done2)
+    # Cached reset restores the original map tile value.
+    assert bool(jnp.array_equal(st3.env_state.map[0, 0], st2.reset_state.map[0, 0]))
+    assert bool(
+        jnp.array_equal(
+            st3.env_state.achievements_unlocked, st2.reset_state.achievements_unlocked
+        )
+    )

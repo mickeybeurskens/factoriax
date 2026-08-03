@@ -1,10 +1,9 @@
-"""Regression test for the rocket-scenario coal-patch resource cap.
+"""Tests for :mod:`factoriax.engine.envs.rocket`.
 
-The advanced factory agent runs four parallel smelters that pull
-coal from the v2 left-edge coal column. A starved coal supply
-half-way through the rocket chain stops every plate stream at once.
-The column carries ~10x the per-tile capacity of any ore patch so
-every smelter row can run unattended for a full episode.
+The rocket level is authored, so its resource budget is a design decision
+rather than a generated one. These tests pin the coal column against the
+per-tile budget every other ore gets, and against the cap the observation
+normalises by.
 """
 
 from __future__ import annotations
