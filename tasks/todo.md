@@ -5,24 +5,24 @@ done-when list, and its verify command.
 
 ## State
 
-Phases 0 to 3 are complete.
+Phases 0 to 4 are complete. Only Phase 5 remains.
 
 - Phase 0: `c670a22`
 - Phase 1: `89e5785`, `9910499`
 - Phase 2: `9dd25dc`, `2cbfd06`, `124c6dd`
 - Phase 3: `6e9ed51`, `ee51be0`, `31090e9`, `0316324`, `d2750c1`, `6d1c8f3`
+- Phase 4: `3228927`, `4543607`, `fe4aa12`
 
 - The suite holds **1447 tests**. All pass. A full run takes about 220 seconds.
-- 7 loose test files remain at the `tests/` root, all bound for `contracts/`
-  or `integration/`. `tests/bench_rollout.py` sits beside them and holds no
-  test.
+- `ls tests/*.py` prints `conftest.py` and `__init__.py`. Nothing else is
+  loose.
 - `tests/engine/`, `tests/playground/`, `tests/analysis/`, and `tests/assets/`
-  mirror the package. All 76 files in them map to a module. The longest is
+  mirror the package. All 77 files in them map to a module. The longest is
   553 lines.
-- `tests/integration/` holds 5 files and `tests/contracts/` holds 3.
-- `tests/scenarios/` is the last directory that does not mirror the package.
-- `tests/helpers/` holds `states.py`, `trajectories.py`, and
-  `observations.py`.
+- `tests/integration/` holds 7 files plus `scenarios/` with 6.
+  `tests/contracts/` holds 6. `tests/benchmarks/` is not collected.
+- `tests/helpers/` holds `states.py`, `trajectories.py`, `observations.py`,
+  and `oracles.py`.
 - `uv run ruff check factoriax tests` exits 0.
 
 ## Verify each move
@@ -129,21 +129,13 @@ places them.
 
 ## Phase 4: contracts, integration, benchmarks
 
-- [ ] **Task 15** (M) Build `tests/contracts/` from six files. Each module
-      docstring states the rule the file guards, and why the file is not in the
-      mirror.
-- [ ] **Task 16** (M) Build `tests/integration/` from five files. Each module
-      docstring names the subpackages the file spans. Each file that renders
-      requests `pygame_display` by name.
-- [ ] **Task 17** (L) Move `tests/scenarios/` to `tests/integration/scenarios/`.
-      Move `oracle_utils.py` to `tests/helpers/oracles.py` and update the two
-      importers.
-- [ ] **Task 18** (S) Move `bench_rollout.py` to `tests/benchmarks/` and keep
-      it out of collection. Sweep the tree for stray files and empty
-      directories.
-- [ ] **Checkpoint** 1447 tests, exit 0. The diff against the Phase 0 baseline
-      is empty: 15 tasks moved every test and lost none. A human reviews the
-      result before any deletion starts.
+- [x] **Task 15** Build `tests/contracts/` from six files.
+- [x] **Task 16** Build `tests/integration/` from five files.
+- [x] **Task 17** Move `tests/scenarios/` to `tests/integration/scenarios/` and
+      `oracle_utils.py` to `tests/helpers/oracles.py`.
+- [x] **Task 18** Move `bench_rollout.py` to `tests/benchmarks/` and sweep.
+- [x] **Checkpoint** 1447 tests, exit 0, empty diff. Every test survived the
+      move phases. A human reviews before any deletion starts.
 
 ## Phase 5: deduplicate
 
