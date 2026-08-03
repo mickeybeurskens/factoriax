@@ -1,7 +1,8 @@
-"""Tests for the UI scaling infrastructure.
+"""Tests for :mod:`factoriax.playground.ui.scaling`.
 
-Validates ScaledCanvas coordinate transforms and theme.apply_scale
-without requiring a live pygame display.
+:class:`ScaledCanvas` maps a window coordinate to a canvas coordinate and
+back. A resize changes the mapping, so the transform tests and the resize
+tests share one surface.
 """
 
 from __future__ import annotations
@@ -18,34 +19,6 @@ def _reset_theme_scale() -> None:
     """Reset theme scale to 1 after each test."""
     yield  # type: ignore[misc]
     theme.apply_scale(1)
-
-
-# ---------------------------------------------------------------------------
-# theme.apply_scale
-# ---------------------------------------------------------------------------
-
-
-class TestApplyScale:
-    """Tests for theme.apply_scale updating size constants."""
-
-    def test_scale_1_keeps_defaults(self) -> None:
-        """Scale factor 1 leaves constants at base values."""
-        theme.apply_scale(1)
-        assert theme.UI_SCALE == 1
-        assert theme.FONT_HEADER == 24
-        assert theme.FONT_BODY == 18
-        assert theme.BORDER_PX == 4
-
-    def test_scale_2_doubles_sizes(self) -> None:
-        """Scale factor 2 doubles all size constants."""
-        theme.apply_scale(2)
-        assert theme.UI_SCALE == 2
-        assert theme.FONT_HEADER == 48
-        assert theme.FONT_BODY == 36
-        assert theme.FONT_HINT == 24
-        assert theme.HEADER_H == 88
-        assert theme.BORDER_PX == 8
-        assert theme.SCROLLBAR_W == 16
 
 
 # ---------------------------------------------------------------------------

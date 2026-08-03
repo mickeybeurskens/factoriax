@@ -257,9 +257,21 @@ records the gap. Do not write new tests here.
 
 1. Move `tests/test_scaling.py` to `tests/playground/ui/test_scaling.py`. Move its `apply_scale` half to `test_theme.py`.
 2. Move `tests/test_machine_icon_coverage.py` to `tests/playground/ui/test_icons.py`.
-3. Merge `tests/play/test_config.py` and `tests/play/test_controller_config.py` into `tests/playground/test_config.py`. Both test `playground/config.py`. The result is about 586 lines, which is under the package threshold.
-4. Move `tests/play/test_rebinding.py` to `tests/playground/menu/test_controls_menu.py`.
-5. Create `tests/playground/conftest.py` with the autouse pygame session from Task 3.
+3. Build `tests/playground/config/` as a package from `tests/play/test_config.py`
+   and `tests/play/test_controller_config.py`, plus three classes out of
+   `test_rebinding.py`. All three files test `playground/config.py`, and
+   together they run to about 710 lines, which is over the threshold. The
+   package files are `test_keyboard.py`, `test_controller.py`,
+   `test_persistence.py`, and `test_env_params.py`.
+4. Split `tests/play/test_rebinding.py` three ways, by what each class reaches
+   for. `TestBindingFormatting` and `TestRebindActions` are the only two that
+   touch `menu/controls_menu.py`, so they go to
+   `tests/playground/menu/test_controls_menu.py`. Three classes test binding
+   round trips in `config.py` and join the config package.
+   `TestGameUIWithReboundKey` builds a `GameUI` and asserts an engine
+   `Action`, so it goes to `tests/integration/`.
+5. Create `tests/playground/conftest.py` with the autouse pygame session from
+   Task 3.
 
 **Done when:**
 

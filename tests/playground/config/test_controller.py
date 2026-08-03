@@ -1,4 +1,10 @@
-"""Tests for controller binding resolution and input name formatting."""
+"""Tests for the controller half of :mod:`factoriax.playground.config`.
+
+A controller reports a button, a hat direction, or an axis throw. Each one
+resolves to a :class:`PlayerAction` through a lookup that
+``build_controller_lookup`` builds from the binding table. The axis needs a
+deadzone, so a resting stick reports no action.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +15,7 @@ import pytest
 
 from factoriax.playground.config import (
     _AXIS_DEADZONE,
+    PlayerAction,
     build_controller_lookup,
     controller_event_to_name,
     default_controller,
@@ -17,10 +24,6 @@ from factoriax.playground.config import (
     resolve_controller_button,
     resolve_controller_hat,
 )
-
-# ---------------------------------------------------------------------------
-# build_controller_lookup
-# ---------------------------------------------------------------------------
 
 
 class TestBuildControllerLookup:
@@ -277,3 +280,36 @@ class TestControllerEventToName:
         event = MagicMock()
         event.type = pygame.MOUSEMOTION
         assert controller_event_to_name(event) is None
+
+
+class TestControllerRebindRoundTrip:
+    """Rebinding a controller input changes resolution."""
+
+    def test_rebind_button(self) -> None:
+        """Changing mine from BUTTON_2 to BUTTON_9 takes effect."""
+        bindings = default_controller()
+        bindings[PlayerAction.MINE] = ["BUTTON_9"]
+
+        lookup = build_controller_lookup(bindings)
+        actions = resolve_controller_button(lookup, 9)
+        assert PlayerAction.MINE in actions
+
+        old = resolve_controller_button(lookup, 2)
+        assert PlayerAction.MINE not in old
+
+    def test_rebind_hat(self) -> None:
+        """Rebinding nav_up from HAT_0_UP to BUTTON_4 removes hat."""
+        bindings = default_controller()
+        bindings[PlayerAction.NAV_UP] = ["BUTTON_4"]
+
+        lookup = build_controller_lookup(bindings)
+        hat_actions = resolve_controller_hat(lookup, 0, (0, 1))
+        assert PlayerAction.NAV_UP not in hat_actions
+
+        btn_actions = resolve_controller_button(lookup, 4)
+        assert PlayerAction.NAV_UP in btn_actions
+
+
+# ---------------------------------------------------------------------------
+# Config persistence simulation
+# ---------------------------------------------------------------------------
