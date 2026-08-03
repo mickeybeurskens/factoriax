@@ -17,10 +17,25 @@ when the caller names none.
 
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pytest
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
-from factoriax.analysis.milestones import first_action_timestep
+from factoriax.analysis.milestones import (
+    achievement_timing,
+    first_action_timestep,
+    plot_achievement_progress,
+    plot_achievement_timing,
+    plot_first_action_timing,
+)
 from factoriax.analysis.trajectory import Trajectory
+from tests.helpers.trajectories import (
+    make_minimal_traj,
+    make_multi_player_traj,
+    make_single_player_traj,
+)
 
 
 def _make_single_player(actions_2d: list[list[int]]) -> Trajectory:
@@ -110,3 +125,129 @@ class TestFirstActionTimestep:
         traj = _make_multi_player(actions)
         result = first_action_timestep(traj, action_id=7)
         np.testing.assert_array_equal(result, [1])
+
+
+class TestMilestones:
+    """Tests for achievement timing and milestone event detection."""
+
+    # ---- achievement_timing ----
+
+    def test_achievement_timing_shape(self) -> None:
+        """achievement_timing returns shape (num_eps, num_achievements)."""
+        traj = make_multi_player_traj(8, 40, num_p=2)
+        timing = achievement_timing(traj)
+        assert timing.shape == (8, 2)
+
+    def test_achievement_timing_never_unlocked_is_minus_one(self) -> None:
+        """Episodes that never unlock an achievement get -1."""
+        num_eps, num_steps = 4, 20
+        achievements = np.zeros((num_eps, num_steps, 2), dtype=bool)
+        traj = Trajectory(
+            actions=np.zeros((num_eps, num_steps), dtype=np.int32),
+            achievements=achievements,
+        )
+        timing = achievement_timing(traj)
+        np.testing.assert_array_equal(timing[:, 1], -1)
+
+    def test_achievement_timing_returns_first_true_timestep(self) -> None:
+        """The reported timestep is the first True occurrence, not the last."""
+        num_eps, num_steps = 4, 20
+        achievements = np.zeros((num_eps, num_steps, 1), dtype=bool)
+        achievements[:, 5:, 0] = True  # unlocked at t=5, stays True
+        traj = Trajectory(
+            actions=np.zeros((num_eps, num_steps), dtype=np.int32),
+            achievements=achievements,
+        )
+        timing = achievement_timing(traj)
+        np.testing.assert_array_equal(timing[:, 0], 5)
+
+    def test_achievement_timing_raises_without_achievements(self) -> None:
+        """achievement_timing raises ValueError when achievements field is absent."""
+        traj = make_minimal_traj(4, 20)
+        with pytest.raises(ValueError):
+            achievement_timing(traj)
+
+    def test_achievement_timing_partial_unlock(self) -> None:
+        """Only episodes that unlock have non-negative timing."""
+        num_eps, num_steps = 6, 30
+        achievements = np.zeros((num_eps, num_steps, 1), dtype=bool)
+        achievements[:3, 10:, 0] = True  # only first 3 episodes unlock at t=10
+        traj = Trajectory(
+            actions=np.zeros((num_eps, num_steps), dtype=np.int32),
+            achievements=achievements,
+        )
+        timing = achievement_timing(traj)
+        assert np.all(timing[:3, 0] == 10)
+        assert np.all(timing[3:, 0] == -1)
+
+    # ---- first_action_timestep ----
+
+    def test_first_action_timestep_absent_action(self) -> None:
+        """Returns -1 for all episodes when the action never appears."""
+        traj = make_minimal_traj(4, 20)  # all zeros
+        result = first_action_timestep(traj, action_id=5)
+        np.testing.assert_array_equal(result, -1)
+
+    def test_first_action_timestep_correct_index(self) -> None:
+        """Returns the first index where the action appears."""
+        num_eps, num_steps = 4, 20
+        actions = np.zeros((num_eps, num_steps), dtype=np.int32)
+        actions[:, 7] = 3  # action 3 first appears at t=7
+        traj = Trajectory(actions=actions)
+        result = first_action_timestep(traj, action_id=3)
+        np.testing.assert_array_equal(result, 7)
+
+    def test_first_action_timestep_multi_player(self) -> None:
+        """first_action_timestep works for a specific player in multi-player traj."""
+        num_eps, num_steps, num_p = 4, 20, 2
+        actions = np.zeros((num_eps, num_steps, num_p), dtype=np.int32)
+        actions[:, 5, 0] = 2  # player 0 takes action 2 at t=5
+        actions[:, 10, 1] = 2  # player 1 takes action 2 at t=10
+        traj = Trajectory(actions=actions)
+        result_p0 = first_action_timestep(traj, action_id=2, player=0)
+        result_p1 = first_action_timestep(traj, action_id=2, player=1)
+        np.testing.assert_array_equal(result_p0, 5)
+        np.testing.assert_array_equal(result_p1, 10)
+
+    # ---- plot functions ----
+
+    def test_plot_achievement_timing_returns_fig_ax(self) -> None:
+        """plot_achievement_timing returns a (Figure, Axes) tuple."""
+        traj = make_multi_player_traj(8, 40, num_p=2)
+        fig, ax = plot_achievement_timing(traj)
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        plt.close("all")
+
+    def test_plot_achievement_timing_all_negative_no_crash(self) -> None:
+        """plot_achievement_timing handles all-negative timing without error."""
+        num_eps, num_steps = 4, 20
+        achievements = np.zeros((num_eps, num_steps, 2), dtype=bool)
+        traj = Trajectory(
+            actions=np.zeros((num_eps, num_steps), dtype=np.int32),
+            achievements=achievements,
+        )
+        fig, ax = plot_achievement_timing(traj)
+        assert isinstance(fig, Figure)
+        plt.close("all")
+
+    def test_plot_achievement_progress_returns_fig_ax(self) -> None:
+        """plot_achievement_progress returns a (Figure, Axes) tuple."""
+        traj = make_multi_player_traj(8, 40, num_p=2)
+        fig, ax = plot_achievement_progress(traj)
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        plt.close("all")
+
+    def test_plot_first_action_timing_returns_fig_ax(self) -> None:
+        """plot_first_action_timing returns a (Figure, Axes) tuple."""
+        traj = make_single_player_traj(8, 40, num_actions=6)
+        fig, ax = plot_first_action_timing(traj, action_ids=[1, 2, 3])
+        assert isinstance(fig, Figure)
+        assert isinstance(ax, Axes)
+        plt.close("all")
+
+
+# ---------------------------------------------------------------------------
+# TestMultiagent
+# ---------------------------------------------------------------------------

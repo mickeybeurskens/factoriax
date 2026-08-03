@@ -203,9 +203,19 @@ This area is the smallest and the most self-contained. Its split brain is also t
 
 1. Split `tests/test_analysis.py` one class at a time into the mirror. Merge each class with the file that is already there.
 2. Fold `tests/analysis/test_state_shapes.py` into `tests/analysis/test_state.py`.
-3. Rename `tests/analysis/test_palettes.py` to `test_categories.py`. It tests `analysis/categories.py`.
+3. Split `tests/analysis/test_palettes.py` by the module that owns each
+   constant. `ACTION_LABELS` and `ACTION_COLORS` live in `analysis/actions.py`,
+   so those classes go to `test_actions.py`. `DEFAULT_ITEM_LABELS` and
+   `DEFAULT_ITEM_COLORS` live in `analysis/state.py`, so those go to
+   `test_state.py`. Then delete the file.
 4. Move `tests/test_inventory_panel.py` to `tests/analysis/test_inventory.py`. It tests `analysis/inventory.py`, and the old name hides this.
-5. Put the `FakeRollout` helper next to its consumer. If two files use it, put it in `tests/helpers/`.
+5. Move the three trajectory builders to `tests/helpers/trajectories.py`. Four
+   destination files share them. Keep `FakeRollout` in `test_recorder.py`,
+   which is its only consumer.
+
+`analysis/categories.py` has no test file of its own. Only
+`test_recipe_graph.py` reaches it, and only through `item_palette`. Task 20
+records the gap. Do not write new tests here.
 
 **Done when:**
 

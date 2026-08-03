@@ -1,4 +1,8 @@
-"""Tests for the ``env_params_scheme`` field on :class:`Trajectory`.
+"""Tests for :mod:`factoriax.analysis.trajectory`.
+
+The first group covers construction, the shape properties, slicing, and
+the ``.npz`` round trip. The second group covers the ``env_params_scheme``
+field.
 
 A replay needs the engine parameters that made the recording. A value
 such as ``player_mining_yield`` changes how many items one mine action
@@ -22,11 +26,16 @@ from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from factoriax.analysis.trajectory import Trajectory, states_to_trajectory
 from factoriax.engine.constants import BlockType
 from factoriax.engine.state import EnvParams
 from factoriax.playground.config import env_params_to_dict
+from tests.helpers.trajectories import (
+    make_multi_player_traj,
+    make_single_player_traj,
+)
 
 
 class TestEnvParamsSchemeField:
@@ -129,3 +138,101 @@ class TestStatesToTrajectoryWithParams:
         states, actions = self._fake_states(state_factory, count=4)
         traj = states_to_trajectory(states, actions=actions)
         assert traj.env_params_scheme is None
+
+
+class TestTrajectory:
+    """Tests for Trajectory construction, shape properties, slicing, and I/O."""
+
+    def test_1d_actions_coerced(self) -> None:
+        """1D action array is promoted to (1, T)."""
+        traj = Trajectory(actions=np.zeros(50, dtype=np.int32))
+        assert traj.num_episodes == 1
+        assert traj.episode_length == 50
+
+    def test_2d_single_player(self) -> None:
+        """2D actions give single-player trajectory."""
+        traj = make_single_player_traj(8, 50)
+        assert traj.is_multi_player is False
+        assert traj.num_players == 1
+
+    def test_3d_multi_player(self) -> None:
+        """3D actions give multi-player trajectory with correct player count."""
+        traj = make_multi_player_traj(8, 50, num_p=3)
+        assert traj.is_multi_player is True
+        assert traj.num_players == 3
+
+    def test_4d_raises_value_error(self) -> None:
+        """4D action array raises ValueError."""
+        with pytest.raises(ValueError):
+            Trajectory(actions=np.zeros((2, 3, 4, 5), dtype=np.int32))
+
+    def test_episode_returns_one_episode(self) -> None:
+        """episode(i) returns a single-episode Trajectory with correct data."""
+        traj = make_single_player_traj(8, 50)
+        ep = traj.episode(2)
+        assert ep.num_episodes == 1
+        np.testing.assert_array_equal(ep.actions[0], traj.actions[2])
+
+    def test_episode_negative_index(self) -> None:
+        """episode(-1) returns the last episode."""
+        traj = make_single_player_traj(8, 50)
+        ep = traj.episode(-1)
+        assert ep.num_episodes == 1
+        np.testing.assert_array_equal(ep.actions[0], traj.actions[-1])
+
+    def test_episodes_slice(self) -> None:
+        """episodes(slice(1, 3)) returns two episodes."""
+        traj = make_single_player_traj(8, 50)
+        sliced = traj.episodes(slice(1, 3))
+        assert sliced.actions.shape == (2, 50)
+
+    def test_episodes_array_index(self) -> None:
+        """episodes(np.array([0, 2, 4])) returns three specific episodes."""
+        traj = make_single_player_traj(8, 50)
+        indexed = traj.episodes(np.array([0, 2, 4]))
+        assert indexed.actions.shape == (3, 50)
+
+    def test_player_on_single_player(self) -> None:
+        """player(0) on a single-player trajectory returns a single-player view."""
+        traj = make_single_player_traj(8, 50)
+        result = traj.player(0)
+        assert result.is_multi_player is False
+
+    def test_player_extracts_correct_player(self) -> None:
+        """player(1) actions match traj.actions[:, :, 1]."""
+        traj = make_multi_player_traj(8, 50, num_p=2)
+        p1 = traj.player(1)
+        np.testing.assert_array_equal(p1.actions, traj.actions[:, :, 1])
+
+    def test_player_preserves_optional_fields(self) -> None:
+        """player(0) squeezes positions to (num_eps, num_steps, 2)."""
+        traj = make_multi_player_traj(8, 50, num_p=2)
+        p0 = traj.player(0)
+        assert p0.positions is not None
+        assert p0.positions.shape == (8, 50, 2)
+
+    def test_time_slice_shape(self) -> None:
+        """time_slice(10, 40) returns episode_length == 30."""
+        traj = make_single_player_traj(8, 50)
+        sliced = traj.time_slice(10, 40)
+        assert sliced.episode_length == 30
+
+    def test_save_load_roundtrip(self, tmp_path: Path) -> None:
+        """All array shapes and dtypes survive save/load."""
+        traj = make_multi_player_traj(4, 30, num_p=2)
+        save_path = str(tmp_path / "traj.npz")
+        traj.save(save_path)
+        loaded = Trajectory.load(save_path)
+        np.testing.assert_array_equal(loaded.actions, traj.actions)
+        assert loaded.positions is not None
+        assert traj.positions is not None
+        assert loaded.positions.shape == traj.positions.shape
+        assert loaded.actions.dtype == traj.actions.dtype
+        assert loaded.achievements is not None
+        assert traj.achievements is not None
+        assert loaded.achievements.shape == traj.achievements.shape
+
+
+# ---------------------------------------------------------------------------
+# TestActions
+# ---------------------------------------------------------------------------
