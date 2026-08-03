@@ -1,8 +1,9 @@
-"""Tests for the render_machine_menu UI function.
+"""Tests for the machine menu that :mod:`factoriax.playground.play.ui` draws.
 
-Validates output shape/dtype, click-region structure, and that the renderer
-handles all machine types, filled/empty inventories, and focused-item state
-without crashing.  Visual correctness is verified by running the game.
+``render_machine_menu`` returns the pixels and the click regions that map a
+mouse position back to a slot. The tests cover the output contract, the
+region structure, and that every machine kind renders, whether its slots are
+empty or full.
 """
 
 from __future__ import annotations

@@ -1,4 +1,10 @@
-"""Tests for the scroll system primitives and scrollable menus in ui.py."""
+"""Tests for the scroll primitives in :mod:`factoriax.playground.play.ui`.
+
+``clip_scroll_offset`` and ``blit_scroll_view`` carry the arithmetic that
+every scrollable menu shares. The last two classes drive that arithmetic
+through the achievement menu and the recipe list, which are the two menus
+long enough to scroll.
+"""
 
 from __future__ import annotations
 

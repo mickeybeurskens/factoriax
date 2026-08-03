@@ -1,9 +1,10 @@
-"""Regression tests for play.ui rendering functions.
+"""Tests for the full-screen menus that :mod:`factoriax.playground.play.ui`
+draws: the achievement menu, the inventory and crafting menu, the welcome
+screen, and the pause menu.
 
-These tests guard the output contract (shape, dtype) of the render functions
-and verify that they do not crash under common state configurations.  Visual
-correctness is validated by running the game. Pixel-level assertions are
-intentionally absent.
+Each test asserts the output contract, which is the array shape and the
+dtype, and that the call does not raise for a common state. A pixel is not
+asserted here. Visual correctness comes from running the game.
 """
 
 import jax.numpy as jnp

@@ -1,13 +1,14 @@
-"""Smoke tests for play and editor modules.
+"""Smoke tests: the play UI and the editor import, build, and render.
 
-These tests verify that the play UI and editor can import, create objects,
-and render frames without crashing. They do NOT test game logic correctness
-or visual output quality. They only check that the code paths do not
-hit missing attributes, import errors, or type mismatches after state
-changes.
+This file spans two subpackages, so it is not in the mirror. It builds a
+real ``FactoriaxEnv`` and drives ``playground/`` code against it.
 
-Pygame fonts are initialized by the session-scoped ``pygame_font_session``
-fixture in ``tests/play/conftest.py``.
+These tests assert no game logic and no visual quality. They assert that
+the code paths do not hit a missing attribute, an import error, or a type
+mismatch after a state change.
+
+Rendering needs a font, so this file asks for the display by name. There
+is no autouse display outside ``tests/playground/``.
 """
 
 from __future__ import annotations
@@ -21,6 +22,11 @@ from factoriax.engine.constants import Action
 from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.state import EnvParams
 from factoriax.playground.config import build_key_lookup, default_keyboard
+
+
+@pytest.fixture(autouse=True)
+def _display(pygame_display: None) -> None:
+    """Request the session display. Rendering needs an initialised font."""
 
 
 @pytest.fixture(scope="module")

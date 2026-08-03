@@ -1,9 +1,14 @@
-"""Integration tests: every GameUI handler with a real EnvState.
+"""Every GameUI handler, driven against a real :class:`EnvState`.
 
-Each test creates a GameUI, sets up the required play state flags,
-sends a pygame event, and verifies the result does not crash and
-returns a sensible GameUIResult. This catches stale field references
-that unit tests miss because they only exercise isolated paths.
+This file spans two subpackages, so it is not in the mirror.
+``playground/play/game_ui.py`` turns an event into a result, and the
+state it reads comes from ``engine/``. A handler that names a field the
+engine has retired passes every test that stays inside the UI.
+
+Each test builds a ``GameUI``, sets the play-state flags the path needs,
+sends a pygame event, and asserts the result. ``handle_event`` reads the
+video system, so this file asks for the display by name. There is no
+autouse display outside ``tests/playground/``.
 """
 
 from __future__ import annotations
@@ -24,6 +29,11 @@ from factoriax.playground.config import (
     default_keyboard,
 )
 from factoriax.playground.play.game_ui import GameUI, GameUIResult
+
+
+@pytest.fixture(autouse=True)
+def _display(pygame_display: None) -> None:
+    """Request the session display. The handlers read the video system."""
 
 
 @pytest.fixture
