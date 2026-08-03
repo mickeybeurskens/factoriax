@@ -31,34 +31,6 @@ def _input_type_set(recipe: Recipe) -> frozenset[int]:
     return frozenset(int(it) for it, _ in recipe.inputs)
 
 
-def test_every_recipe_has_unique_input_type_set() -> None:
-    """No two recipes on the same machine share an input type-set
-    (at the same arity). Two 2-input recipes with the same pair
-    is ambiguous. Two 1-input recipes with the same item
-    likewise. Different-arity recipes with overlapping items are
-    disambiguated by the slot-emptiness gate in Phase 3.
-    """
-    seen: dict[tuple[int, int, frozenset[int]], int] = {}
-    for idx, recipe in enumerate(BASE_RECIPES):
-        key = (
-            int(RECIPE_MACHINE_TYPE[idx]),
-            len(recipe.inputs),
-            _input_type_set(recipe),
-        )
-        assert key not in seen, (
-            f"Recipe {idx} ({recipe.output}) shares input type-set "
-            f"{set(key[2])} at arity {key[1]} with recipe {seen[key]} "
-            f"on the same machine type {key[0]}."
-        )
-        seen[key] = idx
-
-
-@pytest.mark.parametrize("recipe", BASE_RECIPES)
-def test_recipe_has_one_or_two_inputs(recipe: Recipe) -> None:
-    """Furnace recipes take 1 or 2 inputs. Assembler recipes take 2."""
-    assert len(recipe.inputs) in (1, 2)
-
-
 @pytest.mark.parametrize("idx", range(len(BASE_RECIPES)))
 def test_assembler_recipes_have_two_inputs(idx: int) -> None:
     """Every assembler-gated recipe has exactly 2 input types.

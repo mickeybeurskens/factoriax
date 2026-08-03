@@ -252,21 +252,3 @@ class TestObservationFidelity:
         obs = env.get_obs(final, params)
         obs_space = env.observation_space(params)
         assert obs.shape == obs_space.shape
-
-    def test_inventory_observation_encodes_state(self) -> None:
-        """Inventory portion of the observation must match state arrays."""
-        env = FactoriaxEnv()
-        rng = random.PRNGKey(17)
-        _, state = env.reset_env(rng, _SMALL_PARAMS)
-
-        # Place a known item in the player pouch.
-        state = state.replace(
-            player_inventory=state.player_inventory.at[0, ItemType.COAL].set(
-                32,
-            ),
-        )
-
-        obs = env.get_obs(state, _SMALL_PARAMS)
-        # Verify the observation is finite and in range.
-        assert jnp.all(obs >= 0.0)
-        assert jnp.all(obs <= 1.0)

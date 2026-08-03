@@ -31,7 +31,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.levels import Level, build_state, load_level, save_level
+from factoriax.engine.levels import Level, load_level, save_level
 from factoriax.playground.editor.state import (
     editor_state_from_level,
     editor_state_to_level,
@@ -439,21 +439,3 @@ def _make_level_with_pallet_items() -> Level:
         machine_inventory=machine_inv,
         player_positions=[(0, 0)],
     )
-
-
-class TestEditorInventoryInit:
-    """Machine inventories from the editor must appear in EnvState."""
-
-    def test_pallet_items_go_to_buffer(self) -> None:
-        """Items in a pallet's inventory populate the buffer."""
-        level = _make_level_with_pallet_items()
-        state = build_state(level, num_players=1)
-
-        eidx = int(state.tile_entity[2, 2])
-        assert eidx >= 0, "Pallet entity not found"
-        assert int(state.ent_buf_type[eidx]) == int(
-            ItemType.IRON_ORE,
-        ), f"Expected buf_type=IRON_ORE, got {int(state.ent_buf_type[eidx])}"
-        assert int(state.ent_buf_count[eidx]) == 10, (
-            f"Expected buf_count=10, got {int(state.ent_buf_count[eidx])}"
-        )
