@@ -19,7 +19,7 @@ its first 20-pack batch lands at t≈72-84 and totals 188-220 (1.88-2.0x
 tier-1, matching the doubled science-per-ore design target).
 
 Both oracles are phase machines (MINE -> CRAFT -> DEPOSIT, repeat)
-over the shared navigation helpers in ``oracle_utils``:
+over the shared navigation helpers in ``tests.helpers.oracles``:
 
   tier 1: mine 5 coal + 5 limestone -> craft 5 t1 packs -> deposit 5.
   tier 2: mine 5 each of coal/limestone/iron/tin -> craft 5 t1 packs,
@@ -38,7 +38,7 @@ from factoriax.engine.envs.science_tiers import (
     SCIENCE_TIERS_MAX_TIMESTEPS,
     science_tiers,
 )
-from tests.scenarios.oracle_utils import goto_and_act
+from tests.helpers.oracles import goto_and_act
 
 SEEDS = (0, 1, 2)
 

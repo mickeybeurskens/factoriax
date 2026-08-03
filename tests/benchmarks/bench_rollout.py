@@ -1,7 +1,9 @@
 """Micro-benchmark for environment rollout throughput.
 
-Measures steps/second for random-action rollouts on a fixed 15x15 map.
-Run with: python tests/bench_rollout.py
+Measures steps per second for random-action rollouts on a fixed 15x15 map.
+This is a script, not a test. Pytest does not collect this directory.
+
+Run it with ``python tests/benchmarks/bench_rollout.py``.
 """
 
 import time

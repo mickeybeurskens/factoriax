@@ -32,6 +32,8 @@ docs = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Scripts, not tests. Nothing here defines a test function.
+norecursedirs = ["tests/benchmarks"]
 
 [tool.coverage.run]
 # Coverage targets the core environment tree (factoriax/) only.

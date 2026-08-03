@@ -1,10 +1,9 @@
-"""Shared helpers for scripted-oracle scenario tests.
+"""Navigation primitives for the scripted-oracle scenario tests.
 
-Movement and interaction primitives used by the miner-curriculum and
-science-tiers oracles: a greedy approach step, adjacency-aware
-face-then-act, nearest-target lookup, and a BFS walker that routes
-around solid machines. The oracles themselves stay in their test
-modules. This module holds the navigation blocks that they share.
+A scripted oracle proves a scenario is solvable: it walks the player to a
+target, faces it, and acts. These are the movement blocks that the oracles
+share, including a BFS that routes around solid machines. The oracles
+themselves stay in their test modules.
 """
 
 from __future__ import annotations

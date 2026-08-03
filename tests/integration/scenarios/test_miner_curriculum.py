@@ -37,19 +37,19 @@ from factoriax.engine.envs.miner_curriculum import (
 from factoriax.engine.placement import place_machine
 from factoriax.engine.tables import BLOCK_TO_ITEM_ARRAY, DIRECTIONS
 from factoriax.make import env_from_name
-from tests.scenarios.oracle_utils import (
+from tests.helpers.oracles import (
     BLOCK_TO_ITEM as _BLOCK_TO_ITEM,
 )
-from tests.scenarios.oracle_utils import (
+from tests.helpers.oracles import (
     DIR_TO_FACE as _DIR_TO_FACE,
 )
-from tests.scenarios.oracle_utils import (
+from tests.helpers.oracles import (
     DIR_TO_MOVE as _DIR_TO_MOVE,
 )
-from tests.scenarios.oracle_utils import (
+from tests.helpers.oracles import (
     bfs_step_toward as _bfs_step_toward,
 )
-from tests.scenarios.oracle_utils import (
+from tests.helpers.oracles import (
     face_or_mine_adjacent as _face_or_mine_adjacent,
 )
 
