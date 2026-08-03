@@ -1,20 +1,15 @@
-"""Tests for editor save/load via FileDialog without tkinter dependency."""
+"""Tests for :mod:`factoriax.playground.editor.dialogs`.
+
+:class:`FileDialog` picks a level file for a save or a load. It draws its
+own list and never imports tkinter, so the editor needs no toolkit beyond
+pygame.
+"""
 
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
-
-from factoriax.engine.constants import Direction, Machine
-from factoriax.engine.levels import load_level, save_level
 from factoriax.playground.editor.dialogs import FileDialog, _list_level_files
-from factoriax.playground.editor.state import (
-    editor_state_from_level,
-    editor_state_to_level,
-    new_editor_state,
-    set_machine,
-)
 
 
 class TestFileDialogSave:
@@ -109,24 +104,8 @@ class TestFileDialogNavigation:
         assert dlg.selected_index == 0
 
 
-class TestEditorSaveLoadRoundTrip:
-    """Full save-then-load round trip through editor functions."""
-
-    def test_round_trip_preserves_machines(self) -> None:
-        """Machines and directions survive save/load."""
-        state = new_editor_state(8, 8, name="roundtrip")
-        set_machine(state, 3, 3, int(Machine.CONVEYOR_BELT), int(Direction.LEFT))
-
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / "test.json"
-            level = editor_state_to_level(state)
-            save_level(level, path)
-            loaded = load_level(path)
-
-        restored = editor_state_from_level(loaded)
-        assert restored.machine_types[3, 3] == int(Machine.CONVEYOR_BELT)
-        assert restored.machine_directions[3, 3] == int(Direction.LEFT)
-        np.testing.assert_array_equal(restored.block_map, state.block_map)
+class TestFileDialogImports:
+    """The dialog must not pull in tkinter."""
 
     def test_no_tkinter_import(self) -> None:
         """FileDialog must not import tkinter."""

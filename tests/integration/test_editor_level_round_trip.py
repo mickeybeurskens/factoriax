@@ -1,5 +1,10 @@
 """Tests that an edit survives a trip through :class:`Level` unchanged.
 
+This file spans two subpackages, so it is not in the mirror.
+``playground/editor/state.py`` holds the edit, and ``engine/levels.py``
+holds the format it is saved in. A field that changes meaning between them
+is a silent edit that neither side's own tests can see.
+
 The editor saves by converting its state to a ``Level`` and loads by converting
 back. A field that changes meaning on the way is a silent edit to the level, so
 these tests drive the conversion in both directions and compare.
@@ -12,16 +17,20 @@ gap in the player numbering.
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from factoriax.engine.constants import (
     NUM_ITEM_TYPES,
     BlockType,
+    Direction,
     ItemType,
     Machine,
 )
-from factoriax.engine.levels import Level
+from factoriax.engine.levels import Level, load_level, save_level
 from factoriax.playground.editor.state import (
     editor_state_from_level,
     editor_state_to_level,
@@ -29,6 +38,7 @@ from factoriax.playground.editor.state import (
     new_editor_state,
     remove_player_at,
     set_inventory_slot,
+    set_machine,
 )
 
 
@@ -228,3 +238,23 @@ class TestPlayerNumbering:
         restored = editor_state_from_level(editor_state_to_level(three_players))
 
         assert sorted(restored.player_positions) == [0, 1]
+
+
+class TestEditorSaveLoadRoundTrip:
+    """Full save-then-load round trip through editor functions."""
+
+    def test_round_trip_preserves_machines(self) -> None:
+        """Machines and directions survive save/load."""
+        state = new_editor_state(8, 8, name="roundtrip")
+        set_machine(state, 3, 3, int(Machine.CONVEYOR_BELT), int(Direction.LEFT))
+
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "test.json"
+            level = editor_state_to_level(state)
+            save_level(level, path)
+            loaded = load_level(path)
+
+        restored = editor_state_from_level(loaded)
+        assert restored.machine_types[3, 3] == int(Machine.CONVEYOR_BELT)
+        assert restored.machine_directions[3, 3] == int(Direction.LEFT)
+        np.testing.assert_array_equal(restored.block_map, state.block_map)
