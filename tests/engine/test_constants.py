@@ -1,25 +1,34 @@
-"""Tests for the action category enums (DEF2 source of truth).
+"""Tests for the enum composition in :mod:`factoriax.engine.constants`.
 
-``MoveAction`` and ``InteractAction`` are the two *fixed* (non-parametric)
-action categories. DEF2 composes the flat ``Action`` enum from these plus
-the parametric families generated from the item categories (Placement per
-Machine, Craft per non-resource item, Deposit per item). This locks the
-invariant for the fixed half: the two category enums cover exactly the
-non-parametric actions today, disjointly.
+Two groups live here.
+
+The item group covers ``Resource``, ``HalfFabricate``, and ``Machine``, the
+three category enums that ``ItemType`` composes from. Their real members must
+partition the non-EMPTY ``ItemType`` members exactly, because a new member in
+an earlier category shifts the value of every later item.
+
+The action group covers ``MoveAction`` and ``InteractAction``, the two fixed
+action categories. The flat ``Action`` enum composes from these plus the
+parametric families, so the two must cover the non-parametric actions and
+stay disjoint.
 """
 
 from __future__ import annotations
+
+from enum import IntEnum
 
 from factoriax.engine.constants import (
     CRAFT_BASE,
     CRAFT_ITEMS,
     DEPOSIT_BASE,
     DEPOSIT_ITEMS,
+    ITEM_TO_MACHINE,
     NUM_ACTIONS,
     NUM_ITEM_TYPES,
     PLACE_BASE,
     PLACEMENT_ITEMS,
     Action,
+    BlockType,
     HalfFabricate,
     InteractAction,
     ItemType,
@@ -27,6 +36,7 @@ from factoriax.engine.constants import (
     MoveAction,
     Resource,
 )
+from factoriax.engine.tables import SOLID_BLOCKS
 
 # Prefixes of the parametric action families on the current Action enum.
 _PARAMETRIC_PREFIXES = ("PLACE_", "CRAFT_", "DEPOSIT_")
@@ -102,3 +112,63 @@ def test_craftable_iff_non_resource_iff_recipe_outputs() -> None:
     assert craft_items == non_resource
     assert craft_items == recipe_outputs
     assert craft_items.isdisjoint(resources)
+
+
+def _real_names(category: type[IntEnum]) -> set[str]:
+    """Member names of a category excluding the ``NONE`` placeholder."""
+    return {m.name for m in category if m.name != "NONE"}
+
+
+def test_categories_carry_a_none_zero_placeholder() -> None:
+    """Each category enum has ``NONE == 0`` (the uniform empty-slot shape)."""
+    for category in (Resource, HalfFabricate, Machine):
+        assert int(category["NONE"]) == 0
+
+
+def test_categories_partition_non_empty_items() -> None:
+    """The categories' real names cover every non-EMPTY item once."""
+    resource = _real_names(Resource)
+    half_fab = _real_names(HalfFabricate)
+    machine = _real_names(Machine)
+
+    # No name appears in two categories.
+    assert resource.isdisjoint(half_fab)
+    assert resource.isdisjoint(machine)
+    assert half_fab.isdisjoint(machine)
+
+    # Together they are exactly the non-EMPTY items.
+    covered = resource | half_fab | machine
+    non_empty = {m.name for m in ItemType if m != ItemType.EMPTY}
+    assert covered == non_empty
+
+
+def test_every_category_name_is_a_real_item() -> None:
+    """Each real category member name resolves to an ``ItemType`` member."""
+    for enum_cls in (Resource, HalfFabricate, Machine):
+        for member in enum_cls:
+            if member.name == "NONE":
+                continue
+            assert member.name in ItemType.__members__
+
+
+def test_machine_category_matches_item_to_machine_keys() -> None:
+    """The ``Machine`` category (sans NONE) is the placeable mapping's keys."""
+    machine_names = _real_names(Machine)
+    mapping_names = {it.name for it in ITEM_TO_MACHINE}
+    assert machine_names == mapping_names
+
+
+# -------------------------------------------------------------------------
+# Enum sizes the whole engine depends on
+# -------------------------------------------------------------------------
+
+
+class TestConstants:
+    """Tests for constants module."""
+
+    def test_resource_blocks_are_walkable(self) -> None:
+        """Resource blocks are not in SOLID_BLOCKS."""
+        solid_set = set(int(b) for b in SOLID_BLOCKS)
+        assert int(BlockType.IRON) not in solid_set
+        assert int(BlockType.COPPER) not in solid_set
+        assert int(BlockType.COAL) not in solid_set

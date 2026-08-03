@@ -1,4 +1,4 @@
-"""Tests that the play UI constants agree with the engine enums and tables.
+"""Tests that the playground constants agree with the engine enums and tables.
 
 The engine leads. Every item id, item name, and placement action the play UI
 holds must come from :mod:`factoriax.engine`, because a new member in an
@@ -10,8 +10,16 @@ literal.
 
 from __future__ import annotations
 
+import jax.numpy as jnp
+
 from factoriax.engine.actions import ITEM_TO_PLACE_ACTION, NO_ACTION
-from factoriax.engine.constants import PLACEABLE_ITEM_LIST, ItemType
+from factoriax.engine.constants import (
+    PLACEABLE_ITEM_LIST,
+    BlockType,
+    ItemType,
+    SlotRole,
+)
+from factoriax.playground.editor import slot_display
 from factoriax.playground.play.game_ui import _ITEM_TO_PLACE_ACTION, _SLOT_ACTIONS
 from factoriax.playground.play.play_state import PlayState
 from factoriax.playground.play.ui import _ITEM_NAMES
@@ -79,3 +87,44 @@ class TestNumberKeys:
     def test_every_number_key_selects_a_placeable_item(self) -> None:
         for item in _SLOT_ACTIONS.values():
             assert _ITEM_TO_PLACE_ACTION.get(item) is not None
+
+
+# ---------------------------------------------------------------------------
+# Editor slot view against engine entity capacity
+# ---------------------------------------------------------------------------
+# The engine stores a machine's contents in ``ent_buf`` plus the columns of
+# ``ent_asm_in``. These read the real shapes off a constructed state, so the
+# editor cannot offer more slots than the engine can hold.
+
+
+def test_slot_width_matches_engine_buffer_capacity(state_factory) -> None:
+    """Editor slot-view width equals the engine's per-entity slot capacity.
+
+    Capacity is one ``ent_buf`` slot plus the columns of ``ent_asm_in``; the
+    derived width must equal it so the editor shows exactly the slots the
+    engine can store, no more and no fewer.
+    """
+    state = state_factory(
+        world_map=jnp.full((2, 2), int(BlockType.DIRT), dtype=jnp.int32)
+    )
+    ent_asm_in_width = int(state.ent_asm_in_type.shape[1])
+    engine_capacity = 1 + ent_asm_in_width
+    assert slot_display.MAX_MACHINE_INVENTORY_SLOTS == engine_capacity
+
+
+def test_no_machine_exceeds_engine_capacity(state_factory) -> None:
+    """No machine declares more slots than the engine can hold.
+
+    Total slots fit in ``ent_buf`` plus ``ent_asm_in``; INPUT slots
+    specifically live in ``ent_asm_in``, so a machine cannot declare more
+    inputs than it has columns.
+    """
+    state = state_factory(
+        world_map=jnp.full((2, 2), int(BlockType.DIRT), dtype=jnp.int32)
+    )
+    ent_asm_in_width = int(state.ent_asm_in_type.shape[1])
+    capacity = 1 + ent_asm_in_width
+    for machine, roles in slot_display.MACHINE_SLOTS.items():
+        assert len(roles) <= capacity, machine.name
+        n_input = sum(1 for role in roles if int(role) == int(SlotRole.INPUT))
+        assert n_input <= ent_asm_in_width, machine.name

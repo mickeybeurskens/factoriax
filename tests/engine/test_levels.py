@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from jax import random
 
 from factoriax.engine.constants import (
     BLOCK_MAX_RESOURCES,
@@ -19,6 +20,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
+from factoriax.engine.envs.base import FactoriaxEnv
 from factoriax.engine.levels import (
     LEVELS,
     Level,
@@ -628,7 +630,6 @@ class TestResetWithBoundLevel:
     """FactoriaxEnv constructed with ``level=`` resets to that level."""
 
     def test_obs_and_state_returned(self) -> None:
-        from factoriax.engine.envs.base import FactoriaxEnv
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
@@ -638,7 +639,6 @@ class TestResetWithBoundLevel:
         assert state.map.shape == (15, 15)
 
     def test_obs_shape_matches_observation_space(self) -> None:
-        from factoriax.engine.envs.base import FactoriaxEnv
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
@@ -648,7 +648,6 @@ class TestResetWithBoundLevel:
         assert obs.shape == (expected,)
 
     def test_deterministic_no_key_needed(self) -> None:
-        from factoriax.engine.envs.base import FactoriaxEnv
 
         level = get_level("15x15_resources")
         env = FactoriaxEnv(level=level)
@@ -833,3 +832,73 @@ class TestBuiltInLevelOre:
     def test_dirt_holds_no_ore(self) -> None:
         level = get_level("15x15_resources")
         assert int(level.block_resources[7, 7]) == 0
+
+
+# -------------------------------------------------------------------------
+# World generation and the env constructor's bound level
+# -------------------------------------------------------------------------
+
+
+class TestWorldGeneration:
+    """Tests for procedural world generation via ``generate_state``."""
+
+    def test_generate_state_creates_valid_state(self) -> None:
+        """A generated world has a valid state structure."""
+        rng = random.PRNGKey(0)
+        params = EnvParams()
+        state = generate_state(rng, params)
+
+        num_players = state.player_positions.shape[0]
+        assert state.map.shape == (32, 32)
+        assert state.player_positions.shape == (num_players, 2)
+        assert state.timestep == 0
+
+    def test_player_spawns_on_dirt(self) -> None:
+        """Players always spawn on dirt tiles."""
+        rng = random.PRNGKey(0)
+        params = EnvParams()
+        state = generate_state(rng, params)
+
+        num_players = state.player_positions.shape[0]
+        for i in range(num_players):
+            px, py = state.player_positions[i]
+            assert state.map[py, px] == BlockType.DIRT
+
+
+# -------------------------------------------------------------------------
+# The env constructor's bound level
+# -------------------------------------------------------------------------
+
+
+class TestEnvConstructorLevel:
+    """Tests for the level-on-constructor reset path (gymnax conformance)."""
+
+    def test_default_level_none_resets_procedurally(self) -> None:
+        """FactoriaxEnv(level=None).reset_env produces a procedural state."""
+
+        env = FactoriaxEnv(map_width=8, map_height=8)  # level=None default
+        params = EnvParams()
+
+        _, state = env.reset_env(random.PRNGKey(0), params)
+
+        assert state.map.shape == (8, 8)
+        # Procedural maps draw from terrain probabilities, so different
+        # seeds produce different layouts.
+        _, state2 = env.reset_env(random.PRNGKey(1), params)
+        assert not jnp.array_equal(state.map, state2.map)
+
+    def test_level_constructor_arg_resets_to_level(self) -> None:
+        """FactoriaxEnv(level=L).reset_env produces a state matching L's geometry."""
+        from factoriax.engine.levels import get_level
+
+        level = get_level("15x15_resources")
+        env = FactoriaxEnv(level=level)
+        params = EnvParams()
+
+        _, state = env.reset_env(random.PRNGKey(0), params)
+
+        assert state.map.shape == (15, 15)
+        # Level state is deterministic in geometry. Different rngs
+        # still produce the same map.
+        _, state2 = env.reset_env(random.PRNGKey(99), params)
+        assert jnp.array_equal(state.map, state2.map)
