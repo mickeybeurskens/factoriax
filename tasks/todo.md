@@ -5,15 +5,17 @@ done-when list, and its verify command.
 
 ## State
 
-Phases 0 to 4 are complete. Only Phase 5 remains.
+All five phases are complete.
 
 - Phase 0: `c670a22`
 - Phase 1: `89e5785`, `9910499`
 - Phase 2: `9dd25dc`, `2cbfd06`, `124c6dd`
 - Phase 3: `6e9ed51`, `ee51be0`, `31090e9`, `0316324`, `d2750c1`, `6d1c8f3`
 - Phase 4: `3228927`, `4543607`, `fe4aa12`
+- Phase 5: `c74ed5c`, `8f06392`, `d2bbd24`
 
-- The suite holds **1447 tests**. All pass. A full run takes about 220 seconds.
+- The suite holds **1424 tests**. All pass. A full run takes about 220
+  seconds. Coverage is 66.8 percent and `fail_under` is 66.
 - `ls tests/*.py` prints `conftest.py` and `__init__.py`. Nothing else is
   loose.
 - `tests/engine/`, `tests/playground/`, `tests/analysis/`, and `tests/assets/`
@@ -141,19 +143,22 @@ places them.
 
 The test count drops from here. That is the purpose of the phase.
 
-- [ ] **Task 19** (L) Delete the nine recorded duplicates. Verify each
-      subset claim against the moved code first. Move any unique assertion to
-      the survivor. Coverage must not drop.
-- [ ] **Task 20** (S) Add a "Tests" section to `README.md` with the path rule,
-      the 600-line package threshold, and the three bucket rules. Write
-      `tasks/coverage-gaps.md`. Set `fail_under` to the measured figure, which
-      reads a stale 64 today.
-- [ ] **Task 21** (S, separable) Write `tests/engine/test_crafting.py`.
-      `engine/crafting.py` is 182 lines of engine core with no direct test.
-      This is the one task that writes new tests. Drop it to keep the work
-      structural.
-- [ ] **Checkpoint** The suite is green. Coverage is at or above the gate. The
-      layout is recorded and the gaps are listed.
+- [x] **Task 19** Delete the duplicates. Five of the nine claims held up.
+      Coverage held at 6474 lines, exactly.
+- [x] **Task 20** Add the layout section to `README.md`, write
+      `tasks/coverage-gaps.md`, and move `fail_under` from a stale 64 to 66.
+- [x] **Task 21** Write `tests/engine/test_crafting.py`.
+- [x] **Checkpoint** 1424 tests, exit 0, coverage 66.8 percent. The layout is
+      recorded and the gaps carry a verdict each.
+
+Four of the nine dedup claims did not survive checking. Two named different
+constants, one named different modes of the same wrapper, and two named
+different entry points into the same behaviour. Nothing was deleted for them,
+and the commit message says which.
+
+`engine/crafting.py` already read 100 percent through `engine/step.py`, so
+Task 21 moved no coverage. What it added is an assertion on two refusals no
+step-level test reaches.
 
 ## Follow-up, out of scope by request
 
