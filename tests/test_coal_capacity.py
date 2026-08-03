@@ -14,7 +14,6 @@ import jax.numpy as jnp
 from factoriax.engine.constants import BLOCK_MAX_RESOURCES, BlockType
 from factoriax.engine.envs.rocket import build_rocket_level
 from factoriax.engine.levels import build_state
-from factoriax.engine.state import EnvParams
 
 
 def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
@@ -25,7 +24,6 @@ def test_coal_column_per_tile_is_ten_times_ore_per_tile() -> None:
     set how long a single miner can run before depletion.
     """
     level = build_rocket_level()
-    params = EnvParams()
     state = build_state(level, num_players=1)
 
     block_map = state.map
@@ -58,7 +56,6 @@ def test_coal_capacity_fits_within_block_max() -> None:
     :class:`FactoriaxEnv.observation_space` declares.
     """
     level = build_rocket_level()
-    params = EnvParams()
     state = build_state(level, num_players=1)
 
     assert int(state.block_resources.max()) <= BLOCK_MAX_RESOURCES

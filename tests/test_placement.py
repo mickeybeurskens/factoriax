@@ -352,7 +352,6 @@ class TestPlacementInitializesHealth:
             .place_machine(2, 2, int(Machine.FURNACE), int(Direction.UP))
             .build("hp_init_test")
         )
-        params = EnvParams()
         state = build_state(level, num_players=1)
         eidx = int(state.tile_entity[2, 2])
         assert eidx >= 0

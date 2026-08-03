@@ -1,16 +1,12 @@
-"""Shared pytest configuration for the play test package.
+"""Give every play test a display surface and a font subsystem.
 
-Manages the pygame font subsystem lifecycle at session scope so that
-multiple test modules can share it without triggering init/quit cycles
-that cause segfaults.
+The play UI renders. The root ``pygame_display`` fixture is not autouse, so
+this file turns it on for this directory alone.
 """
 
-import pygame
 import pytest
 
 
-@pytest.fixture(scope="session", autouse=True)
-def pygame_font_session() -> None:
-    """Initialise pygame font and display subsystems once per session."""
-    pygame.display.init()
-    pygame.font.init()
+@pytest.fixture(autouse=True)
+def _display(pygame_display: None) -> None:
+    """Request the session display for every test in this directory."""

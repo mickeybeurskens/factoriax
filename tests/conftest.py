@@ -1,47 +1,25 @@
-"""Shared test fixtures and utilities.
+"""Suite-wide fixtures and headless setup.
 
-============================================================================
-Standard env fixtures across the test suite. Pick one before you make your own.
-============================================================================
+The two environment pins below run at import, before any test module loads.
+They must stay at module scope. Everything else in this file is a fixture.
 
-JIT cache thrash is the single biggest driver of test wall time on this
-project. Every fresh ``FactoriaxEnv(...)`` + ``jax.jit(env.step_env)``
-combination triggers a ~7s XLA compile. The catalogue below lists the
-fixtures that already exist. Consume them in preference to a new env of
-your own. If you must build your own, add a comment naming the property
-you assert that prevents you from using a standard.
+Shared env fixtures:
 
-Catalogue (env, wrapper, shape -> fixture name @ file):
+- ``state_factory`` in this file. Builds an :class:`EnvState` from grid-shaped
+  arguments. See ``tests/helpers/states.py``.
+- ``pygame_display`` in this file. A display surface and a font subsystem. It
+  is autouse under the directories that render, and nowhere else.
+- ``canonical_env_8x8_1p`` in this file. An 8x8 single-player
+  ``FactoriaxEnv()`` with a JIT-compiled step. Returns
+  ``(env, params, jit_step_fn, state)``.
+- ``make_env(achievement_fn)`` in ``tests/test_achievement_engine.py``. An 8x8
+  single-player env with a custom ``achievement_fn``.
 
-- 8x8 1p plain ``FactoriaxEnv()``
-    -> ``canonical_env_8x8_1p`` @ this file
-       returns ``(env, params, jit_step_fn, state)``
-- 10x10 1p inside ``ScenarioRunner``
-    -> ``runner`` @ ``tests/scenarios/conftest.py``
-       (multi-entry cache. A new ``blocked_actions`` config compiles once)
-- 5x5 1p per skill level
-    -> ``run_scripted(level_idx, policy)`` @
-       ``tests/scenarios/skills/test_skills_scripted_solves.py``
-- 8x8 1p with custom ``achievement_fn``
-    -> ``make_env(achievement_fn)`` @ ``tests/test_achievement_engine.py``
-
-Rule of thumb when adding a new test:
-
-1. If the test asserts something shape-independent (observation
-   structure, machine logic, or achievement latching), consume
-   ``canonical_env_8x8_1p`` and call it done.
-2. If the test wraps the env (custom achievement_fn or action mask)
-   and the wrapper already has a fixture above, use it.
-3. If the test asserts a *specific* shape's behaviour (obs space
-   dimensions at 32x32, or level builder validation), build your
-   own env and add a one-line comment naming the assertion.
-4. If the test introduces a new wrapper used by more than one
-   assertion, add a module-scoped fixture for it next to the test.
-   Then add a row to this catalogue.
-
-Background: ``SPEC_TEST_SUITE.md`` walks through Phase 2 (Tasks
-2.1-2.11) which collapsed ~60% of wall time by hoisting these
-fixtures from per-test construction to shared scope.
+JIT cache thrash drives the wall time of this suite. Each new
+``FactoriaxEnv(...)`` plus ``jax.jit(env.step_env)`` pair costs about 7 seconds
+of XLA compile. Consume a shared env fixture before you build one. If the test
+asserts the behaviour of one specific map shape, build your own env and add a
+one-line comment that names the assertion.
 """
 
 # Force headless rendering for every test in the suite. Setting these
@@ -50,6 +28,7 @@ fixtures from per-test construction to shared scope.
 # calls pygame.display.init() will get the dummy driver, which is
 # side-effect-free but still supports Surface.blit and font rendering.
 import os
+from collections.abc import Callable
 from typing import Any
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -64,41 +43,29 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import jax  # noqa: E402
-import jax.numpy as jnp  # noqa: E402
-import numpy as np  # noqa: E402
-import pygame  # noqa: E402
 import pytest  # noqa: E402
 from jax import random  # noqa: E402
 
-from factoriax.engine.constants import (  # noqa: E402
-    MAX_ACHIEVEMENTS,
-    NUM_ITEM_TYPES,
-    NUM_SCIENCE_PACK_TYPES,
-    Direction,
-    Machine,
-)
 from factoriax.engine.envs.base import FactoriaxEnv  # noqa: E402
-from factoriax.engine.state import (
-    EnvParams,  # noqa: E402
-    EnvState,  # noqa: E402
-)
-from factoriax.engine.tables import MACHINE_MAX_HEALTH  # noqa: E402
-
-# Default entity capacity used by the test factory.
-_TEST_MAX_MACHINES: int = 64
+from factoriax.engine.state import EnvParams, EnvState  # noqa: E402
+from tests.helpers.states import make_state  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
-def pygame_session() -> None:
-    """Initialise pygame display + font once per test session.
+@pytest.fixture(scope="session")
+def pygame_display() -> None:
+    """Initialise the pygame display and font subsystems once per session.
 
-    SDL drivers are pinned to ``dummy`` above so this is side-effect
-    free. The display surface ``set_mode((800, 600))`` is what
-    :class:`factoriax.playground.ui.scaling.ScaledCanvas` reads via
-    ``pygame.display.get_surface()``; tests in ``tests/test_scaling.py``
-    used to do this in their own session fixture, which is now
-    redundant.
+    This fixture is not autouse. Only the directories that render request it,
+    through an autouse fixture of their own. Most of the suite never touches
+    pygame, and an unconditional display init taxes every one of those tests.
+
+    The SDL drivers are pinned to ``dummy`` at module scope above, so the call
+    has no side effect on the desktop. The surface from ``set_mode`` is what
+    :class:`factoriax.playground.ui.scaling.ScaledCanvas` reads through
+    ``pygame.display.get_surface()``.
     """
+    import pygame
+
     pygame.display.init()
     pygame.display.set_mode((800, 600))
     pygame.font.init()
@@ -106,24 +73,20 @@ def pygame_session() -> None:
 
 @pytest.fixture(scope="session")
 def canonical_env_8x8_1p() -> tuple[FactoriaxEnv, EnvParams, Any, Any]:
-    """Session-scoped 8x8 single-player env + JITted step + reset state.
+    """Return an 8x8 single-player env, its JIT step, and a reset state.
 
-    The load-bearing fixture for the Phase 2 rollout in
-    ``SPEC_TEST_SUITE.md``. Tests that currently build their own
-    :class:`FactoriaxEnv` + ``jax.jit(env.step_env)`` for the canonical
-    shape switch to consuming this fixture, so the XLA compile of
-    ``env.step_env`` happens exactly once per session instead of once
-    per test.
+    Session scope means the XLA compile of ``env.step_env`` runs one time,
+    not one time per test.
 
-    Consumers must NOT replace ``initial_state`` in-place. Pass a
-    different state forward locally if a test needs to step further.
+    A consumer must not replace ``initial_state`` in place. To step further,
+    pass a different state forward locally.
 
     Returns
     -------
     tuple
         ``(env, params, jit_step_fn, initial_state)``. The state is the
-        post-reset state at ``timestep == 0`` from ``random.PRNGKey(0)``;
-        tests step *from* it without mutating it, JAX pytrees being
+        post-reset state at ``timestep == 0`` from ``random.PRNGKey(0)``. A
+        test steps *from* it and cannot mutate it, because a JAX pytree is
         immutable by construction.
     """
     env = FactoriaxEnv(map_width=8, map_height=8)
@@ -134,292 +97,11 @@ def canonical_env_8x8_1p() -> tuple[FactoriaxEnv, EnvParams, Any, Any]:
 
 
 @pytest.fixture
-def state_factory():
-    """Factory for creating test states with sensible defaults.
+def state_factory() -> Callable[..., EnvState]:
+    """Return :func:`tests.helpers.states.make_state`.
 
-    Returns a function that creates :class:`EnvState` objects. Only
-    ``world_map`` is required. Every other field has a sensible default.
-
-    Machine state can be expressed in **grid form** for readability.
-    Pass ``machine_types``, ``machine_direction``, ``machine_power``,
-    ``buffer_type``, ``buffer_count``, ``asm_in_type``, ``asm_in_count``,
-    ``asm_out_type``, ``asm_out_count`` as ``(H, W)``-shaped arrays and
-    the factory packs them into the engine's ``ent_*`` entity arrays
-    plus a ``tile_entity`` lookup. This translation is a deliberate
-    test ergonomic, not a compatibility shim: the engine itself reads
-    only the entity arrays. Tests use the grid form so that a single
-    setup line can place a machine at ``(y, x)`` with a given facing
-    and buffer state.
-
-    Example:
-        def test_something(state_factory):
-            state = state_factory(
-                world_map=jnp.array([[BlockType.COAL]]),
-                block_resources=jnp.array([[50]]),
-            )
+    Only ``world_map`` is required. Every other field has a default. Machine
+    state goes in as ``(H, W)``-shaped grids, and the factory packs it into
+    the engine's flat ``ent_*`` entity arrays.
     """
-
-    def _create(
-        world_map: jnp.ndarray,
-        player_position: tuple[int, int] | None = None,
-        player_positions: jnp.ndarray | None = None,
-        player_direction: int | None = None,
-        player_directions: jnp.ndarray | None = None,
-        timestep: int = 0,
-        player_inventory: jnp.ndarray | None = None,
-        selected_player: int = 0,
-        num_players: int = 1,
-        block_resources: jnp.ndarray | None = None,
-        machine_types: jnp.ndarray | None = None,
-        machine_power: jnp.ndarray | None = None,
-        machine_direction: jnp.ndarray | None = None,
-        buffer_type: jnp.ndarray | None = None,
-        buffer_count: jnp.ndarray | None = None,
-        asm_in_type: jnp.ndarray | None = None,
-        asm_in_count: jnp.ndarray | None = None,
-        asm_out_type: jnp.ndarray | None = None,
-        asm_out_count: jnp.ndarray | None = None,
-        items_mined: jnp.ndarray | None = None,
-        science_consumed_step: jnp.ndarray | None = None,
-        max_machines: int = _TEST_MAX_MACHINES,
-        # Catch-all for kwargs that older tests pass under retired
-        # EnvState field names. They are dropped in silence. A new
-        # test must not rely on this.
-        **_kwargs: object,
-    ) -> EnvState:
-        """Create a test state with defaults for unspecified fields.
-
-        Parameters
-        ----------
-        world_map
-            Block types array. Required.
-        player_position
-            Single player ``(x, y)`` position.
-        player_positions
-            All player positions.
-        player_direction
-            Single player direction.
-        player_directions
-            All player directions.
-        timestep
-            Current timestep.
-        player_inventory
-            Item counts per player.
-        selected_player
-            Currently selected player index.
-        num_players
-            Number of players, used for the defaults.
-        block_resources
-            Resources per tile.
-        machine_types
-            Machine type per tile.
-        machine_power
-            Power per machine, grid form, packed into ``ent_power``.
-        machine_direction
-            Direction per machine, grid form, packed into
-            ``ent_direction``.
-        buffer_type
-            Buffer item type per tile, grid form, packed into
-            ``ent_buf_type``.
-        buffer_count
-            Buffer item count per tile, grid form, packed into
-            ``ent_buf_count``.
-        asm_in_type
-            Assembler input types, grid form, packed into
-            ``ent_asm_in_type``.
-        asm_in_count
-            Assembler input counts, grid form, packed into
-            ``ent_asm_in_count``.
-        asm_out_type
-            Assembler output type, grid form, packed into
-            ``ent_asm_out_type``.
-        asm_out_count
-            Assembler output count, grid form, packed into
-            ``ent_asm_out_count``.
-        items_mined
-            Lifetime mined counts.
-        science_consumed_step
-            Per-step science pack consumption delta, from SCIENCE_LAB
-            entities.
-        max_machines
-            Entity array capacity.
-        **_kwargs
-            Dropped. Absorbs retired ``EnvState`` field names that older
-            tests still pass.
-
-        Returns
-        -------
-        EnvState
-            Configured state for testing.
-        """
-        shape = world_map.shape
-        mm = max_machines
-
-        if player_positions is not None:
-            positions = player_positions
-            num_players = positions.shape[0]
-        elif player_position is not None:
-            if isinstance(player_position, tuple):
-                positions = jnp.array(
-                    [player_position],
-                    dtype=jnp.int16,
-                )
-            else:
-                positions = player_position.reshape(1, 2).astype(jnp.int16)
-            num_players = 1
-        else:
-            positions = jnp.array([[0, 0]], dtype=jnp.int16)
-            num_players = 1
-
-        if player_directions is not None:
-            directions = player_directions.astype(jnp.int8)
-        elif player_direction is not None:
-            directions = jnp.array(
-                [player_direction],
-                dtype=jnp.int8,
-            )
-        else:
-            directions = jnp.full(
-                num_players,
-                Direction.DOWN,
-                dtype=jnp.int8,
-            )
-
-        inv_shape = (num_players, NUM_ITEM_TYPES)
-
-        mt_grid = (
-            machine_types.astype(jnp.int8)
-            if machine_types is not None
-            else jnp.full(shape, Machine.NONE, dtype=jnp.int8)
-        )
-
-        # Build entity arrays from the grid-based arguments.
-        mt_np = np.asarray(mt_grid)
-        md_np = (
-            np.asarray(machine_direction)
-            if machine_direction is not None
-            else np.zeros(shape, dtype=np.int8)
-        )
-        mp_np = (
-            np.asarray(machine_power)
-            if machine_power is not None
-            else np.zeros(shape, dtype=np.int16)
-        )
-        bt_np = (
-            np.asarray(buffer_type)
-            if buffer_type is not None
-            else np.zeros(shape, dtype=np.int8)
-        )
-        bc_np = (
-            np.asarray(buffer_count)
-            if buffer_count is not None
-            else np.zeros(shape, dtype=np.int16)
-        )
-        ait_np = (
-            np.asarray(asm_in_type)
-            if asm_in_type is not None
-            else np.zeros((*shape, 2), dtype=np.int8)
-        )
-        aic_np = (
-            np.asarray(asm_in_count)
-            if asm_in_count is not None
-            else np.zeros((*shape, 2), dtype=np.int16)
-        )
-        aot_np = (
-            np.asarray(asm_out_type)
-            if asm_out_type is not None
-            else np.zeros(shape, dtype=np.int8)
-        )
-        aoc_np = (
-            np.asarray(asm_out_count)
-            if asm_out_count is not None
-            else np.zeros(shape, dtype=np.int16)
-        )
-
-        # Allocate entity arrays.
-        ent_y = np.full(mm, -1, dtype=np.int16)
-        ent_x = np.full(mm, -1, dtype=np.int16)
-        ent_type = np.zeros(mm, dtype=np.int8)
-        ent_dir = np.zeros(mm, dtype=np.int8)
-        ent_power = np.zeros(mm, dtype=np.int16)
-        ent_buf_type = np.zeros(mm, dtype=np.int8)
-        ent_buf_count = np.zeros(mm, dtype=np.int16)
-        ent_asm_in_type = np.zeros((mm, 2), dtype=np.int8)
-        ent_asm_in_count = np.zeros((mm, 2), dtype=np.int16)
-        ent_asm_out_type = np.zeros(mm, dtype=np.int8)
-        ent_asm_out_count = np.zeros(mm, dtype=np.int16)
-        ent_health = np.zeros(mm, dtype=np.int16)
-        tile_ent = np.full(shape, -1, dtype=np.int16)
-
-        idx = 0
-        for y in range(shape[0]):
-            for x in range(shape[1]):
-                if int(mt_np[y, x]) != int(Machine.NONE) and idx < mm:
-                    ent_y[idx] = y
-                    ent_x[idx] = x
-                    ent_type[idx] = mt_np[y, x]
-                    ent_dir[idx] = md_np[y, x]
-                    ent_power[idx] = mp_np[y, x]
-                    ent_buf_type[idx] = bt_np[y, x]
-                    ent_buf_count[idx] = bc_np[y, x]
-                    ent_asm_in_type[idx] = ait_np[y, x]
-                    ent_asm_in_count[idx] = aic_np[y, x]
-                    ent_asm_out_type[idx] = aot_np[y, x]
-                    ent_asm_out_count[idx] = aoc_np[y, x]
-                    # Full health, matching what ``place_machine`` writes.
-                    # Pickup is gated on full health, so leaving this at 0
-                    # builds machines that the engine can never pick up, and
-                    # makes every pickup test exercise the refused path.
-                    ent_health[idx] = int(MACHINE_MAX_HEALTH[int(mt_np[y, x])])
-                    tile_ent[y, x] = idx
-                    idx += 1
-
-        return EnvState(
-            map=world_map.astype(jnp.int8),
-            block_resources=(
-                block_resources
-                if block_resources is not None
-                else jnp.zeros(shape, dtype=jnp.int16)
-            ),
-            machine_types=mt_grid,
-            tile_entity=jnp.array(tile_ent, dtype=jnp.int16),
-            ent_y=jnp.array(ent_y, dtype=jnp.int16),
-            ent_x=jnp.array(ent_x, dtype=jnp.int16),
-            ent_type=jnp.array(ent_type, dtype=jnp.int8),
-            ent_direction=jnp.array(ent_dir, dtype=jnp.int8),
-            ent_power=jnp.array(ent_power, dtype=jnp.int16),
-            ent_buf_type=jnp.array(ent_buf_type, dtype=jnp.int8),
-            ent_buf_count=jnp.array(ent_buf_count, dtype=jnp.int16),
-            ent_asm_in_type=jnp.array(ent_asm_in_type, dtype=jnp.int8),
-            ent_asm_in_count=jnp.array(ent_asm_in_count, dtype=jnp.int16),
-            ent_asm_out_type=jnp.array(ent_asm_out_type, dtype=jnp.int8),
-            ent_asm_out_count=jnp.array(ent_asm_out_count, dtype=jnp.int16),
-            ent_health=jnp.array(ent_health, dtype=jnp.int16),
-            player_positions=positions.astype(jnp.int16),
-            player_directions=directions,
-            player_inventory=(
-                player_inventory.astype(jnp.int16)
-                if player_inventory is not None
-                else jnp.zeros(inv_shape, dtype=jnp.int16)
-            ),
-            # Match env.reset_env's pytree shape: factoriax/levels.py:686-687
-            # emits these as jnp.int32(0). A Python-int leaf here
-            # forces jax.jit(env.step_env) to retrace whenever a test feeds
-            # a state_factory state through the canonical_env_8x8_1p
-            # fixture's shared step path.
-            selected_player=jnp.int32(selected_player),
-            timestep=jnp.int32(timestep),
-            items_mined=(
-                items_mined
-                if items_mined is not None
-                else jnp.zeros(NUM_ITEM_TYPES, dtype=jnp.int32)
-            ),
-            science_consumed_step=(
-                science_consumed_step
-                if science_consumed_step is not None
-                else jnp.zeros(NUM_SCIENCE_PACK_TYPES, dtype=jnp.int32)
-            ),
-            achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
-        )
-
-    return _create
+    return make_state

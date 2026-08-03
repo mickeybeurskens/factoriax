@@ -240,6 +240,58 @@ reliable anchor.
   new machine kind will land in the `else` branch by default whether or not
   that is correct.
 
+- **The craft progress bar in the inventory menu is dead code**
+  Found 2026-08-03.
+  Files: `factoriax/playground/play/ui.py:1966` (`craft_progress = 0`), `:2058`
+  (the `if craft_progress > 0` branch).
+  `render_inventory_menu` binds `craft_progress` to the literal 0 and never
+  writes it again. The branch that draws the progress bar tests
+  `craft_progress > 0`, so it never runs. `EnvState` carried a
+  `craft_progress` field before the entity migration, and the field went away
+  with it. The binding stayed.
+  Found through `tests/play/test_ui.py::test_craft_in_progress`, which passed
+  `craft_progress=` to the state factory. The factory absorbed unknown names
+  in a `**_kwargs` catch-all and dropped them, so the test rendered a default
+  state and asserted the output shape. It duplicated
+  `test_inventory_focus`. The catch-all now raises, and the test is deleted.
+  Either delete the branch and the binding, or restore per-player craft
+  progress to `EnvState` and read it here.
+
+- **The functional `IntEnum` call for `ItemType` blocks mypy across the repo**
+  Found 2026-08-03.
+  Files: `factoriax/engine/constants.py:186`.
+  `ItemType` is built through the functional API, `IntEnum("ItemType", ...)`,
+  because its member names compose from `Machine` and the resource blocks.
+  Mypy cannot resolve a member of a functional enum, so every
+  `ItemType.COAL` in the repo raises `attr-defined`. This one cause produces
+  1182 of the 1268 errors that `mypy tests` reports, and it dominates the 527
+  errors that `mypy factoriax` reports. `[tool.mypy] strict = true` is
+  therefore aspirational: no gate can run until this is settled.
+  Two ways out. Declare the members in a `.pyi` stub beside the module, which
+  keeps the composition at runtime. Or write the class out in full and assert
+  at import time that it agrees with the composed names. The stub is smaller.
+  Not urgent. The runtime behaviour is correct, and the composition is
+  deliberate. This entry records why `strict = true` reports thousands of
+  errors, so that a reader does not mistake it for real type rot.
+
+- **The science tiers oracle costs 58.7 seconds of fixture setup**
+  Found 2026-08-03.
+  Files: `tests/scenarios/test_science_tiers_economics.py`,
+  `factoriax/engine/envs/science_tiers.py`.
+  One fixture setup in this file takes 58.7 seconds. The next slowest item in
+  the suite is `tests/test_env_contract.py::test_step_is_vmappable` at 13.1
+  seconds. The whole rest of the suite is faster than this one fixture, so it
+  dominates the wall time of every full run. Measured with
+  `uv run pytest -q --durations=25` on the CPU backend that `tests/conftest.py`
+  pins.
+  The cost is scripted rollouts across several seeds, and each seed pays its
+  own XLA compile. A module-scoped env plus one shared `jax.jit` step would
+  remove most of it.
+  Not urgent. The `ScienceTiers-v1` scenario is not in active use yet, so the
+  cost buys nothing today and blocks nobody. Revisit when the scenario carries
+  real training work, or when a `slow` marker gives the suite a fast inner
+  loop.
+
 ## Fixed
 
 - **A science lab's contents appear in no observation channel**

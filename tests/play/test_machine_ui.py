@@ -17,6 +17,7 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.state import EnvParams
+from factoriax.engine.tables import MACHINE_MAX_STACK
 from factoriax.playground.play.ui import ClickRegion, render_machine_menu
 
 _SW = 320
@@ -185,11 +186,10 @@ class TestMachineMenuContents:
 
     def test_populated_miner(self, state_factory) -> None:
         """Miner with coal output renders without crash."""
-        machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES),
-            dtype=jnp.int16,
-        )
-        machine_inv = machine_inv.at[2, 3, int(ItemType.COAL)].set(12)
+        buf_type = jnp.zeros((4, 4), dtype=jnp.int8)
+        buf_count = jnp.zeros((4, 4), dtype=jnp.int16)
+        buf_type = buf_type.at[2, 3].set(int(ItemType.COAL))
+        buf_count = buf_count.at[2, 3].set(12)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -197,20 +197,23 @@ class TestMachineMenuContents:
                 int(Machine.MINER),
                 dtype=jnp.int32,
             ),
-            machine_inventory=machine_inv,
+            buffer_type=buf_type,
+            buffer_count=buf_count,
         )
         result, _ = render_machine_menu(state, _PARAMS, _SW, _SH, 3, 2)
         assert result.shape == (_SH, _SW, 4)
 
-    def test_multiple_item_types(self, state_factory) -> None:
-        """Assembler with multiple item types renders cleanly."""
-        machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES),
-            dtype=jnp.int16,
+    def test_both_assembler_input_slots(self, state_factory) -> None:
+        """Assembler with both input slots filled renders cleanly."""
+        in_type = jnp.zeros((4, 4, 2), dtype=jnp.int8)
+        in_count = jnp.zeros((4, 4, 2), dtype=jnp.int16)
+        in_type = in_type.at[0, 0].set(
+            jnp.array(
+                [int(ItemType.COPPER_ORE), int(ItemType.IRON_ORE)],
+                dtype=jnp.int8,
+            ),
         )
-        machine_inv = machine_inv.at[0, 0, int(ItemType.COPPER_ORE)].set(5)
-        machine_inv = machine_inv.at[0, 0, int(ItemType.IRON_ORE)].set(5)
-        machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(10)
+        in_count = in_count.at[0, 0].set(jnp.array([5, 5], dtype=jnp.int16))
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -218,21 +221,21 @@ class TestMachineMenuContents:
                 int(Machine.ASSEMBLER),
                 dtype=jnp.int32,
             ),
-            machine_inventory=machine_inv,
+            asm_in_type=in_type,
+            asm_in_count=in_count,
         )
         result, _ = render_machine_menu(state, _PARAMS, _SW, _SH, 0, 0)
         assert result.shape == (_SH, _SW, 4)
 
     def test_full_pallet_inventory(self, state_factory) -> None:
-        """Pallet with many item types filled renders cleanly."""
-        machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES),
-            dtype=jnp.int16,
-        )
-        for i, item in enumerate(
-            [ItemType.COAL, ItemType.IRON_ORE, ItemType.COPPER_ORE, ItemType.MINER],
-        ):
-            machine_inv = machine_inv.at[0, 0, int(item)].set(i + 1)
+        """Pallet filled to its buffer cap renders cleanly.
+
+        A pallet carries one item type in one buffer slot, so "full" is a
+        count at ``MACHINE_MAX_STACK`` and not a spread across item types.
+        """
+        cap = int(MACHINE_MAX_STACK[int(Machine.PALLET)])
+        buf_type = jnp.full((4, 4), int(ItemType.COAL), dtype=jnp.int8)
+        buf_count = jnp.full((4, 4), cap, dtype=jnp.int16)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -240,7 +243,8 @@ class TestMachineMenuContents:
                 int(Machine.PALLET),
                 dtype=jnp.int32,
             ),
-            machine_inventory=machine_inv,
+            buffer_type=buf_type,
+            buffer_count=buf_count,
         )
         result, _ = render_machine_menu(state, _PARAMS, _SW, _SH, 0, 0)
         assert result.shape == (_SH, _SW, 4)
@@ -281,12 +285,8 @@ class TestMachineMenuFocusedItem:
         focused_item: int,
     ) -> None:
         """Different focused machine items render without crash."""
-        machine_inv = jnp.zeros(
-            (4, 4, NUM_ITEM_TYPES),
-            dtype=jnp.int16,
-        )
-        machine_inv = machine_inv.at[0, 0, int(ItemType.COAL)].set(5)
-        machine_inv = machine_inv.at[0, 0, int(ItemType.IRON_ORE)].set(3)
+        buf_type = jnp.full((4, 4), focused_item, dtype=jnp.int8)
+        buf_count = jnp.full((4, 4), 5, dtype=jnp.int16)
         state = state_factory(
             world_map=jnp.zeros((4, 4), dtype=jnp.int32),
             machine_types=jnp.full(
@@ -294,7 +294,8 @@ class TestMachineMenuFocusedItem:
                 int(Machine.MINER),
                 dtype=jnp.int32,
             ),
-            machine_inventory=machine_inv,
+            buffer_type=buf_type,
+            buffer_count=buf_count,
         )
         result, _ = render_machine_menu(
             state,

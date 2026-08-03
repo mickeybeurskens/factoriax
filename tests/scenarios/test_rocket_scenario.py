@@ -10,7 +10,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from factoriax.engine.achievements import index_of
 from factoriax.engine.constants import (
     MAX_ACHIEVEMENTS,
     NUM_ITEM_TYPES,

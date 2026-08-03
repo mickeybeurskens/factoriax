@@ -64,7 +64,7 @@ separate crafting mode that changes what a key does.
 
 ```bash
 uv run pytest
-uv run ruff check factoriax
+uv run ruff check factoriax tests
 ```
 
 ## Build the documentation
