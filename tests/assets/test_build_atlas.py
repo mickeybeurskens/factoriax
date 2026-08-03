@@ -16,7 +16,7 @@ import orjson
 
 from factoriax.assets.build_atlas import build_atlas
 
-_REPO = Path(__file__).resolve().parent.parent
+_REPO = Path(__file__).resolve().parents[2]
 _COMMITTED_PNG = _REPO / "factoriax" / "assets" / "atlas.png"
 _COMMITTED_JSON = _REPO / "factoriax" / "assets" / "atlas.json"
 
