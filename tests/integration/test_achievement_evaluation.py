@@ -1,15 +1,10 @@
-"""Tests for the achievement-evaluation pass baked into FactoriaxEnv.step_env.
+"""The engine's achievement pass, driven by a playground achievement set.
 
-The achievement system used to live in a wrapper (AchievementWrapper);
-this set of tests pins the engine-state version: a constructor argument
-on FactoriaxEnv, evaluated and OR-folded inside step_env, with the
-result available on state.achievements_unlocked. Spec: SPEC.md Phase A
-items 1.2 and 1.3.
-
-A module-scoped ``make_env`` factory caches ``(env, params, state)``
-per achievement_fn so that ``factoriax_step``'s internal JIT cache is
-shared across tests that use the same achievement_fn. Each unique
-achievement_fn compiles its step path at most once across the file.
+This file spans two subpackages, so it is not in the mirror.
+``engine/envs/base.py`` runs the pass and latches the unlock bits, and the
+conditions come from ``playground/play/achievements.py``. A condition that
+reads a field the engine has retired passes every test that stays on one
+side.
 """
 
 from __future__ import annotations

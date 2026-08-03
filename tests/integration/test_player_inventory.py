@@ -1,4 +1,10 @@
-"""Tests for the inventory system."""
+"""The player inventory, from the state through every reader.
+
+This file spans two subpackages, so it is not in the mirror. The array lives
+in ``engine/state.py``, the observation encoder reads it, the JAX renderer
+draws it, and the panel size comes from ``playground/ui/theme.py``. A change
+to the array shape has to hold for all four.
+"""
 
 import jax.numpy as jnp
 from jax import random
