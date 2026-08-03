@@ -1,12 +1,10 @@
-"""Tests for the superficial observation builders.
+"""Tests for the superficial observation profile.
 
-The superficial profile keeps only outwardly-visible spatial channels
-(block_type, machine_type, machine_direction) and drops the 9
-facing-tile readouts from the scalar block. It pairs with both
-``global_superficial`` and ``local_superficial``.
-
-These tests pin down: shape, value range, channel-by-channel agreement
-with the x_ray builders for shared channels, and JIT compatibility.
+The superficial profile keeps only the channels a player could see:
+block type, machine type, and machine facing. It drops the nine slot
+channels that the x-ray profile exposes. These tests assert the channel
+count, that the kept channels are a subset of the x-ray ones, and that the
+scalars decompose into a common part and a facing part.
 """
 
 from __future__ import annotations
