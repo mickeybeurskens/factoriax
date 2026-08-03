@@ -5,14 +5,17 @@ done-when list, and its verify command.
 
 ## State
 
-Phase 0 is complete, in commit `c670a22`.
+Phase 0 is complete, in commit `c670a22`. Phase 1 is complete, in commits
+`89e5785` and `9910499`.
 
 - The suite holds **1447 tests**. All pass. A full run takes about 220 seconds.
-- 41 loose test files remain at the `tests/` root. `tests/bench_rollout.py`
+- 38 loose test files remain at the `tests/` root. `tests/bench_rollout.py`
   sits beside them and holds no test.
-- Four directories exist and none of them mirrors the package yet:
-  `tests/analysis/`, `tests/editor/`, `tests/play/`, `tests/scenarios/`.
-- `tests/helpers/` exists and holds `states.py`.
+- `tests/analysis/` and `tests/assets/` mirror the package. Every file in
+  them names a module.
+- Three directories do not mirror it yet: `tests/editor/`, `tests/play/`,
+  `tests/scenarios/`.
+- `tests/helpers/` holds `states.py` and `trajectories.py`.
 - `uv run ruff check factoriax tests` exits 0.
 
 ## Verify each move
@@ -54,13 +57,20 @@ science tiers fixture.
 
 ## Phase 1: analysis and assets
 
-- [ ] **Task 4** (M) Dissolve `tests/test_analysis.py`, which holds 78 tests in
-      977 lines, into `tests/analysis/`. Fold `test_state_shapes.py` into
-      `test_state.py`. Rename `test_palettes.py` to `test_categories.py`. Move
-      `tests/test_inventory_panel.py` to `tests/analysis/test_inventory.py`.
-- [ ] **Task 5** (XS) Move `tests/test_atlas_fresh.py` to
+- [x] **Task 4** Dissolve `tests/test_analysis.py`, which held 78 tests in 977
+      lines, into `tests/analysis/`. Fold `test_state_shapes.py` into
+      `test_state.py`. Split `test_palettes.py` by the module that owns each
+      constant. Move `tests/test_inventory_panel.py` to
+      `tests/analysis/test_inventory.py`.
+- [x] **Task 5** Move `tests/test_atlas_fresh.py` to
       `tests/assets/test_build_atlas.py`.
-- [ ] **Checkpoint** 1447 tests, exit 0, empty diff.
+- [x] **Checkpoint** 1447 tests, exit 0, empty diff.
+
+`test_palettes.py` did not test `analysis/categories.py`, whatever its name
+suggested. Its classes cover palette constants that `actions.py` and
+`state.py` own, so they follow those two modules. `analysis/categories.py`,
+`analysis/eval.py`, and `analysis/video.py` have no test file. Task 20 records
+the three gaps.
 
 ## Phase 2: playground
 
