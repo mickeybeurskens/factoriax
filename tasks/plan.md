@@ -41,24 +41,25 @@ Three guardrails are out of scope by request: a layout guard test, pytest marker
 
 ```
 tests/
-  conftest.py              # SDL and JAX pins, plus state_factory wiring
+  conftest.py              # SDL and JAX pins, state_factory, pygame_display,
+                           # canonical_env_8x8_1p
   helpers/                 # support code, never collected
-    states.py              # the state_factory body, moved out of conftest
-    oracles.py             # was tests/scenarios/oracle_utils.py
+    states.py              # the factory body, plus the grid builders
+    trajectories.py        # trajectory builders for the analysis tests
+    observations.py        # map size, radius, channel slicer
+    oracles.py             # was tests/scenarios/oracle_utils.py (Task 17)
   engine/                  <- factoriax/engine/
-    conftest.py            # canonical_env_8x8_1p
     test_achievements.py  test_actions.py  test_constants.py
     test_crafting.py  test_placement.py  test_renderer.py
     test_rewards.py  test_state.py  test_tables.py
     levels/  machines/  observations/  recipes/  step/
     envs/                  <- factoriax/engine/envs/
-      test_base.py  test_common.py  test_easy_rocket.py
-      test_miner_curriculum.py  test_mining.py  test_registry.py
-      test_rocket.py  test_science_tiers.py  test_wrappers.py
+      conftest.py          # level8, params
+      test_base.py  test_easy_rocket.py  test_registry.py
+      test_rocket.py  test_wrappers.py
   playground/              <- factoriax/playground/
     conftest.py            # pygame display and font, autouse here only
-    test_config.py
-    editor/  menu/  play/  ui/
+    config/  editor/  menu/  play/  ui/
   analysis/                <- factoriax/analysis/
     conftest.py            # matplotlib Agg backend, unchanged
     test_actions.py  test_build_progression.py  test_categories.py
@@ -72,6 +73,11 @@ tests/
   contracts/
   benchmarks/              # bench_rollout.py
 ```
+
+`engine/envs/` has no entry for `common.py`, `miner_curriculum.py`,
+`mining.py`, or `science_tiers.py`. Their tests are end-to-end scenario
+rollouts, so they live under `integration/scenarios/`. `ISSUES.md` records
+that, with the rest of the coverage gaps.
 
 ## How to verify a move
 
@@ -107,9 +113,9 @@ Use `git mv` for a whole-file move, so that `git blame` survives. To split a fil
 
 **Done when:**
 
-- [ ] `baselines/` and `tests/baselines/` are gone.
-- [ ] The `tests/conftest.py` docstring names only fixtures that exist.
-- [ ] `.gitignore` covers `__pycache__/`.
+- [x] `baselines/` and `tests/baselines/` are gone.
+- [x] The `tests/conftest.py` docstring names only fixtures that exist.
+- [x] `.gitignore` covers `__pycache__/`.
 
 **How to verify:** `uv run pytest` collects 1448 tests and exits 0. The command `find . -name '*.pyc' -path '*baselines*'` prints nothing.
 
@@ -130,9 +136,9 @@ The six errors are at `tests/scenarios/test_rocket_scenario.py:13`, `tests/test_
 
 **Done when:**
 
-- [ ] `uv run ruff check factoriax tests` exits 0.
-- [ ] The override removes the test-shaped mypy noise.
-- [ ] `README.md` names both directories in the lint command.
+- [x] `uv run ruff check factoriax tests` exits 0.
+- [x] The override removes the test-shaped mypy noise.
+- [x] `README.md` names both directories in the lint command.
 
 Mypy cannot become a gate here. `ItemType` is a functional `IntEnum`, so mypy resolves none of its members. That one cause raises 1182 of the 1268 errors that `mypy tests` reports. It affects `factoriax/` the same way. `ISSUES.md` records it. After the override, `tests/` holds 54 real errors, down from 121.
 
@@ -164,10 +170,10 @@ Task 9, with them.
 
 **Done when:**
 
-- [ ] `tests/helpers/states.py` holds the factory.
-- [ ] The root `conftest.py` holds no factory body and no module-scope pygame
+- [x] `tests/helpers/states.py` holds the factory.
+- [x] The root `conftest.py` holds no factory body and no module-scope pygame
       import.
-- [ ] `pygame_display` runs under `tests/play/` and `tests/editor/` only.
+- [x] `pygame_display` runs under `tests/play/` and `tests/editor/` only.
 
 **How to verify:** `uv run pytest` is green. The command
 `uv run pytest --setup-show tests/analysis/test_utils.py` names no
@@ -184,10 +190,10 @@ the field is gone from `EnvState`, and the branch it named is dead code in
 
 ### Checkpoint: foundation
 
-- [ ] 1447 tests, exit 0, empty node ID diff.
-- [ ] `uv run ruff check factoriax tests` exits 0.
-- [ ] No dead directory remains.
-- [ ] A human reviews the result before the moves start.
+- [x] 1447 tests, exit 0, empty node ID diff.
+- [x] `uv run ruff check factoriax tests` exits 0.
+- [x] No dead directory remains.
+- [x] A human reviews the result before the moves start.
 
 ---
 
@@ -219,8 +225,8 @@ records the gap. Do not write new tests here.
 
 **Done when:**
 
-- [ ] The four source files listed above are gone.
-- [ ] Each file name in `tests/analysis/` matches a module in `factoriax/analysis/`.
+- [x] The four source files listed above are gone.
+- [x] Each file name in `tests/analysis/` matches a module in `factoriax/analysis/`.
 
 **How to verify:** `uv run pytest tests/analysis -q`. The node ID diff is empty.
 
@@ -236,7 +242,7 @@ records the gap. Do not write new tests here.
 
 **Done when:**
 
-- [ ] `tests/assets/test_build_atlas.py` exists and `tests/test_atlas_fresh.py` is gone.
+- [x] `tests/assets/test_build_atlas.py` exists and `tests/test_atlas_fresh.py` is gone.
 
 **How to verify:** `uv run pytest tests/assets -q`. The node ID diff is empty.
 
@@ -244,8 +250,8 @@ records the gap. Do not write new tests here.
 
 ### Checkpoint: analysis and assets
 
-- [ ] 1447 tests, exit 0, empty node ID diff.
-- [ ] The method holds. The remaining phases repeat it.
+- [x] 1447 tests, exit 0, empty node ID diff.
+- [x] The method holds. The remaining phases repeat it.
 
 ---
 
@@ -275,8 +281,8 @@ records the gap. Do not write new tests here.
 
 **Done when:**
 
-- [ ] Each new file name matches a module in `factoriax/playground/`.
-- [ ] `tests/playground/conftest.py` holds the autouse pygame session.
+- [x] Each new file name matches a module in `factoriax/playground/`.
+- [x] `tests/playground/conftest.py` holds the autouse pygame session.
 
 **How to verify:** `uv run pytest tests/playground -q`. The node ID diff is empty.
 
@@ -293,8 +299,8 @@ records the gap. Do not write new tests here.
 
 **Done when:**
 
-- [ ] Each file name in `tests/playground/editor/` matches a module in `factoriax/playground/editor/`.
-- [ ] No file in the `state/` package is longer than 600 lines.
+- [x] Each file name in `tests/playground/editor/` matches a module in `factoriax/playground/editor/`.
+- [x] No file in the `state/` package is longer than 600 lines.
 
 **How to verify:** `uv run pytest tests/playground/editor -q`. The node ID diff is empty.
 
@@ -317,8 +323,8 @@ Steps 5 and 6 belong to Phase 4 by topic. Do them now, so that this directory ne
 
 **Done when:**
 
-- [ ] Each file name in `tests/playground/play/` matches a module in `factoriax/playground/play/`.
-- [ ] `tests/play/` is gone.
+- [x] Each file name in `tests/playground/play/` matches a module in `factoriax/playground/play/`.
+- [x] `tests/play/` is gone.
 
 **How to verify:** `uv run pytest tests/playground tests/integration tests/contracts -q`. The node ID diff is empty.
 
@@ -326,8 +332,8 @@ Steps 5 and 6 belong to Phase 4 by topic. Do them now, so that this directory ne
 
 ### Checkpoint: playground
 
-- [ ] 1447 tests, exit 0, empty node ID diff.
-- [ ] `tests/play/` and `tests/editor/` are gone.
+- [x] 1447 tests, exit 0, empty node ID diff.
+- [x] `tests/play/` and `tests/editor/` are gone.
 
 ---
 
@@ -349,8 +355,8 @@ This phase is the bulk of the work. 26 root-level files land here. The order put
 
 **Done when:**
 
-- [ ] `tests/test_factoriax.py` is gone, and each of its 7 classes has a recorded destination.
-- [ ] Each file name in `tests/engine/` matches a module in `factoriax/engine/`.
+- [x] `tests/test_factoriax.py` is gone, and each of its 7 classes has a recorded destination.
+- [x] Each file name in `tests/engine/` matches a module in `factoriax/engine/`.
 
 **How to verify:** `uv run pytest tests/engine -q`. The node ID diff is empty.
 
@@ -383,8 +389,8 @@ directly.
 
 **Done when:**
 
-- [ ] All seven source files are gone.
-- [ ] No file in the package is longer than 600 lines.
+- [x] All seven source files are gone.
+- [x] No file in the package is longer than 600 lines.
 
 **How to verify:** `uv run pytest tests/engine/machines -q`. The node ID diff is empty.
 
@@ -404,8 +410,8 @@ Note: the root `test_mining.py` does not test `engine/envs/mining.py`. Task 17 h
 
 **Done when:**
 
-- [ ] The three root files are gone.
-- [ ] Each package file name states what it tests, not where it came from.
+- [x] The three root files are gone.
+- [x] Each package file name states what it tests, not where it came from.
 
 **How to verify:** `uv run pytest tests/engine/step -q`. The node ID diff is empty.
 
@@ -420,8 +426,8 @@ Note: the root `test_mining.py` does not test `engine/envs/mining.py`. Task 17 h
 
 **Done when:**
 
-- [ ] Both source files are gone.
-- [ ] Each package file name matches an observation profile.
+- [x] Both source files are gone.
+- [x] Each package file name matches an observation profile.
 
 **How to verify:** `uv run pytest tests/engine/observations -q`. The node ID diff is empty.
 
@@ -437,8 +443,8 @@ Note: the root `test_mining.py` does not test `engine/envs/mining.py`. Task 17 h
 
 **Done when:**
 
-- [ ] Both packages exist.
-- [ ] No file in either package is longer than 600 lines.
+- [x] Both packages exist.
+- [x] No file in either package is longer than 600 lines.
 
 **How to verify:** `uv run pytest tests/engine/levels tests/engine/recipes -q`. The node ID diff is empty.
 
@@ -458,8 +464,8 @@ Note: the root `test_mining.py` does not test `engine/envs/mining.py`. Task 17 h
 
 **Done when:**
 
-- [ ] Each file name in `tests/engine/envs/` matches a module in `factoriax/engine/envs/`.
-- [ ] `test_env_contract.py` is not in this directory.
+- [x] Each file name in `tests/engine/envs/` matches a module in `factoriax/engine/envs/`.
+- [x] `test_env_contract.py` is not in this directory.
 
 **How to verify:** `uv run pytest tests/engine -q`. The node ID diff is empty.
 
@@ -467,8 +473,8 @@ Note: the root `test_mining.py` does not test `engine/envs/mining.py`. Task 17 h
 
 ### Checkpoint: engine
 
-- [ ] 1447 tests, exit 0, empty node ID diff.
-- [ ] The command `ls tests/*.py` prints `conftest.py` and nothing else.
+- [x] 1447 tests, exit 0, empty node ID diff.
+- [x] The command `ls tests/*.py` prints `conftest.py` and nothing else.
 
 ---
 

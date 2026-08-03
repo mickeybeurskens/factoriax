@@ -5,18 +5,24 @@ done-when list, and its verify command.
 
 ## State
 
-Phase 0 is complete, in commit `c670a22`. Phase 1 is complete, in commits
-`89e5785` and `9910499`. Phase 2 is complete, in commits `9dd25dc`,
-`2cbfd06`, and `124c6dd`.
+Phases 0 to 3 are complete.
+
+- Phase 0: `c670a22`
+- Phase 1: `89e5785`, `9910499`
+- Phase 2: `9dd25dc`, `2cbfd06`, `124c6dd`
+- Phase 3: `6e9ed51`, `ee51be0`, `31090e9`, `0316324`, `d2750c1`, `6d1c8f3`
 
 - The suite holds **1447 tests**. All pass. A full run takes about 220 seconds.
-- 36 loose test files remain at the `tests/` root. `tests/bench_rollout.py`
-  sits beside them and holds no test.
-- `tests/analysis/`, `tests/assets/`, and `tests/playground/` mirror the
-  package. All 33 files in them map to a module.
-- `tests/integration/` holds 4 files and `tests/contracts/` holds 2.
+- 7 loose test files remain at the `tests/` root, all bound for `contracts/`
+  or `integration/`. `tests/bench_rollout.py` sits beside them and holds no
+  test.
+- `tests/engine/`, `tests/playground/`, `tests/analysis/`, and `tests/assets/`
+  mirror the package. All 76 files in them map to a module. The longest is
+  553 lines.
+- `tests/integration/` holds 5 files and `tests/contracts/` holds 3.
 - `tests/scenarios/` is the last directory that does not mirror the package.
-- `tests/helpers/` holds `states.py` and `trajectories.py`.
+- `tests/helpers/` holds `states.py`, `trajectories.py`, and
+  `observations.py`.
 - `uv run ruff check factoriax tests` exits 0.
 
 ## Verify each move
@@ -95,28 +101,31 @@ a full-suite run finds this.
 
 ## Phase 3: engine
 
-- [ ] **Task 9** (L) Move the engine leaf modules. Merge the two category files
-      into `test_constants.py`, and `test_belt_helpers.py` with
-      `test_machine_config.py` into `test_tables.py`. Merge the two reward
-      files. Dissolve `test_factoriax.py` across 6 destinations. Move
-      `canonical_env_8x8_1p` from the root conftest to
-      `tests/engine/conftest.py`, with its three consumers. If it runs long,
-      split at `test_factoriax.py`.
-- [ ] **Task 10** (L) Split seven files into `tests/engine/machines/`, by
-      machine kind. They hold 117 tests in about 2600 lines.
-- [ ] **Task 11** (M) Split `test_step.py`, `test_mining.py`, and
-      `test_deposit_withdraw.py` into `tests/engine/step/`.
-- [ ] **Task 12** (M) Split `test_observations.py` and
-      `test_observations_superficial.py` into `tests/engine/observations/`, by
-      observation profile.
-- [ ] **Task 13** (L) Build `tests/engine/levels/` from `test_levels.py`, which
-      holds 85 tests in 19 classes. Build `tests/engine/recipes/` from the
-      three recipe files.
-- [ ] **Task 14** (L) Build `tests/engine/envs/`. Split `test_env_hooks.py`
-      across `test_base.py` and `test_wrappers.py`. Fold in
-      `test_action_mask_wrapper.py` and `test_coal_capacity.py`.
-- [ ] **Checkpoint** 1447 tests, exit 0, empty diff. `ls tests/*.py` prints
-      `conftest.py` and nothing else.
+- [x] **Task 9** Move the engine leaf modules and dissolve `test_factoriax.py`
+      across 6 destinations. `test_machine_config.py` needed four destinations,
+      not two.
+- [x] **Task 10** Split six files into `tests/engine/machines/`, by machine
+      kind.
+- [x] **Task 11** Split four files into `tests/engine/step/`. Deposit and
+      withdraw came in as one 646-line file and split in two.
+- [x] **Task 12** Split two files into `tests/engine/observations/`, by profile
+      and encoder.
+- [x] **Task 13** Build `tests/engine/levels/` and `tests/engine/recipes/`.
+- [x] **Task 14** Build `tests/engine/envs/`.
+- [x] **Checkpoint** 1447 tests, exit 0, empty diff.
+
+Two plan errors surfaced here. `test_science_lab.py` imports `run_labs` from
+`engine/step.py`, not from `engine/machines.py`, so it joined the step package.
+`test_machine_config.py` split four ways: golden values in `tables.py`, the
+editor slot view, a cross-subpackage agreement, and a guard on a deleted
+module.
+
+`canonical_env_8x8_1p` stays in the root conftest. Its consumers ended up
+spread across `tests/engine/` rather than in one file, so a package conftest
+buys nothing.
+
+The checkpoint is not `ls tests/*.py` yet. Seven root files remain and Phase 4
+places them.
 
 ## Phase 4: contracts, integration, benchmarks
 

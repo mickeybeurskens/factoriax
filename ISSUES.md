@@ -240,6 +240,36 @@ reliable anchor.
   new machine kind will land in the `else` branch by default whether or not
   that is correct.
 
+- **Fifteen modules have no test that reaches them**
+  Found 2026-08-03.
+  Files: the modules in the two lists below.
+  The test suite restructure gives each source module a mirror entry, so a
+  module with no entry is now visible. Fifteen have no entry and no test that
+  imports them by any route:
+  `analysis/eval.py`, `analysis/video.py`, `engine/crafting.py`,
+  `playground/app.py`, `playground/editor/inventory_panel.py`,
+  `playground/editor/main.py`, `playground/editor/toolbar.py`,
+  `playground/menu/main_menu.py`, `playground/play/main.py`,
+  `playground/ui/compositing.py`, `playground/ui/fonts.py`,
+  `playground/ui/forms.py`, `playground/ui/labels.py`,
+  `playground/ui/panels.py`, `playground/ui/primitives.py`, and
+  `playground/ui/window.py`.
+  Six more have no entry but a test does reach them: `analysis/categories.py`,
+  `engine/envs/common.py`, `engine/envs/miner_curriculum.py`,
+  `engine/envs/mining.py`, `engine/envs/science_tiers.py`, `make.py`, and
+  `playground/play/play_state.py`. The four `engine/envs` modules have
+  scenario tests, which move to `tests/integration/scenarios/` in Task 17.
+  Two of the gaps are large. `playground/editor/main.py` is 1680 lines and
+  `playground/ui/panels.py` is 761 lines, and nothing tests either. Both draw,
+  so a test costs a display fixture and an output-contract assertion, the same
+  shape the `tests/playground/ui/` files already use.
+  Three are entry points and are fair waivers: `playground/app.py`,
+  `playground/editor/main.py`, and `playground/play/main.py`. So is
+  `analysis/video.py`, which shells out to ffmpeg.
+  `engine/crafting.py` is the one that matters most. It is 182 lines of engine
+  core with nothing on it. Task 21 of `tasks/plan.md` covers it. Task 20
+  writes the full verdict table to `tasks/coverage-gaps.md`.
+
 - **The craft progress bar in the inventory menu is dead code**
   Found 2026-08-03.
   Files: `factoriax/playground/play/ui.py:1966` (`craft_progress = 0`), `:2058`
