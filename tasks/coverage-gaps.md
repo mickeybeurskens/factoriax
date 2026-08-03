@@ -10,7 +10,7 @@ Three verdicts:
   missing piece is a mirror entry, not coverage.
 - **waived** means do not write one, for the reason given.
 
-Measured with `uv run pytest -q --cov` on 2026-08-03, at 1411 tests.
+Measured with `uv run pytest -q --cov` on 2026-08-03, at 1424 tests.
 
 | module | lines | coverage | verdict | note |
 |---|---:|---:|---|---|
@@ -25,7 +25,6 @@ Measured with `uv run pytest -q --cov` on 2026-08-03, at 1411 tests.
 | `analysis/categories.py` | 252 | 100% | covered | tests/analysis/test_recipe_graph.py, through item_palette |
 | `engine/envs/science_tiers.py` | 238 | 100% | covered | tests/integration/scenarios/test_science_tiers.py |
 | `engine/envs/common.py` | 217 | 99% | covered | the scenario tests, which all build through it |
-| `engine/crafting.py` | 182 | 100% | covered | the step tests, through craft_recipe |
 | `playground/ui/compositing.py` | 154 | 100% | covered | the play and editor render tests |
 | `playground/ui/primitives.py` | 100 | 93% | covered | the play render tests |
 | `make.py` | 98 | 100% | covered | tests/integration/scenarios/, through env_from_name |
@@ -50,7 +49,13 @@ the files under `tests/playground/ui/` already use.
 are the same shape and smaller. `analysis/eval.py` at 21 percent is the one
 gap outside the playground.
 
-The twelve **covered** rows need a mirror entry, not a test. Four of the
+`engine/crafting.py` was on this list and is not any more.
+`tests/engine/test_crafting.py` gives it an entry. Its coverage did not move,
+because it already read 100 percent through `engine/step.py`. What the file
+adds is an assertion on two refusals a step-level test never reaches: a recipe
+row of `-1`, and an output that would pass the player stack limit.
+
+The eleven **covered** rows need a mirror entry, not a test. Four of the
 `engine/envs` modules have scenario tests under
 `tests/integration/scenarios/`, which is where an end-to-end rollout
 belongs. Their absence from `tests/engine/envs/` is correct and deliberate.
