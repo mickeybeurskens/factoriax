@@ -284,3 +284,27 @@ def make_state(
         ),
         achievements_unlocked=jnp.zeros(MAX_ACHIEVEMENTS, dtype=jnp.bool_),
     )
+
+
+def entity_at(state: EnvState, y: int, x: int) -> int:
+    """Return the entity index at grid position ``(y, x)``.
+
+    :func:`make_state` packs machines into flat ``ent_*`` arrays and records
+    where each one landed in ``tile_entity``. A test that placed a machine by
+    grid position reads its entity index back through this function.
+
+    Parameters
+    ----------
+    state
+        Environment state with a ``tile_entity`` grid.
+    y
+        Row index.
+    x
+        Column index.
+
+    Returns
+    -------
+    int
+        Entity index at the given tile, or ``-1`` where no entity sits.
+    """
+    return int(state.tile_entity[y, x])

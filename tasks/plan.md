@@ -362,12 +362,24 @@ This phase is the bulk of the work. 26 root-level files land here. The order put
 
 **Steps:**
 
-1. Split the seven files into a package by machine kind: `test_miners.py`, `test_belts.py`, `test_arms.py`, `test_splitters.py`, `test_crossings.py`, `test_assemblers.py`, `test_science_labs.py`, and `test_update_all.py`.
+1. Split the files into a package by machine kind: `test_miners.py`,
+   `test_belts.py`, `test_arms.py`, `test_splitters.py`, `test_crossings.py`,
+   `test_assemblers.py`, `test_pallets.py`, and `test_update_all.py`.
 2. Split `test_belt_arm.py` across `test_belts.py` and `test_arms.py`.
-3. Send each conservation class in `test_machines.py` to the file for its machine kind.
-4. Move `test_science_lab.py::test_lab_slot_roles` to `test_tables.py`. It asserts `MACHINE_SLOT_ROLES`, which `test_tables.py` owns.
+3. Send each conservation class in `test_machines.py` to the file for its
+   machine kind.
+4. Move `test_science_lab.py::test_lab_slot_roles` to
+   `tests/playground/editor/test_slot_display.py`. It asserts
+   `MACHINE_SLOT_ROLES`, which that file owns.
 
-The seven source files are `test_machines.py`, `test_belt_arm.py`, `test_crossing.py`, `test_splitter.py`, `test_assembler.py`, `test_science_lab.py`, and `test_machine_inventory.py`.
+The six source files are `test_machines.py`, `test_belt_arm.py`,
+`test_crossing.py`, `test_splitter.py`, `test_assembler.py`, and
+`test_machine_inventory.py`.
+
+`test_science_lab.py` is not one of them. It imports ``run_labs`` from
+`engine/step.py`, not from `engine/machines.py`, so it belongs to the step
+package that Task 11 builds. The lab is the one machine the step loop drives
+directly.
 
 **Done when:**
 

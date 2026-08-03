@@ -12,7 +12,7 @@ from factoriax.engine.constants import (
     ItemType,
     Machine,
 )
-from factoriax.engine.machines import run_assemblers
+from factoriax.engine.machines import run_assemblers, update_all_machines
 from factoriax.engine.state import EnvParams, EnvState
 from factoriax.engine.step import deposit_to_adjacent
 
@@ -386,3 +386,122 @@ class TestAssemblerPlacementAndPickup:
         new = run_assemblers(state, _PARAMS)
         eid = _eid(new, 0, 0)
         assert int(new.ent_power[eid]) == 4
+
+
+# -------------------------------------------------------------------------
+# Assembler input slots and pull conservation
+# -------------------------------------------------------------------------
+
+
+class TestAssemblerInventory:
+    """Tests for assembler inventory."""
+
+    def test_assembler_initialized_empty(
+        self,
+        state_factory,
+    ) -> None:
+        """An assembler starts with empty buffers."""
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            machine_types=jnp.array(
+                [[Machine.ASSEMBLER]],
+                dtype=jnp.int32,
+            ),
+        )
+        eid = _eid(state, 0, 0)
+        assert int(state.ent_buf_count[eid]) == 0
+        assert jnp.all(state.ent_asm_in_count[eid] == 0)
+        assert int(state.ent_asm_out_count[eid]) == 0
+
+    def test_assembler_idle_without_inputs(
+        self,
+        state_factory,
+    ) -> None:
+        """An assembler without inputs stays idle."""
+        state = state_factory(
+            world_map=jnp.array(
+                [[BlockType.DIRT]],
+                dtype=jnp.int32,
+            ),
+            machine_types=jnp.array(
+                [[Machine.ASSEMBLER]],
+                dtype=jnp.int32,
+            ),
+        )
+        params = EnvParams()
+        new = update_all_machines(state, params)
+        eid = _eid(new, 0, 0)
+        assert int(new.ent_buf_count[eid]) == 0
+        assert jnp.all(new.ent_asm_in_count[eid] == 0)
+        assert int(new.ent_asm_out_count[eid]) == 0
+
+
+class TestAssemblerPullDoesNotLeakIntoInactiveSlots:
+    """Regression: the belt pull must debit only the placed belt.
+
+    ``run_assemblers`` opens with a directional pull: the machine takes one
+    item from each adjacent belt facing it. The pull side is gated on
+    ``is_assembler_or_furnace``, which carries ``active``, but the side that pays for it
+    is not. Every inactive slot clips onto tile (0, 0), so a machine on
+    (0, 1) pulling leftwards reads as pulling from all of them at once and
+    drives each to ``-1``.
+    """
+
+    def _belt_feeding_assembler(self, state_factory) -> EnvState:
+        """Build a belt on (0, 0) facing RIGHT into an assembler on (0, 1).
+
+        The belt occupies the corner tile that every inactive slot clips
+        onto, which is what puts the inactive slots on the paying side of
+        the pull.
+
+        Parameters
+        ----------
+        state_factory
+            The shared ``state_factory`` fixture.
+
+        Returns
+        -------
+        EnvState
+            A state with two active entities and the remaining slots
+            inactive at (0, 0). The belt holds one IRON_ORE.
+        """
+        return state_factory(
+            world_map=jnp.array([[BlockType.DIRT, BlockType.DIRT]], dtype=jnp.int32),
+            machine_types=jnp.array(
+                [[Machine.CONVEYOR_BELT, Machine.ASSEMBLER]], dtype=jnp.int32
+            ),
+            machine_direction=jnp.array(
+                [[Direction.RIGHT, Direction.DOWN]], dtype=jnp.int8
+            ),
+            buffer_type=jnp.array([[int(ItemType.IRON_ORE), 0]], dtype=jnp.int8),
+            buffer_count=jnp.array([[1, 0]], dtype=jnp.int16),
+        )
+
+    def test_inactive_slots_keep_empty_buffers_under_pull(self, state_factory) -> None:
+        """The belt pays for the pull and no inactive slot goes negative."""
+        state = self._belt_feeding_assembler(state_factory)
+
+        state = run_assemblers(state, EnvParams())
+
+        assert state.ent_buf_count[_eid(state, 0, 0)] == 0
+        assert state.ent_asm_in_count[_eid(state, 0, 1), 0] == 1
+
+        inactive = state.ent_y < 0
+        assert bool(jnp.all(state.ent_buf_count[inactive] == 0))
+
+    def test_pull_conserves_items(self, state_factory) -> None:
+        """The IRON_ORE moves from belt buffer to input slot, once."""
+        state = self._belt_feeding_assembler(state_factory)
+
+        before = int(jnp.sum(state.ent_buf_count.astype(jnp.int32))) + int(
+            jnp.sum(state.ent_asm_in_count.astype(jnp.int32))
+        )
+        state = run_assemblers(state, EnvParams())
+        after = int(jnp.sum(state.ent_buf_count.astype(jnp.int32))) + int(
+            jnp.sum(state.ent_asm_in_count.astype(jnp.int32))
+        )
+
+        assert after == before

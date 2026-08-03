@@ -1,9 +1,10 @@
-"""Tests for conveyor belt and pick-and-place arm machine logic.
+"""Tests for the arm pass in :mod:`factoriax.engine.machines`.
 
-Uses the entity-based state model where each machine has a single buffer
-slot (ent_buf_type, ent_buf_count) accessed via tile_entity mapping.
-Belt max stack is 3, arm has no internal buffer and transfers 1 item per
-tick between the entity behind it and the entity in front.
+``run_arms`` moves one item from the tile behind an arm to the tile in
+front. It is the only route into an assembler, a furnace, or a science lab,
+because the belt pass refuses those. The tests cover the transfer, what a
+full destination does, and that a transfer writes no slot the arm does not
+own.
 """
 
 from __future__ import annotations
@@ -11,23 +12,21 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from factoriax.engine.constants import (
+    BlockType,
     Direction,
     ItemType,
     Machine,
 )
-from factoriax.engine.machines import run_arms, run_conveyor_belts
-from factoriax.engine.state import EnvParams
+from factoriax.engine.machines import run_arms
+from factoriax.engine.state import EnvParams, EnvState
+from tests.helpers.states import entity_at as _eid
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-# Per MACHINE_MAX_STACK: NONE=0, MINER=64, PALLET=256, ASM=1000, BELT=3,
-# ARM=1, ROCKET=0.
 _BELT_MAX = 3
+
+
 _NOOP = 0  # Direction that does not push anywhere.
 
-# Default params for run_conveyor_belts / run_arms calls.
+
 _PARAMS = EnvParams()
 
 
@@ -123,148 +122,13 @@ def _get_buf(state, y: int, x: int) -> tuple[int, int]:
     return (int(state.ent_buf_type[eid]), int(state.ent_buf_count[eid]))
 
 
-# ---------------------------------------------------------------------------
-# Conveyor belt tests
-# ---------------------------------------------------------------------------
-
 B = Machine.CONVEYOR_BELT
+
+
 R = int(Direction.RIGHT)
+
+
 D = int(Direction.DOWN)
-
-
-class TestConveyorBelt:
-    """Conveyor belt item transport tests."""
-
-    def test_noop_when_no_items(self, state_factory) -> None:
-        """Belt with empty inventory does nothing."""
-        types = jnp.array([[B, B]])
-        dirs = jnp.array([[R, _NOOP]])
-        state = _make_state(state_factory, machine_types=types, machine_direction=dirs)
-        result = run_conveyor_belts(state, _PARAMS)
-        assert _get_buf(result, 0, 0) == (0, 0)
-        assert _get_buf(result, 0, 1) == (0, 0)
-
-    def test_pushes_item_right(self, state_factory) -> None:
-        """Belt facing right moves items from (0,0) to (0,1)."""
-        types = jnp.array([[B, B]])
-        dirs = jnp.array([[R, _NOOP]])
-        bt, bc = _buf_grids((1, 2), {(0, 0): (ItemType.COAL, 2)})
-        state = _make_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            buffer_type=bt,
-            buffer_count=bc,
-        )
-        result = run_conveyor_belts(state, _PARAMS)
-        _, src_count = _get_buf(result, 0, 0)
-        dst_type, dst_count = _get_buf(result, 0, 1)
-        assert src_count == 0
-        assert dst_type == int(ItemType.COAL)
-        assert dst_count == 2
-
-    def test_pushes_item_down(self, state_factory) -> None:
-        """Belt facing down moves items from row 0 to row 1."""
-        types = jnp.array([[B], [B]])
-        dirs = jnp.array([[D], [_NOOP]])
-        bt, bc = _buf_grids((2, 1), {(0, 0): (ItemType.IRON_ORE, 2)})
-        state = _make_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            buffer_type=bt,
-            buffer_count=bc,
-        )
-        result = run_conveyor_belts(state, _PARAMS)
-        _, src_count = _get_buf(result, 0, 0)
-        dst_type, dst_count = _get_buf(result, 1, 0)
-        assert src_count == 0
-        assert dst_type == int(ItemType.IRON_ORE)
-        assert dst_count == 2
-
-    def test_does_not_push_to_empty_tile(self, state_factory) -> None:
-        """Belt facing an empty tile does not transfer items."""
-        types = jnp.array([[B, Machine.NONE]])
-        dirs = jnp.array([[R, _NOOP]])
-        bt, bc = _buf_grids((1, 2), {(0, 0): (ItemType.COAL, 2)})
-        state = _make_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            buffer_type=bt,
-            buffer_count=bc,
-        )
-        result = run_conveyor_belts(state, _PARAMS)
-        src_type, src_count = _get_buf(result, 0, 0)
-        assert src_type == int(ItemType.COAL)
-        assert src_count == 2
-
-    def test_does_not_push_to_blocked_target(self, state_factory) -> None:
-        """Belt does not push when target holds a different item at max."""
-        types = jnp.array([[B, B]])
-        dirs = jnp.array([[R, _NOOP]])
-        bt, bc = _buf_grids(
-            (1, 2),
-            {
-                (0, 0): (ItemType.COAL, 2),
-                (0, 1): (ItemType.IRON_ORE, _BELT_MAX),
-            },
-        )
-        state = _make_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            buffer_type=bt,
-            buffer_count=bc,
-        )
-        result = run_conveyor_belts(state, _PARAMS)
-        src_type, src_count = _get_buf(result, 0, 0)
-        assert src_type == int(ItemType.COAL)
-        assert src_count == 2
-
-    def test_merges_same_item_into_target(self, state_factory) -> None:
-        """Items of the same type merge into the target's existing stack."""
-        types = jnp.array([[B, B]])
-        dirs = jnp.array([[R, _NOOP]])
-        bt, bc = _buf_grids(
-            (1, 2),
-            {(0, 0): (ItemType.COAL, 1), (0, 1): (ItemType.COAL, 2)},
-        )
-        state = _make_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            buffer_type=bt,
-            buffer_count=bc,
-        )
-        result = run_conveyor_belts(state, _PARAMS)
-        dst_type, dst_count = _get_buf(result, 0, 1)
-        assert dst_type == int(ItemType.COAL)
-        assert dst_count == 3
-        _, src_count = _get_buf(result, 0, 0)
-        assert src_count == 0
-
-    def test_noop_with_zero_direction(self, state_factory) -> None:
-        """Belt with NOOP direction (0) does not push."""
-        types = jnp.array([[B]])
-        dirs = jnp.array([[_NOOP]])
-        bt, bc = _buf_grids((1, 1), {(0, 0): (ItemType.COAL, 2)})
-        state = _make_state(
-            state_factory,
-            machine_types=types,
-            machine_direction=dirs,
-            buffer_type=bt,
-            buffer_count=bc,
-        )
-        result = run_conveyor_belts(state, _PARAMS)
-        buf_type, buf_count = _get_buf(result, 0, 0)
-        assert buf_type == int(ItemType.COAL)
-        assert buf_count == 2
-
-
-# ---------------------------------------------------------------------------
-# Pick-and-place arm tests
-# ---------------------------------------------------------------------------
 
 
 class TestArm:
@@ -454,3 +318,96 @@ class TestArm:
         pallet_type, pallet_count = _get_buf(result, 0, 0)
         assert pallet_type == int(ItemType.COAL)
         assert pallet_count == 2
+
+
+class TestArmTransferDoesNotLeakIntoInactiveSlots:
+    """Regression: an arm transfer must touch only the two placed entities.
+
+    ``run_arms`` gathers on both sides: a receiver checks whether the tile
+    behind it holds an arm pushing its way, and a giver checks whether the
+    tile in front of it does. Every inactive slot clips onto tile (0, 0), so
+    an arm standing on (0, 1) is the neighbour of every inactive slot at once
+    on one side or the other, depending on which way it faces. Both sides
+    need the active gate: without it an arm mints one item into every
+    inactive slot when it faces (0, 0), and drives every inactive slot to
+    ``-1`` when it faces away.
+    """
+
+    def _arm_state(self, state_factory, arm_direction: int) -> EnvState:
+        """Build a pallet, an arm, and a pallet in a row, with COAL upstream.
+
+        The arm sits at (0, 1) so that tile (0, 0) is its destination when it
+        faces LEFT and its source when it faces RIGHT. Tile (0, 0) is the one
+        every inactive slot clips onto, so either facing puts the arm on the
+        inactive slots' neighbour tile.
+
+        Parameters
+        ----------
+        state_factory
+            The shared ``state_factory`` fixture.
+        arm_direction
+            ``Direction.LEFT`` or ``Direction.RIGHT``.
+
+        Returns
+        -------
+        EnvState
+            A state with three active entities and the remaining slots
+            inactive at (0, 0). One COAL sits in the pallet the arm draws
+            from.
+        """
+        src_x = 2 if arm_direction == Direction.LEFT else 0
+        coal = int(ItemType.COAL)
+        buf_type = jnp.zeros((1, 3), dtype=jnp.int8).at[0, src_x].set(coal)
+        buf_count = jnp.zeros((1, 3), dtype=jnp.int16).at[0, src_x].set(1)
+        return state_factory(
+            world_map=jnp.full((1, 3), int(BlockType.DIRT), dtype=jnp.int32),
+            machine_types=jnp.array(
+                [[Machine.PALLET, Machine.ARM, Machine.PALLET]], dtype=jnp.int32
+            ),
+            machine_direction=jnp.array(
+                [[Direction.DOWN, arm_direction, Direction.DOWN]], dtype=jnp.int8
+            ),
+            buffer_type=buf_type,
+            buffer_count=buf_count,
+        )
+
+    def test_inactive_slots_stay_empty_when_arm_faces_corner(
+        self, state_factory
+    ) -> None:
+        """An arm delivering into (0, 0) credits the pallet there and nothing else."""
+        state = self._arm_state(state_factory, int(Direction.LEFT))
+
+        state = run_arms(state, EnvParams())
+
+        assert state.ent_buf_count[_eid(state, 0, 0)] == 1
+        assert state.ent_buf_type[_eid(state, 0, 0)] == ItemType.COAL
+
+        inactive = state.ent_y < 0
+        assert bool(jnp.all(state.ent_buf_count[inactive] == 0))
+        assert bool(jnp.all(state.ent_buf_type[inactive] == 0))
+
+    def test_inactive_slots_stay_empty_when_arm_draws_from_corner(
+        self, state_factory
+    ) -> None:
+        """An arm drawing out of (0, 0) debits the pallet there and nothing else."""
+        state = self._arm_state(state_factory, int(Direction.RIGHT))
+
+        state = run_arms(state, EnvParams())
+
+        assert state.ent_buf_count[_eid(state, 0, 0)] == 0
+        assert state.ent_buf_count[_eid(state, 0, 2)] == 1
+
+        inactive = state.ent_y < 0
+        assert bool(jnp.all(state.ent_buf_count[inactive] == 0))
+        assert bool(jnp.all(state.ent_buf_type[inactive] == 0))
+
+    def test_arm_transfer_conserves_items(self, state_factory) -> None:
+        """The single COAL is moved, never duplicated and never destroyed."""
+        for arm_direction in (Direction.LEFT, Direction.RIGHT):
+            state = self._arm_state(state_factory, int(arm_direction))
+
+            before = int(jnp.sum(state.ent_buf_count.astype(jnp.int32)))
+            state = run_arms(state, EnvParams())
+            after = int(jnp.sum(state.ent_buf_count.astype(jnp.int32)))
+
+            assert after == before
