@@ -6,15 +6,16 @@ done-when list, and its verify command.
 ## State
 
 Phase 0 is complete, in commit `c670a22`. Phase 1 is complete, in commits
-`89e5785` and `9910499`.
+`89e5785` and `9910499`. Phase 2 is complete, in commits `9dd25dc`,
+`2cbfd06`, and `124c6dd`.
 
 - The suite holds **1447 tests**. All pass. A full run takes about 220 seconds.
-- 38 loose test files remain at the `tests/` root. `tests/bench_rollout.py`
+- 36 loose test files remain at the `tests/` root. `tests/bench_rollout.py`
   sits beside them and holds no test.
-- `tests/analysis/` and `tests/assets/` mirror the package. Every file in
-  them names a module.
-- Three directories do not mirror it yet: `tests/editor/`, `tests/play/`,
-  `tests/scenarios/`.
+- `tests/analysis/`, `tests/assets/`, and `tests/playground/` mirror the
+  package. All 33 files in them map to a module.
+- `tests/integration/` holds 4 files and `tests/contracts/` holds 2.
+- `tests/scenarios/` is the last directory that does not mirror the package.
 - `tests/helpers/` holds `states.py` and `trajectories.py`.
 - `uv run ruff check factoriax tests` exits 0.
 
@@ -74,27 +75,23 @@ the three gaps.
 
 ## Phase 2: playground
 
-- [ ] **Task 6** (M) Build `tests/playground/`. Move `test_scaling.py` and
-      `test_machine_icon_coverage.py` into `ui/`. Merge `play/test_config.py`
-      and `play/test_controller_config.py` into `test_config.py`. Move
-      `play/test_rebinding.py` to `menu/test_controls_menu.py`. Create
-      `tests/playground/conftest.py` with the autouse display fixture that
-      `tests/play/conftest.py` and `tests/editor/conftest.py` hold today.
-- [ ] **Task 7** (M) Build `tests/playground/editor/`. Split
-      `test_editor_state.py`, which holds 77 tests in 743 lines, into a
-      `state/` package. Rename `test_editor_canvas.py` to `test_canvas.py` and
-      `test_editor_save_load.py` to `test_dialogs.py`. Delete
-      `tests/editor/conftest.py`, because Task 6 replaced it.
-- [ ] **Task 8** (L) Build `tests/playground/play/`. Split `test_ui.py`,
-      `test_scroll.py`, and `test_machine_ui.py` into a `ui/` package. Merge
-      `test_action_dispatch.py` into `test_game_ui.py`. Rename
-      `test_free_play_achievements.py` to `test_achievements.py`. Send
-      `test_game_ui_integration.py` and `test_smoke.py` to `integration/`, and
-      `test_engine_agreement.py` and `test_no_direct_state_edits.py` to
-      `contracts/`. Delete `tests/play/conftest.py`. If it runs long, split at
-      the `ui/` package.
-- [ ] **Checkpoint** 1447 tests, exit 0, empty diff. `tests/play/` and
+- [x] **Task 6** Build `tests/playground/`. `config.py` needed a package: its
+      three test files ran to 710 lines together. `test_rebinding.py` split
+      three ways, by what each class reaches for.
+- [x] **Task 7** Build `tests/playground/editor/`. `test_editor_state.py`
+      became a `state/` package of five topic files. The save-load round trip
+      inside `test_editor_save_load.py` went to `tests/integration/`.
+- [x] **Task 8** Build `tests/playground/play/`. Three files against `ui.py`
+      became a `ui/` package. Four files left the mirror for `integration/`
+      and `contracts/`.
+- [x] **Checkpoint** 1447 tests, exit 0, empty diff. `tests/play/` and
       `tests/editor/` are gone.
+
+Moving a file out from under `tests/playground/` takes it out from under the
+autouse display. Two files then passed in a full run and failed alone,
+because they had been riding on a display that an earlier directory
+initialised. **Run each moved file on its own.** Neither the node ID diff nor
+a full-suite run finds this.
 
 ## Phase 3: engine
 
