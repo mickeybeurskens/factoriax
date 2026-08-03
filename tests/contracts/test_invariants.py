@@ -1,9 +1,10 @@
-"""Property-based invariant tests for the Factoriax environment.
+"""Structural invariants over random episodes.
 
-These tests verify structural invariants that must hold after any
-sequence of actions, regardless of the specific actions taken. They
-catch subtle bugs that targeted unit tests miss by exercising the
-environment with random action sequences.
+These hold after any sequence of actions, so they belong to no one module.
+A targeted unit test asserts one path. These drive the env with random
+actions and assert what must be true whatever the actions were: positions in
+bounds, inventories non-negative and capped, health in range, and items
+conserved across a mine or a transfer.
 """
 
 import jax

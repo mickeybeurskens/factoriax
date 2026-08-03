@@ -1,8 +1,10 @@
-"""Regression tests for the transfer and observation contracts.
+"""Transfer and observation rules that no single module owns.
 
-Each class here pins one defect recorded in ``ISSUES.md`` and found during the
-documentation pass. They share a theme: a rule the machine passes enforce that
-a player-facing path or an observation did not.
+This file has the widest import set in the suite: machines, observations,
+placement, rewards, step, and tables. Each class pins one defect recorded in
+``ISSUES.md``, and they share a theme. A rule the machine passes enforce was
+not enforced on a player-facing path or in an observation, so a human and a
+policy saw different worlds.
 """
 
 import jax.numpy as jnp

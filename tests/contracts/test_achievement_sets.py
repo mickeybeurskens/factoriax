@@ -1,10 +1,12 @@
-"""Invariants every declared achievement set must satisfy.
+"""Every declared achievement set obeys the wire format.
 
-One parametrized sweep over every set in the tree, so a new scenario
-inherits these checks by declaring its tuple rather than by copying a
-per-scenario test. Bit order and ids are a wire format: trajectories
-persist ``achievements_unlocked`` positionally and training runs log
-per-bit metrics by name, so this pins the shape of that contract.
+The engine ships no achievements. A scenario declares an ordered tuple, and
+the bit order of that tuple is a wire format: a recording, a trained policy,
+and a plot all read position, not name. This file runs the same invariants
+over every set any scenario declares, so a new set cannot break the format
+quietly.
+
+It is not in the mirror because it belongs to no one scenario.
 """
 
 from __future__ import annotations
