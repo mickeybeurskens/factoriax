@@ -308,3 +308,78 @@ def entity_at(state: EnvState, y: int, x: int) -> int:
         Entity index at the given tile, or ``-1`` where no entity sits.
     """
     return int(state.tile_entity[y, x])
+
+
+def machine_type_grid(
+    w: int, h: int, placements: dict[tuple[int, int], int]
+) -> jnp.ndarray:
+    """Build a machine_types grid with specific placements.
+
+    Parameters
+    ----------
+    w
+        Grid width.
+    h
+        Grid height.
+    placements
+        Map of ``(x, y)`` to a ``Machine``.
+
+    Returns
+    -------
+    jnp.ndarray
+        Machine types grid of shape ``(h, w)``.
+    """
+    arr = jnp.full((h, w), Machine.NONE, dtype=jnp.int32)
+    for (x, y), mtype in placements.items():
+        arr = arr.at[y, x].set(mtype)
+    return arr
+
+
+def player_inventory_grid(num_players: int, entries: dict[int, int]) -> jnp.ndarray:
+    """Build a player inventory array.
+
+    Parameters
+    ----------
+    num_players
+        Number of players.
+    entries
+        Mapping of item type to count, for player 0 only.
+
+    Returns
+    -------
+    jnp.ndarray
+        Player inventory of shape ``(num_players, NUM_ITEM_TYPES)``.
+    """
+    inv = jnp.zeros((num_players, NUM_ITEM_TYPES), dtype=jnp.int32)
+    for item_type, count in entries.items():
+        inv = inv.at[0, item_type].set(count)
+    return inv
+
+
+def buffer_grids(
+    h: int,
+    w: int,
+    entries: dict[tuple[int, int], tuple[int, int]],
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Build buffer_type and buffer_count grids.
+
+    Parameters
+    ----------
+    h
+        Grid height.
+    w
+        Grid width.
+    entries
+        Map of ``(y, x)`` to ``(item_type, count)``.
+
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(buffer_type, buffer_count)``.
+    """
+    bt = np.zeros((h, w), dtype=np.int8)
+    bc = np.zeros((h, w), dtype=np.int16)
+    for (y, x), (itype, count) in entries.items():
+        bt[y, x] = itype
+        bc[y, x] = count
+    return jnp.array(bt), jnp.array(bc)

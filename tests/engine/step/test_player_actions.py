@@ -1,7 +1,8 @@
-"""Tests for game logic orchestration (entity-based state).
+"""Tests for the player action dispatcher in :mod:`factoriax.engine.step`.
 
-Covers the action dispatcher ``_handle_player_action``, compound
-deposit/withdraw actions, and the top-level ``factoriax_step``.
+``handle_player_action`` routes one action for one player: a move, a facing
+change, a mine, or a noop. ``factoriax_step`` wraps it, advances the
+timestep, and runs the machine passes.
 """
 
 import jax
@@ -28,6 +29,14 @@ from factoriax.engine.step import (
     move_player,
     withdraw_from_adjacent,
 )
+from tests.helpers.states import (
+    buffer_grids,
+    entity_at,
+    machine_type_grid,
+    player_inventory_grid,
+)
+
+_DIRT_3X3 = jnp.full((3, 3), BlockType.DIRT, dtype=jnp.int32)
 
 _PARAMS = EnvParams()
 
@@ -152,86 +161,6 @@ class TestHandlePlayerAction:
             new_state.player_inventory,
             state.player_inventory,
         )
-
-
-class TestCompoundDeposit:
-    """Tests for typed deposit actions."""
-
-    def test_deposit_into_miner_is_noop(self, state_factory) -> None:
-        """Miners have no input slot. A deposit of any item is a no-op."""
-        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
-        inv = inv.at[0, ItemType.COAL].set(10)
-        state = state_factory(
-            world_map=jnp.full(
-                (3, 3),
-                BlockType.DIRT,
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 0),
-            player_direction=int(Direction.DOWN),
-            player_inventory=inv,
-            machine_types=jnp.full(
-                (3, 3),
-                Machine.NONE,
-                dtype=jnp.int32,
-            )
-            .at[1, 1]
-            .set(Machine.MINER),
-        )
-        new = deposit_to_adjacent(state, 0, int(ItemType.COAL))
-        assert int(new.player_inventory[0, ItemType.COAL]) == 10
-
-
-class TestCompoundWithdraw:
-    """Tests for typed withdraw actions."""
-
-    def test_withdraw_iron_from_miner(self, state_factory) -> None:
-        """WITHDRAW drains the whole miner buffer in one action."""
-        state = state_factory(
-            world_map=jnp.full(
-                (3, 3),
-                BlockType.DIRT,
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 0),
-            player_direction=int(Direction.DOWN),
-            machine_types=jnp.full(
-                (3, 3),
-                Machine.NONE,
-                dtype=jnp.int32,
-            )
-            .at[1, 1]
-            .set(Machine.MINER),
-            buffer_type=jnp.zeros((3, 3), dtype=jnp.int8)
-            .at[1, 1]
-            .set(int(ItemType.IRON_ORE)),
-            buffer_count=jnp.zeros((3, 3), dtype=jnp.int16).at[1, 1].set(8),
-        )
-        new = withdraw_from_adjacent(state, 0)
-        eid = int(state.tile_entity[1, 1])
-        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 8
-        assert int(new.ent_buf_count[eid]) == 0
-
-    def test_withdraw_empty_is_noop(self, state_factory) -> None:
-        """A withdraw of an item that is not there is a no-op."""
-        state = state_factory(
-            world_map=jnp.full(
-                (3, 3),
-                BlockType.DIRT,
-                dtype=jnp.int32,
-            ),
-            player_position=(1, 0),
-            player_direction=int(Direction.DOWN),
-            machine_types=jnp.full(
-                (3, 3),
-                Machine.NONE,
-                dtype=jnp.int32,
-            )
-            .at[1, 1]
-            .set(Machine.MINER),
-        )
-        new = withdraw_from_adjacent(state, 0)
-        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 0
 
 
 class TestFactoriaxStep:
@@ -468,3 +397,146 @@ class TestGameLogic:
         params = EnvParams(max_timesteps=100)
         state = simple_state.replace(timestep=100)
         assert is_game_over(state, params)
+
+
+# -------------------------------------------------------------------------
+# Compound deposit and withdraw through the dispatcher
+# -------------------------------------------------------------------------
+
+
+class TestCompoundDeposit:
+    """Tests for typed deposit actions."""
+
+    def test_deposit_into_miner_is_noop(self, state_factory) -> None:
+        """Miners have no input slot. A deposit of any item is a no-op."""
+        inv = jnp.zeros((1, NUM_ITEM_TYPES), dtype=jnp.int32)
+        inv = inv.at[0, ItemType.COAL].set(10)
+        state = state_factory(
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
+            player_position=(1, 0),
+            player_direction=int(Direction.DOWN),
+            player_inventory=inv,
+            machine_types=jnp.full(
+                (3, 3),
+                Machine.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(Machine.MINER),
+        )
+        new = deposit_to_adjacent(state, 0, int(ItemType.COAL))
+        assert int(new.player_inventory[0, ItemType.COAL]) == 10
+
+
+class TestCompoundWithdraw:
+    """Tests for typed withdraw actions."""
+
+    def test_withdraw_iron_from_miner(self, state_factory) -> None:
+        """WITHDRAW drains the whole miner buffer in one action."""
+        state = state_factory(
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
+            player_position=(1, 0),
+            player_direction=int(Direction.DOWN),
+            machine_types=jnp.full(
+                (3, 3),
+                Machine.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(Machine.MINER),
+            buffer_type=jnp.zeros((3, 3), dtype=jnp.int8)
+            .at[1, 1]
+            .set(int(ItemType.IRON_ORE)),
+            buffer_count=jnp.zeros((3, 3), dtype=jnp.int16).at[1, 1].set(8),
+        )
+        new = withdraw_from_adjacent(state, 0)
+        eid = int(state.tile_entity[1, 1])
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 8
+        assert int(new.ent_buf_count[eid]) == 0
+
+    def test_withdraw_empty_is_noop(self, state_factory) -> None:
+        """A withdraw of an item that is not there is a no-op."""
+        state = state_factory(
+            world_map=jnp.full(
+                (3, 3),
+                BlockType.DIRT,
+                dtype=jnp.int32,
+            ),
+            player_position=(1, 0),
+            player_direction=int(Direction.DOWN),
+            machine_types=jnp.full(
+                (3, 3),
+                Machine.NONE,
+                dtype=jnp.int32,
+            )
+            .at[1, 1]
+            .set(Machine.MINER),
+        )
+        new = withdraw_from_adjacent(state, 0)
+        assert int(new.player_inventory[0, ItemType.IRON_ORE]) == 0
+
+
+# -------------------------------------------------------------------------
+# Deposit and withdraw through factoriax_step
+# -------------------------------------------------------------------------
+
+
+class TestDepositWithdrawViaStep:
+    """End-to-end tests dispatched through factoriax_step."""
+
+    def test_deposit_via_step(self, state_factory) -> None:
+        """DEPOSIT_COAL action through the full step pipeline."""
+        import jax
+
+        from factoriax.engine.state import EnvParams
+        from factoriax.engine.step import factoriax_step
+
+        p_inv = player_inventory_grid(1, {ItemType.COAL: 5})
+        state = state_factory(
+            world_map=_DIRT_3X3,
+            player_position=(1, 1),
+            player_direction=Direction.RIGHT,
+            player_inventory=p_inv,
+            machine_types=machine_type_grid(3, 3, {(2, 1): Machine.PALLET}),
+        )
+        params = EnvParams()
+        rng = jax.random.PRNGKey(0)
+
+        state = factoriax_step(rng, state, Action.DEPOSIT_COAL, params)
+
+        eidx = entity_at(state, 1, 2)
+        assert int(state.ent_buf_count[eidx]) == 1
+        assert int(state.player_inventory[0, ItemType.COAL]) == 4
+
+    def test_withdraw_via_step(self, state_factory) -> None:
+        """WITHDRAW action pulls from the buffer slot regardless of item."""
+        import jax
+
+        from factoriax.engine.state import EnvParams
+        from factoriax.engine.step import factoriax_step
+
+        bt, bc = buffer_grids(3, 3, {(1, 2): (ItemType.IRON_ORE, 10)})
+        state = state_factory(
+            world_map=_DIRT_3X3,
+            player_position=(1, 1),
+            player_direction=Direction.RIGHT,
+            machine_types=machine_type_grid(3, 3, {(2, 1): Machine.PALLET}),
+            buffer_type=bt,
+            buffer_count=bc,
+        )
+        params = EnvParams()
+        rng = jax.random.PRNGKey(0)
+
+        state = factoriax_step(rng, state, Action.WITHDRAW, params)
+
+        eidx = entity_at(state, 1, 2)
+        assert int(state.player_inventory[0, ItemType.IRON_ORE]) == 10
+        assert int(state.ent_buf_count[eidx]) == 0

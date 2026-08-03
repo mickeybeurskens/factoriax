@@ -92,3 +92,16 @@ def test_num_slots_counts_the_declared_roles() -> None:
     """``MACHINE_NUM_SLOTS[m]`` is the length of ``MACHINE_SLOTS[m]``."""
     for machine, roles in slot_display.MACHINE_SLOTS.items():
         assert int(slot_display.MACHINE_NUM_SLOTS[int(machine)]) == len(roles)
+
+
+def test_lab_slot_roles() -> None:
+    """The lab has two INPUT slots in MACHINE_SLOT_ROLES."""
+    from factoriax.engine.constants import SlotRole
+    from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
+
+    roles = MACHINE_SLOT_ROLES[int(Machine.SCIENCE_LAB)]
+    assert roles[0] == int(SlotRole.INPUT)
+    assert roles[1] == int(SlotRole.INPUT)
+    # Padding slots beyond the lab's two are NONE.
+    for i in range(2, len(roles)):
+        assert roles[i] == int(SlotRole.NONE)

@@ -1,9 +1,12 @@
-"""Tests for the block resource and mining system (pouch model).
+"""Tests for ``mine_block`` in :mod:`factoriax.engine.step`.
 
-Mining targets the tile in front of the player. To exercise the engine
-in these tests the player is placed adjacent to the ore and faced
-toward it. For example, a player at (0, 1) with Direction.RIGHT mines an ore at
-(1, 1)).
+Mining targets the tile the player faces. It decrements ``block_resources``,
+pays the player, and turns a depleted tile to dirt. These tests place the
+player adjacent to the ore and face it, because that is the only way to reach
+the engine path.
+
+This file does not test ``engine/envs/mining.py``. That scenario has its own
+tests under ``tests/integration/scenarios/``.
 """
 
 import jax

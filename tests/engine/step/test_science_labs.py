@@ -1,17 +1,9 @@
-"""Tests for the science lab building.
+"""Tests for ``run_labs`` in :mod:`factoriax.engine.step`.
 
-Every non-trivial science lab invariant is tested here so that:
-
-1. Placing a ``SCIENCE_LAB`` item creates an entity with the right
-   machine type.
-2. The per-step delta (``EnvState.science_consumed_step``) correctly
-   sums the packs in every active lab's input slots and is reset to
-   zero on steps where nothing was consumed.
-3. Non-science-pack items sitting in a lab slot are left alone (the
-   lab is a pack sink, not a generic consumer).
-
-The engine exposes ``science_consumed_step`` as its
-input, so these invariants are load-bearing for anything built on top.
+The science lab is the one machine the step loop drives directly, rather
+than the machine passes in ``engine/machines.py``. ``run_labs`` consumes
+packs from ``ent_asm_in`` and writes the per-step science delta, which the
+reward and the observation both read.
 """
 
 from __future__ import annotations
@@ -244,15 +236,3 @@ class TestScienceConstants:
         from factoriax.engine.constants import PLACEABLE_ITEM_LIST
 
         assert int(ItemType.SCIENCE_LAB) in PLACEABLE_ITEM_LIST
-
-    def test_lab_slot_roles(self) -> None:
-        """The lab has two INPUT slots in MACHINE_SLOT_ROLES."""
-        from factoriax.engine.constants import SlotRole
-        from factoriax.playground.editor.slot_display import MACHINE_SLOT_ROLES
-
-        roles = MACHINE_SLOT_ROLES[int(Machine.SCIENCE_LAB)]
-        assert roles[0] == int(SlotRole.INPUT)
-        assert roles[1] == int(SlotRole.INPUT)
-        # Padding slots beyond the lab's two are NONE.
-        for i in range(2, len(roles)):
-            assert roles[i] == int(SlotRole.NONE)
