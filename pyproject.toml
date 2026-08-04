@@ -9,7 +9,7 @@ description = "A JAX-based grid environment for RL research"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "jax[cuda13]>=0.9.1",
+    "jax>=0.9.1",
     "flax>=0.8.0",
     "numpy>=1.26.0",
     "optax>=0.2.0",
@@ -27,6 +27,12 @@ dev = [
 ]
 docs = [
     "distrax>=0.1.9",
+]
+# factoriax itself does not depend on CUDA. This extra exists only to give
+# GPU users a one-line install command; it forwards to jax's own CUDA extra.
+# Linux + NVIDIA GPU only. See the README before installing this.
+cuda = [
+    "jax[cuda13]>=0.9.1",
 ]
 
 [tool.pytest.ini_options]

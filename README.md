@@ -14,9 +14,27 @@ inner loop.
 
 ## Install
 
+factoriax runs on CPU by default. `uv sync` installs it with no CUDA
+dependency, on any machine.
+
 ```bash
 uv sync
 ```
+
+### GPU (NVIDIA, Linux)
+
+Install the `cuda` extra to use a GPU. It adds the CUDA13 build of JAX and
+the matching NVIDIA libraries, about 1 GB.
+
+```bash
+uv sync --extra cuda
+```
+
+The same extra works through pip: `pip install factoriax[cuda]`.
+
+CAUTION: Do not install the `cuda` extra on a machine without an NVIDIA GPU
+and driver. The CUDA plugin of JAX crashes the Python process on import, with
+no error message.
 
 ## Run the playground
 
@@ -73,8 +91,8 @@ uv run ruff check factoriax tests
 `factoriax/<area>/<module>.py`, so the tests for `engine/machines.py` are the
 only thing that can sit at `tests/engine/machines/`.
 
-A mirror entry is a file or a package. Write `test_<module>.py` first. When it
-passes about 600 lines, turn it into a `<module>/` package of topic-named
+A mirror entry is a file or a package. It starts as a `test_<module>.py`
+file. Past about 600 lines, it becomes a `<module>/` package of topic-named
 files. `engine/machines.py` carries 2600 lines of tests, so its entry is a
 package split by machine kind.
 
@@ -83,13 +101,13 @@ module:
 
 - `tests/contracts/` holds a test that asserts a rule no single module owns.
   The gymnax API conformance, the invariants over random episodes, and the AST
-  guard that stops the play UI writing `EnvState` all live here.
+  guard that stops the play UI from writing `EnvState` all live here.
 - `tests/integration/` holds a test that needs two or more subpackages to have
   meaning. The editor-to-level-to-engine round trip is one.
   `tests/integration/scenarios/` holds the end-to-end scripted rollouts.
 - `tests/benchmarks/` holds scripts. Pytest does not collect it.
 
-Put a test in the mirror unless it cannot go there. A file in `contracts/` or
+A test belongs in the mirror unless it cannot go there. A file in `contracts/` or
 `integration/` states in its module docstring why it is not in the mirror.
 
 `tests/helpers/` holds support code that more than one directory shares: the
@@ -99,7 +117,7 @@ file.
 
 ### Two things that bite
 
-Only `tests/playground/` initialises a pygame display, through an autouse
+Only `tests/playground/` initializes a pygame display, through an autouse
 fixture. A test elsewhere that renders must request `pygame_display` by name.
 A file that does not will pass in a full run and fail on its own, because an
 earlier directory left a display behind.
@@ -117,8 +135,8 @@ The build writes the pages to `docs/_build/html`.
 
 The build does not run the notebooks. `nb_execution_mode` is `"off"`, and the
 `html` target removes the stored output first. A guide page therefore holds
-the source of each cell, and the figures that `docs/guides/_images` holds. To
-make a new figure, run the notebook yourself and commit the file that it
+the source of each cell, and the figures that `docs/guides/_images` holds. A
+new figure comes from running the notebook and committing the file that it
 writes.
 
 ## Where to read next
