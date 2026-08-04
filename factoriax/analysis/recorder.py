@@ -182,7 +182,7 @@ class RolloutRecorder:
 
         Returns
         -------
-        Trajectory
+        :class:`~factoriax.analysis.trajectory.Trajectory`
             Actions of shape ``(B, T_max)`` or ``(B, T_max, P)``, plus
             rewards, plus any recorded state fields under their
             trajectory names. ``B`` is the episode count after the
