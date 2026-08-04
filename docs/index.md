@@ -8,11 +8,50 @@ so `jax.vmap` runs a batch of environments on the GPU, with no Python in the
 inner loop.
 
 ```{toctree}
+:maxdepth: 1
+:hidden:
+:caption: Home
+
+Home <self>
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+:caption: Start here
+
+start-here/index
+start-here/getting_started
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+:caption: Training models using Factoriax
+
+training/index
+training/train_ppo_mining
+training/record_and_replay_a_rollout
+training/build_a_custom_scenario
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+:caption: Understanding Factoriax
+
+understanding/index
+understanding/state_and_step
+understanding/observation_space
+understanding/action_design
+understanding/scenarios_and_curriculum
+```
+
+```{toctree}
 :maxdepth: 2
 :hidden:
+:caption: API documentation
 
-guides/getting_started
-guides/ppo_training_example
 api/index
 ```
 
@@ -32,11 +71,16 @@ Five scenarios carry an id: `Mining-v1`, `MinerBootstrap-v1`,
 
 ## Where to go next
 
-- {doc}`guides/getting_started`: the environment, the observation, the action
-  space, and a random rollout.
-- {doc}`guides/ppo_training_example`: train a PPO agent on a Factoriax task.
-- {doc}`api/index`: the reference for every public module. Sphinx builds it
-  from the docstrings.
+Pick a section by what you want to do, not by what you want to read.
+
+- {doc}`start-here/index`: new to Factoriax. Follow one path to a working
+  rollout.
+- {doc}`training/index`: you know Factoriax and have a specific training
+  task, such as running PPO or recording a rollout.
+- {doc}`understanding/index`: you want the reasoning behind a design choice,
+  such as the observation profiles or the action space.
+- {doc}`api/index`: you know what you want and need the exact signature.
+  Sphinx builds this section from the docstrings.
 
 ## Run the playground
 

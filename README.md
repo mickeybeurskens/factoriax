@@ -8,7 +8,7 @@ so `jax.vmap` runs a batch of environments on the GPU, with no Python in the
 inner loop.
 
 <p align="center">
-  <img src="docs/guides/_images/getting_started_state.png" width="420"
+  <img src="docs/start-here/_images/getting_started_state.png" width="420"
        alt="A generated world, with ore patches and a player" />
 </p>
 
@@ -134,17 +134,26 @@ cd docs && make html
 The build writes the pages to `docs/_build/html`.
 
 The build does not run the notebooks. `nb_execution_mode` is `"off"`, and the
-`html` target removes the stored output first. A guide page therefore holds
-the source of each cell, and the figures that `docs/guides/_images` holds. A
-new figure comes from running the notebook and committing the file that it
-writes.
+`html` target removes the stored output first. A notebook page therefore
+holds the source of each cell, and the figures that its `_images` directory
+holds. A new figure comes from running the notebook and committing the file
+that it writes.
 
 ## Where to read next
 
-- [`docs/guides/getting_started.ipynb`](docs/guides/getting_started.ipynb):
-  the environment, the observation, the action space, and a random rollout.
-- [`docs/guides/ppo_training_example.ipynb`](docs/guides/ppo_training_example.ipynb):
-  train a PPO agent on a Factoriax task.
+The docs follow the [Diátaxis](https://diataxis.fr) framework: a tutorial to
+start, task-based guides for real work, explanation for the reasoning, and a
+generated reference.
+
+- [`docs/start-here/getting_started.ipynb`](docs/start-here/getting_started.ipynb):
+  the one-path tutorial. The environment, the observation, the action space,
+  and a random rollout.
+- [`docs/training/`](docs/training): task-based guides, such as
+  [`train_ppo_mining.ipynb`](docs/training/train_ppo_mining.ipynb), that
+  assume you finished the tutorial.
+- [`docs/understanding/`](docs/understanding): the reasoning behind the
+  state representation, the observation space, the action design, and the
+  scenario and curriculum system.
 - [`docs/api/index.rst`](docs/api/index.rst): the reference for every public
   module. Sphinx builds it from the docstrings.
 - [`ISSUES.md`](ISSUES.md): the known defects that stay open.
