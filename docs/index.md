@@ -1,11 +1,10 @@
 # Factoriax
 
-A grid world for reinforcement learning research, in the style of Factorio,
-written in JAX.
+> "The Factory must grow!"
 
-The state is a set of JAX arrays. `step` and `reset` compile to one XLA graph,
-so `jax.vmap` runs a batch of environments on the GPU, with no Python in the
-inner loop.
+Factoriax is a GPU accelerated factory building simulator for reinforcement learning research in the style of the game [Factorio](https://www.factorio.com/), written in JAX.
+
+---
 
 ```{toctree}
 :maxdepth: 1
@@ -27,12 +26,20 @@ start-here/getting_started
 ```{toctree}
 :maxdepth: 1
 :hidden:
-:caption: Training models using Factoriax
+:caption: Training models
 
 training/index
 training/train_ppo_mining
 training/record_and_replay_a_rollout
 training/build_a_custom_scenario
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+:caption: Modifying environments
+
+modifying/index
 ```
 
 ```{toctree}
@@ -55,37 +62,25 @@ understanding/scenarios_and_curriculum
 api/index
 ```
 
-## Build an environment
+## Why Factoriax?
 
-```python
-import jax
+Factorio is quite a cool game with an enormous amount of emergent gameplay complexity, and it is interesting to use it as a benchmark to evaluate AI systems.
+However, even though the game is famous for being [carefully optimized](https://www.factorio.com/blog/post/fff-421), training Reinforcement Learning agents on the base game is very slow.
+Factoriax is basically a simplified version of the core Factorio game mechanics that can run millions of game ticks per second on higher end GPUs (as of writing), while also running quickly enough to train models on local laptop GPUs.
+This allows researchers to test their RL ideas in Factoriax at scale, while allowing students to get familiar with RL concepts without the need for enormous GPU clusters.
 
-from factoriax.make import env_from_name
+And honestly, Factorio is just a lot of fun. 
+Even though the Factoriax implementation of the original game mechanics is quite minimal, I hope it does some justice to the original game.
 
-env, params = env_from_name("EasyRocket-v1")
-obs, state = env.reset_env(jax.random.PRNGKey(0), params)
-```
+## Using The Docs
+The documentation is divided in different sections:
 
-Five scenarios carry an id: `Mining-v1`, `MinerBootstrap-v1`,
-`ScienceTiers-v1`, `EasyRocket-v1`, and `Rocket-v1`.
+- {doc}`start-here/index`: A tutorial to get you up and running with Factoriax and JAX as soon as possible.
+- {doc}`training/index`: Guides on how to use Factoriax to train your own reinforcement learning models.
+- {doc}`modifying/index`: Guides on how to create your own Factoriax environments and extend basic functionality.
+- {doc}`understanding/index`: A more in depth discussion of the design decisions behind Factoriax. Useful to improve your understanding more broadly.
+- {doc}`api/index`: A reference for understanding the code in the repository.
 
-## Where to go next
+Remember:
+> The factory must grow!
 
-Pick a section by what you want to do, not by what you want to read.
-
-- {doc}`start-here/index`: new to Factoriax. Follow one path to a working
-  rollout.
-- {doc}`training/index`: you know Factoriax and have a specific training
-  task, such as running PPO or recording a rollout.
-- {doc}`understanding/index`: you want the reasoning behind a design choice,
-  such as the observation profiles or the action space.
-- {doc}`api/index`: you know what you want and need the exact signature.
-  Sphinx builds this section from the docstrings.
-
-## Run the playground
-
-The playground is the human interface. It holds the game and the level editor.
-
-```bash
-uv run python -m factoriax.playground
-```
