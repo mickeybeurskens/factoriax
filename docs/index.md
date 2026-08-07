@@ -19,8 +19,12 @@ Home <self>
 :hidden:
 :caption: Start here
 
-start-here/index
-start-here/getting_started
+start_here/index
+start_here/getting_started
+start_here/moving_player
+start_here/speeding_up
+start_here/saving_runs
+start_here/plotting_results
 ```
 
 ```{toctree}
@@ -30,16 +34,6 @@ start-here/getting_started
 
 training/index
 training/train_ppo_mining
-training/record_and_replay_a_rollout
-training/build_a_custom_scenario
-```
-
-```{toctree}
-:maxdepth: 1
-:hidden:
-:caption: Modifying environments
-
-modifying/index
 ```
 
 ```{toctree}
@@ -52,6 +46,19 @@ understanding/state_and_step
 understanding/observation_space
 understanding/action_design
 understanding/scenarios_and_curriculum
+```
+
+```{toctree}
+:maxdepth: 1
+:hidden:
+:caption: Modifying environments
+
+modifying/index
+modifying/change_observations
+modifying/change_actions
+modifying/change_textures
+modifying/adding_mechanics
+modifying/rewriting_base_mechanics
 ```
 
 ```{toctree}
