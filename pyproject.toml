@@ -20,17 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "mypy>=1.8.0",
-    "ruff>=0.2.0",
-]
-docs = [
-    "distrax>=0.1.9",
-]
-# factoriax itself does not depend on CUDA. This extra exists only to give
-# GPU users a one-line install command; it forwards to jax's own CUDA extra.
-# Linux + NVIDIA GPU only. See the README before installing this.
+# JAX CPU version is usually installed by default. 
+# This is a convenience feature for running JAX with CUDA support.
+# Check out the JAX installation documentation for your particular GPU setup.
 cuda = [
     "jax[cuda13]>=0.9.1",
 ]
