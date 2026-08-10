@@ -1,17 +1,14 @@
-SPHINXBUILD = JAX_PLATFORMS=cpu uv run --group docs sphinx-build
-NBSTRIPOUT  = uv run --group dev nbstripout
+RUNNER ?= uv run --group docs 
+SPHINXBUILD = JAX_PLATFORMS=cpu $(RUNNER) sphinx-build
 SOURCEDIR   = .
 BUILDDIR    = _build
 
-.PHONY: help html clean strip-notebooks
+.PHONY: help html clean 
 
 help:
 	$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)"
 
-strip-notebooks:
-	find . -name "*.ipynb" -not -path "./_build/*" -exec $(NBSTRIPOUT) {} +
-
-html: strip-notebooks
+html: 
 	$(SPHINXBUILD) -b html "$(SOURCEDIR)" "$(BUILDDIR)/html"
 
 clean:
