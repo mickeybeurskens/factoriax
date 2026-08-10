@@ -3,7 +3,6 @@
 A slot count comes from the machine kind. A write outside that count is
 refused, and the slots survive the round trip through a :class:`Level`."""
 
-
 from factoriax.engine.constants import ItemType, Machine
 from factoriax.playground.editor.state import (
     InvTarget,
@@ -47,6 +46,7 @@ class TestGetInventorySlots:
         slots = get_inventory_slots(state, ("machine", 2, 2))
         assert slots[0] == (int(ItemType.IRON_ORE), 10)
 
+
 class TestSetInventorySlot:
     """Tests for set_inventory_slot."""
 
@@ -65,6 +65,7 @@ class TestSetInventorySlot:
         set_inventory_slot(state, target, 0, int(ItemType.COAL), 5)
         assert state.machine_inventory[1, 1, int(ItemType.COAL)] == 5
 
+
 class TestClearInventorySlot:
     """Tests for clear_inventory_slot."""
 
@@ -75,6 +76,7 @@ class TestClearInventorySlot:
         clear_inventory_slot(state, target, 0)
         slots = get_inventory_slots(state, target)
         assert slots[0] == (int(ItemType.EMPTY), 0)
+
 
 class TestGetNumSlots:
     """Tests for get_num_slots."""
@@ -92,6 +94,7 @@ class TestGetNumSlots:
         state = new_editor_state(5, 5)
         set_machine(state, 0, 0, int(Machine.PALLET), 0)
         assert get_num_slots(state, ("machine", 0, 0)) == 1
+
 
 class TestPerPlayerInventoryRoundTrip:
     """Tests for per-player inventory through Level save/load."""
@@ -113,4 +116,3 @@ class TestPerPlayerInventoryRoundTrip:
         state = new_editor_state(5, 5)
         level = editor_state_to_level(state)
         assert level.player_inventories is None
-

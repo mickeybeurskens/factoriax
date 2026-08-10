@@ -40,4 +40,3 @@ class TestApplyScale:
         assert theme.HEADER_H == 88
         assert theme.BORDER_PX == 8
         assert theme.SCROLLBAR_W == 16
-

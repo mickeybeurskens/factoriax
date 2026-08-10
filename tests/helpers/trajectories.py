@@ -115,4 +115,3 @@ def make_minimal_traj(num_eps: int, num_steps: int) -> Trajectory:
         Minimal trajectory for error-condition tests.
     """
     return Trajectory(actions=np.zeros((num_eps, num_steps), dtype=np.int32))
-

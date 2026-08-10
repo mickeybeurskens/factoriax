@@ -62,6 +62,7 @@ class TestAddColumn:
         assert state.machine_types.shape == expected
         assert state.machine_directions.shape == expected
 
+
 class TestRemoveColumn:
     """Tests for remove_column."""
 
@@ -101,6 +102,7 @@ class TestRemoveColumn:
         assert state.machine_types.shape == expected
         assert state.machine_directions.shape == expected
 
+
 class TestAddRow:
     """Tests for add_row."""
 
@@ -132,6 +134,7 @@ class TestAddRow:
         assert state.block_resources.shape == expected
         assert state.machine_types.shape == expected
         assert state.machine_directions.shape == expected
+
 
 class TestRemoveRow:
     """Tests for remove_row."""
@@ -166,6 +169,7 @@ class TestRemoveRow:
         assert state.block_resources.shape == expected
         assert state.machine_types.shape == expected
         assert state.machine_directions.shape == expected
+
 
 class TestResizeRoundTrip:
     """Tests that resize + save/load produces valid levels."""
@@ -240,6 +244,7 @@ class TestResizeRoundTrip:
         assert np.all(state.block_map[:, 2:] == int(BlockType.DIRT))
         assert np.all(state.machine_types[:, 2:] == int(Machine.NONE))
 
+
 class TestResizeClipsEntities:
     """Tests for entity clipping on map resize."""
 
@@ -260,4 +265,3 @@ class TestResizeClipsEntities:
         set_player_position(state, 0, 0, 0)
         remove_column(state)
         assert state.player_positions == {0: (0, 0)}
-

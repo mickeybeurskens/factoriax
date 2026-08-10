@@ -265,4 +265,3 @@ class TestActionColors:
         cmap = _get_action_cmap(NUM_ACTIONS)
         assert cmap.N == NUM_ACTIONS
         assert len({cmap(i) for i in range(NUM_ACTIONS)}) == NUM_ACTIONS
-

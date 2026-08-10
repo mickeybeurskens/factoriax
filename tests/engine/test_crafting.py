@@ -109,9 +109,10 @@ class TestCraftRecipe:
 
         assert int(new.player_inventory[0, _IN_A]) == 2
         assert int(new.player_inventory[0, _IN_B]) == 2
-        assert int(new.player_inventory[0, _OUT]) == BASE_RECIPES[
-            _IRON_PLATE_ROW
-        ].output_count
+        assert (
+            int(new.player_inventory[0, _OUT])
+            == BASE_RECIPES[_IRON_PLATE_ROW].output_count
+        )
 
     def test_a_recipe_row_of_minus_one_does_nothing(
         self, state_factory, params
@@ -127,9 +128,7 @@ class TestCraftRecipe:
 
         assert jnp.array_equal(new.player_inventory, state.player_inventory)
 
-    def test_an_unaffordable_craft_spends_nothing(
-        self, state_factory, params
-    ) -> None:
+    def test_an_unaffordable_craft_spends_nothing(self, state_factory, params) -> None:
         """A refused craft must not take the inputs it could reach."""
         state = _state(state_factory, IRON_ORE=1)
         new = craft_recipe(state, params, 0, _IRON_PLATE_ROW)
@@ -156,17 +155,13 @@ class TestCraftRecipe:
         """A craft that exactly reaches the cap is not a refusal."""
         cap = int(PLAYER_MAX_STACK[_OUT])
         yield_count = BASE_RECIPES[_IRON_PLATE_ROW].output_count
-        state = _state(
-            state_factory, IRON_ORE=5, COAL=5, IRON_PLATE=cap - yield_count
-        )
+        state = _state(state_factory, IRON_ORE=5, COAL=5, IRON_PLATE=cap - yield_count)
         new = craft_recipe(state, params, 0, _IRON_PLATE_ROW)
 
         assert int(new.player_inventory[0, _OUT]) == cap
         assert int(new.player_inventory[0, _IN_A]) == 4
 
-    def test_leaves_every_other_state_field_alone(
-        self, state_factory, params
-    ) -> None:
+    def test_leaves_every_other_state_field_alone(self, state_factory, params) -> None:
         """A craft writes ``player_inventory`` and nothing else."""
         state = _state(state_factory, IRON_ORE=3, COAL=3)
         new = craft_recipe(state, params, 0, _IRON_PLATE_ROW)

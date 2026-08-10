@@ -341,6 +341,7 @@ class TestPlotInventory:
 
         plt.close(fig)
 
+
 class TestItemLabels:
     """``DEFAULT_ITEM_LABELS`` against the ``ItemType`` enum."""
 

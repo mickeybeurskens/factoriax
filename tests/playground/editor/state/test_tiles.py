@@ -48,6 +48,7 @@ class TestNewEditorState:
         state = new_editor_state(5, 5, name="test_level")
         assert state.name == "test_level"
 
+
 class TestSetTile:
     """Tests for set_tile."""
 
@@ -83,6 +84,7 @@ class TestSetTile:
         set_tile(state, 0, 0, int(BlockType.IRON), brush, rng)
         assert 10 <= state.block_resources[0, 0] <= 20
 
+
 class TestSetMachine:
     """Tests for set_machine."""
 
@@ -97,6 +99,7 @@ class TestSetMachine:
         state = new_editor_state(5, 5)
         set_machine(state, 10, 10, int(Machine.MINER), int(Direction.DOWN))
         assert state.dirty is False
+
 
 class TestFillRectTiles:
     """Tests for fill_rect_tiles."""
@@ -125,6 +128,7 @@ class TestFillRectTiles:
         resources = state.block_resources[0:5, 0:5]
         assert np.all(resources >= 5)
         assert np.all(resources <= 15)
+
 
 class TestEraseTile:
     """Tests for erase_tile, erase_block, and erase_machine."""
@@ -173,4 +177,3 @@ class TestEraseTile:
         state = new_editor_state(5, 5)
         erase_machine(state, 10, 10)
         assert state.dirty is False
-

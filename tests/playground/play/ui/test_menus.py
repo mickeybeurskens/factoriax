@@ -88,7 +88,6 @@ class TestRenderInventoryMenu:
         assert result.shape == (_SH, _SW, 4)
 
 
-
 class TestRenderWelcomeScreen:
     """Output-contract tests for render_welcome_screen."""
 

@@ -30,6 +30,7 @@ class FakeRollout:
     reward: np.ndarray
     done: np.ndarray
 
+
 class TestRolloutRecorder:
     """Tests for RolloutRecorder: segmentation, padding, and output shape."""
 

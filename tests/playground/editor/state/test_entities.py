@@ -37,6 +37,7 @@ class TestSampleResource:
 # Entity placement
 # ---------------------------------------------------------------------------
 
+
 class TestSetPlayerPosition:
     """Tests for set_player_position."""
 
@@ -65,6 +66,7 @@ class TestSetPlayerPosition:
         assert state.player_positions == {}
         assert state.dirty is False
 
+
 class TestRemovePlayerAt:
     """Tests for remove_player_at."""
 
@@ -81,6 +83,7 @@ class TestRemovePlayerAt:
         remove_player_at(state, 2, 2)
         assert state.dirty is False
 
+
 class TestEraseEntity:
     """Tests for erase_entity."""
 
@@ -89,6 +92,7 @@ class TestEraseEntity:
         set_player_position(state, 0, 2, 2)
         erase_entity(state, 2, 2)
         assert state.player_positions == {}
+
 
 class TestEntityRoundTrip:
     """Tests for entity save/load through EditorState ↔ Level."""
@@ -111,4 +115,3 @@ class TestEntityRoundTrip:
 # ---------------------------------------------------------------------------
 # Inventory helpers
 # ---------------------------------------------------------------------------
-

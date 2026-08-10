@@ -121,4 +121,3 @@ class TestLevelConversion:
         state = new_editor_state(5, 5)
         level = editor_state_to_level(state)
         assert level.machine_directions is None
-
