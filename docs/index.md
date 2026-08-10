@@ -82,7 +82,7 @@ Even though the Factoriax implementation of the original game mechanics is quite
 ## Using The Docs
 The documentation is divided in different sections:
 
-- {doc}`start-here/index`: A tutorial to get you up and running with Factoriax and JAX as soon as possible.
+- {doc}`start_here/index`: A tutorial to get you up and running with Factoriax and JAX as soon as possible.
 - {doc}`training/index`: Guides on how to use Factoriax to train your own reinforcement learning models.
 - {doc}`modifying/index`: Guides on how to create your own Factoriax environments and extend basic functionality.
 - {doc}`understanding/index`: A more in depth discussion of the design decisions behind Factoriax. Useful to improve your understanding more broadly.

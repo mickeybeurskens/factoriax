@@ -1,7 +1,7 @@
-# Introduction 
+# Model Training
 
 This section holds task-based guides. Each page assumes you finished
-{doc}`../start-here/index`, and starts from a specific task instead of from
+{doc}`../start_here/index`, and starts from a specific task instead of from
 zero. Pages here do not teach concepts from scratch; they link to
 {doc}`../understanding/index` for the reasoning behind a design.
 
