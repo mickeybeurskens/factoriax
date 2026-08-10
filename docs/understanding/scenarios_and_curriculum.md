@@ -14,7 +14,7 @@ achievements and rewards build a curriculum.
   settings and the auto-reset wrapper the caller asked for.
   `list_scenarios()` returns every registered spec.
 - An achievement is a bit that records that the world reached a state during
-  an episode, such as Craftax-style unlocks. The environment state holds the
+  an episode, such as [Craftax]()-style unlocks. The environment state holds the
   bit after it unlocks. A scenario can read the bits to track progress, or
   build a curriculum from them, independent of what the reward function
   pays. The bit order is a wire format: a recorded trajectory stores

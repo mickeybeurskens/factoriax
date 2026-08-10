@@ -34,6 +34,7 @@ start_here/plotting_results
 
 training/index
 training/train_ppo_mining
+training/plotting_results
 ```
 
 ```{toctree}

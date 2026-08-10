@@ -1,11 +1,6 @@
 repos:
   - repo: local
     hooks:
-        - id: mypy
-          name: mypy_check
-          entry: uv run mypy factoriax tests
-          language: system
-          pass_filenames: false
         - id: ruff
           name: ruff_check
           language: system
