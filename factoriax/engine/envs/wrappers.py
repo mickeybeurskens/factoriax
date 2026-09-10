@@ -508,7 +508,7 @@ class LogWrapper(environment.Environment[LogEnvState, EnvParams]):  # type: igno
     Examples
     --------
     >>> import factoriax
-    >>> env, params = factoriax.make("Mining-v1", auto_reset=True)
+    >>> env, params = factoriax.make("EasyRocket-v1", auto_reset=True)
     >>> from factoriax.engine.envs.wrappers import LogWrapper
     >>> log_env = LogWrapper(env)
     >>> # log_env.step_env(...) now returns info["returned_episode_returns"]

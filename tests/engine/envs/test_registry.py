@@ -11,7 +11,12 @@ import pytest
 from jax import random
 
 from factoriax.engine.constants import MAX_ACHIEVEMENTS, Action
-from factoriax.engine.envs.registry import ScenarioSpec, list_scenarios, make
+from factoriax.engine.envs.registry import (
+    _WITHHELD_SCENARIOS,
+    ScenarioSpec,
+    list_scenarios,
+    make,
+)
 from factoriax.engine.envs.wrappers import ActionMaskWrapper, AutoResetWrapper
 
 _NOOP = int(Action.NOOP)
@@ -22,9 +27,7 @@ def test_catalog_lists_expected_scenarios() -> None:
     assert set(catalog) == {
         "EasyRocket-v1",
         "Rocket-v1",
-        "Mining-v1",
         "MinerBootstrap-v1",
-        "ScienceTiers-v1",
     }
     for spec in catalog.values():
         assert isinstance(spec, ScenarioSpec)
@@ -61,5 +64,16 @@ def test_make_unknown_id_raises() -> None:
 def test_removed_curriculum_ids_raise(env_id: str) -> None:
     """The forward-curriculum stage envs are gone. States define the
     backward curriculum, and environments do not."""
+    with pytest.raises(KeyError):
+        make(env_id)
+
+
+@pytest.mark.parametrize("env_id", ["Mining-v1", "ScienceTiers-v1"])
+def test_withheld_ids_raise(env_id: str) -> None:
+    """These two are built but not offered. Their code is unchanged and
+    ``_WITHHELD_SCENARIOS`` still holds their spec, but the public entry
+    point must not resolve them."""
+    assert env_id in _WITHHELD_SCENARIOS
+    assert env_id not in dict(list_scenarios())
     with pytest.raises(KeyError):
         make(env_id)

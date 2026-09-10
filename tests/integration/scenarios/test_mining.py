@@ -18,8 +18,8 @@ from jax import random
 
 from factoriax.engine.constants import Action, BlockType, Direction, ItemType
 from factoriax.engine.envs.mining import mining
+from factoriax.engine.envs.registry import _WITHHELD_SCENARIOS
 from factoriax.engine.tables import DIRECTIONS
-from factoriax.make import env_from_name
 
 MAP_SIZE = 8
 MAX_SCORE = 30
@@ -137,7 +137,9 @@ def test_scripted_oracle_reaches_max_score(env_and_params, jit_step, seed) -> No
     assert total == MAX_SCORE
 
 
-def test_registry_default_matches_factory() -> None:
-    env, _ = env_from_name("Mining-v1")
+def test_withheld_spec_matches_factory() -> None:
+    """Mining-v1 is withheld from the public registry, so build it from its
+    spec. The defaults of that spec must still match the factory."""
+    env, _ = _WITHHELD_SCENARIOS["Mining-v1"].build()
     assert env.obs == "superficial_local"
     assert env.obs_radius == MAP_SIZE - 1

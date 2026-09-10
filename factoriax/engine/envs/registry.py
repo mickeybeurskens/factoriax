@@ -35,15 +35,6 @@ class ScenarioSpec:
 
 
 SCENARIOS: dict[str, ScenarioSpec] = {
-    "Mining-v1": ScenarioSpec(
-        name="Mining",
-        description=(
-            "Hand-mine ore on a randomly generated 8×8 map. "
-            "Ten iron-ore tiles with 3 resources each; 100-step budget."
-        ),
-        build=mining,
-        resample=True,
-    ),
     "MinerBootstrap-v1": ScenarioSpec(
         name="Miner Bootstrap",
         description=(
@@ -53,18 +44,6 @@ SCENARIOS: dict[str, ScenarioSpec] = {
             "300-step budget, early exit on completion."
         ),
         build=miner_bootstrap,
-        resample=True,
-    ),
-    "ScienceTiers-v1": ScenarioSpec(
-        name="Science Tiers",
-        description=(
-            "Three-tier science economy on the 16x16 six-patch map with "
-            "one pre-placed lab. Labs pay 1 per pack consumed, any tier; "
-            "ore costs double per tier while output quadruples, so "
-            "science/ore doubles: 0.5 / 1.0 / 2.0. Dense throughput "
-            "reward, unbounded score; 1000-step budget."
-        ),
-        build=science_tiers,
         resample=True,
     ),
     "EasyRocket-v1": ScenarioSpec(
@@ -84,6 +63,36 @@ SCENARIOS: dict[str, ScenarioSpec] = {
         ),
         build=rocket,
         resample=False,
+    ),
+}
+
+
+#: Scenarios that are built but not offered. :data:`SCENARIOS` does not hold
+#: them, so :func:`make` raises ``KeyError`` on their ids and
+#: :func:`list_scenarios` does not list them. Their environment code is
+#: unchanged and still imported. Move an entry back into :data:`SCENARIOS` to
+#: offer it again.
+_WITHHELD_SCENARIOS: dict[str, ScenarioSpec] = {
+    "Mining-v1": ScenarioSpec(
+        name="Mining",
+        description=(
+            "Hand-mine ore on a randomly generated 8×8 map. "
+            "Ten iron-ore tiles with 3 resources each; 100-step budget."
+        ),
+        build=mining,
+        resample=True,
+    ),
+    "ScienceTiers-v1": ScenarioSpec(
+        name="Science Tiers",
+        description=(
+            "Three-tier science economy on the 16x16 six-patch map with "
+            "one pre-placed lab. Labs pay 1 per pack consumed, any tier; "
+            "ore costs double per tier while output quadruples, so "
+            "science/ore doubles: 0.5 / 1.0 / 2.0. Dense throughput "
+            "reward, unbounded score; 1000-step budget."
+        ),
+        build=science_tiers,
+        resample=True,
     ),
 }
 

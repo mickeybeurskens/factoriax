@@ -23,6 +23,7 @@ from factoriax.engine.constants import (
     Machine,
 )
 from factoriax.engine.envs.easy_rocket import easy_rocket
+from factoriax.engine.envs.registry import _WITHHELD_SCENARIOS
 from factoriax.engine.envs.science_tiers import (
     SCIENCE_TIERS_MAX_TIMESTEPS,
     SCIENCE_TIERS_RECIPES,
@@ -31,7 +32,6 @@ from factoriax.engine.envs.science_tiers import (
     TIER_PACKS,
     science_tiers,
 )
-from factoriax.make import env_from_name
 
 _BLOCK_COUNT_PER_PATCH = 4  # six 2x2 patches, one per ore block
 
@@ -47,8 +47,10 @@ def science_step(science_env):
     return jax.jit(env.step_env)
 
 
-def test_science_tiers_registered() -> None:
-    env, params = env_from_name("ScienceTiers-v1")
+def test_science_tiers_withheld_spec_builds() -> None:
+    """ScienceTiers-v1 is withheld from the public registry, so build it from
+    its spec. The environment itself must still reset and observe."""
+    env, params = _WITHHELD_SCENARIOS["ScienceTiers-v1"].build()
     obs, _ = env.reset_env(random.PRNGKey(0), params)
     assert obs.shape == env.observation_space(params).shape
 

@@ -4,11 +4,9 @@ A scenario is a named environment, with a level, a reward, and a set of
 achievements. :func:`env_from_name` takes the id of a scenario and returns the
 environment together with its parameters.
 
-These five scenarios carry an id:
+These three scenarios carry an id:
 
-- ``"Mining-v1"``
 - ``"MinerBootstrap-v1"``
-- ``"ScienceTiers-v1"``
 - ``"EasyRocket-v1"``
 - ``"Rocket-v1"``
 
