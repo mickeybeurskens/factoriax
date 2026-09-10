@@ -9,7 +9,7 @@ Factoriax is a GPU accelerated factory building simulator for reinforcement lear
        alt="A Factoriax factory: miners on ore patches, belts that carry ore to furnaces and assemblers, and a player among them" />
 </p>
 
-[Read the documentation](docs/index.md)
+[Read the documentation](https://mickeybeurskens.github.io/factoriax/)
 for the tutorial, the API reference, and the design notes. To build the
 documentation as HTML, run `cd docs && make html`.
 
@@ -96,7 +96,7 @@ To open the playground, run this command:
 python -m factoriax.playground
 ```
 
-More information is available [in the documentation](docs/start_here/playing_manually.md).
+More information is available [in the documentation](https://mickeybeurskens.github.io/factoriax/start_here/playing_manually.html).
 
 ## Build An Environment
 
