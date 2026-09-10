@@ -7,7 +7,7 @@ learning (training an agent by reward). It runs on a GPU and follows the style
 of the game [Factorio](https://www.factorio.com/). It is written in JAX.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mickeybeurskens/factoriax/main/docs/_static/title_image.png"
+  <img src="docs/_static/title_image.png"
        alt="A Factoriax factory: miners on ore patches, belts that carry ore to furnaces and assemblers, and a player among them" />
 </p>
 
@@ -15,7 +15,7 @@ The state of the game is a set of JAX arrays. The `step` and `reset` functions
 compile to one XLA graph. `jax.vmap` then runs a batch of environments on the
 GPU. No Python code runs in the inner loop.
 
-[Read the documentation](https://github.com/mickeybeurskens/factoriax/blob/main/docs/index.md)
+[Read the documentation](docs/index.md)
 for the tutorial, the API reference, and the design notes. To build the
 documentation as HTML, run `cd docs && make html`.
 
@@ -123,7 +123,7 @@ Editor opens the level editor. Paint terrain and place machines to author the
 fixed maps that scenarios load. Press `F5` to play-test the map. Press
 `Ctrl+S` to save the map to the `levels/` directory.
 
-[Playing A Game Manually](https://github.com/mickeybeurskens/factoriax/blob/main/docs/start_here/playing_manually.md)
+[Playing A Game Manually](docs/start_here/playing_manually.md)
 describes both in full.
 
 ## Build An Environment
