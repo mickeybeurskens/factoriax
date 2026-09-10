@@ -134,7 +134,7 @@ Reinforcement Learning (EWRL 2026). If you use Factoriax in your research then p
   booktitle = {19th European Workshop on Reinforcement Learning (EWRL)},
   year      = {2026},
   address   = {Lille, France},
-  url       = {https://ewrl-org.github.io/ewrl-2026/poster_148.html}
+  url       = {https://github.com/mickeybeurskens/factoriax}
 }
 ```
 
