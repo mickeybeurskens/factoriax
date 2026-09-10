@@ -1,52 +1,132 @@
 # Factoriax
 
-A grid world for reinforcement learning research, in the style of Factorio,
-written in JAX.
+> "The Factory must grow!"
 
-The state is a set of JAX arrays. `step` and `reset` compile to one XLA graph,
-so `jax.vmap` runs a batch of environments on the GPU, with no Python in the
-inner loop.
+Factoriax is a factory building simulator for research into reinforcement
+learning (training an agent by reward). It runs on a GPU and follows the style
+of the game [Factorio](https://www.factorio.com/). It is written in JAX.
 
 <p align="center">
-  <img src="docs/start-here/_images/getting_started_state.png" width="420"
-       alt="A generated world, with ore patches and a player" />
+  <img src="https://raw.githubusercontent.com/mickeybeurskens/factoriax/main/docs/_static/title_image.png"
+       alt="A Factoriax factory: miners on ore patches, belts that carry ore to furnaces and assemblers, and a player among them" />
 </p>
 
-## Install
+The state of the game is a set of JAX arrays. The `step` and `reset` functions
+compile to one XLA graph. `jax.vmap` then runs a batch of environments on the
+GPU. No Python code runs in the inner loop.
 
-factoriax runs on CPU by default. `uv sync` installs it with no CUDA
-dependency, on any machine.
+[Read the documentation](https://github.com/mickeybeurskens/factoriax/blob/main/docs/index.md)
+for the tutorial, the API reference, and the design notes. To build the
+documentation as HTML, run `cd docs && make html`.
+
+## Why Factoriax?
+
+Factorio is a game with a large amount of emergent gameplay complexity. That
+makes it interesting as a benchmark for AI systems. The game is
+[carefully optimized](https://www.factorio.com/blog/post/fff-421). Training
+reinforcement learning agents on the base game is still very slow.
+
+Factoriax is a simplified version of the core Factorio game mechanics. On a
+higher end GPU it runs millions of game ticks per second, as of writing. It
+also runs fast enough to train models on a laptop GPU. Researchers can
+therefore test their ideas at scale. Students can learn reinforcement learning
+without a large GPU cluster.
+
+Factorio is also a lot of fun. The Factoriax version of the original game
+mechanics is minimal. I hope that it does some justice to the original game.
+
+## Installation
+
+To install the most recent release from PyPi, run this command:
 
 ```bash
+pip install factoriax
+```
+
+To install it with uv, run this command instead:
+
+```bash
+uv add factoriax
+```
+
+### GPU Support
+
+Factoriax installs the CPU version of JAX by default. Read
+[the JAX documentation](https://docs.jax.dev/en/latest/installation.html#installation)
+to find the version of JAX for your hardware. If your system supports CUDA13,
+run this command after you install Factoriax:
+
+```bash
+pip install "jax[cuda13]"
+```
+
+To do the same with uv, run this command:
+
+```bash
+uv pip install "jax[cuda13]"
+```
+
+### Most Recent Build For Research
+
+Install an editable build if you want the most recent commit on main. Install
+an editable build also if you want to change the source code of Factoriax
+while you work on your own project.
+
+```bash
+git clone https://github.com/mickeybeurskens/factoriax.git
+pip install -e ./factoriax
+```
+
+To do the same with uv, run these commands:
+
+```bash
+git clone https://github.com/mickeybeurskens/factoriax.git
+uv add --editable ./factoriax
+```
+
+### Development Build
+
+The development build keeps the development packages in sync. Do not use it if
+you include Factoriax as a dependency of your own project.
+
+```bash
+git clone https://github.com/mickeybeurskens/factoriax.git
 uv sync
 ```
 
-### GPU (NVIDIA, Linux)
-
-Install the `cuda` extra to use a GPU. It adds the CUDA13 build of JAX and
-the matching NVIDIA libraries, about 1 GB.
+`uv sync` removes the GPU version of JAX. To keep the GPU version, run this
+command instead:
 
 ```bash
 uv sync --extra cuda
 ```
 
-The same extra works through pip: `pip install factoriax[cuda]`.
+## Play The Game First
 
-CAUTION: Do not install the `cuda` extra on a machine without an NVIDIA GPU
-and driver. The CUDA plugin of JAX crashes the Python process on import, with
-no error message.
+Factoriax has a human interface, called the playground. Play it for a few
+minutes before you train a model. The observation and the action space are
+easier to read after you mine an ore patch and place a miner yourself.
 
-## Run the playground
-
-The playground is the human interface. It holds the game and the level editor.
+To open the playground, run this command:
 
 ```bash
-uv run python -m factoriax.playground
+python -m factoriax.playground
 ```
 
-The launcher opens with three entries: Play, Editor, and Settings.
+The launcher shows four entries: Play, Editor, Settings, and Quit.
 
-## Build an environment
+Play generates a world and puts you in it. Move with the `WASD` keys. Hold
+`Space` to mine the ore under the player. Press `I` to craft. Press `E` to
+place the machine that you crafted. Press `?` for the full list of controls.
+
+Editor opens the level editor. Paint terrain and place machines to author the
+fixed maps that scenarios load. Press `F5` to play-test the map. Press
+`Ctrl+S` to save the map to the `levels/` directory.
+
+[Playing A Game Manually](https://github.com/mickeybeurskens/factoriax/blob/main/docs/start_here/playing_manually.md)
+describes both in full.
+
+## Build An Environment
 
 ```python
 import jax
@@ -57,103 +137,52 @@ env, params = env_from_name("EasyRocket-v1")
 obs, state = env.reset_env(jax.random.PRNGKey(0), params)
 ```
 
-Five scenarios carry an id: `Mining-v1`, `MinerBootstrap-v1`,
-`ScienceTiers-v1`, `EasyRocket-v1`, and `Rocket-v1`.
-`factoriax.engine.envs.registry.list_scenarios` returns each id with its spec.
+Five scenarios have an id: `Mining-v1`, `MinerBootstrap-v1`,
+`ScienceTiers-v1`, `EasyRocket-v1`, and `Rocket-v1`. The function
+`factoriax.engine.envs.registry.list_scenarios` returns each id with its
+specification.
 
-## Action design
+## Development
 
-The action set follows three rules.
-
-**One action, one outcome.** A player crafts a miner with the single action
-`CRAFT_MINER`. It does not cycle through a recipe list and then press a craft
-key. The action space holds 87 actions, and no action hides a sequence.
-
-**The observation tells the agent what works.** An affordability bit for each
-item says whether the player can craft that item now. The agent therefore
-reads what an action does before it takes that action. The bit belongs to an
-item, and not to a recipe.
-
-**Context does not change an action.** A craft takes items from the inventory
-and adds the result. A mine adds an item, and a place takes one. There is no
-separate crafting mode that changes what a key does.
-
-## Test and lint
+To run the tests, the linter, and the documentation build, run these commands:
 
 ```bash
 uv run pytest
 uv run ruff check factoriax tests
-```
-
-### Where a test goes
-
-`tests/` mirrors the package. The path `tests/<area>/test_<module>.py` maps to
-`factoriax/<area>/<module>.py`, so the tests for `engine/machines.py` are the
-only thing that can sit at `tests/engine/machines/`.
-
-A mirror entry is a file or a package. It starts as a `test_<module>.py`
-file. Past about 600 lines, it becomes a `<module>/` package of topic-named
-files. `engine/machines.py` carries 2600 lines of tests, so its entry is a
-package split by machine kind.
-
-Three directories sit beside the mirror, for the tests that belong to no one
-module:
-
-- `tests/contracts/` holds a test that asserts a rule no single module owns.
-  The gymnax API conformance, the invariants over random episodes, and the AST
-  guard that stops the play UI from writing `EnvState` all live here.
-- `tests/integration/` holds a test that needs two or more subpackages to have
-  meaning. The editor-to-level-to-engine round trip is one.
-  `tests/integration/scenarios/` holds the end-to-end scripted rollouts.
-- `tests/benchmarks/` holds scripts. Pytest does not collect it.
-
-A test belongs in the mirror unless it cannot go there. A file in `contracts/` or
-`integration/` states in its module docstring why it is not in the mirror.
-
-`tests/helpers/` holds support code that more than one directory shares: the
-state factory, the trajectory builders, the observation scaffolding, and the
-scripted-oracle navigation. A helper that one file uses belongs beside that
-file.
-
-### Two things that bite
-
-Only `tests/playground/` initializes a pygame display, through an autouse
-fixture. A test elsewhere that renders must request `pygame_display` by name.
-A file that does not will pass in a full run and fail on its own, because an
-earlier directory left a display behind.
-
-`tasks/coverage-gaps.md` lists every module with no mirror entry, and says
-whether that is a gap, covered through another module, or waived.
-
-## Build the documentation
-
-```bash
 cd docs && make html
 ```
 
-The build writes the pages to `docs/_build/html`.
+The documentation build writes the pages to `docs/_build/html`. The build does
+not run the notebooks, because `nb_execution_mode` is `"off"`. A notebook page
+therefore holds the source of each cell and the figures in its `_images`
+directory. To add a figure, run the notebook and commit the file that the
+notebook writes.
 
-The build does not run the notebooks. `nb_execution_mode` is `"off"`, and the
-`html` target removes the stored output first. A notebook page therefore
-holds the source of each cell, and the figures that its `_images` directory
-holds. A new figure comes from running the notebook and committing the file
-that it writes.
+The `tests/` directory mirrors the package. The path
+`tests/<area>/test_<module>.py` maps to `factoriax/<area>/<module>.py`. Three
+directories sit beside the mirror, for the tests that belong to no single
+module:
 
-## Where to read next
+- `tests/contracts/` holds a test for a rule that no single module owns.
+- `tests/integration/` holds a test that needs two or more subpackages.
+- `tests/benchmarks/` holds scripts. Pytest does not collect them.
 
-The docs follow the [Diátaxis](https://diataxis.fr) framework: a tutorial to
-start, task-based guides for real work, explanation for the reasoning, and a
-generated reference.
+## Citation
 
-- [`docs/start-here/getting_started.ipynb`](docs/start-here/getting_started.ipynb):
-  the one-path tutorial. The environment, the observation, the action space,
-  and a random rollout.
-- [`docs/training/`](docs/training): task-based guides, such as
-  [`train_ppo_mining.ipynb`](docs/training/train_ppo_mining.ipynb), that
-  assume you finished the tutorial.
-- [`docs/understanding/`](docs/understanding): the reasoning behind the
-  state representation, the observation space, the action design, and the
-  scenario and curriculum system.
-- [`docs/api/index.rst`](docs/api/index.rst): the reference for every public
-  module. Sphinx builds it from the docstrings.
-- [`ISSUES.md`](ISSUES.md): the known defects that stay open.
+Factoriax comes from a workshop paper at the 19th European Workshop on
+Reinforcement Learning (EWRL 2026). If you use Factoriax in your research,
+cite that paper:
+
+```bibtex
+@inproceedings{beurskens2026factoriax,
+  title     = {{Factoriax - A GPU-Accelerated Factory Building Simulator In The Style Of Factorio}},
+  author    = {Beurskens, Mickey and Tomilin, Tristan and Sim{\~a}o, Thiago D.},
+  booktitle = {19th European Workshop on Reinforcement Learning (EWRL)},
+  year      = {2026},
+  address   = {Lille, France},
+  url       = {https://ewrl-org.github.io/ewrl-2026/poster_148.html}
+}
+```
+
+The paper page holds the abstract and the poster session:
+<https://ewrl-org.github.io/ewrl-2026/poster_148.html>

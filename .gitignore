@@ -213,6 +213,8 @@ __marimo__/
 *.npz
 # Track the canonical sprite atlas. The renderer reads it at startup.
 !factoriax/assets/atlas.png
+# Track the README/docs title image.
+!docs/_static/title_image.png
 
 # Performance test logs
 tests/performance/logs/

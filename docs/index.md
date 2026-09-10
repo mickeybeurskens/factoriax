@@ -6,6 +6,11 @@ Factoriax is a GPU accelerated factory building simulator for reinforcement lear
 
 ---
 
+```{image} _static/title_image.png
+:alt: A Factoriax factory: miners on ore patches, belts that carry ore to furnaces and assemblers, and a player among them
+:align: center
+```
+
 ```{toctree}
 :maxdepth: 1
 :hidden:
@@ -21,46 +26,53 @@ Home <self>
 
 start_here/index
 start_here/getting_started
-start_here/moving_player
-start_here/speeding_up
-start_here/saving_runs
-start_here/plotting_results
+start_here/playing_manually
 ```
 
-```{toctree}
-:maxdepth: 1
-:hidden:
-:caption: Training models
-
-training/index
-training/train_ppo_mining
-training/plotting_results
-```
-
-```{toctree}
-:maxdepth: 1
-:hidden:
-:caption: Understanding Factoriax
-
-understanding/index
-understanding/state_and_step
-understanding/observation_space
-understanding/action_design
-understanding/scenarios_and_curriculum
-```
-
-```{toctree}
-:maxdepth: 1
-:hidden:
-:caption: Modifying environments
-
-modifying/index
-modifying/change_observations
-modifying/change_actions
-modifying/change_textures
-modifying/adding_mechanics
-modifying/rewriting_base_mechanics
-```
+% Hidden for the release. To bring a section back, uncomment its block here
+% and drop the matching entry from `exclude_patterns` in conf.py.
+%
+% Stub pages from the "Start here" toctree above:
+%
+% start_here/moving_player
+% start_here/speeding_up
+% start_here/saving_runs
+% start_here/plotting_results
+%
+% ```{toctree}
+% :maxdepth: 1
+% :hidden:
+% :caption: Training models
+%
+% training/index
+% training/train_ppo_mining
+% training/plotting_results
+% ```
+%
+% ```{toctree}
+% :maxdepth: 1
+% :hidden:
+% :caption: Understanding Factoriax
+%
+% understanding/index
+% understanding/state_and_step
+% understanding/observation_space
+% understanding/action_design
+% understanding/scenarios_and_curriculum
+% ```
+%
+% ```{toctree}
+% :maxdepth: 1
+% :hidden:
+% :caption: Modifying environments
+%
+% modifying/index
+% modifying/change_observations
+% modifying/change_actions
+% modifying/change_textures
+% modifying/adding_mechanics
+% modifying/rewriting_base_mechanics
+% ```
 
 ```{toctree}
 :maxdepth: 2
@@ -84,10 +96,13 @@ Even though the Factoriax implementation of the original game mechanics is quite
 The documentation is divided in different sections:
 
 - {doc}`start_here/index`: A tutorial to get you up and running with Factoriax and JAX as soon as possible.
-- {doc}`training/index`: Guides on how to use Factoriax to train your own reinforcement learning models.
-- {doc}`modifying/index`: Guides on how to create your own Factoriax environments and extend basic functionality.
-- {doc}`understanding/index`: A more in depth discussion of the design decisions behind Factoriax. Useful to improve your understanding more broadly.
 - {doc}`api/index`: A reference for understanding the code in the repository.
+
+% Hidden for the release along with their sections:
+%
+% - {doc}`training/index`: Guides on how to use Factoriax to train your own reinforcement learning models.
+% - {doc}`modifying/index`: Guides on how to create your own Factoriax environments and extend basic functionality.
+% - {doc}`understanding/index`: A more in depth discussion of the design decisions behind Factoriax. Useful to improve your understanding more broadly.
 
 Remember:
 > The factory must grow!

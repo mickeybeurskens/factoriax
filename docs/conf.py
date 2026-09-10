@@ -44,4 +44,17 @@ html_logo = "_static/logo.png"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
 
-exclude_patterns = ["_build", "media", "profiling", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build",
+    "media",
+    "profiling",
+    "Thumbs.db",
+    ".DS_Store",
+    # Hidden for the release; see the commented toctrees in index.md.
+    "start_here/moving_player.ipynb",
+    "start_here/speeding_up.ipynb",
+    "start_here/saving_runs.ipynb",
+    "training",
+    "understanding",
+    "modifying",
+]
