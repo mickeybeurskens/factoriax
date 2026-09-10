@@ -215,6 +215,9 @@ __marimo__/
 !factoriax/assets/atlas.png
 # Track the README/docs title image.
 !docs/_static/title_image.png
+# Track figures that documentation pages embed. The docs build fails
+# without them, because a page references a file that is not there.
+!docs/**/_images/*.png
 
 # Performance test logs
 tests/performance/logs/
