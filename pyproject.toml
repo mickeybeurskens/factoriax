@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE.md"]
-authors = [{ name = "Mickey Beurskens", email = "mickeybeurskens@gmail.com" }]
+authors = [{ name = "Mickey Beurskens", email = "m.r.m.beurskens@tue.nl" }]
 keywords = [
     "reinforcement-learning",
     "jax",
