@@ -1,0 +1,55 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The deploy job needs these to publish to Pages with OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. A newer push cancels an in-flight run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # uv reads .python-version and installs 3.11 if the runner lacks it.
+      - name: Install the docs dependency group
+        run: uv sync --group docs
+
+      # -W turns a Sphinx warning into an error, which keeps broken
+      # cross-references from reaching the published site. Drop it if a
+      # warning you do not care about starts failing the build.
+      - name: Build the HTML
+        env:
+          JAX_PLATFORMS: cpu
+        run: |
+          uv run --group docs sphinx-build -W --keep-going \
+            -b html docs docs/_build/html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
