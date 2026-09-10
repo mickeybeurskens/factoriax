@@ -5,7 +5,7 @@
 Factoriax is a GPU accelerated factory building simulator for reinforcement learning research in the style of the game [Factorio](https://www.factorio.com/), written in JAX.
 
 <p align="center">
-  <img src="docs/_static/title_image.png"
+  <img src="https://raw.githubusercontent.com/mickeybeurskens/factoriax/main/docs/_static/title_image.png"
        alt="A Factoriax factory: miners on ore patches, belts that carry ore to furnaces and assemblers, and a player among them" />
 </p>
 

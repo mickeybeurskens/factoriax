@@ -8,6 +8,27 @@ version = "0.1.0"
 description = "A JAX-based grid environment for RL research"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE.md"]
+authors = [{ name = "Mickey Beurskens", email = "mickeybeurskens@gmail.com" }]
+keywords = [
+    "reinforcement-learning",
+    "jax",
+    "gpu",
+    "benchmark",
+    "factorio",
+    "environment",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
 dependencies = [
     "jax>=0.9.1",
     "flax>=0.8.0",
@@ -26,6 +47,18 @@ dependencies = [
 cuda = [
     "jax[cuda13]>=0.9.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mickeybeurskens/factoriax"
+Documentation = "https://mickeybeurskens.github.io/factoriax/"
+Repository = "https://github.com/mickeybeurskens/factoriax"
+Issues = "https://github.com/mickeybeurskens/factoriax/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["factoriax"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["factoriax", "README.md", "LICENSE.md", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
