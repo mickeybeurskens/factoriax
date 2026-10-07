@@ -9,10 +9,9 @@ Factoriax is a GPU accelerated factory building simulator for reinforcement lear
        alt="A Factoriax factory: miners on ore patches, belts that carry ore to furnaces and assemblers, and a player among them" />
 </p>
 
-[Read the documentation here](https://mickeybeurskens.github.io/factoriax/).
+[Read the documentation here](https://mickeybeurskens.github.io/factoriax/). You can find the [paper here](https://arxiv.org/abs/2610.05569), and an online version of the paper with an [interactive demo here](http://mickeybeurskens.com/demos/factoriax-web-paper/).
 
 ## Why Factoriax?
-
 
 Factorio is quite a cool game with an enormous amount of emergent gameplay complexity, and it is interesting to use it as a benchmark to evaluate AI systems. However, even though the game is famous for being [carefully optimized](https://www.factorio.com/blog/post/fff-421), training Reinforcement Learning agents on the base game is very slow. Factoriax is basically a simplified version of the core Factorio game mechanics that can run millions of game ticks per second on higher end GPUs (as of writing), while also running quickly enough to train models on local laptop GPUs. This allows researchers to test their RL ideas in Factoriax at scale, while allowing students to get familiar with RL concepts without the need for enormous GPU clusters.
 
