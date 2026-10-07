@@ -127,7 +127,7 @@ Reinforcement Learning (EWRL 2026). If you use Factoriax in your research then p
 
 ```bibtex
 @inproceedings{beurskens2026factoriax,
-  title     = {{Factoriax - A GPU-Accelerated Factory Building Simulator In The Style Of Factorio}},
+  title     = {{Factoriax: A GPU-Accelerated Factorio-Style Simulator for Reinforcement Learning}},
   author    = {Beurskens, Mickey and Tomilin, Tristan and Sim{\~a}o, Thiago D.},
   booktitle = {19th European Workshop on Reinforcement Learning (EWRL)},
   year      = {2026},
