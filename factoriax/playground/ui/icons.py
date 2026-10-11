@@ -20,11 +20,11 @@ ASSETS_PATH = Path(__file__).parent.parent / "assets"
 
 ITEM_COLORS: dict[int, tuple[int, int, int]] = {
     ItemType.COAL: (54, 54, 54),
-    ItemType.IRON_ORE: (160, 140, 130),
+    ItemType.IRON_ORE: (128, 111, 102),
     ItemType.COPPER_ORE: (170, 100, 50),
     ItemType.TIN_ORE: (170, 180, 185),
-    ItemType.SILICON: (80, 105, 140),
-    ItemType.IRON_PLATE: (192, 192, 192),
+    ItemType.SILICON: (101, 128, 166),
+    ItemType.IRON_PLATE: (148, 129, 118),
     ItemType.COPPER_PLATE: (184, 115, 51),
     ItemType.TIN_PLATE: (200, 200, 190),
     ItemType.WAFER: (80, 90, 140),
@@ -66,11 +66,11 @@ ITEM_COLORS: dict[int, tuple[int, int, int]] = {
 BLOCK_COLORS: dict[int, tuple[int, int, int]] = {
     int(BlockType.DIRT): (201, 167, 121),
     int(BlockType.WATER): (50, 120, 190),
-    int(BlockType.IRON): (111, 138, 166),
+    int(BlockType.IRON): (160, 140, 130),
     int(BlockType.COPPER): (209, 138, 74),
     int(BlockType.COAL): (43, 43, 43),
     int(BlockType.TIN): (185, 185, 185),
-    int(BlockType.SILICON): (111, 90, 138),
+    int(BlockType.SILICON): (80, 105, 140),
     int(BlockType.LIMESTONE): (232, 220, 181),
 }
 
